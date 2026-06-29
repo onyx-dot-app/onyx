@@ -42,7 +42,7 @@ jobs:
       - name: Set up chart-testing
         uses: helm/chart-testing-action@2e2940618cb426dce2999631d543b53cdcfc8527
         with:
-          uv_version: "0.9.9"
+          uv_version: "0.11.25"
 
       # even though we specify chart-dirs in ct.yaml, it isn't used by ct for the list-changed command...
       - name: Run chart-testing (list-changed)

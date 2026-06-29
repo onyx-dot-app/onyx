@@ -41,7 +41,7 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
         with:
-          version: "0.9.9"
+          version: "0.11.25"
           enable-cache: false
 
       - name: Configure AWS credentials

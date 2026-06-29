@@ -30,7 +30,7 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: false
-          version: "0.9.9"
+          version: "0.11.25"
       - run: |
           GOOS="${{ matrix.os-arch.goos }}" \
           GOARCH="${{ matrix.os-arch.goarch }}" \

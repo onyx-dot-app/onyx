@@ -158,7 +158,7 @@ jobs:
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           enable-cache: false
-          version: "0.9.9"
+          version: "0.11.25"
 
       - name: Configure git identity as App
         env:
