@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
+from typing import Any
 from typing import cast
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
@@ -34,6 +35,9 @@ from onyx.utils.variable_functionality import (
 from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
+
+DRIVE_RESOURCE_KEY_HEADER = "X-Goog-Drive-Resource-Keys"
+DRIVE_RESOURCE_KEY_FIELD = "resourceKey"
 
 
 class DriveFileFieldType(Enum):
@@ -262,6 +266,14 @@ def _get_single_file_fields(field_type: DriveFileFieldType) -> str:
     return _extract_single_file_fields(_get_fields_for_file_type(field_type))
 
 
+def add_drive_resource_key_header(
+    request: Any, file_id: str, resource_key: str | None
+) -> None:
+    if not resource_key:
+        return
+    request.headers[DRIVE_RESOURCE_KEY_HEADER] = f"{file_id}/{resource_key}"
+
+
 def _get_file_by_id(
     service: Resource,
     file_id: str,
@@ -273,11 +285,14 @@ def _get_file_by_id(
         "fields": fields,
         "supportsAllDrives": True,
     }
-    if resource_key:
-        kwargs["resourceKey"] = resource_key
 
     try:
-        return service.files().get(**kwargs).execute()  # ty: ignore[unresolved-attribute]
+        request = service.files().get(**kwargs)  # ty: ignore[unresolved-attribute]
+        add_drive_resource_key_header(request, file_id, resource_key)
+        file = request.execute()
+        if resource_key:
+            file[DRIVE_RESOURCE_KEY_FIELD] = resource_key
+        return file
     except HttpError as e:
         if e.resp.status in (403, 404):
             logger.debug("Cannot access Drive file %s: %s", file_id, e)

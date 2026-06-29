@@ -1,5 +1,1 @@
-import { GeneralSettings } from "@/views/SettingsPage";
-
-export default function GeneralSettingsPage() {
-  return <GeneralSettings />;
-}
+export { GeneralSettings as default } from "@/views/SettingsPage";

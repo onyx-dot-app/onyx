@@ -239,6 +239,14 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class SupportedLanguage(str, PyEnum):
+    EN = "en"
+    ES = "es"
+    PT = "pt"
+    FR = "fr"
+    DE = "de"
+
+
 class DefaultAppMode(str, PyEnum):
     AUTO = "AUTO"
     CHAT = "CHAT"
@@ -541,8 +549,6 @@ class Permission(str, PyEnum):
     # identity may use. PAT-only; never granted to a group/user.
     CRAFT_SANDBOX = "craft_sandbox"
 
-    CRAFT_REQUEST_APP_SETUP = "craft:request_app_setup"
-
     # Override — any permission check passes
     FULL_ADMIN_PANEL_ACCESS = "admin"
 
@@ -561,7 +567,6 @@ Permission.IMPLIED = frozenset(
         Permission.READ_CHAT,
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
-        Permission.CRAFT_REQUEST_APP_SETUP,
     }
 )
 

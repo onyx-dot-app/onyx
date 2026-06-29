@@ -8,7 +8,6 @@ import hashlib
 import time
 from collections.abc import Callable
 from collections.abc import Iterator
-from collections.abc import Sequence
 from contextlib import contextmanager
 from typing import cast
 from typing import IO
@@ -122,25 +121,21 @@ def _sign_sidecar_request(path: str, sha256_hex: str) -> tuple[str, str]:
 class SidecarClient:
     """Signed HTTP client for one sandbox sidecar.
 
-    The manager supplies host candidates so Kubernetes-specific discovery stays
+    The manager supplies the host resolver so Kubernetes-specific discovery stays
     outside this transport class. The client owns the repeated request details:
-    URL construction, signatures, timeouts, fallback across hosts, and response
-    status handling.
+    URL construction, signatures, timeouts, and response status handling.
     """
 
-    def __init__(self, hosts: Callable[[UUID], Sequence[str]]) -> None:
-        self._hosts = hosts
+    def __init__(self, host: Callable[[UUID], str]) -> None:
+        self._host = host
 
     def is_healthy(self, *, sandbox_id: UUID, timeout_seconds: float) -> bool:
-        for host in self._hosts(sandbox_id):
-            url = self._url(host, SIDECAR_HEALTH_PATH)
-            try:
-                with httpx.Client(timeout=timeout_seconds) as http_client:
-                    if http_client.get(url).status_code == 200:
-                        return True
-            except httpx.TransportError:
-                continue
-        return False
+        url = self._url(self._host(sandbox_id), SIDECAR_HEALTH_PATH)
+        try:
+            with httpx.Client(timeout=timeout_seconds) as http_client:
+                return http_client.get(url).status_code == 200
+        except httpx.TransportError:
+            return False
 
     def list_directory(
         self,
@@ -153,43 +148,35 @@ class SidecarClient:
         payload = FilesystemListRequest(session_id=session_id, path=path)
         body = payload.model_dump_json().encode()
         sha256_hex = hashlib.sha256(body).hexdigest()
-        last_exc: httpx.TransportError | None = None
 
-        for host in self._hosts(sandbox_id):
-            try:
-                with httpx.Client(timeout=timeout_seconds) as http_client:
-                    resp = http_client.post(
-                        self._url(host, SIDECAR_FILESYSTEM_LIST_PATH),
-                        content=body,
-                        headers=self._signed_headers(
-                            signing_path=SIDECAR_FILESYSTEM_LIST_PATH,
-                            sha256_hex=sha256_hex,
-                            content_type="application/json",
-                        ),
-                    )
-            except httpx.TransportError as e:
-                last_exc = e
-                continue
-
-            if resp.status_code != 200:
-                raise SidecarStatusError("filesystem list", resp.status_code, resp.text)
-
-            listing = FilesystemListResponse.model_validate_json(resp.content)
-            return [
-                FilesystemEntry(
-                    name=entry.name,
-                    path=entry.path,
-                    is_directory=entry.is_directory,
-                    size=entry.size,
-                    mime_type=entry.mime_type,
+        try:
+            with httpx.Client(timeout=timeout_seconds) as http_client:
+                resp = http_client.post(
+                    self._url(self._host(sandbox_id), SIDECAR_FILESYSTEM_LIST_PATH),
+                    content=body,
+                    headers=self._signed_headers(
+                        signing_path=SIDECAR_FILESYSTEM_LIST_PATH,
+                        sha256_hex=sha256_hex,
+                        content_type="application/json",
+                    ),
                 )
-                for entry in listing.entries
-            ]
+        except httpx.TransportError as e:
+            raise SidecarRequestError(f"filesystem list request failed: {e}") from e
 
-        raise SidecarRequestError(
-            "filesystem list request failed: "
-            f"{last_exc or 'no sandbox pod host reachable'}"
-        )
+        if resp.status_code != 200:
+            raise SidecarStatusError("filesystem list", resp.status_code, resp.text)
+
+        listing = FilesystemListResponse.model_validate_json(resp.content)
+        return [
+            FilesystemEntry(
+                name=entry.name,
+                path=entry.path,
+                is_directory=entry.is_directory,
+                size=entry.size,
+                mime_type=entry.mime_type,
+            )
+            for entry in listing.entries
+        ]
 
     @contextmanager
     def request_and_stream_new_snapshot(
@@ -210,43 +197,35 @@ class SidecarClient:
             read=timeout_seconds,
             write=timeout_seconds,
         )
-        last_exc: httpx.TransportError | None = None
 
-        for host in self._hosts(sandbox_id):
-            try:
-                with httpx.Client(timeout=timeout) as http_client:
-                    with http_client.stream(
-                        "POST",
-                        self._url(host, endpoint_path),
-                        content=body,
-                        headers=self._signed_headers(
-                            signing_path=endpoint_path,
-                            sha256_hex=sha256_hex,
-                            content_type=content_type,
-                        ),
-                    ) as resp:
-                        if resp.status_code == 204:
-                            yield None
-                            return
-                        if resp.status_code != 200:
-                            detail = resp.read().decode(errors="replace")
-                            raise SidecarStatusError(
-                                operation_label, resp.status_code, detail
-                            )
-
-                        adapter = _IteratorReader(
-                            resp.iter_bytes(chunk_size=_SIDECAR_CHUNK_SIZE)
-                        )
-                        yield cast(IO[bytes], adapter)
+        try:
+            with httpx.Client(timeout=timeout) as http_client:
+                with http_client.stream(
+                    "POST",
+                    self._url(self._host(sandbox_id), endpoint_path),
+                    content=body,
+                    headers=self._signed_headers(
+                        signing_path=endpoint_path,
+                        sha256_hex=sha256_hex,
+                        content_type=content_type,
+                    ),
+                ) as resp:
+                    if resp.status_code == 204:
+                        yield None
                         return
-            except httpx.TransportError as e:
-                last_exc = e
-                continue
+                    if resp.status_code != 200:
+                        detail = resp.read().decode(errors="replace")
+                        raise SidecarStatusError(
+                            operation_label, resp.status_code, detail
+                        )
 
-        raise SidecarRequestError(
-            f"{operation_label} request failed: "
-            f"{last_exc or 'no sandbox pod host reachable'}"
-        )
+                    adapter = _IteratorReader(
+                        resp.iter_bytes(chunk_size=_SIDECAR_CHUNK_SIZE)
+                    )
+                    yield cast(IO[bytes], adapter)
+                    return
+        except httpx.TransportError as e:
+            raise SidecarRequestError(f"{operation_label} request failed: {e}") from e
 
     def post_archive(
         self,
@@ -339,15 +318,13 @@ class SidecarClient:
         params: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> None:
+        host = self._host(sandbox_id)
         last_exc: httpx.TransportError | None = None
         deadline = time.monotonic() + timeout_seconds
 
         while True:
-            for host in self._hosts(sandbox_id):
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    break
-
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
                 try:
                     with httpx.Client(
                         timeout=self._timeout_for_post(remaining)
@@ -367,19 +344,19 @@ class SidecarClient:
                         )
                 except httpx.TransportError as e:
                     last_exc = e
-                    continue
-
-                if resp.status_code == expected_status:
-                    return
-                raise SidecarStatusError(operation_label, resp.status_code, resp.text)
+                else:
+                    if resp.status_code == expected_status:
+                        return
+                    raise SidecarStatusError(
+                        operation_label, resp.status_code, resp.text
+                    )
 
             if not retry_until_deadline or time.monotonic() >= deadline:
                 break
             time.sleep(min(0.5, max(0.0, deadline - time.monotonic())))
 
         raise SidecarRequestError(
-            f"{operation_label} request failed: "
-            f"{last_exc or 'no sandbox pod host reachable'}"
+            f"{operation_label} request failed: {last_exc or 'sandbox pod unreachable'}"
         )
 
     @staticmethod

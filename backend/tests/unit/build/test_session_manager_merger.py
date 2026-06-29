@@ -16,7 +16,9 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.server.features.build.connect_app import ConnectAppRequest
 from onyx.server.features.build.packets import ApprovalRequestedPacket
+from onyx.server.features.build.packets import ConnectAppRequestPacket
 from onyx.server.features.build.session import streaming as streaming_mod
 
 
@@ -126,6 +128,57 @@ def test_announce_emitted_as_approval_requested_packet(
     assert parsed["type"] == "approval_requested"
     assert parsed["approval_id"] == str(approval_id)
     assert parsed["session_id"] == str(session_id)
+
+
+def test_connect_app_announce_emitted_as_packet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A connect-app announce is injected into the stream as a
+    ConnectAppRequestPacket (the turn-driving worker can't reach the browser, so
+    the card crosses over via this announce)."""
+    session_id = uuid4()
+    request = ConnectAppRequest(
+        request_id="req-9", app_slug="slack", reason="post a message"
+    )
+    announce_enqueued = threading.Event()
+    calls: list[int] = []
+
+    def pop_connect(_sid: str, timeout_s: int, cache: Any) -> ConnectAppRequest | None:  # noqa: ARG001 — kwarg name must match production caller
+        calls.append(1)
+        if len(calls) == 1:
+            return request
+        announce_enqueued.set()
+        time.sleep(min(0.02, float(timeout_s)))
+        return None
+
+    _stub_get_cache_backend(monkeypatch)
+    _stub_pop_announcement(monkeypatch, _always_none)  # approval pump: nothing
+    monkeypatch.setattr(streaming_mod.connect_app, "pop_announcement", pop_connect)
+
+    def events() -> Generator[str, None, None]:
+        assert announce_enqueued.wait(timeout=2.0), "connect-app packet never enqueued"
+        yield "events-end"
+
+    out = _collect_with_timeout(
+        streaming_mod.merge_events_with_announces(
+            events(), session_id=session_id, tenant_id="public"
+        )
+    )
+
+    packets = [item for item in out if isinstance(item, ConnectAppRequestPacket)]
+    assert len(packets) == 1
+    assert packets[0].request_id == "req-9"
+    assert packets[0].app_slug == "slack"
+    assert packets[0].reason == "post a message"
+    assert packets[0].type == "connect_app_request"
+
+    # Verify the SSE-frame shape the attach stream produces from this packet.
+    rendered = streaming_mod.event_to_sse(packets[0])
+    assert rendered.startswith("event: message\n")
+    parsed = json.loads(rendered.split("data: ", 1)[1])
+    assert parsed["type"] == "connect_app_request"
+    assert parsed["request_id"] == "req-9"
+    assert parsed["app_slug"] == "slack"
 
 
 def test_interleaving_events_and_announce(

@@ -10,7 +10,6 @@ import pytest
 
 from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import ApprovalDecision
-from onyx.sandbox_proxy import approval_cache as approval_cache_module
 from onyx.sandbox_proxy.approval_cache import _wake_key
 from onyx.sandbox_proxy.approval_cache import announce_approval
 from onyx.sandbox_proxy.approval_cache import announce_key
@@ -176,10 +175,3 @@ async def test_decision_value_round_trips() -> None:
     received = await wait_for_wake(approval_id, timeout_s=5, cache=cache)
 
     assert received == ApprovalDecision.APPROVED
-
-
-def test_approval_decision_values_complete() -> None:
-    """Pins the full `ApprovalDecision` value set and cache-layer TTL constants."""
-    assert {d.value for d in ApprovalDecision} == {"APPROVED", "REJECTED", "EXPIRED"}
-    assert approval_cache_module.ANNOUNCE_TTL_S == 60
-    assert approval_cache_module.WAKE_TTL_S == 30

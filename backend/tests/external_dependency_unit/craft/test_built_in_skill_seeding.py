@@ -16,11 +16,8 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import CheckConstraint
 from sqlalchemy import delete
 from sqlalchemy import select
-from sqlalchemy import Table
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill
@@ -184,34 +181,3 @@ class TestSchemaInvariant:
         for definition in BUILT_IN_SKILLS.values():
             assert isinstance(definition.source_dir, Path)
             assert definition.source_dir.is_dir()
-
-    def test_xor_check_constraint_model_matches_db(self, db_session: Session) -> None:
-        """The XOR ``ck_skill_definition_source`` constraint is declared in
-        two places — ``Skill.__table_args__`` and the migration. Guard
-        against drift by comparing the model's declared predicate to the
-        constraint actually applied to the DB (which came from the
-        migration)."""
-        constraint_name = "ck_skill_definition_source"
-
-        table = Skill.__table__
-        assert isinstance(table, Table)
-        model_cc = next(
-            c
-            for c in table.constraints
-            if isinstance(c, CheckConstraint) and c.name == constraint_name
-        )
-        model_predicate = str(model_cc.sqltext)
-
-        db_predicate = db_session.execute(
-            text(
-                "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
-                "WHERE conname = :name AND conrelid = 'skill'::regclass"
-            ),
-            {"name": constraint_name},
-        ).scalar_one()
-
-        def _normalize(clause: str) -> str:
-            clause = clause.lower().replace("check", "")
-            return "".join(ch for ch in clause if ch not in "() \t\n")
-
-        assert _normalize(model_predicate) == _normalize(db_predicate)

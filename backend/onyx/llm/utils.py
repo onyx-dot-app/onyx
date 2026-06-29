@@ -198,7 +198,7 @@ def litellm_exception_to_error_msg(
         error_code = "CONTENT_POLICY"
         is_retryable = False
     elif isinstance(core_exception, BadRequestError):
-        error_msg = "Bad request: The server couldn't process your request. Please check your input."
+        error_msg = f"Bad request: {str(core_exception)}"
         error_code = "BAD_REQUEST"
         is_retryable = True
     elif isinstance(core_exception, AuthenticationError):
@@ -207,13 +207,13 @@ def litellm_exception_to_error_msg(
         is_retryable = False
     elif isinstance(core_exception, PermissionDeniedError):
         error_msg = (
-            "Permission denied: You don't have the necessary permissions for this operation. "
+            f"Permission denied: {str(core_exception)}"
             "Ensure you have access to this model."
         )
         error_code = "PERMISSION_DENIED"
         is_retryable = False
     elif isinstance(core_exception, NotFoundError):
-        error_msg = "Resource not found: The requested resource doesn't exist."
+        error_msg = f"Resource not found: {str(core_exception)}"
         error_code = "NOT_FOUND"
         is_retryable = False
     elif isinstance(core_exception, UnprocessableEntityError):

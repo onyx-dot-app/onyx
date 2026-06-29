@@ -9,6 +9,7 @@ from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import QueryHistoryType
+from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
@@ -409,6 +410,24 @@ OPENSEARCH_CA_CERTS: str | None = os.environ.get("OPENSEARCH_CA_CERTS") or None
 OPENSEARCH_CLIENT_CERT: str | None = os.environ.get("OPENSEARCH_CLIENT_CERT") or None
 OPENSEARCH_CLIENT_KEY: str | None = os.environ.get("OPENSEARCH_CLIENT_KEY") or None
 
+# Authentication method for connecting to OpenSearch. "basic" uses
+# OPENSEARCH_ADMIN_USERNAME / OPENSEARCH_ADMIN_PASSWORD (HTTP basic auth); the
+# default and the only option for self-hosted / docker-compose OpenSearch. "iam"
+# uses AWS SigV4 request signing and is only valid against an AWS managed domain
+# whose fine-grained access control master is an IAM ARN. This is independent of
+# USING_AWS_MANAGED_OPENSEARCH: AWS managed domains can use a master user too.
+OPENSEARCH_AUTH_METHOD = OpenSearchAuthMethod(
+    (
+        os.environ.get("OPENSEARCH_AUTH_METHOD") or OpenSearchAuthMethod.BASIC.value
+    ).lower()
+)
+# AWS region of the managed OpenSearch domain. Required when
+# OPENSEARCH_AUTH_METHOD=iam; used to compute the SigV4 signature.
+OPENSEARCH_AWS_REGION: str | None = os.environ.get("OPENSEARCH_AWS_REGION") or None
+# AWS service name for SigV4 signing: "es" for managed OpenSearch domains,
+# "aoss" for OpenSearch Serverless.
+OPENSEARCH_AWS_SERVICE = os.environ.get("OPENSEARCH_AWS_SERVICE") or "es"
+
 if OPENSEARCH_VERIFY_CERTS and not OPENSEARCH_USE_SSL:
     logger.warning(
         "OPENSEARCH_VERIFY_CERTS=true has no effect when OPENSEARCH_USE_SSL is "
@@ -427,9 +446,25 @@ for _os_name, _os_path in (
     if _os_path and not os.path.exists(_os_path):
         raise ValueError(f"{_os_name}={_os_path!r} does not exist.")
 
+if OPENSEARCH_AUTH_METHOD == OpenSearchAuthMethod.IAM and not OPENSEARCH_AWS_REGION:
+    raise ValueError(
+        "OPENSEARCH_AWS_REGION must be set when OPENSEARCH_AUTH_METHOD=iam "
+        "(AWS SigV4 signing needs the domain's region)."
+    )
+
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
+
+if (
+    OPENSEARCH_AUTH_METHOD == OpenSearchAuthMethod.IAM
+    and not USING_AWS_MANAGED_OPENSEARCH
+):
+    raise ValueError(
+        "OPENSEARCH_AUTH_METHOD=iam is only supported for "
+        "AWS-managed instances of OpenSearch."
+    )
+
 # Profiling adds some overhead to OpenSearch operations. This overhead is
 # unknown right now. Defaults to True.
 OPENSEARCH_PROFILING_DISABLED = (
@@ -848,6 +883,14 @@ for _redis_tls_name, _redis_tls_path in (
         raise ValueError(f"{_redis_tls_name}={_redis_tls_path!r} does not exist.")
 
 CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
+
+# A failed prune is skipped for this long before the beat re-dispatches it.
+# Floor: the re-dispatch interval (BLOCK_PRUNING = 60s * beat_multiplier, ~8 min
+# in cloud) so a failure can't hot-loop. Ceiling: prune_freq, so it still retries
+# well before the next scheduled prune. 30m is a midpoint with transient slack.
+PRUNE_FAILURE_BACKOFF_SECONDS = int(
+    os.environ.get("PRUNE_FAILURE_BACKOFF_SECONDS") or 30 * 60
+)
 
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#broker-pool-limit
 # Setting to None may help when there is a proxy in the way closing idle connections
@@ -1343,11 +1386,10 @@ MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
 )
 
-# A worksheet whose uncompressed XML exceeds this is streamed to a file-backed
-# TabularSection (CSV staged in the file store) instead of an in-memory string,
-# so a huge sheet stays off the worker heap rather than being truncated.
-XLSX_STREAM_SHEET_BYTES = max(
-    0, int(os.environ.get("XLSX_STREAM_SHEET_BYTES") or 50 * 1024 * 1024)
+# PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
+# or hang); this is the timeout before the subprocess is killed and pypdf runs.
+PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS = float(
+    os.environ.get("PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS") or 120
 )
 
 # Use document summary for contextual rag
@@ -1487,6 +1529,11 @@ VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT = os.environ.get(
 )
 
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
+
+# Size of the api-server anyio threadpool that runs sync endpoints, including the
+# streaming chat generator (each long request holds one thread for its duration).
+# 0 keeps the anyio default (40). Set via the api.threadpoolSize Helm value.
+API_SERVER_THREADPOOL_SIZE = int(os.environ.get("ONYX_API_THREADPOOL_SIZE") or "0")
 
 PARSE_WITH_TRAFILATURA = os.environ.get("PARSE_WITH_TRAFILATURA", "").lower() == "true"
 

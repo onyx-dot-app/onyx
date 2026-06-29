@@ -30,7 +30,7 @@ import {
   restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
 import useChatSessions from "@/hooks/useChatSessions";
-import { useProjects } from "@/lib/hooks/useProjects";
+import { useProjects } from "@/lib/projects/hooks";
 import {
   useAgents,
   useCurrentAgent,
@@ -40,8 +40,8 @@ import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
-import type { Project } from "@/app/app/projects/projectsService";
+import { removeChatSessionFromProject } from "@/lib/projects/svc";
+import type { Project } from "@/lib/projects/types";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";

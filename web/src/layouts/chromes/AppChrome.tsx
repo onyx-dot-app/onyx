@@ -2,10 +2,11 @@
 
 import {
   useCallback,
+  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  useEffect,
   type ReactNode,
 } from "react";
 import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
@@ -452,7 +453,7 @@ function Footer() {
           // # Note (from @raunakab):
           //
           // The conditional rendering of vertical padding based on the current page is intentional.
-          // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
+          // The `AppInputBar` has `shadow-box-01` applied, which extends ~14px below it.
           // Because the content area in `AppChrome` uses `overflow-auto`, the shadow would be
           // clipped at the container boundary — causing a visible rendering artefact.
           //
@@ -486,6 +487,17 @@ export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
 
   const appFocus = useAppFocus();
+  const { appName } = useSettings();
+  const { currentChatSession } = useChatSessions();
+
+  useLayoutEffect(() => {
+    const appendChatNameToDocumentTitle =
+      (appFocus.isChat() || appFocus.isSharedChat()) && currentChatSession;
+    document.title = appendChatNameToDocumentTitle
+      ? `${currentChatSession.name} — ${appName}`
+      : appName;
+  }, [currentChatSession?.name, appName, appFocus]);
+
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();
   const { isSafari } = useBrowserInfo();

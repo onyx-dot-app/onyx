@@ -591,6 +591,16 @@ export interface BuildSessionData {
    * a fresh turn / aborted fetch).
    */
   isInterrupting: boolean;
+  /**
+   * True from a user interrupt until the next turn starts. Drives the transient
+   * "Response stopped" notice; cleared when a new message is sent.
+   */
+  wasInterrupted: boolean;
+  /**
+   * Bumped per new interactive turn; a pending reconcileInterruptedTurn bails
+   * when it changes, so a stale reconcile can't clobber the superseding turn.
+   */
+  turnGeneration: number;
   error: string | null;
   webappUrl: string | null;
   /** Sandbox info from backend */
@@ -706,7 +716,7 @@ interface BuildSessionStore {
   // Actions - Session Lifecycle
   loadSession: (
     sessionId: string,
-    options?: { force?: boolean }
+    options?: { force?: boolean; preferPersisted?: boolean }
   ) => Promise<void>;
 
   // Actions - Session History
@@ -825,6 +835,8 @@ const createInitialSessionData = (
   streamItems: [],
   queuedMessages: [],
   isInterrupting: false,
+  wasInterrupted: false,
+  turnGeneration: 0,
   error: null,
   webappUrl: null,
   sandbox: null,
@@ -1382,7 +1394,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // Session Lifecycle
   // ===========================================================================
 
-  loadSession: async (sessionId: string, options?: { force?: boolean }) => {
+  loadSession: async (
+    sessionId: string,
+    options?: { force?: boolean; preferPersisted?: boolean }
+  ) => {
     const { setCurrentSession, updateSessionData, sessions } = get();
 
     // Check if already loaded in cache
@@ -1437,6 +1452,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const hasOptimisticMessages =
         (currentSession?.messages?.length ?? 0) > 0 && currentSessionIsLive;
       const isStreaming = hasOptimisticMessages;
+      // settle() (the only preferPersisted caller) runs on a live "running"
+      // session, so the isStreaming status branch below already keeps status live,
+      // leaving settle the sole owner of the flip to "active" (else auto-send races).
+      const useDbMessages = !isStreaming || options?.preferPersisted === true;
 
       // Construct webapp URL
       let webappUrl: string | null = null;
@@ -1449,10 +1468,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       const resolvedActiveTurnId =
         activeTurn?.turn_id ??
-        (isStreaming ? currentSession!.activeTurnId : null);
+        (useDbMessages ? null : currentSession!.activeTurnId);
       const resolvedActiveTurnIndex =
         activeTurn?.turn_index ??
-        (isStreaming ? currentSession!.activeTurnIndex : null);
+        (useDbMessages ? null : currentSession!.activeTurnIndex);
 
       const status = isStreaming
         ? currentSession!.status
@@ -1463,23 +1482,23 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             : sessionData.status === "active"
               ? "active"
               : "idle";
-      const persistedMessages = isStreaming
-        ? currentSession!.messages
-        : consolidateMessagesIntoTurns(messages);
-      const restoredActiveTurn = isStreaming
-        ? {
+      const persistedMessages = useDbMessages
+        ? consolidateMessagesIntoTurns(messages)
+        : currentSession!.messages;
+      const restoredActiveTurn = useDbMessages
+        ? splitActiveTurnTranscript(persistedMessages, resolvedActiveTurnIndex)
+        : {
             messages: persistedMessages,
             streamItems: currentSession!.streamItems,
-          }
-        : splitActiveTurnTranscript(persistedMessages, resolvedActiveTurnIndex);
+          };
       const resolvedMessages = restoredActiveTurn.messages;
       const streamItems = restoredActiveTurn.streamItems;
       // Reconstruct subagents from the raw (un-consolidated) messages — they
       // carry the per-packet _meta needed for classification. Preserve the
       // live map if actively streaming.
-      const subagents = isStreaming
-        ? currentSession!.subagents
-        : buildSubagentsFromMessages(messages);
+      const subagents = useDbMessages
+        ? buildSubagentsFromMessages(messages)
+        : currentSession!.subagents;
       const sandbox =
         needsRestore && sessionData.sandbox
           ? { ...sessionData.sandbox, status: "restoring" as const }
@@ -1498,9 +1517,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
-        activeTurnLocalOwner: isStreaming
-          ? currentSession!.activeTurnLocalOwner
-          : false,
+        activeTurnLocalOwner: useDbMessages
+          ? false
+          : currentSession!.activeTurnLocalOwner,
         error: null,
         isLoaded: true,
       });
@@ -2529,6 +2548,13 @@ export const useIsInterrupting = () =>
     const { currentSessionId, sessions } = state;
     if (!currentSessionId) return false;
     return sessions.get(currentSessionId)?.isInterrupting ?? false;
+  });
+
+export const useWasInterrupted = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return false;
+    return sessions.get(currentSessionId)?.wasInterrupted ?? false;
   });
 
 export const useSessionHistory = () =>

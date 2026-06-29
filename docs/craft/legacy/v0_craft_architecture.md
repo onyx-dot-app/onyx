@@ -2,9 +2,8 @@
 
 A snapshot of how Onyx Craft (a.k.a. "Build") is wired today, before the V1 work
 in this directory lands. The goal of this doc is to give a reader the mental
-model needed to read the V1 plans (`search-design.md`, `interception.md`,
-`sandbox-backends.md`, `skills.md`, etc.) without having to spelunk the code
-themselves.
+model needed to read the V1 plans in this directory without having to spelunk
+the code themselves.
 
 The product surface is `/craft/v1`; the backend module is still called
 `build/`. That naming split is intentional and stays for V1 (see the main plan).
@@ -477,16 +476,16 @@ These are deliberately current-state observations; the V1 plans in this
 directory propose how to fix each.
 
 1. **Knowledge corpus is dumped as JSON files into the sandbox.** No ACL,
-   no freshness, no parity with chat search. (`search-design.md` replaces this
-   with a `company_search` HTTP tool/skill.)
+   no freshness, no parity with chat search. The Craft search plan replaces
+   this with a first-party HTTP tool/skill.
 2. **`local` is the docker-compose default and offers no isolation.**
-   (`sandbox-backends.md` adds a `docker` backend.)
+   The Docker backend work adds a real container backend.
 3. **Skills are baked into the sandbox image.** No customer uploads, no
-   per-user grants. (`skills.md` introduces a DB-backed skills primitive.)
+   per-user grants. The Skills work introduces a DB-backed skills primitive.
 4. **No path for the agent to call external services safely.** Skill
    authors who want Linear/HubSpot/etc. have no way to inject credentials
-   without leaking them. (`interception.md` adds the egress proxy. OAuth-
-   for-apps and approvals are companion projects.)
+   without leaking them. The egress proxy, OAuth-for-apps, and approvals work
+   add that boundary.
 5. **No durable run/audit layer beyond the message stream.** Every search
    the agent ran, every external call, every approval — none of it is
    queryable without scraping the chat transcript.

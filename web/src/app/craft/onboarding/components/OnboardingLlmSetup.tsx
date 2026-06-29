@@ -34,23 +34,25 @@ function SelectableButton({
 }: SelectableButtonProps) {
   const button = (
     <div className="flex flex-col items-center gap-1">
-      <Disabled disabled={disabled} allowClick>
-        <button
-          type="button"
-          onClick={onClick}
-          disabled={disabled}
-          className={cn(
-            "w-full px-6 py-3 rounded-12 border transition-colors",
-            selected
-              ? "border-action-link-05 bg-action-link-01 text-action-text-link-05"
-              : "border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-01"
-          )}
-        >
-          <Text font="main-ui-action" color="text-05">
-            {children}
-          </Text>
-        </button>
-      </Disabled>
+      <div className="w-full">
+        <Disabled disabled={disabled} allowClick>
+          <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            className={cn(
+              "w-full px-6 py-3 rounded-12 border transition-colors",
+              selected
+                ? "border-action-link-05 bg-action-link-01 text-action-text-link-05"
+                : "border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-01"
+            )}
+          >
+            <Text font="main-ui-action" color="text-05">
+              {children}
+            </Text>
+          </button>
+        </Disabled>
+      </div>
       {subtext && (
         <Text font="figure-small-label" color="text-02">
           {subtext}
@@ -83,23 +85,25 @@ function ModelSelectButton({
 }: ModelSelectButtonProps) {
   return (
     <div className="flex flex-col items-center gap-1 w-full">
-      <Disabled disabled={disabled} allowClick>
-        <button
-          type="button"
-          onClick={onClick}
-          disabled={disabled}
-          className={cn(
-            "w-full px-4 py-2.5 rounded-12 border transition-colors",
-            selected
-              ? "border-action-link-05 bg-action-link-01 text-action-text-link-05"
-              : "border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-01"
-          )}
-        >
-          <Text font="main-ui-action" color="text-05">
-            {label}
-          </Text>
-        </button>
-      </Disabled>
+      <div className="w-full">
+        <Disabled disabled={disabled} allowClick>
+          <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            className={cn(
+              "w-full px-4 py-2.5 rounded-12 border transition-colors",
+              selected
+                ? "border-action-link-05 bg-action-link-01 text-action-text-link-05"
+                : "border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-01"
+            )}
+          >
+            <Text font="main-ui-action" color="text-05">
+              {label}
+            </Text>
+          </button>
+        </Disabled>
+      </div>
       {recommended && (
         <Text font="figure-small-label" color="text-02">
           Recommended

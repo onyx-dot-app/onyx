@@ -246,6 +246,14 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
                         logger.info("CC pair not due for pruning: %s", cc_pair_id)
                         continue
 
+                    # Skip auto-scheduling during a prune failure backoff; a manual
+                    # prune (API) bypasses this path and can still force a run.
+                    if RedisConnector(tenant_id, cc_pair_id).prune.in_failure_backoff:
+                        logger.info(
+                            "CC pair in pruning failure backoff: %s", cc_pair_id
+                        )
+                        continue
+
                     payload_id = try_creating_prune_generator_task(
                         self.app, cc_pair, db_session, r, tenant_id
                     )
@@ -744,7 +752,19 @@ def connector_pruning_generator_task(
             f"Pruning exceptioned: cc_pair={cc_pair_id} connector={connector_id} payload_id={payload_id}"
         )
 
-        redis_connector.prune.reset()
+        # Back off so a failing prune isn't re-dispatched on the next beat.
+        redis_connector.prune.set_failure_backoff()
+
+        # Only reset (clears the fence + taskset) if cleanup tasks were never
+        # fanned out. If they were, reset would orphan them (it doesn't revoke
+        # them) and the next beat would re-enumerate and re-queue the whole set;
+        # keeping the fence lets the monitor finalize the in-flight taskset, and
+        # generator_failed makes it record a FAILED prune instead of a false success.
+        if redis_connector.prune.generator_complete is None:
+            redis_connector.prune.reset()
+        else:
+            redis_connector.prune.set_generator_failed()
+
         raise e
     finally:
         if lock.owned():
@@ -792,16 +812,25 @@ def monitor_ccpair_pruning_taskset(
         )
         return
 
-    mark_ccpair_as_pruned(int(cc_pair_id), db_session)
-    task_logger.info(
-        f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
-    )
+    # A generator that threw after fan-out still drains its tasks; record FAILED
+    # so the prune retries after the backoff instead of advancing last_pruned.
+    failed = redis_connector.prune.generator_failed
+    if failed:
+        task_logger.warning(
+            f"Connector pruning failed after fan-out: cc_pair={cc_pair_id} num_pruned={initial}"
+        )
+    else:
+        mark_ccpair_as_pruned(int(cc_pair_id), db_session)
+        redis_connector.prune.clear_failure_backoff()
+        task_logger.info(
+            f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
+        )
 
     update_sync_record_status(
         db_session=db_session,
         entity_id=cc_pair_id,
         sync_type=SyncType.PRUNING,
-        sync_status=SyncStatus.SUCCESS,
+        sync_status=SyncStatus.FAILED if failed else SyncStatus.SUCCESS,
         num_docs_synced=initial,
     )
 

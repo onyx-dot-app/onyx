@@ -5,7 +5,7 @@ The Celery `run_scheduled_task` task is a thin wrapper around
 logic importable + testable without a Celery worker (external-dependency
 unit tests instantiate it directly).
 
-Lifecycle (see ``docs/craft/features/scheduled-tasks.md``):
+Lifecycle (see ``docs/craft/features/scheduled-tasks/overview.md``):
 
 1. Fetch the run row + owning task. Bail out idempotently if the run is
    not ``QUEUED`` (Celery may redeliver, or a sweeper may have already
@@ -381,6 +381,7 @@ def _drive_agent(
         # (terminal Error only) would otherwise be recorded SUCCEEDED (ENG-4234).
         terminal_error: Error | None = None
         got_prompt_response = False
+        cancelled = False
         final_event_count = 0
         # Acquire the per-build_session lock for the duration of the
         # agent loop. __enter__/__exit__ used directly (rather than a
@@ -422,6 +423,11 @@ def _drive_agent(
                 # Break before the budget check: a deadline tripping exactly as
                 # the agent finishes must not mis-mark a success as timed-out.
                 if isinstance(sandbox_event, PromptResponse):
+                    # Scheduled runs have no interrupt mechanism, so a cancelled
+                    # terminal means opencode aborted the agent
+                    # (MessageAbortedError) — record it as a failure, not success.
+                    if getattr(sandbox_event, "stop_reason", None) == "cancelled":
+                        cancelled = True
                     got_prompt_response = True
                     break
 
@@ -480,7 +486,7 @@ def _drive_agent(
                 db_session.commit()
                 return True
 
-            if terminal_error is not None or not got_prompt_response:
+            if terminal_error is not None or cancelled or not got_prompt_response:
                 session_manager.finalize_persist(session_id, state)
                 db_session.commit()
                 if terminal_error is not None:
@@ -492,6 +498,9 @@ def _drive_agent(
                     error_detail = (
                         terminal_error.message or "agent turn ended with an error"
                     )
+                elif cancelled:
+                    error_class = ScheduledTaskErrorClass.AGENT_EXCEPTION
+                    error_detail = "agent turn was aborted before completion"
                 else:
                     error_class = ScheduledTaskErrorClass.AGENT_EXCEPTION
                     error_detail = "agent stream ended without a completion response"

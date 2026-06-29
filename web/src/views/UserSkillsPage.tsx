@@ -16,6 +16,7 @@ import SkillCard, {
 } from "@/sections/cards/SkillCard";
 import CreatePersonalSkillModal from "@/views/UserSkillsPage/CreatePersonalSkillModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import {
   deleteUserSkill,
   patchUserSkill,
@@ -33,6 +34,9 @@ export default function UserSkillsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
+    null
+  );
+  const [previewTarget, setPreviewTarget] = useState<SkillCardItem | null>(
     null
   );
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -114,7 +118,7 @@ export default function UserSkillsPage() {
   const items = useMemo<SkillCardItem[]>(() => {
     if (!data) return [];
     const builtinItems: SkillCardItem[] = data.builtins.map((b) => ({
-      id: `builtin:${b.slug}`,
+      id: b.id,
       name: b.name,
       description: b.description,
       source: "builtin",
@@ -231,6 +235,7 @@ export default function UserSkillsPage() {
                         onReplaceBundle={handleReplaceBundleClick}
                         onDelete={setDeleteTarget}
                         onToggleEnabled={handleToggleEnabled}
+                        onClick={setPreviewTarget}
                       />
                     ))}
                   </div>
@@ -278,6 +283,14 @@ export default function UserSkillsPage() {
           onSubmit={handleDeleteConfirmed}
         />
       )}
+
+      <SkillPreviewModal
+        open={previewTarget !== null}
+        mode="user"
+        skillId={previewTarget?.id ?? null}
+        fallbackTitle={previewTarget?.name}
+        onClose={() => setPreviewTarget(null)}
+      />
     </SettingsLayouts.Root>
   );
 }

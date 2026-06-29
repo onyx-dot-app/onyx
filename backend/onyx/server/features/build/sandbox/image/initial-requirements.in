@@ -1,7 +1,6 @@
 cryptography
 defusedxml
 fastapi
-google-genai
 lxml
 matplotlib
 matplotlib-inline
@@ -13,4 +12,5 @@ pdfplumber
 pillow
 pydantic
 python-pptx
+requests
 uvicorn[standard]

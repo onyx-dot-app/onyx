@@ -9,7 +9,6 @@ hydration, and file API operations backed by docker exec.
 
 from __future__ import annotations
 
-from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -23,6 +22,7 @@ from tests.integration.common_utils.managers.build_session import BuildSessionMa
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
+from tests.integration.tests.craft.docker_e2e.conftest import DockerSandbox
 from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
 
 pytestmark = pytest.mark.skipif(
@@ -40,13 +40,13 @@ def workspace_user() -> DATestUser:
 def workspace_sandbox(
     workspace_user: DATestUser,
     provision_sandbox: ProvisionSandbox,
-) -> tuple[UUID, str]:
+) -> DockerSandbox:
     return provision_sandbox(workspace_user)
 
 
 def test_session_setup_creates_user_writable_workspace(
     workspace_user: DATestUser,
-    workspace_sandbox: tuple[UUID, str],
+    workspace_sandbox: DockerSandbox,
     docker_exec: DockerExec,
 ) -> None:
     """

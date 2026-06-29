@@ -239,6 +239,11 @@ module.exports = {
         description: "375",
         "token-bold": "bold",
       },
+      boxShadow: {
+        "box-00": "var(--shadow-box-00)",
+        "box-01": "var(--shadow-box-01)",
+        "box-02": "var(--shadow-box-02)",
+      },
       backdropBlur: {
         "01": "var(--backdrop-blur-01)",
         "02": "var(--backdrop-blur-02)",

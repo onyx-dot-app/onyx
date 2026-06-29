@@ -10,7 +10,9 @@ Port the Onyx web chat experience to the React Native + Expo mobile app, deliver
 2. [02-high-level-design.md](02-high-level-design.md) — plain-language end-to-end flow, component-interaction diagram, key decisions.
 3. [03-detailed-design.md](03-detailed-design.md) — client data model (no DB change), shared-contract inventory, new files, file tree, renderer-registry foundation, pre-impl notes.
 4. [04-implementation-plan.md](04-implementation-plan.md) — CLAUDE.md-format plan + appended **Plan Challenge** results (all checks pass; claims web-verified).
-5. [05-pr-roadmap.md](05-pr-roadmap.md) — the delivery sequence: PR 0 (spikes) → 1 (shell) → 2 (shared parser) → 3 (**core chat** + renderer-dispatch foundation) → 4 (resume) · 5 (agents) · 6→7→8 (projects → files → attachments) · 9a–9e (rich-chat). Each PR has a **"Before you start (grill on)"** checklist.
+5. [05-pr-roadmap.md](05-pr-roadmap.md) — the delivery sequence: PR 0 (spikes) → 1 (shell) → 2 (**mobile-native chat data layer**: parser + contracts + tree + history) → 3 (**core chat** + renderer-dispatch foundation) → 4 (resume) · 5 (agents) · 6→7→8 (projects → files → attachments) · 9a–9e (rich-chat). Each PR has a **"Before you start (grill on)"** checklist.
+
+> **Decision (2026-06-26, revised): no shared chat code.** The chat pure layer — NDJSON parser, message tree, `processRawChatHistory`, and all chat/streaming/file contracts — is written **natively in mobile** (PR 2), with web keeping its own existing copies. **Nothing chat-related enters `@onyx-ai/shared`.** We considered sharing the whole pure layer, then just the ~40-line parser, then dropped even that — the shared-package machinery (util + web re-point + jest mapper + dist coupling) is more moving parts than the ~200 lines of duplication it removes. Pre-production the backend protocol is stable, so drift risk is low and cheap to re-extract later if it bites. **Web is untouched by the mobile chat port.** Full rationale in the **PR 2** section of `05-pr-roadmap.md`.
 
 ## How to execute
 

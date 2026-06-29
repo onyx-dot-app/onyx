@@ -15,6 +15,7 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 
 interface BuiltinSkillsTableProps {
   skills: BuiltinSkill[];
+  onPreviewSkill: (skill: BuiltinSkill) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +76,7 @@ const COLUMNS = [
 
 export default function BuiltinSkillsTable({
   skills,
+  onPreviewSkill,
 }: BuiltinSkillsTableProps) {
   const columns = useMemo(() => COLUMNS, []);
 
@@ -82,8 +84,9 @@ export default function BuiltinSkillsTable({
     <Table
       data={skills}
       columns={columns}
-      getRowId={(row) => row.slug}
+      getRowId={(row) => row.id}
       pageSize={DEFAULT_PAGE_SIZE}
+      onRowClick={onPreviewSkill}
     />
   );
 }
