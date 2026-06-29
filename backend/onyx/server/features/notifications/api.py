@@ -64,7 +64,7 @@ def get_notifications_api(
     page_size: int = Query(
         DEFAULT_NOTIFICATIONS_PAGE_SIZE, ge=1, le=MAX_NOTIFICATIONS_PAGE_SIZE
     ),
-    notif_type: NotificationType | None = Query(None),
+    notif_type: NotificationType | None = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedNotifications:
