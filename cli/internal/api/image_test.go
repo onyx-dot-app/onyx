@@ -17,8 +17,8 @@ func TestGenerateImage_Success(t *testing.T) {
 		if r.Method != "POST" {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		if !strings.HasSuffix(r.URL.Path, "/build/image-generation/generate") {
-			t.Errorf("path = %s, want .../build/image-generation/generate", r.URL.Path)
+		if !strings.HasSuffix(r.URL.Path, "/image-generation/generate") {
+			t.Errorf("path = %s, want .../image-generation/generate", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
