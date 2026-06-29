@@ -121,6 +121,27 @@ func TestWriteGeneratedImages_MultipleSuffixes(t *testing.T) {
 	}
 }
 
+func TestWriteGeneratedImages_FailsIfExists(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "art.png")
+	if err := os.WriteFile(out, []byte("existing"), 0o644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	images := []models.GeneratedImagePayload{
+		{DataBase64: base64.StdEncoding.EncodeToString([]byte("new"))},
+	}
+
+	_, err := writeGeneratedImages(images, out)
+	if err == nil {
+		t.Fatal("expected error when output already exists")
+	}
+	// The pre-existing file must be left untouched, not truncated.
+	got, _ := os.ReadFile(out)
+	if string(got) != "existing" {
+		t.Fatalf("existing file was modified: %q", got)
+	}
+}
+
 func TestWriteGeneratedImages_CreatesParentDirs(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "outputs", "images", "art.png")
