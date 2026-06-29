@@ -178,6 +178,7 @@ module.exports = {
         "**/src/refresh-pages/**/*.test.tsx",
         "**/src/hooks/**/*.test.tsx",
         "**/src/sections/**/*.test.tsx",
+        "**/src/views/**/*.test.tsx",
         // Add more patterns here as you add more integration tests
       ],
     },
