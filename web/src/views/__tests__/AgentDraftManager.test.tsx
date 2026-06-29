@@ -7,7 +7,6 @@ import { draftKey } from "@/hooks/useDraft";
 
 const KEY = draftKey("agent-editor", "new");
 
-// Surfaces the live form value and lets a test dirty the form.
 function FormReadout() {
   const { values, setFieldValue } = useFormikContext<{ name: string }>();
   return (
@@ -61,17 +60,10 @@ describe("AgentDraftManager", () => {
     expect(screen.getByTestId("name").textContent).toBe("");
   });
 
-  // The save-success path calls clearRef (the hook's clear()), which must
-  // cancel a debounced write scheduled by the edit. A bare removeItem would let
-  // the pending timer rewrite the key right after, resurrecting the saved
-  // values.
   it("clearRef cancels a pending debounced write before removing the draft", () => {
     const { clearRef } = renderManager();
 
-    // Editing schedules a debounced save(values).
     fireEvent.click(screen.getByText("edit"));
-
-    // Save succeeds before the debounce fires; the parent clears via the ref.
     act(() => {
       clearRef.current?.();
     });
@@ -79,7 +71,6 @@ describe("AgentDraftManager", () => {
       jest.advanceTimersByTime(300);
     });
 
-    // The cancelled timer must not have rewritten the key.
     expect(sessionStorage.getItem(KEY)).toBeNull();
   });
 });

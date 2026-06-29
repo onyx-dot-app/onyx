@@ -24,7 +24,6 @@ describe("useDraft", () => {
     act(() => {
       result.current.save("hello");
     });
-    // Nothing written yet: still inside the debounce window.
     expect(sessionStorage.getItem(KEY)).toBeNull();
 
     act(() => {
@@ -130,13 +129,11 @@ describe("useDraft", () => {
     act(() => {
       result.current.save("typed under a");
     });
-    // Switch keys before the debounce fires (e.g. chat:new -> real session id).
     rerender({ key: keyB });
     act(() => {
       jest.advanceTimersByTime(300);
     });
 
-    // The stale timer must not resurrect the old key's value.
     expect(sessionStorage.getItem(keyA)).toBeNull();
     expect(sessionStorage.getItem(keyB)).toBeNull();
   });
@@ -157,9 +154,8 @@ describe("useDraft", () => {
     expect(result.current.draft).toBe("value-b");
   });
 
-  // Regression: a key change must produce a real false->true `loaded` edge. The
-  // old impl batched setLoaded(false)+setLoaded(true) in one effect, so
-  // `loaded` stayed true across the switch and consumers never re-seeded.
+  // Consumers rely on this edge to re-seed; a key change must drop loaded to
+  // false.
   it("drops loaded to false on the render right after the key changes", () => {
     const keyA = draftKey("test", "a");
     const keyB = draftKey("test", "b");
@@ -174,17 +170,14 @@ describe("useDraft", () => {
       { initialProps: { key: keyA } }
     );
 
-    loadedHistory.length = 0; // ignore mount; focus on the key change
+    loadedHistory.length = 0; // ignore mount
     rerender({ key: keyB });
 
     expect(loadedHistory).toContain(false);
     expect(loadedHistory[loadedHistory.length - 1]).toBe(true);
   });
 
-  // Regression for the real-world bug: a draft consumer that gates saves on the
-  // loaded edge (re-arm on key change, set seeded once loaded, save only when
-  // seeded) must keep saving after the key flips -- e.g. a new chat session
-  // gaining its real id once the first message is sent. Mirrors AppInputBar.
+  // Mirrors AppInputBar's loaded-edge save gating across a key flip.
   it("still persists after a key change under loaded-edge save gating", () => {
     const keyA = draftKey("chat", "new");
     const keyB = draftKey("chat", "123");
@@ -225,14 +218,9 @@ describe("useDraft", () => {
     expect(JSON.parse(sessionStorage.getItem(keyB)!)).toBe("draft-for-b");
   });
 
-  // Regression for the enqueue path: when a typed message is committed to the
-  // queue, AppInputBar empties the input (a debounced empty-save) and then
-  // calls clear() explicitly. clear() must remove the draft synchronously so a
-  // reload in the debounce window can't resurrect the already-queued message.
   it("clear() drops a persisted draft immediately, not on the debounce", () => {
     const { result } = renderHook(() => useDraft<string>({ key: KEY }));
 
-    // User typed a message and it reached storage.
     act(() => {
       result.current.save("queued message");
     });
@@ -241,13 +229,11 @@ describe("useDraft", () => {
     });
     expect(sessionStorage.getItem(KEY)).not.toBeNull();
 
-    // Enqueue: empty-save is scheduled (debounced), then clear() fires.
     act(() => {
       result.current.save("");
       result.current.clear();
     });
 
-    // Gone right away, without waiting out the debounce.
     expect(sessionStorage.getItem(KEY)).toBeNull();
   });
 

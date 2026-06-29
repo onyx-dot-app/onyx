@@ -485,16 +485,12 @@ function AgentStarterMessages() {
 
 interface AgentDraftManagerProps {
   storageKey: string;
-  // Exposes the hook's clear() to the parent's save-success path so it cancels
-  // any pending debounced write before removing the draft (a bare removeItem
-  // would let an in-flight save rewrite the key right after).
+  // Lets the parent's save-success path cancel a pending write before clearing.
   clearRef: React.RefObject<(() => void) | null>;
 }
 
-// Headless coordinator for new-agent drafts: auto-saves the form while dirty
-// and auto-restores any stored draft on mount. Only mounted for agent creation;
-// edits to an existing agent are assumed minor and aren't drafted. Renders
-// nothing.
+// Headless: auto-saves the form while dirty and auto-restores the draft on
+// mount. Only mounted for agent creation.
 export function AgentDraftManager({
   storageKey,
   clearRef,
@@ -517,14 +513,13 @@ export function AgentDraftManager({
     if (loaded && dirty) save(values);
   }, [values, dirty, loaded, save]);
 
-  // Restore the draft once the read completes. Safe to apply silently: the
-  // create form starts pristine, so there's nothing to clobber. The !dirty
-  // guard still bails if the user began typing before the read landed.
+  // Restore once read. The !dirty guard avoids clobbering if the user typed
+  // before the read landed.
   useEffect(() => {
     if (!loaded || restoredRef.current) return;
     restoredRef.current = true;
     if (hasDraft && draft && !dirty) {
-      // JSON stores dates as ISO strings; revive the one date field to a Date.
+      // Revive the date field that JSON serialized to an ISO string.
       const cutoff = draft.knowledge_cutoff_date;
       setValues({
         ...draft,
@@ -558,10 +553,7 @@ export default function AgentEditorPage({
   const { vectorDbEnabled } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  // Drafts are only kept while creating an agent, so a single "new" key.
   const agentDraftStorageKey = draftKey("agent-editor", "new");
-  // Assigned by AgentDraftManager; lets handleSubmit cancel a pending draft
-  // write before clearing on a successful save.
   const clearAgentDraftRef = useRef<(() => void) | null>(null);
 
   // Labels are edited in the Share Agent section and saved with the form
@@ -989,9 +981,7 @@ export default function AgentEditorPage({
       // Success
       const agent = await personaResponse.json();
 
-      // Saved: drop the draft so it can't resurface as a stale restore prompt.
-      // Via the hook's clear() so a debounced write in flight is cancelled
-      // first.
+      // clear() (not clearDraft) so an in-flight debounced write is cancelled too.
       clearAgentDraftRef.current?.();
 
       // Apply the leveled share draft captured in the dialog before the
@@ -1337,8 +1327,7 @@ export default function AgentEditorPage({
 
                     {/* Agent Form Content */}
                     <SettingsLayouts.Body>
-                      {/* Drafts are only kept for new agents; edits to an
-                          existing agent are assumed minor. */}
+                      {/* Drafts only for new agents; edits are assumed minor. */}
                       {!existingAgent && (
                         <AgentDraftManager
                           storageKey={agentDraftStorageKey}

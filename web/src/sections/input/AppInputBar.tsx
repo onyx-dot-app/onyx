@@ -206,8 +206,7 @@ const AppInputBar = React.memo(
     const isSearchMode =
       (isNewSession && appMode === "search") || isSearchActive;
 
-    // Draft the message, keyed by chat session id (or "new" before a session
-    // exists; the key flips to the real id once the session is created).
+    // Keyed by chat session id, or "new" until the session is created.
     const chatSessionId = appFocus.isChat() ? appFocus.getId() : null;
     const chatDraftStorageKey = draftKey("chat", chatSessionId ?? "new");
     const {
@@ -218,27 +217,28 @@ const AppInputBar = React.memo(
     } = useDraft<string>({ key: chatDraftStorageKey });
     const draftSeededRef = useRef(false);
     const skipNextDraftSaveRef = useRef(false);
+    // Snapshot of message, read non-reactively in the restore effect so seeding
+    // doesn't re-run on every keystroke.
+    const messageRef = useRef(message);
+    messageRef.current = message;
 
-    // Re-arm seeding when the active key changes (e.g. switching sessions).
     useEffect(() => {
       draftSeededRef.current = false;
     }, [chatDraftStorageKey]);
 
-    // Restore the draft into the empty input once read. A URL prompt
-    // (initialMessage) wins, and a non-empty input is never clobbered.
+    // Restore once read: a URL prompt wins and a non-empty input is never
+    // clobbered.
     useEffect(() => {
       if (!chatDraftLoaded || draftSeededRef.current) return;
       draftSeededRef.current = true;
-      if (chatDraft && !initialMessage && !message) {
-        // setMessage is async, so the save effect below would fire first with
-        // the stale empty message and wipe what we just seeded; skip that run.
+      if (chatDraft && !initialMessage && !messageRef.current) {
+        // Skip the save effect's next run; it would fire with the stale empty
+        // message and wipe what we just seeded.
         skipNextDraftSaveRef.current = true;
         setMessage(chatDraft);
       }
-    }, [chatDraftLoaded, chatDraft, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [chatDraftLoaded, chatDraft, initialMessage, setMessage]);
 
-    // Persist message changes (debounced). The hook's empty-skip rule means
-    // clearing the input also removes the stored draft.
     useEffect(() => {
       if (!chatDraftLoaded || !draftSeededRef.current) return;
       if (skipNextDraftSaveRef.current) {
@@ -784,9 +784,8 @@ const AppInputBar = React.memo(
                 if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
                   enqueueCurrentMessage(message.trim());
                   clearMessage();
-                  // Committed to the queue: drop its draft now rather than via
-                  // the debounced empty-save, so a reload can't briefly
-                  // resurrect it.
+                  // Drop the draft now; a reload could outrace the debounced
+                  // empty-save.
                   clearChatDraft();
                 }
               } else if (chatState == "streaming") {
@@ -935,7 +934,8 @@ const AppInputBar = React.memo(
                         )
                           return;
 
-                        // Enter to submit or queue (Shift+Enter falls through to browser default: inserts <br>)
+                        // Enter to submit or queue (Shift+Enter falls through
+                        // to browser default: inserts <br>).
                         if (
                           event.key === "Enter" &&
                           !showPrompts &&
@@ -964,9 +964,8 @@ const AppInputBar = React.memo(
                           ) {
                             enqueueCurrentMessage(message.trim());
                             clearMessage();
-                            // Committed to the queue: drop its draft now rather
-                            // than via the debounced empty-save, so a reload
-                            // can't briefly resurrect it.
+                            // Drop the draft now; a reload could outrace the
+                            // debounced empty-save.
                             clearChatDraft();
                           }
                         }

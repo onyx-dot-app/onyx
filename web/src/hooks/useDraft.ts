@@ -2,32 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Persists in-progress input to browser storage so it survives navigation and
-// unexpected logout, then offers it back for restore on return.
-
 const STORAGE_PREFIX = "onyx:draft";
 
-// Namespaced so the flat per-origin store stays collision-free:
-// ``onyx:draft:<scope>:<entityId>``.
 export function draftKey(scope: string, entityId: string): string {
   return `${STORAGE_PREFIX}:${scope}:${entityId}`;
 }
 
-// Drafts live in ``sessionStorage``: per-tab, self-clearing on tab close, and
-// it survives reload and the same-tab login redirect, which is all we need
-// today.
 function getStorage(): Storage | null {
   if (typeof window === "undefined") return null;
   try {
+    // sessionStorage access throws when storage is blocked.
     return window.sessionStorage;
   } catch {
-    // Storage access can throw in private-browsing / blocked-cookie modes.
     return null;
   }
 }
 
-// Direct removal for callers that know the key but don't render the hook (e.g.
-// a save-success path).
 export function clearDraft(key: string) {
   const storage = getStorage();
   if (!storage) return;
@@ -38,8 +28,6 @@ export function clearDraft(key: string) {
   }
 }
 
-// A value is "empty" (and so not worth persisting) when it's nullish or a
-// blank/whitespace-only string. Consumers with richer shapes pass their own.
 function defaultIsEmpty(value: unknown): boolean {
   if (value == null) return true;
   if (typeof value === "string") return value.trim().length === 0;
@@ -54,11 +42,10 @@ export interface UseDraftOptions<T> {
 
 export interface UseDraftReturn<T> {
   draft: T | null;
-  // True once the read for the current key finishes; lets consumers tell "not
-  // read yet" from "read, nothing there" before restoring.
+  // Distinguishes "not read yet" from "read, nothing there".
   loaded: boolean;
   hasDraft: boolean;
-  // Debounced; empty values remove the key instead of writing.
+  // Debounced; empty values remove the key.
   save: (value: T) => void;
   // Removes immediately and cancels any pending write.
   clear: () => void;
@@ -69,9 +56,8 @@ export function useDraft<T>({
   debounceMs = 300,
   isEmpty = defaultIsEmpty,
 }: UseDraftOptions<T>): UseDraftReturn<T> {
-  // Tag the read result with its key so ``loaded`` is derived, not separate
-  // state. This forces a real false->true ``loaded`` edge on every key change,
-  // which consumers rely on to re-seed.
+  // Key-tagged so `loaded` is derived, giving a false->true edge on every key
+  // change that consumers rely on to re-seed.
   const [entry, setEntry] = useState<{ key: string; draft: T | null } | null>(
     null
   );
@@ -79,8 +65,6 @@ export function useDraft<T>({
   const isEmptyRef = useRef(isEmpty);
   isEmptyRef.current = isEmpty;
 
-  // Read the stored draft whenever the key changes. Effects don't run during
-  // SSR, so this never touches storage on the server.
   useEffect(() => {
     const storage = getStorage();
     if (!storage) {
@@ -95,8 +79,8 @@ export function useDraft<T>({
     }
   }, [key]);
 
-  // Cancel a pending write when the key changes (or on unmount) so a debounced
-  // save for the previous key can't land after the consumer has moved on.
+  // Cancel a pending write on key change/unmount so it can't land under the old
+  // key.
   useEffect(() => {
     return () => {
       if (timerRef.current !== null) {
@@ -120,7 +104,7 @@ export function useDraft<T>({
             storage.setItem(key, JSON.stringify(value));
           }
         } catch {
-          // ignore quota / serialization errors
+          // ignore
         }
       }, debounceMs);
     },
