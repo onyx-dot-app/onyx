@@ -72,12 +72,14 @@ highest-value resource types, exercised by the escalation integration suite (man
   | `backend/onyx/db/models.py` | modified | 2 boolean columns (`User__UserGroup`, `User`) |
   | `backend/alembic/versions/c71a18ea7d07_*.py` | new | add columns + role-gated backfill |
   | `backend/onyx/db/permissions.py` | modified | recompute sets `is_group_manager` |
-  | `backend/tests/external_dependency_unit/.../test_is_manager_backfill.py` | new | backfill correctness |
+  | `backend/tests/integration/tests/usergroup/test_group_membership_updates_user_permissions.py` | modified | recompute sets `is_group_manager` (folded into the existing recompute test) |
+  | `tests/integration/tests/migrations/test_is_manager_backfill_migration.py` | new (DEFERRED) | backfill correctness via real alembic |
 - **Est. size:** ~220 LOC
 - **Depends on:** —
 - **Feature-flag state:** N/A — additive, columns unread until PR3+.
-- **Tests on merge:** external-dependency unit — CURATOR(+is_curator)→manager; zero-`is_curator` GLOBAL_CURATOR
-  captured on all memberships; `is_group_manager` mirrors; fresh-install all-false.
+- **Tests on merge:** integration — `is_group_manager` set/cleared by `recompute` on a managed edge (folded
+  into the existing recompute test). Backfill correctness (CURATOR / zero-`is_curator` GLOBAL_CURATOR /
+  fresh-install) is DEFERRED — revisit as a real-alembic migration test before GA.
 - **Drift checkpoint:** confirm `c8e316473aaa` is still head; confirm the pre-GA assumption (curators already
   collapsed to STANDARD) still holds so migrated `is_manager` bits are dormant, not a silent re-grant. If §6.1.1
   snapshot caveat matters operationally, decide whether the zero-managed-group report ships now or later.

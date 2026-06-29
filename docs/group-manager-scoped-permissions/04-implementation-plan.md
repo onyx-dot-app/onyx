@@ -15,9 +15,9 @@ PRIVATE and strictly within their managed groups — enforced authoritatively at
 
 ## Important Notes
 
-- **§8 is fully greenfield; §1–7 is built.** Verified — every §8 artifact is absent; base system complete
-  (`01-research.md`). The wiki's "Implemented as revision `4fa09af6ca14`" is **inaccurate** — that migration is
-  not in the tree (`HEAD = c8e316473aaa`).
+- **§8 is greenfield on §1–7; PR0+PR1 now built.** Base system complete (`01-research.md`). PR1 shipped the
+  schema migration as `c71a18ea7d07` (down_revision `c8e316473aaa`, now head) — the earlier placeholder
+  `4fa09af6ca14` was never used. Scoped artifacts (PR2+) remain absent.
 - **Two-gate model is non-negotiable.** Route gate (`has_permission_or_scope`, cached flag) only grants
   *reachability*; the **authorization of record** is `assert_group_set_within_scope`, run **inside the DB write**,
   re-reading the resource's **current** groups (`02/03`). The route gate must never authorize.
@@ -107,6 +107,22 @@ and can never widen group reach (live `is_manager` bounds groups regardless of t
 Primary type = **integration** (per CLAUDE.md: real deployment, hardest to fake; this is a security boundary).
 Use `UserGroupManager` / resource managers in `tests/integration/common_utils`; prefer fixtures.
 
+> **Find the existing home before writing a new test file.** The new permission system already has
+> strong coverage — don't reflexively `git add` a fresh test file. First locate the suite that already
+> exercises the behavior, read it, confirm it's sound, and **extend it** when the new assertion belongs to
+> a flow it already drives. Only create a new file when no existing suite covers the behavior. Known homes:
+> - recompute / `effective_permissions` → `tests/integration/tests/usergroup/test_group_membership_updates_user_permissions.py`
+> - grant / revoke (bulk) + implied-expansion → `tests/integration/tests/usergroup/test_group_permission_toggle.py`
+> - registration / default-group propagation + fixtures → `tests/integration/tests/permissions/` (`test_auth_permission_propagation.py`, `conftest.py`)
+> - read-time permission expansion (pure logic) → `tests/unit/onyx/auth/test_permissions.py`
+>
+> Worked example (PR1): `is_group_manager` is the *second* column `recompute_user_permissions__no_commit`
+> writes, so its coverage was folded into the existing recompute test above — **not** a standalone file. An
+> earlier standalone `test_is_manager_recompute.py` was deleted because it duplicated that home, flipped the
+> flag on an incidental default-group membership, and re-ran the migration's copied SQL as a self-referential
+> oracle. The migration-backfill case is the one genuinely new home (own file under
+> `tests/integration/tests/migrations/`, running the real alembic migration — never a copied-SQL oracle).
+
 - **Escalation suite (integration)** — for a manager of group X: (a) capture-by-reassign rejected
   (`PUT resource{groups:[X]}` on a resource currently in Y → 403); (b) PUBLIC/SYNC create+edit rejected;
   (c) cross-group membership add rejected (add to Y); (d) **fail-closed** — a user with `is_manager` on zero
@@ -115,9 +131,10 @@ Use `UserGroupManager` / resource managers in `tests/integration/common_utils`; 
   add within X) succeed.
 - **PAT (integration)** — a manager's PAT scoped to `manage:connectors` edits only X's connectors and cannot
   reach Y; a PAT cannot widen group reach.
-- **Migration backfill (external-dependency unit)** — seed CURATOR(+is_curator) and a zero-`is_curator`
-  GLOBAL_CURATOR; assert `is_manager` set correctly (GLOBAL_CURATOR captured on all memberships) and
-  `is_group_manager` mirrors it; fresh-install path leaves all false.
+- **Migration backfill (DEFERRED by owner; revisit before GA) — integration, real alembic** — a new test under
+  `tests/integration/tests/migrations/` that seeds CURATOR(+is_curator) and a zero-`is_curator` GLOBAL_CURATOR,
+  runs the actual migration (down→up), and asserts `is_manager` (GLOBAL_CURATOR captured on all memberships) +
+  `is_group_manager` mirror; fresh-install leaves all false. NOT a copied-SQL oracle.
 - **Filter SQL (external-dependency unit)** — `within_managed_scope_clause` returns exactly the resources whose
   every group ⊆ managed and ≥1 group and private (the `document_set` rebuild especially).
 - **Manager toggle UI (playwright, 1 test)** — admin assigns a manager via the group page; that user then sees
