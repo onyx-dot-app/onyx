@@ -38,6 +38,9 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
 )
+from onyx.server.features.build.external_apps.models import (
+    CreateCustomExternalAppFromRepoRequest,
+)
 from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
 from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
 from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
@@ -45,6 +48,10 @@ from onyx.server.features.build.external_apps.models import UpsertUserCredential
 from onyx.skills.bundle import read_bundle_file
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
+from onyx.skills.marketplace import build_bundle_for_skill
+from onyx.skills.marketplace import extracted_skills
+from onyx.skills.marketplace import fetch_repo_archive
+from onyx.skills.marketplace import parse_skill_source
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.encryption import mask_string
@@ -231,6 +238,69 @@ def update_external_app_admin(
     return _to_admin_response(app)
 
 
+def _create_custom_app_from_bundle(
+    *,
+    name: str,
+    description: str,
+    parsed_patterns: list[str],
+    parsed_auth_template: dict,  # type: ignore[type-arg]
+    parsed_org_credentials: dict,  # type: ignore[type-arg]
+    enabled: bool,
+    bundle_bytes: bytes,
+    bundle_filename: str | None,
+    slug: str | None,
+    db_session: Session,
+) -> ExternalApp:
+    """Validate inputs, ingest the bundle, persist the app, and push to sandboxes.
+
+    Shared by the multipart upload path and the repo-pull path. Callers are
+    responsible for all JSON-field parsing and for acquiring ``bundle_bytes``
+    before calling here. This function owns the commit (push happens before it so
+    a push failure rolls back the create + orphaned blob); callers must NOT commit
+    again.
+    """
+    if not name.strip():
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "name is required.")
+    if not parsed_patterns:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "At least one upstream URL pattern is required.",
+        )
+    if any(not p.strip() for p in parsed_patterns):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "upstream_url_patterns must not contain empty entries.",
+        )
+    for pattern in parsed_patterns:
+        UrlGlob.parse(pattern)
+    validate_auth_template(parsed_auth_template, parsed_org_credentials)
+
+    file_store = get_default_file_store()
+    ingested = ingest_skill_bundle(bundle_bytes, bundle_filename, file_store, slug=slug)
+    try:
+        app = create_external_app(
+            db_session=db_session,
+            name=name.strip(),
+            description=description.strip() or ingested.description,
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
+            app_type=ExternalAppType.CUSTOM,
+            upstream_url_patterns=parsed_patterns,
+            auth_template=parsed_auth_template,
+            organization_credentials=parsed_org_credentials,
+            enabled=enabled,
+            is_public=True,
+            slug=ingested.slug,
+        )
+        push_skill_to_affected_sandboxes(app.skill, db_session)
+        db_session.commit()
+    except Exception:
+        delete_bundle_blob(file_store, ingested.bundle_file_id)
+        raise
+
+    return app
+
+
 @router.post("/admin/apps/custom")
 def create_custom_external_app(
     name: str = Form(...),
@@ -258,56 +328,63 @@ def create_custom_external_app(
         organization_credentials, _STR_DICT_ADAPTER, "organization_credentials"
     )
 
-    if not name.strip():
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "name is required.")
-    if not parsed_patterns:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "At least one upstream URL pattern is required.",
-        )
-    if any(not p.strip() for p in parsed_patterns):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "upstream_url_patterns must not contain empty entries.",
-        )
-    # Custom app globs; validate before ingesting the bundle so a bad
-    # pattern fails fast.
-    for pattern in parsed_patterns:
-        UrlGlob.parse(pattern)
-    validate_auth_template(parsed_auth_template, parsed_org_credentials)
-
     if bundle is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "A bundle (.zip) is required when creating a custom app.",
         )
 
-    file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store
+    app = _create_custom_app_from_bundle(
+        name=name,
+        description=description,
+        parsed_patterns=parsed_patterns,
+        parsed_auth_template=parsed_auth_template,
+        parsed_org_credentials=parsed_org_credentials,
+        enabled=enabled,
+        bundle_bytes=read_bundle_file(bundle.file),
+        bundle_filename=bundle.filename,
+        slug=None,
+        db_session=db_session,
     )
-    try:
-        app = create_external_app(
-            db_session=db_session,
-            name=name.strip(),
-            description=description.strip() or ingested.description,
-            bundle_file_id=ingested.bundle_file_id,
-            bundle_sha256=ingested.bundle_sha256,
-            app_type=ExternalAppType.CUSTOM,
-            upstream_url_patterns=parsed_patterns,
-            auth_template=parsed_auth_template,
-            organization_credentials=parsed_org_credentials,
-            enabled=enabled,
-            is_public=True,
-            slug=ingested.slug,
-        )
-        # Push before commit so a failure rolls back the create + orphaned blob.
-        push_skill_to_affected_sandboxes(app.skill, db_session)
-        db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
+    return _to_admin_response(app)
 
+
+@router.post("/admin/apps/custom/from-repo")
+def create_custom_external_app_from_repo(
+    body: CreateCustomExternalAppFromRepoRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ExternalAppAdminResponse:
+    """Create a CUSTOM app by pulling a skill bundle from a git repository.
+
+    ``body.source`` is any skills.sh-compatible input; ``body.slug`` selects
+    which skill from the discovered set to install. Returns 404 if the slug
+    is not found in the repository.
+    """
+    parsed = parse_skill_source(body.source)
+    archive = fetch_repo_archive(parsed)
+
+    with extracted_skills(archive, parsed.subpath) as discovered:
+        match = next((s for s in discovered if s.slug == body.slug), None)
+        if match is None:
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"Skill '{body.slug}' not found in repository",
+            )
+        bundle_bytes = build_bundle_for_skill(match)
+
+    app = _create_custom_app_from_bundle(
+        name=body.name,
+        description=body.description,
+        parsed_patterns=body.upstream_url_patterns,
+        parsed_auth_template=body.auth_template,
+        parsed_org_credentials=body.organization_credentials,
+        enabled=body.enabled,
+        bundle_bytes=bundle_bytes,
+        bundle_filename=None,
+        slug=match.slug,
+        db_session=db_session,
+    )
     return _to_admin_response(app)
 
 

@@ -10,6 +10,8 @@ import {
   Tooltip,
 } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
+import { cn } from "@opal/utils";
+import { Content, Section } from "@opal/layouts";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
 import InputKeyValue, {
   KeyValue,
@@ -17,9 +19,15 @@ import InputKeyValue, {
 import { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import {
   createCustomExternalApp,
+  createCustomExternalAppFromRepo,
   replaceCustomAppBundle,
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
+import {
+  previewRepoSkillsAdmin,
+  type RepoSkillPreviewItem,
+  type RepoSkillsPreview,
+} from "@/lib/skills/api";
 
 interface CreateCustomAppModalProps {
   open: boolean;
@@ -49,6 +57,8 @@ function toKeyValues(record: Record<string, string>): KeyValue[] {
   return entries.length > 0 ? entries : [{ key: "", value: "" }];
 }
 
+type BundleSource = "upload" | "repo";
+
 export default function CreateCustomAppModal({
   open,
   onClose,
@@ -69,6 +79,17 @@ export default function CreateCustomAppModal({
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Repo-import state (create mode only)
+  const [bundleSource, setBundleSource] = useState<BundleSource>("upload");
+  const [repoSource, setRepoSource] = useState("");
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [repoPreview, setRepoPreview] = useState<RepoSkillsPreview | null>(
+    null
+  );
+  const [repoPreviewError, setRepoPreviewError] = useState<string | null>(null);
+  const [selectedSkill, setSelectedSkill] =
+    useState<RepoSkillPreviewItem | null>(null);
+
   // Re-seed every time the modal opens: from the existing app when editing,
   // blank when creating. Prevents a prior attempt from leaking in.
   useEffect(() => {
@@ -88,10 +109,41 @@ export default function CreateCustomAppModal({
     );
     setFile(null);
     setError(null);
+    setBundleSource("upload");
+    setRepoSource("");
+    setIsPreviewing(false);
+    setRepoPreview(null);
+    setRepoPreviewError(null);
+    setSelectedSkill(null);
   }, [open, existingApp]);
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     setFile(event.target.files?.[0] ?? null);
+  }
+
+  async function handleFindSkills() {
+    if (!repoSource.trim()) return;
+    setIsPreviewing(true);
+    setRepoPreviewError(null);
+    setRepoPreview(null);
+    setSelectedSkill(null);
+    try {
+      const result = await previewRepoSkillsAdmin(repoSource.trim());
+      setRepoPreview(result);
+    } catch (err) {
+      setRepoPreviewError(
+        err instanceof Error ? err.message : "Failed to fetch skills from repo"
+      );
+    } finally {
+      setIsPreviewing(false);
+    }
+  }
+
+  function selectSkill(skill: RepoSkillPreviewItem) {
+    setSelectedSkill(skill);
+    // Prefill name/description only when they're still blank
+    if (!name.trim()) setName(skill.name);
+    if (!description.trim()) setDescription(skill.description);
   }
 
   // Headers and org credentials are optional; name + at least one upstream
@@ -104,8 +156,13 @@ export default function CreateCustomAppModal({
     if (upstreamPatterns.length === 0) {
       return "Add at least one upstream URL pattern. Type a pattern and press Enter.";
     }
-    if (!isEdit && file === null) {
-      return "Upload a bundle .zip file before creating this custom app.";
+    if (!isEdit) {
+      if (bundleSource === "upload" && file === null) {
+        return "Upload a bundle .zip file before creating this custom app.";
+      }
+      if (bundleSource === "repo" && selectedSkill === null) {
+        return "Select a skill from the repo before creating this custom app.";
+      }
     }
     return null;
   })();
@@ -144,8 +201,20 @@ export default function CreateCustomAppModal({
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
         });
+      } else if (bundleSource === "repo") {
+        // Create from repo: selectedSkill is guaranteed non-null by disabledCreateReason.
+        await createCustomExternalAppFromRepo({
+          name: name.trim(),
+          description: description.trim(),
+          upstream_url_patterns: upstreamPatterns,
+          auth_template: toRecord(headers),
+          organization_credentials: toRecord(orgCredentials),
+          enabled: true,
+          source: repoSource.trim(),
+          slug: selectedSkill!.slug,
+        });
       } else {
-        // Create: bundle is required (enforced by `canSave`).
+        // Create via zip upload: bundle is required (enforced by disabledCreateReason).
         await createCustomExternalApp({
           name: name.trim(),
           description: description.trim(),
@@ -184,26 +253,26 @@ export default function CreateCustomAppModal({
           }
         />
         <Modal.Body>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1">
+          <Section gap={1} alignItems="stretch">
+            <Section gap={0.25} alignItems="stretch">
               <Text font="main-ui-action">Name</Text>
               <InputTypeIn
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="My Custom App"
               />
-            </div>
+            </Section>
 
-            <div className="flex flex-col gap-1">
+            <Section gap={0.25} alignItems="stretch">
               <Text font="main-ui-action">Description</Text>
               <InputTypeIn
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Optional — defaults to the bundle's SKILL.md description"
               />
-            </div>
+            </Section>
 
-            <div className="flex flex-col gap-1">
+            <Section gap={0.25} alignItems="stretch">
               <Text font="main-ui-action">Upstream URL patterns</Text>
               <Text font="secondary-body" color="text-03">
                 {
@@ -215,9 +284,9 @@ export default function CreateCustomAppModal({
                 onChange={setUpstreamPatterns}
                 placeholder="https://api.example.com/*"
               />
-            </div>
+            </Section>
 
-            <div className="flex flex-col gap-1">
+            <Section gap={0.25} alignItems="stretch">
               <Text font="main-ui-action">Header credential pattern</Text>
               <Text font="secondary-body" color="text-03">
                 {`Optional — headers injected into outbound requests. Use {placeholder} for values the user (or org below) supplies, e.g. "Bearer {api_key}". Leave empty to allowlist the upstream patterns without injecting credentials.`}
@@ -232,9 +301,9 @@ export default function CreateCustomAppModal({
                 mode="line"
                 addButtonLabel="Add header"
               />
-            </div>
+            </Section>
 
-            <div className="flex flex-col gap-1">
+            <Section gap={0.25} alignItems="stretch">
               <Text font="main-ui-action">Organization credentials</Text>
               <Text font="secondary-body" color="text-03">
                 Optional — values your org pre-fills for every user. Leave empty
@@ -250,45 +319,205 @@ export default function CreateCustomAppModal({
                 mode="line"
                 addButtonLabel="Add credential"
               />
-            </div>
+            </Section>
 
-            <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">
-                {isEdit ? "Replace bundle (.zip)" : "Bundle (.zip)"}
-              </Text>
-              <Text font="secondary-body" color="text-03">
-                {isEdit
-                  ? "Optional — upload a new zip to replace the current bundle. Leave empty to keep it. The slug stays the same."
-                  : "A zip containing SKILL.md plus any other files. The filename becomes the app slug."}
-              </Text>
-              <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".zip,application/zip"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                <Button
-                  icon={SvgUploadCloud}
-                  prominence="secondary"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {file
-                    ? "Change file"
-                    : isEdit
-                      ? "Choose new zip"
-                      : "Choose zip"}
-                </Button>
-                <Text font="main-ui-body" color="text-03">
-                  {file
-                    ? file.name
-                    : isEdit
-                      ? "Keeping current bundle"
-                      : "No file selected"}
+            <Section gap={0.5} alignItems="stretch">
+              <Section gap={0.25} alignItems="stretch">
+                <Text font="main-ui-action">
+                  {isEdit ? "Replace bundle (.zip)" : "Bundle"}
                 </Text>
-              </div>
-            </div>
+                {!isEdit && (
+                  <Text font="secondary-body" color="text-03">
+                    Upload a zip or import a skill directly from a git repo.
+                  </Text>
+                )}
+                {isEdit && (
+                  <Text font="secondary-body" color="text-03">
+                    Optional — upload a new zip to replace the current bundle.
+                    Leave empty to keep it. The slug stays the same.
+                  </Text>
+                )}
+              </Section>
+
+              {/* Bundle-source toggle — create mode only */}
+              {!isEdit && (
+                <Section
+                  flexDirection="row"
+                  gap={0.25}
+                  alignItems="center"
+                  justifyContent="start"
+                  width="fit"
+                >
+                  <Button
+                    prominence={
+                      bundleSource === "upload" ? "primary" : "secondary"
+                    }
+                    size="sm"
+                    onClick={() => setBundleSource("upload")}
+                  >
+                    Upload zip
+                  </Button>
+                  <Button
+                    prominence={
+                      bundleSource === "repo" ? "primary" : "secondary"
+                    }
+                    size="sm"
+                    onClick={() => setBundleSource("repo")}
+                  >
+                    Import from repo
+                  </Button>
+                </Section>
+              )}
+
+              {/* Upload zip mode */}
+              {(isEdit || bundleSource === "upload") && (
+                <Section
+                  flexDirection="row"
+                  gap={0.5}
+                  alignItems="center"
+                  justifyContent="start"
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".zip,application/zip"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <Button
+                    icon={SvgUploadCloud}
+                    prominence="secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {file
+                      ? "Change file"
+                      : isEdit
+                        ? "Choose new zip"
+                        : "Choose zip"}
+                  </Button>
+                  <Text font="main-ui-body" color="text-03">
+                    {file
+                      ? file.name
+                      : isEdit
+                        ? "Keeping current bundle"
+                        : "No file selected"}
+                  </Text>
+                </Section>
+              )}
+
+              {/* Import from repo mode */}
+              {!isEdit && bundleSource === "repo" && (
+                <Section gap={0.5} alignItems="stretch">
+                  <Section
+                    flexDirection="row"
+                    gap={0.5}
+                    alignItems="center"
+                    justifyContent="start"
+                  >
+                    <div className="flex-1">
+                      <InputTypeIn
+                        placeholder="https://github.com/owner/repo  or  npx skills add <url>"
+                        value={repoSource}
+                        onChange={(e) => {
+                          setRepoSource(e.target.value);
+                          setRepoPreviewError(null);
+                          // Editing the source invalidates the previous repo's
+                          // discovery — clear it so Create can't submit a stale
+                          // skill slug against a different source.
+                          setRepoPreview(null);
+                          setSelectedSkill(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (
+                            e.key === "Enter" &&
+                            repoSource.trim() &&
+                            !isPreviewing
+                          ) {
+                            void handleFindSkills();
+                          }
+                        }}
+                      />
+                    </div>
+                    <Button
+                      prominence="secondary"
+                      disabled={!repoSource.trim() || isPreviewing}
+                      onClick={() => void handleFindSkills()}
+                    >
+                      {isPreviewing ? "Fetching…" : "Find skills"}
+                    </Button>
+                  </Section>
+                  <Text font="secondary-body" color="text-03">
+                    Paste a GitHub URL, an owner/repo slug, or the full npx
+                    skills add … command. One skill will become the app bundle.
+                  </Text>
+
+                  {repoPreviewError && (
+                    <MessageCard
+                      variant="error"
+                      title="Could not fetch skills"
+                      description={repoPreviewError}
+                    />
+                  )}
+
+                  {repoPreview && repoPreview.skills.length > 0 && (
+                    <Section
+                      gap={0.25}
+                      alignItems="stretch"
+                      role="radiogroup"
+                      aria-label="Skills found in repository"
+                    >
+                      <Text font="secondary-body" color="text-03">
+                        {`${repoPreview.skills.length} skill${repoPreview.skills.length === 1 ? "" : "s"} found — select one to use as the bundle.`}
+                      </Text>
+                      {repoPreview.skills.map((skill) => {
+                        const isSelected = selectedSkill?.slug === skill.slug;
+                        return (
+                          // A fixed-height Interactive.Container can't hold a
+                          // multi-line title+description, so this selectable
+                          // card uses a content-sized wrapper with design
+                          // tokens for the selected state.
+                          <div
+                            key={skill.slug}
+                            role="radio"
+                            aria-checked={isSelected}
+                            tabIndex={0}
+                            onClick={() => selectSkill(skill)}
+                            onKeyDown={(e: React.KeyboardEvent) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                selectSkill(skill);
+                              }
+                            }}
+                            className={cn(
+                              "cursor-pointer rounded-md border p-2",
+                              isSelected
+                                ? "bg-background-tint-02 border-border-04"
+                                : "bg-background-neutral-02 border-border-02"
+                            )}
+                          >
+                            <Content
+                              sizePreset="main-ui"
+                              variant="section"
+                              title={skill.name}
+                              description={skill.description}
+                              descriptionMaxLines={2}
+                            />
+                          </div>
+                        );
+                      })}
+                    </Section>
+                  )}
+
+                  {repoPreview && repoPreview.skills.length === 0 && (
+                    <MessageCard
+                      variant="warning"
+                      title="No skills found"
+                      description="This repo doesn't appear to contain any skills.sh-compatible skills."
+                    />
+                  )}
+                </Section>
+              )}
+            </Section>
 
             {error && (
               <MessageCard
@@ -297,10 +526,15 @@ export default function CreateCustomAppModal({
                 description={error}
               />
             )}
-          </div>
+          </Section>
         </Modal.Body>
         <Modal.Footer>
-          <div className="flex justify-end gap-2 w-full">
+          <Section
+            flexDirection="row"
+            justifyContent="end"
+            gap={0.5}
+            height="auto"
+          >
             <Button
               prominence="secondary"
               onClick={onClose}
@@ -315,7 +549,7 @@ export default function CreateCustomAppModal({
             ) : (
               createButton
             )}
-          </div>
+          </Section>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

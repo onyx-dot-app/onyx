@@ -96,6 +96,38 @@ export async function createCustomExternalApp(
   return res.json();
 }
 
+export interface CreateCustomExternalAppFromRepoInput {
+  name: string;
+  description: string;
+  upstream_url_patterns: string[];
+  auth_template: Record<string, unknown>;
+  organization_credentials: Record<string, string>;
+  enabled: boolean;
+  /** Repo source: GitHub URL, owner/repo slug, or `npx skills add` command. */
+  source: string;
+  /** Slug of the specific skill from the repo to use as the bundle. */
+  slug: string;
+}
+
+/**
+ * Create a CUSTOM external app from a git repo skill
+ * (`POST /admin/apps/custom/from-repo`). JSON body, matching the same
+ * error-handling conventions as the other functions in this file.
+ */
+export async function createCustomExternalAppFromRepo(
+  input: CreateCustomExternalAppFromRepoInput
+): Promise<ExternalAppAdminResponse> {
+  const res = await fetch(`${BUILD_API_BASE}/admin/apps/custom/from-repo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Save failed"));
+  }
+  return res.json();
+}
+
 /**
  * Replace a custom app's bundle bytes, keeping its slug
  * (`PUT /admin/apps/{id}/bundle`). The only multipart channel for edits; all

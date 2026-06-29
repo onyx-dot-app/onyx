@@ -1,6 +1,7 @@
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
@@ -107,6 +108,24 @@ class ExternalAppUserResponse(BaseModel):
     credential_keys: list[str]
     credential_values: dict[str, Any]
     authenticated: bool
+
+
+class CreateCustomExternalAppFromRepoRequest(BaseModel):
+    """Create a CUSTOM app whose bundle is pulled from a git repo skill.
+
+    ``source`` is any skills.sh-compatible input (URL, owner/repo, or
+    ``npx skills add ...`` command). ``slug`` identifies the specific skill to
+    install from the discovered set.
+    """
+
+    name: str
+    description: str = ""
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, Any] = Field(default_factory=dict)
+    organization_credentials: dict[str, str] = Field(default_factory=dict)
+    enabled: bool = True
+    source: str
+    slug: str
 
 
 class OAuthStartResponse(BaseModel):

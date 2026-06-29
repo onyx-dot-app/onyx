@@ -1,11 +1,26 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Button, InputTypeIn, MessageCard, Text } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import {
+  Button,
+  InputTypeIn,
+  MessageCard,
+  Popover,
+  PopoverMenu,
+  Text,
+} from "@opal/components";
+import { IllustrationContent, Section, SettingsLayouts } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { SvgBlocks, SvgPlus, SvgSettings, SvgSimpleLoader } from "@opal/icons";
-import { SettingsLayouts } from "@opal/layouts";
+import {
+  SvgBlocks,
+  SvgChevronDownSmall,
+  SvgDownloadCloud,
+  SvgPlus,
+  SvgSettings,
+  SvgSimpleLoader,
+  SvgUploadCloud,
+} from "@opal/icons";
+import LineItem from "@/refresh-components/buttons/LineItem";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -15,6 +30,7 @@ import SkillCard, {
   type SkillCardItem,
 } from "@/sections/cards/SkillCard";
 import CreatePersonalSkillModal from "@/views/UserSkillsPage/CreatePersonalSkillModal";
+import AddSkillFromRepoModal from "@/views/UserSkillsPage/AddSkillFromRepoModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import {
   deleteUserSkill,
@@ -32,6 +48,8 @@ export default function UserSkillsPage() {
   const { user, isAdmin } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [addFromRepoOpen, setAddFromRepoOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
     null
   );
@@ -164,7 +182,14 @@ export default function UserSkillsPage() {
         title="Skills"
         description="Capability bundles your Craft agent can reach for. This page shows what's currently available to you — skills granted by admins plus your own personal skills."
         rightChildren={
-          <div className="flex items-center gap-2">
+          <Section
+            flexDirection="row"
+            gap={0.5}
+            alignItems="center"
+            justifyContent="end"
+            width="fit"
+            height="auto"
+          >
             {isAdmin && (
               <Button
                 href="/craft/v1/skills/manage"
@@ -174,10 +199,40 @@ export default function UserSkillsPage() {
                 Manage skills
               </Button>
             )}
-            <Button icon={SvgPlus} onClick={() => setCreateOpen(true)}>
-              Create skill
-            </Button>
-          </div>
+            <Popover open={createMenuOpen} onOpenChange={setCreateMenuOpen}>
+              <Popover.Trigger asChild>
+                <Button icon={SvgPlus} rightIcon={SvgChevronDownSmall}>
+                  Create skill
+                </Button>
+              </Popover.Trigger>
+              <Popover.Content align="end" width="sm">
+                <PopoverMenu>
+                  {[
+                    <LineItem
+                      key="bundle"
+                      icon={SvgUploadCloud}
+                      onClick={() => {
+                        setCreateMenuOpen(false);
+                        setCreateOpen(true);
+                      }}
+                    >
+                      Add from bundle
+                    </LineItem>,
+                    <LineItem
+                      key="repo"
+                      icon={SvgDownloadCloud}
+                      onClick={() => {
+                        setCreateMenuOpen(false);
+                        setAddFromRepoOpen(true);
+                      }}
+                    >
+                      Add from repo
+                    </LineItem>,
+                  ]}
+                </PopoverMenu>
+              </Popover.Content>
+            </Popover>
+          </Section>
         }
       >
         <InputTypeIn
@@ -267,6 +322,12 @@ export default function UserSkillsPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={refresh}
+      />
+
+      <AddSkillFromRepoModal
+        open={addFromRepoOpen}
+        onClose={() => setAddFromRepoOpen(false)}
+        onInstalled={refresh}
       />
 
       {deleteTarget && (
