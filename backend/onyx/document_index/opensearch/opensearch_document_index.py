@@ -644,6 +644,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             self._client.bulk_update_documents(
                 document_chunk_ids=doc_chunk_ids_to_update,
                 properties_to_update=properties_to_update,
+                ignore_missing=True,
             )
 
     def id_based_retrieval(

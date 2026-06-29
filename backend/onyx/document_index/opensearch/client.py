@@ -49,6 +49,9 @@ _RETRYABLE_UPDATE_ERROR_TYPES = (
 )
 
 
+_DOCUMENT_MISSING_ERROR_TYPE = "document_missing_exception"
+
+
 logger = setup_logger(__name__)
 # Set the logging level to WARNING to ignore INFO and DEBUG logs from
 # opensearch. By default it emits INFO-level logs for every request.
@@ -1074,7 +1077,10 @@ class OpenSearchIndexClient(OpenSearchClient):
         },
     )
     def update_document(
-        self, document_chunk_id: str, properties_to_update: dict[str, Any]
+        self,
+        document_chunk_id: str,
+        properties_to_update: dict[str, Any],
+        ignore_missing: bool = False,
     ) -> None:
         """Updates an OpenSearch document chunk's properties.
 
@@ -1083,6 +1089,9 @@ class OpenSearchIndexClient(OpenSearchClient):
                 update.
             properties_to_update: The properties of the document to update. Each
                 property should exist in the schema.
+            ignore_missing: If True, silently return instead of raising when the
+                document chunk does not exist (OpenSearch responds with a 404).
+                Defaults to False.
 
         Raises:
             Exception: There was an error updating the document.
@@ -1093,12 +1102,22 @@ class OpenSearchIndexClient(OpenSearchClient):
             self._index_name,
         )
         update_body: dict[str, Any] = {"doc": properties_to_update}
-        result = self._client.update(
-            index=self._index_name,
-            id=document_chunk_id,
-            body=update_body,
-            _source=False,
-        )
+        try:
+            result = self._client.update(
+                index=self._index_name,
+                id=document_chunk_id,
+                body=update_body,
+                _source=False,
+            )
+        except TransportError as e:
+            if ignore_missing and e.status_code == 404:
+                logger.debug(
+                    "Document chunk %s not found in index %s; ignoring as requested.",
+                    document_chunk_id,
+                    self._index_name,
+                )
+                return
+            raise
         result_id = result.get("_id", "")
         # Sanity check.
         if result_id != document_chunk_id:
@@ -1137,7 +1156,10 @@ class OpenSearchIndexClient(OpenSearchClient):
         },
     )
     def bulk_update_documents(
-        self, document_chunk_ids: list[str], properties_to_update: dict[str, Any]
+        self,
+        document_chunk_ids: list[str],
+        properties_to_update: dict[str, Any],
+        ignore_missing: bool = False,
     ) -> None:
         """Bulk updates OpenSearch document chunks' properties.
 
@@ -1149,6 +1171,10 @@ class OpenSearchIndexClient(OpenSearchClient):
                 update.
             properties_to_update: The properties of the document to update. Each
                 property should exist in the schema.
+            ignore_missing: If True, document chunks that do not exist
+                (OpenSearch reports a 404 ``document_missing_exception``) are
+                skipped instead of being treated as fatal errors. Defaults to
+                False.
 
         Raises:
             Exception: There was an error during the bulk update.
@@ -1191,6 +1217,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             raise_on_exception=True,
         )
 
+        ignored_missing_count = 0
         if errors:
             retryable_ids = []
             fatal_errors = []
@@ -1206,7 +1233,19 @@ class OpenSearchIndexClient(OpenSearchClient):
                 err_obj = info.get("error", {})
                 err_type = err_obj.get("type", "") if isinstance(err_obj, dict) else ""
 
-                if status >= 500 and err_type in _RETRYABLE_UPDATE_ERROR_TYPES:
+                if (
+                    ignore_missing
+                    and status == 404
+                    and err_type == _DOCUMENT_MISSING_ERROR_TYPE
+                ):
+                    logger.debug(
+                        "Document chunk %s not found in index %s during bulk update; "
+                        "ignoring as requested.",
+                        info.get("_id", ""),
+                        self._index_name,
+                    )
+                    ignored_missing_count += 1
+                elif status >= 500 and err_type in _RETRYABLE_UPDATE_ERROR_TYPES:
                     # We have seen a bug in OpenSearch version 3.4.0 when using
                     # the knn plugin and when derived_source is enabled (the
                     # default), when OpenSearch is under load sometimes updates
@@ -1266,11 +1305,12 @@ class OpenSearchIndexClient(OpenSearchClient):
                 )
             successes += new_successes
 
-        if successes != len(document_chunk_ids):
+        expected_successes = len(document_chunk_ids) - ignored_missing_count
+        if successes != expected_successes:
             raise OpenSearchUpdateError(
                 f"OpenSearch reported no errors during bulk update but the number of successful "
                 f"operations ({successes}) does not match the number of document chunks "
-                f"({len(document_chunk_ids)})."
+                f"({expected_successes})."
             )
         logger.debug(
             "Successfully bulk updated %s document chunks.", len(document_chunk_ids)
