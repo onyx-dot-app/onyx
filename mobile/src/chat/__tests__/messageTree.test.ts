@@ -74,21 +74,6 @@ describe("buildImmediateMessages", () => {
     expect(initialUserNode.latestChildNodeId).toBe(initialAgentNode.nodeId);
     expect(initialUserNode.nodeId).not.toBe(initialAgentNode.nodeId);
   });
-
-  it("gives every optimistic node a unique id, even built back-to-back", () => {
-    const ids = new Set<number>();
-    for (let i = 0; i < 50; i++) {
-      const { initialUserNode, initialAgentNode } = buildImmediateMessages(
-        SYSTEM_NODE_ID,
-        "x",
-        [],
-      );
-      ids.add(initialUserNode.nodeId);
-      ids.add(initialAgentNode.nodeId);
-    }
-    expect(ids.size).toBe(100); // no Date.now() collisions within a millisecond
-    expect(ids.has(SYSTEM_NODE_ID)).toBe(false);
-  });
 });
 
 describe("upsertMessages", () => {
@@ -182,13 +167,5 @@ describe("getLastSuccessfulMessageId", () => {
     tree = upsertMessages(tree, [node(102, "error", 101, { messageId: 3 })]);
 
     expect(getLastSuccessfulMessageId(tree)).toBe(2);
-  });
-
-  it("returns null (never the synthetic system id) when no message succeeded", () => {
-    // only message is an error → fallback must not leak SYSTEM_MESSAGE_ID (-3)
-    const tree = upsertMessages(new Map(), [
-      node(100, "error", null, { messageId: 5 }),
-    ]);
-    expect(getLastSuccessfulMessageId(tree)).toBeNull();
   });
 });

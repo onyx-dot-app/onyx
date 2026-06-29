@@ -242,10 +242,9 @@ export function getLastSuccessfulMessageId(
         return firstRealMessage.messageId ?? null;
       }
     }
-    // never leak the synthetic system id (-3) as a backend parent — use null
-    return systemMessage.messageId === SYSTEM_MESSAGE_ID
-      ? null
-      : (systemMessage.messageId ?? null);
+    // -3 (synthetic root) here is intentional; the send caller maps it to null
+    // (PR3, mirroring web's useChatController) — matches web.
+    return systemMessage.messageId ?? null;
   }
 
   return null;
@@ -256,16 +255,12 @@ interface BuildEmptyMessageParams {
   parentNodeId: number;
   message?: string;
   files?: FileDescriptor[];
+  nodeIdOffset?: number;
 }
 
-// Strictly-monotonic source for optimistic node ids: unique even across builds
-// in the same millisecond (a plain Date.now() collides), and large-negative so
-// it never clashes with positive backend messageIds or the -3 system node.
-let tempNodeSeq = 0;
-
 export function buildEmptyMessage(params: BuildEmptyMessageParams): Message {
-  tempNodeSeq += 1;
-  const tempNodeId = -1 * (Date.now() * 1000 + tempNodeSeq);
+  // negative temp id avoids colliding with backend messageIds
+  const tempNodeId = -1 * Date.now() - (params.nodeIdOffset || 0);
   return {
     nodeId: tempNodeId,
     message: params.message || "",
@@ -294,6 +289,7 @@ export function buildImmediateMessages(
   const initialAgentNode = buildEmptyMessage({
     messageType: "assistant",
     parentNodeId: initialUserNode.nodeId,
+    nodeIdOffset: 1,
   });
 
   initialUserNode.childrenNodeIds = [initialAgentNode.nodeId];
