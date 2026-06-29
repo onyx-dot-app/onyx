@@ -13,6 +13,7 @@ import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { MessageCard } from "@opal/components";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { dismissNotification } from "@/lib/notifications/api";
 import {
   NotificationType,
@@ -22,8 +23,8 @@ import {
 import type { ExpiryWarningStage } from "@/lib/billing/interfaces";
 
 // Per-user license notifications are few (one per active stage, plus a daily
-// one during grace), so a single max-size page is always enough.
-const LICENSE_NOTIFICATIONS_URL = `/api/notifications?notif_type=${NotificationType.LICENSE_EXPIRY_WARNING}&page_size=50`;
+// one during grace), so a single max-size page always contains them all.
+const LICENSE_NOTIFICATIONS_PAGE_SIZE = 50;
 
 // Single source for stage semantics (higher = more urgent): picks which warning
 // to show when several are undismissed and drives the banner variant. Typed
@@ -93,7 +94,10 @@ function useMainContainerOffset(): { left: number; width: number } {
 
 export default function LicenseExpiryBanner() {
   const { data, mutate } = useSWR<NotificationsResponse>(
-    LICENSE_NOTIFICATIONS_URL,
+    SWR_KEYS.notificationsByType(
+      NotificationType.LICENSE_EXPIRY_WARNING,
+      LICENSE_NOTIFICATIONS_PAGE_SIZE
+    ),
     errorHandlingFetcher,
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   );

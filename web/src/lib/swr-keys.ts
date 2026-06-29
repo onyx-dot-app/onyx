@@ -93,6 +93,13 @@ export const SWR_KEYS = {
     });
     return `/api/notifications?${params.toString()}`;
   },
+  notificationsByType: (notifType: string, pageSize: number) => {
+    const params = new URLSearchParams({
+      notif_type: notifType,
+      page_size: pageSize.toString(),
+    });
+    return `/api/notifications?${params.toString()}`;
+  },
 
   // ── Users ─────────────────────────────────────────────────────────────────
   acceptedUsers: "/api/manage/users/accepted/all",
