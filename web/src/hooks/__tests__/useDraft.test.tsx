@@ -225,6 +225,32 @@ describe("useDraft", () => {
     expect(JSON.parse(sessionStorage.getItem(keyB)!)).toBe("draft-for-b");
   });
 
+  // Regression for the enqueue path: when a typed message is committed to the
+  // queue, AppInputBar empties the input (a debounced empty-save) and then
+  // calls clear() explicitly. clear() must remove the draft synchronously so a
+  // reload in the debounce window can't resurrect the already-queued message.
+  it("clear() drops a persisted draft immediately, not on the debounce", () => {
+    const { result } = renderHook(() => useDraft<string>({ key: KEY }));
+
+    // User typed a message and it reached storage.
+    act(() => {
+      result.current.save("queued message");
+    });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(sessionStorage.getItem(KEY)).not.toBeNull();
+
+    // Enqueue: empty-save is scheduled (debounced), then clear() fires.
+    act(() => {
+      result.current.save("");
+      result.current.clear();
+    });
+
+    // Gone right away, without waiting out the debounce.
+    expect(sessionStorage.getItem(KEY)).toBeNull();
+  });
+
   it("survives storage access throwing (blocked/SSR-like environments)", () => {
     const getItemSpy = jest
       .spyOn(Storage.prototype, "getItem")

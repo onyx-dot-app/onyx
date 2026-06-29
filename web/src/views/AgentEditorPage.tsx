@@ -102,7 +102,7 @@ import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
-import { useDraft, draftKey, clearDraft } from "@/hooks/useDraft";
+import { useDraft, draftKey } from "@/hooks/useDraft";
 
 interface AgentIconEditorProps {
   existingAgent?: FullAgent | null;
@@ -485,17 +485,31 @@ function AgentStarterMessages() {
 
 interface AgentDraftManagerProps {
   storageKey: string;
+  // Exposes the hook's clear() to the parent's save-success path so it cancels
+  // any pending debounced write before removing the draft (a bare removeItem
+  // would let an in-flight save rewrite the key right after).
+  clearRef: React.RefObject<(() => void) | null>;
 }
 
 // Auto-saves the form to a draft (only while dirty, so a pristine form never
 // prompts) and surfaces a restore banner when one exists.
-export function AgentDraftManager({ storageKey }: AgentDraftManagerProps) {
+export function AgentDraftManager({
+  storageKey,
+  clearRef,
+}: AgentDraftManagerProps) {
   const { values, dirty, setValues } =
     useFormikContext<Record<string, unknown>>();
   const { draft, loaded, hasDraft, save, clear } = useDraft<
     Record<string, unknown>
   >({ key: storageKey });
   const [handled, setHandled] = useState(false);
+
+  useEffect(() => {
+    clearRef.current = clear;
+    return () => {
+      clearRef.current = null;
+    };
+  }, [clear, clearRef]);
 
   useEffect(() => {
     if (loaded && dirty) save(values);
@@ -570,6 +584,9 @@ export default function AgentEditorPage({
     "agent-editor",
     existingAgent?.id != null ? String(existingAgent.id) : "new"
   );
+  // Assigned by AgentDraftManager; lets handleSubmit cancel a pending draft
+  // write before clearing on a successful save.
+  const clearAgentDraftRef = useRef<(() => void) | null>(null);
 
   // Labels are edited in the Share Agent section and saved with the form
   const { labels: allLabels, createLabel } = useLabels();
@@ -997,7 +1014,9 @@ export default function AgentEditorPage({
       const agent = await personaResponse.json();
 
       // Saved: drop the draft so it can't resurface as a stale restore prompt.
-      clearDraft(agentDraftStorageKey);
+      // Via the hook's clear() so a debounced write in flight is cancelled
+      // first.
+      clearAgentDraftRef.current?.();
 
       // Apply the leveled share draft captured in the dialog before the
       // agent existed (the create payload only carries viewer-level ids)
@@ -1342,7 +1361,10 @@ export default function AgentEditorPage({
 
                     {/* Agent Form Content */}
                     <SettingsLayouts.Body>
-                      <AgentDraftManager storageKey={agentDraftStorageKey} />
+                      <AgentDraftManager
+                        storageKey={agentDraftStorageKey}
+                        clearRef={clearAgentDraftRef}
+                      />
 
                       <GeneralLayouts.Section
                         flexDirection="row"

@@ -21,7 +21,8 @@ function FormControls() {
 }
 
 function renderManager() {
-  return render(
+  const clearRef = React.createRef<(() => void) | null>();
+  const utils = render(
     <Formik
       initialValues={{ name: "" }}
       onSubmit={() => {}}
@@ -30,11 +31,12 @@ function renderManager() {
       validateOnMount={false}
     >
       <>
-        <AgentDraftManager storageKey={KEY} />
+        <AgentDraftManager storageKey={KEY} clearRef={clearRef} />
         <FormControls />
       </>
     </Formik>
   );
+  return { ...utils, clearRef };
 }
 
 describe("AgentDraftManager banner", () => {
@@ -82,5 +84,27 @@ describe("AgentDraftManager banner", () => {
     // must keep the banner from reappearing.
     fireEvent.click(screen.getByText("revert"));
     expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
+  });
+
+  // The save-success path calls clearRef (the hook's clear()), which must
+  // cancel a debounced write scheduled by the edit. A bare removeItem would let
+  // the pending timer rewrite the key right after, resurrecting the saved
+  // values.
+  it("clearRef cancels a pending debounced write before removing the draft", () => {
+    const { clearRef } = renderManager();
+
+    // Editing schedules a debounced save(values).
+    fireEvent.click(screen.getByText("edit"));
+
+    // Save succeeds before the debounce fires; the parent clears via the ref.
+    act(() => {
+      clearRef.current?.();
+    });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+
+    // The cancelled timer must not have rewritten the key.
+    expect(sessionStorage.getItem(KEY)).toBeNull();
   });
 });

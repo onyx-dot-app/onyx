@@ -784,6 +784,10 @@ const AppInputBar = React.memo(
                 if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
                   enqueueCurrentMessage(message.trim());
                   clearMessage();
+                  // Committed to the queue: drop its draft now rather than via
+                  // the debounced empty-save, so a reload can't briefly
+                  // resurrect it.
+                  clearChatDraft();
                 }
               } else if (chatState == "streaming") {
                 stopTTS({ manual: true });
@@ -960,6 +964,10 @@ const AppInputBar = React.memo(
                           ) {
                             enqueueCurrentMessage(message.trim());
                             clearMessage();
+                            // Committed to the queue: drop its draft now rather
+                            // than via the debounced empty-save, so a reload
+                            // can't briefly resurrect it.
+                            clearChatDraft();
                           }
                         }
                       }}
