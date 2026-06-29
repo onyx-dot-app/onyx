@@ -139,10 +139,7 @@ def _resolve_state_id(team_id: str, state: str) -> str:
     no matching state is found (or the lookup fails)."""
     if _UUID_RE.match(state):
         return state
-    q = (
-        "query($teamId:String!){ team(id:$teamId)"
-        "{ states { nodes { id name } } } }"
-    )
+    q = "query($teamId:String!){ team(id:$teamId){ states { nodes { id name } } } }"
     resp = _gql(q, {"teamId": team_id})
     if resp.get("errors"):
         raise ValueError(f"could not load workflow states: {resp['errors']}")
@@ -153,8 +150,7 @@ def _resolve_state_id(team_id: str, state: str) -> str:
             return node["id"]
     available = ", ".join(n.get("name", "") for n in nodes) or "(none)"
     raise ValueError(
-        f"no workflow state named {state!r} for team {team_id}; "
-        f"available: {available}"
+        f"no workflow state named {state!r} for team {team_id}; available: {available}"
     )
 
 

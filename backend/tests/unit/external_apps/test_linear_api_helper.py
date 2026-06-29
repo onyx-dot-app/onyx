@@ -11,9 +11,7 @@ from pathlib import Path
 from types import ModuleType
 
 _HELPER = (
-    Path(__file__).resolve().parents[3]
-    / "onyx/skills/builtin"
-    / "linear/linear_api.py"
+    Path(__file__).resolve().parents[3] / "onyx/skills/builtin" / "linear/linear_api.py"
 )
 
 
