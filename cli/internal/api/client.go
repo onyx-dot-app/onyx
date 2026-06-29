@@ -152,12 +152,12 @@ func (c *Client) Search(ctx context.Context, req models.SearchRequest) (*models.
 	return &resp, nil
 }
 
-// GenerateImage calls POST /build/image-generation/generate, which generates
+// GenerateImage calls POST /image-generation/generate, which generates
 // image(s) using the workspace's default image-gen provider. Uses the 5min
 // client since high-res generation can be slow.
 func (c *Client) GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error) {
 	var resp models.ImageGenerationResponse
-	if err := c.doJSONWith(ctx, c.streamingHTTPClient, "POST", "/build/image-generation/generate", req, &resp); err != nil {
+	if err := c.doJSONWith(ctx, c.streamingHTTPClient, "POST", "/image-generation/generate", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
