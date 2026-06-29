@@ -37,7 +37,6 @@ from onyx.configs.constants import USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH
 from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import TabularSection
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
@@ -275,16 +274,13 @@ def _process_user_file_without_vector_db(
     user_file_uuid = _as_uuid(user_file_id)
 
     # Combine section text from all document sections. Tabular sections are
-    # file-backed; read their staged CSV on demand.
+    # file-backed and materialize their staged CSV on demand.
     text_parts: list[str] = []
     for doc in documents:
         for section in doc.sections:
-            if isinstance(section, TabularSection):
-                csv_text = section.read_csv_text().strip()
-                if csv_text:
-                    text_parts.append(csv_text)
-            elif section.text:
-                text_parts.append(section.text)
+            text = section.materialize_text()
+            if text:
+                text_parts.append(text)
     combined_text = " ".join(text_parts)
 
     # Compute token count using the user's default LLM tokenizer

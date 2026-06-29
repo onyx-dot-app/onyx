@@ -54,6 +54,11 @@ class Section(BaseModel):
     image_file_id: str | None = None
     heading: str | None = None
 
+    def materialize_text(self) -> str:
+        """This section's content as text. Subclasses with non-inline content
+        (e.g. file-backed tabular data) override this to fetch it on demand."""
+        return self.text or ""
+
 
 class TextSection(Section):
     """Section containing text content"""
@@ -87,12 +92,10 @@ class TabularSection(Section):
     def __sizeof__(self) -> int:
         return sys.getsizeof(self.csv_file_id) + sys.getsizeof(self.link)
 
-    def read_csv_text(self) -> str:
-        """Full staged-CSV content as text, read from the file store on demand.
-
-        The indexing path never calls this — it streams the CSV row-by-row at
-        chunk time so a large sheet stays off the heap. Use only for
-        non-streaming consumers (e.g. the no-vector-db plaintext path)."""
+    def materialize_text(self) -> str:
+        """Read the staged CSV from the file store on demand. The indexing path
+        streams the CSV row by row at chunk time and does not call this; only
+        non-streaming consumers (the no-vector-db plaintext path) do."""
         from onyx.file_store.file_store import get_default_file_store
 
         with get_default_file_store().read_file(
