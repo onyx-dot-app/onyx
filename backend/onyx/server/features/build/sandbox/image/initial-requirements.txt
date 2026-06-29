@@ -24,7 +24,7 @@ lxml==6.1.1               # via python-pptx, -r initial-requirements.in
 matplotlib==3.11.0        # via -r initial-requirements.in
 matplotlib-inline==0.2.2  # via -r initial-requirements.in
 numpy==2.4.6              # via contourpy, matplotlib, pandas, -r initial-requirements.in
-onyx-cli==1.1.1           # via -r initial-requirements.in
+onyx-cli==1.2.0           # via -r initial-requirements.in
 openpyxl==3.1.5           # via -r initial-requirements.in
 packaging==26.2           # via matplotlib
 pandas==3.0.3             # via -r initial-requirements.in
