@@ -849,8 +849,10 @@ for _redis_tls_name, _redis_tls_path in (
 
 CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
 
-# 30m default: above the ~8 min cloud prune-dispatch cadence (so a failed prune
-# can't re-fire in a loop), well under prune_freq (so it retries soon, not days later).
+# A failed prune is skipped for this long before the beat re-dispatches it.
+# Floor: the re-dispatch interval (BLOCK_PRUNING = 60s * beat_multiplier, ~8 min
+# in cloud) so a failure can't hot-loop. Ceiling: prune_freq, so it still retries
+# well before the next scheduled prune. 30m is a midpoint with transient slack.
 PRUNE_FAILURE_BACKOFF_SECONDS = int(
     os.environ.get("PRUNE_FAILURE_BACKOFF_SECONDS") or 30 * 60
 )
