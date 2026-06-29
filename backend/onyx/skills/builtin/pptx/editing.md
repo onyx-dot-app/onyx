@@ -6,6 +6,8 @@
 
 When using an existing presentation as a template:
 
+> **Preserve the template's design.** Your job is to fill the template with the user's content, not to restyle it. Keep its fonts, colors, and layout language exactly. In particular, **do not substitute fonts** — a template often embeds fonts that aren't installed system-wide (check `ppt/fonts/`); they render correctly as-is, and replacing them with an "installed" font breaks the look. New text you add should reuse the fonts already on that slide.
+
 1. **Analyze existing slides**:
    ```bash
    python .opencode/skills/pptx/scripts/thumbnail.py template.pptx outputs/thumbnails
