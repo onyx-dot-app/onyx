@@ -1430,6 +1430,27 @@ CODE_INTERPRETER_MAX_OUTPUT_LENGTH = int(
     os.environ.get("CODE_INTERPRETER_MAX_OUTPUT_LENGTH") or 50_000
 )
 
+# Backstop on per-execution file staging. Session files accumulate over a chat
+# (generated artifacts get carried forward), and staging each one is a blocking
+# object-store read + upload in the request worker; an unbounded set can block
+# longer than the api-server liveness window. Cap by count and cumulative bytes
+# and drop the overflow (oldest first).
+CODE_INTERPRETER_MAX_STAGED_FILES = int(
+    os.environ.get("CODE_INTERPRETER_MAX_STAGED_FILES") or 25
+)
+
+CODE_INTERPRETER_MAX_STAGED_BYTES = int(
+    os.environ.get("CODE_INTERPRETER_MAX_STAGED_BYTES") or 100 * 1024 * 1024
+)
+
+# Cache-miss file uploads run concurrently to keep staging within the liveness
+# window. Bounded fan-out: the sandbox can be overwhelmed by a large upload
+# burst, so keep this modest. Each upload is individually bounded by the
+# client's per-request timeout.
+CODE_INTERPRETER_MAX_PARALLEL_UPLOADS = int(
+    os.environ.get("CODE_INTERPRETER_MAX_PARALLEL_UPLOADS") or 8
+)
+
 # Per-call MCP read timeout; configurable since some tools (e.g. data-agent
 # servers) run longer than the default.
 MCP_TOOL_CALL_TIMEOUT_SECONDS = int(

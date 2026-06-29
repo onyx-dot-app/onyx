@@ -335,3 +335,6 @@ class LlmPythonExecutionResult(BaseModel):
     timed_out: bool
     generated_files: list[PythonExecutionFile]
     error: str | None = None
+    # Set when some session files are absent — dropped by the staging caps or
+    # failed to upload — so the LLM doesn't assume they're available.
+    staging_notice: str | None = None
