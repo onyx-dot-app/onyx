@@ -29,7 +29,7 @@ export function ListFieldInput({
   const [inputValue, setInputValue] = useState("");
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && inputValue.trim()) {
+    if (e.key === "Enter" && !e.nativeEvent.isComposing && inputValue.trim()) {
       e.preventDefault();
       const trimmedValue = inputValue.trim();
 
