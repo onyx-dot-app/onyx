@@ -37,8 +37,35 @@ PRIVATE and strictly within their managed groups — enforced authoritatively at
   (`ee/persona.py:68`). These are where GATE 2 must be inserted.
 - **Conventions (CLAUDE.md):** raise `OnyxError`, strict typing, no `response_model`, DB ops only under
   `*/db/`, EE code under `ee/`.
+- **Regression-review additions (2026-06-29) — see [03 §11](03-detailed-design.md) for the full checklist:**
+  - **PREREQUISITE (boot bug, §11.0):** `current_curator_or_admin_user` is gone but still imported by
+    `skill/api.py:16` + `targeted_reindex.py:22` → the API server won't boot. Fix first (Step 0).
+  - **D4 actions (§11.1):** agent-mediated — **drop `MANAGE_ACTIONS` from the bundle**; the tool/MCP catalog
+    stays owner/admin (no `allow_scope`). No tool→group scoping built.
+  - **D5 skills (§11.2):** add a **dedicated `MANAGE_SKILLS` permission** (groups UI + bundle; no migration).
+    Skills do NOT mirror personas — add a NEW scoped admin-list path (don't touch the runtime visibility
+    filter), GATE 2 on `replace_skill_grants` (the `/grants` seam), re-point `skill/api.py` by verb to
+    `MANAGE_SKILLS, allow_scope=True` (DELETE stays admin-only).
+  - **D7 agent→group = `MANAGE_AGENTS`-controlled (§11.5):** group-share is the standard GATE 2 keyed on
+    `MANAGE_AGENTS` (admin/global bypass; scoped managers ⊆ managed; `ADD_AGENTS`-only can't group-share).
+    Today's route is `ADD_AGENTS` + editable-fetch, so PR4 adds the `MANAGE_AGENTS` requirement on the
+    group-share write (a small intended tightening).
+  - **D6 delete (§11.3):** managers do everything *except delete* — all DELETE endpoints stay admin-only.
+  - **Persona GATE 2 (§11.5):** `update_persona_access` lacks the actor `User`+`permission`; thread the
+    acting user into it from all 3 callers (create / share / `/agents`) and gate the shared chokepoint.
+  - **cc_pair re-attach (§11.6):** `update_user_group` rewrites group↔cc_pair from client `cc_pair_ids` —
+    run GATE 2 per added cc_pair (else a manager attaches out-of-scope connectors).
+  - **Corrections (§11.7):** feedback `db/feedback.py` = **no change** (admin-only; not in bundle);
+    `recompute_user_permissions__no_commit` takes `(user_ids, db_session)` and must be extended to set
+    `is_group_manager`.
+  - **Confirmed SAFE (§11.8):** PAT cap, chat runtime, and document/Vespa ACL are untouched — keep them so.
 
 ## Implementation Strategy
+
+**Step 0 — Prerequisite boot fix (independent of §8).** Re-point `skill/api.py` (`:16` + deps at
+`:173/186/223/259/297/322`) and `targeted_reindex.py:22` off the deleted `current_curator_or_admin_user`
+onto `require_permission(...)`. Until this lands, `import onyx.main` raises `ImportError` and nothing runs.
+Lands as its own small commit ahead of (or at the head of) PR1.
 
 **Step 1 — Schema + cached flag + migration.** Add `User__UserGroup.is_manager` and `User.is_group_manager`
 (`db/models.py`). Author migration `4fa09af6ca14` (down_revision `c8e316473aaa`, `alembic/versions/`) adding both
@@ -62,9 +89,10 @@ endpoints to `require_permission(<token>, allow_scope=True)`. Leave **group crea
 on the plain global dependency (D2 + admin-only grants). Ensure bulk endpoints check **every** item.
 
 **Step 5 — Listing/edit filters.** Re-key the editable branch of the 4 filters onto `within_managed_scope_clause`:
-`document_set.py` (build from `sa_false()`), `connector_credential_pair.py`, `persona.py`, `feedback.py`. Enforce
-managed-scope in the EE `token_limit.py` group write path. `credentials.py` unchanged (documented). Every branch
-fails closed on an empty managed set.
+`document_set.py` (build from `sa_false()`), `connector_credential_pair.py`, `persona.py`, and **`skill.py`**
+(`_add_user_visibility_filter`, the new 7th resource — D5). Enforce managed-scope in the EE `token_limit.py` group
+write path. `credentials.py` **and `feedback.py`** unchanged (documented no-ops — feedback is admin-only,
+`FULL_ADMIN_PANEL_ACCESS`, and not in the bundle; §11.7). Every branch fails closed on an empty managed set.
 
 **Step 6 — API + frontend.** Add `is_manager` (and optionally `managed_group_ids`) to `GET /users/me/permissions`.
 Frontend: `usePermissions` / `hasPermission` consume the flag for nav visibility; group-detail page gets a

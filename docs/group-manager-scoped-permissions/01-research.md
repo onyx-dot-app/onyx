@@ -61,7 +61,8 @@ Source of truth: wiki `Engineering Projects/Group-Based Permissions System V2/so
   `search/api.py:104`. These block dropping `role`; **out of scope** for §8 (deferred cleanup release).
 
 **Reuse posture:** §8 adds one column, one code-defined permission bundle, a handful of resolver/gate helpers,
-and re-keys the existing 6 filters from "membership" to "managed groups." It does **not** add tables, does
+and re-keys ~4 editable filters (connector, document_set, persona, skill — credentials + feedback unchanged;
+see [03 §11.7](03-detailed-design.md)) from "membership" to "managed groups." It does **not** add tables, does
 **not** touch `permission_grant` (stays global-only), and does **not** add a second auth round-trip.
 
 ## Industry best practices (backing for the locked design)
@@ -92,8 +93,10 @@ action passes **two gates** — a coarse route gate (cached) and a per-resource 
 1. **Who** — `is_manager` boolean on `user__user_group` (repurposes the dead `is_curator` column). No new
    table, no new row. Semantically a role binding on the membership edge.
 2. **What** — `SCOPED_MANAGER_PERMISSIONS = {manage:connectors, manage:document_sets, manage:agents,
-   add:agents, manage:user_groups, manage:actions}`, expanded live at resolve time, applied only to managed
-   groups. **Never** merged into `effective_permissions.global`.
+   add:agents, manage:user_groups}`, expanded live at resolve time, applied only to managed groups.
+   **Never** merged into `effective_permissions.global`. (Per the 2026-06-29 review — D4 — `manage:actions`
+   was **dropped**: actions are agent-mediated via the persona `tool_ids` path. Skills are added as a 7th
+   scoped resource under a new dedicated `manage:skills` token (D5). See [03 §11](03-detailed-design.md).)
 3. **Cached vs live** — `User.effective_permissions` carries global tokens **plus an `is_manager` boolean**
    (so the route gate needs no extra query). The managed-group **list** is read live by
    `get_scoped_groups(user)` (one indexed read on `user_id WHERE is_manager=true`) — never cached, so never

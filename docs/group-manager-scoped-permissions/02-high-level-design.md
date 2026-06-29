@@ -2,6 +2,13 @@
 
 # §8 Scoped Permissions (Group Manager) — High-Level Design
 
+> **Revised by the 2026-06-29 regression review.** Bundle/coverage decisions here are updated by
+> **D4** (actions = agent-mediated, `manage:actions` dropped), **D5** (skills = a 7th scoped resource under a
+> new `manage:skills` token), **D6** (managers do everything **except delete**) and **D7** (attaching an agent
+> to a group is controlled by `manage:agents`). The authoritative, complete case list lives in
+> [03 §11](03-detailed-design.md). Also a hard prerequisite: the broken `current_curator_or_admin_user`
+> import (03 §11.0) must be fixed or the API server won't boot.
+
 ## What we're building, in one paragraph
 
 The base system (§1–7) grants permission tokens to a whole **group** — every member gets them, **everywhere**.
@@ -23,9 +30,10 @@ resolution (never cached, never stale), and a **two-gate** enforcement model who
                                 │
             is_manager=TRUE  ⇒  apply SCOPED_MANAGER_PERMISSIONS (in code)
                                 │   {manage:connectors, manage:document_sets,
-                                ▼    manage:agents, add:agents,
-                          but ONLY to    manage:user_groups, manage:actions}
-                          Engineering's resources — resolved LIVE
+                                ▼    manage:agents, add:agents, manage:user_groups}
+                          but ONLY to    (+ new manage:skills token; manage:actions dropped —
+                          Engineering's   actions are agent-mediated — see 03 §11)
+                          resources — resolved LIVE
 ```
 
 Two things never live in the database as data:
