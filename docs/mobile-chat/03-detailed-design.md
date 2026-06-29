@@ -19,7 +19,7 @@ Mirrors web's `useChatSessionStore` shape, trimmed to the locked core (no multi-
 |-------|-------|-----|
 | `currentSessionId` | `string \| null` | which session the open screen renders |
 | `sessions` | `Map<sessionId, SessionData>` | per-session isolation so one stream can't write into another |
-| `SessionData.messageTree` | `Map<nodeId, Message>` (shared `Message` type) | the conversation; mutated only via shared `upsertMessages` |
+| `SessionData.messageTree` | `Map<nodeId, Message>` (mobile-native `Message` type) | the conversation; mutated only via the mobile-native `upsertMessages` |
 | `SessionData.chatState` | `'input'\|'loading'\|'streaming'\|'uploading'` | drives input bar + spinner + send gating |
 | `SessionData.abortController` | `AbortController` | cancels the stream on stop/unmount; **non-serializable → store must never be persisted** |
 | `SessionData.submittedMessage` | `string` | optimistic echo before the user node lands |
@@ -37,29 +37,32 @@ Keyed by client-side temp file id → `{ uri, name, mimeType, size, status, byte
 
 No classes. The new surface is functions + types + hooks. Key seams:
 
-- **Shared `createNdjsonBuffer()`** (`@onyx-ai/shared/utils/ndjson.ts`) — `pushChunk(text: string) => Packet[]` and `flush() => Packet[]`. Holds the partial-line string; splits on `\n`, keeps the trailing partial, `JSON.parse`s each complete line with web's brace-recovery fallback. **No `fetch`/`TextDecoder`** — those stay platform-side. (This is web's `handleSSEStream` with the reader removed.)
-- **Mobile `streamChatMessage(body, signal): AsyncGenerator<Packet>`** (`mobile/src/api/chat/stream.ts`) — owns the `expo/fetch` POST + `getReader()` + `TextDecoder` loop; feeds the shared buffer; filters `chat_heartbeat`; `reader.cancel()` on abort/`finally`.
+- **Mobile-native `createNdjsonBuffer<T>()`** (`mobile/src/chat/ndjson.ts`) — `pushChunk(text: string) => T[]` and `flush() => T[]`, generic over the caller's packet type. Holds the partial-line string; splits on `\n`, keeps the trailing partial, `JSON.parse`s each complete line with web's brace-recovery fallback. **No `fetch`/`TextDecoder`** — those stay in the transport. Mirrors web's `handleSSEStream` parsing core (reader removed); **not shared** (PR 2 Decision (2026-06-26) in `05-pr-roadmap.md`).
+- **Mobile `streamChatMessage(body, signal): AsyncGenerator<Packet>`** (`mobile/src/api/chat/stream.ts`) — owns the `expo/fetch` POST + `getReader()` + `TextDecoder` loop; feeds the mobile-native buffer; filters `chat_heartbeat`; `reader.cancel()` on abort/`finally`.
 - **Mobile packet-renderer registry** (mirrors web's `renderMessageComponent.tsx` + `MessageRenderer<TPacket,TState>` contract) — the **extensibility foundation**, built in PR 3 even though only one renderer ships then:
   - `MessageRenderer<TPacket, TState>` (mobile contract) — `{ matches(packetType): boolean; reduce(state, packet): TState; render(state): ReactNode }`. RN-coupled (returns RN nodes) → **mobile-owned**, not shared. The *packet-grouping* step can later be shared if reuse is proven.
   - `findRenderer(packetType): MessageRenderer | null` — the dispatch (mobile equivalent of web's `findRenderer`).
   - **Core (PR 3) registers exactly one renderer: `MessageTextRenderer`** (`MESSAGE_START/DELTA/END` → markdown string + `isComplete`/`error`). This is ~the same code as a flat concatenator, so it does **not** grow core scope.
   - **`usePacketDisplay(node)`** groups the node's packets and walks the registry to produce render output. Deferred rich-chat PRs (9a–9e) **add a renderer to the registry** (and, for agentic steps, a timeline composition layer) — **no core rewrite**. (Web's React-coupled `usePacketProcessor` stays web-only.)
-- **Shared message-tree fns** — `upsertMessages`, `getLatestMessageChain`, `getMessageByMessageId`, `buildImmediateMessages`, `buildEmptyMessage`, `SYSTEM_NODE_ID`, `MessageTreeState`. Lifted ~verbatim from web (already React-free); web re-points its import in the extraction phase.
+- **Mobile-native message-tree fns** — `upsertMessages`, `getLatestMessageChain`, `getMessageByMessageId`, `buildImmediateMessages`, `buildEmptyMessage`, `SYSTEM_NODE_ID`, `MessageTreeState`. Ported from web's `messageTree.ts` against the **minimal mobile `Message`** (per the PR 2 minimal-sharing decision — **not** shared; web keeps its own copy untouched). `processRawChatHistory` likewise lives in `mobile/src/chat/chatHistory.ts`.
 
 ## New files
 
-### Shared package (`web/lib/shared/src/`) — added incrementally per phase
+### Shared package (`web/lib/shared/src/`)
+**No new shared files.** Per the PR 2 Decision the chat pure layer is mobile-native; nothing chat-related enters `@onyx-ai/shared`.
+
+### Mobile-native chat layer (`mobile/src/chat/`) — per the PR 2 Decision the entire chat pure layer lives in mobile, **not** shared
 | File | Responsibility |
 |------|----------------|
-| `contracts/streaming.ts` | Minimal `Packet` wrapper, `Placement`, `PacketType` (core subset), `MessageStart/Delta/End`, `Stop`/`StopReason`, `PacketError`, `ChatHeartbeat`, `MessageResponseIDInfo`. Rich packet types added later, per their phase. |
-| `contracts/chat.ts` | `Message`, `ChatState`, `ChatSession`/`BackendChatSession`, send-message request body type, create-session request/response. |
+| `ndjson.ts` | `createNdjsonBuffer<T>()` — pure line-buffer NDJSON parser (mirrors web's `handleSSEStream` parsing core). |
+| `contracts/streaming.ts` | Minimal `Packet` wrapper, `Placement`, `PacketType` (core subset), `MessageStart/Delta/End`, `Stop`/`StopReason`, `PacketError`, `ChatHeartbeat`, `MessageResponseIDInfo`. `MessageStart.final_documents` typed `unknown[] \| null` (no `OnyxDocument`). Rich packet types added later, per their phase. |
+| `contracts/chat.ts` | `Message` (minimal), `ChatState`, `ChatSession`/`BackendChatSession`/`BackendMessage`, send-message request body type, create-session request/response. |
 | `contracts/files.ts` | `FileDescriptor`, `ChatFileType`, `UserFileStatus`. |
 | `contracts/agents.ts` | `MinimalAgent` (selection subset), `AgentStarterMessage`. |
 | `contracts/projects.ts` | `Project`, `ProjectFile`, `CategorizedFiles`, `RejectedFile`. |
-| `utils/ndjson.ts` | `createNdjsonBuffer()` — pure line-buffer NDJSON parser. |
-| `utils/messageTree.ts` | Pure tree upsert/traversal/builders (lifted from web). |
-| `utils/chatHistory.ts` | `processRawChatHistory` — backend messages+packets → tree. |
-| `utils/fileDescriptors.ts` | `projectFilesToFileDescriptors` + type detection. |
+| `messageTree.ts` | Tree upsert/traversal/builders — ported from web against the minimal `Message`. |
+| `chatHistory.ts` | `processRawChatHistory` — backend messages+packets → tree (structural-only). |
+| `fileDescriptors.ts` | `projectFilesToFileDescriptors` + type detection (PR 8). |
 
 ### Mobile (`mobile/src/`)
 | File | Responsibility |
@@ -93,22 +96,17 @@ No classes. The new surface is functions + types + hooks. Key seams:
 ## File structure (tree)
 
 ```
-web/lib/shared/src/
-├── contracts/
-│   ├── index.ts            (modified: export new contract files)
-│   ├── streaming.ts        (new)  chat.ts (new)  files.ts (new)
-│   └── agents.ts (new)     projects.ts (new)
-├── utils/
-│   ├── index.ts            (modified: export new utils)
-│   ├── ndjson.ts (new)  messageTree.ts (new)
-│   └── chatHistory.ts (new)  fileDescriptors.ts (new)
-└── (web re-points imports in: web/src/lib/search/streamingUtils.ts,
-     web/src/app/app/services/messageTree.ts, .../fileUtils.ts — per phase, mechanical)
+web/lib/shared/src/   (NO chat changes — nothing chat-related enters shared)
+web/src/              (UNTOUCHED — streamingUtils.ts / messageTree.ts / fileUtils.ts stay web-owned)
 
 mobile/src/
 ├── app/
 │   ├── _layout.tsx         (modified: mount (app) group)
 │   └── (app)/              (new)  _layout · index · chat/[id] · history · projects/*
+├── chat/                   (new, mobile-native pure layer)
+│   ├── ndjson.ts (new)     contracts/ (new)  streaming · chat · files · agents · projects
+│   ├── messageTree.ts (new)  chatHistory.ts (new)  fileDescriptors.ts (new)
+│   └── *.test.ts           (new)  ndjson + tree + history unit tests
 ├── state/                  (new)  chatSessionStore.ts · uploadStore.ts
 ├── api/
 │   ├── query-keys.ts       (modified: add chat/agents/projects keys)
@@ -123,16 +121,16 @@ mobile/src/
 - **Auth / HTTP** — list calls reuse `mobile/src/api/client.ts apiFetch` (bearer + `ApiError`). The streaming call (`api/chat/stream.ts`) reuses `getBaseUrl()` (`config.ts`) + the token from `tokenStore.ts`, but uses `expo/fetch` directly.
 - **Navigation** — `(app)` group mounts under the existing `AuthGate` in `mobile/src/app/_layout.tsx`; sidebar (`mobile/src/components/sidebar`) surfaces sessions/projects.
 - **Query cache** — extend `mobile/src/api/query-keys.ts` + reuse the persisted client in `mobile/src/query/client.ts`. **Required (not conditional):** chat content is sensitive by nature, so the chat session-list + session-detail/message query keys **must** be added to the `dehydrateOptions` PII-exclusion list (alongside the existing `me` exclusion) in PR 1, **before any chat history is persisted to MMKV**. Consequence: chat history is not cached to disk and refetches on launch — the correct PII-safe default (mirrors the `me`-exclusion pattern).
-- **Web re-points (per phase, mechanical)** — `web/src/lib/search/streamingUtils.ts` → shared `ndjson`; `web/src/app/app/services/messageTree.ts` → shared `messageTree`; `web/src/app/app/services/fileUtils.ts` → shared `fileDescriptors`. Each verified by web's existing tests/e2e (`test_chat_stream`).
-- **Shared build** — `@onyx-ai/shared` `dist` must be rebuilt and the mobile `file:` dep re-linked whenever contracts/utils change (shared has a `watch.mjs`).
+- **No web changes** — the mobile chat port touches no web files. `web/src/lib/search/streamingUtils.ts`, `.../messageTree.ts`, and `.../fileUtils.ts` stay web-owned; mobile reimplements the parser/tree/file-descriptor logic natively in `mobile/src/chat/`.
+- **No shared-build coupling** — nothing chat-related enters `@onyx-ai/shared`, so there's no dist-rebuild/`file:`-relink dependency for the chat port. (`@onyx-ai/shared` keeps its existing design-token + interactive/typography + `numbers`/`format` surface.)
 
 ## Important notes before implementation
 
-- **De-risk spikes first (Phase 0/early):** (1) confirm `expo/fetch` exposes `response.body.getReader()` on a **device dev build** (RN 0.85 / SDK 56) — fallback is XHR progress feeding the *same* shared buffer; (2) confirm `react-native-streamdown` builds on RN 0.85 / Reanimated v4 — fallback `react-native-marked` (both keep block-memoization). Both require a **dev client** (already have `expo-dev-client`), not Expo Go.
-- **Never persist `chatSessionStore`** — it holds `AbortController`s and live streams. Keep it strictly separate from the persisted TanStack cache; on relaunch, rehydrate a session via `GET get-chat-session` + shared `processRawChatHistory`.
+- **De-risk spikes first (Phase 0/early):** (1) confirm `expo/fetch` exposes `response.body.getReader()` on a **device dev build** (RN 0.85 / SDK 56) — fallback is XHR progress feeding the *same* NDJSON buffer; (2) confirm `react-native-streamdown` builds on RN 0.85 / Reanimated v4 — fallback `react-native-marked` (both keep block-memoization). Both require a **dev client** (already have `expo-dev-client`), not Expo Go.
+- **Never persist `chatSessionStore`** — it holds `AbortController`s and live streams. Keep it strictly separate from the persisted TanStack cache; on relaunch, rehydrate a session via `GET get-chat-session` + the mobile-native `processRawChatHistory`.
 - **Batch flushes ~50ms** and memoize rows on `packetCount` (not array identity) — the single biggest streaming-perf lever; port web's `stillCurrent`/abort guards so a backgrounded stream can't write into the wrong session.
 - **Send gating** — block send until attached files are indexed (`token_count != null`); surface a `FAILED`/stuck status instead of blocking forever (3s status polling, mirror `ProjectsContext`).
-- **Keep the shared `streaming.ts` minimal** — only the core packet types now; add rich types in their deferred phases. Avoid dragging web's full `OnyxDocument` shape across until citations land.
+- **Keep the mobile `contracts/streaming.ts` minimal** — only the core packet types now; add rich types in their deferred phases. Avoid dragging web's full `OnyxDocument` shape across until citations land.
 - **Renderer foundation in PR 3, renderers as follow-ups** — build the `MessageRenderer` contract + `findRenderer` dispatch in PR 3 (registering only `MessageTextRenderer`) so rich-chat features are *additive registrations*, not core rewrites. The agentic-timeline composition layer (`AgentTimeline`) is itself deferred — the **first** timeline renderer PR (9b) builds it; the dispatch seam it plugs into already exists from PR 3. Do **not** build the rich renderers in core — only the seam.
 - **Agent/project selection is implicit** — carried by the session's `persona_id`/`project_id` at create-time; there is no per-message agent param. Selecting an agent for an *existing* session is not supported by the backend (matches web) — start a new session.
 - **Error handling** — `ERROR`/`PacketError` packets set the assistant node to an error state; raise `OnyxError`-style messages only on the backend (client surfaces `ApiError` messages). No `HTTPException` concerns here (client-only).
