@@ -23,8 +23,8 @@ Source of truth: wiki `Engineering Projects/Group-Based Permissions System V2/so
 
 | §8 artifact | Status | Evidence |
 |---|---|---|
-| `is_manager` column on `User__UserGroup` | **ABSENT** | only old `is_curator` present — `backend/onyx/db/models.py:4361` |
-| Alembic migration `4fa09af6ca14` (`is_manager` add/backfill) | **ABSENT — not in tree** | HEAD migration is still `c8e316473aaa` (`make_user_role_nullable`), no child revision |
+| `is_manager` column on `User__UserGroup` | ABSENT at research time → **BUILT (PR1)** | now on `User__UserGroup`; `User.is_group_manager` cached flag added too |
+| Alembic migration (`is_manager` add/backfill) | ABSENT at research time → **BUILT (PR1) as `c71a18ea7d07`** | down_revision `c8e316473aaa`, now head; placeholder `4fa09af6ca14` never used |
 | `SCOPED_MANAGER_PERMISSIONS` bundle | ABSENT | no match in backend |
 | `get_scoped_groups()` resolver | ABSENT | no match |
 | `assert_group_set_within_scope` / `can_act_on_resource` write-side gate | ABSENT | no match |
@@ -34,8 +34,9 @@ Source of truth: wiki `Engineering Projects/Group-Based Permissions System V2/so
 | Group-Manager assignment UI (web) | ABSENT | no manager UI under `web/src/app/(ee/)admin/groups*` |
 | PAT scope-intersection w/ manager scope | ABSENT | `backend/onyx/db/pat.py` scopes are flat permission tokens |
 
-> **⚠ Doc/reality drift:** the wiki §8 text says *"Implemented as revision `4fa09af6ca14`."* That migration
-> **does not exist** in the repo. The doc overstates status — treat all of §8 as not-yet-built.
+> **⚠ Status (updated):** at research time §8 was entirely unbuilt and the wiki's *"Implemented as revision
+> `4fa09af6ca14`"* was wrong. Since then **PR0+PR1 shipped** (migration `c71a18ea7d07`); scoped enforcement
+> (PR2+) is still not-yet-built.
 
 ### Base system (§1–7) — FULLY BUILT (the foundation §8 extends)
 

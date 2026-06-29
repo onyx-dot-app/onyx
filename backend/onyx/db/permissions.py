@@ -51,6 +51,8 @@ def recompute_user_permissions__no_commit(
     Stores only directly granted permissions — implication expansion
     happens at read time via get_effective_permissions().
 
+    Also refreshes the cached ``is_group_manager`` flag in the same write.
+
     Does NOT commit — caller must commit the session.
     """
     if isinstance(user_ids, (UUID, str)):
@@ -82,11 +84,29 @@ def recompute_user_permissions__no_commit(
     for uid, perm in rows:
         perms_by_user[uid].add(perm.value)
 
+    # Cache only the boolean; the managed-group list stays live. Keyed by str
+    # so the membership check holds whether callers pass UUID or str user ids.
+    manager_uids: set[str] = {
+        str(uid)
+        for uid in db_session.scalars(
+            select(User__UserGroup.user_id)
+            .where(
+                User__UserGroup.user_id.in_(uid_list),
+                User__UserGroup.is_manager.is_(True),
+            )
+            .distinct()
+        )
+        if uid is not None
+    }
+
     for uid, perms in perms_by_user.items():
         db_session.execute(
             update(User)
             .where(User.id == uid)  # ty: ignore[invalid-argument-type]
-            .values(effective_permissions=sorted(perms))
+            .values(
+                effective_permissions=sorted(perms),
+                is_group_manager=str(uid) in manager_uids,
+            )
         )
 
 

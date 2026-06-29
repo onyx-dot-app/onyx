@@ -389,6 +389,10 @@ web/
 9. **Credentials unchanged.** Owner-scoped; deliberately no manager inheritance.
 10. **Tracing / OnyxError / typing conventions** per CLAUDE.md (raise `OnyxError`, strict typing, no
     `response_model`).
+11. **Extend the existing permission tests; don't reflexively add new test files.** The new permission
+    system already has good coverage — verify the relevant suite is sound and add to it when the behavior is
+    one it already drives. New files only for genuinely new homes (e.g. migration backfill). See
+    [04 Tests](04-implementation-plan.md#tests) for the known homes + the PR1 worked example.
 
 ## 10. Decisions resolved at GATE 2
 
