@@ -145,28 +145,30 @@ def strip_skill_md_frontmatter(content: str) -> str:
     return content[match.end() :].strip()
 
 
-def read_custom_bundle_instructions(zip_bytes: bytes, slug: str) -> str:
-    validate_custom_bundle(zip_bytes, slug=slug)
+def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
     try:
         zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
-    except zipfile.BadZipFile:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
+    except zipfile.BadZipFile as exc:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Stored skill bundle is not a valid zip.",
+        ) from exc
 
     with zf:
         try:
             raw_skill_md = zf.read(SKILL_MD_NAME)
-        except KeyError:
+        except KeyError as exc:
             raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "SKILL.md missing at bundle root",
-            )
+                OnyxErrorCode.INTERNAL_ERROR,
+                "Stored skill bundle is missing SKILL.md.",
+            ) from exc
 
     try:
         skill_md = raw_skill_md.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md must be UTF-8 encoded",
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Stored skill bundle SKILL.md must be UTF-8 encoded.",
         ) from exc
 
     return strip_skill_md_frontmatter(skill_md)

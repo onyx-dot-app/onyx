@@ -191,9 +191,12 @@ def test_read_custom_bundle_instructions_returns_instruction_body() -> None:
             ("docs/notes.md", b"# Notes\n"),
         ]
     )
-    assert read_custom_bundle_instructions(zip_bytes, slug="hello") == (
-        "# Instructions\n\nDo it."
-    )
+    assert read_custom_bundle_instructions(zip_bytes) == "# Instructions\n\nDo it."
+
+
+def test_read_custom_bundle_instructions_does_not_require_frontmatter() -> None:
+    zip_bytes = _build_zip([("SKILL.md", b"# Instructions\n\nDo it.")])
+    assert read_custom_bundle_instructions(zip_bytes) == "# Instructions\n\nDo it."
 
 
 def _zip_with_patched_compression_method(payload: bytes, method: int) -> bytes:

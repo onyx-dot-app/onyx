@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -99,14 +98,7 @@ const DEFAULT_COMPONENTS = {
     <strong className="font-semibold text-text-05" {...props} />
   ),
   em: ({ node, ...props }) => <em className="text-text-04" {...props} />,
-  a: ({
-    children,
-    href,
-    ...props
-  }: {
-    children?: ReactNode;
-    href?: string;
-  }) => {
+  a: ({ children, href, node: _node, ...props }) => {
     if (!href) return <>{children}</>;
     const isRelative = href.startsWith("/") || href.startsWith("#");
     if (isRelative) {

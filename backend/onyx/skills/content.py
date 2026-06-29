@@ -47,4 +47,4 @@ def read_custom_skill_bundle_instructions(
             OnyxErrorCode.INTERNAL_ERROR,
             f"Failed to read bundle for skill '{skill.slug}'.",
         ) from exc
-    return read_custom_bundle_instructions(bundle_bytes, slug=skill.slug)
+    return read_custom_bundle_instructions(bundle_bytes)
