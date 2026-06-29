@@ -127,6 +127,15 @@ def _staging_priority(chat_files: list[ChatFile], code: str) -> list[int]:
     return list(reversed(referenced)) + list(reversed(unreferenced))
 
 
+class _StagingSelection(BaseModel):
+    # Selected (file, content) pairs in chronological order.
+    files: list[tuple[ChatFile, bytes]]
+    # Files excluded by the count/byte caps (not counting read failures).
+    dropped_by_caps: int
+    # Filenames whose bytes could not be read from the object store.
+    read_failures: list[str]
+
+
 def _select_files_for_staging(
     chat_files: list[ChatFile],
     code: str,
@@ -134,16 +143,13 @@ def _select_files_for_staging(
     max_files: int,
     max_bytes: int,
     read_concurrency: int,
-) -> tuple[list[tuple[ChatFile, bytes]], int, list[str]]:
+) -> _StagingSelection:
     """Choose which session files to stage, reading bytes only for the chosen.
 
     Files the ``code`` names explicitly are staged first; the remaining
     count/byte budget is backfilled with the most recent of the rest. Candidates
     are read in bounded parallel batches — concurrency hides read latency while
-    only one batch is held in memory at a time. Returns the selected
-    ``(file, content)`` pairs in chronological order, the number of files the
-    caps dropped (excluding read failures), and the filenames that failed to
-    read.
+    only one batch is held in memory at a time.
     """
     # Count cap: only the top candidates can ever be staged, so never read more.
     candidates = _staging_priority(chat_files, code)[:max_files]
@@ -178,8 +184,11 @@ def _select_files_for_staging(
             break
 
     chronological = [(chat_files[idx], selected[idx]) for idx in sorted(selected)]
-    dropped_by_caps = len(chat_files) - len(selected) - len(read_failures)
-    return chronological, dropped_by_caps, read_failures
+    return _StagingSelection(
+        files=chronological,
+        dropped_by_caps=len(chat_files) - len(selected) - len(read_failures),
+        read_failures=read_failures,
+    )
 
 
 def _build_staging_notice(
@@ -379,17 +388,21 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         with CodeInterpreterClient() as client:
             # Select the files to stage (referenced-first, recent backfill,
             # bounded by the caps), upload them, and note any drops to the LLM.
-            selected, dropped_count, read_failures = _select_files_for_staging(
+            selection = _select_files_for_staging(
                 chat_files,
                 code,
                 max_files=CODE_INTERPRETER_MAX_STAGED_FILES,
                 max_bytes=CODE_INTERPRETER_MAX_STAGED_BYTES,
                 read_concurrency=CODE_INTERPRETER_STAGING_CONCURRENCY,
             )
-            files_to_stage, upload_failures = self._upload_and_stage(client, selected)
+            files_to_stage, upload_failures = self._upload_and_stage(
+                client, selection.files
+            )
 
             staging_notice = _build_staging_notice(
-                dropped_count, len(chat_files), read_failures + upload_failures
+                selection.dropped_by_caps,
+                len(chat_files),
+                selection.read_failures + upload_failures,
             )
             if staging_notice:
                 logger.warning(staging_notice)
