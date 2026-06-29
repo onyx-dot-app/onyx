@@ -8,9 +8,11 @@ import {
   MessageCard,
   Tag,
   Text,
+  Tooltip,
 } from "@opal/components";
-import { SvgBlocks, SvgSimpleLoader } from "@opal/icons";
+import { SvgBlocks, SvgCode, SvgEye, SvgSimpleLoader } from "@opal/icons";
 import { cn } from "@opal/utils";
+import type { IconFunctionComponent } from "@opal/types";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -23,9 +25,10 @@ type InstructionsDisplayMode = "rendered" | "raw";
 const INSTRUCTIONS_DISPLAY_OPTIONS: {
   value: InstructionsDisplayMode;
   label: string;
+  icon: IconFunctionComponent;
 }[] = [
-  { value: "rendered", label: "Rendered" },
-  { value: "raw", label: "Raw" },
+  { value: "rendered", label: "Rendered markdown", icon: SvgEye },
+  { value: "raw", label: "Raw markdown", icon: SvgCode },
 ];
 
 interface SkillPreviewModalProps {
@@ -144,23 +147,30 @@ export default function SkillPreviewModal({
                     {INSTRUCTIONS_DISPLAY_OPTIONS.map((option) => {
                       const isSelected =
                         option.value === instructionsDisplayMode;
+                      const Icon = option.icon;
                       return (
-                        <button
+                        <Tooltip
                           key={option.value}
-                          type="button"
-                          aria-pressed={isSelected}
-                          className={cn(
-                            "h-6 rounded-04 px-2 text-xs font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-border-04",
-                            isSelected
-                              ? "bg-background-neutral-00 text-text-05 shadow-sm"
-                              : "text-text-03 hover:text-text-05"
-                          )}
-                          onClick={() =>
-                            setInstructionsDisplayMode(option.value)
-                          }
+                          tooltip={option.label}
+                          side="top"
                         >
-                          {option.label}
-                        </button>
+                          <button
+                            type="button"
+                            aria-label={option.label}
+                            aria-pressed={isSelected}
+                            className={cn(
+                              "flex h-6 w-6 items-center justify-center rounded-04 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-border-04",
+                              isSelected
+                                ? "bg-background-neutral-00 text-text-05 shadow-sm"
+                                : "text-text-03 hover:text-text-05"
+                            )}
+                            onClick={() =>
+                              setInstructionsDisplayMode(option.value)
+                            }
+                          >
+                            <Icon size={14} aria-hidden="true" />
+                          </button>
+                        </Tooltip>
                       );
                     })}
                   </div>
