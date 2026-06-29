@@ -849,6 +849,13 @@ for _redis_tls_name, _redis_tls_path in (
 
 CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
 
+# How long the scheduler skips a connector after its prune fails before it can
+# re-dispatch. Above the prune dispatch cadence (BLOCK_PRUNING, ~8 min in cloud)
+# to break the re-fire loop; well below prune_freq so a failed prune retries soon.
+PRUNE_FAILURE_BACKOFF_SECONDS = int(
+    os.environ.get("PRUNE_FAILURE_BACKOFF_SECONDS") or 30 * 60
+)
+
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#broker-pool-limit
 # Setting to None may help when there is a proxy in the way closing idle connections
 _CELERY_BROKER_POOL_LIMIT_DEFAULT = 10

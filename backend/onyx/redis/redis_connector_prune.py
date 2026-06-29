@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import PRUNE_FAILURE_BACKOFF_SECONDS
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PRUNING_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
@@ -57,7 +58,7 @@ class RedisConnectorPrune:
     # Set on prune failure; survives reset(). While present, the scheduled beat
     # skips re-dispatching this cc_pair, so a failing prune can't re-fire and flood.
     FAILURE_BACKOFF_PREFIX = PREFIX + "_failure_backoff"
-    FAILURE_BACKOFF_TTL = 30 * 60  # 30 minutes
+    FAILURE_BACKOFF_TTL = PRUNE_FAILURE_BACKOFF_SECONDS
 
     # Set when the generator throws after fan-out (fence kept); the monitor reads
     # it to record the prune FAILED instead of falsely advancing last_pruned.
