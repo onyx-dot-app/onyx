@@ -1,10 +1,11 @@
-"""Integration tests for BASIC_ACCESS permission gate.
+"""Integration tests for the curator-or-admin gate on connector read endpoints.
 
-Verifies that endpoints protected by ``require_permission(Permission.BASIC_ACCESS)``
-allow admin and basic users but reject limited service accounts, bot users,
-external-permission users, and anonymous (unauthenticated) client.
-
-Each endpoint is tested with all six user types via parameterization.
+``GET /manage/connector`` (list) and ``GET /manage/connector/{id}`` (by-id) return
+full ``ConnectorSnapshot``s including ``connector_specific_config`` and
+``credential_ids``. They must be restricted to curator/admin users
+(pentest M8 / ENG-4249); basic users, limited service accounts, bot users,
+external-permission users, and anonymous clients must be denied. Curator access
+is covered in ``test_connector_permissions.py``.
 """
 
 import pytest
@@ -14,34 +15,23 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 
-# Representative endpoints that use require_permission(Permission.BASIC_ACCESS).
-# One per major router file to cover breadth without redundancy.
-# Chat endpoints are gated by READ_CHAT/WRITE_CHAT (not BASIC_ACCESS) and are
-# covered by test_chat_scopes.py.
-BASIC_ACCESS_ENDPOINTS: list[tuple[str, str]] = [
-    ("GET", "/manage/credential"),
-    ("GET", "/users"),
-    ("GET", "/settings"),
-    ("GET", "/query/valid-tags"),
-    ("GET", "/input_prompt"),
-    ("GET", "/notifications"),
-    ("GET", "/search-settings/get-all-search-settings"),
-    ("GET", "/user/pats"),
+# Connector read endpoints gated on current_curator_or_admin_user.
+# The by-id path targets a non-existent id on purpose: the auth dependency runs
+# before the handler, so denied users get 403 while an admin gets 404 -- both
+# outcomes confirm the auth gate behaved correctly.
+CONNECTOR_READ_ENDPOINTS: list[tuple[str, str]] = [
+    ("GET", "/manage/connector"),
+    ("GET", "/manage/connector/1"),
 ]
 
 
-# ------------------------------------------------------------------
-# Allowed users: admin and basic
-# ------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_admin_user_allowed(
     method: str,
     path: str,
     permission_admin_user: DATestUser,
 ) -> None:
-    """Admin users should be able to access BASIC_ACCESS endpoints."""
+    """Admin users pass the curator-or-admin gate (200 for list, 404 for missing id)."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -49,18 +39,18 @@ def test_admin_user_allowed(
         cookies=permission_admin_user.cookies,
         timeout=30,
     )
-    assert resp.status_code < 400, (
-        f"Admin should access {method} {path}, got {resp.status_code}"
+    assert resp.status_code not in (401, 403), (
+        f"Admin should pass auth on {method} {path}, got {resp.status_code}"
     )
 
 
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
-def test_basic_user_allowed(
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
+def test_basic_user_denied(
     method: str,
     path: str,
     permission_basic_user: DATestUser,
 ) -> None:
-    """Basic users should be able to access BASIC_ACCESS endpoints."""
+    """Basic users must NOT read connector config/credential ids."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -68,23 +58,18 @@ def test_basic_user_allowed(
         cookies=permission_basic_user.cookies,
         timeout=30,
     )
-    assert resp.status_code < 400, (
-        f"Basic user should access {method} {path}, got {resp.status_code}"
+    assert resp.status_code == 403, (
+        f"Basic user should be denied on {method} {path}, got {resp.status_code}"
     )
 
 
-# ------------------------------------------------------------------
-# Denied users: limited service account, bot, ext_perm, anonymous
-# ------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_limited_service_account_denied(
     method: str,
     path: str,
     limited_service_account: DATestAPIKey,
 ) -> None:
-    """Limited service accounts (no BASIC_ACCESS) should be denied."""
+    """Limited service accounts (no curator/admin role) should be denied."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -97,13 +82,13 @@ def test_limited_service_account_denied(
     )
 
 
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_bot_user_denied(
     method: str,
     path: str,
     bot_user_headers: dict[str, str],
 ) -> None:
-    """Bot (SLACK_USER) accounts should be denied from BASIC_ACCESS endpoints."""
+    """Bot (SLACK_USER) accounts should be denied."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -115,13 +100,13 @@ def test_bot_user_denied(
     )
 
 
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_ext_perm_user_denied(
     method: str,
     path: str,
     ext_perm_user_headers: dict[str, str],
 ) -> None:
-    """External permission users should be denied from BASIC_ACCESS endpoints."""
+    """External permission users should be denied."""
     resp = client.request(
         method,
         f"{API_SERVER_URL}{path}",
@@ -133,7 +118,7 @@ def test_ext_perm_user_denied(
     )
 
 
-@pytest.mark.parametrize("method,path", BASIC_ACCESS_ENDPOINTS)
+@pytest.mark.parametrize("method,path", CONNECTOR_READ_ENDPOINTS)
 def test_anonymous_denied(
     method: str,
     path: str,
