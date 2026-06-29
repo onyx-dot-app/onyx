@@ -607,13 +607,13 @@ def remove_curator_status__no_commit(db_session: Session, user: User) -> None:
 
 def _validate_curator_can_modify_group(
     db_session: Session,
-    user: User | None,
+    user: User,
     user_group_id: int,
 ) -> None:
     """Validates that ``user`` is permitted to modify the given user group
     (its membership, cc_pair assignments, or curator relationships).
 
-    - ADMIN (and internal/system callers with no user) may modify any group.
+    - ADMIN may modify any group.
     - GLOBAL_CURATOR may modify any group they are a member of.
     - CURATOR may only modify groups they actually curate.
 
@@ -622,8 +622,8 @@ def _validate_curator_can_modify_group(
     authorization (403) error rather than a "not found" (404) so callers can
     distinguish "not allowed" from "does not exist".
     """
-    # Admins (and internal/system callers without a user) can modify any group.
-    if user is None or user.role == UserRole.ADMIN:
+    # Admins can modify any group.
+    if user.role == UserRole.ADMIN:
         return
 
     accessible_groups = fetch_user_groups_for_user(
