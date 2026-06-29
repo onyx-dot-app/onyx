@@ -68,16 +68,10 @@ function computeGraceDaysRemaining(gracePeriodEnd: string | null): number {
   return Math.max(1, Math.ceil(msLeft / 86400000));
 }
 
-function dismissKey(
-  stage: ExpiryWarningStage,
-  expiresAt: string | null
-): string {
-  const base = `${DISMISS_STORAGE_KEY}:${stage}:${expiresAt ?? "unknown"}`;
-  if (stage === "grace") {
-    const today = new Date().toISOString().slice(0, 10);
-    return `${base}:${today}`;
-  }
-  return base;
+// Keyed on expires_at alone so one dismissal persists across stage escalation
+// and grace days; a renewal (new expires_at) surfaces the banner again.
+function dismissKey(expiresAt: string | null): string {
+  return `${DISMISS_STORAGE_KEY}:${expiresAt ?? "unknown"}`;
 }
 
 interface LicenseExpiryBannerViewProps {
@@ -164,7 +158,7 @@ export default function LicenseExpiryBanner() {
   const expiresAt = data?.expires_at ?? null;
   const graceDays = computeGraceDaysRemaining(data?.grace_period_end ?? null);
   const hasLicense = data?.has_license ?? false;
-  const key = dismissKey(stage, expiresAt);
+  const key = dismissKey(expiresAt);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
