@@ -51,26 +51,21 @@ export default function Layout({ children }: LayoutProps) {
           className="md:flex-row md:items-start"
         >
           {/* Narrow screens: dropdown navigation above the tab content */}
-          <div
-            data-testid="settings-tab-navigation-dropdown"
-            className="md:hidden px-2"
+          <InputSelect
+            value={pathname}
+            onValueChange={(href) =>
+              router.push(href as Route, { scroll: false })
+            }
           >
-            <InputSelect
-              value={pathname}
-              onValueChange={(href) =>
-                router.push(href as Route, { scroll: false })
-              }
-            >
-              <InputSelect.Trigger placeholder="Select a section" />
-              <InputSelect.Content>
-                {tabs.map((tab) => (
-                  <InputSelect.Item key={tab.href} value={tab.href}>
-                    {tab.label}
-                  </InputSelect.Item>
-                ))}
-              </InputSelect.Content>
-            </InputSelect>
-          </div>
+            <InputSelect.Trigger placeholder="Select a section" />
+            <InputSelect.Content>
+              {tabs.map((tab) => (
+                <InputSelect.Item key={tab.href} value={tab.href}>
+                  {tab.label}
+                </InputSelect.Item>
+              ))}
+            </InputSelect.Content>
+          </InputSelect>
 
           {/* Wide screens: left tab navigation */}
           <div
