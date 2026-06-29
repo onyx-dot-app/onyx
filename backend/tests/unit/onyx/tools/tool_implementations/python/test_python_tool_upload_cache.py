@@ -474,8 +474,8 @@ def test_select_returns_chronological_order_and_no_drops() -> None:
     files = [ChatFile(filename=f"f{i}.csv", content=b"x") for i in range(4)]
     code = "open('f0.csv'); open('f3.csv')"  # mix of referenced and not
 
-    selected, dropped = _select_files_for_staging(
-        files, code, max_files=10, max_bytes=1000
+    selected, dropped, read_failures = _select_files_for_staging(
+        files, code, max_files=10, max_bytes=1000, read_concurrency=4
     )
 
     assert [cf.filename for cf, _ in selected] == [
@@ -485,6 +485,7 @@ def test_select_returns_chronological_order_and_no_drops() -> None:
         "f3.csv",
     ]
     assert dropped == 0
+    assert read_failures == []
 
 
 def test_select_always_keeps_one_file_over_byte_budget() -> None:
@@ -492,8 +493,8 @@ def test_select_always_keeps_one_file_over_byte_budget() -> None:
     # the tool could never run against a big-but-required input.
     files = [ChatFile(filename="big.csv", content=b"x" * 100)]
 
-    selected, dropped = _select_files_for_staging(
-        files, "big.csv", max_files=10, max_bytes=10
+    selected, dropped, _ = _select_files_for_staging(
+        files, "big.csv", max_files=10, max_bytes=10, read_concurrency=4
     )
 
     assert [cf.filename for cf, _ in selected] == ["big.csv"]
@@ -502,7 +503,7 @@ def test_select_always_keeps_one_file_over_byte_budget() -> None:
 
 def test_select_skips_unreadable_files() -> None:
     # A file whose bytes can't be read from the object store is skipped rather
-    # than aborting staging, and counts as dropped.
+    # than aborting staging, and is reported as a read failure (NOT a cap-drop).
     def _bad_loader() -> bytes:
         raise RuntimeError("object store unavailable")
 
@@ -511,12 +512,17 @@ def test_select_skips_unreadable_files() -> None:
         ChatFile(filename="good.csv", content=b"ok"),
     ]
 
-    selected, dropped = _select_files_for_staging(
-        files, "open('bad.csv'); open('good.csv')", max_files=10, max_bytes=1000
+    selected, dropped, read_failures = _select_files_for_staging(
+        files,
+        "open('bad.csv'); open('good.csv')",
+        max_files=10,
+        max_bytes=1000,
+        read_concurrency=4,
     )
 
     assert [cf.filename for cf, _ in selected] == ["good.csv"]
-    assert dropped == 1
+    assert dropped == 0
+    assert read_failures == ["bad.csv"]
 
 
 def test_code_references_file_matches_raw_and_sanitized_names() -> None:

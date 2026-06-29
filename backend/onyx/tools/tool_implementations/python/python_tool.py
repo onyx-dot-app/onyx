@@ -15,9 +15,9 @@ from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
 from onyx.configs.app_configs import CODE_INTERPRETER_DEFAULT_TIMEOUT_MS
 from onyx.configs.app_configs import CODE_INTERPRETER_MAX_OUTPUT_LENGTH
-from onyx.configs.app_configs import CODE_INTERPRETER_MAX_PARALLEL_UPLOADS
 from onyx.configs.app_configs import CODE_INTERPRETER_MAX_STAGED_BYTES
 from onyx.configs.app_configs import CODE_INTERPRETER_MAX_STAGED_FILES
+from onyx.configs.app_configs import CODE_INTERPRETER_STAGING_CONCURRENCY
 from onyx.configs.constants import FileOrigin
 from onyx.db.code_interpreter import fetch_code_interpreter_server
 from onyx.file_store.utils import build_full_frontend_file_url
@@ -106,20 +106,15 @@ def _code_references_file(filename: str, code: str) -> bool:
     return filename in code or _safe_code_interpreter_filename(filename) in code
 
 
-def _select_files_for_staging(
-    chat_files: list[ChatFile],
-    code: str,
-    *,
-    max_files: int,
-    max_bytes: int,
-) -> tuple[list[tuple[ChatFile, bytes]], int]:
-    """Choose which session files to stage, reading bytes only for the chosen.
+def _read_chat_file_content(chat_file: ChatFile) -> bytes:
+    """Materialize a (possibly lazy) chat file's bytes; the object-store read
+    happens here. Extracted so reads can be batched in parallel."""
+    return chat_file.content
 
-    Files the ``code`` names explicitly are staged first; the remaining
-    count/byte budget is backfilled with the most recent of the rest. Returns
-    the selected ``(file, content)`` pairs in chronological order and the number
-    of files the caps dropped.
-    """
+
+def _staging_priority(chat_files: list[ChatFile], code: str) -> list[int]:
+    """``chat_files`` indices in staging-priority order: files the code names
+    first, then the rest, newest-first within each group."""
     referenced: list[int] = []
     unreferenced: list[int] = []
     for idx, chat_file in enumerate(chat_files):
@@ -129,38 +124,72 @@ def _select_files_for_staging(
             else unreferenced
         )
         bucket.append(idx)
+    return list(reversed(referenced)) + list(reversed(unreferenced))
 
-    # Newest-first within each group so the caps keep the most recent files.
-    priority = list(reversed(referenced)) + list(reversed(unreferenced))
+
+def _select_files_for_staging(
+    chat_files: list[ChatFile],
+    code: str,
+    *,
+    max_files: int,
+    max_bytes: int,
+    read_concurrency: int,
+) -> tuple[list[tuple[ChatFile, bytes]], int, list[str]]:
+    """Choose which session files to stage, reading bytes only for the chosen.
+
+    Files the ``code`` names explicitly are staged first; the remaining
+    count/byte budget is backfilled with the most recent of the rest. Candidates
+    are read in bounded parallel batches — concurrency hides read latency while
+    only one batch is held in memory at a time. Returns the selected
+    ``(file, content)`` pairs in chronological order, the number of files the
+    caps dropped (excluding read failures), and the filenames that failed to
+    read.
+    """
+    # Count cap: only the top candidates can ever be staged, so never read more.
+    candidates = _staging_priority(chat_files, code)[:max_files]
 
     selected: dict[int, bytes] = {}
+    read_failures: list[str] = []
     staged_bytes = 0
-    for idx in priority:
-        if len(selected) >= max_files:
+    for start in range(0, len(candidates), read_concurrency):
+        batch = candidates[start : start + read_concurrency]
+        contents = run_functions_tuples_in_parallel(
+            [(_read_chat_file_content, (chat_files[idx],)) for idx in batch],
+            allow_failures=True,
+            max_workers=read_concurrency,
+        )
+
+        over_budget = False
+        for idx, content in zip(batch, contents):
+            if content is None:
+                logger.warning(
+                    "Failed to read file for Python execution: %s",
+                    chat_files[idx].filename,
+                )
+                read_failures.append(chat_files[idx].filename)
+                continue
+            # Always stage at least one file; otherwise stop at the byte budget.
+            if selected and staged_bytes + len(content) > max_bytes:
+                over_budget = True
+                break
+            selected[idx] = content
+            staged_bytes += len(content)
+        if over_budget:
             break
-        try:
-            content = chat_files[idx].content
-        except Exception as e:
-            logger.warning("Failed to read file for Python execution: %s", e)
-            continue
-        # Always stage at least one file; otherwise stop at the byte budget.
-        if selected and staged_bytes + len(content) > max_bytes:
-            break
-        selected[idx] = content
-        staged_bytes += len(content)
 
     chronological = [(chat_files[idx], selected[idx]) for idx in sorted(selected)]
-    return chronological, len(chat_files) - len(selected)
+    dropped_by_caps = len(chat_files) - len(selected) - len(read_failures)
+    return chronological, dropped_by_caps, read_failures
 
 
 def _build_staging_notice(
     dropped_count: int,
     total_files: int,
-    failed_uploads: list[str],
+    failed_files: list[str],
 ) -> str | None:
     """LLM-facing note when some session files are absent — dropped by the caps
-    or failed to upload — so the model doesn't assume they're available.
-    ``None`` when everything staged."""
+    or failed to stage (read/upload error) — so the model doesn't assume they're
+    available. ``None`` when everything staged."""
     parts: list[str] = []
     if dropped_count > 0:
         parts.append(
@@ -169,10 +198,9 @@ def _build_staging_notice(
             f"{CODE_INTERPRETER_MAX_STAGED_BYTES} bytes); files referenced in the "
             f"code were prioritized."
         )
-    if failed_uploads:
+    if failed_files:
         parts.append(
-            f"Failed to stage {len(failed_uploads)} file(s): "
-            f"{', '.join(failed_uploads)}."
+            f"Failed to stage {len(failed_files)} file(s): {', '.join(failed_files)}."
         )
     return " ".join(parts) if parts else None
 
@@ -288,7 +316,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             upload_results = run_functions_tuples_in_parallel(
                 [(client.upload_file, (p.content, p.file_name)) for p in misses],
                 allow_failures=True,
-                max_workers=CODE_INTERPRETER_MAX_PARALLEL_UPLOADS,
+                max_workers=CODE_INTERPRETER_STAGING_CONCURRENCY,
             )
             for plan, ci_file_id in zip(misses, upload_results):
                 if ci_file_id is None:
@@ -351,16 +379,17 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         with CodeInterpreterClient() as client:
             # Select the files to stage (referenced-first, recent backfill,
             # bounded by the caps), upload them, and note any drops to the LLM.
-            selected, dropped_count = _select_files_for_staging(
+            selected, dropped_count, read_failures = _select_files_for_staging(
                 chat_files,
                 code,
                 max_files=CODE_INTERPRETER_MAX_STAGED_FILES,
                 max_bytes=CODE_INTERPRETER_MAX_STAGED_BYTES,
+                read_concurrency=CODE_INTERPRETER_STAGING_CONCURRENCY,
             )
-            files_to_stage, failed_uploads = self._upload_and_stage(client, selected)
+            files_to_stage, upload_failures = self._upload_and_stage(client, selected)
 
             staging_notice = _build_staging_notice(
-                dropped_count, len(chat_files), failed_uploads
+                dropped_count, len(chat_files), read_failures + upload_failures
             )
             if staging_notice:
                 logger.warning(staging_notice)

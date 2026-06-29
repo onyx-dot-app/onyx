@@ -1443,12 +1443,12 @@ CODE_INTERPRETER_MAX_STAGED_BYTES = int(
     os.environ.get("CODE_INTERPRETER_MAX_STAGED_BYTES") or 100 * 1024 * 1024
 )
 
-# Cache-miss file uploads run concurrently to keep staging within the liveness
-# window. Bounded fan-out: the sandbox can be overwhelmed by a large upload
-# burst, so keep this modest. Each upload is individually bounded by the
-# client's per-request timeout.
-CODE_INTERPRETER_MAX_PARALLEL_UPLOADS = int(
-    os.environ.get("CODE_INTERPRETER_MAX_PARALLEL_UPLOADS") or 8
+# Bounds the fan-out of both staging phases — reading files from the object
+# store and uploading cache misses to the sandbox — so neither blocks the
+# request worker serially nor overwhelms a backend with a burst. Each I/O call
+# is individually bounded by its own per-request timeout.
+CODE_INTERPRETER_STAGING_CONCURRENCY = int(
+    os.environ.get("CODE_INTERPRETER_STAGING_CONCURRENCY") or 8
 )
 
 # Per-call MCP read timeout; configurable since some tools (e.g. data-agent
