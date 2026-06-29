@@ -56,7 +56,6 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.WRITE_CHAT.value: {Permission.READ_CHAT.value},
     Permission.CRAFT_SANDBOX.value: {
         Permission.READ_SEARCH.value,
-        Permission.CRAFT_REQUEST_APP_SETUP.value,
     },
 }
 
@@ -107,16 +106,11 @@ def require_permission(
     required: Permission,
     *,
     allow_anonymous: bool = False,
-    require_scoped_token: bool = False,
 ) -> Callable[..., Coroutine[Any, Any, User]]:
     """FastAPI dependency factory: require ``required`` of the caller, capped by the
     authenticating token's scopes (unrestricted PAT / session / API key = no cap).
     allow_anonymous admits the anonymous user where the tenant permits it (the
-    anonymous-capable chat surface).
-
-    require_scoped_token makes the route machine-only: the caller must present a
-    scoped token implying ``required``; unscoped principals (session / API key /
-    unrestricted PAT) are denied and the user's own permissions are not consulted."""
+    anonymous-capable chat surface)."""
     base_user = current_chat_accessible_user if allow_anonymous else current_user
 
     async def dependency(request: Request, user: User = Depends(base_user)) -> User:
@@ -126,12 +120,9 @@ def require_permission(
         token_implies = token_scopes is not None and required.value in (
             resolve_effective_permissions({s.value for s in token_scopes})
         )
-        if require_scoped_token:
-            permitted = token_implies
-        else:
-            permitted_by_user = required in get_effective_permissions(user)
-            permitted_by_token = token_scopes is None or token_implies
-            permitted = permitted_by_user and permitted_by_token
+        permitted_by_user = required in get_effective_permissions(user)
+        permitted_by_token = token_scopes is None or token_implies
+        permitted = permitted_by_user and permitted_by_token
         if not permitted:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
