@@ -36,8 +36,6 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@floating-ui/react-dom": "^2.1.6",
-    "@headlessui/react": "^2.2.0",
-    "@headlessui/tailwindcss": "^0.2.1",
     "@onyx-ai/opal": "file:./lib/opal",
     "@onyx-ai/shared": "file:./lib/shared",
     "@radix-ui/react-accordion": "^1.2.2",
