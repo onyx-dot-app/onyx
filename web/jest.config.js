@@ -18,7 +18,6 @@ const esmPackages = [
   // UI Libraries
   "@radix-ui",
   "@floating-ui",
-  "@headlessui",
   // Testing & Mocking
   "msw",
   "until-async",
