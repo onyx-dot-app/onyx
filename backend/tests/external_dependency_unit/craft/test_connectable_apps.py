@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.server.features.build.sandbox.util.agent_instructions import (
-    build_connectable_apps_section,
+    build_connectable_apps_list,
 )
 from tests.external_dependency_unit.craft.db_helpers import make_external_app
 from tests.external_dependency_unit.craft.db_helpers import make_skill
@@ -66,9 +66,8 @@ def test_lists_only_unconnected_apps_and_renders_them(
     assert "disabled-app" not in slugs
     assert "hidden-app" not in slugs
 
-    section = build_connectable_apps_section(
+    apps_list = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )
-    assert "## Connectable apps" in section
-    assert "needs-setup" in section
-    assert "hidden-app" not in section
+    assert "- **needs-setup**" in apps_list
+    assert "hidden-app" not in apps_list

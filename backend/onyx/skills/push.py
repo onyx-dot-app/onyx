@@ -21,7 +21,7 @@ from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import PushResult
 from onyx.server.features.build.sandbox.util.agent_instructions import (
-    build_connectable_apps_section,
+    build_connectable_apps_list,
 )
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_skills_section_from_data,
@@ -154,20 +154,20 @@ def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     return _assemble_fileset(skills, user, db_session)
 
 
-def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, FileSet]:
-    """Return (skills_section, fileset) sharing one set of DB reads.
-
-    The section also lists org apps the user hasn't connected yet, so the agent
-    knows they exist and can offer to set one up via the connect tool."""
+def build_user_skills_payload(
+    user: User, db_session: Session
+) -> tuple[str, str, FileSet]:
+    """Return (skills_section, connectable_apps_section, fileset) sharing one set
+    of DB reads. ``connectable_apps_section`` lists org apps the user hasn't
+    connected yet, so the agent knows they exist and can offer to set one up via
+    the connect tool."""
     skills = list_skills_for_sandbox_injection(user=user, db_session=db_session)
-    section = build_skills_section_from_data(skills)
-    connectable = build_connectable_apps_section(
+    skills_section = build_skills_section_from_data(skills)
+    connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )
-    if connectable:
-        section = f"{section}\n{connectable}"
     files = _assemble_fileset(skills, user, db_session)
-    return section, files
+    return skills_section, connectable_apps_section, files
 
 
 def hydrate_sandbox_skills(

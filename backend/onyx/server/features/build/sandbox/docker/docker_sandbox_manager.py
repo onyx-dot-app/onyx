@@ -1105,12 +1105,14 @@ class DockerSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> str:
         """Shell-escaped AGENTS.md for ``printf '%s' '...'``."""
         agent_instructions = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1126,6 +1128,7 @@ class DockerSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         container = self._require_container(sandbox_id)
@@ -1134,6 +1137,7 @@ class DockerSandboxManager(SandboxManager):
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
 
@@ -1475,6 +1479,7 @@ echo "Session cleanup complete"
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
@@ -1541,6 +1546,7 @@ fi
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
         )
 
         if nextjs_port is not None:
@@ -1563,6 +1569,7 @@ fi
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         """
         Rewrite AGENTS.md and the skills symlink post-restore. opencode.json is
@@ -1573,6 +1580,7 @@ fi
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
         )
         script = f"""
 set -e

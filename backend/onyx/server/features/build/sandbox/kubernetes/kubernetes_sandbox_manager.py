@@ -462,6 +462,7 @@ class KubernetesSandboxManager(SandboxManager):
     def _load_agent_instructions(
         self,
         skills_section: str,
+        connectable_apps_section: str,
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
@@ -472,6 +473,7 @@ class KubernetesSandboxManager(SandboxManager):
         return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -1370,6 +1372,7 @@ class KubernetesSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
@@ -1400,6 +1403,7 @@ class KubernetesSandboxManager(SandboxManager):
         # Attachments section is injected dynamically when first file is uploaded.
         agent_instructions = self._load_agent_instructions(
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1826,6 +1830,7 @@ echo "Session cleanup complete"
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         """Restore a FileStore-backed snapshot through the sidecar filesystem API.
 
@@ -1877,6 +1882,7 @@ echo "Session cleanup complete"
                 llm_config=llm_config,
                 nextjs_port=nextjs_port,
                 skills_section=skills_section,
+                connectable_apps_section=connectable_apps_section,
             )
 
             if nextjs_port is not None:
@@ -1904,6 +1910,7 @@ echo "Session cleanup complete"
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         """Regenerate session configuration files after snapshot restore.
 
@@ -1921,6 +1928,7 @@ echo "Session cleanup complete"
         """
         agent_instructions = self._load_agent_instructions(
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,

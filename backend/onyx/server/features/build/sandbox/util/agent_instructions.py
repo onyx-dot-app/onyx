@@ -91,34 +91,21 @@ def build_skills_section_from_data(skills: Iterable[Skill]) -> str:
     return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
 
 
-def build_connectable_apps_section(apps: Iterable[ExternalApp]) -> str:
-    """Render the "Connectable apps" block: org apps the user hasn't set up yet.
-
-    These aren't usable until connected, so the agent can't call them directly —
-    but knowing they exist lets it plan around them and offer to connect one via
-    the ``connect_app`` tool. Empty input renders nothing (no heading)."""
+def build_connectable_apps_list(apps: Iterable[ExternalApp]) -> str:
+    """Render the connectable-apps bullet list — org apps the user hasn't set up
+    yet. The heading and explanatory prose live in AGENTS.template.md; this only
+    supplies the dynamic ``{{CONNECTABLE_APPS_LIST}}`` value. Mirrors
+    ``build_skills_section_from_data``: a fallback line when there's nothing."""
     entries = sorted((app.skill.slug, _truncate(app.skill.description)) for app in apps)
     if not entries:
-        return ""
-
-    lines = [
-        "",
-        "## Connectable apps",
-        "",
-        "These org apps are available but **not yet set up** for this user, so you "
-        "cannot call them yet. When the task needs one, call the "
-        "`connect_app` tool with its slug to prompt the user to connect it; "
-        "once they do, it works like any connected app. Never ask for or handle "
-        "credentials yourself.",
-        "",
-    ]
-    lines += [f"- **{slug}**: {desc}" for slug, desc in entries]
-    return "\n".join(lines)
+        return "No connectable apps available."
+    return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
 
 
 def generate_agent_instructions(
     template_path: Path,
     skills_section: str,
+    connectable_apps_section: str,
     provider: str | None = None,
     model_name: str | None = None,
     nextjs_port: int | None = None,
@@ -130,6 +117,7 @@ def generate_agent_instructions(
     Args:
         template_path: Path to the AGENTS.template.md file
         skills_section: Pre-rendered skills section
+        connectable_apps_section: Pre-rendered connectable-apps list (may be empty)
         provider: LLM provider type (e.g., "openai", "anthropic")
         model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
         nextjs_port: Port for Next.js development server
@@ -176,5 +164,6 @@ def generate_agent_instructions(
     )
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", skills_section)
+    content = content.replace("{{CONNECTABLE_APPS_LIST}}", connectable_apps_section)
 
     return content

@@ -114,12 +114,17 @@ def _add_user_visibility_filter(
 
 
 def visible_skill_ids_for_user(user: User, db_session: Session) -> set[UUID]:
-    """Enabled skill ids the user can see (public / group-granted / personal) —
-    the visibility source of truth shared with sandbox injection."""
+    """Enabled skill ids the user can see (public / group-granted / personal).
+
+    A lightweight authorization primitive (ids only, for membership checks such
+    as which external apps a user may connect) — distinct from
+    ``list_skills_for_user``, which is the skills-endpoint listing and excludes
+    external-app-backed skills. The shared visibility predicate is
+    ``_add_user_visibility_filter``."""
     stmt = _add_user_visibility_filter(
         select(Skill).where(Skill.enabled.is_(True)), user
-    )
-    return {skill.id for skill in db_session.scalars(stmt)}
+    ).with_only_columns(Skill.id)
+    return set(db_session.scalars(stmt))
 
 
 def _exclude_unavailable_built_ins(
