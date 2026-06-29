@@ -10,15 +10,15 @@ from typing_extensions import override
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_PROVIDER
-from onyx.db.image_generation import get_default_image_generation_config
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import load_chat_file_by_id
 from onyx.file_store.utils import save_files
 from onyx.image_gen.factory import get_image_generation_provider
-from onyx.image_gen.factory import validate_credentials
+from onyx.image_gen.generation import is_image_generation_configured
 from onyx.image_gen.generation import resolve_image_size
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
+from onyx.image_gen.interfaces import ImageShape
 from onyx.image_gen.interfaces import ReferenceImage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
@@ -32,7 +32,6 @@ from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.images.models import ImageGenerationResponse
-from onyx.tools.tool_implementations.images.models import ImageShape
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -91,30 +90,7 @@ class ImageGenerationTool(Tool[None]):
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
         """Available if a default image generation config exists with valid credentials."""
-        try:
-            config = get_default_image_generation_config(db_session)
-            if not config or not config.model_configuration:
-                return False
-
-            llm_provider = config.model_configuration.llm_provider
-            credentials = ImageGenerationProviderCredentials(
-                api_key=(
-                    llm_provider.api_key.get_value(apply_mask=False)
-                    if llm_provider.api_key
-                    else None
-                ),
-                api_base=llm_provider.api_base,
-                api_version=llm_provider.api_version,
-                deployment_name=llm_provider.deployment_name,
-                custom_config=llm_provider.custom_config,
-            )
-            return validate_credentials(
-                provider=llm_provider.provider,
-                credentials=credentials,
-            )
-        except Exception:
-            logger.exception("Error checking if image generation is available")
-            return False
+        return is_image_generation_configured(db_session)
 
     def tool_definition(self) -> dict:
         return {
