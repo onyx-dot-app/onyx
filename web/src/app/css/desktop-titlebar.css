@@ -21,7 +21,10 @@
 */
 
 html.onyx-desktop {
-  --onyx-titlebar-height: 36px;
+  /* Inherit the desktop shim's titlebar height when it is present, so the two
+     layers can't silently diverge. The 36px literal is the single fallback
+     source of truth for when no shim has set the variable. */
+  --onyx-titlebar-height: var(--onyx-desktop-titlebar-height, 36px);
 
   box-sizing: border-box;
   height: 100dvh !important;
