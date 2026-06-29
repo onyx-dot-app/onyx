@@ -135,7 +135,6 @@ func TestWriteGeneratedImages_FailsIfExists(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when output already exists")
 	}
-	// The pre-existing file must be left untouched, not truncated.
 	got, _ := os.ReadFile(out)
 	if string(got) != "existing" {
 		t.Fatalf("existing file was modified: %q", got)

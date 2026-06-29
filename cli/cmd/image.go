@@ -208,9 +208,6 @@ func writeGeneratedImages(images []models.GeneratedImagePayload, output string) 
 		if len(images) > 1 {
 			path = fmt.Sprintf("%s_%d%s", base, i+1, ext)
 		}
-		// O_EXCL: never overwrite an existing file. Re-running into the same
-		// path (or hitting an existing _N suffix) fails loudly instead of
-		// silently destroying a prior asset — use a fresh -o name to regenerate.
 		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
 			return nil, exitcodes.Newf(exitcodes.General,
