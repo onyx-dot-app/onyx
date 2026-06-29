@@ -4,6 +4,8 @@
 
 > **Altitude note.** Kept deliberately high-level per the project owner's request: this is a *map*, not a line-by-line spec. Each PR phase (see `05-pr-roadmap.md`) gets its own detailed-analysis session that grills the owner before coding. Treat file lists and shapes here as the intended structure, to be confirmed/refined per phase.
 
+> **⚠️ DECISION OVERRIDE (2026-06-29) — chat logic is NOT shared.** See the matching callout in `05-pr-roadmap.md`. The owner reversed Approach C's shared-seam plan *for chat code*: nothing chat-related is extracted into `@onyx-ai/shared`. **Everywhere this document lists `web/lib/shared/src/contracts/*` or `web/lib/shared/src/utils/*` (e.g. `ndjson.ts`, `messageTree.ts`, `chatHistory.ts`, `streaming.ts`, `chat.ts`, `files.ts`, `agents.ts`, `projects.ts`, `fileDescriptors.ts`), read it as `mobile/src/chat/*` — mobile-owned, no web re-points, no shims.** The "Shared message-tree fns", "Shared `createNdjsonBuffer()`", and the shared-`dist`/`watch.mjs` integration notes below are superseded: mobile owns these copies and web is untouched. `@onyx-ai/shared` keeps receiving only cross-platform **design** primitives. Implemented in PR 2 under `mobile/src/chat/` (`streamingModels.ts`, `interfaces.ts`, `ndjson.ts`, `messageTree.ts`, `__tests__/`).
+
 ## Database design
 
 **N/A — no backend or database changes.** The mobile client talks to the existing Onyx backend and its existing schema. All "data model" work is client-side (in-memory zustand + TanStack Query cache, plus MMKV persistence already configured). The relevant backend tables (`chat_session.project_id`, `user_file`, `persona`, `project`, `Project__UserFile`) already exist and are documented in `01-research.md`.
