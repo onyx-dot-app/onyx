@@ -19,8 +19,9 @@ import {
   MarkdownFormField,
   BooleanFormField,
   SelectorFormField,
+  Label,
 } from "@/components/Field";
-import MultiSelectDropdown from "@/components/MultiSelectDropdown";
+import { InputComboBoxMulti } from "@/refresh-components/inputs/InputComboBox";
 
 function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {
   return keywordSelect == "any";
@@ -105,7 +106,7 @@ export const StandardAnswerCreationForm = ({
             }
           }}
         >
-          {({ isSubmitting, values, setFieldValue }) => (
+          {({ isSubmitting, values, setFieldValue, errors, touched }) => (
             <Form>
               {values.matchRegex ? (
                 <TextFormField
@@ -165,18 +166,20 @@ export const StandardAnswerCreationForm = ({
                 />
               </div>
               <div className="w-4/12">
-                <MultiSelectDropdown
+                <Label>Categories:</Label>
+                <InputComboBoxMulti
                   name="categories"
-                  label="Categories:"
+                  placeholder="Select or create categories"
+                  creatable
                   onChange={(selected_options) => {
                     const selected_categories = selected_options.map(
-                      (option) => {
-                        return { id: Number(option.value), name: option.label };
-                      }
+                      (option) => ({
+                        id: Number(option.value),
+                        name: option.label,
+                      })
                     );
                     setFieldValue("categories", selected_categories);
                   }}
-                  creatable={true}
                   onCreate={async (created_name) => {
                     const response = await createStandardAnswerCategory({
                       name: created_name,
@@ -191,10 +194,15 @@ export const StandardAnswerCreationForm = ({
                     label: category.name,
                     value: category.id.toString(),
                   }))}
-                  initialSelectedOptions={values.categories.map((category) => ({
+                  selected={values.categories.map((category) => ({
                     label: category.name,
                     value: category.id.toString(),
                   }))}
+                  error={
+                    touched.categories && typeof errors.categories === "string"
+                      ? errors.categories
+                      : undefined
+                  }
                 />
               </div>
               <div className="py-4 flex">

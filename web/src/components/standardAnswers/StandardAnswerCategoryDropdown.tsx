@@ -1,7 +1,7 @@
 import { FC } from "react";
 import { StandardAnswerCategoryResponse } from "./getStandardAnswerCategoriesIfEE";
 import { Label } from "@/components/Field";
-import MultiSelectDropdown from "../MultiSelectDropdown";
+import { InputComboBoxMulti } from "@/refresh-components/inputs/InputComboBox";
 import { StandardAnswerCategory } from "@/lib/types";
 import { ErrorCallout } from "../ErrorCallout";
 import { LoadingAnimation } from "../Loading";
@@ -37,26 +37,23 @@ export const StandardAnswerCategoryDropdownField: FC<
       <div>
         <Label>Standard Answer Categories</Label>
         <div className="w-64">
-          <MultiSelectDropdown
+          <InputComboBoxMulti
             name="standard_answer_categories"
-            label=""
+            placeholder="Select categories"
             onChange={(selectedOptions) => {
-              const selectedCategories = selectedOptions.map((option) => {
-                return {
-                  id: Number(option.value),
-                  name: option.label,
-                };
-              });
+              const selectedCategories = selectedOptions.map((option) => ({
+                id: Number(option.value),
+                name: option.label,
+              }));
               setCategories(selectedCategories);
             }}
-            creatable={false}
             options={standardAnswerCategoryResponse.categories.map(
               (category) => ({
                 label: category.name,
                 value: category.id.toString(),
               })
             )}
-            initialSelectedOptions={categories.map((category) => ({
+            selected={categories.map((category) => ({
               label: category.name,
               value: category.id.toString(),
             }))}
