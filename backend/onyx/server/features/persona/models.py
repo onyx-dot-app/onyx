@@ -235,7 +235,9 @@ class MinimalPersonaSnapshot(BaseModel):
         cls,
         persona: Persona,
         user_permission: PersonaAccessLevel | None = None,
-        include_owner_email: bool = True,
+        # Fail closed: the owner email is PII and is only included when a caller
+        # explicitly opts in (owner / admin paths). See the DB-layer callers.
+        include_owner_email: bool = False,
     ) -> "MinimalPersonaSnapshot":
         # Collect unique sources from document sets, hierarchy nodes, and attached documents
         sources: set[DocumentSource] = set()
