@@ -489,7 +489,7 @@ interface AgentDraftManagerProps {
 
 // Auto-saves the form to a draft (only while dirty, so a pristine form never
 // prompts) and surfaces a restore banner when one exists.
-function AgentDraftManager({ storageKey }: AgentDraftManagerProps) {
+export function AgentDraftManager({ storageKey }: AgentDraftManagerProps) {
   const { values, dirty, setValues } =
     useFormikContext<Record<string, unknown>>();
   const { draft, loaded, hasDraft, save, clear } = useDraft<
@@ -500,6 +500,12 @@ function AgentDraftManager({ storageKey }: AgentDraftManagerProps) {
   useEffect(() => {
     if (loaded && dirty) save(values);
   }, [values, dirty, loaded, save]);
+
+  // Editing the form means the user is working fresh, not restoring; latch the
+  // banner shut so it can't reappear, even if they later revert to pristine.
+  useEffect(() => {
+    if (dirty) setHandled(true);
+  }, [dirty]);
 
   if (!loaded || !hasDraft || handled || !draft) return null;
 

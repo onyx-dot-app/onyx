@@ -9,7 +9,6 @@ describe("useDraft", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     sessionStorage.clear();
-    localStorage.clear();
   });
 
   afterEach(() => {
@@ -120,6 +119,28 @@ describe("useDraft", () => {
     expect(resultB.current.draft).toBe("value-b");
   });
 
+  it("cancels a pending write when the key changes, never writing under the old key", () => {
+    const keyA = draftKey("test", "a");
+    const keyB = draftKey("test", "b");
+    const { result, rerender } = renderHook(
+      ({ key }) => useDraft<string>({ key }),
+      { initialProps: { key: keyA } }
+    );
+
+    act(() => {
+      result.current.save("typed under a");
+    });
+    // Switch keys before the debounce fires (e.g. chat:new -> real session id).
+    rerender({ key: keyB });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+
+    // The stale timer must not resurrect the old key's value.
+    expect(sessionStorage.getItem(keyA)).toBeNull();
+    expect(sessionStorage.getItem(keyB)).toBeNull();
+  });
+
   it("re-reads when the key changes", () => {
     const keyA = draftKey("test", "a");
     const keyB = draftKey("test", "b");
@@ -202,22 +223,6 @@ describe("useDraft", () => {
     });
 
     expect(JSON.parse(sessionStorage.getItem(keyB)!)).toBe("draft-for-b");
-  });
-
-  it("uses localStorage when backend is 'local'", () => {
-    const { result } = renderHook(() =>
-      useDraft<string>({ key: KEY, backend: "local" })
-    );
-
-    act(() => {
-      result.current.save("persisted");
-    });
-    act(() => {
-      jest.advanceTimersByTime(300);
-    });
-
-    expect(JSON.parse(localStorage.getItem(KEY)!)).toBe("persisted");
-    expect(sessionStorage.getItem(KEY)).toBeNull();
   });
 
   it("survives storage access throwing (blocked/SSR-like environments)", () => {

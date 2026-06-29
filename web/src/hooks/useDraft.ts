@@ -5,8 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // Persists in-progress input to browser storage so it survives navigation and
 // unexpected logout, then offers it back for restore on return.
 
-export type DraftBackend = "session" | "local";
-
 const STORAGE_PREFIX = "onyx:draft";
 
 // Namespaced so the flat per-origin store stays collision-free:
@@ -15,10 +13,13 @@ export function draftKey(scope: string, entityId: string): string {
   return `${STORAGE_PREFIX}:${scope}:${entityId}`;
 }
 
-function getStorage(backend: DraftBackend): Storage | null {
+// Drafts live in ``sessionStorage``: per-tab, self-clearing on tab close, and
+// it survives reload and the same-tab login redirect, which is all we need
+// today.
+function getStorage(): Storage | null {
   if (typeof window === "undefined") return null;
   try {
-    return backend === "local" ? window.localStorage : window.sessionStorage;
+    return window.sessionStorage;
   } catch {
     // Storage access can throw in private-browsing / blocked-cookie modes.
     return null;
@@ -27,8 +28,8 @@ function getStorage(backend: DraftBackend): Storage | null {
 
 // Direct removal for callers that know the key but don't render the hook (e.g.
 // a save-success path).
-export function clearDraft(key: string, backend: DraftBackend = "session") {
-  const storage = getStorage(backend);
+export function clearDraft(key: string) {
+  const storage = getStorage();
   if (!storage) return;
   try {
     storage.removeItem(key);
@@ -47,7 +48,6 @@ function defaultIsEmpty(value: unknown): boolean {
 
 export interface UseDraftOptions<T> {
   key: string;
-  backend?: DraftBackend;
   debounceMs?: number;
   isEmpty?: (value: T) => boolean;
 }
@@ -66,7 +66,6 @@ export interface UseDraftReturn<T> {
 
 export function useDraft<T>({
   key,
-  backend = "session",
   debounceMs = 300,
   isEmpty = defaultIsEmpty,
 }: UseDraftOptions<T>): UseDraftReturn<T> {
@@ -80,10 +79,10 @@ export function useDraft<T>({
   const isEmptyRef = useRef(isEmpty);
   isEmptyRef.current = isEmpty;
 
-  // Read the stored draft whenever the key (or backend) changes. Effects don't
-  // run during SSR, so this never touches storage on the server.
+  // Read the stored draft whenever the key changes. Effects don't run during
+  // SSR, so this never touches storage on the server.
   useEffect(() => {
-    const storage = getStorage(backend);
+    const storage = getStorage();
     if (!storage) {
       setEntry({ key, draft: null });
       return;
@@ -94,21 +93,25 @@ export function useDraft<T>({
     } catch {
       setEntry({ key, draft: null });
     }
-  }, [key, backend]);
+  }, [key]);
 
-  // Cancel any pending write on unmount.
+  // Cancel a pending write when the key changes (or on unmount) so a debounced
+  // save for the previous key can't land after the consumer has moved on.
   useEffect(() => {
     return () => {
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
-  }, []);
+  }, [key]);
 
   const save = useCallback(
     (value: T) => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
-        const storage = getStorage(backend);
+        const storage = getStorage();
         if (!storage) return;
         try {
           if (isEmptyRef.current(value)) {
@@ -121,7 +124,7 @@ export function useDraft<T>({
         }
       }, debounceMs);
     },
-    [key, backend, debounceMs]
+    [key, debounceMs]
   );
 
   const clear = useCallback(() => {
@@ -129,9 +132,9 @@ export function useDraft<T>({
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    clearDraft(key, backend);
+    clearDraft(key);
     setEntry({ key, draft: null });
-  }, [key, backend]);
+  }, [key]);
 
   const loaded = entry !== null && entry.key === key;
   const draft = loaded ? entry.draft : null;
