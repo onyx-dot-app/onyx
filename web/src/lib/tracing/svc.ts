@@ -1,6 +1,7 @@
-import { TRACING_PROVIDERS_URL } from "@/lib/tracing/hooks";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { TracingProviderType } from "@/lib/tracing/types";
 
+const TRACING_PROVIDERS_URL = SWR_KEYS.tracingProviders;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 async function parseErrorDetail(

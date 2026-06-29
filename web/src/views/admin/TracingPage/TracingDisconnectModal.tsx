@@ -28,13 +28,13 @@ export function TracingDisconnectModal({
     try {
       await disconnectTracingProvider(target.providerType);
       toast.success(`${target.label} disconnected`);
+      await onDisconnected();
       onClose?.();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Unexpected error occurred."
       );
     } finally {
-      await onDisconnected();
       setIsSubmitting(false);
     }
   }
