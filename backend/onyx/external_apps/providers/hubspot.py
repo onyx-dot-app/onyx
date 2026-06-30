@@ -18,6 +18,18 @@ from onyx.external_apps.providers.base import OAuthProviderSpec
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.base import OrgCredentialField
 from onyx.external_apps.providers.base import token_response_error
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+# HubSpot's token endpoint omits the granted scopes, so to discover what a user
+# actually consented to we read the token-info endpoint, which returns a
+# `scopes` array. With `optional_scope` (ENG-4260) different users grant
+# different scope sets, so we must record the per-user grant.
+_TOKEN_INFO_URL = "https://api.hubapi.com/oauth/v1/access-tokens/{access_token}"
+
+# Bounded so a slow/hung token-info call can't pin the OAuth connect flow.
+_TOKEN_INFO_TIMEOUT_SECONDS = 15.0
 
 
 class HubspotAction(ExternalAppAction):
@@ -224,4 +236,44 @@ class HubspotProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             creds["refresh_token"] = response_data["refresh_token"]
         if response_data.get("expires_in"):
             creds["expires_in"] = response_data["expires_in"]
+
+        # Record the scopes actually granted for this user. The token response
+        # itself omits granted scopes, so we hit HubSpot's token-info endpoint
+        # to read them. Downstream features consume `granted_scopes`: skill
+        # action gating (ENG-4262) and write-denied messaging (ENG-4263).
+        granted_scopes = self._fetch_granted_scopes(access_token)
+        if granted_scopes is not None:
+            creds["granted_scopes"] = granted_scopes
         return creds
+
+    def _fetch_granted_scopes(self, access_token: str) -> list[str] | None:
+        """Best-effort lookup of the scopes HubSpot actually granted for this
+        token, via the token-info endpoint (the token response omits them).
+
+        Returns the list of scope strings, or ``None`` if the lookup fails.
+        Strictly non-fatal: any network/HTTP/JSON error is swallowed and logged
+        as a warning so a hiccup here can never break the OAuth connect flow (or
+        the refresh path, which also calls ``extract_credentials``)."""
+        try:
+            response = requests.get(
+                _TOKEN_INFO_URL.format(access_token=access_token),
+                timeout=_TOKEN_INFO_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            body = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning(
+                "Could not fetch HubSpot granted scopes from the token-info "
+                "endpoint; persisting credential without `granted_scopes`: %s",
+                exc,
+            )
+            return None
+
+        scopes = body.get("scopes") if isinstance(body, dict) else None
+        if not isinstance(scopes, list):
+            logger.warning(
+                "HubSpot token-info response had no `scopes` list; persisting "
+                "credential without `granted_scopes`."
+            )
+            return None
+        return [str(scope) for scope in scopes]
