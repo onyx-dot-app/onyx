@@ -75,15 +75,16 @@ class CustomSkillResponse(BaseModel):
         # still pass grant existence so grants-shared skills aren't marked
         # personal.
         grants_exist = bool(group_ids) if has_grants is None else has_grants
+        is_org_shared = skill.public_permission is not None
         is_personal = (
-            skill.built_in_skill_id is None and not skill.is_public and not grants_exist
+            skill.built_in_skill_id is None and not is_org_shared and not grants_exist
         )
         return cls(
             id=skill.id,
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
-            is_public=skill.is_public,
+            is_public=is_org_shared,
             enabled=skill.enabled,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
