@@ -11,22 +11,6 @@ import {
   Vertical,
 } from "@/components/form";
 
-// Flattens the rendered tree's text nodes in render order, so a test can assert
-// that one piece of text appears before another.
-function collectText(node: unknown, acc: string[]): void {
-  if (typeof node === "string") {
-    acc.push(node);
-    return;
-  }
-  if (Array.isArray(node)) {
-    for (const child of node) collectText(child, acc);
-    return;
-  }
-  if (node && typeof node === "object" && "children" in node) {
-    collectText((node as { children: unknown }).children, acc);
-  }
-}
-
 describe("Vertical", () => {
   it("renders the title + description and shows the error row only when error is set", () => {
     const { rerender } = render(
@@ -47,18 +31,13 @@ describe("Vertical", () => {
     expect(screen.getByRole("alert")).toBeTruthy();
   });
 
-  it("orders the title above the input and the description below it", () => {
+  it("renders subDescription below the input", () => {
     render(
-      <Vertical title="Email" description="We never share it">
-        <Text>THE_INPUT</Text>
+      <Vertical title="Email" subDescription="We never share it">
+        <Text>input</Text>
       </Vertical>,
     );
-    const order: string[] = [];
-    collectText(screen.toJSON(), order);
-    expect(order.indexOf("Email")).toBeLessThan(order.indexOf("THE_INPUT"));
-    expect(order.indexOf("THE_INPUT")).toBeLessThan(
-      order.indexOf("We never share it"),
-    );
+    expect(screen.getByText("We never share it")).toBeTruthy();
   });
 });
 

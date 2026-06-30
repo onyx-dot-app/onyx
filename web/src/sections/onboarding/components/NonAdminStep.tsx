@@ -11,7 +11,7 @@ import { Button } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
+import { Content, ContentAction } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 
 export default function NonAdminStep() {
@@ -93,15 +93,14 @@ export default function NonAdminStep() {
           role="group"
           aria-label="non-admin-name-prompt"
         >
-          <ContentAction
+          <Content
             icon={SvgUser}
             title="What should Onyx call you?"
             description="We will display this name in the app."
             sizePreset="main-ui"
             variant="section"
-            padding="fit"
-            rightChildren={
-              <div className="flex items-center justify-end gap-2">
+            belowTitle={
+              <div className="flex w-full items-center gap-2">
                 <InputTypeIn
                   ref={inputRef}
                   placeholder="Your name"

@@ -122,7 +122,7 @@ export function EmailPasswordForm({
           name="password"
           title="Password"
           placeholder="●●●●●●●●●●●●●●"
-          description={
+          subDescription={
             isSignup
               ? `Must be at least ${passwordMinLength} characters.`
               : undefined

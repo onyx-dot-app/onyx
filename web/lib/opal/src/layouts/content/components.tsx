@@ -116,6 +116,8 @@ type MdContentProps = ContentBaseProps & {
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
   /** Tag rendered beside the title. */
   tag?: TagProps;
+  /** Content rendered full-width between the title row and the description. */
+  belowTitle?: React.ReactNode;
 };
 
 /** ContentSm does not support descriptions or inline editing. */

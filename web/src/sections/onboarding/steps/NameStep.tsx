@@ -12,7 +12,7 @@ import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
+import { Content } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 
 export interface NameStepProps {
@@ -46,14 +46,13 @@ const NameStep = React.memo(
         role="group"
         aria-label="onboarding-name-step"
       >
-        <ContentAction
+        <Content
           icon={SvgUser}
           title="What should Onyx call you?"
           description="We will display this name in the app."
           sizePreset="main-ui"
           variant="section"
-          padding="fit"
-          rightChildren={
+          belowTitle={
             <InputTypeIn
               ref={inputRef}
               placeholder="Your name"

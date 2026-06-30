@@ -49,6 +49,14 @@ interface ContentMdProps {
   /** Optional description text below the title. */
   description?: string | RichStr;
 
+  /**
+   * Content rendered full-width between the title row and the description
+   * (e.g. an input). When set, the title, this slot, and the description stack
+   * vertically with a uniform gap and the description is no longer indented
+   * past the icon.
+   */
+  belowTitle?: React.ReactNode;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 
@@ -135,6 +143,7 @@ function ContentMd({
   icon: Icon,
   title,
   description,
+  belowTitle,
   descriptionMaxLines,
   editable,
   onTitleChange,
@@ -163,7 +172,19 @@ function ContentMd({
   }
 
   return (
-    <div ref={ref} className="opal-content-md" data-opal-content>
+    <div
+      ref={ref}
+      className="opal-content-md"
+      data-opal-content
+      data-stacked={belowTitle ? true : undefined}
+      style={
+        belowTitle && Icon
+          ? ({
+              "--opal-content-md-desc-indent": config.descriptionIndent,
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
       <div
         className="opal-content-md-header"
         data-editing={editing || undefined}
@@ -273,10 +294,18 @@ function ContentMd({
         </div>
       </div>
 
+      {belowTitle && (
+        <div className="opal-content-md-below-title">{belowTitle}</div>
+      )}
+
       {description && toPlainString(description) && (
         <div
           className="opal-content-md-description"
-          style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
+          style={
+            Icon && !belowTitle
+              ? { paddingLeft: config.descriptionIndent }
+              : undefined
+          }
         >
           <Text
             font="secondary-body"
