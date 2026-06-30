@@ -3,7 +3,7 @@
 import { ChangeEvent, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { ContentAction } from "@opal/layouts";
 import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -327,7 +327,7 @@ export default function CostOverridesPanel() {
           title="Failed to load cost overrides."
         />
       ) : isLoading ? (
-        <ThreeDotsLoader />
+        <PageLoader />
       ) : costOverrides && costOverrides.length > 0 ? (
         <div className="flex flex-col gap-2">
           {costOverrides.map((override) => (
