@@ -13,6 +13,8 @@ Most normal web tasks (navigate, read, click, fill, extract, screenshot) are cov
 > **Onyx Craft:** for basic reads of static pages, prefer the `webfetch` tool — it returns clean markdown, is faster, and is cheaper. Reach for `browser` only when the page needs JavaScript/SPA rendering, interaction (clicks, forms, login), multi-step navigation, or visual inspection.
 >
 > Every `browser` command is automatically pinned to THIS session's browser, so just use the plain commands below — do not pass `--session`. The browser is headless (the user does not see it); rely on `snapshot` to read the page and `screenshot` if you need to inspect it visually.
+>
+> This is a locked-down, display-less pod, so some workflows in this guide do **not** apply: ignore `--headed` / "show the browser window" (there is no display), `--provider cloud-browser`, `browser plugin add`, and `browser doctor --fix` (it would reinstall Chrome). Interactive 2FA that needs a visible window is not possible — drive auth through `snapshot`/`fill`/`click` instead.
 
 ## The core loop
 

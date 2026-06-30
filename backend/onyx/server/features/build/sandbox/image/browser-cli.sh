@@ -17,11 +17,21 @@ if [ -f "$CA_BUNDLE" ] && [ ! -f "$NSSDB/.proxy-ca-imported" ]; then
     [ -f "$NSSDB/cert9.db" ] || certutil -d "sql:$NSSDB" -N --empty-password
     SPLITDIR="$(mktemp -d)"
     csplit -z -f "$SPLITDIR/ca-" -b "%03d.pem" "$CA_BUNDLE" "/BEGIN CERTIFICATE/" "{*}" >/dev/null 2>&1
+    imported=0
     for f in "$SPLITDIR"/ca-*.pem; do
-        [ -f "$f" ] && certutil -d "sql:$NSSDB" -A -t "C,," -n "proxy-$(basename "$f" .pem)" -i "$f" 2>/dev/null || true
+        if [ -f "$f" ] && certutil -d "sql:$NSSDB" -A -t "C,," -n "proxy-$(basename "$f" .pem)" -i "$f" 2>/dev/null; then
+            imported=$((imported + 1))
+        fi
     done
     rm -rf "$SPLITDIR"
-    touch "$NSSDB/.proxy-ca-imported"
+    # Only commit the sentinel once at least one cert landed — otherwise a bad
+    # bundle would be skipped forever, re-creating the ERR_CERT_AUTHORITY_INVALID
+    # this block exists to prevent.
+    if [ "$imported" -gt 0 ]; then
+        touch "$NSSDB/.proxy-ca-imported"
+    else
+        echo "browser: CA bundle present but no certs imported; HTTPS via the proxy may fail" >&2
+    fi
 fi
 
 # Chromium needs --no-sandbox (pod drops caps/seccomp) and the proxy as a FLAG
