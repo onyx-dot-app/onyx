@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Portal } from "@rn-primitives/portal";
 
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import SvgSidebar from "@/icons/sidebar";
 import { useSidebar } from "@/components/sidebar/SidebarProvider";
@@ -112,13 +112,12 @@ function SidebarHeader({ logo, children }: SidebarHeaderProps) {
       {logoEl != null && (
         <View className="flex-row items-start justify-between px-2 pt-3">
           {logoEl}
-          <Pressable
+          <Button
+            prominence="internal"
+            icon={SvgSidebar}
+            accessibilityLabel="Collapse sidebar"
             onPress={() => setFolded(true)}
-            hitSlop={8}
-            className="rounded-08 p-1 active:bg-background-tint-03"
-          >
-            <Icon as={SvgSidebar} size={20} className="text-text-03" />
-          </Pressable>
+          />
         </View>
       )}
       {children != null && <View className="px-2">{children}</View>}
