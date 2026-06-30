@@ -2,7 +2,6 @@ package audit
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"os"
 	"strconv"
@@ -14,9 +13,12 @@ import (
 )
 
 func init() {
-	// osv-scanner logs via slog; silence it so it doesn't pollute ods output
-	// (we surface findings through our own reporters).
-	osvscanner.SetLogger(slog.NewTextHandler(io.Discard, nil))
+	// osv-scanner logs via slog. Route it to stderr at Warn+ so failures it only
+	// reports through its logger (e.g. the docker stderr behind a "failed to run
+	// docker command" image-pull error) stay visible, while findings still flow
+	// to stdout via our own reporters. Warn+ keeps routine Info scan chatter out
+	// and never collides with a --format=json/sarif report on stdout.
+	osvscanner.SetLogger(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 }
 
 // osvBaseURL is the canonical OSV.dev vulnerability page prefix.

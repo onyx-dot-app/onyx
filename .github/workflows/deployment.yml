@@ -1740,7 +1740,12 @@ jobs:
        needs.build-sandbox-amd64.result == 'success')
     runs-on:
       - runs-on
-      - runner=2cpu-linux-arm64
+      # amd64 to match the images scanned: `ods audit image` uses the docker CLI,
+      # which won't pull an amd64 image onto an arm64 host.
+      - runner=2cpu-linux-x64
+      # osv-scanner pulls the image and writes a full `docker save` tar (~2x its
+      # size); size the root volume up so large images don't fill the disk.
+      - volume=60gb
       - run-id=${{ github.run_id }}-image-audit-${{ matrix.component }}
       - extras=ecr-cache
     permissions:
