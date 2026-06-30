@@ -15,8 +15,6 @@ _HELPER = "onyx.image_gen.generation"
 
 @pytest.fixture(autouse=True)
 def _stub_session() -> object:
-    """Stub the helper's internal short-lived DB session so unit tests never
-    touch a real engine (the config accessor is patched per-test)."""
     with patch(f"{_HELPER}.get_session_with_current_tenant") as m:
         m.return_value.__enter__.return_value = MagicMock()
         yield m

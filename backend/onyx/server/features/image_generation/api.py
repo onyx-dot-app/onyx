@@ -1,7 +1,3 @@
-"""Image-generation endpoint: generate image(s) from the admin-configured
-default provider, server-side (no provider keys leave the backend). Callable by
-any authenticated user via ``onyx-cli image`` / the GENERATE_IMAGE scope."""
-
 import base64
 import binascii
 

@@ -1,5 +1,3 @@
-"""Generate images using the admin's configured default image-gen provider."""
-
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -35,8 +33,7 @@ def resolve_image_size(model: str, shape: ImageShape) -> str:
 
 def response_format_for_model(model: str) -> str | None:
     """gpt-image-* models reject the ``response_format`` param; every other
-    model needs ``b64_json`` to return base64 inline. Shared so the chat tool
-    and the endpoint can't drift on this."""
+    model needs ``b64_json`` to return base64 inline."""
     return None if _GPT_IMAGE_PREFIX in model else "b64_json"
 
 
@@ -49,11 +46,6 @@ def generate_images_with_provider(
     quality: str | None = None,
     reference_images: list[ReferenceImage] | None = None,
 ) -> list[GeneratedImageData]:
-    """Call an already-built provider and extract base64 image(s). Shared by the
-    endpoint and the chat ``ImageGenerationTool`` so the provider-call shape,
-    ``response_format`` rule, and b64/revised-prompt parsing live in one place.
-    Raises RuntimeError when the provider returns no usable image data; provider
-    errors propagate to the caller."""
     response = provider.generate_image(
         prompt=prompt,
         model=model,
@@ -118,8 +110,6 @@ def _default_provider_and_model(
 
 
 def is_image_generation_configured(db_session: Session) -> bool:
-    """True if a usable default image-gen provider is configured. Shared by the
-    endpoint and the built-in skill's availability gate so they can't drift."""
     try:
         _default_provider_and_model(db_session)
         return True
@@ -134,9 +124,6 @@ def generate_images_with_default_config(
     quality: str | None = None,
     reference_images: list[ReferenceImage] | None = None,
 ) -> list[GeneratedImageData]:
-    """Raises ImageGenerationNotConfiguredError when no usable default config
-    exists, and ValueError when reference images are supplied to a provider that
-    can't edit; provider/litellm errors propagate. Callers map these to HTTP."""
     # Resolve provider/model/credentials in a short-lived session and release it
     # before the (slow, minutes-long) provider call, so a pooled DB connection
     # isn't pinned for the whole generation round-trip.

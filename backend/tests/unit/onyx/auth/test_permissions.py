@@ -291,8 +291,6 @@ class TestRequirePermission:
 
     @pytest.mark.asyncio
     async def test_craft_sandbox_scope_reaches_generate_image(self) -> None:
-        """The craft sandbox PAT scope implies generate:image, so it reaches the
-        image-generation endpoint (the sandbox's image command path)."""
         user = MagicMock()
         user.effective_permissions = ["basic"]
 
@@ -302,7 +300,6 @@ class TestRequirePermission:
 
     @pytest.mark.asyncio
     async def test_search_only_scope_denied_generate_image(self) -> None:
-        """A read:search-scoped token does not imply generate:image."""
         user = MagicMock()
         user.effective_permissions = ["basic"]
 
