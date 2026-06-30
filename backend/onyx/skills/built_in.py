@@ -35,6 +35,7 @@ from pydantic import model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
+from onyx.image_gen.generation import is_image_generation_configured
 from onyx.server.features.build.configs import ENABLE_BROWSER
 
 # On-disk root for built-in skill content (one ``<skill_id>/`` dir each). Pushed
@@ -168,7 +169,14 @@ class BuiltInSkillRegistry:
 _REGISTRY: Final = BuiltInSkillRegistry(
     providers=(
         SeededBuiltInProvider(skill_id="pptx"),
-        SeededBuiltInProvider(skill_id="image-generation"),
+        SeededBuiltInProvider(
+            skill_id="image-generation",
+            is_available=is_image_generation_configured,
+            unavailable_reason=(
+                "No image generation provider is configured — an admin can set "
+                "one up at /admin/configuration/image-generation."
+            ),
+        ),
         SeededBuiltInProvider(skill_id="company-search"),
         SeededBuiltInProvider(
             skill_id="browser",

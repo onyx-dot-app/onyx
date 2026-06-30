@@ -4,3 +4,7 @@ class ImageProviderError(Exception):
 
 class ImageProviderCredentialsError(ImageProviderError):
     pass
+
+
+class ImageGenerationNotConfiguredError(ImageProviderError):
+    pass

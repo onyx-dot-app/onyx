@@ -527,6 +527,7 @@ class Permission(str, PyEnum):
     READ_CHAT = "read:chat"
     WRITE_CHAT = "write:chat"
     READ_ADMIN = "read:admin"
+    GENERATE_IMAGE = "generate:image"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -567,6 +568,7 @@ Permission.IMPLIED = frozenset(
         Permission.READ_CHAT,
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
+        Permission.GENERATE_IMAGE,
     }
 )
 

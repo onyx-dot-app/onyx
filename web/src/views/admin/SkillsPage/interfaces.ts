@@ -21,6 +21,7 @@ export type SkillVisibility = "private" | "groups" | "org_wide";
 
 export interface BuiltinSkill {
   source: "builtin";
+  id: string;
   slug: string;
   name: string;
   description: string;
@@ -48,4 +49,13 @@ export interface CustomSkill {
 export interface SkillsList {
   builtins: BuiltinSkill[];
   customs: CustomSkill[];
+}
+
+export interface SkillPreview {
+  source: SkillSource;
+  id: string;
+  name: string;
+  description: string;
+  author_email: string | null;
+  instructions_markdown: string;
 }

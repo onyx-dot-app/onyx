@@ -247,6 +247,36 @@ describe("useBuildStreaming thinking packets", () => {
     ]);
   });
 
+  it("appends a connect card stream item from a connect_app_request packet", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "connect_app_request",
+          request_id: "req-1",
+          app_slug: "google_calendar",
+          reason: "to schedule events",
+        } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "what's on my calendar?");
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.streamItems).toEqual([
+      expect.objectContaining({
+        type: "connect_app_request",
+        id: "req-1",
+        requestId: "req-1",
+        appSlug: "google_calendar",
+        reason: "to schedule events",
+      }),
+    ]);
+  });
+
   it("replaces placeholder subagent metadata when task progress names the child", async () => {
     jest
       .mocked(processSSEStream)

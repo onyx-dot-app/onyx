@@ -17,7 +17,7 @@ import {
 import Link from "next/link";
 import type { Route } from "next";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { SvgSearch } from "@opal/icons";
 import { useState, JSX } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -237,7 +237,7 @@ const StandardAnswersTable = ({
   return (
     <div className="justify-center py-2">
       <div className="flex items-center w-full border-2 border-border rounded-lg px-4 py-2 focus-within:border-accent">
-        <MagnifyingGlass />
+        <SvgSearch className="w-4 h-4" />
         <textarea
           autoFocus
           className="grow ml-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"

@@ -24,6 +24,7 @@ interface CustomSkillsTableProps {
   onReplaceBundle: (skill: CustomSkill) => void;
   onToggleEnabled: (skill: CustomSkill) => void;
   onDeleteSkill: (skill: CustomSkill) => void;
+  onPreviewSkill: (skill: CustomSkill) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +64,7 @@ export default function CustomSkillsTable({
   onReplaceBundle,
   onToggleEnabled,
   onDeleteSkill,
+  onPreviewSkill,
 }: CustomSkillsTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -146,6 +148,7 @@ export default function CustomSkillsTable({
         getRowId={(row) => row.id}
         pageSize={DEFAULT_PAGE_SIZE}
         searchTerm={searchTerm}
+        onRowClick={onPreviewSkill}
         emptyState={
           <IllustrationContent
             illustration={SvgNoResult}

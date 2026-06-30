@@ -99,6 +99,7 @@ import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { useDraft, draftKey } from "@/hooks/useDraft";
 
 interface AgentIconEditorProps {
   existingAgent?: FullAgent | null;
@@ -479,6 +480,55 @@ function AgentStarterMessages() {
   );
 }
 
+interface AgentDraftManagerProps {
+  storageKey: string;
+  // Lets the parent's save-success path cancel a pending write before clearing.
+  clearRef: React.RefObject<(() => void) | null>;
+}
+
+// Headless: auto-saves the form while dirty and auto-restores the draft on
+// mount. Only mounted for agent creation.
+export function AgentDraftManager({
+  storageKey,
+  clearRef,
+}: AgentDraftManagerProps) {
+  const { values, dirty, setValues } =
+    useFormikContext<Record<string, unknown>>();
+  const { draft, loaded, hasDraft, save, clear } = useDraft<
+    Record<string, unknown>
+  >({ key: storageKey });
+  const restoredRef = useRef(false);
+
+  useEffect(() => {
+    clearRef.current = clear;
+    return () => {
+      clearRef.current = null;
+    };
+  }, [clear, clearRef]);
+
+  useEffect(() => {
+    if (loaded && dirty) save(values);
+  }, [values, dirty, loaded, save]);
+
+  // Restore once read. The !dirty guard avoids clobbering if the user typed
+  // before the read landed.
+  useEffect(() => {
+    if (!loaded || restoredRef.current) return;
+    restoredRef.current = true;
+    if (hasDraft && draft && !dirty) {
+      // Revive the date field that JSON serialized to an ISO string.
+      const cutoff = draft.knowledge_cutoff_date;
+      setValues({
+        ...draft,
+        knowledge_cutoff_date:
+          typeof cutoff === "string" ? new Date(cutoff) : (cutoff ?? null),
+      });
+    }
+  }, [loaded, hasDraft, draft, dirty, setValues]);
+
+  return null;
+}
+
 export interface AgentEditorPageProps {
   agent?: FullAgent;
   refreshAgent?: () => void;
@@ -499,6 +549,9 @@ export default function AgentEditorPage({
   const canUpdateFeaturedStatus = isAdmin;
   const { vectorDbEnabled } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
+
+  const agentDraftStorageKey = draftKey("agent-editor", "new");
+  const clearAgentDraftRef = useRef<(() => void) | null>(null);
 
   // Labels are edited in the Share Agent section and saved with the form
   const { labels: allLabels, createLabel } = useLabels();
@@ -925,6 +978,9 @@ export default function AgentEditorPage({
       // Success
       const agent = await personaResponse.json();
 
+      // clear() (not clearDraft) so an in-flight debounced write is cancelled too.
+      clearAgentDraftRef.current?.();
+
       // Apply the leveled share draft captured in the dialog before the
       // agent existed (the create payload only carries viewer-level ids)
       if (!existingAgent && values.shared_draft) {
@@ -1268,6 +1324,14 @@ export default function AgentEditorPage({
 
                     {/* Agent Form Content */}
                     <SettingsLayouts.Body>
+                      {/* Drafts only for new agents; edits are assumed minor. */}
+                      {!existingAgent && (
+                        <AgentDraftManager
+                          storageKey={agentDraftStorageKey}
+                          clearRef={clearAgentDraftRef}
+                        />
+                      )}
+
                       <GeneralLayouts.Section
                         flexDirection="row"
                         gap={2.5}

@@ -100,12 +100,14 @@ class TestAvailabilityGate:
             for s in list_skills_for_user(test_user, db_session)
             if s.built_in_skill_id is not None
         }
-        # Only built-ins whose availability gate is satisfied should show; some
-        # (e.g. browser) gate on a deployment flag that may be off in this env.
-        expected = {
-            bid for bid, d in BUILT_IN_SKILLS.items() if d.is_available(db_session)
+        # Some built-ins gate on environment availability (e.g. image-generation
+        # needs a configured provider); only those available here must be visible.
+        available_built_ins = {
+            built_in_skill_id
+            for built_in_skill_id, definition in BUILT_IN_SKILLS.items()
+            if definition.is_available(db_session)
         }
-        assert expected <= visible_built_ins
+        assert available_built_ins <= visible_built_ins
 
     def test_browser_built_in_gated_on_enable_browser(
         self,
