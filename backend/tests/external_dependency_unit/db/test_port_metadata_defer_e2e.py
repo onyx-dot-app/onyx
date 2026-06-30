@@ -440,7 +440,7 @@ def test_metadata_sync_does_not_defer_non_indexable_only_doc(
         db_session.commit()
 
 
-def test_forward_index_during_port_overwrites_ported_chunk(
+def test_forward_write_wins_over_concurrent_port_copy(
     db_session: Session,
     env: tuple[
         ConnectorCredentialPair,
@@ -495,7 +495,7 @@ def test_forward_index_during_port_overwrites_ported_chunk(
         assert _read_acl(future_client, doc_id, c_i) == _ACL_NEW
 
 
-def test_metadata_update_during_port_does_not_falsely_defer(
+def test_acl_update_during_port_applies_to_both_indices(
     db_session: Session,
     env: tuple[
         ConnectorCredentialPair,
