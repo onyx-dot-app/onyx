@@ -1745,6 +1745,11 @@ jobs:
       # an arm64 host. (Trivy pulled platform-specific manifests daemonlessly, so
       # it didn't care.)
       - runner=2cpu-linux-x64
+      # m7i-flex.large has no local NVMe, so docker's data-root and /tmp share the
+      # root volume. osv-scanner pulls the image AND writes a full `docker save`
+      # tar (~2x the image size); the default disk overflows on large images
+      # (model-server). Size the root volume up to fit both.
+      - volume=80gb:gp3
       - run-id=${{ github.run_id }}-image-audit-${{ matrix.component }}
       - extras=ecr-cache
     permissions:
