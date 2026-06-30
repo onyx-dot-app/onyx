@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { toast } from "@/hooks/useToast";
 import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
@@ -21,9 +22,8 @@ import {
   SelectorFormField,
   Label,
 } from "@/components/Field";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
-import Chip from "@/refresh-components/Chip";
-import Text from "@/refresh-components/texts/Text";
+import InputChipField from "@/refresh-components/inputs/InputChipField";
+import { Text } from "@opal/components";
 
 function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {
   return keywordSelect == "any";
@@ -42,6 +42,7 @@ export const StandardAnswerCreationForm = ({
 }) => {
   const isUpdate = existingStandardAnswer !== undefined;
   const router = useRouter();
+  const [categoryInput, setCategoryInput] = useState("");
 
   return (
     <div>
@@ -169,19 +170,28 @@ export const StandardAnswerCreationForm = ({
               </div>
               <div className="w-4/12 flex flex-col gap-2">
                 <Label>Categories:</Label>
-                <InputComboBox
-                  placeholder="Search or create categories..."
-                  value=""
-                  onChange={() => {}}
-                  onValueChange={async (value) => {
-                    // `value` is either an existing category id (option select)
-                    // or the typed name (the "Create" option). Match on either
-                    // so an existing category is never duplicated.
+                <InputChipField
+                  placeholder="Type a category and press Enter…"
+                  value={categoryInput}
+                  onChange={setCategoryInput}
+                  chips={values.categories.map((category) => ({
+                    id: category.id.toString(),
+                    label: category.name,
+                  }))}
+                  onRemoveChip={(id) =>
+                    setFieldValue(
+                      "categories",
+                      values.categories.filter((c) => c.id.toString() !== id)
+                    )
+                  }
+                  onAdd={async (name) => {
+                    setCategoryInput("");
+
+                    // Reuse an existing category (case-insensitive) rather than
+                    // creating a duplicate.
                     const existing = standardAnswerCategories.find(
                       (category) =>
-                        category.id.toString() === value ||
-                        category.name.toLowerCase() ===
-                          value.trim().toLowerCase()
+                        category.name.toLowerCase() === name.toLowerCase()
                     );
                     if (existing) {
                       if (
@@ -196,7 +206,7 @@ export const StandardAnswerCreationForm = ({
                     }
 
                     const response = await createStandardAnswerCategory({
-                      name: value,
+                      name,
                     });
                     const newCategory =
                       (await response.json()) as StandardAnswerCategory;
@@ -205,42 +215,11 @@ export const StandardAnswerCreationForm = ({
                       newCategory,
                     ]);
                   }}
-                  options={standardAnswerCategories
-                    .filter(
-                      (category) =>
-                        !values.categories.some((c) => c.id === category.id)
-                    )
-                    .map((category) => ({
-                      label: category.name,
-                      value: category.id.toString(),
-                    }))}
-                  createPrefix="Create"
-                  searchIcon
                 />
-
-                {values.categories.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {values.categories.map((category) => (
-                      <Chip
-                        key={category.id}
-                        onRemove={() =>
-                          setFieldValue(
-                            "categories",
-                            values.categories.filter(
-                              (c) => c.id !== category.id
-                            )
-                          )
-                        }
-                      >
-                        {category.name}
-                      </Chip>
-                    ))}
-                  </div>
-                )}
 
                 <ErrorMessage name="categories" component="div">
                   {(msg) => (
-                    <Text as="p" text03 className="text-action-danger-05">
+                    <Text as="p" font="secondary-body" color="status-error-05">
                       {msg}
                     </Text>
                   )}
