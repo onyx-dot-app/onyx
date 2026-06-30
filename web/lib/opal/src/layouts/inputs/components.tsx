@@ -152,33 +152,20 @@ function Horizontal({
 
   const content = (
     <Section ref={ref} gap={0.25} alignItems="start">
-      {responsive ? (
-        <Content
-          icon={icon}
-          title={title}
-          description={description}
-          suffix={suffix}
-          tag={tag}
-          sizePreset="main-ui"
-          variant="section"
-          width="full"
-          rightChildren={children}
-        />
-      ) : (
-        <ContentAction
-          icon={icon}
-          title={title}
-          description={description}
-          suffix={suffix}
-          tag={tag}
-          sizePreset="main-ui"
-          variant="section"
-          width="full"
-          padding="fit"
-          center={center}
-          rightChildren={children}
-        />
-      )}
+      <ContentAction
+        icon={icon}
+        title={title}
+        description={description}
+        suffix={suffix}
+        tag={tag}
+        sizePreset="main-ui"
+        variant="section"
+        width="full"
+        padding="fit"
+        center={center}
+        responsive={responsive}
+        rightChildren={children}
+      />
       {fieldName && <FormikInputError name={fieldName} />}
     </Section>
   );
