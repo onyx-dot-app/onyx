@@ -1386,13 +1386,15 @@ def _db_mcp_server_to_api_mcp_server(
     user_authenticated: bool | None = None
     user_credentials = None
     admin_credentials = None
-    can_view_admin_credentials = bool(include_auth_config) and (
-        request_user is not None
-        and (
-            request_user.role == UserRole.ADMIN
-            or (request_user.email and request_user.email == db_server.owner)
-        )
+    is_owner_or_admin = request_user is not None and (
+        request_user.role == UserRole.ADMIN
+        or (request_user.email and request_user.email == db_server.owner)
     )
+    can_view_admin_credentials = bool(include_auth_config) and is_owner_or_admin
+    # The internal server_url and the owner email are sensitive: expose them only
+    # to the server's owner or an admin. Basic users attaching MCP actions to an
+    # assistant don't need either (the connect/OAuth flow is brokered server-side).
+    can_view_server_details = is_owner_or_admin
     if db_server.auth_type == MCPAuthenticationType.NONE:
         user_authenticated = True  # No auth required
     elif auth_performer == MCPAuthenticationPerformer.ADMIN:
@@ -1530,8 +1532,8 @@ def _db_mcp_server_to_api_mcp_server(
         id=db_server.id,
         name=db_server.name,
         description=db_server.description,
-        server_url=db_server.server_url,
-        owner=db_server.owner,
+        server_url=db_server.server_url if can_view_server_details else "",
+        owner=db_server.owner if can_view_server_details else "",
         transport=db_server.transport,
         auth_type=db_server.auth_type,
         auth_performer=auth_performer,

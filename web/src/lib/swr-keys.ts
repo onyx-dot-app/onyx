@@ -93,6 +93,13 @@ export const SWR_KEYS = {
     });
     return `/api/notifications?${params.toString()}`;
   },
+  notificationsByType: (notifType: string, pageSize: number) => {
+    const params = new URLSearchParams({
+      notif_type: notifType,
+      page_size: pageSize.toString(),
+    });
+    return `/api/notifications?${params.toString()}`;
+  },
 
   // ── Users ─────────────────────────────────────────────────────────────────
   acceptedUsers: "/api/manage/users/accepted/all",
@@ -120,6 +127,9 @@ export const SWR_KEYS = {
   // ── Skills ────────────────────────────────────────────────────────────────
   adminSkills: "/api/admin/skills",
   userSkills: "/api/skills",
+  adminSkillPreview: (skillId: string) =>
+    `/api/admin/skills/${skillId}/preview`,
+  userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",

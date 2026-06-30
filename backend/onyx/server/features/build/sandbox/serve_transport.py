@@ -417,6 +417,26 @@ class _ServeMixin:
             ).password,
         )
 
+    def answer_connect_app_permission(
+        self,
+        sandbox_id: UUID,
+        *,
+        opencode_session_id: str,
+        perm_id: str,
+        directory: str,
+        allow: bool,
+    ) -> bool:
+        """Answer a pending ``connect_app`` permission on ``sandbox_id`` — the
+        decision endpoint's path to opencode, on whatever worker handled the POST.
+        Returns whether opencode accepted it. One-shot, so no event bus."""
+        client = self._build_serve_client(sandbox_id, directory, with_event_bus=False)
+        try:
+            return client.answer_permission(
+                opencode_session_id, perm_id, allow=allow, directory=directory
+            )
+        finally:
+            client.close()
+
     def _close_session_buses(self, sandbox_id: UUID, session_id: UUID) -> None:
         """Release the per-(sandbox, session) bus. Call from
         ``cleanup_session_workspace`` — without this the reader thread +

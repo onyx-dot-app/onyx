@@ -238,6 +238,7 @@ def test_render_agents_md_returns_escaped_string(
         llm_config=llm_config,
         nextjs_port=None,
         skills_section="",
+        connectable_apps_section="",
     )
     assert isinstance(agents_md, str)
     assert agents_md

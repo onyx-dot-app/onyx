@@ -27,7 +27,7 @@ from PIL import Image
 
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_XLSX_CELLS_PER_SHEET
-from onyx.configs.app_configs import XLSX_STREAM_SHEET_BYTES
+from onyx.configs.app_configs import PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -38,6 +38,8 @@ from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.utils.logger import setup_logger
+from onyx.utils.process_isolation import IsolatedProcessError
+from onyx.utils.process_isolation import run_in_isolated_process
 
 if TYPE_CHECKING:
     from markitdown import MarkItDown
@@ -352,12 +354,16 @@ def read_pdf_file(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        # GIL-releasing extraction so a large PDF can't pin the worker — see helper.
+        # PDFium can hard-abort or hang on a malformed PDF (uncatchable in-process),
+        # so run it isolated; a crash, timeout, or PdfiumError falls back to pypdf.
         try:
-            text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
-        except PdfiumError as pdfium_err:
-            # PDFium rejects some malformed PDFs that pypdf can still read; fall
-            # back so those docs aren't dropped. Only failing files take this path.
+            text = run_in_isolated_process(
+                _extract_pdf_text_pdfium,
+                file_bytes,
+                decrypt_password,
+                timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
+            )
+        except (PdfiumError, IsolatedProcessError) as pdfium_err:
             logger.warning(
                 "PDFium text extraction failed (%s); falling back to pypdf",
                 pdfium_err,
@@ -714,35 +720,12 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
     return sheets
 
 
-def xlsx_has_large_sheet(
-    file: IO[bytes], threshold: int = XLSX_STREAM_SHEET_BYTES
-) -> bool:
-    """True if any worksheet's *uncompressed* XML exceeds `threshold` — a cheap
-    pre-parse check read straight from the xlsx zip directory (no decompression).
-    Routes a huge workbook to streamed, file-backed extraction."""
-    try:
-        file.seek(0)
-        with zipfile.ZipFile(file) as zf:
-            return any(
-                info.file_size > threshold
-                for info in zf.infolist()
-                if info.filename.startswith("xl/worksheets/")
-                and info.filename.endswith(".xml")
-            )
-    except BadZipFile:
-        return False
-    finally:
-        file.seek(0)
-
-
 class StreamedSheet(NamedTuple):
-    """One worksheet rendered to CSV. Small sheets are returned inline (`text`);
-    larger ones are staged in the file store (`csv_file_id`) so they never land
-    on the heap. Exactly one of the two is populated."""
+    """One worksheet rendered to CSV, staged in the file store, and referenced
+    by `csv_file_id`."""
 
     title: str
-    text: str | None
-    csv_file_id: str | None
+    csv_file_id: str
 
 
 def _row_has_content(row: tuple[Any, ...]) -> bool:
@@ -753,19 +736,14 @@ def _cell(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-def stage_or_inline_xlsx_sheets(
+def stage_xlsx_sheets(
     file: IO[bytes],
     stage: Callable[[IO[bytes], str], str],
-    max_inline_bytes: int,
     file_name: str = "",
 ) -> list[StreamedSheet]:
-    """Render each non-empty worksheet to a temp CSV, writing rows one at a time
-    so no worksheet is fully held in memory during conversion. A worksheet whose
-    CSV is at most `max_inline_bytes` is read back inline; a larger one is staged
-    via `stage` and referenced by `csv_file_id` so it stays off the heap
-    downstream. The returned list thus holds full CSV text for inline sheets
-    (each bounded by `max_inline_bytes`) and only an id for file-backed ones.
-    Empty rows are dropped; columns are not trimmed (that needs a second pass)."""
+    """Stream each non-empty worksheet to a temp CSV row by row (never holding a
+    full sheet in memory), then stage it via `stage` and reference it by
+    `csv_file_id`. Empty rows are dropped; columns are not trimmed."""
     sheets: list[StreamedSheet] = []
     workbook = _load_readonly_workbook(file, file_name)
     if workbook is None:
@@ -781,18 +759,10 @@ def stage_or_inline_xlsx_sheets(
                         writer.writerow([_cell(v) for v in row])
                 tmp.flush()
                 binary = cast(IO[bytes], tmp.buffer)
-                size = binary.seek(0, io.SEEK_END)
-                if size > max_inline_bytes:
-                    binary.seek(0)
-                    sheets.append(
-                        StreamedSheet(ro_sheet.title, None, stage(binary, "text/csv"))
-                    )
+                if binary.seek(0, io.SEEK_END) == 0:
                     continue
                 binary.seek(0)
-                text = binary.read().decode("utf-8").strip()
-                if not text:
-                    continue
-                sheets.append(StreamedSheet(ro_sheet.title, text, None))
+                sheets.append(StreamedSheet(ro_sheet.title, stage(binary, "text/csv")))
     finally:
         workbook.close()
     return sheets

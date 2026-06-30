@@ -168,7 +168,7 @@ export function useBuildStreaming() {
       const settle = async (): Promise<void> => {
         await useBuildSessionStore
           .getState()
-          .loadSession(sessionId, { force: true })
+          .loadSession(sessionId, { force: true, preferPersisted: true })
           .catch((err) =>
             console.warn("[Streaming] Failed to reload settled turn:", err)
           );

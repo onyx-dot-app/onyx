@@ -307,7 +307,7 @@ def test_timeout_error_event_marks_run_failed_with_timeout_class(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: ("", "", {}),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -343,7 +343,7 @@ def test_prompt_response_marks_run_succeeded(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: ("", "", {}),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -381,7 +381,7 @@ def test_cancelled_prompt_response_marks_run_failed(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: ("", "", {}),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -415,7 +415,7 @@ def test_transport_error_event_marks_run_failed_with_agent_exception_class(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: ("", "", {}),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)
@@ -451,7 +451,7 @@ def test_stream_without_prompt_response_marks_run_failed(
     # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.build_user_skills_payload",
-        lambda *_: ("", {}),
+        lambda *_: ("", "", {}),
     )
 
     sandbox(user=test_user, status=SandboxStatus.RUNNING)

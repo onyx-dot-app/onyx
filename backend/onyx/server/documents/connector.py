@@ -1899,7 +1899,7 @@ def google_drive_callback(
 
 @router.get("/connector", tags=PUBLIC_API_TAGS)
 def get_connectors(
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorSnapshot]:
     connectors = fetch_connectors(db_session)
@@ -1926,7 +1926,7 @@ def get_indexed_sources(
 @router.get("/connector/{connector_id}", tags=PUBLIC_API_TAGS)
 def get_connector_by_id(
     connector_id: int,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)

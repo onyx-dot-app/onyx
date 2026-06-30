@@ -48,6 +48,8 @@ how it gates deploys.`,
 	cmd.Flags().StringVar(&opts.FailOn, "fail-on", "critical", "Minimum severity that fails the audit: critical, high, moderate, or low")
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
 
+	cmd.AddCommand(newAuditImageCommand())
+
 	return cmd
 }
 

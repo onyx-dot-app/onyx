@@ -10,6 +10,7 @@ import type {
 export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
   return {
     source: "builtin",
+    id: "builtin-1",
     slug: "pptx",
     name: "PPTX",
     description: "Build PowerPoint decks.",

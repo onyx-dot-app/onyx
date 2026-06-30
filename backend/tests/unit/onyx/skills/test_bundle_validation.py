@@ -17,7 +17,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import parse_skill_md_metadata
+from onyx.skills.bundle import read_custom_bundle_instructions
 from onyx.skills.bundle import slug_from_filename
+from onyx.skills.bundle import strip_skill_md_frontmatter
 from onyx.skills.bundle import validate_custom_bundle
 
 
@@ -169,6 +171,32 @@ def test_compute_bundle_sha256_differs_for_same_content_different_timestamps() -
     b = _build_zip(entries, fixed_date=(2026, 6, 15, 12, 30, 0))
     assert a != b
     assert compute_bundle_sha256(a) != compute_bundle_sha256(b)
+
+
+def test_strip_skill_md_frontmatter_returns_instruction_body() -> None:
+    content = (
+        "---\nname: Demo\ndescription: Demo skill\n---\n\n# Instructions\n\nDo it."
+    )
+    assert strip_skill_md_frontmatter(content) == "# Instructions\n\nDo it."
+
+
+def test_read_custom_bundle_instructions_returns_instruction_body() -> None:
+    zip_bytes = _build_zip(
+        [
+            (
+                "SKILL.md",
+                b"---\nname: Demo\ndescription: Demo skill\n---\n\n# Instructions\n\nDo it.",
+            ),
+            ("scripts/run.py", b"print('hi')\n"),
+            ("docs/notes.md", b"# Notes\n"),
+        ]
+    )
+    assert read_custom_bundle_instructions(zip_bytes) == "# Instructions\n\nDo it."
+
+
+def test_read_custom_bundle_instructions_does_not_require_frontmatter() -> None:
+    zip_bytes = _build_zip([("SKILL.md", b"# Instructions\n\nDo it.")])
+    assert read_custom_bundle_instructions(zip_bytes) == "# Instructions\n\nDo it."
 
 
 def _zip_with_patched_compression_method(payload: bytes, method: int) -> bytes:

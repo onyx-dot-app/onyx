@@ -21,7 +21,7 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: false
-          version: "0.9.9"
+          version: "0.11.25"
       - run: |
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 uv build --wheel
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 ONYX_CLI_REUSE_BINARY=1 \

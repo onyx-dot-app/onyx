@@ -1225,7 +1225,7 @@ describe("useBuildStreaming thinking packets", () => {
     });
     expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
       sessionId,
-      { force: true }
+      { force: true, preferPersisted: true }
     );
   });
 
@@ -1440,7 +1440,7 @@ describe("useBuildStreaming thinking packets", () => {
     });
     expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
       sessionId,
-      { force: true }
+      { force: true, preferPersisted: true }
     );
     warnSpy.mockRestore();
   });
@@ -1533,7 +1533,7 @@ describe("useBuildStreaming thinking packets", () => {
     });
     expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
       sessionId,
-      { force: true }
+      { force: true, preferPersisted: true }
     );
   });
 
