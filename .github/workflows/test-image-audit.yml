@@ -31,6 +31,10 @@ jobs:
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
+      # Match the real image-audit job: ecr-cache provisions the large ephemeral
+      # NVMe as docker's data-root, so a pulled multi-GB image doesn't fill the
+      # small root volume (and compete with the `docker save` tar in /tmp).
+      - extras=ecr-cache
       - run-id=${{ github.run_id }}-test-image-audit-${{ matrix.component }}
     timeout-minutes: 20
     strategy:
