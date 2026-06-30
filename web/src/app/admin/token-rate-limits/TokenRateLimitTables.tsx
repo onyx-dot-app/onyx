@@ -43,7 +43,7 @@ export const TokenRateLimitTable = ({
 
   const handleEnabledChange = (id: number) => {
     const tokenRateLimit = tokenRateLimits.find(
-      (tokenRateLimit) => tokenRateLimit.token_id === id
+      (tokenRateLimit) => tokenRateLimit.token_id === id,
     );
 
     if (!tokenRateLimit) {
@@ -53,6 +53,7 @@ export const TokenRateLimitTable = ({
     updateTokenRateLimit(id, {
       token_budget: tokenRateLimit.token_budget,
       period_hours: tokenRateLimit.period_hours,
+      cost_budget_cents: tokenRateLimit.cost_budget_cents,
       enabled: !tokenRateLimit.enabled,
     }).then(() => {
       mutate(fetchUrl);
@@ -102,7 +103,8 @@ export const TokenRateLimitTable = ({
             <TableHead>Enabled</TableHead>
             {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
             <TableHead>Time Window (Hours)</TableHead>
-            <TableHead>Token Budget (Thousands)</TableHead>
+            <TableHead>Token Budget</TableHead>
+            <TableHead>Cost Budget (USD)</TableHead>
             {isAdmin && <TableHead>Delete</TableHead>}
           </TableRow>
         </TableHeader>
@@ -152,7 +154,15 @@ export const TokenRateLimitTable = ({
                     (tokenRateLimit.period_hours > 1 ? "s" : "")}
                 </TableCell>
                 <TableCell>
-                  {tokenRateLimit.token_budget + " thousand tokens"}
+                  {tokenRateLimit.token_budget != null
+                    ? (tokenRateLimit.token_budget * 1000).toLocaleString() +
+                      " tokens"
+                    : "—"}
+                </TableCell>
+                <TableCell>
+                  {tokenRateLimit.cost_budget_cents != null
+                    ? "$" + (tokenRateLimit.cost_budget_cents / 100).toFixed(2)
+                    : "—"}
                 </TableCell>
                 {isAdmin && (
                   <TableCell>
@@ -189,7 +199,7 @@ export const GenericTokenRateLimitTable = ({
 }) => {
   const { data, isLoading, error } = useSWR<TokenRateLimitDisplay[]>(
     fetchUrl,
-    errorHandlingFetcher
+    errorHandlingFetcher,
   );
 
   if (isLoading) {

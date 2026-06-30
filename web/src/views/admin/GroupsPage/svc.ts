@@ -202,13 +202,22 @@ async function updateDocSetGroupSharing(
 interface TokenLimitPayload {
   tokenBudget: number | null;
   periodHours: number | null;
+  costBudgetDollars: number | null;
 }
 
 interface ExistingTokenLimit {
   token_id: number;
   enabled: boolean;
-  token_budget: number;
+  token_budget: number | null;
   period_hours: number;
+  cost_budget_cents: number | null;
+}
+
+interface ValidTokenLimit {
+  // null = cost-only (the gate skips a null/<=0 token budget); never send 0.
+  tokenBudget: number | null;
+  periodHours: number;
+  costBudgetCents: number | null;
 }
 
 async function saveTokenLimits(
@@ -216,11 +225,26 @@ async function saveTokenLimits(
   limits: TokenLimitPayload[],
   existing: ExistingTokenLimit[]
 ): Promise<void> {
-  // Filter to only valid (non-null) limits
-  const validLimits = limits.filter(
-    (l): l is { tokenBudget: number; periodHours: number } =>
-      l.tokenBudget != null && l.periodHours != null
-  );
+  // A budget only counts when it's strictly positive — a 0/negative token
+  // budget or a cost that rounds to 0 cents is "unset", not a real limit
+  // (sending it would overwrite a real existing limit via positional matching).
+  // A row is valid with a time window plus at least one positive budget.
+  const validLimits: ValidTokenLimit[] = limits
+    .map((l) => {
+      const tokenBudget =
+        l.tokenBudget != null && l.tokenBudget > 0 ? l.tokenBudget : null;
+      const cents =
+        l.costBudgetDollars != null
+          ? Math.round(l.costBudgetDollars * 100)
+          : null;
+      const costBudgetCents = cents != null && cents > 0 ? cents : null;
+      return { tokenBudget, periodHours: l.periodHours, costBudgetCents };
+    })
+    .filter(
+      (l): l is ValidTokenLimit =>
+        l.periodHours != null &&
+        (l.tokenBudget != null || l.costBudgetCents != null)
+    );
 
   // Update existing limits (match by index position)
   const toUpdate = Math.min(validLimits.length, existing.length);
@@ -236,6 +260,7 @@ async function saveTokenLimits(
           enabled: existingLimit.enabled,
           token_budget: limit.tokenBudget,
           period_hours: limit.periodHours,
+          cost_budget_cents: limit.costBudgetCents,
         }),
       }
     );
@@ -258,6 +283,7 @@ async function saveTokenLimits(
           enabled: true,
           token_budget: limit.tokenBudget,
           period_hours: limit.periodHours,
+          cost_budget_cents: limit.costBudgetCents,
         }),
       }
     );

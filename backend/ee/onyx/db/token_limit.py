@@ -89,6 +89,7 @@ def insert_user_group_token_rate_limit(
     token_limit = TokenRateLimit(
         enabled=token_rate_limit_settings.enabled,
         token_budget=token_rate_limit_settings.token_budget,
+        cost_budget_cents=token_rate_limit_settings.cost_budget_cents,
         period_hours=token_rate_limit_settings.period_hours,
         scope=TokenRateLimitScope.USER_GROUP,
     )

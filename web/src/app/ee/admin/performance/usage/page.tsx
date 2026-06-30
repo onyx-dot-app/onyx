@@ -7,6 +7,7 @@ import { QueryPerformanceChart } from "@/app/ee/admin/performance/usage/QueryPer
 import { PersonaMessagesChart } from "@/app/ee/admin/performance/usage/PersonaMessagesChart";
 import { useTimeRange } from "@/app/ee/admin/performance/lib";
 import UsageReports from "@/app/ee/admin/performance/usage/UsageReports";
+import PerUserUsagePanel from "@/views/admin/PerUserUsagePanel";
 import { Divider } from "@opal/components";
 import { useAdminAgents } from "@/lib/agents/hooks";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -33,6 +34,8 @@ export default function AnalyticsPage() {
           availablePersonas={agents}
           timeRange={timeRange}
         />
+        <Divider />
+        <PerUserUsagePanel />
         <Divider />
         <UsageReports />
       </SettingsLayouts.Body>

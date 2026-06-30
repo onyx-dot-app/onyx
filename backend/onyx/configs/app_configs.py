@@ -1412,6 +1412,23 @@ RECENCY_BIAS_MULTIPLIER = float(os.environ.get("RECENCY_BIAS_MULTIPLIER") or 1.0
 # backend/onyx/document_index/vespa/app_config/schemas/danswer_chunk.sd.jinja.
 RERANK_COUNT = int(os.environ.get("RERANK_COUNT") or 1000)
 
+# Flat per-image cost (cents) when litellm has no price for an image model.
+# Clamped to >= 0 so a misconfigured negative can't credit usage.
+DEFAULT_IMAGE_COST_CENTS = max(
+    0.0, float(os.environ.get("DEFAULT_IMAGE_COST_CENTS") or 4.0)
+)
+
+# Fallback per-million-token rates (USD) for models litellm can't price, so
+# unknown/BYO models still accrue cost instead of being silently free. Default 0
+# preserves prior behavior; operators set these to give unpriced models a rate.
+# Clamped to >= 0 so a negative can't produce negative usage cost.
+DEFAULT_LLM_INPUT_COST_PER_MTOK = max(
+    0.0, float(os.environ.get("DEFAULT_LLM_INPUT_COST_PER_MTOK") or 0.0)
+)
+DEFAULT_LLM_OUTPUT_COST_PER_MTOK = max(
+    0.0, float(os.environ.get("DEFAULT_LLM_OUTPUT_COST_PER_MTOK") or 0.0)
+)
+
 
 #####
 # Tool Configs
@@ -1505,6 +1522,15 @@ SCHEDULED_EVAL_PROJECT = os.environ.get("SCHEDULED_EVAL_PROJECT", "st-dev")
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
 LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfuse
+
+#####
+# Per-user usage/cost tracking
+#####
+# Records every priced generation span into the per-user usage ledger. On by
+# default; set to "false" to drop the recording processor entirely.
+USER_USAGE_TRACKING_ENABLED = (
+    os.environ.get("USER_USAGE_TRACKING_ENABLED", "true").lower() != "false"
+)
 
 # Defined custom query/answer conditions to validate the query and the LLM answer.
 # Format: list of strings

@@ -41,13 +41,15 @@ const USER_GROUP_DESCRIPTION =
 const handleCreateTokenRateLimit = async (
   target_scope: Scope,
   period_hours: number,
-  token_budget: number,
+  token_budget: number | null,
+  cost_budget_cents: number | null,
   group_id: number = -1
 ) => {
   const tokenRateLimitArgs = {
     enabled: true,
     token_budget: token_budget,
     period_hours: period_hours,
+    cost_budget_cents: cost_budget_cents,
   };
 
   if (target_scope === Scope.GLOBAL) {
@@ -83,13 +85,15 @@ function Main() {
   const handleSubmit = (
     target_scope: Scope,
     period_hours: number,
-    token_budget: number,
+    token_budget: number | null,
+    cost_budget_cents: number | null,
     group_id: number = -1
   ) => {
     handleCreateTokenRateLimit(
       target_scope,
       period_hours,
       token_budget,
+      cost_budget_cents,
       group_id
     )
       .then(() => {

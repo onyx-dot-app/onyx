@@ -111,6 +111,9 @@ from onyx.server.features.skill.api import admin_router as skill_admin_router
 from onyx.server.features.skill.api import user_router as skill_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
+from onyx.server.features.usage.api import admin_usage_router
+from onyx.server.features.usage.api import router as cost_override_router
+from onyx.server.features.usage.api import user_usage_router
 from onyx.server.features.user_oauth_token.api import router as user_oauth_token_router
 from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router
@@ -419,6 +422,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     yield
 
+    # Flush buffered per-user usage before disposing the DB engines its drain
+    # thread writes through.
+    from onyx.tracing.setup import shutdown_tracing
+
+    shutdown_tracing()
+
     if DISABLE_VECTOR_DB:
         from onyx.background.periodic_poller import stop_periodic_poller
 
@@ -569,6 +578,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(
         application, token_rate_limit_settings_router
     )
+    include_router_with_global_prefix_prepended(application, cost_override_router)
+    include_router_with_global_prefix_prepended(application, user_usage_router)
+    include_router_with_global_prefix_prepended(application, admin_usage_router)
     include_router_with_global_prefix_prepended(application, api_key_router)
     include_router_with_global_prefix_prepended(application, standard_oauth_router)
     include_router_with_global_prefix_prepended(application, federated_router)

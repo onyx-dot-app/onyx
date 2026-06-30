@@ -20,6 +20,8 @@ import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 export interface TokenLimit {
   tokenBudget: number | null;
   periodHours: number | null;
+  // Dollars in the form; converted to cost_budget_cents at the API boundary.
+  costBudgetDollars: number | null;
 }
 
 interface TokenLimitSectionProps {
@@ -54,12 +56,18 @@ function TokenLimitSection({
 
   function addLimit() {
     const emptyIndex = limits.findIndex(
-      (l) => l.tokenBudget === null && l.periodHours === null
+      (l) =>
+        l.tokenBudget === null &&
+        l.periodHours === null &&
+        l.costBudgetDollars === null
     );
     if (emptyIndex !== -1) return;
     const key = nextKeyRef.current++;
     keysRef.current = [...keysRef.current, key];
-    onLimitsChange([...limits, { tokenBudget: null, periodHours: null }]);
+    onLimitsChange([
+      ...limits,
+      { tokenBudget: null, periodHours: null, costBudgetDollars: null },
+    ]);
   }
 
   function removeLimit(index: number) {
@@ -103,7 +111,15 @@ function TokenLimitSection({
                     Token Limit
                   </Text>
                   <Text mainUiMuted text03 className="ml-0.5">
-                    (thousand tokens)
+                    (thousands)
+                  </Text>
+                </div>
+                <div className="flex-1 flex items-center min-w-[160px]">
+                  <Text mainUiAction text04>
+                    Cost Limit
+                  </Text>
+                  <Text mainUiMuted text03 className="ml-0.5">
+                    (USD)
                   </Text>
                 </div>
                 <div className="flex-1 flex items-center min-w-[160px]">
@@ -127,7 +143,15 @@ function TokenLimitSection({
                       value={limit.tokenBudget}
                       onChange={(v) => updateLimit(i, "tokenBudget", v)}
                       min={0}
-                      placeholder="Token limit in thousands"
+                      placeholder="Token limit (thousands)"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <InputNumber
+                      value={limit.costBudgetDollars}
+                      onChange={(v) => updateLimit(i, "costBudgetDollars", v)}
+                      min={0}
+                      placeholder="Cost limit"
                     />
                   </div>
                   <div className="flex-1">
