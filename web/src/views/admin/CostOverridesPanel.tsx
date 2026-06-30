@@ -1,16 +1,23 @@
 "use client";
 
-import { ChangeEvent, useMemo, useState } from "react";
+import { ChangeEvent, useState } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
 import { PageLoader } from "@/refresh-components/PageLoader";
 import { ContentAction } from "@opal/layouts";
-import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
+import {
+  Button,
+  Card,
+  InputTypeIn,
+  MessageCard,
+  OpenButton,
+  Text,
+} from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { LLMOption } from "@/lib/languageModels/options";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   CostOverride,
@@ -60,21 +67,9 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   );
   const [submitting, setSubmitting] = useState(false);
 
-  // Offer the org's configured models as options so the override key matches the
-  // model id actually recorded in usage (free-text still allowed for a model not
-  // yet configured, e.g. an embedding/rerank id).
-  const { llmProviders } = useAdminLLMProviders();
-  const modelOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const provider of llmProviders ?? []) {
-      for (const mc of provider.model_configurations) {
-        names.add(mc.name);
-      }
-    }
-    return Array.from(names)
-      .sort()
-      .map((name) => ({ value: name, label: name }));
-  }, [llmProviders]);
+  // The override keys on the model name; track the picked config id too so the
+  // selector can highlight the current choice.
+  const [modelConfigId, setModelConfigId] = useState<number | null>(null);
 
   const isEdit = existing !== undefined;
   const parsedInput = parseRate(inputRate);
@@ -127,15 +122,16 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
           {isEdit ? (
             <InputTypeIn value={model} variant="readOnly" />
           ) : (
-            <InputComboBox
-              value={model}
-              options={modelOptions}
-              strict={false}
-              placeholder="Select a configured model, or type a model id"
-              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                setModel(e.target.value)
-              }
-              onValueChange={(value: string) => setModel(value)}
+            <ModelSelector
+              value={modelConfigId}
+              onChange={(opt: LLMOption) => {
+                setModel(opt.modelName);
+                setModelConfigId(opt.modelConfigurationId ?? null);
+              }}
+              renderTrigger={() => (
+                <OpenButton>{model || "Select a model"}</OpenButton>
+              )}
+              side="bottom"
             />
           )}
         </div>
