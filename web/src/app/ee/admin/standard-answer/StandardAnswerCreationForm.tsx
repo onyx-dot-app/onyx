@@ -1,10 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { toast } from "@/hooks/useToast";
 import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
 import Button from "@/refresh-components/buttons/Button";
-import { Form, Formik } from "formik";
+import { Form, Formik, ErrorMessage } from "formik";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import * as Yup from "yup";
@@ -19,8 +20,10 @@ import {
   MarkdownFormField,
   BooleanFormField,
   SelectorFormField,
+  Label,
 } from "@/components/Field";
-import MultiSelectDropdown from "@/components/MultiSelectDropdown";
+import InputChipField from "@/refresh-components/inputs/InputChipField";
+import { Text } from "@opal/components";
 
 function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {
   return keywordSelect == "any";
@@ -39,6 +42,7 @@ export const StandardAnswerCreationForm = ({
 }) => {
   const isUpdate = existingStandardAnswer !== undefined;
   const router = useRouter();
+  const [categoryInput, setCategoryInput] = useState("");
 
   return (
     <div>
@@ -164,38 +168,79 @@ export const StandardAnswerCreationForm = ({
                   placeholder="The answer in Markdown. Example: If you need any help from the IT team, please email internalsupport@company.com"
                 />
               </div>
-              <div className="w-4/12">
-                <MultiSelectDropdown
-                  name="categories"
-                  label="Categories:"
-                  onChange={(selected_options) => {
-                    const selected_categories = selected_options.map(
-                      (option) => {
-                        return { id: Number(option.value), name: option.label };
-                      }
+              <div className="w-4/12 flex flex-col gap-2">
+                <Label>Categories:</Label>
+                <InputChipField
+                  placeholder="Type a category and press Enter…"
+                  value={categoryInput}
+                  onChange={setCategoryInput}
+                  chips={values.categories.map((category) => ({
+                    id: category.id.toString(),
+                    label: category.name,
+                  }))}
+                  onRemoveChip={(id) =>
+                    setFieldValue(
+                      "categories",
+                      values.categories.filter((c) => c.id.toString() !== id)
+                    )
+                  }
+                  onAdd={async (name) => {
+                    setCategoryInput("");
+
+                    // Skip if already selected. This also covers categories
+                    // created earlier this session, which won't appear in the
+                    // `standardAnswerCategories` prop snapshot — so re-typing
+                    // the same name never fires a duplicate create.
+                    if (
+                      values.categories.some(
+                        (c) => c.name.toLowerCase() === name.toLowerCase()
+                      )
+                    ) {
+                      return;
+                    }
+
+                    // Reuse an existing category (case-insensitive) rather than
+                    // creating a duplicate.
+                    const existing = standardAnswerCategories.find(
+                      (category) =>
+                        category.name.toLowerCase() === name.toLowerCase()
                     );
-                    setFieldValue("categories", selected_categories);
-                  }}
-                  creatable={true}
-                  onCreate={async (created_name) => {
+                    if (existing) {
+                      setFieldValue("categories", [
+                        ...values.categories,
+                        existing,
+                      ]);
+                      return;
+                    }
+
                     const response = await createStandardAnswerCategory({
-                      name: created_name,
+                      name,
                     });
-                    const newCategory = await response.json();
-                    return {
-                      label: newCategory.name,
-                      value: newCategory.id.toString(),
-                    };
+                    if (!response.ok) {
+                      const responseJson = await response.json();
+                      const errorMsg =
+                        responseJson.detail || responseJson.message;
+                      toast.error(
+                        `Error creating category "${name}" - ${errorMsg}`
+                      );
+                      return;
+                    }
+                    const newCategory =
+                      (await response.json()) as StandardAnswerCategory;
+                    setFieldValue("categories", [
+                      ...values.categories,
+                      newCategory,
+                    ]);
                   }}
-                  options={standardAnswerCategories.map((category) => ({
-                    label: category.name,
-                    value: category.id.toString(),
-                  }))}
-                  initialSelectedOptions={values.categories.map((category) => ({
-                    label: category.name,
-                    value: category.id.toString(),
-                  }))}
                 />
+
+                <ErrorMessage name="categories" component="div">
+                  {(msg) => (
+                    <Text as="p" font="secondary-body" color="status-error-05">
+                      {msg}
+                    </Text>
+                  )}
+                </ErrorMessage>
               </div>
               <div className="py-4 flex">
                 {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
