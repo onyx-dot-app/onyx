@@ -87,6 +87,29 @@ def create_notification(
     return notification
 
 
+def delete_notifications_by_additional_data(
+    notif_type: NotificationType,
+    db_session: Session,
+    additional_data: dict | None = None,
+) -> None:
+    """Delete every notification of this type whose additional_data matches,
+    regardless of user. Matches the COALESCE(additional_data, '{}') equality
+    used at creation, so it clears exactly the rows create_notification /
+    batch_create_notifications would have written for the same key."""
+    additional_data_normalized = additional_data if additional_data is not None else {}
+    notifications = (
+        db_session.query(Notification)
+        .filter_by(notif_type=notif_type)
+        .filter(
+            func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
+            == additional_data_normalized
+        )
+        .all()
+    )
+    for notification in notifications:
+        db_session.delete(notification)
+
+
 def get_notification_by_id(
     notification_id: int, user: User, db_session: Session
 ) -> Notification:
