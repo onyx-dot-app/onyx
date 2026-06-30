@@ -121,6 +121,11 @@ def start_external_app_oauth(
         "state": state,
         **oauth.extra_authorize_params,
     }
+    # Optional scopes (HubSpot) ride under their own param: the provider drops
+    # any the account can't grant rather than failing the whole authorize page.
+    # Set after extra_authorize_params so a provider can't accidentally clobber it.
+    if oauth.optional_scope:
+        params["optional_scope"] = oauth.optional_scope
     # urlencode so URI-shaped scopes (Google) get `:` and `/`
     # percent-encoded.
     authorize_url = f"{oauth.authorize_url}?{urlencode(params)}"

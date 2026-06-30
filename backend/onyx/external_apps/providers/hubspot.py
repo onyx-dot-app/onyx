@@ -121,16 +121,26 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
-# Scopes requested from HubSpot. `oauth` is mandatory for the auth-code flow;
-# the rest grant read/write on the CRM objects this provider catalogs.
-_SCOPES = [
+# Required scopes: `oauth` is mandatory for the auth-code flow, plus read on the
+# CRM objects this provider catalogs. Every HubSpot account — including read-only
+# and free tiers — can grant these, so requesting them as required is always safe.
+_REQUIRED_SCOPES = [
     "oauth",
     "crm.objects.owners.read",
     "crm.objects.contacts.read",
-    "crm.objects.contacts.write",
     "crm.objects.companies.read",
-    "crm.objects.companies.write",
     "crm.objects.deals.read",
+]
+
+# Write scopes go in `optional_scope`, not the required `scope`. Read-only/free
+# HubSpot accounts can't grant writer scopes, and HubSpot fails the *entire*
+# authorize page if the account lacks any required scope — so requesting writes
+# as required would lock those users out of OAuth altogether. As optional scopes
+# HubSpot silently drops the ones an account can't grant: everyone connects (read
+# always succeeds) and write lights up only where the account supports it.
+_OPTIONAL_WRITE_SCOPES = [
+    "crm.objects.contacts.write",
+    "crm.objects.companies.write",
     "crm.objects.deals.write",
 ]
 
@@ -142,8 +152,9 @@ class HubspotProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         oauth=OAuthFlowSpec(
             authorize_url="https://app.hubspot.com/oauth/authorize",
             token_url="https://api.hubapi.com/oauth/v1/token",
-            scope=" ".join(_SCOPES),
+            scope=" ".join(_REQUIRED_SCOPES),
             scope_param="scope",
+            optional_scope=" ".join(_OPTIONAL_WRITE_SCOPES),
         ),
         descriptor=AdminDescriptorSpec(
             description=(
