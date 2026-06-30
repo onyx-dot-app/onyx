@@ -187,6 +187,18 @@ export const StandardAnswerCreationForm = ({
                   onAdd={async (name) => {
                     setCategoryInput("");
 
+                    // Skip if already selected. This also covers categories
+                    // created earlier this session, which won't appear in the
+                    // `standardAnswerCategories` prop snapshot — so re-typing
+                    // the same name never fires a duplicate create.
+                    if (
+                      values.categories.some(
+                        (c) => c.name.toLowerCase() === name.toLowerCase()
+                      )
+                    ) {
+                      return;
+                    }
+
                     // Reuse an existing category (case-insensitive) rather than
                     // creating a duplicate.
                     const existing = standardAnswerCategories.find(
@@ -194,20 +206,25 @@ export const StandardAnswerCreationForm = ({
                         category.name.toLowerCase() === name.toLowerCase()
                     );
                     if (existing) {
-                      if (
-                        !values.categories.some((c) => c.id === existing.id)
-                      ) {
-                        setFieldValue("categories", [
-                          ...values.categories,
-                          existing,
-                        ]);
-                      }
+                      setFieldValue("categories", [
+                        ...values.categories,
+                        existing,
+                      ]);
                       return;
                     }
 
                     const response = await createStandardAnswerCategory({
                       name,
                     });
+                    if (!response.ok) {
+                      const responseJson = await response.json();
+                      const errorMsg =
+                        responseJson.detail || responseJson.message;
+                      toast.error(
+                        `Error creating category "${name}" - ${errorMsg}`
+                      );
+                      return;
+                    }
                     const newCategory =
                       (await response.json()) as StandardAnswerCategory;
                     setFieldValue("categories", [
