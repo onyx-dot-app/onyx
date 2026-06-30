@@ -66,6 +66,7 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
+from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tracing.framework.create import trace
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -838,13 +839,14 @@ def run_llm_loop(
                 else None
             )
 
+            tool_token_budget = compute_all_tool_tokens(final_tools, token_counter)
             truncated_message_history = construct_message_history(
                 system_prompt=system_prompt,
                 custom_agent_prompt=custom_agent_prompt_msg,
                 simple_chat_history=simple_chat_history,
                 reminder_message=reminder_msg,
                 context_files=context_files,
-                available_tokens=available_tokens,
+                available_tokens=max(0, available_tokens - tool_token_budget),
                 token_counter=token_counter,
                 all_injected_file_metadata=all_injected_file_metadata,
             )
@@ -976,7 +978,6 @@ def run_llm_loop(
                     except (json.JSONDecodeError, AttributeError):
                         pass
 
-                # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
 
                 # Add the results to the chat history. Even though tools may run in parallel,
