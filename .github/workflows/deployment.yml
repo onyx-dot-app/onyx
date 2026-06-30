@@ -1854,6 +1854,8 @@ jobs:
           uv run --no-sync --with onyx-devtools ods audit image "$IMAGE" \
             --fail-on=critical --format=sarif > image-audit.sarif || status=$?
           if [ ! -s image-audit.sarif ]; then
+            # $schema is a literal SARIF key, not a shell variable.
+            # shellcheck disable=SC2016
             echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}' > image-audit.sarif
           fi
           exit "${status:-0}"
