@@ -1847,11 +1847,16 @@ jobs:
 
       - name: Run image vulnerability audit
         if: steps.should-run.outputs.run == 'true'
-        # Exits non-zero on unsuppressed CRITICAL (gates the release); SARIF is
-        # still written so the always() upload below reaches the Security tab.
+        # Exits non-zero on unsuppressed CRITICAL (gates the release). On a hard
+        # scan failure nothing is written, so seed a valid empty SARIF to keep the
+        # always() upload below from choking; either way it reaches the Security tab.
         run: |
           uv run --no-sync --with onyx-devtools ods audit image "$IMAGE" \
-            --fail-on=critical --format=sarif > image-audit.sarif
+            --fail-on=critical --format=sarif > image-audit.sarif || status=$?
+          if [ ! -s image-audit.sarif ]; then
+            echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}' > image-audit.sarif
+          fi
+          exit "${status:-0}"
         env:
           IMAGE: ${{ steps.scan-image.outputs.image }}
 

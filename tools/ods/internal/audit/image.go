@@ -63,6 +63,9 @@ func RunImage(opts ImageOptions) (*Result, error) {
 func scanImage(ref string) ([]Finding, error) {
 	res, err := osvscanner.DoContainerScan(osvscanner.ScannerActions{
 		Image: ref,
+		// Fetch the OSV databases so matching works on a fresh CI runner
+		// regardless of whether container scanning defaults to online or offline.
+		DownloadDatabases: true,
 	})
 	if err != nil {
 		// ErrVulnerabilitiesFound is the normal "found something" path; results
