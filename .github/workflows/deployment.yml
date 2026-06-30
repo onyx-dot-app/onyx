@@ -1740,7 +1740,11 @@ jobs:
        needs.build-sandbox-amd64.result == 'success')
     runs-on:
       - runs-on
-      - runner=2cpu-linux-arm64
+      # Must match the amd64 images this job scans: `ods audit image` shells out
+      # to the docker CLI (`docker pull`/`save`), which refuses an amd64 image on
+      # an arm64 host. (Trivy pulled platform-specific manifests daemonlessly, so
+      # it didn't care.)
+      - runner=2cpu-linux-x64
       - run-id=${{ github.run_id }}-image-audit-${{ matrix.component }}
       - extras=ecr-cache
     permissions:
