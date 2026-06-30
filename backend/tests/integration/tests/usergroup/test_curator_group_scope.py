@@ -96,12 +96,16 @@ def test_curator_cannot_modify_unscoped_group(reset: None) -> None:  # noqa: ARG
     assert patch_own_resp.status_code == 200
 
     # --- Positive: curator can still add users to the group they curate ---
-    updated_group_a = UserGroupManager.add_users(
+    UserGroupManager.add_users(
         user_group=group_a,
         user_ids=[other_user.id],
         user_performing_action=curator,
     )
-    assert other_user.id in set(updated_group_a.user_ids)
+    # Re-fetch rather than trust the add-users response body, which does not
+    # reflect the freshly inserted membership.
+    admin_view = UserGroupManager.get_all(user_performing_action=admin_user)
+    group_a_view = next(group for group in admin_view if group.id == group_a.id)
+    assert other_user.id in {str(user.id) for user in group_a_view.users}
 
     # --- Admin is unaffected: can modify any group ---
     admin_add_resp = client.post(
@@ -185,9 +189,13 @@ def test_global_curator_scoped_to_member_groups(reset: None) -> None:  # noqa: A
     )
     assert patch_own_resp.status_code == 200
 
-    updated_group_a = UserGroupManager.add_users(
+    UserGroupManager.add_users(
         user_group=group_a,
         user_ids=[other_user.id],
         user_performing_action=global_curator,
     )
-    assert other_user.id in set(updated_group_a.user_ids)
+    # Re-fetch rather than trust the add-users response body, which does not
+    # reflect the freshly inserted membership.
+    member_view = UserGroupManager.get_all(user_performing_action=admin_user)
+    group_a_view = next(group for group in member_view if group.id == group_a.id)
+    assert other_user.id in {str(user.id) for user in group_a_view.users}
