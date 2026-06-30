@@ -1902,24 +1902,17 @@ class SharepointConnector(
                 )
                 if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
                     if attempt < GRAPH_API_MAX_RETRIES:
-                        parsed_retry_after = parse_retry_after_seconds(
-                            response.headers.get("Retry-After")
+                        wait = _backoff_seconds(
+                            attempt, response.headers.get("Retry-After")
                         )
-                        retry_after = (
-                            parsed_retry_after
-                            if parsed_retry_after is not None
-                            else float(2**attempt)
-                        )
-                        wait = min(retry_after, 60)
                         logger.warning(
-                            "Graph API %s on attempt %s, retrying in %ss: %s",
+                            "Graph API %s on attempt %s, retrying in %.1fs: %s",
                             response.status_code,
                             attempt + 1,
                             wait,
                             url,
                         )
                         time.sleep(wait)
-                        # Re-acquire token in case it expired during a long traversal
                         access_token = self._get_graph_access_token()
                         headers = {"Authorization": f"Bearer {access_token}"}
                         continue
@@ -1927,14 +1920,20 @@ class SharepointConnector(
                 try:
                     return response.json()
                 except (ValueError, requests.exceptions.JSONDecodeError):
-                    # Graph intermittently returns an empty/non-JSON 2xx body under load; treat it as transient and retry.
+                    # Graph intermittently returns an empty/non-JSON 2xx body
+                    # under load; treat it as transient and retry.
                     if attempt < GRAPH_API_MAX_RETRIES:
-                        wait = _backoff_seconds(attempt, response.headers.get("Retry-After"))
+                        wait = _backoff_seconds(
+                            attempt, response.headers.get("Retry-After")
+                        )
                         logger.warning(
                             "Graph API non-JSON/empty body (status %s, len=%s) on "
                             "attempt %s, retrying in %.1fs: %s",
-                            response.status_code, len(response.content),
-                            attempt + 1, wait, url,
+                            response.status_code,
+                            len(response.content),
+                            attempt + 1,
+                            wait,
+                            url,
                         )
                         time.sleep(wait)
                         access_token = self._get_graph_access_token()
@@ -1944,7 +1943,13 @@ class SharepointConnector(
             except TRANSIENT_TRANSPORT_EXCEPTIONS:
                 if attempt < GRAPH_API_MAX_RETRIES:
                     wait = _backoff_seconds(attempt, retry_after=None)
-                    ...
+                    logger.warning(
+                        "Graph API transport error on attempt %s, retrying in %.1fs: %s",
+                        attempt + 1,
+                        wait,
+                        url,
+                    )
+                    time.sleep(wait)
                     continue
                 raise
 
