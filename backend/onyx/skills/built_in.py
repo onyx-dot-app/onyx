@@ -35,6 +35,7 @@ from pydantic import model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
+from onyx.server.features.build.configs import ENABLE_BROWSER
 
 # On-disk root for built-in skill content (one ``<skill_id>/`` dir each). Pushed
 # to sandboxes at session setup; not baked into the sandbox image.
@@ -169,6 +170,11 @@ _REGISTRY: Final = BuiltInSkillRegistry(
         SeededBuiltInProvider(skill_id="pptx"),
         SeededBuiltInProvider(skill_id="image-generation"),
         SeededBuiltInProvider(skill_id="company-search"),
+        SeededBuiltInProvider(
+            skill_id="browser",
+            is_available=lambda _: ENABLE_BROWSER,
+            unavailable_reason="Browser runtime is not enabled for this deployment.",
+        ),
         ExternalAppBuiltInProvider(skill_id="slack", app_type=ExternalAppType.SLACK),
         ExternalAppBuiltInProvider(skill_id="linear", app_type=ExternalAppType.LINEAR),
         ExternalAppBuiltInProvider(

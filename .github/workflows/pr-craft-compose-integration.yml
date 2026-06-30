@@ -148,7 +148,9 @@ jobs:
             context: ./backend/onyx/server/features/build/sandbox/image
             file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
             # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
-            # so skip LibreOffice et al. to keep the CI image lean.
+            # so skip LibreOffice et al. to keep the CI image lean. Browser stays
+            # on (ENABLE_BROWSER defaults true) — chromium is lighter than the
+            # skill bundle and keeps the CI image consistent with prod.
             extra_build_args: "ENABLE_SKILLS=false"
           - image: backend
             context: ./backend

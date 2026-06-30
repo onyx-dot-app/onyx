@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import fetch_skill_for_user
+from onyx.db.skill import list_skills_for_sandbox_injection
 from onyx.db.skill import list_skills_for_user
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import _ensure_custom
@@ -99,7 +100,37 @@ class TestAvailabilityGate:
             for s in list_skills_for_user(test_user, db_session)
             if s.built_in_skill_id is not None
         }
-        assert set(BUILT_IN_SKILLS) <= visible_built_ins
+        # Only built-ins whose availability gate is satisfied should show; some
+        # (e.g. browser) gate on a deployment flag that may be off in this env.
+        expected = {
+            bid for bid, d in BUILT_IN_SKILLS.items() if d.is_available(db_session)
+        }
+        assert expected <= visible_built_ins
+
+    def test_browser_built_in_gated_on_enable_browser(
+        self,
+        db_session: Session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # browser is the one registry entry gated per-deployment on ENABLE_BROWSER
+        # (whether the sandbox image has the browser runtime). It must drop out of
+        # sandbox injection when off and appear when on.
+        _seed_canonical(db_session)
+
+        monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", False)
+        off = {
+            s.built_in_skill_id
+            for s in list_skills_for_sandbox_injection(test_user, db_session)
+        }
+        assert "browser" not in off
+
+        monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", True)
+        on = {
+            s.built_in_skill_id
+            for s in list_skills_for_sandbox_injection(test_user, db_session)
+        }
+        assert "browser" in on
 
     def test_unavailable_built_in_cannot_be_fetched_by_id(
         self,
