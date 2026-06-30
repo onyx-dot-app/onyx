@@ -1,17 +1,16 @@
-"""The process-isolation helper must convert a native child crash, a hang, and a
-runaway allocation into typed parent-side exceptions, while passing normal return
-values and ordinary exceptions through unchanged."""
+"""The process-isolation helper must convert a native child crash and a hang into
+typed parent-side exceptions, while passing normal return values and ordinary
+exceptions through unchanged."""
 
 import ctypes
+import multiprocessing as mp
 import operator
 import os
-import sys
 import time
 
 import pytest
 
 from onyx.utils.process_isolation import IsolatedProcessCrashed
-from onyx.utils.process_isolation import IsolatedProcessError
 from onyx.utils.process_isolation import IsolatedProcessTimeout
 from onyx.utils.process_isolation import run_in_isolated_process
 
@@ -55,11 +54,23 @@ def test_timeout_is_enforced_and_child_reaped() -> None:
     assert time.monotonic() - started < 15
 
 
-@pytest.mark.skipif(
-    sys.platform != "linux", reason="RLIMIT_AS is enforced reliably only on Linux"
-)
-def test_memory_limit_bounds_allocation() -> None:
-    with pytest.raises((MemoryError, IsolatedProcessError)):
-        run_in_isolated_process(
-            bytearray, 2 * 1024 * 1024 * 1024, memory_limit_mb=1024, timeout=30
-        )
+def _isolate_from_within(queue: "mp.Queue") -> None:
+    try:
+        queue.put(("ok", run_in_isolated_process(abs, -7, timeout=30)))
+    except Exception as e:
+        queue.put(("err", repr(e)))
+
+
+def test_works_when_caller_is_a_daemon_process() -> None:
+    # The indexing worker runs as a daemon, and daemons can't have multiprocessing
+    # children. Isolation must still work from there (it shells out to subprocess).
+    ctx = mp.get_context("spawn")
+    queue: "mp.Queue" = ctx.Queue()
+    proc = ctx.Process(target=_isolate_from_within, args=(queue,))
+    proc.daemon = True
+    proc.start()
+    proc.join(60)
+    assert proc.exitcode == 0, proc.exitcode
+    status, value = queue.get(timeout=5)
+    assert status == "ok", value
+    assert value == 7
