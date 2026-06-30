@@ -18,6 +18,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
+import ee.onyx.server.query_and_chat.token_limit as ee_token_limit
 import onyx.server.query_and_chat.token_limit as token_limit
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import TokenRateLimitScope
@@ -235,7 +236,7 @@ def _cost_limit(
     cost_budget_cents: float | None,
     scope: TokenRateLimitScope,
     period_hours: int = 1,
-    token_budget: int = 10**12,  # effectively unbounded so only cost can trigger
+    token_budget: int | None = 10**12,  # default unbounded; None = cost-only
 ) -> TokenRateLimit:
     limit = TokenRateLimit(
         enabled=True,
@@ -456,6 +457,233 @@ class TestCostEnforcementRealLedgerPath:
         monkeypatch.setattr(token_limit, "_fetch_global_usage", lambda *_: _usage(1))
 
         token_limit._user_is_rate_limited_by_global()  # no raise
+
+
+# ---------------------------------------------------------------------------
+# EE per-user and per-group gates. These are the scopes the original code never
+# enforced cost on (a User/Group cost budget was silently a no-op). Data sources
+# are stubbed; the real gate logic runs.
+# ---------------------------------------------------------------------------
+
+
+def _stub_user_sources(
+    monkeypatch: pytest.MonkeyPatch,
+    limits: list[TokenRateLimit],
+    token_usage: list[tuple[datetime.datetime, int]],
+    cost_buckets: list[tuple[datetime.datetime, float]],
+) -> None:
+    monkeypatch.setattr(
+        ee_token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+    )
+    monkeypatch.setattr(
+        ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: limits
+    )
+    monkeypatch.setattr(ee_token_limit, "_fetch_user_usage", lambda *_: token_usage)
+    monkeypatch.setattr(
+        ee_token_limit, "get_user_cost_cents_buckets_since", lambda *_: cost_buckets
+    )
+
+
+class TestUserGateEE:
+    """The per-user gate must enforce BOTH token and cost budgets. The cost half
+    was previously unenforced, so a per-user cost budget did nothing."""
+
+    def test_user_over_cost_budget_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import uuid
+
+        limit = _cost_limit(500.0, TokenRateLimitScope.USER, period_hours=2)
+        _stub_user_sources(monkeypatch, [limit], _usage(1), _recent_cost_buckets(600.0))
+        with pytest.raises(OnyxError) as ei:
+            ee_token_limit._user_is_rate_limited(uuid.uuid4())
+        _assert_structured_429(ei.value, "your account", 2)
+
+    def test_user_under_cost_budget_does_not_raise(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import uuid
+
+        limit = _cost_limit(500.0, TokenRateLimitScope.USER)
+        _stub_user_sources(monkeypatch, [limit], _usage(1), _recent_cost_buckets(100.0))
+        ee_token_limit._user_is_rate_limited(uuid.uuid4())  # no raise
+
+    def test_user_over_token_budget_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import uuid
+
+        limit = _make_limit(token_budget=1)  # 1,000 tokens
+        limit.scope = TokenRateLimitScope.USER
+        limit.period_hours = 5
+        _stub_user_sources(monkeypatch, [limit], _usage(2_000), [])
+        with pytest.raises(OnyxError) as ei:
+            ee_token_limit._user_is_rate_limited(uuid.uuid4())
+        _assert_structured_429(ei.value, "your account", 5)
+
+    def test_cost_only_user_limit_skips_token_query(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import uuid
+
+        cost_only = TokenRateLimit(
+            enabled=True,
+            token_budget=None,
+            cost_budget_cents=500.0,
+            period_hours=1,
+            scope=TokenRateLimitScope.USER,
+        )
+        monkeypatch.setattr(
+            ee_token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+        )
+        monkeypatch.setattr(
+            ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: [cost_only]
+        )
+
+        def _boom(*_a: object) -> object:
+            raise AssertionError("token aggregation ran for a cost-only user limit")
+
+        monkeypatch.setattr(ee_token_limit, "_fetch_user_usage", _boom)
+        monkeypatch.setattr(
+            ee_token_limit,
+            "get_user_cost_cents_buckets_since",
+            lambda *_: _recent_cost_buckets(100.0),
+        )
+        ee_token_limit._user_is_rate_limited(uuid.uuid4())  # no raise, no token query
+
+
+def _stub_group_sources(
+    monkeypatch: pytest.MonkeyPatch,
+    group_limits: dict[int, list[TokenRateLimit]],
+    group_token_usage: dict[int, list[tuple[datetime.datetime, int]]],
+    group_cost_buckets: dict[int, list[tuple[datetime.datetime, float]]],
+) -> None:
+    monkeypatch.setattr(
+        ee_token_limit, "get_session_with_current_tenant", lambda: _SessionCtx()
+    )
+    monkeypatch.setattr(
+        ee_token_limit, "_fetch_all_user_group_rate_limits", lambda *_: group_limits
+    )
+    monkeypatch.setattr(
+        ee_token_limit, "_fetch_user_group_usage", lambda *_: group_token_usage
+    )
+    monkeypatch.setattr(
+        ee_token_limit,
+        "get_group_cost_cents_buckets_since",
+        lambda *_: group_cost_buckets,
+    )
+
+
+class TestGroupGateEE:
+    """The per-group gate must enforce cost too, while keeping the 'allowed if
+    ANY of the user's groups is under budget' semantics."""
+
+    def test_group_over_cost_budget_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import uuid
+
+        limit = _cost_limit(500.0, TokenRateLimitScope.USER_GROUP, period_hours=4)
+        _stub_group_sources(
+            monkeypatch, {1: [limit]}, {1: _usage(1)}, {1: _recent_cost_buckets(600.0)}
+        )
+        with pytest.raises(OnyxError) as ei:
+            ee_token_limit._user_is_rate_limited_by_group(uuid.uuid4())
+        _assert_structured_429(ei.value, "your group", 4)
+
+    def test_user_allowed_when_one_group_under_budget(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import uuid
+
+        over = _cost_limit(100.0, TokenRateLimitScope.USER_GROUP)
+        under = _cost_limit(100.0, TokenRateLimitScope.USER_GROUP)
+        _stub_group_sources(
+            monkeypatch,
+            {1: [over], 2: [under]},
+            {1: _usage(1), 2: _usage(1)},
+            {1: _recent_cost_buckets(600.0), 2: _recent_cost_buckets(10.0)},
+        )
+        # group 2 is under budget -> user allowed despite group 1 being over
+        ee_token_limit._user_is_rate_limited_by_group(uuid.uuid4())  # no raise
+
+    def test_all_groups_over_budget_raises_longest_window(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import uuid
+
+        g1 = _cost_limit(100.0, TokenRateLimitScope.USER_GROUP, period_hours=1)
+        g2 = _cost_limit(100.0, TokenRateLimitScope.USER_GROUP, period_hours=6)
+        _stub_group_sources(
+            monkeypatch,
+            {1: [g1], 2: [g2]},
+            {1: _usage(1), 2: _usage(1)},
+            {1: _recent_cost_buckets(600.0), 2: _recent_cost_buckets(600.0)},
+        )
+        with pytest.raises(OnyxError) as ei:
+            ee_token_limit._user_is_rate_limited_by_group(uuid.uuid4())
+        _assert_structured_429(ei.value, "your group", 6)
+
+
+class TestUserCostEnforcementRealLedgerPath:
+    """The per-user cost gate end-to-end through the real UserUsage ledger —
+    guards get_user_cost_cents_buckets_since and the wiring that was missing
+    (a per-user cost budget previously did nothing)."""
+
+    def test_user_over_cost_blocks_against_real_ledger(
+        self, monkeypatch: pytest.MonkeyPatch, ledger_session: Session
+    ) -> None:
+        import uuid
+
+        uid = uuid.uuid4()
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        ledger_window = get_window_start(now, period_hours=168)
+        record_user_usage(
+            ledger_session, str(uid), "m", "CHAT", None, 1, 1, 0, 500.0, ledger_window
+        )
+
+        limit = _cost_limit(
+            100.0, TokenRateLimitScope.USER, period_hours=24, token_budget=None
+        )
+        monkeypatch.setattr(
+            ee_token_limit,
+            "get_session_with_current_tenant",
+            lambda: _RealLedgerSessionCtx(ledger_session),
+        )
+        monkeypatch.setattr(
+            ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: [limit]
+        )
+        # cost-only path: the token scan must be skipped, so no ChatMessage query.
+        with pytest.raises(OnyxError) as ei:
+            ee_token_limit._user_is_rate_limited(uid)
+        _assert_structured_429(ei.value, "your account", 24)
+
+    def test_other_users_spend_not_counted(
+        self, monkeypatch: pytest.MonkeyPatch, ledger_session: Session
+    ) -> None:
+        # A different user's spend must NOT count against this user's budget —
+        # the new bucket helper filters by user_id.
+        import uuid
+
+        me, other = uuid.uuid4(), uuid.uuid4()
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        win = get_window_start(now, period_hours=168)
+        record_user_usage(
+            ledger_session, str(other), "m", "CHAT", None, 1, 1, 0, 9999.0, win
+        )
+
+        limit = _cost_limit(
+            100.0, TokenRateLimitScope.USER, period_hours=24, token_budget=None
+        )
+        monkeypatch.setattr(
+            ee_token_limit,
+            "get_session_with_current_tenant",
+            lambda: _RealLedgerSessionCtx(ledger_session),
+        )
+        monkeypatch.setattr(
+            ee_token_limit, "fetch_all_user_token_rate_limits", lambda **_: [limit]
+        )
+        ee_token_limit._user_is_rate_limited(me)  # no raise — other user's spend
 
 
 class TestTokenRateLimitArgsValidation:
