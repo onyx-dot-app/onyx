@@ -4,6 +4,39 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/api/client";
 import { QUERY_KEYS } from "@/api/query-keys";
 import { useSession } from "@/state/session";
+import { BackendChatSession } from "@/chat/interfaces";
+
+// default agent; selection lands in PR 5
+const DEFAULT_PERSONA_ID = 0;
+
+// Pre-creates a session so the first message can send with a real chat_session_id.
+export async function createChatSession(
+  personaId: number = DEFAULT_PERSONA_ID,
+  projectId: number | null = null,
+): Promise<string> {
+  const { chat_session_id } = await apiFetch<{ chat_session_id: string }>(
+    "/chat/create-chat-session",
+    {
+      method: "POST",
+      body: { persona_id: personaId, description: null, project_id: projectId },
+    },
+  );
+  return chat_session_id;
+}
+
+// Session snapshot for hydration.
+export async function getChatSession(
+  sessionId: string,
+): Promise<BackendChatSession> {
+  return apiFetch<BackendChatSession>(`/chat/get-chat-session/${sessionId}`);
+}
+
+// client abort alone leaves the backend generating
+export async function stopChatSession(sessionId: string): Promise<void> {
+  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}`, {
+    method: "POST",
+  });
+}
 
 export type ChatSessionSharedStatus = "private" | "public";
 

@@ -18,6 +18,8 @@ Port the Onyx web chat experience to the React Native + Expo mobile app, deliver
 
 Each PR is its own session. **Before coding a PR: open its entry in `05-pr-roadmap.md`, run the "Before you start (grill on)" checklist with the owner, re-read the cited web/mobile files, then implement.** The deep per-slice detail is produced in that session — this spec is deliberately high-level so it doesn't go stale.
 
+**Web-parity is required for every component (PR 4 onward).** Every mobile component/screen must match its web counterpart as closely as the platform allows; reuse the parity primitives (`Text`, `Button`, …) first, check existing `components/*` before building, **ask the owner before porting a missing primitive** (don't hand-roll a divergent one), and each PR must document what differs from web and why. Full principle in the **WEB-PARITY PRINCIPLE** callout in `05-pr-roadmap.md`. (Sidebar parity is owned separately.)
+
 **Hard gate before PR 3 (two-step):** the `expo/fetch` streaming spike is **DONE — PASS** (`getReader()` works on the iOS sim; recorded in `05-pr-roadmap.md`). The `react-native-streamdown` build/render check on RN 0.85 was **deferred to PR 3 pre-work** and is **still outstanding** — it must pass before PR 3 locks the markdown component (fallback `react-native-marked`).
 
 ## Locked scope
