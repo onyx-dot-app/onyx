@@ -46,6 +46,7 @@ from onyx.server.features.build.session.models import (
     MessageRequest,
     MessageResponse,
 )
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -140,6 +141,9 @@ def send_message(
             SessionManager(db_session).reload_session_skills(session_id, user)
 
         check_build_rate_limits(user=user, db_session=db_session)
+        # Craft turns also respect the org/user token + cost budgets. No-op when
+        # none are configured; raises the structured 429 when over budget.
+        check_token_rate_limits(user)
 
         turn_index = count_user_messages(session_id, db_session)
         if request.provider and request.model:
@@ -203,6 +207,8 @@ def send_subagent_message(
     request: MessageRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     _rate_limit_check: None = Depends(check_build_rate_limits),
+    # Craft turns also respect the org/user token + cost budgets (no-op when none).
+    _token_rate_limit_check: None = Depends(check_token_rate_limits),
 ) -> StreamingResponse:
     """
     Send a follow-up message to a subagent's child opencode session and
