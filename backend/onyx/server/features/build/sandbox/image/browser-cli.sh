@@ -5,8 +5,6 @@
 # (no ~/.bashrc / alias expansion).
 set -euo pipefail
 
-# Proxy CA trust is set up once at startup by entrypoint.sh, not per call.
-
 # Chromium needs --no-sandbox (pod drops caps/seccomp) and the proxy as a FLAG
 # (it ignores *_PROXY env; userinfo stripped — proxy authorizes by source IP);
 # agent-browser otherwise launches a non-installed Chrome-for-Testing.
