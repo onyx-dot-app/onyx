@@ -99,7 +99,7 @@ export default function NonAdminStep() {
             description="We will display this name in the app."
             sizePreset="main-ui"
             variant="section"
-            belowTitle={
+            subDescription={
               <div className="flex w-full items-center gap-2">
                 <InputTypeIn
                   ref={inputRef}

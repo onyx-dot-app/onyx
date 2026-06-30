@@ -50,12 +50,12 @@ interface ContentMdProps {
   description?: string | RichStr;
 
   /**
-   * Content rendered full-width between the title row and the description
-   * (e.g. an input). When set, the title, this slot, and the description stack
-   * vertically with a uniform gap and the description is no longer indented
-   * past the icon.
+   * Content slot rendered directly below the title and above {@link description}
+   * — typically an input or action (not plain text, despite the name).
+   * Responsive: stacks full-width on narrow viewports and floats to the right of
+   * the title/description at the `sm` breakpoint.
    */
-  belowTitle?: React.ReactNode;
+  subDescription?: React.ReactNode;
 
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
@@ -143,7 +143,7 @@ function ContentMd({
   icon: Icon,
   title,
   description,
-  belowTitle,
+  subDescription,
   descriptionMaxLines,
   editable,
   onTitleChange,
@@ -176,9 +176,9 @@ function ContentMd({
       ref={ref}
       className="opal-content-md"
       data-opal-content
-      data-stacked={belowTitle ? true : undefined}
+      data-stacked={subDescription ? true : undefined}
       style={
-        belowTitle && Icon
+        subDescription && Icon
           ? ({
               "--opal-content-md-desc-indent": config.descriptionIndent,
             } as React.CSSProperties)
@@ -294,15 +294,15 @@ function ContentMd({
         </div>
       </div>
 
-      {belowTitle && (
-        <div className="opal-content-md-below-title">{belowTitle}</div>
+      {subDescription && (
+        <div className="opal-content-md-sub-description">{subDescription}</div>
       )}
 
       {description && toPlainString(description) && (
         <div
           className="opal-content-md-description"
           style={
-            Icon && !belowTitle
+            Icon && !subDescription
               ? { paddingLeft: config.descriptionIndent }
               : undefined
           }

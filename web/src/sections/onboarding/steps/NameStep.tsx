@@ -52,7 +52,7 @@ const NameStep = React.memo(
           description="We will display this name in the app."
           sizePreset="main-ui"
           variant="section"
-          belowTitle={
+          subDescription={
             <InputTypeIn
               ref={inputRef}
               placeholder="Your name"

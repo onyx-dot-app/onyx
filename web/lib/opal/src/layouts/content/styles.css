@@ -254,7 +254,7 @@
   @apply flex flex-col items-start;
 }
 
-/* Responsive "action" layout — active only when a `belowTitle` slot is passed.
+/* Responsive layout — active only when a `subDescription` slot is passed.
    Mobile-first: the title row, the slot (e.g. an input), and the description
    stack full-width (see the onboarding name card in Figma). At the `sm`
    breakpoint (724px) it reflows to the desktop layout — title + description on
@@ -266,7 +266,7 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
     "title"
-    "action"
+    "sub"
     "description";
 }
 
@@ -274,8 +274,8 @@
   grid-area: title;
 }
 
-.opal-content-md[data-stacked] > .opal-content-md-below-title {
-  grid-area: action;
+.opal-content-md[data-stacked] > .opal-content-md-sub-description {
+  grid-area: sub;
 }
 
 .opal-content-md[data-stacked] > .opal-content-md-description {
@@ -287,11 +287,11 @@
     column-gap: 1rem;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      "title       action"
-      "description action";
+      "title       sub"
+      "description sub";
   }
 
-  .opal-content-md[data-stacked] > .opal-content-md-below-title {
+  .opal-content-md[data-stacked] > .opal-content-md-sub-description {
     min-width: 12rem;
   }
 
@@ -302,7 +302,7 @@
   }
 }
 
-.opal-content-md-below-title {
+.opal-content-md-sub-description {
   @apply w-full;
 }
 
