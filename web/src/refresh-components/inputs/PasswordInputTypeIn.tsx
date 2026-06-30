@@ -6,6 +6,7 @@ import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
 import { noProp } from "@/lib/utils";
 import { SvgEye, SvgEyeClosed } from "@opal/icons";
+import { useTranslation } from "react-i18next";
 
 // Backend placeholder pattern - indicates a stored value that can't be revealed
 const BACKEND_PLACEHOLDER_PATTERN = /^•+$/; // All bullet characters (U+2022)
@@ -113,11 +114,12 @@ export default function PasswordInputTypeIn({
 
   const showToggleButton = hasValue || isFocused;
   const isRevealed = isPasswordVisible && !effectiveNonRevealable;
+  const { t } = useTranslation();
   const toggleLabel = effectiveNonRevealable
-    ? "Value cannot be revealed"
+    ? t("auth.value_cannot_be_revealed", { defaultValue: "Value cannot be revealed" })
     : isPasswordVisible
-      ? "Hide password"
-      : "Show password";
+      ? t("auth.hide_password", { defaultValue: "Hide password" })
+      : t("auth.show_password", { defaultValue: "Show password" });
 
   return (
     <div

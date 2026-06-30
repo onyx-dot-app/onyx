@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@opal/components";
 import { Text } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
@@ -77,6 +78,7 @@ export default function MultiModelPanel({
   errorDetails,
   isGenerating,
 }: MultiModelPanelProps) {
+  const { t } = useTranslation();
   const ModelIcon = getModelIcon(provider, modelName);
 
   const canSelect = !isHidden && !isPreferred && !isGenerating;
@@ -106,7 +108,7 @@ export default function MultiModelPanel({
               <>
                 <span className="text-action-link-05 shrink-0">
                   <Text font="secondary-body" color="inherit" nowrap>
-                    Preferred Response
+                    {t("chat.preferred_response")}
                   </Text>
                 </span>
                 {onDeselect && (
@@ -118,7 +120,7 @@ export default function MultiModelPanel({
                       e.stopPropagation();
                       onDeselect();
                     }}
-                    tooltip="Deselect preferred response"
+                    tooltip={t("chat.deselect_preferred_response")}
                   />
                 )}
               </>
@@ -132,7 +134,7 @@ export default function MultiModelPanel({
                   e.stopPropagation();
                   onToggleVisibility();
                 }}
-                tooltip={isHidden ? "Show response" : "Hide response"}
+                tooltip={isHidden ? t("chat.show_response") : t("chat.hide_response")}
               />
             )}
           </div>

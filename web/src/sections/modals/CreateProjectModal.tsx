@@ -2,6 +2,8 @@
 
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@opal/components";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { InputVertical } from "@opal/layouts";
@@ -11,10 +13,15 @@ import { SvgFolderPlus } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { toast } from "@/hooks/useToast";
+import i18n from "@/lib/i18n";
 
-const validationSchema = Yup.object({
-  projectName: Yup.string().trim().required("Project name is required"),
-});
+function getValidationSchema() {
+  return Yup.object({
+    projectName: Yup.string()
+      .trim()
+      .required(i18n.t("projects.project_name_required")),
+  });
+}
 
 interface CreateProjectModalProps {
   initialProjectName?: string;
@@ -23,17 +30,19 @@ interface CreateProjectModalProps {
 export default function CreateProjectModal({
   initialProjectName,
 }: CreateProjectModalProps) {
+  const { t } = useTranslation();
   const { createProject } = useProjectsContext();
   const modal = useModal();
   const route = useAppRouter();
+  const validationSchema = useMemo(() => getValidationSchema(), []);
 
   return (
     <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgFolderPlus}
-          title="Create New Project"
-          description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
+          title={t("projects.create_new_project")}
+          description={t("projects.create_desc")}
           onClose={() => modal.toggle(false)}
         />
         <Formik
@@ -48,7 +57,7 @@ export default function CreateProjectModal({
               route({ projectId: newProject.id });
               modal.toggle(false);
             } catch {
-              toast.error(`Failed to create the project ${name}`);
+              toast.error(t("projects.create_failed", { name }));
             } finally {
               setSubmitting(false);
             }
@@ -57,10 +66,13 @@ export default function CreateProjectModal({
           {({ isSubmitting, isValid }) => (
             <Form>
               <Modal.Body>
-                <InputVertical title="Project Name" withLabel="projectName">
+                <InputVertical
+                  title={t("projects.project_name")}
+                  withLabel="projectName"
+                >
                   <InputTypeInField
                     name="projectName"
-                    placeholder="What are you working on?"
+                    placeholder={t("projects.project_name_placeholder")}
                     clearButton
                   />
                 </InputVertical>
@@ -71,10 +83,10 @@ export default function CreateProjectModal({
                   type="button"
                   onClick={() => modal.toggle(false)}
                 >
-                  Cancel
+                  {t("general.cancel")}
                 </Button>
                 <Button type="submit" disabled={isSubmitting || !isValid}>
-                  Create Project
+                  {t("projects.create_project")}
                 </Button>
               </Modal.Footer>
             </Form>

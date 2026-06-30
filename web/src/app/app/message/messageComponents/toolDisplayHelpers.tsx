@@ -5,6 +5,7 @@ import {
   SearchToolPacket,
 } from "@/app/app/services/streamingModels";
 import { constructCurrentSearchState } from "./timeline/renderers/search/searchStateUtils";
+import i18n from "@/lib/i18n";
 import {
   SvgGlobe,
   SvgSearchMenu,
@@ -89,38 +90,41 @@ export function parseToolKey(key: string): {
 
 export function getToolName(packets: Packet[]): string {
   const firstPacket = packets[0];
-  if (!firstPacket) return "Tool";
+  if (!firstPacket) return i18n.t("chat.tool_display.tool");
 
   switch (firstPacket.obj.type) {
     case PacketType.SEARCH_TOOL_START: {
       const searchState = constructCurrentSearchState(
         packets as SearchToolPacket[]
       );
-      return searchState.isInternetSearch ? "Web Search" : "Internal Search";
+      return searchState.isInternetSearch
+        ? i18n.t("admin.chat_preferences.tool_web_search")
+        : i18n.t("admin.chat_preferences.tool_internal_search");
     }
     case PacketType.PYTHON_TOOL_START:
-      return "Code Interpreter";
+      return i18n.t("admin.chat_preferences.tool_code_interpreter");
     case PacketType.FETCH_TOOL_START:
-      return "Open URLs";
+      return i18n.t("admin.chat_preferences.tool_open_url");
     case PacketType.CUSTOM_TOOL_START:
       return (
-        (firstPacket.obj as { tool_name?: string }).tool_name || "Custom Tool"
+        (firstPacket.obj as { tool_name?: string }).tool_name ||
+        i18n.t("chat.tool_display.custom_tool")
       );
     case PacketType.IMAGE_GENERATION_TOOL_START:
-      return "Generate Image";
+      return i18n.t("admin.chat_preferences.tool_image_gen");
     case PacketType.DEEP_RESEARCH_PLAN_START:
-      return "Generate plan";
+      return i18n.t("chat.tool_display.generate_plan");
     case PacketType.RESEARCH_AGENT_START:
-      return "Research agent";
+      return i18n.t("chat.tool_display.research_agent");
     case PacketType.CODING_AGENT_START:
-      return "Coding agent";
+      return i18n.t("admin.chat_preferences.tool_coding_agent");
     case PacketType.REASONING_START:
-      return "Thinking";
+      return i18n.t("chat.tool_display.thinking");
     case PacketType.MEMORY_TOOL_START:
     case PacketType.MEMORY_TOOL_NO_ACCESS:
-      return "Memory";
+      return i18n.t("chat.tool_display.memory");
     default:
-      return "Tool";
+      return i18n.t("chat.tool_display.tool");
   }
 }
 

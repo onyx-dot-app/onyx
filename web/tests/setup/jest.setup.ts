@@ -89,3 +89,43 @@ console.error = (...args: any[]) => {
   }
   originalError.call(console, ...args);
 };
+
+// Global mock for react-i18next to resolve keys using the English locale JSON
+jest.mock("react-i18next", () => {
+  const enCommon = require("../../public/locales/en/common.json");
+
+  const getNestedValue = (obj: any, path: string): string => {
+    return path.split(".").reduce((acc, part) => acc && acc[part], obj) || path;
+  };
+
+  return {
+    useTranslation: () => ({
+      t: (key: string, options?: any) => {
+        const fallback = options?.defaultValue;
+        const val = getNestedValue(enCommon, key);
+        if (val === key && fallback !== undefined) {
+          return fallback;
+        }
+        // Handle interpolations like {{count}} or {{date}}
+        if (typeof val === "string" && options) {
+          let interpolated = val;
+          for (const k of Object.keys(options)) {
+            interpolated = interpolated.replace(new RegExp(`{{${k}}}`, "g"), options[k]);
+          }
+          return interpolated;
+        }
+        return val;
+      },
+      i18n: {
+        changeLanguage: () => Promise.resolve(),
+        language: "en",
+      },
+    }),
+    I18nextProvider: ({ children }: any) => children,
+    initReactI18next: {
+      type: "3rdParty",
+      init: () => {},
+    },
+  };
+});
+

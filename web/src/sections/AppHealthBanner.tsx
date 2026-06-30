@@ -14,8 +14,10 @@ import { SvgAlertTriangle, SvgLogOut } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getExtensionContext } from "@/lib/extension/utils";
+import { useTranslation } from "react-i18next";
 
 export default function AppHealthBanner() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { error } = useSWR(SWR_KEYS.health, errorHandlingFetcher);
   const [expired, setExpired] = useState(false);
@@ -27,7 +29,7 @@ export default function AppHealthBanner() {
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
     null
   );
-  // Latches true once we see an authed user — separates mid-session logout
+  // Latches true once we see an authed user ÔÇö separates mid-session logout
   // from a fresh unauth load.
   const hasSeenAuthenticatedUserRef = useRef(false);
 
@@ -258,8 +260,8 @@ export default function AppHealthBanner() {
       <div className="fixed top-0 left-0 z-101 w-full bg-status-error-01 p-3">
         <Content
           icon={SvgAlertTriangle}
-          title="The backend is currently unavailable"
-          description="If this is your initial setup or you just updated your Onyx deployment, this is likely because the backend is still starting up. Give it a minute or two, and then refresh the page. If that does not work, make sure the backend is setup and/or contact an administrator."
+          title={t("health.backend_unavailable_title")}
+          description={t("health.backend_unavailable_desc")}
           sizePreset="main-content"
           variant="section"
         />

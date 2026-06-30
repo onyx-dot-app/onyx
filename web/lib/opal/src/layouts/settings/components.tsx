@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { cn } from "@opal/utils";
 import { Divider, Button, Spacer } from "@opal/components";
 import type {
@@ -12,6 +12,7 @@ import type {
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 import { Content } from "@opal/layouts";
 import { SvgArrowLeft } from "@opal/icons";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Root
@@ -36,7 +37,7 @@ interface SettingsRootProps extends WithoutStyles<
 /**
  * Wrapper for settings pages. Creates a centered, scrollable container.
  * The `id="page-wrapper-scroll-container"` is referenced by `Header` for
- * scroll-shadow detection — do not remove it.
+ * scroll-shadow detection ÔÇö do not remove it.
  */
 function SettingsRoot({ width = "md", ...props }: SettingsRootProps) {
   return (
@@ -69,7 +70,7 @@ export interface SettingsHeaderProps {
  * Sticky header for settings pages. Shows a scroll shadow when the page
  * has scrolled. Headers with `rightChildren` are always sticky; others are not.
  *
- * Back button: set `backButton` to show a "← Back" button. Supply a function
+ * Back button: set `backButton` to show a "ÔåÉ Back" button. Supply a function
  * to override the default `router.back()` behavior.
  */
 function SettingsHeader({
@@ -82,6 +83,8 @@ function SettingsHeader({
   divider,
 }: SettingsHeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const { t } = useTranslation();
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
 
@@ -89,6 +92,25 @@ function SettingsHeader({
   const showBackButton = !!backButton;
   const onBack =
     typeof backButton === "function" ? backButton : () => router.back();
+
+  let displayTitle = title;
+  let displayDescription = description;
+
+  if (pathname && (pathname.startsWith("/admin/") || pathname.startsWith("/ee/admin/"))) {
+    const key = pathname.replace(/^\/(ee\/)?admin\//, "").replace(/[/-]/g, "_");
+    if (typeof title === "string") {
+      displayTitle = t(`admin.page_titles.${key}`, t(`admin.sidebar.routes.${key}`, title));
+    }
+    if (typeof description === "string") {
+      displayDescription = t(
+        `admin.${key}.desc`,
+        t(
+          `admin.${key}.description`,
+          t(`admin.${key}.page_description`, description)
+        )
+      );
+    }
+  }
 
   useEffect(() => {
     if (!isSticky) return;
@@ -132,8 +154,8 @@ function SettingsHeader({
           <div aria-label="admin-page-title">
             <Content
               icon={Icon}
-              title={title}
-              description={description}
+              title={displayTitle}
+              description={displayDescription}
               sizePreset="headline"
               variant="heading"
             />

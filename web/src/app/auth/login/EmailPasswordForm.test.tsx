@@ -143,7 +143,7 @@ describe("Email/Password Signup Workflow", () => {
 
     // User submits the signup form
     const signupButton = screen.getByRole("button", {
-      name: /create account/i,
+      name: /create an? account/i,
     });
     await user.click(signupButton);
 
@@ -209,7 +209,7 @@ describe("Email/Password Signup Workflow", () => {
 
     // User submits
     const signupButton = screen.getByRole("button", {
-      name: /create account/i,
+      name: /create an? account/i,
     });
     await user.click(signupButton);
 
@@ -244,7 +244,7 @@ describe("Email/Password Signup Workflow", () => {
 
     // User submits
     const signupButton = screen.getByRole("button", {
-      name: /create account/i,
+      name: /create an? account/i,
     });
     await user.click(signupButton);
 

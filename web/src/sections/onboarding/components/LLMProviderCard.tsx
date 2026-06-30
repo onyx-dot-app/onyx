@@ -14,6 +14,7 @@ import {
   SvgSettings,
 } from "@opal/icons";
 import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
+import { useTranslation } from "react-i18next";
 
 export interface LLMProviderCardProps {
   title: string;
@@ -32,6 +33,7 @@ function LLMProviderCardInner({
   isConnected,
   onClick,
 }: LLMProviderCardProps) {
+  const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
 
   const handleCardClick = useCallback(() => {
@@ -112,7 +114,7 @@ function LLMProviderCardInner({
           <div className="flex items-start p-1">
             <div className="flex items-center gap-0.5">
               <Text as="p" text03 secondaryAction>
-                Connect
+                {t("onboarding.llm.connect", "Connect")}
               </Text>
               <div className="p-0.5">
                 <SvgArrowExchange className="w-4 h-4 stroke-text-03" />

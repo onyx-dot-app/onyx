@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import "@opal/layouts/sidebar/styles.css";
 import {
@@ -17,6 +17,7 @@ import { SvgSidebar } from "@opal/icons";
 import type { RichStr } from "@opal/types";
 import { useSidebarState } from "@opal/layouts/root/components";
 import useScreenSize from "@opal/hooks/useScreenSize";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -110,7 +111,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Header — topbar (logo + fold button) with optional pinned content below
+// Header ÔÇö topbar (logo + fold button) with optional pinned content below
 // ---------------------------------------------------------------------------
 
 interface SidebarHeaderProps {
@@ -129,6 +130,7 @@ function SidebarHeader({
   showLogoWhenFolded = true,
   children,
 }: SidebarHeaderProps) {
+  const { t } = useTranslation();
   const foldable = useContext(SidebarFoldableContext);
   const { folded, setFolded } = useSidebarState();
   const toggleFolded = useCallback(
@@ -142,14 +144,14 @@ function SidebarHeader({
         <Button
           icon={SvgSidebar}
           prominence="tertiary"
-          tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
+          tooltip={folded ? t("chat.sidebar.open_sidebar", "Open Sidebar") : t("chat.sidebar.close_sidebar", "Close Sidebar")}
           tooltipSide={folded ? "right" : "bottom"}
           size="md"
           onClick={toggleFolded}
         />
       </div>
     ),
-    [folded, toggleFolded]
+    [folded, toggleFolded, t]
   );
 
   if (logo == null && !children) return null;
@@ -185,7 +187,7 @@ function SidebarHeader({
 }
 
 // ---------------------------------------------------------------------------
-// Body — scrollable content area with scroll-position persistence
+// Body ÔÇö scrollable content area with scroll-position persistence
 // ---------------------------------------------------------------------------
 
 interface SidebarBodyProps {
@@ -244,7 +246,7 @@ function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Footer — pinned content below the scroll area
+// Footer ÔÇö pinned content below the scroll area
 // ---------------------------------------------------------------------------
 
 interface SidebarFooterProps {
@@ -256,7 +258,7 @@ function SidebarFooter({ children }: SidebarFooterProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Section — titled group within the scrollable body
+// Section ÔÇö titled group within the scrollable body
 // ---------------------------------------------------------------------------
 
 interface SidebarSectionProps {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
@@ -124,6 +125,7 @@ function FormWarningsEffect() {
 }
 
 function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
+  const { t } = useTranslation();
   const { values, setFieldValue } = useFormikContext<{
     name: string;
     icon_name: string | null;
@@ -244,7 +246,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                 onClick={() => fileInputRef.current?.click()}
                 emphasized
               >
-                Upload Image
+                {t("agents.upload_image")}
               </LineItem>,
               null,
               <div key="icon-grid" className="grid grid-cols-4 gap-1">
@@ -538,6 +540,7 @@ export default function AgentEditorPage({
   agent: existingAgent,
   refreshAgent,
 }: AgentEditorPageProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const appRouter = useAppRouter();
   const { refresh: refreshAgents } = useAgents();
@@ -1313,7 +1316,7 @@ export default function AgentEditorPage({
                               }
                               type="submit"
                             >
-                              {existingAgent ? "Save" : "Create"}
+                              {existingAgent ? t("admin.agents.editor_save") : t("admin.agents.editor_create")}
                             </Button>
                           </Tooltip>
                         </div>
@@ -1338,21 +1341,21 @@ export default function AgentEditorPage({
                         alignItems="start"
                       >
                         <GeneralLayouts.Section>
-                          <InputVertical withLabel="name" title="Name">
+                          <InputVertical withLabel="name" title={t("admin.agents.editor_name")}>
                             <InputTypeInField
                               name="name"
-                              placeholder="Name your agent"
+                              placeholder={t("admin.agents.editor_name_placeholder")}
                             />
                           </InputVertical>
 
                           <InputVertical
                             withLabel="description"
-                            title="Description"
-                            suffix="optional"
+                            title={t("admin.agents.editor_description")}
+                            suffix={t("admin.llm.form.optional_suffix")}
                           >
                             <InputTextAreaField
                               name="description"
-                              placeholder="What does this agent do?"
+                              placeholder={t("admin.agents.editor_description_placeholder")}
                             />
                           </InputVertical>
                         </GeneralLayouts.Section>
@@ -1376,7 +1379,7 @@ export default function AgentEditorPage({
                         <InputVertical
                           withLabel="instructions"
                           title="Instructions"
-                          suffix="optional"
+                          suffix={t("admin.llm.form.optional_suffix")}
                           description="Add instructions to tailor the response for this agent."
                         >
                           <InputTextAreaField
@@ -1389,7 +1392,7 @@ export default function AgentEditorPage({
                           withLabel="starter_messages"
                           title="Conversation Starters"
                           description="Example messages that help users understand what this agent can do and how to interact with it effectively."
-                          suffix="optional"
+                          suffix={t("admin.llm.form.optional_suffix")}
                         >
                           <AgentStarterMessages />
                         </InputVertical>
@@ -1545,8 +1548,8 @@ export default function AgentEditorPage({
 
                       <SimpleCollapsible>
                         <SimpleCollapsible.Header
-                          title="Actions"
-                          description="Tools and capabilities available for this agent to use."
+                          title={t("admin.agents.editor_actions_title")}
+                          description={t("admin.agents.editor_actions_desc")}
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section
@@ -1560,8 +1563,8 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="image_generation"
-                                  title="Image Generation"
-                                  description="Generate and manipulate images using AI-powered tools."
+                                  title={t("admin.chat_preferences.tool_image_gen")}
+                                  description={t("admin.chat_preferences.tool_image_gen_desc")}
                                   disabled={!isImageGenerationAvailable}
                                 >
                                   <SwitchField
@@ -1576,8 +1579,8 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="web_search"
-                                  title="Web Search"
-                                  description="Search the web for real-time information and up-to-date results."
+                                  title={t("admin.chat_preferences.tool_web_search")}
+                                  description={t("admin.chat_preferences.tool_web_search_desc")}
                                   disabled={!webSearchTool}
                                 >
                                   <SwitchField
@@ -1592,8 +1595,8 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="open_url"
-                                  title="Open URL"
-                                  description="Fetch and read content from web URLs."
+                                  title={t("admin.chat_preferences.tool_open_url")}
+                                  description={t("admin.chat_preferences.tool_open_url_desc")}
                                   disabled={!openURLTool}
                                 >
                                   <SwitchField
@@ -1608,8 +1611,8 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="code_interpreter"
-                                  title="Code Interpreter"
-                                  description="Generate and run code."
+                                  title={t("admin.chat_preferences.tool_code_interpreter")}
+                                  description={t("admin.chat_preferences.tool_code_interpreter_desc")}
                                   disabled={!codeInterpreterTool}
                                 >
                                   <SwitchField
@@ -1624,8 +1627,8 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="coding_agent"
-                                  title="Coding Agent"
-                                  description="Investigate a GitHub repository and answer questions about its code."
+                                  title={t("admin.chat_preferences.tool_coding_agent")}
+                                  description={t("admin.chat_preferences.tool_coding_agent_desc")}
                                   disabled={!codingAgentTool}
                                 >
                                   <SwitchField
@@ -1695,8 +1698,8 @@ export default function AgentEditorPage({
                               <GeneralLayouts.Section>
                                 <InputHorizontal
                                   withLabel="llm_model"
-                                  title="Default Model"
-                                  description="This model will be used by Onyx by default in your chats."
+                                  title={t("admin.agents.editor_default_model")}
+                                  description={t("admin.agents.editor_default_model_desc")}
                                 >
                                   <ModelSelector
                                     value={
@@ -1716,7 +1719,7 @@ export default function AgentEditorPage({
                                 <InputHorizontal
                                   withLabel="knowledge_cutoff_date"
                                   title="Knowledge Cutoff Date"
-                                  suffix="optional"
+                                  suffix={t("admin.llm.form.optional_suffix")}
                                   description="Documents with a last-updated date prior to this will be ignored."
                                 >
                                   <InputDatePickerField
@@ -1739,7 +1742,7 @@ export default function AgentEditorPage({
                               <InputVertical
                                 withLabel="reminders"
                                 title="Reminders"
-                                suffix="optional"
+                                suffix={t("admin.llm.form.optional_suffix")}
                               >
                                 <InputTextAreaField
                                   name="reminders"

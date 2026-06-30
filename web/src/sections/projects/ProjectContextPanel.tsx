@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useDropzone } from "react-dropzone";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
@@ -33,6 +34,7 @@ export default function ProjectContextPanel({
   availableContextTokens = 128_000,
   setPresentingDocument,
 }: ProjectContextPanelProps) {
+  const { t } = useTranslation();
   const addInstructionModal = useCreateModal();
   const projectFilesModal = useCreateModal();
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
@@ -93,7 +95,7 @@ export default function ProjectContextPanel({
   });
 
   const currentProject = projects.find((p) => p.id === currentProjectId);
-  const projectName = currentProject?.name || "Loading project...";
+  const projectName = currentProject?.name || t("projects.loading_project");
 
   if (!currentProjectId) return null; // no selection yet
 
@@ -110,8 +112,8 @@ export default function ProjectContextPanel({
 
       <projectFilesModal.Provider>
         <UserFilesModal
-          title="Project Files"
-          description="Sessions in this project can access the files here."
+          title={t("projects.project_files_title")}
+          description={t("projects.project_files_desc")}
           recentFiles={[...allCurrentProjectFiles]}
           onView={handleOnView}
           handleUploadChange={handleUploadChange}
@@ -139,12 +141,12 @@ export default function ProjectContextPanel({
         <ContentAction
           sizePreset="main-ui"
           variant="section"
-          title="Instructions"
+          title={t("projects.instructions")}
           description={
             isLoadingProjectDetails && !currentProjectDetails
               ? undefined
               : currentProjectDetails?.project?.instructions ||
-                "Add instructions to tailor the response in this project."
+                t("projects.instructions_desc_empty")
           }
           descriptionMaxLines={2}
           padding="fit"
@@ -156,7 +158,7 @@ export default function ProjectContextPanel({
               onClick={() => addInstructionModal.toggle(true)}
               interaction={addInstructionModal.isOpen ? "active" : undefined}
             >
-              Set Instructions
+              {t("projects.set_instructions")}
             </Button>
           }
         />
@@ -168,8 +170,8 @@ export default function ProjectContextPanel({
           <ContentAction
             sizePreset="main-ui"
             variant="section"
-            title="Files"
-            description="Chats in this project can access these files."
+            title={t("projects.files")}
+            description={t("projects.files_desc")}
             padding="fit"
             center
             rightChildren={
@@ -180,7 +182,7 @@ export default function ProjectContextPanel({
                     prominence="tertiary"
                     interaction={open ? "active" : undefined}
                   >
-                    Add Files
+                    {t("projects.add_files")}
                   </Button>
                 )}
                 onFileClick={handleOnView}
@@ -215,8 +217,10 @@ export default function ProjectContextPanel({
                 <LineItemButton
                   sizePreset="main-ui"
                   variant="section"
-                  title="View files"
-                  description={`${displayFileCount} files`}
+                  title={t("projects.view_files")}
+                  description={t("projects.files_count", {
+                    count: displayFileCount,
+                  })}
                   icon={SvgFiles}
                   width="full"
                   onClick={() => projectFilesModal.toggle(true)}
@@ -242,8 +246,10 @@ export default function ProjectContextPanel({
                   <LineItemButton
                     sizePreset="main-ui"
                     variant="section"
-                    title="View All"
-                    description={`${displayFileCount} files`}
+                    title={t("projects.view_all")}
+                    description={t("projects.files_count", {
+                      count: displayFileCount,
+                    })}
                     rightChildren={
                       <SvgFiles className="h-5 w-5 stroke-text-02" />
                     }
@@ -257,9 +263,7 @@ export default function ProjectContextPanel({
 
               {projectTokenCount > availableContextTokens && (
                 <Text as="p" font="secondary-body" color="text-02">
-                  This project exceeds the model&apos;s context limits. Sessions
-                  will automatically search for relevant files first before
-                  generating response.
+                  {t("projects.context_limit_warning")}
                 </Text>
               )}
             </>
@@ -274,8 +278,8 @@ export default function ProjectContextPanel({
             >
               <Text as="p" font="secondary-body" color="inherit">
                 {isDragActive
-                  ? "Drop files here to add to this project"
-                  : "Add documents, texts, or images to use in the project. Drag & drop supported."}
+                  ? t("projects.dropzone_active")
+                  : t("projects.dropzone_desc")}
               </Text>
             </div>
           )}

@@ -18,6 +18,8 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { Section } from "@/layouts/general-layouts";
+import { useTranslation } from "react-i18next";
+import { getLocalizedToolLabel } from "@/lib/tool-i18n";
 
 export interface ActionItemProps {
   tool?: ToolSnapshot;
@@ -63,13 +65,16 @@ export default function ActionLineItem({
 }: ActionItemProps) {
   const router = useRouter();
   const { currentProjectId } = useProjectsContext();
+  const { t } = useTranslation();
 
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
   const toolName = tool?.name || providedLabel || "";
 
-  let label = tool ? tool.display_name || tool.name : providedLabel!;
+  let label = tool
+    ? getLocalizedToolLabel(tool, t)
+    : providedLabel!;
   if (!!currentProjectId && tool?.in_code_tool_id === SEARCH_TOOL_ID) {
-    label = "Project Search";
+    label = t("chat.actions.project_search", "Project Search");
   }
 
   const isSearchToolWithNoConnectors =
@@ -184,8 +189,8 @@ export default function ActionLineItem({
               <Button
                 aria-label={
                   isSearchToolWithNoConnectors
-                    ? "Add Connectors"
-                    : "Configure Connectors"
+                    ? t("chat.actions.add_connectors", "Add Connectors")
+                    : t("chat.actions.configure_connectors", "Configure Connectors")
                 }
                 icon={
                   isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
@@ -199,8 +204,8 @@ export default function ActionLineItem({
                 size="sm"
                 tooltip={
                   isSearchToolWithNoConnectors
-                    ? "Add Connectors"
-                    : "Configure Connectors"
+                    ? t("chat.actions.add_connectors", "Add Connectors")
+                    : t("chat.actions.configure_connectors", "Configure Connectors")
                 }
               />
             )}
