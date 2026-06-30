@@ -1860,12 +1860,12 @@ jobs:
         env:
           IMAGE: ${{ steps.scan-image.outputs.image }}
 
-      # Map results to main at the tag's commit (which release/nightly tags are
-      # cut from) so they land in the default-branch Security tab and auto-resolve
-      # once a later release stops reporting them. Skipped for test runs, whose
-      # commit may not be on main.
+      # Upload only for the rolling main-HEAD builds (nightly-latest / edge): their
+      # commit is the tip of main, so mapping to refs/heads/main keeps the Security
+      # tab authoritative and lets alerts auto-resolve on later main builds. Release
+      # /beta tags sit on older commits — they still gate, they just don't upload.
       - name: Upload audit results to GitHub Security tab
-        if: always() && steps.should-run.outputs.run == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
+        if: always() && steps.should-run.outputs.run == 'true' && env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
         uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
         with:
           sarif_file: image-audit.sarif
