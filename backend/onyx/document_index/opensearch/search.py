@@ -895,12 +895,16 @@ class DocumentQuery:
             persona_id_filter: If not None, only documents whose personas array
                 contains this persona ID will be retrieved. Primary — creates
                 a knowledge scope on its own.
-            time_cutoff: Time cutoff for the documents to retrieve. If not None,
-                Documents which were last updated before this date will not be
-                returned. For documents which do not have a value for their last
-                updated time, we assume some default age of
-                ASSUMED_DOCUMENT_AGE_DAYS for when the document was last
-                updated.
+            time_cutoff: Inclusive lower bound on a document's last updated time.
+                If not None, documents last updated before this time will not be
+                returned. Documents which have no last updated time are included
+                only when this bound is open-ended (time_cutoff_upper is None)
+                and older than ASSUMED_DOCUMENT_AGE_DAYS — a closed range cannot
+                vouch for an undated document.
+            time_cutoff_upper: Inclusive upper bound on a document's last updated
+                time. If not None, documents last updated after this time will
+                not be returned. May be set with or without time_cutoff. When
+                set, undated documents are always excluded.
             min_chunk_index: The minimum chunk index to retrieve, inclusive. If
                 None, no minimum chunk index will be applied.
             max_chunk_index: The maximum chunk index to retrieve, inclusive. If
