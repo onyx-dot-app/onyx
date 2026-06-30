@@ -101,6 +101,9 @@ class ModelPrice(BaseModel):
     provider: str | None
     input_per_mtok: float | None
     output_per_mtok: float | None
+    # null when the model/override doesn't price cache reads; the UI falls back
+    # to the input rate (how billing treats it).
+    cache_per_mtok: float | None = None
 
 
 class UserUsageResponse(BaseModel):
@@ -114,3 +117,6 @@ class UserUsageResponse(BaseModel):
     budget_period_hours: int | None = None
     # null when no default chat model is configured tenant-wide.
     selected_model_price: ModelPrice | None
+    # Every configured chat model's price (USD/1M) so the Usage tab can show all
+    # options, not just the tenant default. Empty when none are priced.
+    available_model_prices: list[ModelPrice] = []

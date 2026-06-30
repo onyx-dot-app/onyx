@@ -20,6 +20,7 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import fetch_default_llm_model
+from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
@@ -36,7 +37,7 @@ from onyx.db.user_usage import USAGE_PERIOD_HOURS
 from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.cost import get_model_price_per_million
+from onyx.llm.cost import get_model_prices_per_million
 from onyx.llm.cost_overrides import delete_override
 from onyx.llm.cost_overrides import invalidate_override_cache
 from onyx.llm.cost_overrides import list_overrides
@@ -190,7 +191,7 @@ def get_my_usage(
     selected_model_price: ModelPrice | None = None
     if default_model is not None:
         provider = default_model.llm_provider.provider
-        input_per_mtok, output_per_mtok = get_model_price_per_million(
+        input_per_mtok, output_per_mtok, cache_per_mtok = get_model_prices_per_million(
             default_model.name, provider, db_session
         )
         # Only surface a price block when both sides are known; an unpriced model
@@ -201,7 +202,33 @@ def get_my_usage(
                 provider=provider,
                 input_per_mtok=input_per_mtok,
                 output_per_mtok=output_per_mtok,
+                cache_per_mtok=cache_per_mtok,
             )
+
+    # Price every configured chat model so users can compare costs, not just the
+    # tenant default. Dedup on (provider, model); skip unpriced models.
+    available_model_prices: list[ModelPrice] = []
+    seen: set[tuple[str, str]] = set()
+    for prov in fetch_existing_llm_providers(db_session, flow_type_filter=[]):
+        for mc in prov.model_configurations:
+            key = (prov.provider, mc.name)
+            if key in seen:
+                continue
+            seen.add(key)
+            in_per_mtok, out_per_mtok, cache_per_mtok = get_model_prices_per_million(
+                mc.name, prov.provider, db_session
+            )
+            if in_per_mtok is not None and out_per_mtok is not None:
+                available_model_prices.append(
+                    ModelPrice(
+                        model=mc.name,
+                        provider=prov.provider,
+                        input_per_mtok=in_per_mtok,
+                        output_per_mtok=out_per_mtok,
+                        cache_per_mtok=cache_per_mtok,
+                    )
+                )
+    available_model_prices.sort(key=lambda p: (p.input_per_mtok or 0.0, p.model))
 
     budget_cents, budget_remaining_cents, budget_period_hours = _user_cost_budget(
         db_session, user_id
@@ -214,6 +241,7 @@ def get_my_usage(
         budget_remaining_cents=budget_remaining_cents,
         budget_period_hours=budget_period_hours,
         selected_model_price=selected_model_price,
+        available_model_prices=available_model_prices,
     )
 
 

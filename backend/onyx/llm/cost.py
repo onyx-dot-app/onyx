@@ -87,6 +87,44 @@ def get_model_price_per_million(
         return None, None
 
 
+def get_model_prices_per_million(
+    model: str,
+    provider: str | None,
+    db_session: Session | None = None,
+) -> tuple[float | None, float | None, float | None]:
+    """(input, output, cache-read) USD per 1M tokens, override-aware.
+
+    Same resolution as get_model_price_per_million, plus the cache-read rate.
+    Cache is None when neither an override nor litellm prices cache reads (the UI
+    then falls back to the input rate, which is how billing treats it). Never raises.
+    """
+    if db_session is not None:
+        try:
+            rates = cost_overrides.get_override(db_session, model, provider or "")
+        except Exception:
+            logger.exception("Override lookup failed for model %s", model)
+            rates = None
+        if rates is not None:
+            # rates is (input, output, cache).
+            return rates[0], rates[1], rates[2]
+
+    try:
+        import litellm
+
+        entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
+        input_per_tok = entry.get("input_cost_per_token")
+        output_per_tok = entry.get("output_cost_per_token")
+        cache_per_tok = entry.get("cache_read_input_token_cost")
+        return (
+            float(input_per_tok) * 1_000_000 if input_per_tok is not None else None,
+            float(output_per_tok) * 1_000_000 if output_per_tok is not None else None,
+            float(cache_per_tok) * 1_000_000 if cache_per_tok is not None else None,
+        )
+    except Exception:
+        logger.debug("No price-per-million for model %s (provider %s)", model, provider)
+        return None, None, None
+
+
 def _image_cost_cents(model: str, provider: str | None) -> float:
     """Per-image cost in cents from litellm, falling back to a flat constant.
 
