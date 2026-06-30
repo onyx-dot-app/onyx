@@ -31,11 +31,9 @@ jobs:
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
-      # The amd64 default (m7i-flex.large) has no local NVMe, so docker's
-      # data-root and /tmp share a small root volume. osv-scanner pulls the image
-      # AND writes a full `docker save` tar (~2x the image size), which overflows
-      # the default disk on large images (model-server). Size the root volume up.
-      - volume=80gb:gp3
+      # osv-scanner pulls the image and writes a full `docker save` tar (~2x its
+      # size); size the root volume up so large images don't fill the disk.
+      - volume=40gb
       - run-id=${{ github.run_id }}-test-image-audit-${{ matrix.component }}
     timeout-minutes: 20
     strategy:

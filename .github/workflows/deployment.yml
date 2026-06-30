@@ -1740,16 +1740,12 @@ jobs:
        needs.build-sandbox-amd64.result == 'success')
     runs-on:
       - runs-on
-      # Must match the amd64 images this job scans: `ods audit image` shells out
-      # to the docker CLI (`docker pull`/`save`), which refuses an amd64 image on
-      # an arm64 host. (Trivy pulled platform-specific manifests daemonlessly, so
-      # it didn't care.)
+      # amd64 to match the images scanned: `ods audit image` uses the docker CLI,
+      # which won't pull an amd64 image onto an arm64 host.
       - runner=2cpu-linux-x64
-      # m7i-flex.large has no local NVMe, so docker's data-root and /tmp share the
-      # root volume. osv-scanner pulls the image AND writes a full `docker save`
-      # tar (~2x the image size); the default disk overflows on large images
-      # (model-server). Size the root volume up to fit both.
-      - volume=80gb:gp3
+      # osv-scanner pulls the image and writes a full `docker save` tar (~2x its
+      # size); size the root volume up so large images don't fill the disk.
+      - volume=40gb
       - run-id=${{ github.run_id }}-image-audit-${{ matrix.component }}
       - extras=ecr-cache
     permissions:
