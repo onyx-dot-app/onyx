@@ -10,8 +10,10 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import NotificationType
 from onyx.db.models import Notification
 from onyx.db.models import User
+from onyx.db.notification import batch_create_notifications
 from onyx.db.notification import count_notifications
 from onyx.db.notification import create_notification
+from onyx.db.notification import delete_notifications_by_additional_data
 from onyx.db.notification import dismiss_user_notifications
 from onyx.db.notification import get_notifications
 from onyx.server.features.notifications import api as notifications_api
@@ -336,6 +338,89 @@ def test_notification_summary_and_dismiss_all_api(
         select(Notification).where(Notification.id == other_user_notification.id)
     ).one()
     assert other_user_row.dismissed is False
+
+
+def test_delete_notifications_by_additional_data_clears_all_admins_for_cc_pair(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    # Mirrors the connector-error flow: an alert is fanned out to every admin
+    # on error, then cleared for all of them when the connector recovers.
+    admin_one = create_test_user(db_session, "notif_delete_admin_one")
+    admin_two = create_test_user(db_session, "notif_delete_admin_two")
+
+    batch_create_notifications(
+        user_ids=[admin_one.id, admin_two.id],
+        notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
+        db_session=db_session,
+        title="Connector in repeated error state",
+        additional_data={"cc_pair_id": 1},
+    )
+    # A different connector and a different type must survive the targeted clear.
+    create_notification(
+        user_id=admin_one.id,
+        notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
+        db_session=db_session,
+        title="Other connector in repeated error state",
+        additional_data={"cc_pair_id": 2},
+    )
+    create_notification(
+        user_id=admin_one.id,
+        notif_type=NotificationType.APPROVAL_REQUESTED,
+        db_session=db_session,
+        title="Approval for cc_pair 1",
+        additional_data={"cc_pair_id": 1},
+    )
+
+    admin_ids = [admin_one.id, admin_two.id]
+
+    def rows_for(notif_type: NotificationType) -> list[Notification]:
+        # Scope to the users this test created — the shared DB carries committed
+        # rows from other tests, so a global query by type is not isolated.
+        return list(
+            db_session.scalars(
+                select(Notification).where(
+                    Notification.user_id.in_(admin_ids),
+                    Notification.notif_type == notif_type,
+                )
+            ).all()
+        )
+
+    # Both admins start with a cc_pair_id=1 error notification.
+    assert (
+        len(
+            [
+                n
+                for n in rows_for(NotificationType.CONNECTOR_REPEATED_ERRORS)
+                if n.additional_data == {"cc_pair_id": 1}
+            ]
+        )
+        == 2
+    )
+
+    # Dismissal must not shield a row from recovery cleanup — otherwise a
+    # dismissed-then-recovered connector would never alert again.
+    dismissed_row = next(
+        n
+        for n in rows_for(NotificationType.CONNECTOR_REPEATED_ERRORS)
+        if n.user_id == admin_one.id and n.additional_data == {"cc_pair_id": 1}
+    )
+    dismissed_row.dismissed = True
+    db_session.commit()
+
+    delete_notifications_by_additional_data(
+        notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
+        db_session=db_session,
+        additional_data={"cc_pair_id": 1},
+    )
+    db_session.commit()
+
+    # Every admin's cc_pair_id=1 row is gone; the cc_pair_id=2 row is untouched.
+    assert [
+        n.additional_data for n in rows_for(NotificationType.CONNECTOR_REPEATED_ERRORS)
+    ] == [{"cc_pair_id": 2}]
+    # A different notif_type with the same cc_pair_id is not affected.
+    assert len(rows_for(NotificationType.APPROVAL_REQUESTED)) == 1
 
 
 def _disable_notification_ensure_checks(monkeypatch: pytest.MonkeyPatch) -> None:
