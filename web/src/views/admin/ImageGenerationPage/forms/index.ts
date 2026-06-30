@@ -3,3 +3,4 @@ export { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/Ima
 export { OpenAIImageGenForm } from "@/views/admin/ImageGenerationPage/forms/OpenAIImageGenForm";
 export { AzureImageGenForm } from "@/views/admin/ImageGenerationPage/forms/AzureImageGenForm";
 export { getImageGenForm } from "@/views/admin/ImageGenerationPage/forms/getImageGenForm";
+export { OpenRouterImageGenForm } from "@/views/admin/ImageGenerationPage/forms/OpenRouterImageGenForm";
