@@ -83,6 +83,12 @@ export default function CreateRateLimitModal({
               .integer("Time Window must be a whole number of days")
               .min(1, "Time Window must be at least 1 day"),
             token_budget: Yup.number()
+              // Empty (no token budget) is allowed — a cost-only limit. Without
+              // this, "" coerces to NaN and trips .min(1) even when only a cost
+              // budget is set. Mirrors the cost_budget_dollars transform below.
+              .transform((value, original) =>
+                original === "" ? undefined : value,
+              )
               .min(1, "Token Budget must be at least 1")
               .test(
                 "budget-required",
