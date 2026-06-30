@@ -19,6 +19,32 @@ if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
     echo "[entrypoint] WARNING: OPENCODE_SERVER_PASSWORD is empty — opencode serve will run without auth"
 fi
 
+# Trust the egress-proxy MITM CA in Chromium's NSS db (Chromium reads trust only
+# from there) so the browser skill's HTTPS works. No-op without the browser
+# runtime (certutil absent). Best-effort — never block boot.
+import_proxy_ca() {
+    command -v certutil >/dev/null 2>&1 || return 0
+    local bundle="${SANDBOX_PROXY_CA_BUNDLE_DST:-/etc/ssl/sandbox/ca-bundle.crt}"
+    [ -f "$bundle" ] || return 0
+    local nssdb="${HOME:-/home/sandbox}/.pki/nssdb"
+    mkdir -p "$nssdb"
+    [ -f "$nssdb/cert9.db" ] || certutil -d "sql:$nssdb" -N --empty-password
+    # The bundle is many roots; `certutil -A` imports one cert at a time, so split.
+    local splitdir imported=0 f
+    splitdir="$(mktemp -d)"
+    csplit -z -f "$splitdir/ca-" -b "%03d.pem" "$bundle" "/BEGIN CERTIFICATE/" "{*}" >/dev/null 2>&1 || true
+    for f in "$splitdir"/ca-*.pem; do
+        [ -f "$f" ] || continue
+        certutil -d "sql:$nssdb" -A -t "C,," -n "proxy-$(basename "$f" .pem)" -i "$f" 2>/dev/null \
+            && imported=$((imported + 1))
+    done
+    rm -rf "$splitdir"
+    [ "$imported" -gt 0 ]
+}
+import_proxy_ca \
+    && echo "[entrypoint] imported proxy CA into Chromium NSS db" \
+    || echo "[entrypoint] proxy CA not imported into NSS (browser runtime absent or CA missing)"
+
 backoff=1
 max_backoff=30
 

@@ -30,10 +30,14 @@ agent's life simple — it just uses the plain commands. The wrapper, per call:
   seccomp), the egress proxy as a `--proxy-server` flag (Chromium ignores
   `*_PROXY` env; userinfo is stripped since the proxy authorizes by source IP),
   and headless-stability flags. Defaults only — anything already exported wins.
-- **Trusts the proxy CA** — imports the egress-proxy CA bundle into Chromium's
-  per-user NSS db (`~/.pki/nssdb`) so HTTPS through the MITM proxy is trusted.
-  Idempotent (a single `stat` once imported); splits the bundle and imports every
-  cert (a single `certutil -A -i <bundle>` imports only the first).
+
+Proxy-CA trust is **not** done here — it's a once-at-startup step in
+`entrypoint.sh` (the main container, as uid 1000), which imports the egress-proxy
+CA bundle into Chromium's per-user NSS db (`~/.pki/nssdb`) so HTTPS through the
+MITM proxy is trusted. It runs in the main container (not the K8s
+`firewall-init` initContainer, whose `/home/sandbox` isn't shared), splits the
+bundle and imports every cert (`certutil -A -i` imports only the first), and is
+a no-op without the browser runtime.
 
 Why a real PATH executable and not a bashrc alias: opencode runs the agent's
 `bash` tool in non-interactive shells, which don't source `~/.bashrc` or expand
