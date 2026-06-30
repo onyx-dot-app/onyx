@@ -83,33 +83,32 @@ function InputErrorText({ children, type = "error" }: InputErrorTextProps) {
   );
 }
 
-export interface VerticalProps extends InputLayoutBaseProps {
-  subDescription?: string;
-}
+export type VerticalProps = InputLayoutBaseProps;
 
+// Title sits above the input; the description renders below it (see the card
+// layout in Figma "Sign-In / Onboarding").
 function Vertical({
   title,
   description,
   suffix,
   error,
   errorType = "error",
-  subDescription,
   disabled,
   children,
   className,
 }: VerticalProps) {
   return (
     <View className={cn("w-full", disabled && "opacity-50", className)}>
-      <Label title={title} description={description} suffix={suffix} />
+      <Label title={title} suffix={suffix} />
       <View className="mt-4">{children}</View>
       {error ? (
         <View className="mt-4">
           <InputErrorText type={errorType}>{error}</InputErrorText>
         </View>
       ) : null}
-      {subDescription ? (
+      {description ? (
         <Text font="secondary-body" color="text-03" className="mt-4">
-          {subDescription}
+          {description}
         </Text>
       ) : null}
     </View>

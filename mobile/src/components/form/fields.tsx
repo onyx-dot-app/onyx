@@ -44,7 +44,6 @@ interface FieldBaseProps<
   rules?: FieldRules<TFieldValues, TName>;
   title: string;
   description?: string;
-  subDescription?: string;
   suffix?: "optional" | (string & {});
   /** Value still submits while disabled. */
   disabled?: boolean;
@@ -97,7 +96,6 @@ function TextInputField<
   rules,
   title,
   description,
-  subDescription,
   suffix,
   disabled,
   ...input
@@ -110,7 +108,6 @@ function TextInputField<
     <Vertical
       title={title}
       description={description}
-      subDescription={subDescription}
       suffix={suffix}
       error={error}
       disabled={disabled}
@@ -152,7 +149,6 @@ function PasswordInputField<
   rules,
   title,
   description,
-  subDescription,
   suffix,
   disabled,
   ...input
@@ -165,7 +161,6 @@ function PasswordInputField<
     <Vertical
       title={title}
       description={description}
-      subDescription={subDescription}
       suffix={suffix}
       error={error}
       disabled={disabled}
