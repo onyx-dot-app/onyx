@@ -94,15 +94,22 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     && rm -rf /var/lib/apt/lists/*; \
     fi
 
-# Do NOT run `agent-browser install` — it fetches Chrome-for-Testing (no arm64
-# build); we use system chromium via AGENT_BROWSER_EXECUTABLE_PATH. --allow-scripts
-# lets agent-browser's npm postinstall run on npm 11+. certutil (libnss3-tools)
-# imports the egress-proxy CA into Chromium's NSS db.
+# Chromium engine + certutil (libnss3-tools imports the egress-proxy CA into
+# Chromium's NSS db). Its own layer: big and rarely-changing, so an
+# AGENT_BROWSER_VERSION bump below re-pulls only the small CLI layer, not this.
 RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     chromium \
     libnss3-tools \
-    && rm -rf /var/lib/apt/lists/* && \
+    && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+# agent-browser CLI/daemon — separate layer so it pulls in parallel with the
+# chromium layer and churns independently of it. Do NOT run `agent-browser
+# install` — it fetches Chrome-for-Testing (no arm64 build); we use system
+# chromium via AGENT_BROWSER_EXECUTABLE_PATH. --allow-scripts lets agent-browser's
+# npm postinstall run on npm 11+.
+RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
     npm install -g --allow-scripts=agent-browser "agent-browser@${AGENT_BROWSER_VERSION}" && \
     agent-browser --version && \
     npm cache clean --force && \
