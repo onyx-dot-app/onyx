@@ -1,0 +1,105 @@
+# Smoke test for `ods audit image`, built from the PR (not the published
+# onyx-devtools), so changes to the image-audit path can be exercised before a
+# release. Mirrors the real `image-audit` job in deployment.yml: an amd64
+# runs-on runner pulls a published image and runs the locally-built binary over
+# it. Findings are informational here — the job only fails if the scan itself
+# can't complete (the failure mode this harness exists to debug).
+name: Test Image Audit
+
+concurrency:
+  group: test-image-audit-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - "tools/ods/**"
+      - ".github/workflows/test-image-audit.yml"
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Image ref to audit (overrides the matrix default)"
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  audit-image:
+    permissions:
+      contents: read # checkout + build
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-test-image-audit-${{ matrix.component }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: backend
+            image: docker.io/onyxdotapp/onyx-backend:latest
+          - component: web
+            image: docker.io/onyxdotapp/onyx-web-server:latest
+          # The largest image — most likely to surface a `docker save` failure.
+          - component: model-server
+            image: docker.io/onyxdotapp/onyx-model-server:latest
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
+        with:
+          go-version-file: tools/ods/go.mod
+          cache-dependency-path: tools/ods/go.sum
+
+      - name: Build ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
+        working-directory: tools/ods
+
+      # Public images, but anonymous pulls are rate-limited; log in when creds
+      # are available. continue-on-error so a missing secret falls back to an
+      # anonymous pull instead of failing the job.
+      - name: Login to Docker Hub
+        continue-on-error: true
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Audit image
+        env:
+          ODS: ${{ runner.temp }}/ods
+          IMAGE: ${{ inputs.image != '' && inputs.image || matrix.image }}
+        run: |
+          set -uo pipefail
+
+          echo "::group::Environment"
+          docker version || true
+          df -h || true
+          echo "::endgroup::"
+
+          echo "Auditing image: ${IMAGE}"
+          set +e
+          "${ODS}" audit image "${IMAGE}" --fail-on=critical --format=text 2>&1 | tee audit.out
+          status=${PIPESTATUS[0]}
+          set -e
+
+          echo "::group::Post-scan disk"
+          df -h || true
+          docker system df || true
+          echo "::endgroup::"
+
+          # log.Fatalf("Image audit failed: ...") is the only path that means the
+          # scan could not run. A non-zero exit without it just means findings at
+          # or above --fail-on, which is fine for a smoke test.
+          if grep -q "Image audit failed" audit.out; then
+            echo "::error::ods audit image could not complete the scan for ${IMAGE} (see osv-scanner stderr above)"
+            exit 1
+          fi
+          echo "Scan completed (ods exit=${status}); findings above are informational."
