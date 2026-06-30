@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSWRConfig } from "swr";
 
 import { Button, Text } from "@opal/components";
+import { Content } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import {
   ConnectAppDecision,
@@ -182,16 +183,21 @@ export default function SetupCard({
         <div
           data-testid="setup-card"
           className={cn(
-            "rounded-08 border bg-background-neutral-00 p-3 flex items-center gap-2 transition-colors",
+            "rounded-08 border bg-background-neutral-00 p-3 transition-colors",
             connected ? "border-status-success-03" : "border-status-error-03"
           )}
         >
-          <Logo className="size-5 shrink-0" />
-          <Text font="secondary-body" color="text-03">
-            {connected
-              ? `${appName} connected.`
-              : `Skipped connecting ${appName}.`}
-          </Text>
+          <Content
+            sizePreset="secondary"
+            variant="body"
+            icon={Logo}
+            color={connected ? "muted" : "danger"}
+            title={
+              connected
+                ? `${appName} connected.`
+                : `Skipped connecting ${appName}.`
+            }
+          />
         </div>
       </CometEdge>
     );
@@ -203,15 +209,15 @@ export default function SetupCard({
         data-testid="setup-card"
         className="rounded-08 border border-status-info-03 bg-background-neutral-00 p-3 flex flex-col gap-2"
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <Logo className="size-5 shrink-0" />
-          <Text font="main-ui-action" color="text-05" nowrap>
-            {`Connect ${appName}`}
-          </Text>
-        </div>
-        <Text font="secondary-body" color="text-03">
-          {reason ?? `The agent needs ${appName} to continue this task.`}
-        </Text>
+        <Content
+          sizePreset="main-ui"
+          variant="section"
+          icon={Logo}
+          title={`Connect ${appName}`}
+          description={
+            reason ?? `The agent needs ${appName} to continue this task.`
+          }
+        />
         {error && (
           <Text font="secondary-body" color="text-03">
             {error}
