@@ -1714,7 +1714,12 @@ jobs:
             -f event_type=new-cloud-image \
             -F "client_payload[version]=${VERSION}"
 
-  trivy-scan:
+  # Scan the freshly built images for known OS/language-package vulnerabilities
+  # via `ods audit image`, which uses osv-scanner's layer-aware container scanner
+  # (the same library and OSV data source as the dependency `audit-gate`).
+  # Gates the release on unsuppressed CRITICAL findings; suppressions live in the
+  # shared S3 allowlist, and SARIF is uploaded to the Security tab regardless.
+  image-audit:
     needs:
       - determine-builds
       - merge-web
@@ -1732,12 +1737,13 @@ jobs:
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
-      - run-id=${{ github.run_id }}-trivy-scan-${{ matrix.component }}
+      - run-id=${{ github.run_id }}-image-audit-${{ matrix.component }}
       - extras=ecr-cache
     permissions:
-      contents: read # needed to checkout the repo on private repos (no-op on public)
-      security-events: write # needed for SARIF uploads
-    timeout-minutes: 10
+      contents: read # checkout + uv project context
+      id-token: write # OIDC for fetching the S3 allowlist
+      security-events: write # SARIF uploads
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -1748,7 +1754,6 @@ jobs:
             registry-image: onyxdotapp/onyx-web-server-cloud
           - component: backend
             registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
-            trivyignore: backend/.trivyignore
           - component: model-server
             registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
           - component: sandbox
@@ -1781,10 +1786,32 @@ jobs:
         if: steps.should-run.outputs.run == 'true'
 
       - name: Checkout
-        if: steps.should-run.outputs.run == 'true' && matrix.trivyignore != ''
+        if: steps.should-run.outputs.run == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Setup uv
+        if: steps.should-run.outputs.run == 'true'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        with:
+          version: "0.9.9"
+          enable-cache: false
+
+      - name: Configure AWS credentials
+        if: steps.should-run.outputs.run == 'true'
+        continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # ratchet:aws-actions/configure-aws-credentials@v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Login to Docker Hub
+        if: steps.should-run.outputs.run == 'true'
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Determine scan image
         if: steps.should-run.outputs.run == 'true'
@@ -1802,24 +1829,23 @@ jobs:
           REGISTRY_IMAGE: ${{ matrix.registry-image }}
           REF_NAME: ${{ github.ref_name }}
 
-      - name: Run Trivy vulnerability scanner
+      - name: Run image vulnerability audit
         if: steps.should-run.outputs.run == 'true'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
-        with:
-          image-ref: ${{ steps.scan-image.outputs.image }}
-          severity: CRITICAL,HIGH
-          format: "sarif"
-          output: "trivy-results.sarif"
-          trivyignores: ${{ matrix.trivyignore }}
+        # Writes SARIF to a file and exits non-zero on unsuppressed CRITICAL
+        # findings, which gates the release. The upload step below runs even when
+        # this step fails so the findings still reach the Security tab.
+        run: |
+          uv run --no-sync --with onyx-devtools ods audit image "$IMAGE" \
+            --fail-on=critical --format=sarif > image-audit.sarif
         env:
-          TRIVY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          TRIVY_PASSWORD: ${{ secrets.DOCKER_TOKEN }}
+          IMAGE: ${{ steps.scan-image.outputs.image }}
 
-      - name: Upload Trivy scan results to GitHub Security tab
-        if: steps.should-run.outputs.run == 'true'
+      - name: Upload audit results to GitHub Security tab
+        if: always() && steps.should-run.outputs.run == 'true'
         uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
         with:
-          sarif_file: "trivy-results.sarif"
+          sarif_file: image-audit.sarif
+          category: image-audit-${{ matrix.component }}
 
   notify-slack-on-failure:
     needs:
@@ -1843,7 +1869,8 @@ jobs:
       - build-sandbox-amd64
       - build-sandbox-arm64
       - merge-sandbox
-    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+      - image-audit
+    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure' || needs.image-audit.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
