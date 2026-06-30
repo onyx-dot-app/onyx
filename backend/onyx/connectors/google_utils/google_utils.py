@@ -1,5 +1,6 @@
 import re
 import socket
+import ssl
 import time
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -173,9 +174,12 @@ def _execute_single_retrieval(
         else:
             logger.exception("Error executing request:")
             raise e
-    except (TimeoutError, socket.timeout) as error:
+    except (TimeoutError, socket.timeout, ConnectionError, ssl.SSLError) as error:
+        # Connection-level drops (broken pipe, reset, SSL teardown) hit mid-crawl
+        # on long parallel Drive paginations; retry the page rather than failing
+        # the whole attempt.
         logger.warning(
-            "Timed out executing Google API request; retrying with backoff. Details: %s",
+            "Transient network error executing Google API request; retrying with backoff. Details: %s",
             error,
         )
         results = add_retries(lambda: retrieval_function(**request_kwargs).execute())()
