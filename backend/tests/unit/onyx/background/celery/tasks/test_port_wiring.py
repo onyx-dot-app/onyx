@@ -10,6 +10,7 @@ or `-Q` entry would silently break with every other test still green:
   ->  light worker has run_port_attempt registered to execute it.
 """
 
+import re
 from pathlib import Path
 
 from onyx.background.celery.tasks.beat_schedule import beat_task_templates
@@ -27,16 +28,23 @@ def _find_supervisord_conf() -> Path:
 
 
 def _worker_queues(program: str) -> set[str]:
-    """The `-Q` queue set a supervisord worker program consumes."""
-    lines = _find_supervisord_conf().read_text().splitlines()
-    in_program = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("[program:"):
-            in_program = stripped == f"[program:{program}]"
-        elif in_program and stripped.startswith("-Q "):
-            return {q.strip() for q in stripped[len("-Q ") :].split(",")}
-    raise AssertionError(f"no -Q line found for [program:{program}]")
+    """The `-Q` queue set a supervisord worker program consumes.
+
+    Reads the queues from anywhere in the `[program:*]` block, so it survives the
+    `command=celery ... -Q a,b,c` being on one line or wrapped across several.
+    """
+    conf = _find_supervisord_conf().read_text()
+    block = re.search(
+        rf"^\[program:{re.escape(program)}\]\n(.*?)(?=^\[|\Z)",
+        conf,
+        re.DOTALL | re.MULTILINE,
+    )
+    if block is None:
+        raise AssertionError(f"no [program:{program}] block found")
+    queues = re.search(r"-Q\s+(\S+)", block.group(1))
+    if queues is None:
+        raise AssertionError(f"no -Q queues found in [program:{program}]")
+    return set(queues.group(1).split(","))
 
 
 def test_check_for_port_scheduled_in_beat() -> None:
