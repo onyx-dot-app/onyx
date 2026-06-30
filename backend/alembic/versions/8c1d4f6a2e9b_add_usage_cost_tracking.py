@@ -5,7 +5,7 @@ and adds a cost budget to token rate limits (token budget becomes nullable so a
 limit can be token-only, cost-only, or both).
 
 Revision ID: 8c1d4f6a2e9b
-Revises: f3a9c1d4b7e2
+Revises: 99c855a8f2a1
 Create Date: 2026-06-05 00:00:00.000000
 
 """
@@ -16,7 +16,7 @@ import fastapi_users_db_sqlalchemy
 
 # revision identifiers, used by Alembic.
 revision = "8c1d4f6a2e9b"
-down_revision = "f3a9c1d4b7e2"
+down_revision = "99c855a8f2a1"
 branch_labels = None
 depends_on = None
 
