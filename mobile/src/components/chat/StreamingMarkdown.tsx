@@ -15,17 +15,12 @@ interface StreamingMarkdownProps {
 const BODY = textPresets["main-content-body"];
 const MONO = textPresets["main-content-mono"];
 
-// Mirrors the web chat renderer (`prose prose-onyx` + the MemoizedParagraph/CodeBlock component
-// overrides). Each token below is the one web actually resolves per element; sizes are web's
-// computed pixels (prose base = 16px). Web sources: prose vars in custom-code-styles.css, heading
-// sizes from Tailwind Typography defaults, margins from globals.css `.prose` overrides, inline/code
-// from CodeBlock.tsx.
+// Markdown element styles as concrete values (enriched-markdown takes literals, not NativeWind
+// classes): Onyx tokens on a 16px body base; heading/code sizes are fixed pixels.
 function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
   const vars = scheme === "dark" ? varsDark : varsLight;
   const color = (token: string): string => vars[token] ?? "#000000";
-  // Fenced code has no Onyx token on web — it shows the `.hljs` base color (Atom One Light/Dark)
-  // from custom-code-styles.css. We can't reproduce per-token syntax highlighting with the single
-  // flat color this library exposes, so mirror that base literal as the closest match.
+  // Fenced code has no Onyx token; use the Atom One base color (one flat color — no per-token highlighting).
   const codeBaseColor = scheme === "dark" ? "#e2e6eb" : "#383a42";
   return {
     paragraph: {
@@ -33,8 +28,7 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
       fontFamily: BODY.fontFamily,
       fontSize: BODY.fontSize,
       lineHeight: BODY.lineHeight,
-      // marginTop 0 (not web's 0.5em): RN doesn't collapse margins, so 0/8 yields web's collapsed
-      // 8px inter-paragraph rhythm and matches the `.prose > :first-child` zero top margin.
+      // marginTop 0: RN doesn't collapse margins, so 0 top + 8 bottom gives an even 8px rhythm.
       marginTop: 0,
       marginBottom: 8,
     },
@@ -66,7 +60,7 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
       marginBottom: 10,
     },
     strong: { color: color("--text-05"), fontWeight: "bold" },
-    // No color: like web, italics inherit their block color (paragraph/list text-05, blockquote text-04).
+    // No color: italics inherit their block color (paragraph/list text-05, blockquote text-04).
     em: { fontStyle: "italic" },
     link: { color: color("--action-link-05"), underline: true },
     list: {
@@ -87,7 +81,7 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
       fontSize: 12,
       color: codeBaseColor,
       backgroundColor: color("--background-code-01"),
-      // Web code blocks have no border; the tint-00 card + rounded-12 give them shape.
+      // No border; the card background + rounded-12 give code blocks their shape.
       borderRadius: 12,
       padding: 8,
     },
@@ -103,8 +97,7 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
       marginTop: 20,
       marginBottom: 16,
     },
-    // Web tables sit on a `--background-neutral-01` card (ScrollableTable) with prose grey borders.
-    // The library draws a full grid (web uses horizontal rules only), but tokens keep it theme-correct.
+    // The library draws a full grid; the neutral-01 card + token borders keep it theme-correct.
     table: {
       color: color("--text-05"),
       borderColor: color("--border-01"),

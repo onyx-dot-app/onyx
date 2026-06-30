@@ -161,8 +161,8 @@ export function useChatController(sessionId: string | null): ChatController {
   const submit = useCallback(async () => {
     const text = input.trim();
     if (!text) return;
-    // Clear synchronously (mirrors web's clearMessage() right after onSubmit) so a second tap during
-    // the create-session await can't double-submit — the input is already empty, so canSend is false.
+    // Clear synchronously so a second tap during the create-session await can't double-submit
+    // (the input is empty → canSend is false).
     setInput("");
 
     let activeId = sessionId;
