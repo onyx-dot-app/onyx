@@ -26,13 +26,14 @@ from onyx.db.skill import fetch_skill_by_id
 from onyx.db.skill import fetch_skill_for_user
 from onyx.db.skill import fetch_skill_for_user_by_slug
 from onyx.db.skill import get_group_ids_for_skill
-from onyx.db.skill import list_skills_for_admin
+from onyx.db.skill import list_skills
 from onyx.db.skill import list_skills_for_user
 from onyx.db.skill import lock_personal_skills_for_user
 from onyx.db.skill import patch_skill
 from onyx.db.skill import replace_skill_bundle
 from onyx.db.skill import replace_skill_grants
 from onyx.db.skill import skill_ids_with_grants
+from onyx.db.skill import SkillAccessPolicy
 from onyx.db.skill import SkillPatch
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -180,10 +181,16 @@ def _preview_response_for_skill(
 
 @admin_router.get("")
 def list_skills_admin(
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
-    rows = list(list_skills_for_admin(db_session=db_session))
+    rows = list(
+        list_skills(
+            policy=SkillAccessPolicy.VIEW,
+            user=user,
+            db_session=db_session,
+        )
+    )
     builtins, customs = _split_rows(rows, db_session, include_grants=True)
     return SkillsList(builtins=builtins, customs=customs)
 

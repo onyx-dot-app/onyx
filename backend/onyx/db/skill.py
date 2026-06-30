@@ -1,13 +1,13 @@
-"""DB operations for custom (admin-uploaded) skills.
+"""DB operations for skill rows.
 
 Access model:
-- Admin reads: see every row. Disabled skills stay visible so admins can
-  re-enable them.
-- User reads: filter `enabled = True` (except the user's own personal skills,
-  which stay listed while disabled so the owner can re-enable them), plus
-  `is_public` OR the user is in a group that has been granted access OR the
-  skill is the user's own personal skill (custom, non-public, zero group
-  grants, authored by the user).
+- `VIEW` is the skills UI/read API policy. It excludes external-app-backed rows,
+  applies user visibility, and lets admins view all non-external-app rows.
+- `EDIT` is the skill mutation policy. It excludes external-app-backed
+  and built-in rows, and only returns rows the user can modify.
+- `USE` is the runtime/sandbox policy. It applies user visibility without an
+  admin bypass, requires enabled rows, includes available external-app-backed
+  rows, and hides unavailable built-ins.
 
 Delete is a hard delete — `delete_skill` removes the row and returns its
 `bundle_file_id` so the caller can drop the blob from the file store
@@ -22,11 +22,13 @@ import hashlib
 import struct
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import Enum
 from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import ColumnElement
 from sqlalchemy import delete
+from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import Select
@@ -36,12 +38,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SkillSharePermission
 from onyx.db.external_app import is_user_authenticated_for_app
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Sandbox
 from onyx.db.models import Skill
+from onyx.db.models import Skill__User
 from onyx.db.models import Skill__UserGroup
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
@@ -59,41 +64,37 @@ logger = setup_logger()
 SKILL_SLUG_UNIQUE_CONSTRAINT = "uq_skill_slug"
 
 
+class SkillAccessPolicy(str, Enum):
+    VIEW = "view"
+    EDIT = "edit"
+    USE = "use"
+
+
 @dataclass(frozen=True, kw_only=True)
 class SkillPatch:
     is_public: bool | UnsetType = UNSET
     enabled: bool | UnsetType = UNSET
 
 
-def _personal_skill_clause(user_id: UUID) -> ColumnElement[bool]:
-    """Predicate matching *user_id*'s personal skills: custom, non-public,
-    zero group grants, authored by the user. Shared by the visibility
-    filter and the sandbox-push fanout so the two can't drift."""
-    no_grants = ~(
-        select(Skill__UserGroup.skill_id)
-        .where(Skill__UserGroup.skill_id == Skill.id)
-        .exists()
+def _is_shared_with_user(
+    user: User,
+    permission: SkillSharePermission | None = None,
+) -> ColumnElement[bool]:
+    stmt = (
+        select(Skill__User.skill_id)
+        .where(Skill__User.skill_id == Skill.id)
+        .where(Skill__User.user_id == user.id)
     )
-    return and_(
-        Skill.author_user_id == user_id,
-        Skill.built_in_skill_id.is_(None),
-        Skill.is_public.is_(False),
-        no_grants,
-    )
+    if permission is not None:
+        stmt = stmt.where(Skill__User.permission == permission)
+    return stmt.exists()
 
 
-def _add_user_visibility_filter(
-    stmt: Select[tuple[Skill]], user: User
-) -> Select[tuple[Skill]]:
-    """Restrict a `select(Skill)` to rows the given user can see:
-    is_public OR group-granted OR their own personal skill.
-
-    Admins get NO bypass here on purpose: this filter also feeds sandbox
-    injection, and a bypass would push every user's personal skill
-    (untrusted content) into admins' agent contexts. Admin oversight lives
-    on the /admin/skills surface instead.
-    """
-    group_grant_exists = (
+def _is_shared_with_user_group(
+    user: User,
+    permission: SkillSharePermission | None = None,
+) -> ColumnElement[bool]:
+    stmt = (
         select(Skill__UserGroup.skill_id)
         .join(
             User__UserGroup,
@@ -101,33 +102,92 @@ def _add_user_visibility_filter(
         )
         .where(Skill__UserGroup.skill_id == Skill.id)
         .where(User__UserGroup.user_id == user.id)
+    )
+    if permission is not None:
+        stmt = stmt.where(Skill__UserGroup.permission == permission)
+    return stmt.exists()
+
+
+def _any_share_exists() -> ColumnElement[bool]:
+    user_share_exists = (
+        select(Skill__User.skill_id).where(Skill__User.skill_id == Skill.id).exists()
+    )
+    group_share_exists = (
+        select(Skill__UserGroup.skill_id)
+        .where(Skill__UserGroup.skill_id == Skill.id)
         .exists()
     )
+    return or_(user_share_exists, group_share_exists)
 
-    return stmt.where(
-        or_(
-            Skill.is_public.is_(True),
-            group_grant_exists,
-            _personal_skill_clause(user.id),
-        )
+
+def _personal_skill_clause(user_id: UUID) -> ColumnElement[bool]:
+    """Predicate matching *user_id*'s personal skills: custom, non-public,
+    zero direct/group shares, authored by the user."""
+    no_shares = ~_any_share_exists()
+    return and_(
+        Skill.author_user_id == user_id,
+        Skill.built_in_skill_id.is_(None),
+        Skill.public_permission.is_(None),
+        no_shares,
     )
+
+
+def _is_group_shared_only_with_curator_scope(user: User) -> ColumnElement[bool]:
+    """Curators can manage skills only when all group shares are in their scope."""
+    curator_scope_group_ids = select(User__UserGroup.user_group_id).where(
+        User__UserGroup.user_id == user.id
+    )
+    share_in_curator_scope_exists = (
+        select(Skill__UserGroup.skill_id)
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
+        )
+        .where(Skill__UserGroup.skill_id == Skill.id)
+        .where(User__UserGroup.user_id == user.id)
+    )
+
+    if user.role == UserRole.CURATOR:
+        curator_scope_group_ids = curator_scope_group_ids.where(
+            User__UserGroup.is_curator.is_(True)
+        )
+        share_in_curator_scope_exists = share_in_curator_scope_exists.where(
+            User__UserGroup.is_curator.is_(True)
+        )
+
+    no_group_share_outside_scope = ~exists().where(
+        Skill__UserGroup.skill_id == Skill.id
+    ).where(Skill__UserGroup.user_group_id.notin_(curator_scope_group_ids)).correlate(
+        Skill
+    )
+    return and_(share_in_curator_scope_exists.exists(), no_group_share_outside_scope)
 
 
 def visible_skill_ids_for_user(user: User, db_session: Session) -> set[UUID]:
-    """Enabled skill ids the user can see (public / group-granted / personal).
+    """Enabled skill ids the user can see, including external-app-backed rows.
 
-    A lightweight authorization primitive (ids only, for membership checks such
-    as which external apps a user may connect) — distinct from
-    ``list_skills_for_user``, which is the skills-endpoint listing and excludes
-    external-app-backed skills. The shared visibility predicate is
-    ``_add_user_visibility_filter``."""
-    stmt = _add_user_visibility_filter(
-        select(Skill).where(Skill.enabled.is_(True)), user
-    ).with_only_columns(Skill.id)
+    Used by the external-app API to decide which apps a user may connect. This
+    deliberately does not apply the per-user external-app credential gate.
+    """
+    stmt = (
+        select(Skill.id)
+        .where(Skill.enabled.is_(True))
+        .where(
+            or_(
+                Skill.public_permission.isnot(None),
+                _is_shared_with_user(user),
+                _is_shared_with_user_group(user),
+                and_(
+                    Skill.author_user_id == user.id,
+                    Skill.built_in_skill_id.is_(None),
+                ),
+            )
+        )
+    )
     return set(db_session.scalars(stmt))
 
 
-def _exclude_unavailable_built_ins(
+def _exclude_unavailable_built_in_skills(
     stmt: Select[tuple[Skill]], db_session: Session
 ) -> Select[tuple[Skill]]:
     """Hide built-ins whose codified ``is_available(db)`` returns False.
@@ -147,26 +207,14 @@ def _exclude_unavailable_built_ins(
     )
 
 
-def _external_app_skill_ids_subquery() -> Select[tuple[UUID]]:
-    """Subquery of every skill id backed by an ``external_app`` row.
-
-    Used with ``Skill.id.notin_(...)`` to keep external-app-backed skills
-    out of the skills endpoint — they're managed through the
-    external-apps API instead.
-    """
-    return select(ExternalApp.skill_id)
-
-
-def _skill_ids_blocked_by_external_app_auth(
+def _external_app_skill_ids_available_to_user(
     user: User, db_session: Session
 ) -> list[UUID]:
-    """Skill ids to withhold from *user*'s sandbox: external-app-backed
-    skills the user has not authenticated for.
+    """External-app-backed skill ids this user may load into their sandbox.
 
     Each external app is left-joined to this user's credential row; an app
-    the user can't use yet (missing required credential keys) has its skill
-    blocked. Apps that need no per-user credentials, or that the user has
-    already configured, are not blocked.
+    is available when it needs no per-user credentials, or when the user has
+    already configured every required credential key.
     """
     rows = db_session.execute(
         select(ExternalApp, ExternalAppUserCredential).join(
@@ -181,8 +229,139 @@ def _skill_ids_blocked_by_external_app_auth(
     return [
         app.skill_id
         for app, user_cred in rows
-        if not is_user_authenticated_for_app(app, user_cred)
+        if is_user_authenticated_for_app(app, user_cred)
     ]
+
+
+def _public_permission_for_update(
+    *,
+    current_permission: SkillSharePermission | None,
+    is_public: bool | None,
+    public_permission: SkillSharePermission | None,
+) -> SkillSharePermission | None:
+    if is_public is False:
+        return None
+    if public_permission is not None:
+        return public_permission
+    if is_public is True:
+        return current_permission or SkillSharePermission.VIEWER
+    return current_permission
+
+
+def _skill_select_with_eager_load(*, order_by_name: bool) -> Select[tuple[Skill]]:
+    stmt = select(Skill).options(
+        selectinload(Skill.author),
+        selectinload(Skill.user_shares).selectinload(Skill__User.user),
+        selectinload(Skill.group_shares).selectinload(Skill__UserGroup.user_group),
+    )
+    if order_by_name:
+        stmt = stmt.order_by(Skill.name)
+    return stmt
+
+
+def _skill_select_for_access_policy(
+    *,
+    policy: SkillAccessPolicy,
+    db_session: Session,
+    user: User,
+    order_by_name: bool,
+) -> Select[tuple[Skill]]:
+    stmt = _skill_select_with_eager_load(order_by_name=order_by_name).outerjoin(
+        ExternalApp,
+        ExternalApp.skill_id == Skill.id,
+    )
+    owned_by_user = and_(
+        Skill.author_user_id == user.id,
+        Skill.built_in_skill_id.is_(None),
+    )
+    visible_to_user = or_(
+        Skill.public_permission.isnot(None),
+        _is_shared_with_user(user),
+        _is_shared_with_user_group(user),
+        owned_by_user,
+    )
+    editable_by_user = or_(
+        owned_by_user,
+        _is_shared_with_user(user, SkillSharePermission.EDITOR),
+        _is_shared_with_user_group(user, SkillSharePermission.EDITOR),
+        Skill.public_permission == SkillSharePermission.EDITOR,
+    )
+
+    if user.role in (UserRole.CURATOR, UserRole.GLOBAL_CURATOR):
+        editable_by_user = or_(
+            editable_by_user,
+            _is_group_shared_only_with_curator_scope(user),
+        )
+
+    if policy == SkillAccessPolicy.VIEW:
+        stmt = stmt.where(ExternalApp.id.is_(None))
+        if user.role == UserRole.ADMIN:
+            return stmt
+        stmt = stmt.where(
+            visible_to_user,
+            or_(Skill.enabled.is_(True), editable_by_user),
+        )
+        return _exclude_unavailable_built_in_skills(
+            stmt,
+            db_session=db_session,
+        )
+
+    if policy == SkillAccessPolicy.EDIT:
+        stmt = stmt.where(
+            ExternalApp.id.is_(None),
+            Skill.built_in_skill_id.is_(None),
+        )
+        if user.role == UserRole.ADMIN:
+            return stmt
+        return stmt.where(editable_by_user)
+
+    if policy == SkillAccessPolicy.USE:
+        available_external_app_skill_ids = _external_app_skill_ids_available_to_user(
+            user, db_session
+        )
+        available_in_sandbox = or_(
+            ExternalApp.id.is_(None),
+            Skill.id.in_(available_external_app_skill_ids),
+        )
+        stmt = stmt.where(
+            Skill.enabled.is_(True),
+            available_in_sandbox,
+            visible_to_user,
+        )
+        return _exclude_unavailable_built_in_skills(stmt, db_session)
+
+    raise ValueError(f"Unknown skill access policy: {policy}")
+
+
+def list_skills(
+    *,
+    policy: SkillAccessPolicy,
+    db_session: Session,
+    user: User,
+) -> Sequence[Skill]:
+    stmt = _skill_select_for_access_policy(
+        policy=policy,
+        db_session=db_session,
+        user=user,
+        order_by_name=True,
+    )
+    return list(db_session.scalars(stmt))
+
+
+def fetch_skill(
+    skill_id: UUID,
+    *,
+    policy: SkillAccessPolicy,
+    db_session: Session,
+    user: User,
+) -> Skill | None:
+    stmt = _skill_select_for_access_policy(
+        policy=policy,
+        db_session=db_session,
+        user=user,
+        order_by_name=False,
+    ).where(Skill.id == skill_id)
+    return db_session.scalars(stmt).one_or_none()
 
 
 def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
@@ -198,16 +377,11 @@ def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
     which stay listed (greyed out in the UI) so the owner can re-enable
     them. Sandbox injection never includes disabled skills.
     """
-    stmt = (
-        select(Skill)
-        .where(or_(Skill.enabled.is_(True), _personal_skill_clause(user.id)))
-        .where(Skill.id.notin_(_external_app_skill_ids_subquery()))
-        .options(selectinload(Skill.author))
-        .order_by(Skill.name)
+    return list_skills(
+        policy=SkillAccessPolicy.VIEW,
+        user=user,
+        db_session=db_session,
     )
-    stmt = _add_user_visibility_filter(stmt, user)
-    stmt = _exclude_unavailable_built_ins(stmt, db_session)
-    return list(db_session.scalars(stmt))
 
 
 def fetch_skill_for_user(
@@ -217,16 +391,12 @@ def fetch_skill_for_user(
     for external-app-backed rows even when the id matches — the skills
     endpoint must not be a mutation seam for external apps. Disabled
     skills resolve only for their owner (own-personal rows)."""
-    stmt = (
-        select(Skill)
-        .where(Skill.id == skill_id)
-        .where(or_(Skill.enabled.is_(True), _personal_skill_clause(user.id)))
-        .where(Skill.id.notin_(_external_app_skill_ids_subquery()))
-        .options(selectinload(Skill.author))
+    return fetch_skill(
+        skill_id,
+        policy=SkillAccessPolicy.VIEW,
+        user=user,
+        db_session=db_session,
     )
-    stmt = _add_user_visibility_filter(stmt, user)
-    stmt = _exclude_unavailable_built_ins(stmt, db_session)
-    return db_session.scalars(stmt).one_or_none()
 
 
 def fetch_skill_for_user_by_slug(
@@ -234,16 +404,24 @@ def fetch_skill_for_user_by_slug(
 ) -> Skill | None:
     """Slug variant of ``fetch_skill_for_user``. Same exclusion: never
     returns external-app-backed skills."""
-    stmt = (
-        select(Skill)
-        .where(Skill.slug == slug)
-        .where(or_(Skill.enabled.is_(True), _personal_skill_clause(user.id)))
-        .where(Skill.id.notin_(_external_app_skill_ids_subquery()))
-        .options(selectinload(Skill.author))
-    )
-    stmt = _add_user_visibility_filter(stmt, user)
-    stmt = _exclude_unavailable_built_ins(stmt, db_session)
+    stmt = _skill_select_for_access_policy(
+        policy=SkillAccessPolicy.VIEW,
+        db_session=db_session,
+        user=user,
+        order_by_name=False,
+    ).where(Skill.slug == slug)
     return db_session.scalars(stmt).one_or_none()
+
+
+def fetch_skill_for_edit(
+    skill_id: UUID, user: User, db_session: Session
+) -> Skill | None:
+    return fetch_skill(
+        skill_id,
+        policy=SkillAccessPolicy.EDIT,
+        user=user,
+        db_session=db_session,
+    )
 
 
 def list_skills_for_sandbox_injection(
@@ -253,26 +431,22 @@ def list_skills_for_sandbox_injection(
     can see, plus the external-app-backed skills they've authenticated
     for. Used by the sandbox skill-push path, NOT by the skills
     endpoint (which excludes external apps entirely)."""
-    blocked = _skill_ids_blocked_by_external_app_auth(user, db_session)
-    stmt = (
-        select(Skill)
-        .where(Skill.enabled.is_(True))
-        .where(Skill.id.notin_(blocked))
-        .options(selectinload(Skill.author))
-        .order_by(Skill.name)
+    return list_skills(
+        policy=SkillAccessPolicy.USE,
+        user=user,
+        db_session=db_session,
     )
-    stmt = _add_user_visibility_filter(stmt, user)
-    stmt = _exclude_unavailable_built_ins(stmt, db_session)
-    return list(db_session.scalars(stmt))
 
 
 def fetch_skill_by_id(skill_id: UUID, db_session: Session) -> Skill | None:
-    stmt = select(Skill).where(Skill.id == skill_id).options(selectinload(Skill.author))
+    stmt = _skill_select_with_eager_load(order_by_name=False).where(
+        Skill.id == skill_id
+    )
     return db_session.scalars(stmt).one_or_none()
 
 
 def list_skills_for_admin(db_session: Session) -> Sequence[Skill]:
-    stmt = select(Skill).options(selectinload(Skill.author)).order_by(Skill.name)
+    stmt = _skill_select_with_eager_load(order_by_name=True)
     return list(db_session.scalars(stmt))
 
 
@@ -284,6 +458,7 @@ def create_skill__no_commit(
     bundle_file_id: str,
     bundle_sha256: str,
     is_public: bool,
+    public_permission: SkillSharePermission | None = None,
     author_user_id: UUID | None,
     db_session: Session,
 ) -> Skill:
@@ -300,7 +475,11 @@ def create_skill__no_commit(
         description=description,
         bundle_file_id=bundle_file_id,
         bundle_sha256=bundle_sha256,
-        is_public=is_public,
+        public_permission=_public_permission_for_update(
+            current_permission=None,
+            is_public=is_public,
+            public_permission=public_permission,
+        ),
         author_user_id=author_user_id,
         enabled=True,
     )
@@ -325,6 +504,7 @@ def create_built_in_skill_row__no_commit(
     is_public: bool,
     enabled: bool,
     author_user_id: UUID | None = None,
+    public_permission: SkillSharePermission | None = None,
     db_session: Session,
 ) -> Skill:
     """Create a built-in-style ``Skill`` row: ``built_in_skill_id`` set,
@@ -353,7 +533,11 @@ def create_built_in_skill_row__no_commit(
         built_in_skill_id=built_in_skill_id,
         bundle_file_id=None,
         bundle_sha256=None,
-        is_public=is_public,
+        public_permission=_public_permission_for_update(
+            current_permission=None,
+            is_public=is_public,
+            public_permission=public_permission,
+        ),
         author_user_id=author_user_id,
         enabled=enabled,
     )
@@ -379,7 +563,7 @@ def replace_skill_bundle(
     new_description: str,
     db_session: Session,
 ) -> tuple[Skill, str]:
-    """Swap a custom skill's bundle blob and refresh its display metadata.
+    """Swap a skill's bundle blob and refresh its display metadata.
 
     Returns ``(skill, old_bundle_file_id)`` so the caller can delete the
     old blob from FileStore AFTER the transaction commits — never
@@ -432,10 +616,14 @@ def patch_skill(
             f"Skill {skill_id} not found.",
         )
 
-    for field in ("is_public", "enabled"):
-        value = getattr(patch, field)
-        if not isinstance(value, UnsetType):
-            setattr(skill, field, value)
+    if not isinstance(patch.is_public, UnsetType):
+        skill.public_permission = _public_permission_for_update(
+            current_permission=skill.public_permission,
+            is_public=patch.is_public,
+            public_permission=None,
+        )
+    if not isinstance(patch.enabled, UnsetType):
+        skill.enabled = patch.enabled
 
     db_session.flush()
     return skill
@@ -486,11 +674,11 @@ def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
     Does not filter by ``enabled`` — callers use this for both enable and
     disable transitions (the pushed fileset handles the actual filtering).
     """
-    if skill.is_public:
+    if skill.public_permission is not None:
         stmt = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
         return set(db_session.scalars(stmt))
 
-    stmt = (
+    group_share_stmt = (
         select(Sandbox.user_id)
         .join(
             User__UserGroup,
@@ -503,19 +691,24 @@ def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
         .where(Skill__UserGroup.skill_id == skill.id)
         .where(Sandbox.status == SandboxStatus.RUNNING)
     )
-    user_ids = set(db_session.scalars(stmt))
+    user_ids = set(db_session.scalars(group_share_stmt))
+
+    user_share_stmt = (
+        select(Sandbox.user_id)
+        .join(
+            Skill__User,
+            Skill__User.user_id == Sandbox.user_id,
+        )
+        .where(Skill__User.skill_id == skill.id)
+        .where(Sandbox.status == SandboxStatus.RUNNING)
+    )
+    user_ids |= set(db_session.scalars(user_share_stmt))
 
     if skill.author_user_id is not None:
         author_stmt = (
             select(Sandbox.user_id)
             .where(Sandbox.user_id == skill.author_user_id)
             .where(Sandbox.status == SandboxStatus.RUNNING)
-            .where(
-                select(Skill.id)
-                .where(Skill.id == skill.id)
-                .where(_personal_skill_clause(skill.author_user_id))
-                .exists()
-            )
         )
         user_ids |= set(db_session.scalars(author_stmt))
 
@@ -559,15 +752,23 @@ def lock_personal_skills_for_user(user_id: UUID, db_session: Session) -> None:
 
 
 def skill_ids_with_grants(skill_ids: Sequence[UUID], db_session: Session) -> set[UUID]:
-    """Subset of *skill_ids* that have at least one group grant row."""
+    """Subset of *skill_ids* that have at least one direct or group share row."""
     if not skill_ids:
         return set()
-    stmt = (
+
+    group_share_stmt = (
         select(Skill__UserGroup.skill_id)
         .where(Skill__UserGroup.skill_id.in_(skill_ids))
         .distinct()
     )
-    return set(db_session.scalars(stmt))
+    user_share_stmt = (
+        select(Skill__User.skill_id)
+        .where(Skill__User.skill_id.in_(skill_ids))
+        .distinct()
+    )
+    return set(db_session.scalars(group_share_stmt)) | set(
+        db_session.scalars(user_share_stmt)
+    )
 
 
 def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
