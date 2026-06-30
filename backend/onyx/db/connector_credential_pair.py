@@ -720,6 +720,7 @@ def resync_cc_pair(
     cc_pair: ConnectorCredentialPair,
     search_settings_id: int,
     db_session: Session,
+    commit: bool = True,
 ) -> None:
     """
     Updates state stored in the connector_credential_pair table based on the
@@ -769,4 +770,5 @@ def resync_cc_pair(
         last_success.time_started if last_success else None
     )
 
-    db_session.commit()
+    if commit:
+        db_session.commit()

@@ -129,12 +129,15 @@ def set_new_search_settings(
             db_session, search_settings_id=secondary_search_settings.id
         )
 
-    # Every new FUTURE reindexes via the port flow: re-embed PRESENT -> FUTURE in
-    # place rather than re-fetching from connectors.
+    # Every new FUTURE reindexes via the port flow (re-embed PRESENT -> FUTURE in
+    # place, no connector re-fetch). commit=False here and below so the FUTURE and
+    # its seeds commit together: a FUTURE visible before its seeds makes workers
+    # re-scan from scratch instead of resuming from PRESENT's poll cursor.
     new_search_settings = create_search_settings(
         search_settings=new_search_settings_request,
         db_session=db_session,
         use_port_flow=True,
+        commit=False,
     )
 
     # Ensure the document indices have the new index immediately.
@@ -150,13 +153,16 @@ def set_new_search_settings(
     # Pause index attempts for the currently in-use index to preserve resources.
     if DISABLE_INDEX_UPDATE_ON_SWAP:
         expire_index_attempts(
-            search_settings_id=search_settings.id, db_session=db_session
+            search_settings_id=search_settings.id,
+            db_session=db_session,
+            commit=False,
         )
         for cc_pair in get_connector_credential_pairs(db_session):
             resync_cc_pair(
                 cc_pair=cc_pair,
                 search_settings_id=new_search_settings.id,
                 db_session=db_session,
+                commit=False,
             )
 
     # Seed the port flow: one SUCCESS synthetic IndexAttempt per in-scope cc_pair
@@ -186,6 +192,7 @@ def set_new_search_settings(
                 db_session=db_session,
             )
 
+    # Atomic: FUTURE row and its seeds become visible together.
     db_session.commit()
     return IdReturn(id=new_search_settings.id)
 
