@@ -281,6 +281,32 @@ def get_user_cost_cents_since(
     return float(total)
 
 
+def get_user_cost_cents_buckets_since(
+    db_session: Session,
+    user_id: str,
+    cutoff: datetime,
+) -> list[tuple[datetime, float]]:
+    """A user's cost buckets (window_start, cents) for windows >= `cutoff`, in one
+    query. Batched counterpart to get_user_cost_cents_since so the per-user cost
+    gate can window in Python (mirrors get_total_cost_cents_buckets_since)."""
+    rows = db_session.execute(
+        select(
+            UserUsage.window_start,
+            func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
+        )
+        .where(UserUsage.user_id == user_id, UserUsage.window_start >= cutoff)
+        .group_by(UserUsage.window_start)
+    ).all()
+
+    buckets: list[tuple[datetime, float]] = []
+    for window_start, cost in rows:
+        # Coerce to tz-aware UTC; SQLite returns naive datetimes.
+        if window_start.tzinfo is None:
+            window_start = window_start.replace(tzinfo=timezone.utc)
+        buckets.append((window_start, float(cost)))
+    return buckets
+
+
 def get_total_cost_cents_since(
     db_session: Session,
     cutoff: datetime,

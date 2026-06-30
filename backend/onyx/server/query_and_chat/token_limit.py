@@ -173,8 +173,9 @@ def _is_rate_limited(
 ) -> bool:
     """Whether any token budget in ``rate_limits`` is exceeded by ``usage``.
 
-    Thin bool wrapper over ``_worst_triggered_limit`` for the EE user/group
-    token gates, which enforce token budgets only (cost gating is global-only)."""
+    Thin bool wrapper over ``_worst_triggered_limit``. Token-only — the cost side
+    of every scope (global/user/group) is enforced separately via
+    ``_worst_triggered_cost_limit`` over the UserUsage cost ledger."""
     return _worst_triggered_limit(rate_limits, usage) is not None
 
 
