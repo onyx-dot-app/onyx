@@ -98,8 +98,11 @@ function ContentAction({
   // Responsive: forward rightChildren into the ContentMd slot, which reflows it
   // to the right on desktop and between the title/description on narrow widths.
   if (responsive && rightChildren && routesToContentMd(contentProps)) {
+    // Full width: in a flex-col `align-items: start` parent (e.g. InputHorizontal's
+    // Section) a wrapper without w-full shrinks to content width, so the input
+    // wouldn't fill the row.
     return (
-      <div className={cn("opal-content-action-content", paddingClass)}>
+      <div className={cn("w-full min-w-0", paddingClass)}>
         <Content {...({ ...contentProps, rightChildren } as ContentProps)} />
       </div>
     );
