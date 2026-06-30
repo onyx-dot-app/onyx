@@ -68,6 +68,14 @@ class UsageExportResponse(BaseModel):
     users: list[UsageExportUser]
 
 
+class ResetUsageRequest(BaseModel):
+    user_email: str
+
+
+class ResetUsageResponse(BaseModel):
+    reset_rows: int
+
+
 class ModelPrice(BaseModel):
     """USD per 1M tokens for the user's selected chat model; null if unpriced."""
 
