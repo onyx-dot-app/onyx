@@ -24,6 +24,7 @@ from onyx.hooks.points.document_ingestion import DocumentIngestionSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import _apply_document_ingestion_hook
+from onyx.indexing.indexing_pipeline import _dedupe_documents_by_id
 from onyx.indexing.indexing_pipeline import add_contextual_summaries
 from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import get_docs_to_update
@@ -51,6 +52,27 @@ def create_test_document(
         source=DocumentSource.FILE,
         metadata={},
     )
+
+
+def test_dedupe_documents_by_id_drops_non_contiguous_duplicate() -> None:
+    docs = [
+        create_test_document(doc_id="a"),
+        create_test_document(doc_id="b"),
+        create_test_document(doc_id="a"),
+    ]
+
+    result = _dedupe_documents_by_id(docs)
+
+    assert [doc.id for doc in result] == ["a", "b"]
+    assert result[0] is docs[0]
+
+
+def test_dedupe_documents_by_id_no_duplicates() -> None:
+    docs = [create_test_document(doc_id="a"), create_test_document(doc_id="b")]
+
+    result = _dedupe_documents_by_id(docs)
+
+    assert [doc.id for doc in result] == ["a", "b"]
 
 
 def test_filter_documents_empty_title_and_content() -> None:
