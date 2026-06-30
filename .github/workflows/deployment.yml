@@ -1745,7 +1745,7 @@ jobs:
       - runner=2cpu-linux-x64
       # osv-scanner pulls the image and writes a full `docker save` tar (~2x its
       # size); size the root volume up so large images don't fill the disk.
-      - volume=40gb
+      - volume=60gb
       - run-id=${{ github.run_id }}-image-audit-${{ matrix.component }}
       - extras=ecr-cache
     permissions:
