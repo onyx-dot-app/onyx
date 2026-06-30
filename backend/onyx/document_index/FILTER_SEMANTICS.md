@@ -115,5 +115,5 @@ AND (user_project contains 7)
 | `source_type` | `source_type` | `string` | Connector source type (e.g. `web`, `jira`) |
 | `tags` | `metadata_list` | `array<string>` | Document metadata tags |
 | `time_cutoff` | `doc_updated_at` | `long` | Minimum document update timestamp |
-| `time_cutoff_upper` | `doc_updated_at` | `long` | Maximum document update timestamp (pairs with `time_cutoff` for a range; excludes undated docs) |
+| `time_cutoff_upper` | `doc_updated_at` | `long` | Maximum document update timestamp; usable alone or together with `time_cutoff` for a closed range; excludes undated docs in all cases |
 | `tenant_id` | `tenant_id` | `string` | Tenant isolation (multi-tenant) |
