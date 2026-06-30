@@ -16,6 +16,7 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.server.features.skill.models import SkillPatchRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import SkillManager
@@ -35,10 +36,8 @@ def test_get_skills_returns_builtins_plus_accessible_customs(
     user_skills = SkillManager.list_for_user(basic_user)
     # Built-ins ship with the deployment; the registry always returns at
     # least one entry for an out-of-the-box install.
-    assert isinstance(user_skills.get("builtins"), list)
-    assert isinstance(user_skills.get("customs"), list)
-    assert len(user_skills["builtins"]) >= 1
-    assert len(user_skills["customs"]) >= 1
+    assert len(user_skills.builtins) >= 1
+    assert len(user_skills.customs) >= 1
 
 
 def test_user_does_not_see_disabled_skill(
@@ -47,10 +46,10 @@ def test_user_does_not_see_disabled_skill(
 ) -> None:
     slug = f"disabled-{uuid4().hex[:6]}"
     skill = SkillManager.create_custom(admin_user, slug=slug, is_public=True)
-    SkillManager.patch_custom(skill, admin_user, enabled=False)
+    SkillManager.patch_custom(skill, admin_user, SkillPatchRequest(enabled=False))
 
     user_skills = SkillManager.list_for_user(basic_user)
-    custom_slugs = [c["slug"] for c in user_skills["customs"]]
+    custom_slugs = [skill.slug for skill in user_skills.customs]
     assert slug not in custom_slugs
 
 
@@ -62,7 +61,7 @@ def test_user_does_not_see_private_skill_without_share(
     SkillManager.create_custom(admin_user, slug=slug, is_public=False)
 
     user_skills = SkillManager.list_for_user(basic_user)
-    custom_slugs = [c["slug"] for c in user_skills["customs"]]
+    custom_slugs = [skill.slug for skill in user_skills.customs]
     assert slug not in custom_slugs
 
 
@@ -74,7 +73,7 @@ def test_user_sees_public_skill(
     SkillManager.create_custom(admin_user, slug=slug, is_public=True)
 
     user_skills = SkillManager.list_for_user(basic_user)
-    custom_slugs = [c["slug"] for c in user_skills["customs"]]
+    custom_slugs = [skill.slug for skill in user_skills.customs]
     assert slug in custom_slugs
 
 
@@ -107,7 +106,7 @@ def test_user_sees_private_skill_with_group_share(
     )
 
     user_skills = SkillManager.list_for_user(basic_user)
-    custom_slugs = [c["slug"] for c in user_skills["customs"]]
+    custom_slugs = [skill.slug for skill in user_skills.customs]
     assert slug in custom_slugs
 
 
@@ -118,7 +117,6 @@ def test_get_skill_by_id_404_when_not_visible(
     """Direct lookup by UUID obeys the same visibility filter as listing."""
     slug = f"hidden-id-{uuid4().hex[:6]}"
     skill = SkillManager.create_custom(admin_user, slug=slug, is_public=False)
-    assert skill.id is not None
 
     response = client.get(
         f"{API_SERVER_URL}/skills/{skill.id}",

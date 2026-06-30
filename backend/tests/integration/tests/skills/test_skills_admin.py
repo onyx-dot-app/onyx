@@ -15,6 +15,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import FileRecord
 from onyx.db.models import Skill
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.skill.models import SkillPatchRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import build_minimal_bundle
@@ -66,22 +67,25 @@ def _skill_bundle_blob_ids() -> set[str]:
 def test_create_and_list_skill(admin_user: DATestUser) -> None:
     slug = f"test-create-{uuid4().hex[:6]}"
     skill = SkillManager.create_custom(admin_user, slug=slug)
-    assert skill.id is not None
     assert skill.slug == slug
     assert skill.enabled is True
 
     skills_list = SkillManager.list_all(admin_user)
-    custom_slugs = [c["slug"] for c in skills_list["customs"]]
+    custom_slugs = [skill.slug for skill in skills_list.customs]
     assert slug in custom_slugs
 
 
 def test_patch_skill_metadata(admin_user: DATestUser) -> None:
     skill = SkillManager.create_custom(admin_user, slug=f"patch-test-{uuid4().hex[:6]}")
 
-    public = SkillManager.patch_custom(skill, admin_user, is_public=True)
+    public = SkillManager.patch_custom(
+        skill, admin_user, SkillPatchRequest(is_public=True)
+    )
     assert public.is_public is True
 
-    disabled = SkillManager.patch_custom(skill, admin_user, enabled=False)
+    disabled = SkillManager.patch_custom(
+        skill, admin_user, SkillPatchRequest(enabled=False)
+    )
     assert disabled.enabled is False
 
 
@@ -108,7 +112,7 @@ def test_delete_skill(admin_user: DATestUser) -> None:
     SkillManager.delete_custom(skill, admin_user)
 
     skills_list = SkillManager.list_all(admin_user)
-    custom_slugs = [c["slug"] for c in skills_list["customs"]]
+    custom_slugs = [skill.slug for skill in skills_list.customs]
     assert slug not in custom_slugs
 
 
@@ -202,8 +206,7 @@ def test_create_skill_201_persists_row_group_shares_bundle(
         group_ids=[group.id],
     )
 
-    assert skill.id is not None
-    assert [share["group_id"] for share in skill.group_shares] == [group.id]
+    assert [share.group_id for share in skill.group_shares] == [group.id]
 
     row = _fetch_skill_row(skill.id)
     assert row is not None, "skill row missing after create"
@@ -302,7 +305,7 @@ def test_create_skill_failure_cleans_up_orphan_blob(
 
     # First create — succeeds and saves blob #1.
     first = SkillManager.create_custom(admin_user, slug=slug)
-    first_row = _fetch_skill_row(first.id) if first.id is not None else None
+    first_row = _fetch_skill_row(first.id)
     assert first_row is not None
     first_blob_id = first_row.bundle_file_id
     assert first_blob_id is not None  # custom skills always have a bundle
@@ -395,7 +398,6 @@ def test_basic_user_can_create_private_skill(basic_user: DATestUser) -> None:
     skill = SkillManager.create_custom(
         basic_user, slug=f"basic-create-{uuid4().hex[:6]}"
     )
-    assert skill.id is not None
     assert skill.is_public is False
     assert skill.user_permission == "OWNER"
 
@@ -415,7 +417,6 @@ def test_curator_can_post_skill(
         skill = SkillManager.create_custom(
             curator, slug=f"curator-create-{uuid4().hex[:6]}"
         )
-        assert skill.id is not None
         assert skill.enabled is True
     finally:
         # restore so module-shared basic_user fixture stays BASIC

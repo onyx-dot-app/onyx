@@ -317,17 +317,3 @@ class DATestDiscordChannelConfig(BaseModel):
     thread_only_mode: bool = False
     require_bot_invocation: bool = True
     persona_override_id: int | None = None
-
-
-class DATestSkill(BaseModel):
-    id: UUID | None = None
-    slug: str
-    name: str
-    description: str
-    is_public: bool = False
-    public_permission: str | None = None
-    enabled: bool = True
-    user_shares: list[dict] = Field(default_factory=list)
-    group_shares: list[dict] = Field(default_factory=list)
-    is_personal: bool = False
-    user_permission: str | None = None

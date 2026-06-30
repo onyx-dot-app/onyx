@@ -18,6 +18,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -29,6 +30,9 @@ from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.server.features.skill.models import SkillResponse
+from onyx.server.features.skill.models import SkillUserShareRequest
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
@@ -36,7 +40,6 @@ from onyx.skills.push import push_skill_to_affected_sandboxes
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestSkill
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import DATestUserGroup
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
@@ -85,7 +88,7 @@ def _create_skill(
     body: bytes | str,
     is_public: bool = False,
     group_ids: list[int] | None = None,
-) -> DATestSkill:
+) -> SkillResponse:
     return SkillManager.create_custom(
         admin,
         slug=slug,
@@ -98,10 +101,10 @@ def _create_skill(
 
 def _replace_bundle(
     admin: DATestUser,
-    skill: DATestSkill,
+    skill: SkillResponse,
     *,
     body: bytes | str,
-) -> DATestSkill:
+) -> SkillResponse:
     return SkillManager.replace_bundle(
         skill,
         _bundle(skill.slug, body),
@@ -389,7 +392,9 @@ class TestSkillPush:
         )
         _skill_file_path(workspace, skill.slug).wait_for_bytes(b"to be disabled\n")
 
-        SkillManager.patch_custom(skill, k8s_admin_user, enabled=False)
+        SkillManager.patch_custom(
+            skill, k8s_admin_user, SkillPatchRequest(enabled=False)
+        )
 
         (_skills_dir(workspace) / skill.slug).wait_for_absent()
 
@@ -426,6 +431,54 @@ class TestSkillPush:
 
         _skill_file_path(ws_a, skill.slug).wait_for_absent()
         _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"shifting shares\n")
+
+    def test_direct_user_share_change_adds_to_newly_shared_and_removes_from_revoked(
+        self,
+        k8s_admin_user: DATestUser,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        user_a, user_b = _create_users(2)
+        [ws_a, ws_b] = handle.provision_api_users([user_a, user_b])
+
+        slug = f"direct-shares-flip-{uuid4().hex[:6]}"
+        skill = _create_skill(
+            k8s_admin_user,
+            slug,
+            is_public=False,
+            body="direct shifting shares\n",
+        )
+        _skill_file_path(ws_a, skill.slug).wait_for_absent()
+        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+
+        skill = SkillManager.share(
+            skill,
+            k8s_admin_user,
+            user_shares=[
+                SkillUserShareRequest(
+                    user_id=UUID(user_a.id),
+                    permission=SkillSharePermission.VIEWER,
+                )
+            ],
+        )
+        assert [str(share.user.id) for share in skill.user_shares] == [user_a.id]
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"direct shifting shares\n")
+        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+
+        skill = SkillManager.share(
+            skill,
+            k8s_admin_user,
+            user_shares=[
+                SkillUserShareRequest(
+                    user_id=UUID(user_b.id),
+                    permission=SkillSharePermission.VIEWER,
+                )
+            ],
+        )
+        assert [str(share.user.id) for share in skill.user_shares] == [user_b.id]
+
+        _skill_file_path(ws_a, skill.slug).wait_for_absent()
+        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"direct shifting shares\n")
 
     def test_replace_bundle_propagates_new_content(
         self,
