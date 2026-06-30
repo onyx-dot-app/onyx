@@ -43,7 +43,6 @@ class TestBrowserUse:
             "&& browser open https://example.com && browser snapshot -i",
         )
 
-        # The page rendered through the proxy with the CA trusted.
         assert "Example Domain" in out, out
         # Guard the specific MITM-cert failure mode that has regressed before.
         assert "ERR_CERT_AUTHORITY_INVALID" not in out, out

@@ -47,8 +47,6 @@ FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:f82c96458eedc847b233
 # the API server at session-setup, but their runtime tools must already be in
 # the image.
 ARG ENABLE_SKILLS=true
-# Bakes the browser runtime (chromium + agent-browser, ~400 MB) into the image;
-# set false in dev/CI to skip it. See docs/craft/specs/browser-use.md.
 ARG ENABLE_BROWSER=true
 ARG OPENCODE_VERSION=1.15.7
 ARG AGENT_BROWSER_VERSION=0.31.1
@@ -104,11 +102,10 @@ RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
     && rm -rf /var/lib/apt/lists/*; \
     fi
 
-# agent-browser CLI/daemon — separate layer so it pulls in parallel with the
-# chromium layer and churns independently of it. Do NOT run `agent-browser
-# install` — it fetches Chrome-for-Testing (no arm64 build); we use system
-# chromium via AGENT_BROWSER_EXECUTABLE_PATH. --allow-scripts lets agent-browser's
-# npm postinstall run on npm 11+.
+# agent-browser CLI/daemon. Do NOT run `agent-browser install` — it fetches
+# Chrome-for-Testing (no arm64 build); we use system chromium via
+# AGENT_BROWSER_EXECUTABLE_PATH. --allow-scripts lets the npm postinstall run on
+# npm 11+.
 RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
     npm install -g --allow-scripts=agent-browser "agent-browser@${AGENT_BROWSER_VERSION}" && \
     agent-browser --version && \
@@ -190,8 +187,6 @@ RUN chmod +x /workspace/firewall-init.sh
 # kubernetes_sandbox_manager._OPENCODE_SESSION_TAG_PLUGIN_PATH.
 COPY opencode-plugins/ /workspace/opencode-plugins/
 
-# `browser` — the agent's browser-use command (see browser-cli.sh). Inert when
-# ENABLE_BROWSER=false (agent-browser absent).
 COPY browser-cli.sh /usr/local/bin/browser
 RUN chmod 0755 /usr/local/bin/browser
 

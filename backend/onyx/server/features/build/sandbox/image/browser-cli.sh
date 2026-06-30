@@ -38,9 +38,7 @@ fi
 # (it ignores *_PROXY env; userinfo stripped — proxy authorizes by source IP);
 # agent-browser otherwise launches a non-installed Chrome-for-Testing.
 CLEAN_PROXY="$(printf '%s' "${HTTPS_PROXY:-${HTTP_PROXY:-}}" | sed -E 's#^([a-z]+://)?[^@/]*@#\1#')"
-# Fail fast: with no proxy, an empty --proxy-server= flag makes Chromium go
-# direct, which the pod's egress lockdown blocks — surfaces as cryptic connection
-# errors instead of a clear cause. Skip when AGENT_BROWSER_ARGS is overridden.
+# No proxy → an empty --proxy-server= sends Chromium direct, which egress blocks; fail fast.
 if [ -z "${AGENT_BROWSER_ARGS:-}" ] && [ -z "$CLEAN_PROXY" ]; then
     echo "browser: no egress proxy configured (HTTPS_PROXY/HTTP_PROXY unset)" >&2
     exit 1

@@ -115,9 +115,6 @@ class TestAvailabilityGate:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # browser is the one registry entry gated per-deployment on ENABLE_BROWSER
-        # (whether the sandbox image has the browser runtime). It must drop out of
-        # sandbox injection when off and appear when on.
         _seed_canonical(db_session)
 
         monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", False)

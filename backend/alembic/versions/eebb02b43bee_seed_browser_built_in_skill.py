@@ -38,7 +38,6 @@ _BROWSER_DESCRIPTION = (
     "interactive browser rather than static page content."
 )
 
-# Lightweight Core table — only the columns this migration writes.
 _skill_table = sa.table(
     "skill",
     sa.column("id", postgresql.UUID(as_uuid=True)),
