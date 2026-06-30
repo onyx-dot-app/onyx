@@ -99,10 +99,6 @@ class MCPTool(Tool[None]):
     def display_name(self) -> str:
         return self._display_name
 
-    @property
-    def llm_name(self) -> str:
-        return self._llm_name
-
     def use_disambiguated_name(self) -> None:
         self._name = self._llm_name
 
