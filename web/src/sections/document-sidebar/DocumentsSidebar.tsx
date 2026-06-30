@@ -12,6 +12,7 @@ import {
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
 import { SvgSearchMenu, SvgX } from "@opal/icons";
+import { useTranslation } from "react-i18next";
 
 // Build an OnyxDocument from basic file info
 const buildOnyxDocumentFromFile = (
@@ -43,6 +44,7 @@ interface HeaderProps {
 }
 
 function Header({ children, onClose }: HeaderProps) {
+  const { t } = useTranslation();
   return (
     <div className="sticky top-0 z-sticky bg-background-tint-01">
       <div className="flex flex-row w-full items-center justify-between gap-2 py-3">
@@ -56,7 +58,7 @@ function Header({ children, onClose }: HeaderProps) {
           icon={SvgX}
           prominence="tertiary"
           onClick={onClose}
-          tooltip="Close Sidebar"
+          tooltip={t("chat.sidebar.close_sidebar", "Close Sidebar")}
         />
       </div>
       <Divider paddingParallel="fit" paddingPerpendicular="fit" />
@@ -92,6 +94,7 @@ const DocumentsSidebar = memo(
     selectedDocuments,
     setPresentingDocument,
   }: DocumentsSidebarProps) => {
+    const { t } = useTranslation();
     const idOfMessageToDisplay = useSelectedNodeForDocDisplay();
     const currentMessageTree = useCurrentMessageTree();
 
@@ -166,7 +169,9 @@ const DocumentsSidebar = memo(
         <div className="flex flex-col px-3 gap-6">
           {hasCited && (
             <div>
-              <Header onClose={closeSidebar}>Cited Sources</Header>
+              <Header onClose={closeSidebar}>
+                {t("chat.sidebar.cited_sources", "Cited Sources")}
+              </Header>
               <ChatDocumentDisplayWrapper>
                 {citedDocuments.map((document) => (
                   <ChatDocumentDisplay
@@ -186,7 +191,9 @@ const DocumentsSidebar = memo(
           {hasOther && (
             <div>
               <Header onClose={closeSidebar}>
-                {citedDocuments.length > 0 ? "More" : "Found Sources"}
+                {citedDocuments.length > 0
+                  ? t("chat.sidebar.more", "More")
+                  : t("chat.sidebar.found_sources", "Found Sources")}
               </Header>
               <ChatDocumentDisplayWrapper>
                 {otherDocuments.map((document) => (
@@ -206,7 +213,9 @@ const DocumentsSidebar = memo(
 
           {humanFileDescriptors && humanFileDescriptors.length > 0 && (
             <div>
-              <Header onClose={closeSidebar}>User Files</Header>
+              <Header onClose={closeSidebar}>
+                {t("chat.sidebar.user_files", "User Files")}
+              </Header>
               <ChatDocumentDisplayWrapper>
                 {humanFileDescriptors.map((file) => (
                   <ChatDocumentDisplay

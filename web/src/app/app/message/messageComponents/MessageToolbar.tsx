@@ -1,6 +1,7 @@
 "use client";
 
 import React, { RefObject, useState, useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
 import { FeedbackType, Message } from "@/app/app/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -51,6 +52,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   updateCurrentDocumentSidebarVisible,
   updateCurrentSelectedNodeForDocDisplay,
 }: SouurcesTagWrapperProps) {
+  const { t } = useTranslation();
   // Convert citations to SourceInfo array
   const sources = useMemo(
     () => citationsToSourceInfoArray(citations, documentMap),
@@ -79,7 +81,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   return (
     <SourceTag
       variant="button"
-      displayName="Sources"
+      displayName={t("general.sources", "Sources")}
       sources={sources}
       onSourceClick={handleSourceClick}
       toggleSource
@@ -137,6 +139,7 @@ export default function MessageToolbar({
   citations,
   documentMap,
 }: MessageToolbarProps) {
+  const { t } = useTranslation();
   // Document sidebar state - managed internally to reduce prop drilling
   const documentSidebarVisible = useDocumentSidebarVisible();
   const selectedMessageForDocDisplay = useSelectedNodeForDocDisplay();
@@ -268,7 +271,9 @@ export default function MessageToolbar({
               variant="select-light"
               state={isFeedbackTransient("like") ? "selected" : "empty"}
               tooltip={
-                currentFeedback === "like" ? "Remove Like" : "Good Response"
+                currentFeedback === "like"
+                  ? t("chat.remove_like")
+                  : t("chat.good_response")
               }
               data-testid="AgentMessage/like-button"
             />
@@ -279,8 +284,8 @@ export default function MessageToolbar({
               state={isFeedbackTransient("dislike") ? "selected" : "empty"}
               tooltip={
                 currentFeedback === "dislike"
-                  ? "Remove Dislike"
-                  : "Bad Response"
+                  ? t("chat.remove_dislike")
+                  : t("chat.bad_response")
               }
               data-testid="AgentMessage/dislike-button"
             />

@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useLayoutEffect,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Packet, StopReason } from "@/app/app/services/streamingModels";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
 import { FullChatState } from "@/app/app/message/messageComponents/interfaces";
@@ -108,6 +109,7 @@ const AgentMessage = React.memo(function AgentMessage({
   disableTTS,
   fullWidthChat,
 }: AgentMessageProps) {
+  const { t } = useTranslation();
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
 
@@ -355,7 +357,7 @@ const AgentMessage = React.memo(function AgentMessage({
         {pacedDisplayGroups.length === 0 &&
           stopReason === StopReason.USER_CANCELLED && (
             <Text as="p" secondaryBody text04>
-              User has stopped generation
+              {t("chat.user_stopped_generation")}
             </Text>
           )}
       </div>

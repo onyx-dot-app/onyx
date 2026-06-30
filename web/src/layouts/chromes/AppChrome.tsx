@@ -2,13 +2,13 @@
 
 import {
   useCallback,
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useEffect,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
 import { cn, markdown } from "@opal/utils";
 import { INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
@@ -66,6 +66,7 @@ import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 // ---------------------------------------------------------------------------
 
 function Header() {
+  const { t } = useTranslation();
   const appFocus = useAppFocus();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
@@ -219,7 +220,7 @@ function Header() {
             sizePreset="main-ui"
             rounding="sm"
             icon={SvgFolderIn}
-            title="Move to Project"
+            title={t("projects.move_to_project")}
             onClick={noProp(() => setShowMoveOptions(true))}
           />,
           <LineItemButton
@@ -228,7 +229,7 @@ function Header() {
             rounding="sm"
             color="danger"
             icon={SvgTrash}
-            title="Delete"
+            title={t("projects.delete")}
             onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
           />,
         ];
@@ -240,6 +241,7 @@ function Header() {
     currentChatSession,
     setDeleteConfirmationModalOpen,
     handleMoveClick,
+    t,
   ]);
 
   return (
@@ -270,17 +272,16 @@ function Header() {
 
       {deleteModalOpen && (
         <ConfirmationModalLayout
-          title="Delete Chat"
+          title={t("projects.delete_chat_title")}
           icon={SvgTrash}
           onClose={() => setDeleteModalOpen(false)}
           submit={
             <Button variant="danger" onClick={handleDeleteChat}>
-              Delete
+              {t("projects.delete")}
             </Button>
           }
         >
-          Are you sure you want to delete this chat? This action cannot be
-          undone.
+          {t("projects.delete_chat_confirm")}
         </ConfirmationModalLayout>
       )}
 
@@ -397,7 +398,7 @@ function Header() {
                       onClick={() => setShowShareModal(true)}
                       aria-label="share-chat-button"
                     >
-                      Share
+                      {t("projects.share")}
                     </Button>
                     <Button
                       icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
@@ -453,7 +454,7 @@ function Footer() {
           // # Note (from @raunakab):
           //
           // The conditional rendering of vertical padding based on the current page is intentional.
-          // The `AppInputBar` has `shadow-box-01` applied, which extends ~14px below it.
+          // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
           // Because the content area in `AppChrome` uses `overflow-auto`, the shadow would be
           // clipped at the container boundary — causing a visible rendering artefact.
           //
@@ -488,15 +489,22 @@ export default function AppChrome({ children }: AppChromeProps) {
 
   const appFocus = useAppFocus();
   const { appName } = useSettings();
-  const { currentChatSession } = useChatSessions();
 
-  useLayoutEffect(() => {
-    const appendChatNameToDocumentTitle =
-      (appFocus.isChat() || appFocus.isSharedChat()) && currentChatSession;
-    document.title = appendChatNameToDocumentTitle
-      ? `${currentChatSession.name} — ${appName}`
-      : appName;
-  }, [currentChatSession?.name, appName, appFocus]);
+  // Keep the browser tab title in sync for routes that don't mount `AppPage`
+  // (settings, agents list, shared chat). `AppPage` owns the title on the
+  // chat / new-session / agent / project views, so we skip those here to avoid
+  // clobbering its more specific (e.g. per-chat-session) title.
+  useEffect(() => {
+    if (
+      appFocus.isChat() ||
+      appFocus.isNewSession() ||
+      appFocus.isAgent() ||
+      appFocus.isProject()
+    ) {
+      return;
+    }
+    document.title = appName;
+  }, [appFocus, appName]);
 
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();

@@ -44,7 +44,10 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
   );
 }
 
+import { useTranslation } from "react-i18next";
+
 export default function AgentsNavigationPage() {
+  const { t } = useTranslation();
   const { agents } = useAgents();
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
@@ -95,15 +98,15 @@ export default function AgentsNavigationPage() {
     >
       <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
-        title="Agents"
-        description="Customize AI behavior and knowledge for you and your team's use cases."
+        title={t("agents.title")}
+        description={t("agents.desc")}
         rightChildren={
           <Button
             href="/app/agents/create"
             icon={SvgPlus}
             aria-label="AgentsPage/new-agent-button"
           >
-            New Agent
+            {t("agents.new_agent")}
           </Button>
         }
       >
@@ -112,7 +115,7 @@ export default function AgentsNavigationPage() {
             <div className="flex-2">
               <InputTypeIn
                 ref={searchInputRef}
-                placeholder="Search agents..."
+                placeholder={t("agents.search_placeholder")}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 searchIcon
@@ -124,8 +127,12 @@ export default function AgentsNavigationPage() {
                 onValueChange={(value) => setActiveTab(value as "all" | "your")}
               >
                 <Tabs.List>
-                  <Tabs.Trigger value="all">All Agents</Tabs.Trigger>
-                  <Tabs.Trigger value="your">Your Agents</Tabs.Trigger>
+                  <Tabs.Trigger value="all">
+                    {t("agents.all_agents")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="your">
+                    {t("agents.your_agents")}
+                  </Tabs.Trigger>
                 </Tabs.List>
               </Tabs>
             </div>
@@ -142,19 +149,23 @@ export default function AgentsNavigationPage() {
             className="w-full h-full flex flex-col items-center justify-center py-12"
             text03
           >
-            No Agents found
+            {t("agents.no_agents")}
           </Text>
         ) : (
           <>
             <AgentsSection
-              title="Featured Agents"
-              description="Curated by your team"
+              title={t("agents.featured_agents")}
+              description={t("agents.curated_by_team")}
               agents={featuredAgents}
             />
-            <AgentsSection title="All Agents" agents={allAgents} />
+            <AgentsSection title={t("agents.all_agents")} agents={allAgents} />
             <TextSeparator
               count={agentCount}
-              text={agentCount === 1 ? "Agent" : "Agents"}
+              text={
+                agentCount === 1
+                  ? t("agents.agent_singular")
+                  : t("agents.agent_plural")
+              }
             />
           </>
         )}

@@ -9,6 +9,7 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "@/interfaces/onboarding";
+import { useTranslation } from "react-i18next";
 import {
   LLMProviderFormProps,
   WellKnownLLMProviderDescriptor,
@@ -92,6 +93,7 @@ const LLMStep = memo(
     actions: onboardingActions,
     disabled,
   }: LLMStepProps) => {
+    const { t } = useTranslation();
     const { llmProviderOptions, isLoading } = useLLMProviderOptions();
     const llmDescriptors = llmProviderOptions ?? [];
 
@@ -152,8 +154,14 @@ const LLMStep = memo(
           >
             <ContentAction
               icon={SvgCpu}
-              title="Connect your LLM models"
-              description="Onyx supports both self-hosted models and popular providers."
+              title={t(
+                "onboarding.llm.connect_title",
+                "Connect your LLM models"
+              )}
+              description={t(
+                "onboarding.llm.connect_desc",
+                "Onyx supports both self-hosted models and popular providers."
+              )}
               sizePreset="main-ui"
               variant="section"
               padding="lg"
@@ -164,7 +172,7 @@ const LLMStep = memo(
                   rightIcon={SvgExternalLink}
                   href="/admin/configuration/language-models"
                 >
-                  View in Admin Panel
+                  {t("onboarding.llm.btn_view_admin", "View in Admin Panel")}
                 </Button>
               }
             />
@@ -215,8 +223,14 @@ const LLMStep = memo(
                   {/* Custom provider card */}
                   <div className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow">
                     <LLMProviderCard
-                      title="Custom LLM Provider"
-                      subtitle="LiteLLM Compatible APIs"
+                      title={t(
+                        "onboarding.llm.custom_provider_title",
+                        "Custom LLM Provider"
+                      )}
+                      subtitle={t(
+                        "onboarding.llm.custom_provider_subtitle",
+                        "LiteLLM Compatible APIs"
+                      )}
                       disabled={disabled}
                       isConnected={onboardingState.data.llmProviders?.some(
                         (provider) => provider === "custom"
@@ -240,7 +254,7 @@ const LLMStep = memo(
           onboardingActions.setButtonActive(true);
           onboardingActions.goToStep(OnboardingStep.LlmSetup);
         }}
-        aria-label="Edit LLM providers"
+        aria-label={t("onboarding.llm.edit_providers", "Edit LLM providers")}
       >
         <div className="flex items-center gap-1">
           <StackedProviderIcons
@@ -249,9 +263,9 @@ const LLMStep = memo(
           <Text as="p" text04 mainUiAction>
             {onboardingState.data.llmProviders?.length || 0}{" "}
             {(onboardingState.data.llmProviders?.length || 0) === 1
-              ? "model"
-              : "models"}{" "}
-            connected
+              ? t("onboarding.llm.model", "model")
+              : t("onboarding.llm.models", "models")}{" "}
+            {t("onboarding.llm.connected", "connected")}
           </Text>
         </div>
         <div className="p-1">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Button,
   LineItemButton,
@@ -47,6 +48,7 @@ export default function ModelSelectorContent({
   includeGlobalDefault = false,
   footer,
 }: ModelSelectorContentProps) {
+  const { t } = useTranslation();
   const { llmProviders, isLoading, defaultText } =
     useCurrentAgentLLMProviders();
 
@@ -163,7 +165,7 @@ export default function ModelSelectorContent({
         variant="internal"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder="Search models..."
+        placeholder={t("admin.agents.editor_search_models")}
       />
 
       <PopoverMenu scrollContainerRef={scrollContainerRef}>
@@ -207,11 +209,7 @@ export default function ModelSelectorContent({
                 ]
               : groupedOptions.length === 1
                 ? [
-                    <Section
-                      key="single-provider"
-                      gap={0.25}
-                      alignItems="stretch"
-                    >
+                    <Section key="single-provider" gap={0.25}>
                       {groupedOptions[0]!.options.map(renderModelItem)}
                     </Section>,
                   ]
@@ -265,7 +263,7 @@ export default function ModelSelectorContent({
                         </CollapsibleTrigger>
 
                         <CollapsibleContent>
-                          <Section gap={0.25} alignItems="stretch">
+                          <Section gap={0.25}>
                             {group.options.map(renderModelItem)}
                           </Section>
                         </CollapsibleContent>

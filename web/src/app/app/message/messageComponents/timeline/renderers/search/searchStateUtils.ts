@@ -45,8 +45,15 @@ export interface SearchState {
  */
 const MAX_HEADER_SOURCES = 3;
 
-export const formatSearchHeader = (sourceFilters: string[]): string => {
-  if (sourceFilters.length === 0) return "Searching internal documents";
+export const formatSearchHeader = (
+  sourceFilters: string[],
+  t?: any
+): string => {
+  if (sourceFilters.length === 0) {
+    return t
+      ? t("chat.timeline.searching_internal")
+      : "Searching internal documents";
+  }
   const names = sourceFilters.map((source) =>
     isValidSource(source)
       ? getSourceDisplayName(source as ValidSources)
@@ -54,9 +61,25 @@ export const formatSearchHeader = (sourceFilters: string[]): string => {
   );
   const shown = names.slice(0, MAX_HEADER_SOURCES);
   const overflow = names.length - shown.length;
-  const label =
-    overflow > 0 ? `${shown.join(", ")} +${overflow} more` : shown.join(", ");
-  return `Searching ${label}`;
+  const listStr = shown.join(", ");
+
+  if (t) {
+    const label =
+      overflow > 0
+        ? t("chat.timeline.sources_overflow", {
+            list: listStr,
+            count: overflow,
+            defaultValue: `${listStr} +${overflow} more`,
+          })
+        : listStr;
+    return t("chat.timeline.searching_sources", {
+      sources: label,
+      defaultValue: `Searching ${label}`,
+    });
+  } else {
+    const label = overflow > 0 ? `${listStr} +${overflow} more` : listStr;
+    return `Searching ${label}`;
+  }
 };
 
 /** Constructs the current search state from search tool packets. */

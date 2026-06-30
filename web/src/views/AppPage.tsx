@@ -4,6 +4,7 @@ import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast, useToastFromQuery } from "@/hooks/useToast";
+import { useTranslation } from "react-i18next";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
@@ -107,6 +108,7 @@ export interface ChatPageProps {
 }
 
 export default function AppPage({ firstMessage }: ChatPageProps) {
+  const { t } = useTranslation();
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
   // const renderCount = useRef(0);
@@ -130,7 +132,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   useToastFromQuery({
     oauth_connected: {
-      message: "Authentication successful",
+      message: t("chat.auth_successful"),
       type: "success",
     },
   });
@@ -144,8 +146,27 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     currentChatSessionId,
     isLoading: isLoadingChatSessions,
   } = useChatSessions();
-  const { vectorDbEnabled, disable_default_assistant } = useSettings();
+  // handle redirect if chat page is disabled
+  // NOTE: this must be done here, in a client component since
+  // settings are passed in via Context and therefore aren't
+  // available in server-side components
+  const settings = useSettings();
+  const { appName } = settings;
 
+  const appNameRef = useRef<string>("Onyx");
+  useEffect(() => {
+    appNameRef.current = appName;
+    document.title = currentChatSession?.name
+      ? `${currentChatSession.name} — ${appName}`
+      : appName;
+  }, [currentChatSession?.name, appName]);
+  useEffect(() => {
+    return () => {
+      document.title = appNameRef.current;
+    };
+  }, []);
+
+  const { vectorDbEnabled } = settings;
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -295,7 +316,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     liveAgent,
     currentChatSessionId,
     currentChatSession ?? undefined,
-    disable_default_assistant ?? false
+    settings.disable_default_assistant ?? false
   );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
@@ -522,7 +543,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      toast.error("No previously-submitted user message found.");
+      toast.error(t("chat.no_previous_message"));
       return;
     }
 
@@ -541,6 +562,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     deepResearchEnabledForCurrentWorkflow,
     multiModel.isMultiModelActive,
   ]);
+
+  const toggleDocumentSidebar = useCallback(() => {
+    updateCurrentDocumentSidebarVisible(!documentSidebarVisible);
+  }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
   if (resolvedUser === null) {
     redirect("/auth/login");
@@ -845,21 +870,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           }
                           title={
                             sessionFetchError.type === "not_found"
-                              ? "Chat not found"
+                              ? t("chat.chat_not_found")
                               : sessionFetchError.type === "access_denied"
-                                ? "Access denied"
-                                : "Something went wrong"
+                                ? t("chat.access_denied")
+                                : t("chat.something_went_wrong")
                           }
                           description={
                             sessionFetchError.type === "not_found"
-                              ? "This chat session doesn't exist or has been deleted."
+                              ? t("chat.chat_not_found_desc")
                               : sessionFetchError.type === "access_denied"
-                                ? "You don't have permission to view this chat session."
+                                ? t("chat.access_denied_desc")
                                 : sessionFetchError.detail
                           }
                         />
                         <Button href="/app" prominence="secondary">
-                          Start a new chat
+                          {t("chat.start_new_chat")}
                         </Button>
                       </Section>
                     )}
@@ -955,7 +980,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     {/*
                       # Note (@raunakab)
 
-                      `shadow-box-01` on AppInputBar extends ~14px below the element
+                      `shadow-01` on AppInputBar extends ~14px below the element
                       (2px offset + 12px blur). Because the content area in `Root`
                       (app-layouts.tsx) uses `overflow-auto`, shadows that exceed
                       the container bounds are clipped.

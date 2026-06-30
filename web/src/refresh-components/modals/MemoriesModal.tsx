@@ -12,6 +12,7 @@ import TextSeparator from "@/refresh-components/TextSeparator";
 import { toast } from "@/hooks/useToast";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
+import { useTranslation } from "react-i18next";
 import {
   useMemoryManager,
   MAX_MEMORY_LENGTH,
@@ -50,6 +51,7 @@ function MemoryItem({
   const [isHighlighting, setIsHighlighting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (shouldFocus && textareaRef.current) {
@@ -91,7 +93,10 @@ function MemoryItem({
         <Section flexDirection="row" alignItems="start" gap={0.5}>
           <InputTextArea
             ref={textareaRef}
-            placeholder="Type or paste in a personal note or memory"
+            placeholder={t(
+              "settings.memory.type_paste_placeholder",
+              "Type or paste in a personal note or memory"
+            )}
             value={memory.content}
             onChange={(e) => onUpdate(originalIndex, e.target.value)}
             onFocus={() => setIsFocused(true)}
@@ -121,8 +126,8 @@ function MemoryItem({
             prominence="tertiary"
             icon={SvgMinusCircle}
             onClick={() => void onRemove(originalIndex)}
-            aria-label="Remove Line"
-            tooltip="Remove Line"
+            aria-label={t("settings.memory.remove_line_aria", "Remove Line")}
+            tooltip={t("settings.memory.remove_line_tooltip", "Remove Line")}
           />
         </Section>
         <div
@@ -172,6 +177,7 @@ export default function MemoriesModal({
 }: MemoriesModalProps) {
   const close = useModalClose(onClose);
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
+  const { t } = useTranslation();
 
   // Self-fetching: when no props provided, fetch from UserProvider
   const { user, refreshUser, updateUserPersonalization } = useUser();
@@ -179,8 +185,14 @@ export default function MemoriesModal({
     user,
     updateUserPersonalization,
     {
-      onSuccess: () => toast.success("Preferences saved"),
-      onError: () => toast.error("Failed to save preferences"),
+      onSuccess: () =>
+        toast.success(
+          t("settings.chats.toast_prefs_saved", "Preferences saved")
+        ),
+      onError: () =>
+        toast.error(
+          t("settings.chats.toast_prefs_failed", "Failed to save preferences")
+        ),
     }
   );
 
@@ -239,7 +251,22 @@ export default function MemoriesModal({
   } = useMemoryManager({
     memories: effectiveMemories,
     onSaveMemories: effectiveSave,
-    onNotify: (message, type) => toast[type](message),
+    onNotify: (message, type) => {
+      let translated = message;
+      if (message === "Memory saved") {
+        translated = t("settings.memory.saved_success", "Memory saved");
+      } else if (message === "Failed to save memory") {
+        translated = t("settings.memory.saved_failed", "Failed to save memory");
+      } else if (message === "Memory deleted") {
+        translated = t("settings.memory.deleted_success", "Memory deleted");
+      } else if (message === "Failed to delete memory") {
+        translated = t(
+          "settings.memory.deleted_failed",
+          "Failed to delete memory"
+        );
+      }
+      toast[type](translated);
+    },
   });
 
   // Always start with an empty card; optionally focus it (View/Add button)
@@ -267,13 +294,16 @@ export default function MemoriesModal({
       <Modal.Content width="sm" height="lg" position="top">
         <Modal.Header
           icon={SvgAddLines}
-          title="Memory"
-          description="Let Onyx reference these stored notes and memories in chats."
+          title={t("settings.memory.modal_title", "Memory")}
+          description={t(
+            "settings.memory.modal_desc",
+            "Let Onyx reference these stored notes and memories in chats."
+          )}
           onClose={close}
         >
           <Section flexDirection="row" gap={0.5}>
             <InputTypeIn
-              placeholder="Search..."
+              placeholder={t("settings.memory.search_placeholder", "Search...")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               searchIcon
@@ -285,11 +315,14 @@ export default function MemoriesModal({
               rightIcon={SvgPlusCircle}
               title={
                 !canAddMemory
-                  ? `Maximum of ${MAX_MEMORY_COUNT} memories reached`
+                  ? t("settings.memory.max_reached", {
+                      defaultValue: `Maximum of ${MAX_MEMORY_COUNT} memories reached`,
+                      count: MAX_MEMORY_COUNT,
+                    })
                   : undefined
               }
             >
-              Add Line
+              {t("settings.memory.add_line", "Add Line")}
             </Button>
           </Section>
         </Modal.Header>
@@ -299,8 +332,14 @@ export default function MemoriesModal({
             <Section alignItems="center" padding={2}>
               <Text secondaryBody text03>
                 {searchQuery.trim()
-                  ? "No memories match your search."
-                  : 'No memories yet. Click "Add Line" to get started.'}
+                  ? t(
+                      "settings.memory.no_matches",
+                      "No memories match your search."
+                    )
+                  : t(
+                      "settings.memory.no_memories_yet",
+                      'No memories yet. Click "Add Line" to get started.'
+                    )}
               </Text>
             </Section>
           ) : (
@@ -329,7 +368,11 @@ export default function MemoriesModal({
           )}
           <TextSeparator
             count={totalLineCount}
-            text={totalLineCount === 1 ? "Line" : "Lines"}
+            text={
+              totalLineCount === 1
+                ? t("settings.memory.suffix_line", "Line")
+                : t("settings.memory.suffix_lines", "Lines")
+            }
           />
         </Modal.Body>
       </Modal.Content>

@@ -25,6 +25,7 @@ import {
 } from "@/hooks/useAuthTypeMetadata";
 import { updateUserPersonalization as persistPersonalization } from "@/lib/userSettings";
 import { useTheme } from "next-themes";
+import { useTranslation } from "react-i18next";
 
 interface UserContextType {
   user: User | null;
@@ -48,6 +49,7 @@ interface UserContextType {
   updateUserThemePreference: (
     themePreference: ThemePreference
   ) => Promise<void>;
+  updateUserLanguagePreference: (language: string) => Promise<void>;
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
   updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
@@ -62,6 +64,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser } = useCurrentUser();
+  const { i18n } = useTranslation();
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
   const updatedSettingsData = useSettings();
@@ -154,6 +157,27 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     theme,
     setTheme,
   ]);
+
+  // Sync user's language preference from DB to i18next on load
+  const hasSyncedLanguageRef = useRef(false);
+
+  useEffect(() => {
+    // Only sync once per session
+    if (hasSyncedLanguageRef.current) return;
+
+    // Wait for user data to load
+    if (!upToDateUser?.id) return;
+
+    // Only sync if user has a saved preference
+    const savedLanguage = upToDateUser?.preferences?.language;
+    if (!savedLanguage) return;
+
+    i18n.changeLanguage(savedLanguage);
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = savedLanguage;
+    }
+    hasSyncedLanguageRef.current = true;
+  }, [upToDateUser?.id, upToDateUser?.preferences?.language, i18n]);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
@@ -399,6 +423,54 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUserLanguagePreference = async (language: string) => {
+    // Snapshot the current language so we can roll back the optimistic
+    // i18n change if the request fails.
+    const previousLanguage = i18n.language;
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              language,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      // Change local language immediately (optimistic)
+      i18n.changeLanguage(language);
+      if (typeof document !== "undefined") {
+        document.documentElement.lang = language;
+      }
+
+      const response = await fetch(`/api/user/language`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ language }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update language preference");
+      }
+    } catch (error) {
+      // Roll back the optimistic UI language change so the live UI stays in
+      // sync with the persisted preference.
+      i18n.changeLanguage(previousLanguage);
+      if (typeof document !== "undefined") {
+        document.documentElement.lang = previousLanguage;
+      }
+      await refreshUser();
+      console.error("Error updating language preference:", error);
+      throw error;
+    }
+  };
+
   const updateUserChatBackground = async (chatBackground: string | null) => {
     try {
       setUpToDateUser((prevUser) => {
@@ -558,6 +630,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserTemperatureOverrideEnabled,
         updateUserPersonalization,
         updateUserThemePreference,
+        updateUserLanguagePreference,
         updateUserChatBackground,
         updateUserDefaultModel,
         updateUserDefaultAppMode,

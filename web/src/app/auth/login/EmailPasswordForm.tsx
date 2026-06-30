@@ -19,6 +19,7 @@ import { APIFormFieldState } from "@/refresh-components/form/types";
 import { SvgArrowRightCircle } from "@opal/icons";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
 import { Spacer } from "@opal/components";
+import { useTranslation } from "react-i18next";
 
 interface EmailPasswordFormProps {
   isSignup?: boolean;
@@ -37,6 +38,7 @@ export default function EmailPasswordForm({
   defaultEmail,
   isJoin = false,
 }: EmailPasswordFormProps) {
+  const { t } = useTranslation();
   const { user, authTypeMetadata } = useUser();
   const passwordMinLength = authTypeMetadata?.passwordMinLength ?? 8;
   const [isWorking, setIsWorking] = useState<boolean>(false);
@@ -49,15 +51,15 @@ export default function EmailPasswordForm({
     () => ({
       loading: isSignup
         ? isJoin
-          ? "Joining..."
-          : "Creating account..."
-        : "Signing in...",
+          ? t("auth.joining")
+          : t("auth.creating_account")
+        : t("auth.signing_in"),
       success: isSignup
-        ? "Account created. Signing in..."
-        : "Signed in successfully.",
+        ? t("auth.account_created_signing_in")
+        : t("auth.signed_in_successfully"),
       error: errorMessage,
     }),
-    [isSignup, isJoin, errorMessage]
+    [isSignup, isJoin, errorMessage, t]
   );
 
   return (
@@ -159,9 +161,9 @@ export default function EmailPasswordForm({
             const errorDetail: any = (await loginResponse.json()).detail;
             let errorMsg: string = "Unknown error";
             if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
-              errorMsg = "Invalid email or password";
+              errorMsg = t("auth.invalid_email_or_password");
             } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
-              errorMsg = "Create an account to set a password";
+              errorMsg = t("auth.create_an_account_to_set_password");
             } else if (typeof errorDetail === "string") {
               errorMsg = errorDetail;
             }
@@ -181,7 +183,7 @@ export default function EmailPasswordForm({
                 name="email"
                 render={(field, helper, meta, state) => (
                   <FormField name="email" state={state} className="w-full">
-                    <FormField.Label>Email Address</FormField.Label>
+                    <FormField.Label>{t("auth.email_address")}</FormField.Label>
                     <FormField.Control>
                       <InputTypeIn
                         {...field}
@@ -193,7 +195,7 @@ export default function EmailPasswordForm({
                           }
                           field.onChange(e);
                         }}
-                        placeholder="email@yourcompany.com"
+                        placeholder={t("auth.email_placeholder")}
                         data-testid="email"
                         autoComplete="username"
                         variant={apiStatus === "error" ? "error" : undefined}
@@ -207,7 +209,7 @@ export default function EmailPasswordForm({
                 name="password"
                 render={(field, helper, meta, state) => (
                   <FormField name="password" state={state} className="w-full">
-                    <FormField.Label>Password</FormField.Label>
+                    <FormField.Label>{t("auth.password")}</FormField.Label>
                     <FormField.Control>
                       <PasswordInputTypeIn
                         {...field}
@@ -231,9 +233,15 @@ export default function EmailPasswordForm({
                     {isSignup && !showApiMessage && (
                       <FormField.Message
                         messages={{
-                          idle: `Password must be at least ${passwordMinLength} characters`,
+                          idle: t("auth.password_min_length", {
+                            count: passwordMinLength,
+                            defaultValue: `Password must be at least ${passwordMinLength} characters`,
+                          }),
                           error: meta.error,
-                          success: `Password must be at least ${passwordMinLength} characters`,
+                          success: t("auth.password_min_length", {
+                            count: passwordMinLength,
+                            defaultValue: `Password must be at least ${passwordMinLength} characters`,
+                          }),
                         }}
                       />
                     )}
@@ -254,7 +262,11 @@ export default function EmailPasswordForm({
                 width="full"
                 rightIcon={SvgArrowRightCircle}
               >
-                {isJoin ? "Join" : isSignup ? "Create Account" : "Sign In"}
+                {isJoin
+                  ? t("auth.join")
+                  : isSignup
+                    ? t("auth.create_account")
+                    : t("auth.sign_in")}
               </Button>
               {user?.is_anonymous_user && (
                 <Link
@@ -262,7 +274,7 @@ export default function EmailPasswordForm({
                   className="text-xs text-action-link-05 cursor-pointer text-center w-full font-medium mx-auto"
                 >
                   <span className="hover:border-b hover:border-dotted hover:border-action-link-05">
-                    or continue as guest
+                    {t("auth.or_continue_as_guest")}
                   </span>
                 </Link>
               )}

@@ -9,6 +9,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { Button } from "@opal/components";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { MemoryItem } from "@/lib/types";
+import { useTranslation } from "react-i18next";
 
 interface MemoriesProps {
   memories: MemoryItem[];
@@ -18,13 +19,17 @@ interface MemoriesProps {
 export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
   const memoriesModal = useCreateModal();
   const [targetMemoryId, setTargetMemoryId] = useState<number | null>(null);
+  const { t } = useTranslation();
 
   return (
     <>
       {memories.length === 0 ? (
         <LineItem
           skeleton
-          description="Add personal note or memory that Onyx should remember."
+          description={t(
+            "settings.chats.add_note_placeholder",
+            "Add personal note or memory that Onyx should remember."
+          )}
           onClick={() => {
             setTargetMemoryId(null);
             memoriesModal.toggle(true);
@@ -55,8 +60,8 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
             ))}
           </div>
           <ButtonTile
-            title="View/Add"
-            description="All Memories"
+            title={t("settings.chats.view_add", "View/Add")}
+            description={t("settings.chats.all_memories", "All Memories")}
             icon={SvgAddLines}
             onClick={() => {
               setTargetMemoryId(null);

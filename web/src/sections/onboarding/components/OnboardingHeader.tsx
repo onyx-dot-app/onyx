@@ -11,6 +11,7 @@ import { SvgProgressCircle, SvgX } from "@opal/icons";
 import { Card } from "@/refresh-components/cards";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
+import { useTranslation } from "react-i18next";
 
 interface OnboardingHeaderProps {
   state: OnboardingState;
@@ -25,9 +26,44 @@ const OnboardingHeader = React.memo(
     handleHideOnboarding,
     handleFinishOnboarding,
   }: OnboardingHeaderProps) => {
+    const { t } = useTranslation();
     const iconPercentage =
       STEP_CONFIG[onboardingState.currentStep].iconPercentage;
-    const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
+    const rawTitle = STEP_CONFIG[onboardingState.currentStep].title;
+    const rawButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
+
+    let title = rawTitle;
+    if (rawTitle === "Let's take a moment to get you set up.") {
+      title = t(
+        "onboarding.setup_title",
+        "Let's take a moment to get you set up."
+      );
+    } else if (
+      rawTitle === "Almost there! Connect your models to start chatting."
+    ) {
+      title = t(
+        "onboarding.connect_models_title",
+        "Almost there! Connect your models to start chatting."
+      );
+    } else if (
+      rawTitle ===
+      "You're all set, review the optional settings or click Finish Setup"
+    ) {
+      title = t(
+        "onboarding.complete_title",
+        "You're all set, review the optional settings or click Finish Setup"
+      );
+    }
+
+    let stepButtonText = rawButtonText;
+    if (rawButtonText === "Let's Go") {
+      stepButtonText = t("onboarding.btn_lets_go", "Let's Go");
+    } else if (rawButtonText === "Next") {
+      stepButtonText = t("onboarding.btn_next", "Next");
+    } else if (rawButtonText === "Finish Setup") {
+      stepButtonText = t("onboarding.btn_finish_setup", "Finish Setup");
+    }
+
     const isWelcomeStep =
       onboardingState.currentStep === OnboardingStep.Welcome;
     const isCompleteStep =
@@ -44,7 +80,7 @@ const OnboardingHeader = React.memo(
           icon={(props) => (
             <SvgProgressCircle value={iconPercentage} {...props} />
           )}
-          title={STEP_CONFIG[onboardingState.currentStep].title}
+          title={title}
           sizePreset="main-ui"
           variant="body"
           color="muted"
@@ -54,8 +90,11 @@ const OnboardingHeader = React.memo(
               <Section flexDirection="row">
                 {!isWelcomeStep && (
                   <Text as="p" text03 mainUiBody>
-                    Step {onboardingState.stepIndex} of{" "}
-                    {onboardingState.totalSteps}
+                    {t("onboarding.step_indicator", {
+                      defaultValue: "Step {{current}} of {{total}}",
+                      current: onboardingState.stepIndex,
+                      total: onboardingState.totalSteps,
+                    })}
                   </Text>
                 )}
                 <Button
