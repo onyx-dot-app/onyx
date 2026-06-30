@@ -17,11 +17,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
-<<<<<<< HEAD
 from shared_configs.contextvars import get_current_tenant_id
-=======
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
->>>>>>> bb95655549 (feat(usage): cost budgets on token rate limits (CE enforcement))
 
 logger = setup_logger()
 
