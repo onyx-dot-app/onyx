@@ -25,6 +25,7 @@ from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
+from sqlalchemy import Numeric
 from sqlalchemy import PrimaryKeyConstraint
 from sqlalchemy import Sequence
 from sqlalchemy import String
@@ -4672,7 +4673,9 @@ class TokenRateLimit(Base):
     # from that gate. At least one must be set — enforced by the check constraint
     # below, so a backfill / direct write can't create an unenforceable row.
     token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    cost_budget_cents: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_budget_cents: Mapped[float | None] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=True
+    )
     period_hours: Mapped[int] = mapped_column(Integer, nullable=False)
     scope: Mapped[TokenRateLimitScope] = mapped_column(
         Enum(TokenRateLimitScope, native_enum=False)
@@ -5472,7 +5475,9 @@ class UserUsage(Base):
     cache_read_tokens: Mapped[int] = mapped_column(
         BigInteger, nullable=False, default=0
     )
-    cost_cents: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    cost_cents: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False, default=0.0
+    )
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -5520,13 +5525,25 @@ class ModelCostOverride(Base):
     )
 
     # Rates in USD per million tokens.
-    input_cost_per_mtok: Mapped[float] = mapped_column(Float, nullable=False)
-    output_cost_per_mtok: Mapped[float] = mapped_column(Float, nullable=False)
+    input_cost_per_mtok: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
+    )
+    output_cost_per_mtok: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
+    )
     # Cache-read rate; null bills cache reads at the input rate (litellm default).
-    cache_read_cost_per_mtok: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cache_read_cost_per_mtok: Mapped[float | None] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=True
+    )
 
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
     __table_args__ = (

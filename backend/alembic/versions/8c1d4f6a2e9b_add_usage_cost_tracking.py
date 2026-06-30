@@ -29,10 +29,16 @@ def upgrade() -> None:
         # Empty string (not NULL) for a provider-agnostic override, so the unique
         # key works on every Postgres version (NULLS NOT DISTINCT is PG15+ only).
         sa.Column("provider", sa.String(), nullable=False, server_default=""),
-        sa.Column("input_cost_per_mtok", sa.Float(), nullable=False),
-        sa.Column("output_cost_per_mtok", sa.Float(), nullable=False),
+        sa.Column("input_cost_per_mtok", sa.Numeric(18, 6), nullable=False),
+        sa.Column("output_cost_per_mtok", sa.Numeric(18, 6), nullable=False),
         # null cache rate bills cache reads at the input rate (litellm default).
-        sa.Column("cache_read_cost_per_mtok", sa.Float(), nullable=True),
+        sa.Column("cache_read_cost_per_mtok", sa.Numeric(18, 6), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         # The model's onupdate=func.now() is ORM-side only (not DDL), so
         # updated_at auto-bumps on ORM writes but not on raw-SQL UPDATEs.
         sa.Column(
@@ -69,7 +75,7 @@ def upgrade() -> None:
         sa.Column(
             "cache_read_tokens", sa.BigInteger(), nullable=False, server_default="0"
         ),
-        sa.Column("cost_cents", sa.Float(), nullable=False, server_default="0.0"),
+        sa.Column("cost_cents", sa.Numeric(18, 6), nullable=False, server_default="0"),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -98,7 +104,7 @@ def upgrade() -> None:
 
     op.add_column(
         "token_rate_limit",
-        sa.Column("cost_budget_cents", sa.Float(), nullable=True),
+        sa.Column("cost_budget_cents", sa.Numeric(18, 6), nullable=True),
     )
     op.alter_column("token_rate_limit", "token_budget", nullable=True)
     # A limit must carry a token budget, a cost budget, or both — never neither.
