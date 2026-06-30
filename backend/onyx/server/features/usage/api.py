@@ -29,7 +29,9 @@ from onyx.db.user_usage import (
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_since,
     get_user_usage_by_day_and_model,
+    reset_user_usage,
 )
+from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cost import get_model_price_per_million
@@ -44,6 +46,8 @@ from onyx.server.features.usage.models import (
     CostOverrideUpsertRequest,
     EffectiveCostBudget,
     ModelPrice,
+    ResetUsageRequest,
+    ResetUsageResponse,
     UsageExportRecord,
     UsageExportResponse,
     UsageExportTotals,
@@ -273,6 +277,19 @@ def export_usage(
         end=end_date.isoformat(),
         users=users,
     )
+
+
+@admin_usage_router.post("/reset")
+def reset_usage(
+    payload: ResetUsageRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ResetUsageResponse:
+    """Clear a user's current UTC-day usage bucket."""
+    user = get_user_by_email(payload.user_email, db_session)
+    if user is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+    return ResetUsageResponse(reset_rows=reset_user_usage(db_session, str(user.id)))
 
 
 @router.get("")
