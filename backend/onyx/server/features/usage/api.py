@@ -31,7 +31,9 @@ from onyx.db.user_usage import get_user_cost_cents_in_window
 from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.db.user_usage import get_user_usage_by_day_and_model
 from onyx.db.user_usage import get_window_start
+from onyx.db.user_usage import reset_user_usage
 from onyx.db.user_usage import USAGE_PERIOD_HOURS
+from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cost import get_model_price_per_million
@@ -42,6 +44,7 @@ from onyx.llm.cost_overrides import upsert_override
 from onyx.server.features.usage.models import CostOverride
 from onyx.server.features.usage.models import CostOverrideUpsertRequest
 from onyx.server.features.usage.models import ModelPrice
+from onyx.server.features.usage.models import ResetUsageRequest
 from onyx.server.features.usage.models import UsageDayModel
 from onyx.server.features.usage.models import UsageExportRecord
 from onyx.server.features.usage.models import UsageExportResponse
@@ -266,6 +269,20 @@ def export_usage(
         end=end_date.isoformat(),
         users=users,
     )
+
+
+@admin_usage_router.post("/reset")
+def reset_usage(
+    payload: ResetUsageRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Clear a user's current-window usage so an admin can lift a budget block
+    before it rolls over on its own. Prior windows (history) are preserved."""
+    user = get_user_by_email(payload.user_email, db_session)
+    if user is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+    reset_user_usage(db_session, str(user.id))
 
 
 @router.get("")

@@ -8,6 +8,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -239,6 +240,23 @@ def get_usage_export(
         }
         for email, mdl, day, in_tok, out_tok, cache_tok, cost in rows
     ]
+
+
+def reset_user_usage(db_session: Session, user_id: str) -> int:
+    """Clear a user's usage for the current ledger window so an admin can lift a
+    budget block before it rolls over on its own. Prior windows (the export
+    history) are preserved. Returns the number of ledger rows removed."""
+    window_start = get_window_start(
+        datetime.now(timezone.utc), period_hours=USAGE_PERIOD_HOURS
+    )
+    result = db_session.execute(
+        delete(UserUsage).where(
+            UserUsage.user_id == user_id,
+            UserUsage.window_start == window_start,
+        )
+    )
+    db_session.commit()
+    return result.rowcount or 0
 
 
 def get_user_cost_cents_in_window(

@@ -88,6 +88,12 @@ class UsageExportResponse(BaseModel):
     users: list[UsageExportUser]
 
 
+class ResetUsageRequest(BaseModel):
+    """Admin request to clear a user's current-window usage (lift a budget block)."""
+
+    user_email: str
+
+
 class ModelPrice(BaseModel):
     """USD per 1M tokens for the user's selected chat model; null if unpriced."""
 
