@@ -284,6 +284,9 @@
 
 @media (min-width: 724px) {
   .opal-content-md[data-stacked] {
+    /* Title and description sit flush on desktop, matching the non-responsive
+       layout; the 4px stacking gap only applies to the mobile column. */
+    row-gap: 0;
     column-gap: 1rem;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
