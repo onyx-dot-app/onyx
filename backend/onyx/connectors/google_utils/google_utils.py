@@ -174,10 +174,11 @@ def _execute_single_retrieval(
         else:
             logger.exception("Error executing request:")
             raise e
-    except (TimeoutError, socket.timeout, ConnectionError, ssl.SSLError) as error:
-        # Connection-level drops (broken pipe, reset, SSL teardown) hit mid-crawl
-        # on long parallel Drive paginations; retry the page rather than failing
-        # the whole attempt.
+    except (TimeoutError, socket.timeout, ConnectionError, ssl.SSLEOFError) as error:
+        # Connection-level drops (broken pipe, reset, TLS EOF) hit mid-crawl on
+        # long parallel Drive paginations. Retry the page instead of failing the
+        # whole attempt. Narrow SSL to SSLEOFError so permanent SSL errors
+        # (cert/version) still fail fast.
         logger.warning(
             "Transient network error executing Google API request; retrying with backoff. Details: %s",
             error,
