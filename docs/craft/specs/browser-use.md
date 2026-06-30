@@ -79,6 +79,22 @@ which fetches a no-arm64 Chrome-for-Testing) + `libnss3-tools` (certutil) +
 when `ENABLE_BROWSER=false` (agent-browser absent) and only advertised via the
 per-user-gated skill.
 
+## Browser state is ephemeral
+
+agent-browser keeps per-session state (cookies, localStorage, the Chromium
+profile) under a fixed `~/.agent-browser/` (= `/home/sandbox/.agent-browser/`,
+outside the snapshotted `/workspace/sessions/<id>` volume). The wrapper passes
+neither `--profile` nor `--restore`, so browser state is intentionally ephemeral
+— it lives only for the daemon's lifetime and is **not** captured by session
+snapshots; logins/cookies do not survive a pod reap or restore.
+
+Making it persist would mean relocating agent-browser's data dir under
+`/workspace` (no data-dir env override exists beyond `AGENT_BROWSER_SOCKET_DIR`;
+the lever is `HOME`) and using `--restore` (cookies+localStorage only, not a full
+`--profile`) — which writes auth cookies into the S3 snapshot. That's a
+deliberate security/size tradeoff to revisit only if a "resume a logged-in
+browser across reaps" use case appears.
+
 ## Not in scope
 
 - No screencast / streamed browser to the frontend.
