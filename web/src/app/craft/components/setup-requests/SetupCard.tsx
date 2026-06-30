@@ -172,8 +172,11 @@ export default function SetupCard({
 
   const Logo = getAppTypeLogo(userApp?.app_type ?? "CUSTOM");
 
-  const decided = decision !== null;
-  const connected = decision === "connected";
+  // `decision` is this session's click; `userApp.authenticated` is the durable
+  // truth, so a connected card stays connected after navigating away and back.
+  const connected =
+    decision === "connected" || (userApp?.authenticated ?? false);
+  const decided = connected || decision === "declined";
   // Comet travels while pending (info), then settles to the outcome tone.
   const tone = decided ? (connected ? "success" : "error") : "info";
 
