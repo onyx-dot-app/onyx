@@ -1867,17 +1867,22 @@ jobs:
         env:
           IMAGE: ${{ steps.scan-image.outputs.image }}
 
-      # Upload only for the rolling main-HEAD builds (nightly-latest / edge): their
-      # commit is the tip of main, so mapping to refs/heads/main keeps the Security
-      # tab authoritative and lets alerts auto-resolve on later main builds. Release
-      # /beta tags sit on older commits — they still gate, they just don't upload.
+      # Rolling main-HEAD builds (nightly-latest / edge) map to refs/heads/main so
+      # the Security tab stays authoritative for main and alerts auto-resolve on
+      # later main builds. Test runs (manual workflow_dispatch) upload against their
+      # own ref/sha instead, so the scan + upload can be verified without polluting
+      # main's alerts. Release/beta tags sit on older commits — they still gate, they
+      # just don't upload.
       - name: Upload audit results to GitHub Security tab
-        if: always() && steps.should-run.outputs.run == 'true' && env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
+        if: >-
+          always() && steps.should-run.outputs.run == 'true' &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
         uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
         with:
           sarif_file: image-audit.sarif
           category: image-audit-${{ matrix.component }}
-          ref: refs/heads/main
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
           sha: ${{ github.sha }}
 
   notify-slack-on-failure:
