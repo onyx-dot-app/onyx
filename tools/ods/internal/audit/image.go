@@ -78,9 +78,8 @@ func scanImage(ref string) ([]Finding, error) {
 }
 
 // imageFindingsFromResults maps osv-scanner's container results into Findings,
-// tagging them with the image source and pointing their manifest at the image
-// ref so SARIF locations name the scanned image. It is pure (no I/O) so it can
-// be unit tested against fixtures.
+// tagging them as image findings and pointing their manifest at the ref. Pure
+// (no I/O) so it can be unit tested.
 func imageFindingsFromResults(res models.VulnerabilityResults, ref string) []Finding {
 	findings := findingsFromResults(res)
 	for i := range findings {

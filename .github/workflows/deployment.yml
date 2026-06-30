@@ -1719,15 +1719,10 @@ jobs:
             -f event_type=new-cloud-image \
             -F "client_payload[version]=${VERSION}"
 
-  # Scan each freshly built image for known OS/language-package vulnerabilities
-  # via `ods audit image`, which uses osv-scanner's layer-aware container scanner
-  # (the same library and OSV data source as the dependency `audit-gate`).
-  #
-  # Runs on the amd64 digest after build but BEFORE merge: every merge-* job
-  # depends on this audit, so an unsuppressed CRITICAL in any image fails the
-  # gate and the public tags are never pushed (the release is blocked as a unit).
-  # Suppressions live in the shared S3 allowlist; SARIF is uploaded to the
-  # Security tab regardless.
+  # Scan each freshly built image (amd64 digest) via `ods audit image`, reusing
+  # osv-scanner and the shared S3 allowlist from the dependency `audit-gate`.
+  # Runs before merge-* and every merge-* depends on it, so an unsuppressed
+  # CRITICAL blocks the public tags. SARIF goes to the Security tab regardless.
   image-audit:
     needs:
       - determine-builds
@@ -1822,9 +1817,8 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      # Scan the by-digest image the build pushed, before merge-* tags it. The
-      # content is identical across registries, so for test runs we pull the same
-      # digest from the ECR cache the build wrote to.
+      # Scan the by-digest image the build pushed, before merge-* tags it (same
+      # content in the ECR cache for test runs).
       - name: Determine scan image
         if: steps.should-run.outputs.run == 'true'
         id: scan-image
@@ -1853,9 +1847,8 @@ jobs:
 
       - name: Run image vulnerability audit
         if: steps.should-run.outputs.run == 'true'
-        # Writes SARIF to a file and exits non-zero on unsuppressed CRITICAL
-        # findings, which gates the release. The upload step below runs even when
-        # this step fails so the findings still reach the Security tab.
+        # Exits non-zero on unsuppressed CRITICAL (gates the release); SARIF is
+        # still written so the always() upload below reaches the Security tab.
         run: |
           uv run --no-sync --with onyx-devtools ods audit image "$IMAGE" \
             --fail-on=critical --format=sarif > image-audit.sarif
