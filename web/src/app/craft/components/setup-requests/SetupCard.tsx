@@ -71,13 +71,19 @@ export default function SetupCard({
   const appLoading = userApp === undefined;
 
   async function resolve(result: ConnectAppDecision) {
-    setDecision(result);
+    setError(null);
     try {
       await postConnectAppDecision(requestId, result);
     } catch (e) {
-      // Already resolved (timed out, other device) — leave the terminal state.
+      // POST failed (network error, or already resolved on another device).
+      // Keep the card actionable so the user can retry.
       console.error("Failed to resolve connect-app request:", e);
+      if (mountedRef.current)
+        setError("Something went wrong. Please try again.");
+      return;
     }
+    if (!mountedRef.current) return;
+    setDecision(result);
     if (result === "connected") {
       void mutate(SWR_KEYS.buildExternalApps);
     }
