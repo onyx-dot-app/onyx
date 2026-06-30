@@ -162,7 +162,7 @@ function Horizontal({
           sizePreset="main-ui"
           variant="section"
           width="full"
-          subDescription={children}
+          rightChildren={children}
         />
       ) : (
         <ContentAction

@@ -116,8 +116,8 @@ type MdContentProps = ContentBaseProps & {
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
   /** Tag rendered beside the title. */
   tag?: TagProps;
-  /** Content slot (e.g. an input) rendered below the title; responsive — see ContentMd. */
-  subDescription?: React.ReactNode;
+  /** Slot for a control rendered to the right (desktop) / between title and description (mobile). See ContentMd. */
+  rightChildren?: React.ReactNode;
 };
 
 /** ContentSm does not support descriptions or inline editing. */
