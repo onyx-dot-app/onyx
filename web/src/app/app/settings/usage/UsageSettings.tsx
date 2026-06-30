@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import { Text, EmptyMessageCard, Divider } from "@opal/components";
@@ -9,14 +9,20 @@ import {
   SvgWallet,
   SvgCreditCard,
   SvgSimpleLoader,
+  SvgChevronRight,
 } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Card from "@/refresh-components/cards/Card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/refresh-components/Collapsible";
 import { cn } from "@opal/utils";
 import {
   useUserUsage,
   type UsagePerDayByModel,
-  type SelectedModelPrice,
+  type ModelPrice,
 } from "@/app/app/settings/usage/lib";
 
 const DAYS_OPTIONS = ["7", "30"] as const;
@@ -118,41 +124,119 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
 }
 
 interface ModelPriceSectionProps {
-  price: SelectedModelPrice | null;
+  prices: ModelPrice[];
+  defaultModel: string | null;
 }
 
-function ModelPriceSection({ price }: ModelPriceSectionProps) {
+function formatMtok(value: number | null): string {
+  return value !== null ? `$${value.toFixed(2)}` : "—";
+}
+
+// Every available model's price (USD/1M, input · output · cache), grouped into a
+// collapsible menu per provider — click a provider to expand its models. Mirrors
+// the chat model selector so users can compare costs, not just the default.
+function ModelPriceSection({ prices, defaultModel }: ModelPriceSectionProps) {
+  const groups = useMemo(() => {
+    const byProvider = new Map<string, ModelPrice[]>();
+    for (const price of prices) {
+      const key = price.provider ?? "Other";
+      const list = byProvider.get(key) ?? [];
+      list.push(price);
+      byProvider.set(key, list);
+    }
+    return Array.from(byProvider.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([provider, models]) => ({ provider, models }));
+  }, [prices]);
+
+  // Expand the provider that holds the default model (else the first).
+  const defaultProvider = useMemo(
+    () =>
+      prices.find((p) => p.model === defaultModel)?.provider ??
+      groups[0]?.provider ??
+      null,
+    [prices, defaultModel, groups],
+  );
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (defaultProvider) setExpanded(new Set([defaultProvider]));
+  }, [defaultProvider]);
+
+  function toggle(provider: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(provider)) next.delete(provider);
+      else next.add(provider);
+      return next;
+    });
+  }
+
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
         icon={SvgCreditCard}
-        title="Your model's price"
+        title="Model prices"
+        description="USD per 1M tokens (input · output · cache) for every available model"
         sizePreset="main-content"
         variant="section"
         width="full"
       />
       <Card>
-        {price &&
-        price.input_per_mtok !== null &&
-        price.output_per_mtok !== null ? (
-          <Section
-            flexDirection="row"
-            justifyContent="between"
-            alignItems="center"
-            width="full"
-            gap={1}
-          >
-            <Text font="main-ui-body" color="text-03">
-              {`$${price.input_per_mtok.toFixed(2)} / 1M input`}
-            </Text>
-            <Text font="main-ui-body" color="text-03">
-              {`$${price.output_per_mtok.toFixed(2)} / 1M output`}
-            </Text>
-          </Section>
-        ) : (
+        {groups.length === 0 ? (
           <Text font="main-ui-body" color="text-01">
-            Price unavailable
+            Prices unavailable
           </Text>
+        ) : (
+          <Section gap={0.25} alignItems="stretch" justifyContent="start">
+            {groups.map(({ provider, models }) => {
+              const open = expanded.has(provider);
+              return (
+                <Collapsible
+                  key={provider}
+                  open={open}
+                  onOpenChange={() => toggle(provider)}
+                  className="flex flex-col"
+                >
+                  <CollapsibleTrigger asChild>
+                    <div className="flex flex-row items-center justify-between cursor-pointer select-none py-1.5">
+                      <Text font="main-ui-action" color="text-03">
+                        {provider}
+                      </Text>
+                      <SvgChevronRight
+                        className={cn(
+                          "w-4 h-4 text-text-03 transition-transform",
+                          open && "rotate-90",
+                        )}
+                      />
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <Section gap={0} alignItems="stretch" justifyContent="start">
+                      {models.map((price) => (
+                        <div
+                          key={`${provider}-${price.model}`}
+                          className="flex flex-row items-center justify-between gap-2 py-1 pl-3"
+                        >
+                          <Text font="secondary-body" color="text-03" nowrap>
+                            {price.model === defaultModel
+                              ? `${price.model} · default`
+                              : price.model}
+                          </Text>
+                          <Text font="secondary-body" color="text-01" nowrap>
+                            {`${formatMtok(price.input_per_mtok)} in · ${formatMtok(
+                              price.output_per_mtok,
+                            )} out · ${formatMtok(
+                              price.cache_per_mtok ?? price.input_per_mtok,
+                            )} cache`}
+                          </Text>
+                        </div>
+                      ))}
+                    </Section>
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            })}
+          </Section>
         )}
       </Card>
     </Section>
@@ -299,11 +383,14 @@ export default function UsageSettings() {
               windowCostCents={data.window_cost_cents}
               rows={data.per_day_by_model}
             />
-            <ModelPriceSection price={data.selected_model_price} />
             <BudgetSection
               budgetCents={data.budget_cents}
               budgetRemainingCents={data.budget_remaining_cents}
               budgetPeriodHours={data.budget_period_hours}
+            />
+            <ModelPriceSection
+              prices={data.available_model_prices ?? []}
+              defaultModel={data.selected_model_price?.model ?? null}
             />
           </Section>
         )}

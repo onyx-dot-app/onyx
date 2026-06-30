@@ -11,9 +11,12 @@ export interface UsagePerDayByModel {
   cost_cents: number;
 }
 
-export interface SelectedModelPrice {
+export interface ModelPrice {
+  model: string;
+  provider: string | null;
   input_per_mtok: number | null; // $/1M tokens; null if the model is unpriced
   output_per_mtok: number | null;
+  cache_per_mtok: number | null; // null => cache reads bill at the input rate
 }
 
 export interface UserUsageResponse {
@@ -24,7 +27,8 @@ export interface UserUsageResponse {
   budget_cents: number | null;
   budget_remaining_cents: number | null;
   budget_period_hours: number | null;
-  selected_model_price: SelectedModelPrice | null;
+  selected_model_price: ModelPrice | null;
+  available_model_prices: ModelPrice[];
 }
 
 export function useUserUsage(days: number) {
