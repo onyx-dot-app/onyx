@@ -489,6 +489,16 @@ def test_delete_notifications_by_additional_data_clears_all_admins_for_cc_pair(
         == 2
     )
 
+    # Dismissal must not shield a row from recovery cleanup — otherwise a
+    # dismissed-then-recovered connector would never alert again.
+    dismissed_row = next(
+        n
+        for n in rows_for(NotificationType.CONNECTOR_REPEATED_ERRORS)
+        if n.user_id == admin_one.id and n.additional_data == {"cc_pair_id": 1}
+    )
+    dismissed_row.dismissed = True
+    db_session.commit()
+
     delete_notifications_by_additional_data(
         notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
         db_session=db_session,

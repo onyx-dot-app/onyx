@@ -97,17 +97,11 @@ def delete_notifications_by_additional_data(
     used at creation, so it clears exactly the rows create_notification /
     batch_create_notifications would have written for the same key."""
     additional_data_normalized = additional_data if additional_data is not None else {}
-    notifications = (
-        db_session.query(Notification)
-        .filter_by(notif_type=notif_type)
-        .filter(
-            func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
-            == additional_data_normalized
-        )
-        .all()
-    )
-    for notification in notifications:
-        db_session.delete(notification)
+    db_session.query(Notification).filter(
+        Notification.notif_type == notif_type,
+        func.coalesce(Notification.additional_data, cast({}, postgresql.JSONB))
+        == additional_data_normalized,
+    ).delete(synchronize_session=False)
 
 
 def get_notification_by_id(
