@@ -20,8 +20,8 @@ if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ]; then
 fi
 
 # Trust the egress-proxy MITM CA in Chromium's NSS db (Chromium reads trust only
-# from there) so the browser skill's HTTPS works. No-op without the browser
-# runtime (certutil absent). Best-effort — never block boot.
+# from there) so browser HTTPS works. Best-effort — a failure, or no browser
+# runtime, must not block boot.
 import_proxy_ca() {
     command -v certutil >/dev/null 2>&1 || return 0
     local bundle="${SANDBOX_PROXY_CA_BUNDLE_DST:-/etc/ssl/sandbox/ca-bundle.crt}"

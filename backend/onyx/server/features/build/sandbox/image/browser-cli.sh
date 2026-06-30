@@ -5,8 +5,7 @@
 # (no ~/.bashrc / alias expansion).
 set -euo pipefail
 
-# The egress-proxy MITM CA is imported into Chromium's NSS db once at startup by
-# entrypoint.sh; this wrapper only sets launch env and pins the session.
+# Proxy CA trust is set up once at startup by entrypoint.sh, not per call.
 
 # Chromium needs --no-sandbox (pod drops caps/seccomp) and the proxy as a FLAG
 # (it ignores *_PROXY env; userinfo stripped — proxy authorizes by source IP);
