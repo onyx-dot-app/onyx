@@ -754,6 +754,11 @@ def _build_persona_filters(
     return stmt
 
 
+def _user_may_view_persona_owner_email(user: User, persona: Persona) -> bool:
+    """Owner email is PII — only the persona's owner or an admin may see it."""
+    return user.role == UserRole.ADMIN or persona.user_id == user.id
+
+
 def get_minimal_persona_snapshots_for_user(
     user: User,
     db_session: Session,
@@ -795,6 +800,7 @@ def get_minimal_persona_snapshots_for_user(
         MinimalPersonaSnapshot.from_model(
             persona,
             user_permission=get_persona_access_level(persona, user, user_group_ids),
+            include_owner_email=_user_may_view_persona_owner_email(user, persona),
         )
         for persona in results
     ]
@@ -951,6 +957,7 @@ def get_minimal_persona_snapshots_paginated(
         MinimalPersonaSnapshot.from_model(
             persona,
             user_permission=get_persona_access_level(persona, user, user_group_ids),
+            include_owner_email=_user_may_view_persona_owner_email(user, persona),
         )
         for persona in results
     ]
