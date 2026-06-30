@@ -4,11 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useSWRConfig } from "swr";
 
 import { Button, Text } from "@opal/components";
+import { cn } from "@opal/utils";
 import {
   ConnectAppDecision,
   postConnectAppDecision,
   startExternalAppOAuth,
 } from "@/app/craft/services/externalAppsService";
+import CometEdge from "@/app/craft/components/CometEdge";
 import {
   OAUTH_POPUP_MESSAGE_SOURCE,
   OAuthPopupMessage,
@@ -33,9 +35,6 @@ interface SetupCardProps {
 
 const POPUP_FEATURES = "popup,width=520,height=720";
 const POPUP_POLL_MS = 600;
-// On popup close, wait briefly for an in-flight success message before treating
-// the close as a cancel — the two arrive on unordered task queues.
-const POPUP_CLOSE_GRACE_MS = 500;
 
 /**
  * Connect-app card rendered from a `connect_app_request` packet. "Connect" runs
@@ -68,8 +67,6 @@ export default function SetupCard({
   const appName = userApp?.name ?? appSlug;
   const externalAppId = userApp?.id ?? null;
   const supportsOauth = userApp?.supports_oauth ?? false;
-  // The app row drives the popup-vs-form choice; until it resolves we can't
-  // tell, so the action stays disabled rather than routing the wrong branch.
   const appLoading = userApp === undefined;
 
   async function resolve(result: ConnectAppDecision) {
@@ -85,6 +82,19 @@ export default function SetupCard({
     }
   }
 
+  async function confirmConnected(): Promise<boolean> {
+    try {
+      const apps = await mutate<ExternalAppUserResponse[]>(
+        SWR_KEYS.buildExternalApps
+      );
+      return !!apps?.some(
+        (app) => app.id === externalAppId && app.authenticated
+      );
+    } catch {
+      return false;
+    }
+  }
+
   function awaitOAuthCompletion(popup: Window) {
     let settled = false;
 
@@ -96,13 +106,16 @@ export default function SetupCard({
       finish(true);
     }
 
-    const poll = setInterval(() => {
-      if (!popup.closed) return;
+    // Close alone isn't a cancel: the success postMessage can lose the race with
+    // this poll, so confirm against the server before giving up.
+    async function onClose() {
+      if (settled) return;
       clearInterval(poll);
-      // The popup may have just posted its success message; give it a beat to
-      // land before declaring a cancel. finish() is idempotent, so a message
-      // arriving first still wins.
-      setTimeout(() => finish(false), POPUP_CLOSE_GRACE_MS);
+      finish(await confirmConnected());
+    }
+
+    const poll = setInterval(() => {
+      if (popup.closed) void onClose();
     }, POPUP_POLL_MS);
     window.addEventListener("message", onMessage);
 
@@ -118,27 +131,23 @@ export default function SetupCard({
       teardown();
       cleanupRef.current = null;
       if (mountedRef.current) setBusy(false);
-      // A closed popup without a success message is just a cancelled attempt —
-      // leave the card live so the user can retry rather than declining.
+      // Unconfirmed attempts leave the card live to retry rather than decline.
       if (connected) void resolve("connected");
     }
   }
 
   async function connect() {
     setError(null);
+    // Capabilities are unknown until the app row loads (the button is disabled).
+    if (appLoading) return;
     if (externalAppId === null) {
       setError("This app can't be set up from here.");
       return;
     }
     if (!supportsOauth) {
-      if (userApp) {
-        // Hold both actions while the credential modal is open so a stray
-        // "Not now" can't decline the request the form is about to connect.
-        setBusy(true);
-        setCredModalOpen(true);
-      } else {
-        setError("This app needs setup on the Apps page.");
-      }
+      // Lock the actions so "Not now" can't decline while the form is open.
+      setBusy(true);
+      setCredModalOpen(true);
       return;
     }
 
@@ -162,70 +171,82 @@ export default function SetupCard({
 
   const Logo = getAppTypeLogo(userApp?.app_type ?? "CUSTOM");
 
-  if (decision !== null) {
+  const decided = decision !== null;
+  const connected = decision === "connected";
+  // Comet travels while pending (info), then settles to the outcome tone.
+  const tone = decided ? (connected ? "success" : "error") : "info";
+
+  if (decided) {
     return (
-      <div
-        data-testid="setup-card"
-        className="rounded-08 border border-border-02 bg-background-neutral-00 p-3 flex items-center gap-2"
-      >
-        <Logo className="size-5 shrink-0" />
-        <Text font="secondary-body" color="text-03">
-          {decision === "connected"
-            ? `${appName} connected.`
-            : `Skipped connecting ${appName}.`}
-        </Text>
-      </div>
+      <CometEdge active={false} settled tone={tone}>
+        <div
+          data-testid="setup-card"
+          className={cn(
+            "rounded-08 border bg-background-neutral-00 p-3 flex items-center gap-2 transition-colors",
+            connected ? "border-status-success-03" : "border-status-error-03"
+          )}
+        >
+          <Logo className="size-5 shrink-0" />
+          <Text font="secondary-body" color="text-03">
+            {connected
+              ? `${appName} connected.`
+              : `Skipped connecting ${appName}.`}
+          </Text>
+        </div>
+      </CometEdge>
     );
   }
 
   return (
-    <div
-      data-testid="setup-card"
-      className="rounded-08 border border-status-info-03 bg-background-neutral-00 p-3 flex flex-col gap-2"
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        <Logo className="size-5 shrink-0" />
-        <Text font="main-ui-action" color="text-05" nowrap>
-          {`Connect ${appName}`}
-        </Text>
-      </div>
-      <Text font="secondary-body" color="text-03">
-        {reason ?? `The agent needs ${appName} to continue this task.`}
-      </Text>
-      {error && (
+    <CometEdge active settled={false} tone="info" speedSeconds={3.6}>
+      <div
+        data-testid="setup-card"
+        className="rounded-08 border border-status-info-03 bg-background-neutral-00 p-3 flex flex-col gap-2"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Logo className="size-5 shrink-0" />
+          <Text font="main-ui-action" color="text-05" nowrap>
+            {`Connect ${appName}`}
+          </Text>
+        </div>
         <Text font="secondary-body" color="text-03">
-          {error}
+          {reason ?? `The agent needs ${appName} to continue this task.`}
         </Text>
-      )}
-      <div className="flex items-center justify-end gap-1">
-        <Button
-          prominence="secondary"
-          size="sm"
-          disabled={busy}
-          onClick={() => void resolve("declined")}
-        >
-          Not now
-        </Button>
-        <Button
-          prominence="primary"
-          size="sm"
-          disabled={busy || appLoading}
-          onClick={() => void connect()}
-        >
-          {busy ? "Waiting…" : appLoading ? "Loading…" : `Connect ${appName}`}
-        </Button>
+        {error && (
+          <Text font="secondary-body" color="text-03">
+            {error}
+          </Text>
+        )}
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            prominence="secondary"
+            size="sm"
+            disabled={busy}
+            onClick={() => void resolve("declined")}
+          >
+            Not now
+          </Button>
+          <Button
+            prominence="primary"
+            size="sm"
+            disabled={busy || appLoading}
+            onClick={() => void connect()}
+          >
+            {busy ? "Waiting…" : appLoading ? "Loading…" : `Connect ${appName}`}
+          </Button>
+        </div>
+        {userApp && (
+          <UserCredentialsModal
+            open={credModalOpen}
+            onClose={() => {
+              setCredModalOpen(false);
+              setBusy(false);
+            }}
+            onSaved={() => void resolve("connected")}
+            userApp={userApp}
+          />
+        )}
       </div>
-      {userApp && (
-        <UserCredentialsModal
-          open={credModalOpen}
-          onClose={() => {
-            setCredModalOpen(false);
-            setBusy(false);
-          }}
-          onSaved={() => void resolve("connected")}
-          userApp={userApp}
-        />
-      )}
-    </div>
+    </CometEdge>
   );
 }
