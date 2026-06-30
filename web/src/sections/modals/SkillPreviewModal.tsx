@@ -2,37 +2,19 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import {
-  Button,
-  CompactMarkdown,
-  MessageCard,
-  Text,
-  Tooltip,
-} from "@opal/components";
-import { SvgBlocks, SvgCode, SvgEye, SvgSimpleLoader } from "@opal/icons";
-import { cn } from "@opal/utils";
-import type { IconFunctionComponent } from "@opal/types";
+import { Button, CompactMarkdown, MessageCard, Text } from "@opal/components";
+import { SvgBlocks, SvgSimpleLoader } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { SkillPreview } from "@/views/admin/SkillsPage/interfaces";
-
-type SkillPreviewMode = "admin" | "user";
-type InstructionsDisplayMode = "rendered" | "raw";
-
-const INSTRUCTIONS_DISPLAY_OPTIONS: {
-  value: InstructionsDisplayMode;
-  label: string;
-  icon: IconFunctionComponent;
-}[] = [
-  { value: "rendered", label: "Rendered markdown", icon: SvgEye },
-  { value: "raw", label: "Raw markdown", icon: SvgCode },
-];
+import type { SkillPreview } from "@/lib/skills/types";
+import InstructionsDisplayModeToggle, {
+  type InstructionsDisplayMode,
+} from "@/sections/skills/InstructionsDisplayModeToggle";
 
 interface SkillPreviewModalProps {
   open: boolean;
-  mode: SkillPreviewMode;
   skillId: string | null;
   fallbackTitle?: string;
   onClose: () => void;
@@ -52,19 +34,13 @@ function metadataRows(
 
 export default function SkillPreviewModal({
   open,
-  mode,
   skillId,
   fallbackTitle = "Skill preview",
   onClose,
 }: SkillPreviewModalProps) {
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("rendered");
-  const swrKey =
-    open && skillId
-      ? mode === "admin"
-        ? SWR_KEYS.adminSkillPreview(skillId)
-        : SWR_KEYS.userSkillPreview(skillId)
-      : null;
+  const swrKey = open && skillId ? SWR_KEYS.userSkillPreview(skillId) : null;
   const {
     data: preview,
     error,
@@ -123,41 +99,10 @@ export default function SkillPreviewModal({
                   <Text font="main-ui-action" color="text-05">
                     Instructions
                   </Text>
-                  <div
-                    role="group"
-                    className="inline-flex shrink-0 rounded-08 border border-border-01 bg-background-tint-01 p-0.5"
-                    aria-label="Instruction display mode"
-                  >
-                    {INSTRUCTIONS_DISPLAY_OPTIONS.map((option) => {
-                      const isSelected =
-                        option.value === instructionsDisplayMode;
-                      const Icon = option.icon;
-                      return (
-                        <Tooltip
-                          key={option.value}
-                          tooltip={option.label}
-                          side="top"
-                        >
-                          <button
-                            type="button"
-                            aria-label={option.label}
-                            aria-pressed={isSelected}
-                            className={cn(
-                              "flex h-6 w-6 items-center justify-center rounded-04 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-border-04",
-                              isSelected
-                                ? "bg-background-neutral-00 text-text-05 shadow-sm"
-                                : "text-text-03 hover:text-text-05"
-                            )}
-                            onClick={() =>
-                              setInstructionsDisplayMode(option.value)
-                            }
-                          >
-                            <Icon size={14} aria-hidden="true" />
-                          </button>
-                        </Tooltip>
-                      );
-                    })}
-                  </div>
+                  <InstructionsDisplayModeToggle
+                    value={instructionsDisplayMode}
+                    onChange={setInstructionsDisplayMode}
+                  />
                 </div>
                 <div className="rounded-lg border border-border p-3 overflow-y-auto overflow-x-hidden bg-background-neutral-00 max-h-[48dvh]">
                   {instructionsDisplayMode === "rendered" ? (

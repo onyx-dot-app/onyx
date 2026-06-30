@@ -22,11 +22,11 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill
 from onyx.db.models import User
-from onyx.db.skill import fetch_skill_for_user
-from onyx.db.skill import list_skills_for_sandbox_injection
-from onyx.db.skill import list_skills_for_user
+from onyx.db.skill import fetch_skill
+from onyx.db.skill import list_skills
+from onyx.db.skill import SkillAccessPolicy
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill.mutation_helpers import ensure_custom_skill
+from onyx.server.features.skill.service import get_editable_custom_skill
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
@@ -84,7 +84,12 @@ class TestAvailabilityGate:
         )
 
         visible = {
-            s.built_in_skill_id for s in list_skills_for_user(test_user, db_session)
+            s.built_in_skill_id
+            for s in list_skills(
+                policy=SkillAccessPolicy.VIEW,
+                user=test_user,
+                db_session=db_session,
+            )
         }
         assert gated_id not in visible
 
@@ -97,7 +102,11 @@ class TestAvailabilityGate:
 
         visible_built_ins = {
             s.built_in_skill_id
-            for s in list_skills_for_user(test_user, db_session)
+            for s in list_skills(
+                policy=SkillAccessPolicy.VIEW,
+                user=test_user,
+                db_session=db_session,
+            )
             if s.built_in_skill_id is not None
         }
         # Some built-ins gate on environment availability (e.g. image-generation
@@ -120,14 +129,22 @@ class TestAvailabilityGate:
         monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", False)
         off = {
             s.built_in_skill_id
-            for s in list_skills_for_sandbox_injection(test_user, db_session)
+            for s in list_skills(
+                policy=SkillAccessPolicy.USE,
+                user=test_user,
+                db_session=db_session,
+            )
         }
         assert "browser" not in off
 
         monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", True)
         on = {
             s.built_in_skill_id
-            for s in list_skills_for_sandbox_injection(test_user, db_session)
+            for s in list_skills(
+                policy=SkillAccessPolicy.USE,
+                user=test_user,
+                db_session=db_session,
+            )
         }
         assert "browser" in on
 
@@ -151,27 +168,42 @@ class TestAvailabilityGate:
             ),
         )
 
-        assert fetch_skill_for_user(row.id, test_user, db_session) is None
+        assert (
+            fetch_skill(
+                row.id,
+                policy=SkillAccessPolicy.VIEW,
+                user=test_user,
+                db_session=db_session,
+            )
+            is None
+        )
 
 
 class TestBuiltInIsImmutable:
-    """Built-in skill rows reject every admin mutation path: PATCH,
-    bundle-replace, grants-replace, delete. Enforcement lives at the
-    service layer via ``ensure_custom_skill`` and the discriminator is
-    ``built_in_skill_id IS NOT NULL``."""
+    """Built-in skill rows are not editable custom skills."""
 
-    def test_ensure_custom_rejects_built_in_rows(self, db_session: Session) -> None:
+    def test_edit_fetch_rejects_built_in_rows(
+        self,
+        db_session: Session,
+        test_user: User,
+    ) -> None:
         row = make_built_in_skill_row(db_session, built_in_skill_id="pptx")
         db_session.commit()
 
-        with pytest.raises(OnyxError, match="cannot be modified"):
-            ensure_custom_skill(row)
+        with pytest.raises(OnyxError, match="Skill not found"):
+            get_editable_custom_skill(row.id, test_user, db_session)
 
-    def test_ensure_custom_accepts_custom_rows(self, db_session: Session) -> None:
+    def test_edit_fetch_accepts_owned_custom_rows(
+        self,
+        db_session: Session,
+        test_user: User,
+    ) -> None:
         custom = make_skill(db_session, slug=f"custom-{uuid4().hex[:8]}")
+        custom.author_user_id = test_user.id
         db_session.commit()
 
-        ensure_custom_skill(custom)  # no raise
+        skill = get_editable_custom_skill(custom.id, test_user, db_session)
+        assert skill.id == custom.id
 
 
 class TestNonUniqueBuiltInId:

@@ -301,16 +301,6 @@ def share_skill_with_group(
     return share
 
 
-def grant_skill_to_group(
-    db_session: Session,
-    skill: Skill,
-    group: UserGroup,
-    permission: SkillSharePermission = SkillSharePermission.VIEWER,
-) -> Skill__UserGroup:
-    """Backward-compatible alias for group skill shares."""
-    return share_skill_with_group(db_session, skill, group, permission)
-
-
 def make_cc_pair(
     db_session: Session,
     source: DocumentSource,

@@ -98,27 +98,6 @@ class TestAffectedUserIdsForSkill:
         assert shared_user.id in result
         assert unshared_user.id not in result
 
-    def test_shared_private_skill_still_returns_author(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        author = make_user(db_session)
-        shared_user = make_user(db_session)
-        shared_group = make_group(db_session)
-        add_user_to_group(db_session, shared_user, shared_group)
-        make_sandbox(db_session, author)
-        make_sandbox(db_session, shared_user)
-        skill = make_skill(db_session, is_public=False)
-        skill.author_user_id = author.id
-        share_skill_with_group(db_session, skill, shared_group)
-        db_session.flush()
-
-        result = affected_user_ids_for_skill(skill, db_session)
-
-        assert author.id in result
-        assert shared_user.id in result
-
     def test_disabled_skill_still_returns_affected_users(
         self,
         db_session: Session,

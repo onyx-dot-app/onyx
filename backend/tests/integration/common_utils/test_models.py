@@ -325,6 +325,9 @@ class DATestSkill(BaseModel):
     name: str
     description: str
     is_public: bool = False
+    public_permission: str | None = None
     enabled: bool = True
-    granted_group_ids: list[int] = Field(default_factory=list)
+    user_shares: list[dict] = Field(default_factory=list)
+    group_shares: list[dict] = Field(default_factory=list)
     is_personal: bool = False
+    user_permission: str | None = None

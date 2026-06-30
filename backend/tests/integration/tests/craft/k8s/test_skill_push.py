@@ -338,7 +338,7 @@ class TestSkillPush:
                 b"public skill body\n",
             )
 
-    def test_private_skill_only_lands_in_granted_users_sandboxes(
+    def test_private_skill_only_lands_in_shared_users_sandboxes(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -393,7 +393,7 @@ class TestSkillPush:
 
         (_skills_dir(workspace) / skill.slug).wait_for_absent()
 
-    def test_grants_change_adds_to_newly_granted_and_removes_from_revoked(
+    def test_share_change_adds_to_newly_shared_and_removes_from_revoked(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -411,21 +411,21 @@ class TestSkillPush:
             [user_b.id],
         )
 
-        slug = f"grants-flip-{uuid4().hex[:6]}"
+        slug = f"shares-flip-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
             slug,
             is_public=False,
             group_ids=[group_x.id],
-            body="shifting grants\n",
+            body="shifting shares\n",
         )
-        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"shifting grants\n")
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"shifting shares\n")
         _skill_file_path(ws_b, skill.slug).wait_for_absent()
 
-        SkillManager.replace_grants(skill, [group_y.id], k8s_admin_user)
+        SkillManager.replace_group_shares(skill, [group_y.id], k8s_admin_user)
 
         _skill_file_path(ws_a, skill.slug).wait_for_absent()
-        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"shifting grants\n")
+        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"shifting shares\n")
 
     def test_replace_bundle_propagates_new_content(
         self,
@@ -473,7 +473,7 @@ class TestSkillPush:
         (_skills_dir(ws_a) / skill.slug).wait_for_absent()
         (_skills_dir(ws_b) / skill.slug).wait_for_absent()
 
-    def test_user_with_overlapping_grants_receives_skill_once(
+    def test_user_with_overlapping_shares_receives_skill_once(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
@@ -491,7 +491,7 @@ class TestSkillPush:
             [user.id],
         )
 
-        slug = f"dup-grants-{uuid4().hex[:6]}"
+        slug = f"dup-shares-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
             slug,

@@ -1,6 +1,6 @@
 import io
-import json
 import zipfile
+from typing import Any
 from uuid import uuid4
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -32,6 +32,22 @@ def build_minimal_bundle(
     return buf.getvalue()
 
 
+def _skill_from_response(data: dict[str, Any]) -> DATestSkill:
+    return DATestSkill(
+        id=data["id"],
+        slug=data["slug"],
+        name=data["name"],
+        description=data["description"],
+        is_public=data["is_public"],
+        public_permission=data.get("public_permission"),
+        enabled=data["enabled"],
+        user_shares=data.get("user_shares", []),
+        group_shares=data.get("group_shares", []),
+        is_personal=data.get("is_personal", False),
+        user_permission=data.get("user_permission"),
+    )
+
+
 class SkillManager:
     @staticmethod
     def create_custom(
@@ -55,11 +71,7 @@ class SkillManager:
         headers.pop("Content-Type", None)
 
         response = client.post(
-            f"{API_SERVER_URL}/admin/skills/custom",
-            data={
-                "is_public": str(is_public).lower(),
-                "group_ids": json.dumps(group_ids or []),
-            },
+            f"{API_SERVER_URL}/skills/custom",
             files={
                 "bundle": (
                     filename or f"{slug}.zip",
@@ -70,17 +82,24 @@ class SkillManager:
             headers=headers,
         )
         response.raise_for_status()
-        data = response.json()
-        return DATestSkill(
-            id=data["id"],
-            slug=data["slug"],
-            name=data["name"],
-            description=data["description"],
-            is_public=data["is_public"],
-            enabled=data["enabled"],
-            granted_group_ids=data.get("granted_group_ids", []),
-            is_personal=data.get("is_personal", False),
-        )
+        skill = _skill_from_response(response.json())
+
+        if is_public or group_ids:
+            share_response = client.patch(
+                f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
+                json={
+                    "is_public": is_public,
+                    "group_shares": [
+                        {"group_id": group_id, "permission": "VIEWER"}
+                        for group_id in group_ids or []
+                    ],
+                },
+                headers=user_performing_action.headers,
+            )
+            share_response.raise_for_status()
+            return _skill_from_response(share_response.json())
+
+        return skill
 
     @staticmethod
     def patch_custom(
@@ -89,22 +108,12 @@ class SkillManager:
         **fields: object,
     ) -> DATestSkill:
         response = client.patch(
-            f"{API_SERVER_URL}/admin/skills/custom/{skill.id}",
+            f"{API_SERVER_URL}/skills/custom/{skill.id}",
             json=fields,
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
-        data = response.json()
-        return DATestSkill(
-            id=data["id"],
-            slug=data["slug"],
-            name=data["name"],
-            description=data["description"],
-            is_public=data["is_public"],
-            enabled=data["enabled"],
-            granted_group_ids=data.get("granted_group_ids", []),
-            is_personal=data.get("is_personal", False),
-        )
+        return _skill_from_response(response.json())
 
     @staticmethod
     def replace_bundle(
@@ -116,7 +125,7 @@ class SkillManager:
         headers.pop("Content-Type", None)
 
         response = client.put(
-            f"{API_SERVER_URL}/admin/skills/custom/{skill.id}/bundle",
+            f"{API_SERVER_URL}/skills/custom/{skill.id}/bundle",
             files={
                 "bundle": (
                     f"{skill.slug}.zip",
@@ -127,41 +136,26 @@ class SkillManager:
             headers=headers,
         )
         response.raise_for_status()
-        data = response.json()
-        return DATestSkill(
-            id=data["id"],
-            slug=data["slug"],
-            name=data["name"],
-            description=data["description"],
-            is_public=data["is_public"],
-            enabled=data["enabled"],
-            granted_group_ids=data.get("granted_group_ids", []),
-            is_personal=data.get("is_personal", False),
-        )
+        return _skill_from_response(response.json())
 
     @staticmethod
-    def replace_grants(
+    def replace_group_shares(
         skill: DATestSkill,
         group_ids: list[int],
         user_performing_action: DATestUser,
     ) -> DATestSkill:
-        response = client.put(
-            f"{API_SERVER_URL}/admin/skills/custom/{skill.id}/grants",
-            json={"group_ids": group_ids},
+        response = client.patch(
+            f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
+            json={
+                "group_shares": [
+                    {"group_id": group_id, "permission": "VIEWER"}
+                    for group_id in group_ids
+                ]
+            },
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
-        data = response.json()
-        return DATestSkill(
-            id=data["id"],
-            slug=data["slug"],
-            name=data["name"],
-            description=data["description"],
-            is_public=data["is_public"],
-            enabled=data["enabled"],
-            granted_group_ids=data.get("granted_group_ids", []),
-            is_personal=data.get("is_personal", False),
-        )
+        return _skill_from_response(response.json())
 
     @staticmethod
     def delete_custom(
@@ -169,7 +163,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> None:
         response = client.delete(
-            f"{API_SERVER_URL}/admin/skills/custom/{skill.id}",
+            f"{API_SERVER_URL}/skills/custom/{skill.id}",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -179,7 +173,7 @@ class SkillManager:
         user_performing_action: DATestUser,
     ) -> dict:
         response = client.get(
-            f"{API_SERVER_URL}/admin/skills",
+            f"{API_SERVER_URL}/skills",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -198,11 +192,11 @@ class SkillManager:
 
     @staticmethod
     def get_for_user(
-        slug_or_id: str,
+        skill_id: str,
         user_performing_action: DATestUser,
     ) -> dict:
         response = client.get(
-            f"{API_SERVER_URL}/skills/{slug_or_id}",
+            f"{API_SERVER_URL}/skills/{skill_id}",
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -239,17 +233,7 @@ class SkillManager:
             headers=headers,
         )
         response.raise_for_status()
-        data = response.json()
-        return DATestSkill(
-            id=data["id"],
-            slug=data["slug"],
-            name=data["name"],
-            description=data["description"],
-            is_public=data["is_public"],
-            enabled=data["enabled"],
-            granted_group_ids=data.get("granted_group_ids", []),
-            is_personal=data.get("is_personal", False),
-        )
+        return _skill_from_response(response.json())
 
     @staticmethod
     def replace_personal_bundle(
@@ -272,42 +256,21 @@ class SkillManager:
             headers=headers,
         )
         response.raise_for_status()
-        data = response.json()
-        return DATestSkill(
-            id=data["id"],
-            slug=data["slug"],
-            name=data["name"],
-            description=data["description"],
-            is_public=data["is_public"],
-            enabled=data["enabled"],
-            granted_group_ids=data.get("granted_group_ids", []),
-            is_personal=data.get("is_personal", False),
-        )
+        return _skill_from_response(response.json())
 
     @staticmethod
     def patch_personal(
         skill: DATestSkill,
         user_performing_action: DATestUser,
-        *,
-        enabled: bool,
+        **fields: object,
     ) -> DATestSkill:
         response = client.patch(
             f"{API_SERVER_URL}/skills/custom/{skill.id}",
-            json={"enabled": enabled},
+            json=fields,
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
-        data = response.json()
-        return DATestSkill(
-            id=data["id"],
-            slug=data["slug"],
-            name=data["name"],
-            description=data["description"],
-            is_public=data["is_public"],
-            enabled=data["enabled"],
-            granted_group_ids=data.get("granted_group_ids", []),
-            is_personal=data.get("is_personal", False),
-        )
+        return _skill_from_response(response.json())
 
     @staticmethod
     def delete_personal(
