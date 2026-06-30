@@ -37,6 +37,10 @@ def create_search_settings(
     search_settings: SavedSearchSettings,
     db_session: Session,
     status: IndexModelStatus = IndexModelStatus.FUTURE,
+    # Defaults to the DB column default (False). The reindex endpoint opts into
+    # True so every new FUTURE ports PRESENT -> FUTURE in place; it is set here
+    # (not a request field) so a client can't toggle it.
+    use_port_flow: bool = False,
 ) -> SearchSettings:
     embedding_model = SearchSettings(
         model_name=search_settings.model_name,
@@ -53,7 +57,7 @@ def create_search_settings(
         enable_contextual_rag=search_settings.enable_contextual_rag,
         contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         switchover_type=search_settings.switchover_type,
-        use_port_flow=search_settings.use_port_flow,
+        use_port_flow=use_port_flow,
     )
 
     db_session.add(embedding_model)

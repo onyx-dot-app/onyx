@@ -157,6 +157,8 @@ export interface SavedSearchSettings
   passage_prefix: string | null;
   provider_type: EmbeddingProviderName | null;
   switchover_type?: SwitchoverType;
+  // Read-only: server-controlled reindex-flow flag, always true for new settings.
+  use_port_flow: boolean;
 }
 
 export interface LLMContextualCost {

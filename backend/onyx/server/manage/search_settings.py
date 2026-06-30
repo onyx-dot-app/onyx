@@ -106,12 +106,6 @@ def set_new_search_settings(
             **search_settings_new.model_dump()
         )
 
-    # Every new (FUTURE) search settings drives its reindex through the port flow:
-    # re-embed PRESENT -> FUTURE in place rather than re-fetching from connectors.
-    new_search_settings_request = new_search_settings_request.model_copy(
-        update={"use_port_flow": True}
-    )
-
     secondary_search_settings = get_secondary_search_settings(db_session)
 
     if secondary_search_settings:
@@ -135,8 +129,12 @@ def set_new_search_settings(
             db_session, search_settings_id=secondary_search_settings.id
         )
 
+    # Every new FUTURE reindexes via the port flow: re-embed PRESENT -> FUTURE in
+    # place rather than re-fetching from connectors.
     new_search_settings = create_search_settings(
-        search_settings=new_search_settings_request, db_session=db_session
+        search_settings=new_search_settings_request,
+        db_session=db_session,
+        use_port_flow=True,
     )
 
     # Ensure the document indices have the new index immediately.

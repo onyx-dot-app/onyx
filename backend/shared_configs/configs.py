@@ -129,6 +129,8 @@ PRESERVED_SEARCH_FIELDS = [
     "normalize",
     "passage_prefix",
     "query_prefix",
+    # Server-controlled reindex-flow flag; immutable for a given settings id.
+    "use_port_flow",
 ]
 
 
