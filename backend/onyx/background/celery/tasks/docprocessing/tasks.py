@@ -94,11 +94,12 @@ from onyx.db.indexing_coordination import CoordinationStatus
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
-from onyx.db.notification import create_notification
-from onyx.db.notification import get_notifications
+from onyx.db.notification import batch_create_notifications
+from onyx.db.notification import delete_notifications_by_additional_data
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.db.users import get_active_admin_users
 from onyx.document_index.factory import get_all_document_indices
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
@@ -622,19 +623,13 @@ def check_indexing_completion(
             if cc_pair.in_repeated_error_state:
                 cc_pair.in_repeated_error_state = False
 
-                # Delete any existing error notification for this CC pair so a
-                # fresh one is created if the connector fails again later.
-                for notif in get_notifications(
-                    user=None,
-                    db_session=db_session,
+                # Clear every admin's error notification for this connector so a
+                # fresh one is created if it fails again later.
+                delete_notifications_by_additional_data(
                     notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
-                    include_dismissed=True,
-                ):
-                    if (
-                        notif.additional_data
-                        and notif.additional_data.get("cc_pair_id") == cc_pair.id
-                    ):
-                        db_session.delete(notif)
+                    db_session=db_session,
+                    additional_data={"cc_pair_id": cc_pair.id},
+                )
 
                 db_session.commit()
                 on_connector_error_state_change(
@@ -1002,8 +997,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     )
                     source = cc_pair.connector.source.value
                     connector_url = f"/admin/connector/{cc_pair.id}"
-                    create_notification(
-                        user_id=None,
+                    admin_ids = [
+                        admin.id for admin in get_active_admin_users(db_session)
+                    ]
+                    batch_create_notifications(
+                        user_ids=admin_ids,
                         notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
                         db_session=db_session,
                         title=f"Connector '{connector_name}' has entered repeated error state",
