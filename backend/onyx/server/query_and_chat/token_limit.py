@@ -105,6 +105,9 @@ def _is_rate_limited(
     If at least one rate limit is exceeded, return True
     """
     for rate_limit in rate_limits:
+        if rate_limit.token_budget is None:
+            continue
+
         tokens_used = sum(
             u_token_count
             for u_date, u_token_count in usage
