@@ -40,16 +40,20 @@ export default function NonAdminStep() {
     updateUserPersonalization({ name })
       .then(() => {
         setSavedName(name);
-        showHeader && setShowHeader(true); // check safety or set normally
         setShowHeader(true);
         setIsEditing(false);
-        // Don't call refreshUser() here ÔÇö it would cause OnboardingFlow to
+        // Don't call refreshUser() here — it would cause OnboardingFlow to
         // unmount this component (since user.personalization.name becomes set),
         // hiding the confirmation banner before the user sees it.
         // refreshUser() is called in handleDismissConfirmation instead.
       })
       .catch((error) => {
-        toast.error(t("onboarding.toast_save_name_failed", "Failed to save name. Please try again."));
+        toast.error(
+          t(
+            "onboarding.toast_save_name_failed",
+            "Failed to save name. Please try again."
+          )
+        );
         console.error(error);
       });
   };
@@ -99,7 +103,10 @@ export default function NonAdminStep() {
           <ContentAction
             icon={SvgUser}
             title={t("onboarding.name_prompt", "What should Onyx call you?")}
-            description={t("settings.profile.full_name_desc", "We'll display this name in the app.")}
+            description={t(
+              "settings.profile.full_name_desc",
+              "We'll display this name in the app."
+            )}
             sizePreset="main-ui"
             variant="section"
             padding="fit"
@@ -107,7 +114,10 @@ export default function NonAdminStep() {
               <div className="flex items-center justify-end gap-2">
                 <InputTypeIn
                   ref={inputRef}
-                  placeholder={t("settings.profile.full_name_placeholder", "Your name")}
+                  placeholder={t(
+                    "settings.profile.full_name_placeholder",
+                    "Your name"
+                  )}
                   value={name || ""}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setName(e.target.value)
@@ -156,7 +166,11 @@ export default function NonAdminStep() {
             <div className="p-1 flex items-center gap-1">
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
-                <IconButton internal icon={SvgEdit} tooltip={t("chat.edit", "Edit")} />
+                <IconButton
+                  internal
+                  icon={SvgEdit}
+                  tooltip={t("chat.edit", "Edit")}
+                />
               </Hoverable.Item>
               <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
             </div>

@@ -154,8 +154,14 @@ const LLMStep = memo(
           >
             <ContentAction
               icon={SvgCpu}
-              title={t("onboarding.llm.connect_title", "Connect your LLM models")}
-              description={t("onboarding.llm.connect_desc", "Onyx supports both self-hosted models and popular providers.")}
+              title={t(
+                "onboarding.llm.connect_title",
+                "Connect your LLM models"
+              )}
+              description={t(
+                "onboarding.llm.connect_desc",
+                "Onyx supports both self-hosted models and popular providers."
+              )}
               sizePreset="main-ui"
               variant="section"
               padding="lg"
@@ -217,8 +223,14 @@ const LLMStep = memo(
                   {/* Custom provider card */}
                   <div className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow">
                     <LLMProviderCard
-                      title={t("onboarding.llm.custom_provider_title", "Custom LLM Provider")}
-                      subtitle={t("onboarding.llm.custom_provider_subtitle", "LiteLLM Compatible APIs")}
+                      title={t(
+                        "onboarding.llm.custom_provider_title",
+                        "Custom LLM Provider"
+                      )}
+                      subtitle={t(
+                        "onboarding.llm.custom_provider_subtitle",
+                        "LiteLLM Compatible APIs"
+                      )}
                       disabled={disabled}
                       isConnected={onboardingState.data.llmProviders?.some(
                         (provider) => provider === "custom"

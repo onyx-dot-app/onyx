@@ -75,8 +75,11 @@ interface AppProviderProps {
 export default function AppProvider({ children }: AppProviderProps) {
   // Initialize i18next once at app startup. `initI18n` is idempotent and
   // synchronous (resources are bundled), so the instance is ready before the
-  // provider renders. Done here rather than as an import-time side effect.
-  initI18n();
+  // provider renders. A lazy `useState` initializer guarantees it runs exactly
+  // once during render (even under Strict Mode's double-render) without leaking
+  // a side effect into the render body. Done here rather than as an import-time
+  // side effect.
+  useState(() => initI18n());
 
   return (
     <I18nextProvider i18n={i18n}>

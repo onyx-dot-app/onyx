@@ -57,8 +57,14 @@ function buildTooltipMessage(
   canManageAction: boolean,
   t: any
 ) {
-  const _CONFIGURE_MESSAGE = t("chat.actions.configure_msg", "Press the settings cog to enable.");
-  const _USER_NOT_ADMIN_MESSAGE = t("chat.actions.user_not_admin_msg", "Ask an admin to configure.");
+  const _CONFIGURE_MESSAGE = t(
+    "chat.actions.configure_msg",
+    "Press the settings cog to enable."
+  );
+  const _USER_NOT_ADMIN_MESSAGE = t(
+    "chat.actions.user_not_admin_msg",
+    "Ask an admin to configure."
+  );
 
   if (isConfigured) {
     return actionDescription;
@@ -77,18 +83,35 @@ function getToolTooltip(
   canManageAction: boolean,
   t: any
 ): string {
-  let description = tool.description || t("chat.actions.default_desc", "This action is not configured yet.");
+  let description =
+    tool.description ||
+    t("chat.actions.default_desc", "This action is not configured yet.");
   if (tool.in_code_tool_id) {
     if (tool.in_code_tool_id === SEARCH_TOOL_ID) {
-      description = t("chat.actions.search_desc", "Search through connected knowledge to inform the answer.");
+      description = t(
+        "chat.actions.search_desc",
+        "Search through connected knowledge to inform the answer."
+      );
     } else if (tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID) {
-      description = t("chat.actions.image_gen_desc", "Generate images based on a prompt.");
+      description = t(
+        "chat.actions.image_gen_desc",
+        "Generate images based on a prompt."
+      );
     } else if (tool.in_code_tool_id === WEB_SEARCH_TOOL_ID) {
-      description = t("chat.actions.web_search_desc", "Search the web for up-to-date information.");
+      description = t(
+        "chat.actions.web_search_desc",
+        "Search the web for up-to-date information."
+      );
     } else if (tool.in_code_tool_id === PYTHON_TOOL_ID) {
-      description = t("chat.actions.python_desc", "Execute code for complex analysis.");
+      description = t(
+        "chat.actions.python_desc",
+        "Execute code for complex analysis."
+      );
     } else if (tool.in_code_tool_id === CODING_AGENT_TOOL_ID) {
-      description = t("chat.actions.coding_agent_desc", "Investigate a GitHub repository and answer questions about its code.");
+      description = t(
+        "chat.actions.coding_agent_desc",
+        "Investigate a GitHub repository and answer questions about its code."
+      );
     }
   }
   return buildTooltipMessage(description, isConfigured, canManageAction, t);
@@ -102,7 +125,10 @@ const getAdminConfigureInfo = (
     if (tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID) {
       return {
         href: "/admin/configuration/image-generation",
-        tooltip: t("chat.actions.config_image_gen", "Configure Image Generation"),
+        tooltip: t(
+          "chat.actions.config_image_gen",
+          "Configure Image Generation"
+        ),
       };
     } else if (tool.in_code_tool_id === WEB_SEARCH_TOOL_ID) {
       return {
@@ -112,7 +138,10 @@ const getAdminConfigureInfo = (
     } else if (tool.in_code_tool_id === PYTHON_TOOL_ID) {
       return {
         href: "/admin/configuration/code-interpreter",
-        tooltip: t("chat.actions.config_code_interpreter", "Configure Code Interpreter"),
+        tooltip: t(
+          "chat.actions.config_code_interpreter",
+          "Configure Code Interpreter"
+        ),
       };
     }
   }
@@ -836,7 +865,10 @@ export default function ActionsPopover({
       {[
         <InputTypeIn
           key="search"
-          placeholder={t("chat.actions.search_placeholder", "Search actions...")}
+          placeholder={t(
+            "chat.actions.search_placeholder",
+            "Search actions..."
+          )}
           searchIcon
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
@@ -957,7 +989,10 @@ export default function ActionsPopover({
   const mcpView = (
     <SwitchList
       items={mcpToggleItems}
-      searchPlaceholder={t("chat.actions.search_server_tools", { defaultValue: "Search {{name}} tools", name: selectedMcpServer?.name ?? "server" })}
+      searchPlaceholder={t("chat.actions.search_server_tools", {
+        defaultValue: "Search {{name}} tools",
+        name: selectedMcpServer?.name ?? "server",
+      })}
       allDisabled={mcpAllDisabled}
       onDisableAll={disableAllToolsForSelectedServer}
       onEnableAll={enableAllToolsForSelectedServer}

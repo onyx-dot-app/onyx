@@ -169,7 +169,9 @@ const DocumentsSidebar = memo(
         <div className="flex flex-col px-3 gap-6">
           {hasCited && (
             <div>
-              <Header onClose={closeSidebar}>{t("chat.sidebar.cited_sources", "Cited Sources")}</Header>
+              <Header onClose={closeSidebar}>
+                {t("chat.sidebar.cited_sources", "Cited Sources")}
+              </Header>
               <ChatDocumentDisplayWrapper>
                 {citedDocuments.map((document) => (
                   <ChatDocumentDisplay
@@ -189,7 +191,9 @@ const DocumentsSidebar = memo(
           {hasOther && (
             <div>
               <Header onClose={closeSidebar}>
-                {citedDocuments.length > 0 ? t("chat.sidebar.more", "More") : t("chat.sidebar.found_sources", "Found Sources")}
+                {citedDocuments.length > 0
+                  ? t("chat.sidebar.more", "More")
+                  : t("chat.sidebar.found_sources", "Found Sources")}
               </Header>
               <ChatDocumentDisplayWrapper>
                 {otherDocuments.map((document) => (
@@ -209,7 +213,9 @@ const DocumentsSidebar = memo(
 
           {humanFileDescriptors && humanFileDescriptors.length > 0 && (
             <div>
-              <Header onClose={closeSidebar}>{t("chat.sidebar.user_files", "User Files")}</Header>
+              <Header onClose={closeSidebar}>
+                {t("chat.sidebar.user_files", "User Files")}
+              </Header>
               <ChatDocumentDisplayWrapper>
                 {humanFileDescriptors.map((file) => (
                   <ChatDocumentDisplay

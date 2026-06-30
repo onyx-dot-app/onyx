@@ -177,11 +177,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       document.documentElement.lang = savedLanguage;
     }
     hasSyncedLanguageRef.current = true;
-  }, [
-    upToDateUser?.id,
-    upToDateUser?.preferences?.language,
-    i18n,
-  ]);
+  }, [upToDateUser?.id, upToDateUser?.preferences?.language, i18n]);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {

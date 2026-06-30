@@ -110,7 +110,10 @@ jest.mock("react-i18next", () => {
         if (typeof val === "string" && options) {
           let interpolated = val;
           for (const k of Object.keys(options)) {
-            interpolated = interpolated.replace(new RegExp(`{{${k}}}`, "g"), options[k]);
+            interpolated = interpolated.replace(
+              new RegExp(`{{${k}}}`, "g"),
+              options[k]
+            );
           }
           return interpolated;
         }
@@ -128,4 +131,3 @@ jest.mock("react-i18next", () => {
     },
   };
 });
-

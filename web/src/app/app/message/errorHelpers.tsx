@@ -58,4 +58,3 @@ export const getErrorTitle = (errorCode?: string) => {
       return "chat.errors.generic_error";
   }
 };
-

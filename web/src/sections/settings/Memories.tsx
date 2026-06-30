@@ -26,7 +26,10 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
       {memories.length === 0 ? (
         <LineItem
           skeleton
-          description={t("settings.chats.add_note_placeholder", "Add personal note or memory that Onyx should remember.")}
+          description={t(
+            "settings.chats.add_note_placeholder",
+            "Add personal note or memory that Onyx should remember."
+          )}
           onClick={() => {
             setTargetMemoryId(null);
             memoriesModal.toggle(true);

@@ -11,7 +11,10 @@ import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { Popover, PopoverMenu } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
-import { removeChatSessionFromProject, createProject as createProjectService } from "@/lib/projects/svc";
+import {
+  removeChatSessionFromProject,
+  createProject as createProjectService,
+} from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";

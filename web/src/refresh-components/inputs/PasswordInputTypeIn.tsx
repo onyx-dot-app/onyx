@@ -116,7 +116,9 @@ export default function PasswordInputTypeIn({
   const isRevealed = isPasswordVisible && !effectiveNonRevealable;
   const { t } = useTranslation();
   const toggleLabel = effectiveNonRevealable
-    ? t("auth.value_cannot_be_revealed", { defaultValue: "Value cannot be revealed" })
+    ? t("auth.value_cannot_be_revealed", {
+        defaultValue: "Value cannot be revealed",
+      })
     : isPasswordVisible
       ? t("auth.hide_password", { defaultValue: "Hide password" })
       : t("auth.show_password", { defaultValue: "Show password" });

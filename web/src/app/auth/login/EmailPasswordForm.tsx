@@ -233,9 +233,15 @@ export default function EmailPasswordForm({
                     {isSignup && !showApiMessage && (
                       <FormField.Message
                         messages={{
-                          idle: t("auth.password_min_length", { count: passwordMinLength, defaultValue: `Password must be at least ${passwordMinLength} characters` }),
+                          idle: t("auth.password_min_length", {
+                            count: passwordMinLength,
+                            defaultValue: `Password must be at least ${passwordMinLength} characters`,
+                          }),
                           error: meta.error,
-                          success: t("auth.password_min_length", { count: passwordMinLength, defaultValue: `Password must be at least ${passwordMinLength} characters` }),
+                          success: t("auth.password_min_length", {
+                            count: passwordMinLength,
+                            defaultValue: `Password must be at least ${passwordMinLength} characters`,
+                          }),
                         }}
                       />
                     )}
@@ -256,7 +262,11 @@ export default function EmailPasswordForm({
                 width="full"
                 rightIcon={SvgArrowRightCircle}
               >
-                {isJoin ? t("auth.join") : isSignup ? t("auth.create_account") : t("auth.sign_in")}
+                {isJoin
+                  ? t("auth.join")
+                  : isSignup
+                    ? t("auth.create_account")
+                    : t("auth.sign_in")}
               </Button>
               {user?.is_anonymous_user && (
                 <Link

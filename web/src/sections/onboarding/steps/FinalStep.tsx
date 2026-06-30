@@ -29,16 +29,37 @@ const FinalStepItem = React.memo(
     let displayButtonText = buttonText;
 
     if (title === "Select web search provider") {
-      displayTitle = t("onboarding.final.web_search_title", "Select web search provider");
-      displayDescription = t("onboarding.final.web_search_desc", "Enable Onyx to search the internet for information.");
+      displayTitle = t(
+        "onboarding.final.web_search_title",
+        "Select web search provider"
+      );
+      displayDescription = t(
+        "onboarding.final.web_search_desc",
+        "Enable Onyx to search the internet for information."
+      );
       displayButtonText = t("onboarding.final.web_search_btn", "Web Search");
     } else if (title === "Enable image generation") {
-      displayTitle = t("onboarding.final.image_gen_title", "Enable image generation");
-      displayDescription = t("onboarding.final.image_gen_desc", "Set up models to create images in your chats.");
-      displayButtonText = t("onboarding.final.image_gen_btn", "Image Generation");
+      displayTitle = t(
+        "onboarding.final.image_gen_title",
+        "Enable image generation"
+      );
+      displayDescription = t(
+        "onboarding.final.image_gen_desc",
+        "Set up models to create images in your chats."
+      );
+      displayButtonText = t(
+        "onboarding.final.image_gen_btn",
+        "Image Generation"
+      );
     } else if (title === "Invite your team") {
-      displayTitle = t("onboarding.final.invite_team_title", "Invite your team");
-      displayDescription = t("onboarding.final.invite_team_desc", "Manage users and permissions for your team");
+      displayTitle = t(
+        "onboarding.final.invite_team_title",
+        "Invite your team"
+      );
+      displayDescription = t(
+        "onboarding.final.invite_team_desc",
+        "Manage users and permissions for your team"
+      );
       displayButtonText = t("onboarding.final.invite_team_btn", "Manage Users");
     }
 

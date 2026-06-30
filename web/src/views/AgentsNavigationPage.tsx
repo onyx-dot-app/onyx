@@ -127,8 +127,12 @@ export default function AgentsNavigationPage() {
                 onValueChange={(value) => setActiveTab(value as "all" | "your")}
               >
                 <Tabs.List>
-                  <Tabs.Trigger value="all">{t("agents.all_agents")}</Tabs.Trigger>
-                  <Tabs.Trigger value="your">{t("agents.your_agents")}</Tabs.Trigger>
+                  <Tabs.Trigger value="all">
+                    {t("agents.all_agents")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="your">
+                    {t("agents.your_agents")}
+                  </Tabs.Trigger>
                 </Tabs.List>
               </Tabs>
             </div>
@@ -157,7 +161,11 @@ export default function AgentsNavigationPage() {
             <AgentsSection title={t("agents.all_agents")} agents={allAgents} />
             <TextSeparator
               count={agentCount}
-              text={agentCount === 1 ? t("agents.agent_singular") : t("agents.agent_plural")}
+              text={
+                agentCount === 1
+                  ? t("agents.agent_singular")
+                  : t("agents.agent_plural")
+              }
             />
           </>
         )}

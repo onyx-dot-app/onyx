@@ -144,7 +144,11 @@ function SidebarHeader({
         <Button
           icon={SvgSidebar}
           prominence="tertiary"
-          tooltip={folded ? t("chat.sidebar.open_sidebar", "Open Sidebar") : t("chat.sidebar.close_sidebar", "Close Sidebar")}
+          tooltip={
+            folded
+              ? t("chat.sidebar.open_sidebar", "Open Sidebar")
+              : t("chat.sidebar.close_sidebar", "Close Sidebar")
+          }
           tooltipSide={folded ? "right" : "bottom"}
           size="md"
           onClick={toggleFolded}

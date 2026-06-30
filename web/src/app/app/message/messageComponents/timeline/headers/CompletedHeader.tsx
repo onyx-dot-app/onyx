@@ -35,7 +35,9 @@ function MemoryTagWithTooltip({
   const memoriesModal = useCreateModal();
 
   const operationLabel =
-    memoryOperation === "add" ? t("chat.added_to_memories") : t("chat.updated_memory");
+    memoryOperation === "add"
+      ? t("chat.added_to_memories")
+      : t("chat.updated_memory");
 
   const tag = <Tag icon={SvgAddLines} label={operationLabel} />;
 
@@ -152,7 +154,9 @@ export const CompletedHeader = React.memo(function CompletedHeader({
             aria-label="Expand timeline"
             aria-expanded={isExpanded}
           >
-            {totalSteps === 1 ? t("chat.step_count_single") : t("chat.step_count_plural", { count: totalSteps })}
+            {totalSteps === 1
+              ? t("chat.step_count_single")
+              : t("chat.step_count_plural", { count: totalSteps })}
           </Button>
         )}
       </div>
@@ -160,12 +164,16 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   }
 
   const durationText = processingDurationSeconds
-    ? t("chat.thought_for", { duration: formatDurationSeconds(processingDurationSeconds) })
+    ? t("chat.thought_for", {
+        duration: formatDurationSeconds(processingDurationSeconds),
+      })
     : t("chat.thought_for_some_time");
 
   const imageText =
     generatedImageCount > 0
-      ? generatedImageCount === 1 ? t("chat.generated_image_single") : t("chat.generated_image_plural", { count: generatedImageCount })
+      ? generatedImageCount === 1
+        ? t("chat.generated_image_single")
+        : t("chat.generated_image_plural", { count: generatedImageCount })
       : null;
 
   return (
@@ -197,7 +205,9 @@ export const CompletedHeader = React.memo(function CompletedHeader({
           aria-label="Expand timeline"
           aria-expanded={isExpanded}
         >
-          {totalSteps === 1 ? t("chat.step_count_single") : t("chat.step_count_plural", { count: totalSteps })}
+          {totalSteps === 1
+            ? t("chat.step_count_single")
+            : t("chat.step_count_plural", { count: totalSteps })}
         </Button>
       )}
     </div>

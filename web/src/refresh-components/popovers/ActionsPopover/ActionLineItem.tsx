@@ -70,9 +70,7 @@ export default function ActionLineItem({
   const Icon = tool ? getIconForAction(tool) : ProvidedIcon!;
   const toolName = tool?.name || providedLabel || "";
 
-  let label = tool
-    ? getLocalizedToolLabel(tool, t)
-    : providedLabel!;
+  let label = tool ? getLocalizedToolLabel(tool, t) : providedLabel!;
   if (!!currentProjectId && tool?.in_code_tool_id === SEARCH_TOOL_ID) {
     label = t("chat.actions.project_search", "Project Search");
   }
@@ -190,7 +188,10 @@ export default function ActionLineItem({
                 aria-label={
                   isSearchToolWithNoConnectors
                     ? t("chat.actions.add_connectors", "Add Connectors")
-                    : t("chat.actions.configure_connectors", "Configure Connectors")
+                    : t(
+                        "chat.actions.configure_connectors",
+                        "Configure Connectors"
+                      )
                 }
                 icon={
                   isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
@@ -205,7 +206,10 @@ export default function ActionLineItem({
                 tooltip={
                   isSearchToolWithNoConnectors
                     ? t("chat.actions.add_connectors", "Add Connectors")
-                    : t("chat.actions.configure_connectors", "Configure Connectors")
+                    : t(
+                        "chat.actions.configure_connectors",
+                        "Configure Connectors"
+                      )
                 }
               />
             )}

@@ -134,7 +134,9 @@ export default function MultiModelPanel({
                   e.stopPropagation();
                   onToggleVisibility();
                 }}
-                tooltip={isHidden ? t("chat.show_response") : t("chat.hide_response")}
+                tooltip={
+                  isHidden ? t("chat.show_response") : t("chat.hide_response")
+                }
               />
             )}
           </div>

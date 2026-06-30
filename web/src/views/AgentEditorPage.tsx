@@ -1316,7 +1316,9 @@ export default function AgentEditorPage({
                               }
                               type="submit"
                             >
-                              {existingAgent ? t("admin.agents.editor_save") : t("admin.agents.editor_create")}
+                              {existingAgent
+                                ? t("admin.agents.editor_save")
+                                : t("admin.agents.editor_create")}
                             </Button>
                           </Tooltip>
                         </div>
@@ -1341,10 +1343,15 @@ export default function AgentEditorPage({
                         alignItems="start"
                       >
                         <GeneralLayouts.Section>
-                          <InputVertical withLabel="name" title={t("admin.agents.editor_name")}>
+                          <InputVertical
+                            withLabel="name"
+                            title={t("admin.agents.editor_name")}
+                          >
                             <InputTypeInField
                               name="name"
-                              placeholder={t("admin.agents.editor_name_placeholder")}
+                              placeholder={t(
+                                "admin.agents.editor_name_placeholder"
+                              )}
                             />
                           </InputVertical>
 
@@ -1355,7 +1362,9 @@ export default function AgentEditorPage({
                           >
                             <InputTextAreaField
                               name="description"
-                              placeholder={t("admin.agents.editor_description_placeholder")}
+                              placeholder={t(
+                                "admin.agents.editor_description_placeholder"
+                              )}
                             />
                           </InputVertical>
                         </GeneralLayouts.Section>
@@ -1563,8 +1572,12 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="image_generation"
-                                  title={t("admin.chat_preferences.tool_image_gen")}
-                                  description={t("admin.chat_preferences.tool_image_gen_desc")}
+                                  title={t(
+                                    "admin.chat_preferences.tool_image_gen"
+                                  )}
+                                  description={t(
+                                    "admin.chat_preferences.tool_image_gen_desc"
+                                  )}
                                   disabled={!isImageGenerationAvailable}
                                 >
                                   <SwitchField
@@ -1579,8 +1592,12 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="web_search"
-                                  title={t("admin.chat_preferences.tool_web_search")}
-                                  description={t("admin.chat_preferences.tool_web_search_desc")}
+                                  title={t(
+                                    "admin.chat_preferences.tool_web_search"
+                                  )}
+                                  description={t(
+                                    "admin.chat_preferences.tool_web_search_desc"
+                                  )}
                                   disabled={!webSearchTool}
                                 >
                                   <SwitchField
@@ -1595,8 +1612,12 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="open_url"
-                                  title={t("admin.chat_preferences.tool_open_url")}
-                                  description={t("admin.chat_preferences.tool_open_url_desc")}
+                                  title={t(
+                                    "admin.chat_preferences.tool_open_url"
+                                  )}
+                                  description={t(
+                                    "admin.chat_preferences.tool_open_url_desc"
+                                  )}
                                   disabled={!openURLTool}
                                 >
                                   <SwitchField
@@ -1611,8 +1632,12 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="code_interpreter"
-                                  title={t("admin.chat_preferences.tool_code_interpreter")}
-                                  description={t("admin.chat_preferences.tool_code_interpreter_desc")}
+                                  title={t(
+                                    "admin.chat_preferences.tool_code_interpreter"
+                                  )}
+                                  description={t(
+                                    "admin.chat_preferences.tool_code_interpreter_desc"
+                                  )}
                                   disabled={!codeInterpreterTool}
                                 >
                                   <SwitchField
@@ -1627,8 +1652,12 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="coding_agent"
-                                  title={t("admin.chat_preferences.tool_coding_agent")}
-                                  description={t("admin.chat_preferences.tool_coding_agent_desc")}
+                                  title={t(
+                                    "admin.chat_preferences.tool_coding_agent"
+                                  )}
+                                  description={t(
+                                    "admin.chat_preferences.tool_coding_agent_desc"
+                                  )}
                                   disabled={!codingAgentTool}
                                 >
                                   <SwitchField
@@ -1699,7 +1728,9 @@ export default function AgentEditorPage({
                                 <InputHorizontal
                                   withLabel="llm_model"
                                   title={t("admin.agents.editor_default_model")}
-                                  description={t("admin.agents.editor_default_model_desc")}
+                                  description={t(
+                                    "admin.agents.editor_default_model_desc"
+                                  )}
                                 >
                                   <ModelSelector
                                     value={

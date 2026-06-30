@@ -140,7 +140,10 @@ function ScopeSelector({
   if (scopesError) {
     return (
       <Text font="secondary-body" color="text-03">
-        {t("settings.accounts.err_could_not_load_pats", "Couldn't load permissions.")}
+        {t(
+          "settings.accounts.err_could_not_load_pats",
+          "Couldn't load permissions."
+        )}
       </Text>
     );
   }
@@ -183,7 +186,7 @@ function ScopeSelector({
                       ? t("settings.accounts.scope_included_with", {
                           defaultValue: `${option.label} (included with ${lockReason})`,
                           label: option.label,
-                          reason: lockReason
+                          reason: lockReason,
                         })
                       : option.label}
                   </Text>
@@ -245,7 +248,10 @@ function PATModal({
             title={t("settings.accounts.modal_created_title", "Access Token")}
             icon={SvgKey}
             onClose={onClose}
-            description={t("settings.accounts.modal_created_desc", "Save this token before continuing. It won't be shown again.")}
+            description={t(
+              "settings.accounts.modal_created_desc",
+              "Save this token before continuing. It won't be shown again."
+            )}
           />
           <Modal.Body>
             <Code showCopyButton={false}>{createdToken.token}</Code>
@@ -271,7 +277,10 @@ function PATModal({
     <ConfirmationModalLayout
       icon={SvgKey}
       title={t("settings.accounts.modal_create_title", "Create Access Token")}
-      description={t("settings.accounts.modal_create_desc", "All API requests using this token will inherit your access permissions and be attributed to you as an individual.")}
+      description={t(
+        "settings.accounts.modal_create_desc",
+        "All API requests using this token will inherit your access permissions and be attributed to you as an individual."
+      )}
       onClose={onClose}
       submit={
         <Button
@@ -282,14 +291,22 @@ function PATModal({
           }
           onClick={onCreate}
         >
-          {isCreating ? t("settings.accounts.creating_token", "Creating Token...") : t("settings.accounts.create_token", "Create Token")}
+          {isCreating
+            ? t("settings.accounts.creating_token", "Creating Token...")
+            : t("settings.accounts.create_token", "Create Token")}
         </Button>
       }
     >
       <Section gap={1}>
-        <InputVertical title={t("settings.accounts.token_name", "Token Name")} withLabel>
+        <InputVertical
+          title={t("settings.accounts.token_name", "Token Name")}
+          withLabel
+        >
           <InputTypeIn
-            placeholder={t("settings.accounts.token_name_placeholder", "Name your token")}
+            placeholder={t(
+              "settings.accounts.token_name_placeholder",
+              "Name your token"
+            )}
             value={newTokenName}
             onChange={(e) => setNewTokenName(e.target.value)}
             variant={isCreating ? "disabled" : undefined}
@@ -311,7 +328,11 @@ function PATModal({
                     .toISOString()
                     .replace("T", " ")
                     .replace(".999Z", "");
-                  return t("settings.accounts.will_expire_at", "This token will expire at: {{date}} UTC", { date: dateStr });
+                  return t(
+                    "settings.accounts.will_expire_at",
+                    "This token will expire at: {{date}} UTC",
+                    { date: dateStr }
+                  );
                 })()
           }
           withLabel
@@ -321,12 +342,25 @@ function PATModal({
             onValueChange={setExpirationDays}
             disabled={isCreating}
           >
-            <InputSelect.Trigger placeholder={t("settings.accounts.select_expiration", "Select expiration")} />
+            <InputSelect.Trigger
+              placeholder={t(
+                "settings.accounts.select_expiration",
+                "Select expiration"
+              )}
+            />
             <InputSelect.Content>
-              <InputSelect.Item value="7">{t("settings.accounts.days_7", "7 days")}</InputSelect.Item>
-              <InputSelect.Item value="30">{t("settings.accounts.days_30", "30 days")}</InputSelect.Item>
-              <InputSelect.Item value="365">{t("settings.accounts.days_365", "365 days")}</InputSelect.Item>
-              <InputSelect.Item value="null">{t("settings.accounts.no_expiration", "No expiration")}</InputSelect.Item>
+              <InputSelect.Item value="7">
+                {t("settings.accounts.days_7", "7 days")}
+              </InputSelect.Item>
+              <InputSelect.Item value="30">
+                {t("settings.accounts.days_30", "30 days")}
+              </InputSelect.Item>
+              <InputSelect.Item value="365">
+                {t("settings.accounts.days_365", "365 days")}
+              </InputSelect.Item>
+              <InputSelect.Item value="null">
+                {t("settings.accounts.no_expiration", "No expiration")}
+              </InputSelect.Item>
             </InputSelect.Content>
           </InputSelect>
         </InputVertical>
@@ -334,8 +368,14 @@ function PATModal({
           title={t("settings.accounts.permissions", "Permissions")}
           subDescription={
             accessMode === "full"
-              ? t("settings.accounts.permissions_full_desc", "Inherits all of your permissions.")
-              : t("settings.accounts.permissions_limited_desc", "Limit this token to specific capabilities.")
+              ? t(
+                  "settings.accounts.permissions_full_desc",
+                  "Inherits all of your permissions."
+                )
+              : t(
+                  "settings.accounts.permissions_limited_desc",
+                  "Limit this token to specific capabilities."
+                )
           }
           withLabel
         >
@@ -344,9 +384,16 @@ function PATModal({
             onValueChange={(value) => setAccessMode(value as AccessMode)}
             disabled={isCreating}
           >
-            <InputSelect.Trigger placeholder={t("settings.accounts.select_permissions", "Select permissions")} />
+            <InputSelect.Trigger
+              placeholder={t(
+                "settings.accounts.select_permissions",
+                "Select permissions"
+              )}
+            />
             <InputSelect.Content>
-              <InputSelect.Item value="full">{t("settings.accounts.full_access", "Full access")}</InputSelect.Item>
+              <InputSelect.Item value="full">
+                {t("settings.accounts.full_access", "Full access")}
+              </InputSelect.Item>
               <InputSelect.Item value="limited">
                 {t("settings.accounts.permissions_limited", "Limited access")}
               </InputSelect.Item>
@@ -376,7 +423,7 @@ function GeneralSettings() {
     updateUserChatBackground,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const applyBackground = useCallback(
     async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
@@ -406,8 +453,20 @@ function GeneralSettings() {
     updatePersonalizationField,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success(t("settings.danger_zone.toast_update_personalization_success", "Personalization updated successfully")),
-    onError: () => toast.error(t("settings.danger_zone.toast_update_personalization_failed", "Failed to update personalization")),
+    onSuccess: () =>
+      toast.success(
+        t(
+          "settings.danger_zone.toast_update_personalization_success",
+          "Personalization updated successfully"
+        )
+      ),
+    onError: () =>
+      toast.error(
+        t(
+          "settings.danger_zone.toast_update_personalization_failed",
+          "Failed to update personalization"
+        )
+      ),
   });
 
   // Track initial values to detect changes
@@ -425,14 +484,24 @@ function GeneralSettings() {
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
-        toast.success(t("settings.danger_zone.toast_success", "All your chat sessions have been deleted."));
+        toast.success(
+          t(
+            "settings.danger_zone.toast_success",
+            "All your chat sessions have been deleted."
+          )
+        );
         await refreshChatSessions();
         setShowDeleteConfirmation(false);
       } else {
         throw new Error("Failed to delete all chat sessions");
       }
     } catch (error) {
-      toast.error(t("settings.danger_zone.toast_failed", "Failed to delete all chat sessions"));
+      toast.error(
+        t(
+          "settings.danger_zone.toast_failed",
+          "Failed to delete all chat sessions"
+        )
+      );
     } finally {
       setIsDeleting(false);
     }
@@ -453,16 +522,24 @@ function GeneralSettings() {
                 void handleDeleteAllChats();
               }}
             >
-              {isDeleting ? t("settings.danger_zone.deleting", "Deleting...") : t("settings.danger_zone.delete_btn", "Delete")}
+              {isDeleting
+                ? t("settings.danger_zone.deleting", "Deleting...")
+                : t("settings.danger_zone.delete_btn", "Delete")}
             </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
             <Text color="text-05">
-              {t("settings.danger_zone.confirm_desc_1", "All your chat sessions and history will be permanently deleted. Deletion cannot be undone.")}
+              {t(
+                "settings.danger_zone.confirm_desc_1",
+                "All your chat sessions and history will be permanently deleted. Deletion cannot be undone."
+              )}
             </Text>
             <Text color="text-05">
-              {t("settings.danger_zone.confirm_desc_2", "Are you sure you want to delete all chats?")}
+              {t(
+                "settings.danger_zone.confirm_desc_2",
+                "Are you sure you want to delete all chats?"
+              )}
             </Text>
           </Section>
         </ConfirmationModalLayout>
@@ -479,12 +556,18 @@ function GeneralSettings() {
           <Card>
             <InputHorizontal
               title={t("settings.profile.full_name", "Full Name")}
-              description={t("settings.profile.full_name_desc", "We'll display this name in the app.")}
+              description={t(
+                "settings.profile.full_name_desc",
+                "We'll display this name in the app."
+              )}
               center
               withLabel
             >
               <InputTypeIn
-                placeholder={t("settings.profile.full_name_placeholder", "Your name")}
+                placeholder={t(
+                  "settings.profile.full_name_placeholder",
+                  "Your name"
+                )}
                 value={personalizationValues.name}
                 onChange={(e) =>
                   updatePersonalizationField("name", e.target.value)
@@ -505,12 +588,18 @@ function GeneralSettings() {
             </InputHorizontal>
             <InputHorizontal
               title={t("settings.profile.work_role", "Work Role")}
-              description={t("settings.profile.work_role_desc", "Share your role to better tailor responses.")}
+              description={t(
+                "settings.profile.work_role_desc",
+                "Share your role to better tailor responses."
+              )}
               center
               withLabel
             >
               <InputTypeIn
-                placeholder={t("settings.profile.work_role_placeholder", "Your role")}
+                placeholder={t(
+                  "settings.profile.work_role_placeholder",
+                  "Your role"
+                )}
                 value={personalizationValues.role}
                 onChange={(e) =>
                   updatePersonalizationField("role", e.target.value)
@@ -542,7 +631,10 @@ function GeneralSettings() {
           <Card>
             <InputHorizontal
               title={t("settings.appearance.color_mode", "Color Mode")}
-              description={t("settings.appearance.color_mode_desc", "Select your preferred color mode for the UI.")}
+              description={t(
+                "settings.appearance.color_mode_desc",
+                "Select your preferred color mode for the UI."
+              )}
               center
               withLabel
             >
@@ -595,7 +687,7 @@ function GeneralSettings() {
               withLabel
             >
               <InputSelect
-                value={user?.preferences?.language ?? "en"}
+                value={user?.preferences?.language ?? i18n.language ?? "en"}
                 onValueChange={(value) => {
                   updateUserLanguagePreference(value);
                 }}
@@ -610,7 +702,12 @@ function GeneralSettings() {
                 </InputSelect.Content>
               </InputSelect>
             </InputHorizontal>
-            <InputVertical title={t("settings.appearance.chat_background", "Chat Background")}>
+            <InputVertical
+              title={t(
+                "settings.appearance.chat_background",
+                "Chat Background"
+              )}
+            >
               <div className="flex flex-wrap gap-2">
                 {CHAT_BACKGROUND_OPTIONS.map((bg) => {
                   const currentBackgroundId =
@@ -630,7 +727,9 @@ function GeneralSettings() {
                     >
                       {isNone ? (
                         <div className="absolute inset-0 bg-background flex items-center justify-center">
-                          <span className="text-xs text-text-02">{t("settings.appearance.bg_none", "None")}</span>
+                          <span className="text-xs text-text-02">
+                            {t("settings.appearance.bg_none", "None")}
+                          </span>
                         </div>
                       ) : (
                         <div
@@ -670,8 +769,14 @@ function GeneralSettings() {
           />
           <Card>
             <InputHorizontal
-              title={t("settings.danger_zone.delete_all_chats", "Delete All Chats")}
-              description={t("settings.danger_zone.delete_all_chats_desc", "Permanently delete all your chat sessions.")}
+              title={t(
+                "settings.danger_zone.delete_all_chats",
+                "Delete All Chats"
+              )}
+              description={t(
+                "settings.danger_zone.delete_all_chats_desc",
+                "Permanently delete all your chat sessions."
+              )}
               center
             >
               <Button
@@ -732,7 +837,9 @@ function PromptShortcuts() {
   // Show error popup if fetch fails
   useEffect(() => {
     if (!error) return;
-    toast.error(t("settings.shortcuts.toast_load_failed", "Failed to load shortcuts"));
+    toast.error(
+      t("settings.shortcuts.toast_load_failed", "Failed to load shortcuts")
+    );
   }, [error, t]);
 
   const handleUpdateShortcut = useCallback(
@@ -805,12 +912,19 @@ function PromptShortcuts() {
         if (response.ok) {
           setShortcuts((prev) => prev.filter((_, i) => i !== index));
           await refresh();
-          toast.success(t("settings.shortcuts.toast_deleted", "Shortcut deleted"));
+          toast.success(
+            t("settings.shortcuts.toast_deleted", "Shortcut deleted")
+          );
         } else {
           throw new Error("Failed to delete shortcut");
         }
       } catch (error) {
-        toast.error(t("settings.shortcuts.toast_delete_failed", "Failed to delete shortcut"));
+        toast.error(
+          t(
+            "settings.shortcuts.toast_delete_failed",
+            "Failed to delete shortcut"
+          )
+        );
       }
     },
     [shortcuts, refresh, t]
@@ -820,7 +934,12 @@ function PromptShortcuts() {
     async (index: number) => {
       const shortcut = shortcuts[index];
       if (!shortcut || !shortcut.prompt.trim() || !shortcut.content.trim()) {
-        toast.error(t("settings.shortcuts.err_both_required", "Both shortcut and expansion are required"));
+        toast.error(
+          t(
+            "settings.shortcuts.err_both_required",
+            "Both shortcut and expansion are required"
+          )
+        );
         return;
       }
 
@@ -840,7 +959,9 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success(t("settings.shortcuts.toast_created", "Shortcut created"));
+            toast.success(
+              t("settings.shortcuts.toast_created", "Shortcut created")
+            );
           } else {
             throw new Error("Failed to create shortcut");
           }
@@ -859,13 +980,17 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success(t("settings.shortcuts.toast_updated", "Shortcut updated"));
+            toast.success(
+              t("settings.shortcuts.toast_updated", "Shortcut updated")
+            );
           } else {
             throw new Error("Failed to update shortcut");
           }
         }
       } catch (error) {
-        toast.error(t("settings.shortcuts.toast_save_failed", "Failed to save shortcut"));
+        toast.error(
+          t("settings.shortcuts.toast_save_failed", "Failed to save shortcut")
+        );
       }
     },
     [shortcuts, refresh, t]
@@ -911,7 +1036,10 @@ function PromptShortcuts() {
               >
                 <InputTypeIn
                   prefixText="/"
-                  placeholder={t("settings.shortcuts.summarize_placeholder", "Summarize")}
+                  placeholder={t(
+                    "settings.shortcuts.summarize_placeholder",
+                    "Summarize"
+                  )}
                   value={shortcut.prompt}
                   onChange={(e) =>
                     handleUpdateShortcut(index, "prompt", e.target.value)
@@ -935,16 +1063,25 @@ function PromptShortcuts() {
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
                     prominence="tertiary"
-                    aria-label={t("settings.shortcuts.remove_aria", "Remove shortcut")}
+                    aria-label={t(
+                      "settings.shortcuts.remove_aria",
+                      "Remove shortcut"
+                    )}
                     tooltip={
                       shortcut.is_public
-                        ? t("settings.shortcuts.cannot_delete_public", "Cannot delete public prompt-shortcuts.")
+                        ? t(
+                            "settings.shortcuts.cannot_delete_public",
+                            "Cannot delete public prompt-shortcuts."
+                          )
                         : undefined
                     }
                   />
                 </Section>
                 <InputTextArea
-                  placeholder={t("settings.shortcuts.content_placeholder", "Provide a concise 1ÔÇô2 sentence summary of the following:")}
+                  placeholder={t(
+                    "settings.shortcuts.content_placeholder",
+                    "Provide a concise 1ÔÇô2 sentence summary of the following:"
+                  )}
                   value={shortcut.content}
                   onChange={(e) =>
                     handleUpdateShortcut(index, "content", e.target.value)
@@ -1000,8 +1137,12 @@ function ChatPreferencesSettings() {
     updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success(t("settings.chats.toast_prefs_saved", "Preferences saved")),
-    onError: () => toast.error(t("settings.chats.toast_prefs_failed", "Failed to save preferences")),
+    onSuccess: () =>
+      toast.success(t("settings.chats.toast_prefs_saved", "Preferences saved")),
+    onError: () =>
+      toast.error(
+        t("settings.chats.toast_prefs_failed", "Failed to save preferences")
+      ),
   });
   const [draftVoicePlaybackSpeed, setDraftVoicePlaybackSpeed] = useState(
     user?.preferences.voice_playback_speed ?? 1
@@ -1019,9 +1160,13 @@ function ChatPreferencesSettings() {
     }) => {
       try {
         await updateUserVoiceSettings(settings);
-        toast.success(t("settings.chats.toast_prefs_saved", "Preferences saved"));
+        toast.success(
+          t("settings.chats.toast_prefs_saved", "Preferences saved")
+        );
       } catch {
-        toast.error(t("settings.chats.toast_prefs_failed", "Failed to save preferences"));
+        toast.error(
+          t("settings.chats.toast_prefs_failed", "Failed to save preferences")
+        );
       }
     },
     [updateUserVoiceSettings, t]
@@ -1065,7 +1210,10 @@ function ChatPreferencesSettings() {
         <Card>
           <InputHorizontal
             title={t("settings.chats.default_model", "Default Model")}
-            description={t("settings.chats.default_model_desc", "This model will be used by Onyx by default in your chats.")}
+            description={t(
+              "settings.chats.default_model_desc",
+              "This model will be used by Onyx by default in your chats."
+            )}
             withLabel
           >
             <ModelSelector
@@ -1100,7 +1248,10 @@ function ChatPreferencesSettings() {
 
           <InputHorizontal
             title={t("settings.chats.auto_scroll", "Chat Auto-scroll")}
-            description={t("settings.chats.auto_scroll_desc", "Automatically scroll to new content as chat generates response.")}
+            description={t(
+              "settings.chats.auto_scroll_desc",
+              "Automatically scroll to new content as chat generates response."
+            )}
             withLabel
           >
             <Switch
@@ -1113,7 +1264,10 @@ function ChatPreferencesSettings() {
 
           <InputHorizontal
             title={t("settings.chats.smooth_streaming", "Smooth Streaming")}
-            description={t("settings.chats.smooth_streaming_desc", "Animate streamed responses character-by-character. Disable to render chunks as they arrive.")}
+            description={t(
+              "settings.chats.smooth_streaming_desc",
+              "Animate streamed responses character-by-character. Disable to render chunks as they arrive."
+            )}
             withLabel
           >
             <Switch
@@ -1124,7 +1278,10 @@ function ChatPreferencesSettings() {
 
           <InputHorizontal
             title={t("settings.chats.collapse_pastes", "Collapse Large Pastes")}
-            description={t("settings.chats.collapse_pastes_desc", "When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text.")}
+            description={t(
+              "settings.chats.collapse_pastes_desc",
+              "When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text."
+            )}
             withLabel
           >
             <Switch
@@ -1140,13 +1297,19 @@ function ChatPreferencesSettings() {
               tooltip={
                 searchUiEnabled
                   ? undefined
-                  : t("settings.chats.search_ui_disabled_tooltip", "Search UI is disabled and can only be enabled by an admin.")
+                  : t(
+                      "settings.chats.search_ui_disabled_tooltip",
+                      "Search UI is disabled and can only be enabled by an admin."
+                    )
               }
               side="top"
             >
               <InputHorizontal
                 title={t("settings.chats.default_app_mode", "Default App Mode")}
-                description={t("settings.chats.default_app_mode_desc", "Choose whether new sessions start in Search or Chat mode.")}
+                description={t(
+                  "settings.chats.default_app_mode_desc",
+                  "Choose whether new sessions start in Search or Chat mode."
+                )}
                 center
                 disabled={!searchUiEnabled}
                 withLabel
@@ -1160,8 +1323,12 @@ function ChatPreferencesSettings() {
                 >
                   <InputSelect.Trigger />
                   <InputSelect.Content>
-                    <InputSelect.Item value="CHAT">{t("settings.chats.mode_chat", "Chat")}</InputSelect.Item>
-                    <InputSelect.Item value="SEARCH">{t("settings.chats.mode_search", "Search")}</InputSelect.Item>
+                    <InputSelect.Item value="CHAT">
+                      {t("settings.chats.mode_chat", "Chat")}
+                    </InputSelect.Item>
+                    <InputSelect.Item value="SEARCH">
+                      {t("settings.chats.mode_search", "Search")}
+                    </InputSelect.Item>
                   </InputSelect.Content>
                 </InputSelect>
               </InputHorizontal>
@@ -1172,12 +1339,21 @@ function ChatPreferencesSettings() {
 
       <Section gap={0.75}>
         <InputVertical
-          title={t("settings.chats.personal_prefs_title", "Personal Preferences")}
-          description={t("settings.chats.personal_prefs_desc", "Provide your custom preferences in natural language.")}
+          title={t(
+            "settings.chats.personal_prefs_title",
+            "Personal Preferences"
+          )}
+          description={t(
+            "settings.chats.personal_prefs_desc",
+            "Provide your custom preferences in natural language."
+          )}
           withLabel
         >
           <InputTextArea
-            placeholder={t("settings.chats.personal_prefs_placeholder", "Describe how you want the system to behave and the tone it should use.")}
+            placeholder={t(
+              "settings.chats.personal_prefs_placeholder",
+              "Describe how you want the system to behave and the tone it should use."
+            )}
             value={personalizationValues.user_preferences}
             onChange={(e) => updateUserPreferences(e.target.value)}
             onBlur={() => void handleSavePersonalization()}
@@ -1199,8 +1375,14 @@ function ChatPreferencesSettings() {
         />
         <Card>
           <InputHorizontal
-            title={t("settings.chats.ref_memories", "Reference Stored Memories")}
-            description={t("settings.chats.ref_memories_desc", "Let Onyx reference stored memories in chats.")}
+            title={t(
+              "settings.chats.ref_memories",
+              "Reference Stored Memories"
+            )}
+            description={t(
+              "settings.chats.ref_memories_desc",
+              "Let Onyx reference stored memories in chats."
+            )}
             withLabel
           >
             <Switch
@@ -1213,7 +1395,10 @@ function ChatPreferencesSettings() {
           </InputHorizontal>
           <InputHorizontal
             title={t("settings.chats.update_memories", "Update Memories")}
-            description={t("settings.chats.update_memories_desc", "Let Onyx generate and update stored memories.")}
+            description={t(
+              "settings.chats.update_memories_desc",
+              "Let Onyx generate and update stored memories."
+            )}
             withLabel
           >
             <Switch
@@ -1247,8 +1432,14 @@ function ChatPreferencesSettings() {
         />
         <Card>
           <InputHorizontal
-            title={t("settings.chats.use_prompt_shortcuts", "Use Prompt Shortcuts")}
-            description={t("settings.chats.use_prompt_shortcuts_desc", "Enable shortcuts to quickly insert common prompts.")}
+            title={t(
+              "settings.chats.use_prompt_shortcuts",
+              "Use Prompt Shortcuts"
+            )}
+            description={t(
+              "settings.chats.use_prompt_shortcuts_desc",
+              "Enable shortcuts to quickly insert common prompts."
+            )}
             withLabel
           >
             <Switch
@@ -1273,7 +1464,10 @@ function ChatPreferencesSettings() {
         <Card>
           <InputHorizontal
             title={t("settings.chats.voice_auto_send", "Auto-Send on Pause")}
-            description={t("settings.chats.voice_auto_send_desc", "Automatically send voice input when you stop speaking.")}
+            description={t(
+              "settings.chats.voice_auto_send_desc",
+              "Automatically send voice input when you stop speaking."
+            )}
             withLabel
           >
             <Switch
@@ -1286,7 +1480,10 @@ function ChatPreferencesSettings() {
 
           <InputHorizontal
             title={t("settings.chats.voice_auto_playback", "Auto-Playback")}
-            description={t("settings.chats.voice_auto_playback_desc", "Automatically play voice responses.")}
+            description={t(
+              "settings.chats.voice_auto_playback_desc",
+              "Automatically play voice responses."
+            )}
             withLabel
           >
             <Switch
@@ -1299,7 +1496,10 @@ function ChatPreferencesSettings() {
 
           <InputHorizontal
             title={t("settings.chats.voice_playback_speed", "Playback Speed")}
-            description={t("settings.chats.voice_playback_speed_desc", "Adjust the speed of voice playback.")}
+            description={t(
+              "settings.chats.voice_playback_speed_desc",
+              "Adjust the speed of voice playback."
+            )}
             withLabel
           >
             <div className="flex items-center gap-3">
@@ -1339,19 +1539,34 @@ function AccountsAccessSettings() {
   const { t } = useTranslation();
 
   const passwordValidationSchema = Yup.object().shape({
-    currentPassword: Yup.string().required(t("settings.accounts.current_password_required", "Current password is required")),
+    currentPassword: Yup.string().required(
+      t(
+        "settings.accounts.current_password_required",
+        "Current password is required"
+      )
+    ),
     newPassword: Yup.string()
       .min(
         authTypeMetadata.passwordMinLength,
         t("settings.accounts.new_password_min_length", {
           defaultValue: `Password must be at least ${authTypeMetadata.passwordMinLength} characters`,
-          count: authTypeMetadata.passwordMinLength
+          count: authTypeMetadata.passwordMinLength,
         })
       )
-      .required(t("settings.accounts.new_password_required", "New password is required")),
+      .required(
+        t("settings.accounts.new_password_required", "New password is required")
+      ),
     confirmPassword: Yup.string()
-      .oneOf([Yup.ref("newPassword")], t("settings.accounts.passwords_do_not_match", "Passwords do not match"))
-      .required(t("settings.accounts.confirm_password_required", "Please confirm your new password")),
+      .oneOf(
+        [Yup.ref("newPassword")],
+        t("settings.accounts.passwords_do_not_match", "Passwords do not match")
+      )
+      .required(
+        t(
+          "settings.accounts.confirm_password_required",
+          "Please confirm your new password"
+        )
+      ),
   });
 
   // PAT state
@@ -1421,19 +1636,28 @@ function AccountsAccessSettings() {
   // Show error popup if SWR fetch fails
   useEffect(() => {
     if (error) {
-      toast.error(t("settings.accounts.toast_load_failed", "Failed to load tokens"));
+      toast.error(
+        t("settings.accounts.toast_load_failed", "Failed to load tokens")
+      );
     }
   }, [error, t]);
 
   useEffect(() => {
     if (scopeOptionsError) {
-      toast.error(t("settings.accounts.toast_load_scopes_failed", "Failed to load permission options"));
+      toast.error(
+        t(
+          "settings.accounts.toast_load_scopes_failed",
+          "Failed to load permission options"
+        )
+      );
     }
   }, [scopeOptionsError, t]);
 
   const createPAT = useCallback(async () => {
     if (!newTokenName.trim()) {
-      toast.error(t("settings.accounts.err_name_required", "Token name is required"));
+      toast.error(
+        t("settings.accounts.err_name_required", "Token name is required")
+      );
       return;
     }
 
@@ -1458,15 +1682,28 @@ function AccountsAccessSettings() {
           token: data.token,
           name: newTokenName,
         });
-        toast.success(t("settings.accounts.toast_create_success", "Token created successfully"));
+        toast.success(
+          t(
+            "settings.accounts.toast_create_success",
+            "Token created successfully"
+          )
+        );
         // Revalidate the token list
         await mutate();
       } else {
         const errorData = await response.json();
-        toast.error(errorData.detail || t("settings.accounts.toast_create_failed", "Failed to create token"));
+        toast.error(
+          errorData.detail ||
+            t("settings.accounts.toast_create_failed", "Failed to create token")
+        );
       }
     } catch (error) {
-      toast.error(t("settings.accounts.toast_create_network_error", "Network error creating token"));
+      toast.error(
+        t(
+          "settings.accounts.toast_create_network_error",
+          "Network error creating token"
+        )
+      );
     } finally {
       setIsCreating(false);
     }
@@ -1485,13 +1722,25 @@ function AccountsAccessSettings() {
             setNewlyCreatedToken(null);
           }
           await mutate();
-          toast.success(t("settings.accounts.toast_delete_success", "Token deleted successfully"));
+          toast.success(
+            t(
+              "settings.accounts.toast_delete_success",
+              "Token deleted successfully"
+            )
+          );
           setTokenToDelete(null);
         } else {
-          toast.error(t("settings.accounts.toast_delete_failed", "Failed to delete token"));
+          toast.error(
+            t("settings.accounts.toast_delete_failed", "Failed to delete token")
+          );
         }
       } catch (error) {
-        toast.error(t("settings.accounts.toast_delete_network_error", "Network error deleting token"));
+        toast.error(
+          t(
+            "settings.accounts.toast_delete_network_error",
+            "Network error deleting token"
+          )
+        );
       }
     },
     [newlyCreatedToken, mutate, t]
@@ -1516,14 +1765,27 @@ function AccountsAccessSettings() {
         });
 
         if (response.ok) {
-          toast.success(t("settings.accounts.toast_success", "Password updated successfully"));
+          toast.success(
+            t(
+              "settings.accounts.toast_success",
+              "Password updated successfully"
+            )
+          );
           setShowPasswordModal(false);
         } else {
           const errorData = await response.json();
-          toast.error(errorData.detail || t("settings.accounts.toast_failed", "Failed to change password"));
+          toast.error(
+            errorData.detail ||
+              t("settings.accounts.toast_failed", "Failed to change password")
+          );
         }
       } catch (error) {
-        toast.error(t("settings.accounts.toast_error_occurred", "An error occurred while changing the password"));
+        toast.error(
+          t(
+            "settings.accounts.toast_error_occurred",
+            "An error occurred while changing the password"
+          )
+        );
       }
     },
     [t]
@@ -1560,7 +1822,10 @@ function AccountsAccessSettings() {
       {tokenToDelete && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={t("settings.accounts.modal_revoke_title", "Revoke Access Token")}
+          title={t(
+            "settings.accounts.modal_revoke_title",
+            "Revoke Access Token"
+          )}
           onClose={() => setTokenToDelete(null)}
           submit={
             <Button
@@ -1576,11 +1841,14 @@ function AccountsAccessSettings() {
               {t("settings.accounts.revoke_desc_1", {
                 defaultValue: `Any application using the token ${tokenToDelete.name} (${tokenToDelete.token_display}) will lose access to Onyx. This action cannot be undone.`,
                 name: tokenToDelete.name,
-                display: tokenToDelete.token_display
+                display: tokenToDelete.token_display,
               })}
             </Text>
             <Text color="text-05">
-              {t("settings.accounts.revoke_desc_2", "Are you sure you want to revoke this token?")}
+              {t(
+                "settings.accounts.revoke_desc_2",
+                "Are you sure you want to revoke this token?"
+              )}
             </Text>
           </Section>
         </ConfirmationModalLayout>
@@ -1612,7 +1880,10 @@ function AccountsAccessSettings() {
             <Form>
               <ConfirmationModalLayout
                 icon={SvgLock}
-                title={t("settings.accounts.change_password", "Change Password")}
+                title={t(
+                  "settings.accounts.change_password",
+                  "Change Password"
+                )}
                 submit={
                   <Button
                     disabled={isSubmitting || !dirty || !isValid}
@@ -1625,7 +1896,9 @@ function AccountsAccessSettings() {
                       }
                     }}
                   >
-                    {isSubmitting ? t("settings.accounts.updating", "Updating...") : t("settings.accounts.btn_update", "Update")}
+                    {isSubmitting
+                      ? t("settings.accounts.updating", "Updating...")
+                      : t("settings.accounts.btn_update", "Update")}
                   </Button>
                 }
                 onClose={() => {
@@ -1636,7 +1909,10 @@ function AccountsAccessSettings() {
                   <Section gap={0.25} alignItems="start">
                     <InputVertical
                       withLabel="currentPassword"
-                      title={t("settings.accounts.current_password", "Current Password")}
+                      title={t(
+                        "settings.accounts.current_password",
+                        "Current Password"
+                      )}
                     >
                       <PasswordInputTypeIn
                         name="currentPassword"
@@ -1650,7 +1926,13 @@ function AccountsAccessSettings() {
                     </InputVertical>
                   </Section>
                   <Section gap={0.25} alignItems="start">
-                    <InputVertical withLabel="newPassword" title={t("settings.accounts.new_password", "New Password")}>
+                    <InputVertical
+                      withLabel="newPassword"
+                      title={t(
+                        "settings.accounts.new_password",
+                        "New Password"
+                      )}
+                    >
                       <PasswordInputTypeIn
                         name="newPassword"
                         value={values.newPassword}
@@ -1663,7 +1945,10 @@ function AccountsAccessSettings() {
                   <Section gap={0.25} alignItems="start">
                     <InputVertical
                       withLabel="confirmPassword"
-                      title={t("settings.accounts.confirm_new_password", "Confirm New Password")}
+                      title={t(
+                        "settings.accounts.confirm_new_password",
+                        "Confirm New Password"
+                      )}
                     >
                       <PasswordInputTypeIn
                         name="confirmPassword"
@@ -1694,7 +1979,10 @@ function AccountsAccessSettings() {
           <Card>
             <InputHorizontal
               title={t("settings.accounts.email", "Email")}
-              description={t("settings.accounts.email_desc", "Your account email address.")}
+              description={t(
+                "settings.accounts.email_desc",
+                "Your account email address."
+              )}
               center
             >
               <Text color="text-05">{user?.email ?? "anonymous"}</Text>
@@ -1703,7 +1991,10 @@ function AccountsAccessSettings() {
             {showPasswordSection && (
               <InputHorizontal
                 title={t("settings.accounts.password", "Password")}
-                description={t("settings.accounts.password_desc", "Update your account password.")}
+                description={t(
+                  "settings.accounts.password_desc",
+                  "Update your account password."
+                )}
                 center
               >
                 <Button
@@ -1735,13 +2026,22 @@ function AccountsAccessSettings() {
                       <Section padding={0.5} alignItems="start">
                         <Text font="secondary-body" color="text-03">
                           {isLoading
-                            ? t("settings.accounts.loading_tokens", "Loading tokens...")
-                            : t("settings.accounts.no_tokens", "No access tokens created.")}
+                            ? t(
+                                "settings.accounts.loading_tokens",
+                                "Loading tokens..."
+                              )
+                            : t(
+                                "settings.accounts.no_tokens",
+                                "No access tokens created."
+                              )}
                         </Text>
                       </Section>
                     ) : (
                       <InputTypeIn
-                        placeholder={t("settings.accounts.search_placeholder", "Search...")}
+                        placeholder={t(
+                          "settings.accounts.search_placeholder",
+                          "Search..."
+                        )}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         searchIcon
@@ -1755,7 +2055,10 @@ function AccountsAccessSettings() {
                         interaction={showCreateModal ? "active" : "rest"}
                         onClick={() => setShowCreateModal(true)}
                       >
-                        {t("settings.accounts.new_access_token", "New Access Token")}
+                        {t(
+                          "settings.accounts.new_access_token",
+                          "New Access Token"
+                        )}
                       </Button>
                     </div>
                   </Section>
@@ -1769,19 +2072,26 @@ function AccountsAccessSettings() {
                           (1000 * 60 * 60 * 24)
                       );
 
-                      let expiryText = t("settings.accounts.never_expires", "Never expires");
+                      let expiryText = t(
+                        "settings.accounts.never_expires",
+                        "Never expires"
+                      );
                       if (pat.expires_at) {
                         const expiresDate = new Date(pat.expires_at);
                         const daysUntilExpiry = Math.ceil(
                           (expiresDate.getTime() - now.getTime()) /
                             (1000 * 60 * 60 * 24)
                         );
-                        expiryText = daysUntilExpiry === 1
-                          ? t("settings.accounts.expires_in_day", "Expires in 1 day")
-                          : t("settings.accounts.expires_in_days", {
-                              defaultValue: `Expires in ${daysUntilExpiry} days`,
-                              days: daysUntilExpiry
-                            });
+                        expiryText =
+                          daysUntilExpiry === 1
+                            ? t(
+                                "settings.accounts.expires_in_day",
+                                "Expires in 1 day"
+                              )
+                            : t("settings.accounts.expires_in_days", {
+                                defaultValue: `Expires in ${daysUntilExpiry} days`,
+                                days: daysUntilExpiry,
+                              });
                       }
 
                       const scopeText =
@@ -1793,12 +2103,18 @@ function AccountsAccessSettings() {
 
                       const createdText =
                         daysSinceCreation === 0
-                          ? t("settings.accounts.created_today", "Created today")
+                          ? t(
+                              "settings.accounts.created_today",
+                              "Created today"
+                            )
                           : daysSinceCreation === 1
-                            ? t("settings.accounts.created_day_ago", "Created 1 day ago")
+                            ? t(
+                                "settings.accounts.created_day_ago",
+                                "Created 1 day ago"
+                              )
                             : t("settings.accounts.created_days_ago", {
                                 defaultValue: `Created ${daysSinceCreation} days ago`,
-                                days: daysSinceCreation
+                                days: daysSinceCreation,
                               });
 
                       const middleText = `${createdText} - ${expiryText} - ${scopeText}`;
@@ -1821,7 +2137,14 @@ function AccountsAccessSettings() {
                                   onClick={() => setTokenToDelete(pat)}
                                   prominence="tertiary"
                                   size="sm"
-                                  aria-label={t("settings.accounts.modal_revoke_title", "Revoke Access Token") + " " + pat.name}
+                                  aria-label={
+                                    t(
+                                      "settings.accounts.modal_revoke_title",
+                                      "Revoke Access Token"
+                                    ) +
+                                    " " +
+                                    pat.name
+                                  }
                                 />
                               }
                             />
@@ -1836,7 +2159,10 @@ function AccountsAccessSettings() {
               <Card>
                 <Section flexDirection="row" justifyContent="between">
                   <Text font="secondary-body" color="text-03">
-                    {t("settings.accounts.paid_subscription_required", "Access tokens require an active paid subscription.")}
+                    {t(
+                      "settings.accounts.paid_subscription_required",
+                      "Access tokens require an active paid subscription."
+                    )}
                   </Text>
                   <Button prominence="secondary" href="/admin/billing">
                     {t("settings.accounts.btn_upgrade_plan", "Upgrade Plan")}
@@ -1865,7 +2191,11 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
       <Content
         icon={sourceMetadata.icon}
         title={sourceMetadata.displayName}
-        description={isActive ? t("settings.connectors.connected", "Connected") : t("settings.connectors.paused", "Paused")}
+        description={
+          isActive
+            ? t("settings.connectors.connected", "Connected")
+            : t("settings.connectors.paused", "Paused")
+        }
         sizePreset="main-content"
         variant="section"
       />
@@ -1897,14 +2227,21 @@ function FederatedConnectorCard({
       );
 
       if (response.ok) {
-        toast.success(t("settings.connectors.toast_disconnect_success", "Disconnected successfully"));
+        toast.success(
+          t(
+            "settings.connectors.toast_disconnect_success",
+            "Disconnected successfully"
+          )
+        );
         setShowDisconnectConfirmation(false);
         onDisconnectSuccess();
       } else {
         throw new Error("Failed to disconnect");
       }
     } catch (error) {
-      toast.error(t("settings.connectors.toast_disconnect_failed", "Failed to disconnect"));
+      toast.error(
+        t("settings.connectors.toast_disconnect_failed", "Failed to disconnect")
+      );
     } finally {
       setIsDisconnecting(false);
     }
@@ -1915,10 +2252,12 @@ function FederatedConnectorCard({
       {showDisconnectConfirmation && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={markdown(t("settings.connectors.modal_disconnect_title", {
-            defaultValue: `Disconnect *${sourceMetadata.displayName}*`,
-            name: sourceMetadata.displayName
-          }))}
+          title={markdown(
+            t("settings.connectors.modal_disconnect_title", {
+              defaultValue: `Disconnect *${sourceMetadata.displayName}*`,
+              name: sourceMetadata.displayName,
+            })
+          )}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
             <Button
@@ -1926,7 +2265,9 @@ function FederatedConnectorCard({
               variant="danger"
               onClick={() => void handleDisconnect()}
             >
-              {isDisconnecting ? t("settings.connectors.btn_disconnecting", "Disconnecting...") : t("settings.connectors.btn_disconnect", "Disconnect")}
+              {isDisconnecting
+                ? t("settings.connectors.btn_disconnecting", "Disconnecting...")
+                : t("settings.connectors.btn_disconnect", "Disconnect")}
             </Button>
           }
         >
@@ -1934,13 +2275,13 @@ function FederatedConnectorCard({
             <Text color="text-05">
               {t("settings.connectors.disconnect_desc_1", {
                 defaultValue: `Onyx will no longer be able to access or search content from your ${sourceMetadata.displayName} account.`,
-                name: sourceMetadata.displayName
+                name: sourceMetadata.displayName,
               })}
             </Text>
             <Text color="text-05">
               {t("settings.connectors.disconnect_desc_2", {
                 defaultValue: `You can still continue existing sessions referencing ${sourceMetadata.displayName} content.`,
-                name: sourceMetadata.displayName
+                name: sourceMetadata.displayName,
               })}
             </Text>
           </Section>
@@ -2057,7 +2398,10 @@ function ConnectorsSettings() {
         ) : (
           <EmptyMessageCard
             sizePreset="main-ui"
-            title={t("settings.connectors.no_connectors_title", "No connectors set up for your organization.")}
+            title={t(
+              "settings.connectors.no_connectors_title",
+              "No connectors set up for your organization."
+            )}
           />
         )}
       </Section>

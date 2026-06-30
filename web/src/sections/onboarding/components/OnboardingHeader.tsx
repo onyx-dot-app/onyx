@@ -34,11 +34,25 @@ const OnboardingHeader = React.memo(
 
     let title = rawTitle;
     if (rawTitle === "Let's take a moment to get you set up.") {
-      title = t("onboarding.setup_title", "Let's take a moment to get you set up.");
-    } else if (rawTitle === "Almost there! Connect your models to start chatting.") {
-      title = t("onboarding.connect_models_title", "Almost there! Connect your models to start chatting.");
-    } else if (rawTitle === "You're all set, review the optional settings or click Finish Setup") {
-      title = t("onboarding.complete_title", "You're all set, review the optional settings or click Finish Setup");
+      title = t(
+        "onboarding.setup_title",
+        "Let's take a moment to get you set up."
+      );
+    } else if (
+      rawTitle === "Almost there! Connect your models to start chatting."
+    ) {
+      title = t(
+        "onboarding.connect_models_title",
+        "Almost there! Connect your models to start chatting."
+      );
+    } else if (
+      rawTitle ===
+      "You're all set, review the optional settings or click Finish Setup"
+    ) {
+      title = t(
+        "onboarding.complete_title",
+        "You're all set, review the optional settings or click Finish Setup"
+      );
     }
 
     let stepButtonText = rawButtonText;
@@ -79,7 +93,7 @@ const OnboardingHeader = React.memo(
                     {t("onboarding.step_indicator", {
                       defaultValue: "Step {{current}} of {{total}}",
                       current: onboardingState.stepIndex,
-                      total: onboardingState.totalSteps
+                      total: onboardingState.totalSteps,
                     })}
                   </Text>
                 )}

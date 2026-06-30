@@ -564,11 +564,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   ]);
 
   const toggleDocumentSidebar = useCallback(() => {
-    if (!documentSidebarVisible) {
-      updateCurrentDocumentSidebarVisible(true);
-    } else {
-      updateCurrentDocumentSidebarVisible(false);
-    }
+    updateCurrentDocumentSidebarVisible(!documentSidebarVisible);
   }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
   if (resolvedUser === null) {

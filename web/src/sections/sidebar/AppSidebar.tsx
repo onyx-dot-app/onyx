@@ -551,7 +551,9 @@ const AppSidebar = memo(function AppSidebarInner() {
           selected={activeSidebarTab.isMoreAgents()}
           variant={folded ? "sidebar-heavy" : "sidebar-light"}
         >
-          {visibleAgents.length === 0 ? t("sidebar.explore_agents") : t("sidebar.more_agents")}
+          {visibleAgents.length === 0
+            ? t("sidebar.explore_agents")
+            : t("sidebar.more_agents")}
         </SidebarTab>
       </div>
     ),

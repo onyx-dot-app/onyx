@@ -456,7 +456,7 @@ function Footer() {
           // The conditional rendering of vertical padding based on the current page is intentional.
           // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
           // Because the content area in `AppChrome` uses `overflow-auto`, the shadow would be
-          // clipped at the container boundary ÔÇö causing a visible rendering artefact.
+          // clipped at the container boundary — causing a visible rendering artefact.
           //
           // To fix this, `AppPage.tsx` uses animated spacer divs around `AppInputBar` to
           // give the shadow breathing room. However, that extra space adds visible gap
@@ -488,6 +488,24 @@ export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
 
   const appFocus = useAppFocus();
+  const { appName } = useSettings();
+
+  // Keep the browser tab title in sync for routes that don't mount `AppPage`
+  // (settings, agents list, shared chat). `AppPage` owns the title on the
+  // chat / new-session / agent / project views, so we skip those here to avoid
+  // clobbering its more specific (e.g. per-chat-session) title.
+  useEffect(() => {
+    if (
+      appFocus.isChat() ||
+      appFocus.isNewSession() ||
+      appFocus.isAgent() ||
+      appFocus.isProject()
+    ) {
+      return;
+    }
+    document.title = appName;
+  }, [appFocus, appName]);
+
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();
   const { isSafari } = useBrowserInfo();
@@ -552,7 +570,7 @@ export default function AppChrome({ children }: AppChromeProps) {
                 : undefined
             }
           >
-            {/* Effect 1 ÔÇö Vignette overlay for custom backgrounds (disabled in light mode).
+            {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
               z-[-1] keeps overlays below the normal-flow header/content/footer. */}
             {showBackground && !isLightMode && (
               <div
@@ -565,7 +583,7 @@ export default function AppChrome({ children }: AppChromeProps) {
                 }}
               />
             )}
-            {/* Effect 2 ÔÇö Semi-transparent overlay for readability when background is set */}
+            {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
             {showBackground && appFocus.isChat() && (
               <>
                 <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />

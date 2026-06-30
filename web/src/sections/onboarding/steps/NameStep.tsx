@@ -51,14 +51,20 @@ const NameStep = React.memo(
         <ContentAction
           icon={SvgUser}
           title={t("onboarding.name_prompt", "What should Onyx call you?")}
-          description={t("settings.profile.full_name_desc", "We'll display this name in the app.")}
+          description={t(
+            "settings.profile.full_name_desc",
+            "We'll display this name in the app."
+          )}
           sizePreset="main-ui"
           variant="section"
           padding="fit"
           rightChildren={
             <InputTypeIn
               ref={inputRef}
-              placeholder={t("settings.profile.full_name_placeholder", "Your name")}
+              placeholder={t(
+                "settings.profile.full_name_placeholder",
+                "Your name"
+              )}
               value={userName || ""}
               onChange={(e) => updateName(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -98,7 +104,11 @@ const NameStep = React.memo(
           <div className="p-1 flex items-center gap-1">
             {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Hoverable.Item group="nameStep" variant="appear-on-hover">
-              <IconButton internal icon={SvgEdit} tooltip={t("chat.edit", "Edit")} />
+              <IconButton
+                internal
+                icon={SvgEdit}
+                tooltip={t("chat.edit", "Edit")}
+              />
             </Hoverable.Item>
             <SvgCheckCircle
               className={cn(

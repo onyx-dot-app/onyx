@@ -25,7 +25,11 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <SettingsLayouts.Root width="lg">
-      <SettingsLayouts.Header icon={SvgSliders} title={t("settings.header", "Settings")} divider />
+      <SettingsLayouts.Header
+        icon={SvgSliders}
+        title={t("settings.header", "Settings")}
+        divider
+      />
 
       <SettingsLayouts.Body>
         <Section

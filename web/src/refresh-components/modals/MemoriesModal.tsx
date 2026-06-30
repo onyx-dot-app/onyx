@@ -93,7 +93,10 @@ function MemoryItem({
         <Section flexDirection="row" alignItems="start" gap={0.5}>
           <InputTextArea
             ref={textareaRef}
-            placeholder={t("settings.memory.type_paste_placeholder", "Type or paste in a personal note or memory")}
+            placeholder={t(
+              "settings.memory.type_paste_placeholder",
+              "Type or paste in a personal note or memory"
+            )}
             value={memory.content}
             onChange={(e) => onUpdate(originalIndex, e.target.value)}
             onFocus={() => setIsFocused(true)}
@@ -182,8 +185,14 @@ export default function MemoriesModal({
     user,
     updateUserPersonalization,
     {
-      onSuccess: () => toast.success(t("settings.chats.toast_prefs_saved", "Preferences saved")),
-      onError: () => toast.error(t("settings.chats.toast_prefs_failed", "Failed to save preferences")),
+      onSuccess: () =>
+        toast.success(
+          t("settings.chats.toast_prefs_saved", "Preferences saved")
+        ),
+      onError: () =>
+        toast.error(
+          t("settings.chats.toast_prefs_failed", "Failed to save preferences")
+        ),
     }
   );
 
@@ -251,7 +260,10 @@ export default function MemoriesModal({
       } else if (message === "Memory deleted") {
         translated = t("settings.memory.deleted_success", "Memory deleted");
       } else if (message === "Failed to delete memory") {
-        translated = t("settings.memory.deleted_failed", "Failed to delete memory");
+        translated = t(
+          "settings.memory.deleted_failed",
+          "Failed to delete memory"
+        );
       }
       toast[type](translated);
     },
@@ -283,7 +295,10 @@ export default function MemoriesModal({
         <Modal.Header
           icon={SvgAddLines}
           title={t("settings.memory.modal_title", "Memory")}
-          description={t("settings.memory.modal_desc", "Let Onyx reference these stored notes and memories in chats.")}
+          description={t(
+            "settings.memory.modal_desc",
+            "Let Onyx reference these stored notes and memories in chats."
+          )}
           onClose={close}
         >
           <Section flexDirection="row" gap={0.5}>
@@ -302,7 +317,7 @@ export default function MemoriesModal({
                 !canAddMemory
                   ? t("settings.memory.max_reached", {
                       defaultValue: `Maximum of ${MAX_MEMORY_COUNT} memories reached`,
-                      count: MAX_MEMORY_COUNT
+                      count: MAX_MEMORY_COUNT,
                     })
                   : undefined
               }
@@ -317,8 +332,14 @@ export default function MemoriesModal({
             <Section alignItems="center" padding={2}>
               <Text secondaryBody text03>
                 {searchQuery.trim()
-                  ? t("settings.memory.no_matches", "No memories match your search.")
-                  : t("settings.memory.no_memories_yet", 'No memories yet. Click "Add Line" to get started.')}
+                  ? t(
+                      "settings.memory.no_matches",
+                      "No memories match your search."
+                    )
+                  : t(
+                      "settings.memory.no_memories_yet",
+                      'No memories yet. Click "Add Line" to get started.'
+                    )}
               </Text>
             </Section>
           ) : (

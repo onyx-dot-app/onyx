@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * AgentsFilters ÔÇö shared filter bar for agent lists.
+ * AgentsFilters — shared filter bar for agent lists.
  *
  * Renders "Created By" and "Actions" filter popovers that let users narrow
  * an agent list by creator and by attached tools/MCP servers.
@@ -20,9 +20,9 @@
  * ```
  *
  * `useAgentsFilters` returns:
- * - `filtered` ÔÇö the input agents array with creator and action filters
+ * - `filtered` — the input agents array with creator and action filters
  *   applied. When no filters are active, this is the original array.
- * - `filterBar` ÔÇö a React node containing the two filter popovers, ready to
+ * - `filterBar` — a React node containing the two filter popovers, ready to
  *   render inline.
  */
 
@@ -50,8 +50,8 @@ import {
 
 /**
  * Discriminated union for action filter items.
- * - `"tool"` ÔÇö an individual tool (system or OpenAPI/custom).
- * - `"mcp_server"` ÔÇö an MCP server, grouping all its tools into one entry.
+ * - `"tool"` — an individual tool (system or OpenAPI/custom).
+ * - `"mcp_server"` — an MCP server, grouping all its tools into one entry.
  */
 type ActionFilterItem =
   | { type: "mcp_server"; mcpServerId: number; name: string }
@@ -154,7 +154,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
    * pages.
    *
    * Ordering: system tools first (with their dedicated icons), then MCP
-   * servers (grouped ÔÇö one entry per server, not per tool), then
+   * servers (grouped — one entry per server, not per tool), then
    * OpenAPI/custom actions.
    */
   const uniqueActions: ActionFilterItem[] = useMemo(() => {
@@ -165,7 +165,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
     >();
 
     allTools.forEach((tool) => {
-      // Skip OpenURL ÔÇö implicit tool, not user-facing
+      // Skip OpenURL — implicit tool, not user-facing
       if (
         tool.in_code_tool_id === OPEN_URL_TOOL_ID ||
         tool.name === OPEN_URL_TOOL_ID ||
@@ -257,7 +257,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
   // -- Filtered agents -------------------------------------------------------
 
   const filtered = useMemo(() => {
-    // No filters active ÔÇö return the original array (preserves identity)
+    // No filters active — return the original array (preserves identity)
     if (selectedCreatorIds.size === 0 && selectedActionKeys.size === 0) {
       return agents;
     }
@@ -324,7 +324,9 @@ export function useAgentsFilters<T extends MinimalAgent>(
                     selectVariant="select-heavy"
                     icon={SvgUser}
                     title={creator.email}
-                    description={isCurrentUser ? t("admin.agents.filter_me") : undefined}
+                    description={
+                      isCurrentUser ? t("admin.agents.filter_me") : undefined
+                    }
                     state={isSelected ? "selected" : "empty"}
                     onClick={() => {
                       setSelectedCreatorIds((prev) => {

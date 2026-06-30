@@ -1282,10 +1282,7 @@
     "start_new_chat": "Démarrer une nouvelle conversation",
     "auth_successful": "Authentification réussie",
     "no_previous_message": "Aucun message utilisateur précédemment envoyé n'a été trouvé.",
-    "greetings": [
-      "Comment puis-je vous aider ?",
-      "Commençons."
-    ],
+    "greetings": ["Comment puis-je vous aider ?", "Commençons."],
     "thought_for": "Réflexion pendant {{duration}}",
     "thought_for_some_time": "A réfléchi pendant un certain temps",
     "interrupted_thinking": "Réflexion interrompue",
