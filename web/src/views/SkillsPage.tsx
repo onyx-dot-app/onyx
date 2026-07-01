@@ -16,7 +16,7 @@ import SkillCard, {
   type CustomSkillCardItem,
   type SkillCardItem,
 } from "@/sections/cards/SkillCard";
-import CreatePersonalSkillModal from "@/views/UserSkillsPage/CreatePersonalSkillModal";
+import CreatePersonalSkillModal from "@/views/SkillsPage/CreatePersonalSkillModal";
 import UploadSkillModal from "@/sections/modals/skills/UploadSkillModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
@@ -25,7 +25,7 @@ import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 // Page
 // ---------------------------------------------------------------------------
 
-export default function UserSkillsPage() {
+export default function SkillsPage() {
   const router = useRouter();
   const { data, error, isLoading, refresh } = useUserSkills();
   const { isAdmin, isCurator } = useUser();
@@ -116,7 +116,7 @@ export default function UserSkillsPage() {
       : null;
 
   return (
-    <SettingsLayouts.Root data-testid="UserSkillsPage/container">
+    <SettingsLayouts.Root data-testid="SkillsPage/container">
       <SettingsLayouts.Header
         icon={SvgBlocks}
         title="Skills"

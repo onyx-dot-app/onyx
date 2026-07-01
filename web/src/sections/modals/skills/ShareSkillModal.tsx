@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useShareableGroups, {
-  MinimalUserGroupSnapshot,
+  type MinimalUserGroupSnapshot,
 } from "@/hooks/useShareableGroups";
 import useShareableUsers from "@/hooks/useShareableUsers";
 import { toast } from "@/hooks/useToast";
@@ -16,19 +16,22 @@ import {
   SCOPE_OPTIONS,
 } from "@/sections/modals/shareAccessConstants";
 import {
+  applyStagedShares,
+  serializeDraftState,
+  type ShareDraftState as BaseShareDraftState,
+} from "@/sections/modals/shareDraftState";
+import {
   TransferOwnershipTarget,
   TransferOwnershipView,
 } from "@/sections/modals/TransferOwnershipView";
+import {
+  StaticPermissionLabel,
+  TransferTrailingButton,
+} from "@/sections/modals/ShareModalPermissionControls";
 import { updateSkillShares, transferSkillOwnership } from "@/lib/skills/api";
-import type {
-  CustomSkill,
-  SkillGroupShare,
-  SkillSharePermission,
-  SkillUserShare,
-} from "@/lib/skills/types";
-import { MinimalUserSnapshot } from "@/lib/types";
+import type { CustomSkill, SkillSharePermission } from "@/lib/skills/types";
+import type { MinimalUserSnapshot } from "@/lib/types";
 import { Button, Divider, Text } from "@opal/components";
-import { Content } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgArrowLeft,
@@ -39,108 +42,17 @@ import {
   SvgUserManage,
   SvgUsers,
 } from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
 import { markdown } from "@opal/utils";
 
 type ShareModalView = "share" | "transfer";
 
-interface ShareDraftState {
-  groupShares: SkillGroupShare[];
-  isPublic: boolean;
-  publicPermission: SkillSharePermission;
-  userShares: SkillUserShare[];
-}
+type SkillShareDraftState = BaseShareDraftState<SkillSharePermission>;
 
 interface ShareSkillModalProps {
   skill: CustomSkill | null;
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
-}
-
-function serializeDraftState(state: ShareDraftState): string {
-  const normalizedUsers = [...state.userShares]
-    .map((share) => ({ id: share.user.id, permission: share.permission }))
-    .sort((first, second) => first.id.localeCompare(second.id));
-  const normalizedGroups = [...state.groupShares]
-    .map((share) => ({ id: share.group_id, permission: share.permission }))
-    .sort((first, second) => first.id - second.id);
-
-  return JSON.stringify({
-    groupShares: normalizedGroups,
-    isPublic: state.isPublic,
-    publicPermission: state.publicPermission,
-    userShares: normalizedUsers,
-  });
-}
-
-function applyStagedShares(
-  draftState: ShareDraftState,
-  stagedUsers: MinimalUserSnapshot[],
-  stagedGroups: MinimalUserGroupSnapshot[],
-  stagedPermission: SkillSharePermission
-): ShareDraftState {
-  const userShareMap = new Map(
-    draftState.userShares.map((share) => [share.user.id, share])
-  );
-  const groupShareMap = new Map(
-    draftState.groupShares.map((share) => [share.group_id, share])
-  );
-
-  stagedUsers.forEach((user) => {
-    userShareMap.set(user.id, { permission: stagedPermission, user });
-  });
-  stagedGroups.forEach((group) => {
-    groupShareMap.set(group.id, {
-      group_id: group.id,
-      group_name: group.name,
-      permission: stagedPermission,
-    });
-  });
-
-  return {
-    ...draftState,
-    groupShares: Array.from(groupShareMap.values()),
-    userShares: Array.from(userShareMap.values()),
-  };
-}
-
-interface StaticPermissionLabelProps {
-  icon: IconFunctionComponent;
-  label: string;
-  muted?: boolean;
-}
-
-function StaticPermissionLabel({
-  icon,
-  label,
-  muted = false,
-}: StaticPermissionLabelProps) {
-  return (
-    <Content
-      color={muted ? "muted" : undefined}
-      icon={icon}
-      sizePreset="main-ui"
-      title={label}
-      variant="section"
-    />
-  );
-}
-
-interface TransferTrailingButtonProps {
-  onTransfer: () => void;
-}
-
-function TransferTrailingButton({ onTransfer }: TransferTrailingButtonProps) {
-  return (
-    <Button
-      icon={SvgArrowExchange}
-      onClick={onTransfer}
-      prominence="tertiary"
-      size="sm"
-      tooltip="Transfer Ownership"
-    />
-  );
 }
 
 export default function ShareSkillModal({
@@ -158,8 +70,10 @@ export default function ShareSkillModal({
   const { data: shareableGroupsData } = useShareableGroups();
   const { isAdmin, user: currentUser } = useUser();
 
-  const [draftState, setDraftState] = useState<ShareDraftState | null>(null);
-  const [initialState, setInitialState] = useState<ShareDraftState | null>(
+  const [draftState, setDraftState] = useState<SkillShareDraftState | null>(
+    null
+  );
+  const [initialState, setInitialState] = useState<SkillShareDraftState | null>(
     null
   );
   const [stagedUsers, setStagedUsers] = useState<MinimalUserSnapshot[]>([]);
@@ -175,7 +89,7 @@ export default function ShareSkillModal({
 
   useEffect(() => {
     if (!open || !skill) return;
-    const nextState: ShareDraftState = {
+    const nextState: SkillShareDraftState = {
       groupShares: skill.group_shares,
       isPublic: skill.public_permission !== null,
       publicPermission: skill.public_permission ?? "VIEWER",
