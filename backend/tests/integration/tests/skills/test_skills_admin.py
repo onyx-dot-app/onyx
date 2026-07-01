@@ -211,7 +211,7 @@ def test_create_skill_201_persists_row_group_shares_bundle(
     row = _fetch_skill_row(skill.id)
     assert row is not None, "skill row missing after create"
     assert row.slug == slug
-    assert row.is_public is False
+    assert row.public_permission is None
     assert row.enabled is True
     assert row.bundle_file_id, "skill row has no bundle_file_id"
     assert _bundle_blob_exists(row.bundle_file_id), (

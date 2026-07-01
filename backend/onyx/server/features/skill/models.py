@@ -97,13 +97,14 @@ class SkillResponse(BaseModel):
         ]
         visible_user_shares = user_shares if include_share_details else []
         visible_group_shares = group_shares if include_share_details else []
+        is_org_shared = skill.public_permission is not None
         return cls(
             source="custom",
             id=skill.id,
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
-            is_public=skill.is_public,
+            is_public=is_org_shared,
             enabled=skill.enabled,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
@@ -120,7 +121,7 @@ class SkillResponse(BaseModel):
             user_shares=visible_user_shares,
             group_shares=visible_group_shares,
             public_permission=skill.public_permission,
-            is_personal=not skill.is_public and not user_shares and not group_shares,
+            is_personal=not is_org_shared and not user_shares and not group_shares,
             user_permission=user_permission,
         )
 

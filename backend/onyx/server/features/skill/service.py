@@ -56,6 +56,9 @@ def user_permission_for_skill(
     if skill.author_user_id == user.id:
         return SkillAccessLevel.OWNER
 
+    if user.role == UserRole.ADMIN:
+        return SkillAccessLevel.EDITOR
+
     direct_permissions = {
         share.permission for share in skill.user_shares if share.user_id == user.id
     }
@@ -66,9 +69,8 @@ def user_permission_for_skill(
     }
     share_permissions = direct_permissions | group_permissions
 
-    is_org_shared = skill.is_public
+    is_org_shared = skill.public_permission is not None
     is_shared_with_user = bool(share_permissions)
-    is_shared_anywhere = bool(skill.user_shares or skill.group_shares)
     group_share_ids = {share.user_group_id for share in skill.group_shares}
     curator_managed_group_ids = set[int]()
     if user.role == UserRole.GLOBAL_CURATOR:
@@ -89,13 +91,6 @@ def user_permission_for_skill(
     if has_explicit_edit:
         return SkillAccessLevel.EDITOR
 
-    if user.role == UserRole.ADMIN:
-        return (
-            SkillAccessLevel.EDITOR
-            if is_org_shared or is_shared_anywhere
-            else SkillAccessLevel.VIEWER
-        )
-
     if is_curator_managed:
         return SkillAccessLevel.EDITOR
 
@@ -115,9 +110,7 @@ def _refetch_skill_or_404(skill_id: UUID, db_session: Session) -> Skill:
 def _ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
     if skill.author_user_id == user.id:
         return
-    if user.role == UserRole.ADMIN and (
-        skill.is_public or bool(skill.user_shares or skill.group_shares)
-    ):
+    if user.role == UserRole.ADMIN:
         return
     raise OnyxError(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -189,7 +182,7 @@ def patch_custom_skill_for_user(
     if not (patch.has_details_update or patch.has_db_field_update):
         return skill
 
-    old_visibility = (skill.is_public, skill.enabled)
+    old_visibility = (skill.public_permission, skill.enabled)
     before_affected = affected_user_ids_for_skill(skill, db_session)
 
     file_store = get_default_file_store() if patch.has_details_update else None
@@ -257,7 +250,7 @@ def patch_custom_skill_for_user(
 
     updated = _refetch_skill_or_404(skill_id, db_session)
     visibility_changed = old_visibility != (
-        updated.is_public,
+        updated.public_permission,
         updated.enabled,
     )
     if patch.has_details_update or visibility_changed:

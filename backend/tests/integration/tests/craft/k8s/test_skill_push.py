@@ -200,7 +200,7 @@ def _make_built_in_skill_row(db_session: Session, *, built_in_skill_id: str) -> 
         built_in_skill_id=built_in_skill_id,
         bundle_file_id=None,
         bundle_sha256=None,
-        is_public=True,
+        public_permission=SkillSharePermission.VIEWER,
         enabled=True,
     )
     db_session.add(skill)
@@ -245,7 +245,7 @@ def _seed_custom_skill(
         description=f"Seeded skill {slug}",
         bundle_file_id=bundle_file_id,
         bundle_sha256=hashlib.sha256(bundle_bytes).hexdigest(),
-        is_public=public,
+        public_permission=SkillSharePermission.VIEWER if public else None,
         enabled=True,
     )
     db_session.add(skill)
