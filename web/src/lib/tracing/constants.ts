@@ -32,7 +32,7 @@ export const TRACING_PROVIDERS: TracingProviderMeta[] = [
       name: "api_key",
       label: "API Key",
       placeholder: "API Key",
-      help: "Paste your [API key](https://www.braintrust.dev/app/settings/api-keys) from Braintrust.",
+      help: "Paste your [API key](https://www.braintrust.dev/app) from Braintrust.",
     },
     configFields: [
       {
