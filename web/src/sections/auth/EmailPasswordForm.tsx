@@ -185,7 +185,9 @@ export default function EmailPasswordForm({
 
               <AuthLayouts.Submit
                 label={label}
-                disabled={isSubmitting || !isValid || !dirty}
+                isSubmitting={isSubmitting}
+                isValid={isValid}
+                dirty={dirty}
               />
 
               {user?.is_anonymous_user && (

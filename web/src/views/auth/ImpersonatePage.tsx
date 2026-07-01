@@ -1,38 +1,47 @@
 "use client";
 
-import { AuthLayouts } from "@opal/layouts";
-import { useSettings } from "@/lib/settings/hooks";
-import { useUser } from "@/providers/UserProvider";
-import { redirect, useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { Formik, Form, FormikHelpers } from "formik";
+import { AuthLayouts, InputVertical } from "@opal/layouts";
+import { useSettings } from "@/lib/settings/hooks";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { Formik, Form, type FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { toast } from "@/hooks/useToast";
-import { TextFormField } from "@/components/Field";
-import { Button, Text } from "@opal/components";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
+import { markdown } from "@opal/utils";
 
-const ImpersonateSchema = Yup.object().shape({
+const initialValues = { email: "", apiKey: "" };
+
+const impersonationSchema = Yup.object().shape({
   email: Yup.string().email("Invalid email").required("Required"),
   apiKey: Yup.string().required("Required"),
 });
 
 export default function ImpersonatePage() {
   const router = useRouter();
-  const { user, isCloudSuperuser } = useUser();
+  const { user } = useCurrentUser();
   const { logoUrl } = useSettings();
 
-  if (!user) {
-    redirect("/auth/login");
-  }
+  useEffect(() => {
+    if (user === undefined) return;
 
-  if (!isCloudSuperuser) {
-    redirect("/app" as Route);
-  }
+    if (!user || !user.is_active || user.is_anonymous_user) {
+      router.replace("/auth/login" as Route);
+      return;
+    }
 
-  const handleImpersonate = async (
+    if (!user.is_cloud_superuser) {
+      router.replace("/app" as Route);
+    }
+  }, [user, router]);
+
+  async function handleImpersonate(
     values: { email: string; apiKey: string },
     helpers: FormikHelpers<{ email: string; apiKey: string }>
-  ) => {
+  ) {
     try {
       const response = await fetch("/api/tenants/impersonate", {
         method: "POST",
@@ -47,18 +56,17 @@ export default function ImpersonatePage() {
       if (!response.ok) {
         const errorData = await response.json();
         toast.error(errorData.detail || "Failed to impersonate user");
-        helpers.setSubmitting(false);
       } else {
-        helpers.setSubmitting(false);
         router.push("/app" as Route);
       }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to impersonate user"
       );
+    } finally {
       helpers.setSubmitting(false);
     }
-  };
+  }
 
   return (
     <AuthLayouts.Card
@@ -67,35 +75,42 @@ export default function ImpersonatePage() {
       logoSrc={logoUrl}
     >
       <Formik
-        initialValues={{ email: "", apiKey: "" }}
-        validationSchema={ImpersonateSchema}
-        onSubmit={(values, helpers) => handleImpersonate(values, helpers)}
+        initialValues={initialValues}
+        validationSchema={impersonationSchema}
+        onSubmit={handleImpersonate}
       >
-        {({ isSubmitting }) => (
-          <Form className="flex flex-col gap-4">
-            <TextFormField
-              name="email"
-              type="email"
-              label="Email"
-              placeholder="email@yourcompany.com"
+        {({ isSubmitting, dirty, isValid }) => (
+          <AuthLayouts.FormBody>
+            <AuthLayouts.Message
+              title="Account impersonation."
+              description={markdown(
+                "This feature is only available for `@onyx.app` administrators."
+              )}
             />
-            <TextFormField
-              name="apiKey"
-              type="password"
-              label="API Key"
-              placeholder="Enter API Key"
+            <AuthLayouts.Fields>
+              <InputVertical title="Email" withLabel="email">
+                <InputTypeInField
+                  name="email"
+                  type="email"
+                  placeholder="email@yourcompany.com"
+                />
+              </InputVertical>
+              <InputVertical title="API Key" withLabel="apiKey">
+                <PasswordInputTypeInField
+                  name="apiKey"
+                  placeholder="Enter API Key"
+                />
+              </InputVertical>
+            </AuthLayouts.Fields>
+            <AuthLayouts.Submit
+              label="impersonate"
+              isSubmitting={isSubmitting}
+              isValid={isValid}
+              dirty={dirty}
             />
-            <Button disabled={isSubmitting} type="submit" width="full">
-              Impersonate
-            </Button>
-          </Form>
+          </AuthLayouts.FormBody>
         )}
       </Formik>
-      <div className="mt-4 text-center px-4">
-        <Text as="p" font="main-ui-body" color="text-03">
-          Note: This feature is only available for @onyx.app administrators
-        </Text>
-      </div>
     </AuthLayouts.Card>
   );
 }

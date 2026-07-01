@@ -106,7 +106,9 @@ export default function ResetPasswordPage() {
             </AuthLayouts.Fields>
             <AuthLayouts.Submit
               label="reset"
-              disabled={isSubmitting || !dirty || !isValid}
+              isSubmitting={isSubmitting}
+              isValid={isValid}
+              dirty={dirty}
             />
           </AuthLayouts.FormBody>
         )}

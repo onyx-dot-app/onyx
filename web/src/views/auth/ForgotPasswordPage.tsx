@@ -67,7 +67,7 @@ function ForgotPasswordPage() {
                 />
               </InputVertical>
             </AuthLayouts.Fields>
-            <AuthLayouts.Submit label="submit" disabled={isSubmitting} />
+            <AuthLayouts.Submit label="submit" isSubmitting={isSubmitting} />
           </AuthLayouts.FormBody>
         )}
       </Formik>

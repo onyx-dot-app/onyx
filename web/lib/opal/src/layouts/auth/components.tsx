@@ -13,6 +13,7 @@ import SvgArrowRightCircle from "@opal/icons/arrow-right-circle";
 import { Content } from "@opal/layouts";
 import { SvgOnyxLogo } from "@opal/logos";
 import type { RichStr } from "@opal/types";
+import { SvgSimpleLoader } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
 // Root — screen-centering wrapper for auth pages
@@ -123,11 +124,13 @@ function Fields({ children }: FieldsProps) {
 // Submit — full-width submit button
 // ---------------------------------------------------------------------------
 
-type SubmitLabel = "submit" | "create" | "join" | "reset";
+type SubmitLabel = "submit" | "create" | "join" | "reset" | "impersonate";
 
 interface SubmitProps {
   label: SubmitLabel;
-  disabled?: boolean;
+  isSubmitting?: boolean;
+  isValid?: boolean;
+  dirty?: boolean;
 }
 
 const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
@@ -135,14 +138,16 @@ const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
   create: "Create",
   join: "Join",
   reset: "Reset Password",
+  impersonate: "Impersonate",
 };
 
-function Submit({ label, disabled }: SubmitProps) {
+function Submit({ label, isSubmitting, isValid, dirty }: SubmitProps) {
   return (
     <Button
       type="submit"
       width="full"
-      disabled={disabled}
+      disabled={isSubmitting || !isValid || !dirty}
+      icon={isSubmitting ? SvgSimpleLoader : undefined}
       rightIcon={SvgArrowRightCircle}
     >
       {SUBMIT_LABEL_TEXT[label]}
@@ -168,13 +173,11 @@ function Message({
   description,
 }: MessageProps) {
   return (
-    <div className="pt-2">
-      <MessageCard
-        variant={messageType}
-        title={title}
-        description={description}
-      />
-    </div>
+    <MessageCard
+      variant={messageType}
+      title={title}
+      description={description}
+    />
   );
 }
 
