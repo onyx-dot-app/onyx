@@ -479,10 +479,9 @@ def upsert_external_app_user_credential(
     is for user form submissions that may echo masked display values; internal
     OAuth writers should store provider-returned values as-is.
 
-    ``granted_scopes`` is the authoritative OAuth grant, captured at connect
-    time. ``None`` means "don't touch it": an existing grant is preserved, so
-    the refresh and credential-form paths (which don't re-derive scopes) can't
-    clobber it. Pass a list only from the connect flow.
+    ``granted_scopes=None`` preserves any existing grant, so the refresh and
+    credential-form paths (which don't re-derive scopes) can't clobber it. Pass
+    a list only from the connect flow.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -510,14 +509,12 @@ def upsert_external_app_user_credential(
         user_credentials=user_credentials,
         granted_scopes=granted_scopes,
     )
-    # A hand-built ON CONFLICT DO UPDATE doesn't fire the column's `onupdate`,
-    # so bump `updated_at` explicitly to keep it truthful on reconnect.
+    # ON CONFLICT DO UPDATE doesn't fire the column's `onupdate`, so bump
+    # `updated_at` explicitly.
     update_set: dict[str, Any] = {
         "user_credentials": stmt.excluded.user_credentials,
         "updated_at": func.now(),
     }
-    # Only overwrite granted_scopes when the caller supplied a fresh grant;
-    # otherwise leave the stored value untouched.
     if granted_scopes is not None:
         update_set["granted_scopes"] = stmt.excluded.granted_scopes
     stmt = stmt.on_conflict_do_update(

@@ -56,20 +56,15 @@ def token_response_error(http_response: requests.Response, body: Any) -> str | N
     return None
 
 
-# OAuth scope tokens never contain whitespace or commas, so splitting on either
-# unambiguously handles the space-delimited (RFC 6749 §3.3), comma-delimited
-# (GitHub, Slack), and already-tokenised forms with one rule.
+# Handles space-delimited (RFC 6749 §3.3) and comma-delimited (GitHub, Slack)
+# scope strings with one rule; scope tokens contain neither whitespace nor commas.
 _SCOPE_DELIMITERS = re.compile(r"[,\s]+")
 
 
 def parse_granted_scopes(raw: Any) -> list[str] | None:
-    """Normalise a provider's granted-scope signal into a scope list, or
-    ``None`` when the provider gave us nothing authoritative.
-
-    Accepts a delimited string (space or comma) or an already-split list.
-    Returns ``None`` — never ``[]`` — for an absent/empty signal, so callers
-    record "grant unknown" rather than fabricating an empty grant (an empty
-    grant is meaningless for OAuth: a token always carries its base scopes).
+    """Normalise a granted-scope signal (delimited string or list) into a scope
+    list. Returns ``None`` — never ``[]`` — for an absent/empty signal, so
+    callers record "grant unknown" rather than an (impossible) empty grant.
     """
     if isinstance(raw, str):
         scopes = _SCOPE_DELIMITERS.split(raw.strip())
