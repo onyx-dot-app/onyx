@@ -121,9 +121,8 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
-# Required scopes: `oauth` is mandatory for the auth-code flow, plus read on the
-# CRM objects this provider catalogs. Every HubSpot account — including read-only
-# and free tiers — can grant these, so requesting them as required is always safe.
+# `oauth` is mandatory for the auth-code flow; the reads cover the CRM objects
+# this provider catalogs. Every HubSpot tier can grant these.
 _REQUIRED_SCOPES = [
     "oauth",
     "crm.objects.owners.read",
@@ -132,12 +131,9 @@ _REQUIRED_SCOPES = [
     "crm.objects.deals.read",
 ]
 
-# Write scopes go in `optional_scope`, not the required `scope`. Read-only/free
-# HubSpot accounts can't grant writer scopes, and HubSpot fails the *entire*
-# authorize page if the account lacks any required scope — so requesting writes
-# as required would lock those users out of OAuth altogether. As optional scopes
-# HubSpot silently drops the ones an account can't grant: everyone connects (read
-# always succeeds) and write lights up only where the account supports it.
+# Optional, not required: read-only/free tiers can't grant writes, and HubSpot
+# fails the whole authorize page on any ungrantable required scope. As optional
+# scopes it drops what the account lacks, so everyone can still connect.
 _OPTIONAL_WRITE_SCOPES = [
     "crm.objects.contacts.write",
     "crm.objects.companies.write",
