@@ -925,8 +925,9 @@ def test_check_for_port_leaves_active_in_progress(
 def test_check_for_port_reissues_stale_not_started(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """A NOT_STARTED attempt whose enqueued task was lost/expired (created before the
-    TTL window) is re-enqueued in place — not stranded, not duplicated."""
+    """A NOT_STARTED attempt whose enqueued task was lost/expired (not re-enqueued
+    within the TTL window) is re-enqueued in place — not stranded, not duplicated —
+    and the enqueue clock advances so it re-sends once per window, not every beat."""
     cc_pair, future_id = cc_pair_and_future
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
@@ -934,11 +935,10 @@ def test_check_for_port_reissues_stale_not_started(
     db_session.commit()
 
     stale = create_port_attempt(db_session, cc_pair.id, future_id)
-    # backdate time_created past the task TTL so its enqueued task is "expired"
+    # backdate time_updated past the TTL so the gate sees the task as expired
+    # (explicit set wins over the column's onupdate)
     old = datetime.now(timezone.utc) - timedelta(seconds=BEAT_EXPIRES_DEFAULT + 60)
-    db_session.query(PortAttempt).filter(PortAttempt.id == stale.id).update(
-        {PortAttempt.time_created: old}
-    )
+    stale.time_updated = old
     db_session.commit()
 
     result, celery_app = _run_check_for_port(cc_pair, future_id)
@@ -955,6 +955,11 @@ def test_check_for_port_reissues_stale_not_started(
     )
     assert len(rows) == 1 and rows[0].id == stale.id
     assert rows[0].status == PortAttemptStatus.NOT_STARTED
+    # the clock advanced past the backdate, so an immediate next tick is throttled
+    assert rows[0].time_updated > old
+    result2, celery_app2 = _run_check_for_port(cc_pair, future_id)
+    assert result2 == 0
+    celery_app2.send_task.assert_not_called()
 
 
 def test_check_for_port_leaves_fresh_not_started(
@@ -968,7 +973,7 @@ def test_check_for_port_leaves_fresh_not_started(
     future_ss.use_port_flow = True
     db_session.commit()
 
-    fresh = create_port_attempt(db_session, cc_pair.id, future_id)  # time_created = now
+    fresh = create_port_attempt(db_session, cc_pair.id, future_id)  # time_updated = now
 
     result, celery_app = _run_check_for_port(cc_pair, future_id)
 

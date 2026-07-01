@@ -464,9 +464,9 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
 
             _fail_stalled_port_attempts(db_session, search_settings_id, lock_beat)
 
-            # A NOT_STARTED attempt older than the task TTL had its enqueued
-            # run_port_attempt dropped (worker down/absent when it was created); it
-            # would otherwise strand forever since it still counts as "active".
+            # A NOT_STARTED not (re-)enqueued within the task TTL had its
+            # run_port_attempt dropped (worker down/absent); re-issue it, else it
+            # strands forever since it still counts as "active".
             not_started_expired_before = datetime.now(timezone.utc) - timedelta(
                 seconds=BEAT_EXPIRES_DEFAULT
             )
@@ -484,8 +484,12 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
                     # task is already gone, so there's no double-run).
                     if (
                         active.status == PortAttemptStatus.NOT_STARTED
-                        and active.time_created < not_started_expired_before
+                        and active.time_updated < not_started_expired_before
                     ):
+                        # Stamp before re-sending (the gate reads time_updated) so a
+                        # down worker gets one re-send per TTL window, not one per beat.
+                        active.time_updated = datetime.now(timezone.utc)
+                        db_session.commit()
                         try:
                             _enqueue_run_port_attempt(celery_app, active.id, tenant_id)
                             tasks_created += 1
