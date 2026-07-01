@@ -32,7 +32,7 @@ def test_copier_drops_docs_deleted_mid_batch(mock_reembed: MagicMock) -> None:
     mock_reembed.side_effect = _passthrough_reembed
     future_index = MagicMock()
 
-    written = copy_present_chunks_to_future(
+    written, aborted = copy_present_chunks_to_future(
         present_client=present_client,
         future_index=future_index,
         doc_ids=["doc_a", "doc_b"],
@@ -42,6 +42,7 @@ def test_copier_drops_docs_deleted_mid_batch(mock_reembed: MagicMock) -> None:
     )
 
     assert written == 1
+    assert aborted is False
     (written_chunks,), _ = future_index.index_raw_chunks.call_args
     assert [c.document_id for c in written_chunks] == ["doc_a"]
 
@@ -53,7 +54,7 @@ def test_copier_skips_write_when_whole_batch_deleted(mock_reembed: MagicMock) ->
     mock_reembed.side_effect = _passthrough_reembed
     future_index = MagicMock()
 
-    written = copy_present_chunks_to_future(
+    written, aborted = copy_present_chunks_to_future(
         present_client=present_client,
         future_index=future_index,
         doc_ids=["doc_a"],
@@ -63,6 +64,7 @@ def test_copier_skips_write_when_whole_batch_deleted(mock_reembed: MagicMock) ->
     )
 
     assert written == 0
+    assert aborted is False
     future_index.index_raw_chunks.assert_not_called()
 
 
@@ -77,9 +79,11 @@ def test_copier_aborts_write_when_cancelled_mid_batch(mock_reembed: MagicMock) -
     mock_reembed.side_effect = _passthrough_reembed
     future_index = MagicMock()
 
-    aborts = iter([False, True])  # ok for page 1, cancelled before page 2
+    # should_abort is polled twice per page (pre-filter + before the sub-page
+    # write): allow both of page 1's polls, then cancel at page 2's first poll.
+    aborts = iter([False, False, True])
 
-    written = copy_present_chunks_to_future(
+    written, aborted = copy_present_chunks_to_future(
         present_client=present_client,
         future_index=future_index,
         doc_ids=["doc_a", "doc_b"],
@@ -90,6 +94,7 @@ def test_copier_aborts_write_when_cancelled_mid_batch(mock_reembed: MagicMock) -
 
     # only the first page was written; the second is skipped by the abort.
     assert written == 1
+    assert aborted is True
     future_index.index_raw_chunks.assert_called_once()
     (written_chunks,), _ = future_index.index_raw_chunks.call_args
     assert [c.document_id for c in written_chunks] == ["doc_a"]
@@ -104,7 +109,7 @@ def test_copier_writes_all_without_filter(mock_reembed: MagicMock) -> None:
     mock_reembed.side_effect = _passthrough_reembed
     future_index = MagicMock()
 
-    written = copy_present_chunks_to_future(
+    written, aborted = copy_present_chunks_to_future(
         present_client=present_client,
         future_index=future_index,
         doc_ids=["doc_a", "doc_b"],
@@ -113,4 +118,5 @@ def test_copier_writes_all_without_filter(mock_reembed: MagicMock) -> None:
     )
 
     assert written == 2
+    assert aborted is False
     future_index.index_raw_chunks.assert_called_once()

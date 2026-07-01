@@ -36,6 +36,10 @@ from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import SearchSettings
+from onyx.db.port_attempt import any_future_port_in_progress
+from onyx.db.port_attempt import create_port_attempt
+from onyx.db.port_attempt import mark_port_in_progress
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
 from onyx.document_index.interfaces_new import TenantState
@@ -53,6 +57,7 @@ from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import make_future_search_settings
 
 _VECTOR_DIM = 8  # tiny: this test never re-embeds, it only updates metadata
 _CHUNKS_PER_DOC = 2
@@ -85,18 +90,22 @@ def _make_chunk(
     chunk_index: int,
     access: DocumentAccess,
     last_updated: datetime | None = None,
+    content: str | None = None,
 ) -> DocumentChunk:
     # The port re-copies the SAME stored PRESENT chunk on a batch retry, so its
     # doc_updated_at (the external version) is identical across retries — callers
     # exercising the retry race must pin last_updated rather than take now().
     if last_updated is None:
         last_updated = datetime.now(timezone.utc).replace(microsecond=0)
+    # Distinct content lets a test prove a write overwrote (vs merely merged acls).
+    if content is None:
+        content = f"chunk {chunk_index} of {document_id}"
     return DocumentChunk(
         document_id=document_id,
         chunk_index=chunk_index,
         title=None,
         title_vector=None,
-        content=f"chunk {chunk_index} of {document_id}",
+        content=content,
         content_vector=list(_PLACEHOLDER_VECTOR),
         source_type=DocumentSource.FILE.value,
         metadata_list=None,
@@ -146,6 +155,13 @@ def _read_acl(client: OpenSearchIndexClient, doc_id: str, chunk_index: int) -> s
     return set(client.get_document(document_chunk_id=chunk_id).access_control_list)
 
 
+def _read_content(client: OpenSearchIndexClient, doc_id: str, chunk_index: int) -> str:
+    chunk_id = get_opensearch_doc_chunk_id(
+        tenant_state=_TENANT_STATE, document_id=doc_id, chunk_index=chunk_index
+    )
+    return client.get_document(document_chunk_id=chunk_id).content
+
+
 @pytest.fixture
 def env(
     db_session: Session,
@@ -187,6 +203,37 @@ def env(
                 pass
             finally:
                 client.close()
+
+
+@pytest.fixture
+def future_port(
+    db_session: Session,
+    env: tuple[
+        ConnectorCredentialPair,
+        str,
+        OpenSearchIndexClient,
+        OpenSearchIndexClient,
+        str,
+        str,
+    ],
+) -> Generator[int, None, None]:
+    """An IN_PROGRESS PortAttempt against an isolated FUTURE SearchSettings, so the
+    interleavings below run while any_future_port_in_progress() is genuinely True --
+    i.e. a real, live port. Deleting the FUTURE settings on teardown cascades the
+    attempt (FK ondelete=CASCADE) before env tears down the cc_pair."""
+    pair = env[0]
+    future = make_future_search_settings(db_session, use_port_flow=True)
+    future_id = future.id
+    attempt = create_port_attempt(db_session, pair.id, future_id)
+    mark_port_in_progress(db_session, attempt.id)
+    try:
+        yield future_id
+    finally:
+        db_session.rollback()
+        db_session.query(SearchSettings).filter(SearchSettings.id == future_id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()
 
 
 def test_deferred_metadata_sync_no_stale_permission_leak(
@@ -391,3 +438,129 @@ def test_metadata_sync_does_not_defer_non_indexable_only_doc(
             DocumentByConnectorCredentialPair.id == doc_id
         ).delete(synchronize_session="fetch")
         db_session.commit()
+
+
+def test_forward_write_wins_over_concurrent_port_copy(
+    db_session: Session,
+    env: tuple[
+        ConnectorCredentialPair,
+        str,
+        OpenSearchIndexClient,
+        OpenSearchIndexClient,
+        str,
+        str,
+    ],
+    future_port: int,  # noqa: ARG001 -- a live IN_PROGRESS port for the duration
+) -> None:
+    """Indexing a doc while a port is in flight. The port copies a STALE snapshot of
+    the doc into FUTURE first (create-only); then the connector forward-indexes the
+    SAME doc with FRESH content via a normal write (update_if_exists, internal
+    versioning). The forward write must OVERWRITE the ported chunk -- a stale backlog
+    copy can never shadow live content. The mirror ordering (forward-first, then a
+    stale port create yielding via a benign 409) lives in
+    test_opensearch_client.test_port_create_only_yields_to_forward_write.
+    """
+    _, doc_id, _present_client, future_client, _present_name, _future_name = env
+    assert any_future_port_in_progress(db_session) is True
+
+    # 1. Port copies the doc into FUTURE first: stale content + old access, create-only.
+    future_client.bulk_index_documents(
+        documents=[
+            _make_chunk(doc_id, c_i, _ACCESS_OLD, content=f"stale {c_i} of {doc_id}")
+            for c_i in range(_CHUNKS_PER_DOC)
+        ],
+        tenant_state=_TENANT_STATE,
+        use_create_only=True,
+    )
+    future_client.refresh_index()
+    assert _read_content(future_client, doc_id, 0) == f"stale 0 of {doc_id}"
+    assert _read_acl(future_client, doc_id, 0) == _ACL_OLD
+
+    # 2. Connector forward-indexes the SAME doc into FUTURE: fresh content + new
+    #    access, a normal overwrite (NOT create-only).
+    future_client.bulk_index_documents(
+        documents=[
+            _make_chunk(doc_id, c_i, _ACCESS_NEW, content=f"fresh {c_i} of {doc_id}")
+            for c_i in range(_CHUNKS_PER_DOC)
+        ],
+        tenant_state=_TENANT_STATE,
+        update_if_exists=True,
+    )
+    future_client.refresh_index()
+
+    # 3. The forward write won: FUTURE holds the fresh content + new access, not the
+    #    stale ported snapshot.
+    for c_i in range(_CHUNKS_PER_DOC):
+        assert _read_content(future_client, doc_id, c_i) == f"fresh {c_i} of {doc_id}"
+        assert _read_acl(future_client, doc_id, c_i) == _ACL_NEW
+
+
+def test_acl_update_during_port_applies_to_both_indices(
+    db_session: Session,
+    env: tuple[
+        ConnectorCredentialPair,
+        str,
+        OpenSearchIndexClient,
+        OpenSearchIndexClient,
+        str,
+        str,
+    ],
+    future_port: int,  # noqa: ARG001 -- a live IN_PROGRESS port for the duration
+) -> None:
+    """Updating a doc's permissions while a port is in flight, for a doc the port has
+    ALREADY copied into FUTURE. The pair update lands on BOTH PRESENT and FUTURE in
+    one shot -- no SecondaryIndexDocumentMissingError, so the doc is NOT (falsely)
+    deferred and the swap-gate backlog count is unchanged. The mirror case (doc still
+    MISSING from FUTURE, which defers correctly) is
+    test_deferred_metadata_sync_no_stale_permission_leak.
+    """
+    _, doc_id, present_client, future_client, present_name, future_name = env
+    assert any_future_port_in_progress(db_session) is True
+
+    # PRESENT (forward-indexed) and FUTURE (port-copied) both already hold the doc
+    # with the old access -- the port reached this doc before the permission change.
+    present_client.bulk_index_documents(
+        documents=[
+            _make_chunk(doc_id, c_i, _ACCESS_OLD) for c_i in range(_CHUNKS_PER_DOC)
+        ],
+        tenant_state=_TENANT_STATE,
+    )
+    future_client.bulk_index_documents(
+        documents=[
+            _make_chunk(doc_id, c_i, _ACCESS_OLD) for c_i in range(_CHUNKS_PER_DOC)
+        ],
+        tenant_state=_TENANT_STATE,
+        use_create_only=True,
+    )
+    present_client.refresh_index()
+    future_client.refresh_index()
+
+    pair_index = OpenSearchIndexPair(
+        primary=_index(present_name),
+        secondary=_index(future_name),
+        secondary_embedding_dim=_VECTOR_DIM,
+        secondary_embedding_precision=EmbeddingPrecision.FLOAT,
+    )
+    req = MetadataUpdateRequest(
+        document_ids=[doc_id],
+        doc_id_to_chunk_cnt={doc_id: _CHUNKS_PER_DOC},
+        access=_ACCESS_NEW,
+    )
+    baseline_deferred = count_secondary_only_sync_pending_documents(db_session)
+
+    # The permission change while the port runs: the doc exists in BOTH indices, so
+    # the pair update succeeds outright -- no defer signal is raised.
+    pair_index.update([req])
+    mark_document_as_synced(doc_id, db_session)  # the sync task's success branch
+
+    present_client.refresh_index()
+    future_client.refresh_index()
+    assert _read_acl(present_client, doc_id, 0) == _ACL_NEW
+    assert _read_acl(future_client, doc_id, 0) == _ACL_NEW
+    assert _read_acl(future_client, doc_id, 1) == _ACL_NEW
+
+    # The doc was never deferred -> the swap-gate backlog is unchanged.
+    db_session.expire_all()
+    doc = db_session.get(DbDocument, doc_id)
+    assert doc is not None and doc.secondary_only_sync_pending is False
+    assert count_secondary_only_sync_pending_documents(db_session) == baseline_deferred

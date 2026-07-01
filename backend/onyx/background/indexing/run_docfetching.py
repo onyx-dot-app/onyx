@@ -474,7 +474,8 @@ def connector_document_extraction(
             and (from_beginning or not has_successful_attempt)
         )
 
-        # Set up time windows for polling
+        # Set up time windows for polling. A port-flow FUTURE's resume cursor comes from its
+        # synthetic seed (get_last_successful_... keeps ignore_synthetic_seed=False by default).
         last_successful_index_poll_range_end = (
             earliest_index_time
             if from_beginning
