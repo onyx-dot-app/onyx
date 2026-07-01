@@ -1476,6 +1476,8 @@ DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
 BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
 # Braintrust API key - if provided, Braintrust tracing will be enabled
 BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
+# Optional custom Braintrust API URL (self-hosted / non-default deployments)
+BRAINTRUST_API_URL = os.environ.get("BRAINTRUST_API_URL") or ""
 # Maximum concurrency for Braintrust evaluations
 # None means unlimited concurrency, otherwise specify a number
 _braintrust_concurrency = os.environ.get("BRAINTRUST_MAX_CONCURRENCY")

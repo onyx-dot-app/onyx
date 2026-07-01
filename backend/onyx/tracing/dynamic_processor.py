@@ -28,10 +28,19 @@ _UNSET = object()
 
 
 def _build_braintrust_processor(config: BraintrustConfig) -> TracingProcessor:
+    import os
+
     import braintrust
 
     from onyx.tracing.braintrust_tracing_processor import BraintrustTracingProcessor
     from onyx.tracing.masking import mask_sensitive_data
+
+    # The Braintrust SDK reads BRAINTRUST_API_URL from the env; keep it in sync
+    # (and cleared when unset) so a custom/self-hosted URL is honored.
+    if config.api_url:
+        os.environ["BRAINTRUST_API_URL"] = config.api_url
+    else:
+        os.environ.pop("BRAINTRUST_API_URL", None)
 
     braintrust_logger = braintrust.init_logger(
         project=config.project,
@@ -156,7 +165,14 @@ class DynamicTracingProcessor(TracingProcessor):
         return drained
 
     def on_trace_start(self, trace: Trace) -> None:
-        self.reconcile()
+        # Tracing must never disrupt the traced operation: a config-refresh
+        # failure (e.g. DB unreachable) is logged and we keep the existing
+        # delegates. Delegate callbacks themselves are guarded in `_forward`, so
+        # a provider connection dropping mid-trace is caught and logged too.
+        try:
+            self.reconcile()
+        except Exception as e:
+            logger.error("Failed to refresh tracing config at trace start: %s", e)
         with self._lock:
             delegates = self._delegates
             self._trace_delegates[trace.trace_id] = delegates

@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from onyx.configs.app_configs import BRAINTRUST_API_KEY
+from onyx.configs.app_configs import BRAINTRUST_API_URL
 from onyx.configs.app_configs import BRAINTRUST_PROJECT
 from onyx.configs.app_configs import LANGFUSE_HOST
 from onyx.configs.app_configs import LANGFUSE_PUBLIC_KEY
@@ -25,6 +26,8 @@ logger = setup_logger()
 class BraintrustConfig:
     api_key: str
     project: str
+    # Optional custom API URL for self-hosted / non-default Braintrust deployments.
+    api_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -50,7 +53,11 @@ class EffectiveTracingConfig:
     def fingerprint(self) -> tuple[object, object]:
         """A hashable identity used to detect config changes (in-memory only)."""
         braintrust_fp = (
-            (self.braintrust.api_key, self.braintrust.project)
+            (
+                self.braintrust.api_key,
+                self.braintrust.project,
+                self.braintrust.api_url,
+            )
             if self.braintrust
             else None
         )
@@ -64,7 +71,11 @@ class EffectiveTracingConfig:
 
 def _env_braintrust() -> BraintrustConfig | None:
     if BRAINTRUST_API_KEY:
-        return BraintrustConfig(api_key=BRAINTRUST_API_KEY, project=BRAINTRUST_PROJECT)
+        return BraintrustConfig(
+            api_key=BRAINTRUST_API_KEY,
+            project=BRAINTRUST_PROJECT,
+            api_url=BRAINTRUST_API_URL or None,
+        )
     return None
 
 
@@ -88,6 +99,7 @@ def _braintrust_from_row(row: TracingProviderConfig) -> BraintrustConfig | None:
     return BraintrustConfig(
         api_key=api_key,
         project=config.get("project") or BRAINTRUST_PROJECT,
+        api_url=config.get("api_url") or BRAINTRUST_API_URL or None,
     )
 
 
