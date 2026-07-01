@@ -1252,7 +1252,14 @@ class OpenSearchIndexClient(OpenSearchClient):
                     and err_type == _DOCUMENT_MISSING_ERROR_TYPE
                 ):
                     # doc not in this index yet; surface instead of failing
-                    missing_chunk_ids.append(info.get("_id", ""))
+                    missing_chunk_id = info.get("_id", "")
+                    if not missing_chunk_id:
+                        raise OpenSearchUpdateError(
+                            "OpenSearch returned a document_missing error when trying to bulk "
+                            f"update document chunks for index {self._index_name}. Error: {error}. "
+                            "The error did not contain an ID however.",
+                        )
+                    missing_chunk_ids.append(missing_chunk_id)
                 elif status >= 500 and err_type in _RETRYABLE_UPDATE_ERROR_TYPES:
                     # We have seen a bug in OpenSearch version 3.4.0 when using
                     # the knn plugin and when derived_source is enabled (the
