@@ -98,7 +98,7 @@ class DocmostConnector(LoadConnector, PollConnector, SlimConnector):
         return self._client
 
     def validate_connector_settings(self) -> None:
-        """Cheap call to confirm the token works and the base URL is right."""
+        """Confirm the token works and that any configured space filters resolve."""
         try:
             # /spaces is the smallest list call; limit 1 just probes auth.
             next(iter(self.client.paginate(_SPACES_LIST, limit=1)), None)
@@ -106,6 +106,17 @@ class DocmostConnector(LoadConnector, PollConnector, SlimConnector):
             raise CredentialExpiredError(str(e))
         except DocmostClientError as e:
             raise ConnectorValidationError(str(e))
+
+        # Validate that space_filter slugs actually resolve to visible spaces.
+        if self.space_filter:
+            resolved = self._allowed_space_ids()
+            if resolved is not None and not resolved:
+                raise ConnectorValidationError(
+                    f"None of the configured space_filter slugs "
+                    f"({', '.join(sorted(self.space_filter))}) match any "
+                    f"spaces visible to the service user. Check that the "
+                    f"slugs are correct and the user has access."
+                )
 
     # -- interface: LoadConnector -------------------------------------------
 
@@ -178,12 +189,22 @@ class DocmostConnector(LoadConnector, PollConnector, SlimConnector):
         if not self.space_filter:
             return None
         allowed: set[str] = set()
+        visible_slugs: set[str] = set()
         for space in self.client.paginate(_SPACES_LIST):
             slug = space.get(SPACE_SLUG_FIELD)
+            if slug:
+                visible_slugs.add(slug)
             if slug in self.space_filter:
                 space_id = space.get(SPACE_ID_FIELD)
                 if space_id:
                     allowed.add(space_id)
+
+        unresolved = self.space_filter - visible_slugs
+        if unresolved:
+            logger.warning(
+                f"DocMost space_filter contains slugs not visible to the "
+                f"service user: {sorted(unresolved)}. These will be ignored."
+            )
         return allowed
 
     def _iter_pages(
