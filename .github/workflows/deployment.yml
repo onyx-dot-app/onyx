@@ -625,6 +625,7 @@ jobs:
       - build-web-amd64
       - build-web-arm64
       - image-audit
+    if: always() && needs.build-web-amd64.result == 'success' && needs.build-web-arm64.result == 'success' && needs.image-audit.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -862,6 +863,7 @@ jobs:
       - build-web-cloud-amd64
       - build-web-cloud-arm64
       - image-audit
+    if: always() && needs.build-web-cloud-amd64.result == 'success' && needs.build-web-cloud-arm64.result == 'success' && needs.image-audit.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1069,6 +1071,7 @@ jobs:
       - build-backend-amd64
       - build-backend-arm64
       - image-audit
+    if: always() && needs.build-backend-amd64.result == 'success' && needs.build-backend-arm64.result == 'success' && needs.image-audit.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1292,6 +1295,7 @@ jobs:
       - build-model-server-amd64
       - build-model-server-arm64
       - image-audit
+    if: always() && needs.build-model-server-amd64.result == 'success' && needs.build-model-server-arm64.result == 'success' && needs.image-audit.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1680,7 +1684,14 @@ jobs:
       - merge-backend
       - merge-model-server
       - merge-sandbox
-    if: needs.determine-builds.outputs.is-cloud-tag == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
+    if: >-
+      always()
+      && needs.merge-web-cloud.result == 'success'
+      && needs.merge-backend.result == 'success'
+      && needs.merge-model-server.result == 'success'
+      && needs.merge-sandbox.result == 'success'
+      && needs.determine-builds.outputs.is-cloud-tag == 'true'
+      && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -1740,7 +1751,12 @@ jobs:
        needs.build-sandbox-amd64.result == 'success')
     runs-on:
       - runs-on
-      - runner=2cpu-linux-arm64
+      # amd64 to match the images scanned: `ods audit image` uses the docker CLI,
+      # which won't pull an amd64 image onto an arm64 host.
+      - runner=2cpu-linux-x64
+      # osv-scanner pulls the image and writes a full `docker save` tar (~2x its
+      # size); size the root volume up so large images don't fill the disk.
+      - volume=60gb
       - run-id=${{ github.run_id }}-image-audit-${{ matrix.component }}
       - extras=ecr-cache
     permissions:
@@ -1862,17 +1878,22 @@ jobs:
         env:
           IMAGE: ${{ steps.scan-image.outputs.image }}
 
-      # Upload only for the rolling main-HEAD builds (nightly-latest / edge): their
-      # commit is the tip of main, so mapping to refs/heads/main keeps the Security
-      # tab authoritative and lets alerts auto-resolve on later main builds. Release
-      # /beta tags sit on older commits — they still gate, they just don't upload.
+      # Rolling main-HEAD builds (nightly-latest / edge) map to refs/heads/main so
+      # the Security tab stays authoritative for main and alerts auto-resolve on
+      # later main builds. Test runs (manual workflow_dispatch) upload against their
+      # own ref/sha instead, so the scan + upload can be verified without polluting
+      # main's alerts. Release/beta tags sit on older commits — they still gate, they
+      # just don't upload.
       - name: Upload audit results to GitHub Security tab
-        if: always() && steps.should-run.outputs.run == 'true' && env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
+        if: >-
+          always() && steps.should-run.outputs.run == 'true' &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
         uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
         with:
           sarif_file: image-audit.sarif
           category: image-audit-${{ matrix.component }}
-          ref: refs/heads/main
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
           sha: ${{ github.sha }}
 
   notify-slack-on-failure:

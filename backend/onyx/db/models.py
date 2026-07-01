@@ -36,12 +36,14 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine.interfaces import Dialect
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import validates
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from typing_extensions import TypedDict  # noreorder
@@ -96,6 +98,7 @@ from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
+from onyx.db.enums import SkillSharePermission
 from onyx.db.enums import SwitchoverType
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
@@ -633,6 +636,30 @@ class Persona__User(Base):
     )
 
     user: Mapped["User | None"] = relationship("User")
+
+
+class Skill__User(Base):
+    __tablename__ = "skill__user"
+
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+
+    user: Mapped["User"] = relationship("User")
+
+    __table_args__ = (Index("ix_skill__user_user_id", "user_id"),)
 
 
 class DocumentSet__User(Base):
@@ -4294,8 +4321,24 @@ class Skill(Base):
         ForeignKey("user.id", ondelete="SET NULL"),
         nullable=True,
     )
-    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    public_permission: Mapped[SkillSharePermission | None] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=True,
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    @hybrid_property
+    def is_public(self) -> bool:
+        return self.public_permission is not None
+
+    @is_public.inplace.setter
+    def _is_public_setter(self, value: bool) -> None:
+        self.public_permission = SkillSharePermission.VIEWER if value else None
+
+    @is_public.inplace.expression
+    @classmethod
+    def _is_public_expression(cls) -> ColumnElement[bool]:
+        return cls.public_permission.isnot(None)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -4312,10 +4355,27 @@ class Skill(Base):
         foreign_keys=[author_user_id],
     )
 
+    users: Mapped[list[User]] = relationship(
+        "User",
+        secondary=Skill__User.__table__,
+        viewonly=True,
+        overlaps="user_shares",
+    )
+    user_shares: Mapped[list[Skill__User]] = relationship(
+        "Skill__User",
+        viewonly=True,
+        overlaps="users",
+    )
+    group_shares: Mapped[list["Skill__UserGroup"]] = relationship(
+        "Skill__UserGroup",
+        viewonly=True,
+        overlaps="groups",
+    )
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="skill__user_group",
         viewonly=True,
+        overlaps="group_shares",
     )
 
     __table_args__ = (
@@ -4473,6 +4533,14 @@ class Skill__UserGroup(Base):
         ForeignKey("user_group.id", ondelete="CASCADE"),
         primary_key=True,
     )
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+
+    user_group: Mapped["UserGroup"] = relationship("UserGroup")
 
 
 class LLMProvider__Persona(Base):

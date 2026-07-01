@@ -23,6 +23,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import AccountType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SkillSharePermission
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import remove_llm_provider
@@ -298,7 +299,7 @@ def seeded_skill(
             description=f"Seeded skill {slug}",
             bundle_file_id=bundle_file_id,
             bundle_sha256=bundle_sha256,
-            is_public=public,
+            public_permission=SkillSharePermission.VIEWER if public else None,
             enabled=True,
             author_user_id=author_user_id,
         )

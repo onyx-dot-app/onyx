@@ -42,6 +42,7 @@ from onyx.db.models import SyncRecord
 from onyx.db.models import UserGroup
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.platform_utils import is_running_in_container
@@ -53,6 +54,12 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 _MONITORING_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
 _MONITORING_TIME_LIMIT = _MONITORING_SOFT_TIME_LIMIT + 60  # 6 minutes
+
+# Queue lengths are broker-global, so they are emitted by at most one tenant per
+# window rather than once per tenant every cycle. Keep the lease shorter than the
+# 5-minute monitor beat so it expires before the next cycle and never blocks it.
+_GLOBAL_QUEUE_METRICS_LEASE = "monitoring_global_queue_metrics_lease"
+_GLOBAL_QUEUE_METRICS_LEASE_TTL = 60 * 4  # 4 minutes
 
 _CONNECTOR_INDEX_ATTEMPT_START_LATENCY_KEY_FMT = (
     "monitoring_connector_index_attempt_start_latency:{cc_pair_id}:{index_attempt_id}"
@@ -710,7 +717,17 @@ def monitor_background_processes(self: Task, *, tenant_id: str) -> None:
 
         # Collect queue metrics with broker connection
         r_celery = celery_get_broker_client(self.app)
-        queue_metrics = _collect_queue_metrics(r_celery)
+
+        # Queue lengths are broker-global. Emit them from only one tenant per
+        # short window by taking a cross-tenant lease, so the same values are not
+        # re-sent once per tenant. The lease is intentionally left to expire on
+        # its own so the next window re-acquires it.
+        queue_metrics: list[Metric] = []
+        queue_lease = get_shared_redis_client().lock(
+            _GLOBAL_QUEUE_METRICS_LEASE, timeout=_GLOBAL_QUEUE_METRICS_LEASE_TTL
+        )
+        if queue_lease.acquire(blocking=False):
+            queue_metrics = _collect_queue_metrics(r_celery)
 
         # Collect remaining metrics (no broker connection needed)
         with get_session_with_current_tenant() as db_session:

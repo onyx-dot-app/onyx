@@ -121,6 +121,9 @@ def start_external_app_oauth(
         "state": state,
         **oauth.extra_authorize_params,
     }
+    # Set after extra_authorize_params so a provider can't clobber it.
+    if oauth.optional_scope:
+        params[oauth.optional_scope_param] = oauth.optional_scope
     # urlencode so URI-shaped scopes (Google) get `:` and `/`
     # percent-encoded.
     authorize_url = f"{oauth.authorize_url}?{urlencode(params)}"

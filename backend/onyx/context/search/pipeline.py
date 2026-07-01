@@ -99,6 +99,7 @@ def _build_index_filters(
         source_type=source_filter,
         document_set=document_set_filter,
         time_cutoff=time_filter,
+        time_cutoff_upper=base_filters.time_cutoff_upper,
         tags=base_filters.tags,
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
