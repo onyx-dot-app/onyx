@@ -12,6 +12,9 @@
 @import "./css/line-item.css" layer(base);
 @import "./css/square-button.css" layer(base);
 @import "./css/z-index.css" layer(base);
+/* Imported unlayered (and gated on html.onyx-desktop) so it overrides the
+   frozen desktop-wrapper shim regardless of source order. */
+@import "./css/desktop-titlebar.css";
 @config '../../tailwind.config.js';
 
 /*
