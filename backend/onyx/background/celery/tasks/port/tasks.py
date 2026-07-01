@@ -70,11 +70,11 @@ _PORT_TIME_LIMIT = _PORT_SOFT_TIME_LIMIT + 60
 _PORT_BATCH_MAX_RETRIES = 5
 _PORT_BATCH_RETRY_SLEEP_S = 2
 
-# Kept above the soft time limit so check_for_port only reschedules genuinely dead
-# workers, never a slow-but-alive batch (one batch can run ~10min under embedder
-# rate-limit retries; the task self-yields at the soft limit anyway).
-# No per-page heartbeat for this long → dead/yielded worker. Above the slowest
-# single page so an active port isn't failed mid-batch.
+# Above the slowest single page — the longest gap between per-page heartbeats
+# (touch_port_progress fires before each write) — so check_for_port fails only
+# genuinely dead/yielded workers, never a slow-but-alive batch. A live worker that
+# hits the 30min soft limit self-yields and is rescheduled from its committed
+# cursor; that's a separate path, not what this value guards against.
 _PORT_STALL_THRESHOLD_SECONDS = 10 * 60  # 10 minutes
 
 # Backoff before recreating a FAILED port stuck at the same cursor (durable error:
