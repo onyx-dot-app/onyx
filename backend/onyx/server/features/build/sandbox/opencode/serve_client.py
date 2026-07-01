@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
 from typing import cast
-from typing import NamedTuple
 from uuid import uuid4
 
 import httpx
@@ -57,15 +56,11 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-class _ModelKey(NamedTuple):
-    provider: str
-    model: str
-
-
-# Model context window (models.dev limit.context), cached per model. The limit
-# is universal for a given (provider, model), so a process-wide cache is correct
-# — one successful fetch serves every session (clients are rebuilt per turn).
-_CONTEXT_LIMIT_CACHE: dict[_ModelKey, int] = {}
+# Model context window (models.dev limit.context), cached in the shared cache
+# keyed by (provider, model). The limit is stable per model for the pinned
+# opencode version, so a modest TTL avoids re-fetching it every turn.
+_CONTEXT_LIMIT_CACHE_PREFIX = "craft:context_limit:"
+_CONTEXT_LIMIT_TTL_SECONDS = 3600
 
 # opencode permission category emitted by the no-op ``connect_app`` tool
 _CONNECT_APP_PERMISSION = "connect_app"
@@ -1317,10 +1312,14 @@ class OpencodeServeClient:
     ) -> int | None:
         if not model_provider or not model_id:
             return None
-        key = _ModelKey(model_provider, model_id)
-        cached = _CONTEXT_LIMIT_CACHE.get(key)
+        cache = get_cache_backend()
+        cache_key = f"{_CONTEXT_LIMIT_CACHE_PREFIX}{model_provider}:{model_id}"
+        cached = cache.get(cache_key)
         if cached is not None:
-            return cached
+            try:
+                return int(cached)
+            except ValueError:
+                pass
 
         limit: int | None = None
         try:
@@ -1339,11 +1338,9 @@ class OpencodeServeClient:
         except (httpx.HTTPError, ValueError) as e:
             logger.warning("opencode-serve: context-limit fetch failed: %s", e)
 
-        # Cache successes only — a transient failure must not poison the limit
-        # process-wide. models.dev limits are stable per model, so one successful
-        # fetch serves every future turn (clients are rebuilt per turn).
+        # Cache successes only — a transient failure must not mask the real limit.
         if limit is not None:
-            _CONTEXT_LIMIT_CACHE[key] = limit
+            cache.set(cache_key, limit, ex=_CONTEXT_LIMIT_TTL_SECONDS)
         return limit
 
     def abort(self, opencode_session_id: str, *, directory: str) -> None:
