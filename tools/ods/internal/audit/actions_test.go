@@ -226,20 +226,20 @@ runs:
     - run: echo hi
       shell: bash
 `)
-	steps, ok := compositeSteps(composite)
-	if !ok || len(steps) != 2 {
-		t.Fatalf("compositeSteps = (%d steps, %v), want (2, true)", len(steps), ok)
+	steps, err := compositeSteps(composite)
+	if err != nil || len(steps) != 2 {
+		t.Fatalf("compositeSteps = (%d steps, %v), want (2, nil)", len(steps), err)
 	}
 
-	// Docker/JavaScript actions reference no other actions.
+	// Docker/JavaScript actions reference no other actions: a clean skip.
 	docker := []byte("name: x\nruns:\n  using: docker\n  image: Dockerfile\n")
-	if _, ok := compositeSteps(docker); ok {
-		t.Error("docker action should not be treated as composite")
+	if steps, err := compositeSteps(docker); err != nil || steps != nil {
+		t.Errorf("docker action = (%v, %v), want (nil, nil)", steps, err)
 	}
 
-	// Malformed YAML must be skipped, not fail the scan.
-	if _, ok := compositeSteps([]byte("runs: [unclosed")); ok {
-		t.Error("malformed yaml should return ok=false")
+	// Malformed YAML must surface an error so the skipped file is visible.
+	if _, err := compositeSteps([]byte("runs: [unclosed")); err == nil {
+		t.Error("malformed yaml should return an error")
 	}
 }
 

@@ -208,8 +208,19 @@ func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef
 		if err != nil {
 			return err
 		}
-		steps, ok := compositeSteps(data)
-		if !ok {
+		manifest := path
+		if rel, err := filepath.Rel(root, path); err == nil {
+			manifest = rel
+		}
+		manifest = filepath.ToSlash(manifest)
+		steps, err := compositeSteps(data)
+		if err != nil {
+			// A broken action.yml would otherwise drop its nested uses from the
+			// audit silently; warn so the skipped coverage is visible.
+			log.Warnf("Skipping unparseable composite action %s: %v", manifest, err)
+			return nil
+		}
+		if len(steps) == 0 {
 			return nil
 		}
 		wrapped, err := yaml.Marshal(map[string]any{
@@ -218,11 +229,6 @@ func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef
 		if err != nil {
 			return err
 		}
-		manifest := path
-		if rel, err := filepath.Rel(root, path); err == nil {
-			manifest = rel
-		}
-		manifest = filepath.ToSlash(manifest)
 		rs, err := usesFromReader(ext, path, bytes.NewReader(wrapped), manifest)
 		if err != nil {
 			log.Warnf("Skipping composite action %s: %v", manifest, err)
@@ -237,26 +243,25 @@ func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef
 	return refs, nil
 }
 
-// compositeSteps returns the runs.steps of a composite action.yml, or ok=false
-// when the file is not a composite action (Docker and JavaScript actions
-// reference no other actions).
-func compositeSteps(data []byte) ([]any, bool) {
+// compositeSteps returns the runs.steps of a composite action.yml. It returns a
+// nil slice and nil error for a valid but non-composite action (Docker and
+// JavaScript actions reference no other actions), and a non-nil error only when
+// the file can't be parsed as YAML — so callers can distinguish a clean skip from
+// a broken file whose dependencies would otherwise vanish from the audit.
+func compositeSteps(data []byte) ([]any, error) {
 	var doc map[string]any
 	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return nil, false
+		return nil, err
 	}
 	runs, ok := doc["runs"].(map[string]any)
 	if !ok {
-		return nil, false
+		return nil, nil
 	}
 	if using, _ := runs["using"].(string); !strings.EqualFold(using, "composite") {
-		return nil, false
+		return nil, nil
 	}
-	steps, ok := runs["steps"].([]any)
-	if !ok {
-		return nil, false
-	}
-	return steps, true
+	steps, _ := runs["steps"].([]any)
+	return steps, nil
 }
 
 // usesFromReader runs the extractor over a workflow document and maps the
