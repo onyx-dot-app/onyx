@@ -21,7 +21,7 @@ jest.mock("next/navigation", () => ({
   }),
 }));
 
-jest.mock("@/hooks/useCurrentUser", () => ({
+jest.mock("@/lib/users/hooks", () => ({
   useCurrentUser: () => mockUseCurrentUser(),
 }));
 

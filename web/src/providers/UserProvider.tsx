@@ -18,7 +18,7 @@ import {
 import { usePostHog } from "posthog-js/react";
 import { useSettings } from "@/lib/settings/hooks";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCurrentUser } from "@/lib/users/hooks";
 import {
   useAuthTypeMetadata,
   AuthTypeMetadata,

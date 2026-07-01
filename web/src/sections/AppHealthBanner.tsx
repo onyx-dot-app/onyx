@@ -12,7 +12,7 @@ import { Button } from "@opal/components";
 import { usePathname, useRouter } from "next/navigation";
 import { SvgAlertTriangle, SvgLogOut } from "@opal/icons";
 import { Content } from "@opal/layouts";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCurrentUser } from "@/lib/users/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 
 export default function AppHealthBanner() {

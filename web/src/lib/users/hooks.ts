@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR, { type KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { User } from "@/lib/types";
@@ -24,18 +26,20 @@ import { SWR_KEYS } from "@/lib/swr-keys";
  *
  * @example
  * ```ts
- * const { user, mutateUser, userError } = useCurrentUser();
+ * const { user, isLoading, mutateUser } = useCurrentUser();
  * ```
  */
 export function useCurrentUser(): {
   /** The authenticated user, `null` when signed out, or `undefined` while loading. */
   user: User | null | undefined;
+  /** True while the initial `/api/me` request is in-flight with no cached data. */
+  isLoading: boolean;
   /** Imperatively revalidate / update the cached user. */
   mutateUser: KeyedMutator<User | null>;
   /** The error thrown by the fetcher, if any. */
   userError: (Error & { status?: number }) | undefined;
 } {
-  const { data, mutate, error } = useSWR<User | null>(
+  const { data, isLoading, mutate, error } = useSWR<User | null>(
     SWR_KEYS.me,
     errorHandlingFetcher,
     {
@@ -46,5 +50,5 @@ export function useCurrentUser(): {
     }
   );
 
-  return { user: data, mutateUser: mutate, userError: error };
+  return { user: data, isLoading, mutateUser: mutate, userError: error };
 }
