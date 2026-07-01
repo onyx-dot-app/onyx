@@ -16,15 +16,17 @@ interface SettingsTabNavProps {
 function SettingsTabNav({ tabs, activeHref, className }: SettingsTabNavProps) {
   return (
     <View className={cn("flex-col px-8", className)}>
-      {tabs.map((tab) => (
-        <SidebarTab
-          key={String(tab.href)}
-          href={tab.href}
-          selected={tab.href === activeHref}
-        >
-          {tab.label}
-        </SidebarTab>
-      ))}
+      {tabs.map((tab) => {
+        // Reduce a bare-path or object-form href to its pathname to match
+        // `activeHref` (a `usePathname()` string) and to key the list.
+        const path =
+          typeof tab.href === "string" ? tab.href : tab.href.pathname;
+        return (
+          <SidebarTab key={path} href={tab.href} selected={path === activeHref}>
+            {tab.label}
+          </SidebarTab>
+        );
+      })}
     </View>
   );
 }
