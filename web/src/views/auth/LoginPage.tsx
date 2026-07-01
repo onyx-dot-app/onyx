@@ -10,7 +10,7 @@ import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import SignInButton from "@/sections/auth/SignInButton";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
-import { useSendAuthRequiredMessage } from "@/lib/extension/utils";
+import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { Button, MessageCard } from "@opal/components";
 import { markdown } from "@opal/utils";
 
