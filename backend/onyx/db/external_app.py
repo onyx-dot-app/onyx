@@ -470,7 +470,7 @@ def upsert_external_app_user_credential(
     external_app_id: int,
     user_id: UUID,
     user_credentials: dict[str, Any],
-    granted_scopes: list[str] | None = None,
+    granted_scopes: list[str] | None | UnsetType = UNSET,
     resolve_masked_values: bool = False,
 ) -> ExternalAppUserCredential:
     """Create or replace the calling user's credentials for the app, and commit.
@@ -479,9 +479,11 @@ def upsert_external_app_user_credential(
     is for user form submissions that may echo masked display values; internal
     OAuth writers should store provider-returned values as-is.
 
-    ``granted_scopes=None`` preserves any existing grant, so the refresh and
-    credential-form paths (which don't re-derive scopes) can't clobber it. Pass
-    a list only from the connect flow.
+    ``granted_scopes`` is the connect-time OAuth grant: a list, or ``None`` when
+    a fresh authorize couldn't determine it — either value overwrites the stored
+    grant (``None`` clears a now-stale prior grant to "unknown"). Leave it
+    ``UNSET`` on the refresh and credential-form paths, which don't re-derive
+    scopes, to keep the stored grant untouched.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -507,7 +509,7 @@ def upsert_external_app_user_credential(
         external_app_id=external_app_id,
         user_id=user_id,
         user_credentials=user_credentials,
-        granted_scopes=granted_scopes,
+        granted_scopes=granted_scopes if is_set(granted_scopes) else None,
     )
     # ON CONFLICT DO UPDATE doesn't fire the column's `onupdate`, so bump
     # `updated_at` explicitly.
@@ -515,7 +517,7 @@ def upsert_external_app_user_credential(
         "user_credentials": stmt.excluded.user_credentials,
         "updated_at": func.now(),
     }
-    if granted_scopes is not None:
+    if is_set(granted_scopes):
         update_set["granted_scopes"] = stmt.excluded.granted_scopes
     stmt = stmt.on_conflict_do_update(
         index_elements=[

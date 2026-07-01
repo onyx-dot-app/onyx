@@ -236,9 +236,8 @@ def handle_external_app_oauth_callback(
         provider.extract_credentials(response_data), datetime.now(timezone.utc)
     )
 
-    # The authorize-time grant is authoritative and captured only here (a
-    # refresh can't change it). None when the provider gives no signal, which
-    # the upsert records as "unknown" without disturbing a prior grant.
+    # The grant is authoritative and captured only here (a refresh can't change
+    # it); None when the provider gives no signal.
     granted_scopes = provider.extract_granted_scopes(response_data)
 
     upsert_external_app_user_credential(

@@ -1,8 +1,9 @@
 """Persisting the OAuth grant onto ``ExternalAppUserCredential.granted_scopes``
 via ``upsert_external_app_user_credential`` (ENG-4261).
 
-The connect flow records the authoritative grant; refresh and credential-form
-saves pass ``granted_scopes=None`` and must leave a prior grant untouched."""
+The connect flow records the authoritative grant (a list, or ``None`` for
+"unknown" — both overwrite); refresh and credential-form saves omit the
+argument (``UNSET``) and must leave a prior grant untouched."""
 
 from __future__ import annotations
 
@@ -56,8 +57,8 @@ def test_missing_scopes_leaves_grant_unknown(
     db_session: Session,
     test_user: object,  # noqa: ARG001
 ) -> None:
-    """A new row written without a grant (provider gave no signal) is NULL —
-    not an empty list — so downstream can tell "unknown" from "granted none"."""
+    """A new row written without a grant argument is NULL — not an empty list —
+    so downstream can tell "unknown" from "granted none"."""
     user = make_user(db_session)
     app = _hubspot_app(db_session)
 
@@ -79,7 +80,7 @@ def test_refresh_preserves_existing_grant(
     db_session: Session,
     test_user: object,  # noqa: ARG001
 ) -> None:
-    """A later upsert with ``granted_scopes=None`` (the refresh / form path)
+    """A later upsert that omits ``granted_scopes`` (the refresh / form path)
     rotates the credential but must not wipe the stored grant."""
     user = make_user(db_session)
     app = _hubspot_app(db_session)
@@ -104,6 +105,38 @@ def test_refresh_preserves_existing_grant(
     assert cred is not None
     assert cred.user_credentials.get_value(apply_mask=False)["access_token"] == "t2"
     assert cred.granted_scopes == ["crm.read", "crm.write"]
+
+
+def test_reconnect_with_unknown_grant_clears_stale_scopes(
+    db_session: Session,
+    test_user: object,  # noqa: ARG001
+) -> None:
+    """A reconnect whose scope extraction failed passes ``granted_scopes=None``
+    and must clear the prior grant to NULL — a fresh authorize can change the
+    grant, so keeping the old scopes would be stale."""
+    user = make_user(db_session)
+    app = _hubspot_app(db_session)
+
+    upsert_external_app_user_credential(
+        db_session,
+        external_app_id=app.id,
+        user_id=user.id,
+        user_credentials={"access_token": "t1"},
+        granted_scopes=["crm.read", "crm.write"],
+    )
+    upsert_external_app_user_credential(
+        db_session,
+        external_app_id=app.id,
+        user_id=user.id,
+        user_credentials={"access_token": "t2"},
+        granted_scopes=None,
+    )
+
+    cred = get_external_app_user_credential(
+        db_session, external_app_id=app.id, user_id=user.id
+    )
+    assert cred is not None
+    assert cred.granted_scopes is None
 
 
 def test_reconnect_bumps_updated_at(

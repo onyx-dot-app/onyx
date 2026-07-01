@@ -247,10 +247,9 @@ class HubspotProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         return creds
 
     def extract_granted_scopes(self, response_data: dict[str, Any]) -> list[str] | None:
-        """HubSpot omits the granted scopes from the token response, so read
-        them from the token-info endpoint. Strictly best-effort: any
+        """Reads the grant from the token-info endpoint. Best-effort: any
         network/HTTP/JSON error returns ``None`` (grant unknown) rather than
-        breaking connect — the caller persists the credential regardless.
+        breaking connect.
         """
         access_token = response_data.get("access_token")
         if not access_token:

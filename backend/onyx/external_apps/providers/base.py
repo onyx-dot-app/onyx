@@ -266,15 +266,11 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         token is absent."""
 
     def extract_granted_scopes(self, response_data: dict[str, Any]) -> list[str] | None:
-        """The OAuth scopes the user actually granted, from the initial-grant
-        token response — or ``None`` when the provider gives no authoritative
-        signal (so the caller records the grant as unknown rather than empty).
+        """The scopes the user granted, from the connect-time token response, or
+        ``None`` when the provider gives no authoritative signal.
 
-        Default: the RFC 6749 §3.3 space-delimited ``scope`` field, which most
-        providers echo with the *granted* (post-downscope) scopes. Override for
-        providers that nest it (Slack's ``authed_user.scope``) or omit it from
-        the token response and require a separate lookup (HubSpot). Read only at
-        connect time: a refresh cannot change what a grant authorised.
+        Default reads the RFC 6749 §3.3 ``scope`` field. Override for providers
+        that nest it (Slack) or require a separate lookup (HubSpot).
         """
         return parse_granted_scopes(response_data.get("scope"))
 
