@@ -1,4 +1,6 @@
 import io
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import NamedTuple
 
 from onyx.configs.constants import FileOrigin
@@ -20,6 +22,20 @@ class IngestedBundle(NamedTuple):
     description: str
 
 
+def save_skill_bundle_bytes(
+    bundle_bytes: bytes,
+    *,
+    display_name: str,
+    file_store: FileStore,
+) -> str:
+    return file_store.save_file(
+        content=io.BytesIO(bundle_bytes),
+        display_name=display_name,
+        file_origin=FileOrigin.SKILL_BUNDLE,
+        file_type="application/zip",
+    )
+
+
 def ingest_skill_bundle(
     bundle_bytes: bytes,
     filename: str | None,
@@ -35,8 +51,8 @@ def ingest_skill_bundle(
     Pass ``slug`` to keep an existing row's slug when replacing a bundle on
     update; when omitted the slug is derived from ``filename`` (create path).
 
-    The caller owns DB row creation and must delete ``bundle_file_id`` if its
-    transaction fails.
+    Prefer ``ingested_skill_bundle`` when the stored blob should be cleaned up
+    automatically if the caller's transaction fails.
     """
     if slug is None:
         slug = slug_from_filename(filename)
@@ -44,11 +60,10 @@ def ingest_skill_bundle(
     name, description = parse_skill_md_metadata(bundle_bytes)
     sha = compute_bundle_sha256(bundle_bytes)
 
-    bundle_file_id = file_store.save_file(
-        content=io.BytesIO(bundle_bytes),
+    bundle_file_id = save_skill_bundle_bytes(
+        bundle_bytes,
         display_name=f"{slug}.zip",
-        file_origin=FileOrigin.SKILL_BUNDLE,
-        file_type="application/zip",
+        file_store=file_store,
     )
     return IngestedBundle(
         slug=slug,
@@ -57,6 +72,27 @@ def ingest_skill_bundle(
         name=name,
         description=description,
     )
+
+
+@contextmanager
+def ingested_skill_bundle(
+    bundle_bytes: bytes,
+    filename: str | None,
+    file_store: FileStore,
+    *,
+    slug: str | None = None,
+) -> Iterator[IngestedBundle]:
+    ingested = ingest_skill_bundle(
+        bundle_bytes,
+        filename,
+        file_store,
+        slug=slug,
+    )
+    try:
+        yield ingested
+    except Exception:
+        delete_bundle_blob(file_store, ingested.bundle_file_id)
+        raise
 
 
 def delete_bundle_blob(file_store: FileStore, file_id: str) -> None:
