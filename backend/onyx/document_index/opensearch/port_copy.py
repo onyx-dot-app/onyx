@@ -32,10 +32,7 @@ from onyx.indexing.port_reembed import ReembedStrategy
 from onyx.indexing.port_reembed import select_reembed_strategy
 from onyx.llm.factory import get_contextual_rag_llm_for_search_settings
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
-
-logger = setup_logger()
 
 # Chunks per create-only write. AUGMENTATION buffers a whole batch into one page, so
 # an unbounded write could run minutes with no heartbeat and get a live port falsely
