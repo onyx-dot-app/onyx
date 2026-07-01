@@ -19,6 +19,8 @@ export default function EmailVerificationPage() {
   const { logoUrl } = useSettings();
 
   useEffect(() => {
+    if (user === undefined) return;
+
     if (!user) {
       router.replace("/auth/login" as Route);
       return;

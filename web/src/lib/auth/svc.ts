@@ -44,6 +44,24 @@ export async function requestEmailVerification(
   });
 }
 
+export async function verifyEmail(token: string): Promise<void> {
+  const response = await fetch("/api/auth/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+
+  if (!response.ok) {
+    let detail = "unknown error";
+    try {
+      detail = (await response.json()).detail;
+    } catch {
+      // ignore parse failure
+    }
+    throw new Error(detail);
+  }
+}
+
 export async function impersonateUser(
   email: string,
   apiKey: string
