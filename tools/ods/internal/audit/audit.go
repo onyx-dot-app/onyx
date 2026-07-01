@@ -33,6 +33,7 @@ const (
 	SourceOSV        = "osv-scanner"
 	SourceDependabot = "dependabot"
 	SourceImage      = "osv-scanner-image"
+	SourceActions    = "github-actions"
 )
 
 // rank gives an orderable weight to a severity; higher is more severe.
@@ -112,6 +113,7 @@ type Options struct {
 	Web        bool
 	Python     bool
 	Dependabot bool
+	Actions    bool
 	Format     string // text|json|sarif
 	FailOn     Severity
 	IgnoreURL  string
@@ -129,10 +131,11 @@ type Result struct {
 // report to opts.Writer, and returns the result. With no selector flags set,
 // all backends are run.
 func Run(opts Options) (*Result, error) {
-	runAll := !opts.Web && !opts.Python && !opts.Dependabot
+	runAll := !opts.Web && !opts.Python && !opts.Dependabot && !opts.Actions
 	scanWeb := runAll || opts.Web
 	scanPython := runAll || opts.Python
 	scanDependabot := runAll || opts.Dependabot
+	scanActionsSrc := runAll || opts.Actions
 
 	var findings []Finding
 
@@ -151,13 +154,25 @@ func Run(opts Options) (*Result, error) {
 	if scanDependabot {
 		fs, err := auditDependabot()
 		if err != nil {
-			// When Dependabot is the only requested source, surface the error.
-			// Otherwise the lockfile scan is the primary gate, so warn and
-			// continue rather than fail the whole audit on an API hiccup.
-			if opts.Dependabot && !opts.Web && !opts.Python {
+			// When this is the only requested source, surface the error. Otherwise
+			// the lockfile scan is the primary gate, so warn and continue rather
+			// than fail the whole audit on an API hiccup.
+			if isOnlySource(opts, opts.Dependabot) {
 				return nil, fmt.Errorf("dependabot audit failed: %w", err)
 			}
 			log.Warnf("Dependabot audit skipped: %v", err)
+		} else {
+			findings = append(findings, fs...)
+		}
+	}
+
+	if scanActionsSrc {
+		fs, err := scanActions()
+		if err != nil {
+			if isOnlySource(opts, opts.Actions) {
+				return nil, fmt.Errorf("github actions audit failed: %w", err)
+			}
+			log.Warnf("GitHub Actions audit skipped: %v", err)
 		} else {
 			findings = append(findings, fs...)
 		}
@@ -194,6 +209,22 @@ func Run(opts Options) (*Result, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+// isOnlySource reports whether sel is the single explicitly requested source, so
+// a backend failure should fail the whole audit instead of being downgraded to a
+// warning. It is false during an all-sources run (no selector flags set).
+func isOnlySource(opts Options, sel bool) bool {
+	if !sel {
+		return false
+	}
+	n := 0
+	for _, s := range []bool{opts.Web, opts.Python, opts.Dependabot, opts.Actions} {
+		if s {
+			n++
+		}
+	}
+	return n == 1
 }
 
 // lockfilePaths returns the lockfiles to scan based on the selectors, skipping
