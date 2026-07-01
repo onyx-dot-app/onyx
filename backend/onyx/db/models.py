@@ -4673,6 +4673,8 @@ class TokenRateLimit(Base):
     # from that gate. At least one must be set — enforced by the check constraint
     # below, so a backfill / direct write can't create an unenforceable row.
     token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # USD cents; Numeric(18,6) avoids binary-float rounding on accumulation.
+    # Sub-cent precision (6 dp) keeps fractional per-token deltas exact.
     cost_budget_cents: Mapped[float | None] = mapped_column(
         Numeric(18, 6, asdecimal=False), nullable=True
     )
