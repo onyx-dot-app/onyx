@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
 from typing import cast
+from typing import NamedTuple
 from uuid import uuid4
 
 import httpx
@@ -55,11 +56,16 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# (directory, providerID, modelID) → context window. Directory-scoped so a
-# per-workspace opencode config can't leak one tenant's limit to another; still
-# process-wide, so one fetch serves every turn of a session (clients are rebuilt
-# per turn).
-_CONTEXT_LIMIT_CACHE: dict[tuple[str, str, str], int] = {}
+
+class _ModelKey(NamedTuple):
+    provider: str
+    model: str
+
+
+# Model context window (models.dev limit.context), cached per model. The limit
+# is universal for a given (provider, model), so a process-wide cache is correct
+# — one successful fetch serves every session (clients are rebuilt per turn).
+_CONTEXT_LIMIT_CACHE: dict[_ModelKey, int] = {}
 
 # opencode permission category emitted by the no-op ``connect_app`` tool
 _CONNECT_APP_PERMISSION = "connect_app"
@@ -1311,7 +1317,7 @@ class OpencodeServeClient:
     ) -> int | None:
         if not model_provider or not model_id:
             return None
-        key = (directory, model_provider, model_id)
+        key = _ModelKey(model_provider, model_id)
         cached = _CONTEXT_LIMIT_CACHE.get(key)
         if cached is not None:
             return cached
