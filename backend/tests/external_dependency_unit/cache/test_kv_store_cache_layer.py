@@ -140,9 +140,7 @@ class TestEncryptedValuesNotCached:
     ) -> None:
         kv_store.store("secret_a", {"token": "s3cr3t"}, encrypt=True)
 
-        # the secret is never written to the cache backend...
         assert pg_cache.get(REDIS_KEY_PREFIX + "secret_a") is None
-        # ...but still loads correctly from Postgres
         assert kv_store.load("secret_a") == {"token": "s3cr3t"}
 
     def test_encrypted_load_does_not_repopulate_cache(
@@ -150,15 +148,13 @@ class TestEncryptedValuesNotCached:
     ) -> None:
         kv_store.store("secret_b", {"token": "abc"}, encrypt=True)
 
-        # a load is a cache miss that falls through to Postgres. It must not
-        # repopulate the cache with the decrypted secret
         assert kv_store.load("secret_b") == {"token": "abc"}
         assert pg_cache.get(REDIS_KEY_PREFIX + "secret_b") is None
 
     def test_store_with_encrypt_drops_stale_plaintext_entry(
         self, kv_store: PgRedisKVStore, pg_cache: PostgresCacheBackend
     ) -> None:
-        # a plaintext entry left by an earlier (pre-fix) write
+        # a stale plaintext entry already in the cache
         pg_cache.set(REDIS_KEY_PREFIX + "secret_c", json.dumps({"old": "plain"}))
 
         kv_store.store("secret_c", {"token": "new"}, encrypt=True)
@@ -170,9 +166,8 @@ class TestEncryptedValuesNotCached:
     ) -> None:
         kv_store.store("secret_d", {"token": "real"}, encrypt=True)
 
-        # a plaintext secret left in the cache by the pre-v2 code, under the OLD prefix
+        # a stale plaintext entry under the previous cache prefix
         pg_cache.set("onyx_kv_store:secret_d", json.dumps({"leaked": "old"}))
 
-        # load reads the current (v2) prefix, so the stale old-prefix entry is never
-        # served. It returns the value from Postgres
+        # load uses the current prefix, so the old-prefix entry is never served
         assert kv_store.load("secret_d") == {"token": "real"}

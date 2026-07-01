@@ -12,9 +12,7 @@ from onyx.utils.special_types import JSON_ro
 logger = setup_logger()
 
 
-# v2: encrypted values are no longer mirrored to the cache. The version bump abandons
-# any plaintext-secret entries written by the pre-v2 code (they expire from the old
-# prefix by TTL) instead of serving them on a cache hit.
+# Bumping this version abandons all entries cached under the prior prefix.
 REDIS_KEY_PREFIX = "onyx_kv_store_v2:"
 KV_REDIS_KEY_EXPIRATION = 60 * 60 * 24  # 1 Day
 
@@ -31,9 +29,8 @@ class PgRedisKVStore(KeyValueStore):
         return self._cache
 
     def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
-        # Encrypted values are protected at rest in Postgres; never mirror them to the
-        # cache backend (typically Redis) in plaintext. Cache only non-encrypted values,
-        # and drop any stale plaintext entry a prior write may have left for this key.
+        # Never mirror encrypted values to the cache in plaintext. Cache only
+        # non-encrypted values, and evict any stale entry for an encrypted key.
         try:
             if encrypt:
                 self._get_cache().delete(REDIS_KEY_PREFIX + key)
@@ -98,8 +95,7 @@ class PgRedisKVStore(KeyValueStore):
                         "Failed to set value in cache for key '%s': %s", key, str(e)
                     )
             else:
-                # Evict any cache entry for a key that turns out to be encrypted (e.g.
-                # cached while plaintext, then re-stored as a secret) so it is not served.
+                # Evict a stale plaintext entry for a key that is now encrypted.
                 try:
                     self._get_cache().delete(REDIS_KEY_PREFIX + key)
                 except Exception as e:
