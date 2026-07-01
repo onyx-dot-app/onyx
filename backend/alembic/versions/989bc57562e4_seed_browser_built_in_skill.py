@@ -10,9 +10,9 @@ Availability is gated per-deployment by the skill's registry ``is_available``
 (keyed on ENABLE_BROWSER, in onyx.skills.built_in); this migration only creates
 the row.
 
-Revision ID: eebb02b43bee
+Revision ID: 989bc57562e4
 Revises: a4c9d2e7f1b8
-Create Date: 2026-06-30 10:55:42.145894
+Create Date: 2026-07-01 11:08:10.633955
 
 """
 
@@ -23,7 +23,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "eebb02b43bee"
+revision = "989bc57562e4"
 down_revision = "a4c9d2e7f1b8"
 branch_labels = None
 depends_on = None
