@@ -131,7 +131,7 @@ _REQUIRED_SCOPES = [
     "crm.objects.deals.read",
 ]
 
-# Optional, not required: read-only/free tiers can't grant writes, and HubSpot
+# Optional, read-only/free tiers can't grant writes, and HubSpot
 # fails the whole authorize page on any ungrantable required scope. As optional
 # scopes it drops what the account lacks, so everyone can still connect.
 _OPTIONAL_WRITE_SCOPES = [

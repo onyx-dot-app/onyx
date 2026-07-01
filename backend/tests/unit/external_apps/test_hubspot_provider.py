@@ -6,6 +6,7 @@ scopes — can still complete OAuth. See ENG-4260."""
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
@@ -13,6 +14,7 @@ from urllib.parse import urlparse
 import pytest
 
 from onyx.db.enums import ExternalAppType
+from onyx.db.models import User
 from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.hubspot import HubspotProvider
 from onyx.external_apps.providers.registry import PROVIDERS
@@ -85,7 +87,7 @@ def test_authorize_url_carries_optional_scope(monkeypatch: pytest.MonkeyPatch) -
         app_type=ExternalAppType.HUBSPOT,
         skill=SimpleNamespace(name="HubSpot", enabled=True),
         organization_credentials=SimpleNamespace(
-            get_value=lambda apply_mask: {
+            get_value=lambda **_: {
                 "client_id": "client-id",
                 "client_secret": "client-secret",
             }
@@ -93,11 +95,11 @@ def test_authorize_url_carries_optional_scope(monkeypatch: pytest.MonkeyPatch) -
     )
     monkeypatch.setattr(oauth_route, "get_external_app_by_id", lambda *_: app)
     monkeypatch.setattr(oauth_route, "get_current_tenant_id", lambda: "tenant")
-    monkeypatch.setattr(oauth_route, "get_redis_client", lambda tenant_id: MagicMock())
+    monkeypatch.setattr(oauth_route, "get_redis_client", lambda **_: MagicMock())
 
     response = oauth_route.start_external_app_oauth(
         external_app_id=app.id,
-        user=SimpleNamespace(id="user-1"),
+        user=cast(User, SimpleNamespace(id="user-1")),
         db_session=MagicMock(),
     )
 
