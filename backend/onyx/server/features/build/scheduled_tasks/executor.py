@@ -77,8 +77,6 @@ PROVISIONING_WAIT_SECONDS = 120
 
 
 def _clip_summary(text: str) -> str:
-    """Only backtracks to a space past the halfway point so one long token
-    (e.g. a URL) can't discard most of the snippet."""
     if len(text) <= SUMMARY_MAX_CHARS:
         return text
     clipped = text[:SUMMARY_MAX_CHARS]

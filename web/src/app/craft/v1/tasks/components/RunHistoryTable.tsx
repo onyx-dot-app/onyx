@@ -72,7 +72,6 @@ function NonClickableCell({ reason, children }: NonClickableCellProps) {
 }
 
 function clipAtWordBoundary(text: string): string {
-  // Slice by code points so an astral char at the boundary isn't split.
   const chars = Array.from(text);
   if (chars.length <= SUMMARY_TOOLTIP_MAX_CHARS) return text;
   const head = chars.slice(0, SUMMARY_TOOLTIP_MAX_CHARS).join("");
@@ -87,9 +86,7 @@ interface SummaryCellProps {
 function SummaryCell({ row }: SummaryCellProps) {
   const reason = getNonClickableReason(row);
   const raw = row.summary ?? row.skip_reason ?? row.error_class;
-  // Headings must be stripped before toPlainString collapses newlines (else
-  // mid-sentence "# " gets eaten); the trailing passes sweep unpaired markers
-  // left by server truncation — `__` only at marker edges so `foo__bar` survives.
+  // Heading strip must run before toPlainString collapses newlines.
   const stripped = raw
     ? toPlainString(markdown(raw.replace(/^#{1,6}\s+/gm, "")))
         .replace(/\*\*|~~|`/g, "")
