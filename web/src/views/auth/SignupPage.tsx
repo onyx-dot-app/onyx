@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { AuthType } from "@/lib/constants";
 import { AuthLayouts } from "@opal/layouts";

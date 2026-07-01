@@ -19,10 +19,7 @@ import { usePostHog } from "posthog-js/react";
 import { useSettings } from "@/lib/settings/hooks";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import {
-  useAuthTypeMetadata,
-  AuthTypeMetadata,
-} from "@/hooks/useAuthTypeMetadata";
+import { useAuthTypeMetadata, AuthTypeMetadata } from "@/lib/auth/hooks";
 import { updateUserPersonalization as persistPersonalization } from "@/lib/userSettings";
 import { useTheme } from "next-themes";
 

@@ -7,7 +7,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { Text } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { verifyEmail } from "@/lib/auth/svc";
 import RequestNewVerificationEmail from "@/sections/auth/RequestNewVerificationEmail";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";

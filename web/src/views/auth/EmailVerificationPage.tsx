@@ -7,7 +7,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { requestEmailVerification } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
 
@@ -56,6 +56,9 @@ export default function EmailVerificationPage() {
       title="Check your inbox"
       logoSrc={logoUrl}
       description="We've sent a verification link to your email address."
+      bottomPrompt={markdown(
+        "Back to [Sign In](/auth/login) or [Create an Account](/auth/signup)"
+      )}
     >
       <AuthLayouts.Message
         title={`Email sent to ${user.email}`}

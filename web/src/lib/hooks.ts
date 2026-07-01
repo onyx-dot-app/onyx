@@ -39,7 +39,7 @@ import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
-import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const usePublicCredentials = () => {
