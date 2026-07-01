@@ -4669,12 +4669,9 @@ class TokenRateLimit(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    # A row carries a token budget, a cost budget, or both; a null side is exempt
-    # from that gate. At least one must be set — enforced by the check constraint
-    # below, so a backfill / direct write can't create an unenforceable row.
+    # Null side skips its gate; at least one must be set (check constraint below).
     token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # USD cents; Numeric(18,6) avoids binary-float rounding on accumulation.
-    # Sub-cent precision (6 dp) keeps fractional per-token deltas exact.
+    # USD cents; Numeric(18,6) exact accumulation, 6dp for sub-cent per-token deltas.
     cost_budget_cents: Mapped[float | None] = mapped_column(
         Numeric(18, 6, asdecimal=False), nullable=True
     )
@@ -5454,8 +5451,7 @@ class UserUsage(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # No index=True: uq_user_usage_dims leads with user_id, so Postgres uses it
-    # for user-only lookups.
+    # No index=True: uq_user_usage_dims (user_id-first) covers user-only lookups.
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
@@ -5466,8 +5462,7 @@ class UserUsage(Base):
 
     model: Mapped[str] = mapped_column(String, nullable=False)
     flow: Mapped[str] = mapped_column(String, nullable=False)
-    # Empty string (not NULL) for "no provider" so the dedup unique index below
-    # works on every Postgres version without NULLS NOT DISTINCT (PG15+).
+    # '' not NULL: unique index dedups pre-PG15 without NULLS NOT DISTINCT.
     provider: Mapped[str] = mapped_column(
         String, nullable=False, default="", server_default=""
     )

@@ -26,8 +26,7 @@ def upgrade() -> None:
         "model_cost_override",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("model", sa.String(), nullable=False),
-        # Empty string (not NULL) for a provider-agnostic override, so the unique
-        # key works on every Postgres version (NULLS NOT DISTINCT is PG15+ only).
+        # '' not NULL: unique key works pre-PG15 without NULLS NOT DISTINCT.
         sa.Column("provider", sa.String(), nullable=False, server_default=""),
         sa.Column("input_cost_per_mtok", sa.Numeric(18, 6), nullable=False),
         sa.Column("output_cost_per_mtok", sa.Numeric(18, 6), nullable=False),
@@ -39,8 +38,7 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
-        # The model's onupdate=func.now() is ORM-side only (not DDL), so
-        # updated_at auto-bumps on ORM writes but not on raw-SQL UPDATEs.
+        # onupdate=func.now() is ORM-only; raw-SQL UPDATEs won't bump updated_at.
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
@@ -67,8 +65,7 @@ def upgrade() -> None:
         ),
         sa.Column("model", sa.String(), nullable=False),
         sa.Column("flow", sa.String(), nullable=False),
-        # Empty string (not NULL) for "no provider" so the dedup unique index
-        # works on every Postgres version (NULLS NOT DISTINCT is PG15+ only).
+        # '' not NULL: unique index dedups pre-PG15 without NULLS NOT DISTINCT.
         sa.Column("provider", sa.String(), nullable=False, server_default=""),
         sa.Column("input_tokens", sa.BigInteger(), nullable=False),
         sa.Column("output_tokens", sa.BigInteger(), nullable=False),
@@ -91,10 +88,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    # No standalone user_id index: uq_user_usage_dims leads with user_id, so
-    # Postgres uses it for user-only lookups.
-    # Upsert key. provider is non-null ('' when absent), so a plain unique index
-    # dedups correctly on every Postgres version (no PG15-only NULLS NOT DISTINCT).
+    # uq_user_usage_dims (user_id-first) serves user-only lookups; no separate index needed.
     op.create_index(
         "uq_user_usage_dims",
         "user_usage",
@@ -119,10 +113,7 @@ def downgrade() -> None:
     op.drop_constraint(
         "ck_token_rate_limit_budget_set", "token_rate_limit", type_="check"
     )
-    # Delete cost-only rows before restoring NOT NULL. Zero-filling them would
-    # leave token_budget=0 rows that older enforcement reads as "block at 0
-    # tokens" (rejecting every request); a cost-only limit can't function once
-    # cost_budget_cents is dropped below anyway.
+    # Zero-filling would set token_budget=0, which older enforcement treats as "block all".
     op.execute("DELETE FROM token_rate_limit WHERE token_budget IS NULL")
     op.alter_column("token_rate_limit", "token_budget", nullable=False)
     op.drop_column("token_rate_limit", "cost_budget_cents")
