@@ -6,7 +6,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { QUERY_KEYS } from "@/api/query-keys";
 import { getChatSession } from "@/api/chat/sessions";
-import { resumeChatMessage, type StreamEvent } from "@/api/chat/stream";
+import {
+  resumeChatMessage,
+  StreamHttpError,
+  type StreamEvent,
+} from "@/api/chat/stream";
 import { processRawChatHistory } from "@/chat/chatHistory";
 import { BackendChatSession, BackendMessage } from "@/chat/interfaces";
 import { getMessageByMessageId } from "@/chat/messageTree";
@@ -27,6 +31,13 @@ jest.mock("@/api/chat/stream", () => ({
     "obj" in event && "placement" in event,
   isHeartbeat: (event: { obj?: { type?: string }; type?: string }) =>
     event?.obj?.type === "chat_heartbeat" || event?.type === "chat_heartbeat",
+  StreamHttpError: class StreamHttpError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  },
 }));
 jest.mock("@/api/chat/sessions", () => ({
   getChatSession: jest.fn(),
@@ -352,6 +363,55 @@ describe("useChatSessionController", () => {
     // stands instead of the stale snapshot.
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(assistantText("s1", 2)).toBe("resumed");
+  });
+
+  it("stays silent when the run is already gone (404), then settles", async () => {
+    seedLiveSession(2);
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    getSessionMock.mockResolvedValue({
+      chat_session_id: "s1",
+      description: "Named",
+      persona_id: 0,
+      messages: backendMessages("done"),
+      packets: [[historyPacket("done")]],
+      time_created: "",
+      current_run: null,
+    });
+    resumeMock.mockReturnValue(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        throw new StreamHttpError("no resumable run", 404);
+      })(),
+    );
+
+    renderHook(() => useChatSessionController("s1"), { wrapper });
+
+    await waitFor(() => expect(getSessionMock).toHaveBeenCalled());
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("logs an unexpected resume failure before settling", async () => {
+    seedLiveSession(2);
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    getSessionMock.mockResolvedValue({
+      chat_session_id: "s1",
+      description: "Named",
+      persona_id: 0,
+      messages: backendMessages("done"),
+      packets: [[historyPacket("done")]],
+      time_created: "",
+      current_run: null,
+    });
+    resumeMock.mockReturnValue(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        throw new Error("network down");
+      })(),
+    );
+
+    renderHook(() => useChatSessionController("s1"), { wrapper });
+
+    await waitFor(() => expect(warn).toHaveBeenCalled());
+    warn.mockRestore();
   });
 
   it("does not render heartbeat packets during resume", async () => {

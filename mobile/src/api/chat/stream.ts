@@ -20,6 +20,17 @@ export interface SendMessageBody {
   origin: string;
 }
 
+// status lets the resume caller stay silent on the expected "nothing to resume" (404).
+export class StreamHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "StreamHttpError";
+  }
+}
+
 // The wire mixes wrapped packets ({placement, obj}) with root control objects; discriminate by field, not `type`.
 export type StreamEvent = Packet | MessageResponseIDInfo;
 
@@ -41,12 +52,10 @@ export function isHeartbeat(event: unknown): boolean {
   return (event as { type?: string }).type === "chat_heartbeat";
 }
 
+// Auth + Accept only. Content-Type is added by the send POST; the resume GET has no body.
 async function authHeaders(): Promise<Record<string, string>> {
   const token = await getToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
+  const headers: Record<string, string> = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
 }
@@ -59,7 +68,7 @@ async function raiseForStatus(response: ExpoResponse): Promise<never> {
   } catch {
     // non-JSON body — keep the status message
   }
-  throw new Error(detail);
+  throw new StreamHttpError(detail, response.status);
 }
 
 // resume keeps heartbeats as quiet-phase liveness ticks (to re-check focus/abort); send drops them
@@ -99,7 +108,7 @@ export async function* streamChatMessage(
 ): AsyncGenerator<StreamEvent> {
   const response = await expoFetch(`${getBaseUrl()}/chat/send-chat-message`, {
     method: "POST",
-    headers: await authHeaders(),
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal,
   });

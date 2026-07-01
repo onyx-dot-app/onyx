@@ -17,6 +17,7 @@ import {
   SendMessageBody,
   streamChatMessage,
 } from "@/api/chat/stream";
+import { FLUSH_INTERVAL_MS } from "@/chat/constants";
 import { processRawChatHistory } from "@/chat/chatHistory";
 import { ChatState } from "@/chat/interfaces";
 import {
@@ -31,7 +32,6 @@ import { Packet } from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 
-const FLUSH_INTERVAL_MS = 50;
 // the run can finish before the ChatSession row is committed; let it settle before naming (web too)
 const AUTO_NAME_DELAY_MS = 200;
 

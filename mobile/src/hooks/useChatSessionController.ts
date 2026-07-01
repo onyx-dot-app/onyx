@@ -2,19 +2,29 @@
 // ephemeral, so a backgrounded/killed app loses the live stream). Mirrors web's resume tail;
 // runResumeStream is module-scope so it survives re-renders, resumingRuns dedupes across reopens.
 import { useEffect } from "react";
-import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  QueryClient,
+  skipToken,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { QUERY_KEYS } from "@/api/query-keys";
 import { getChatSession } from "@/api/chat/sessions";
-import { isHeartbeat, isPacket, resumeChatMessage } from "@/api/chat/stream";
+import {
+  isHeartbeat,
+  isPacket,
+  resumeChatMessage,
+  StreamHttpError,
+} from "@/api/chat/stream";
 import { processRawChatHistory } from "@/chat/chatHistory";
+import { FLUSH_INTERVAL_MS } from "@/chat/constants";
 import { BackendChatSession } from "@/chat/interfaces";
 import { getMessageByMessageId, upsertMessages } from "@/chat/messageTree";
 import { Packet } from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 
-const FLUSH_INTERVAL_MS = 50;
 const resumingRuns = new Set<number>();
 
 async function runResumeStream(
@@ -93,8 +103,12 @@ async function runResumeStream(
         scheduleFlush();
       }
     }
-  } catch {
-    // 404 = nothing to resume; transient otherwise — either way settle from the snapshot below
+  } catch (error) {
+    // 404 = nothing to resume (finished/evicted run) — expected, stay quiet. Anything else is a
+    // real failure worth surfacing. Either way we settle from the snapshot below.
+    if (!(error instanceof StreamHttpError && error.status === 404)) {
+      console.warn("resume-stream failed; settling from snapshot", error);
+    }
   } finally {
     if (flushTimer) clearTimeout(flushTimer);
     flush();
@@ -146,8 +160,9 @@ export function useChatSessionController(sessionId: string | null): void {
 
   const { data } = useQuery<BackendChatSession>({
     queryKey: QUERY_KEYS.chatSession(serverUrl, sessionId ?? "new"),
-    queryFn: () => getChatSession(sessionId!),
-    // read-only observer: useChatController owns the fetch + hydration
+    // read-only observer: useChatController owns the fetch + hydration. skipToken keeps this
+    // type-safe (no non-null assertion) when there's no session.
+    queryFn: sessionId ? () => getChatSession(sessionId) : skipToken,
     enabled: false,
   });
 
