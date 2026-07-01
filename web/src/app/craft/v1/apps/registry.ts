@@ -105,6 +105,8 @@ export interface ExternalAppUserResponse {
   credential_keys: string[];
   credential_values: Record<string, string>;
   authenticated: boolean;
+  // OAuth apps connect via a popup; others via the credential form.
+  supports_oauth: boolean;
 }
 
 /**

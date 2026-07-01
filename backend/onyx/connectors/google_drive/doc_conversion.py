@@ -19,9 +19,6 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
 )
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    tabular_file_to_sections,
-)
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
 from onyx.connectors.google_drive.file_retrieval import add_drive_resource_key_header
@@ -348,11 +345,11 @@ def _download_and_extract_sections_basic(
             tabular_sections = result.sections
             staged_file_id = result.staged_file_id
         else:
-            tabular_sections = tabular_file_to_sections(
-                io.BytesIO(raw_bytes),
-                file_name=name,
-                link=link,
+            logger.warning(
+                "Skipping tabular file %s because raw_file_callback is not set",
+                name,
             )
+            return FileExtractionResult(sections=[], staged_file_id=None)
         sections: list[TextSection | ImageSection | TabularSection] = list(
             tabular_sections
         )

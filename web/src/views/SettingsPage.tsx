@@ -473,6 +473,7 @@ function GeneralSettings() {
               description="We'll display this name in the app."
               center
               withLabel
+              responsive
             >
               <InputTypeIn
                 placeholder="Your name"
@@ -499,6 +500,7 @@ function GeneralSettings() {
               description="Share your role to better tailor responses."
               center
               withLabel
+              responsive
             >
               <InputTypeIn
                 placeholder="Your role"
@@ -1691,7 +1693,11 @@ function AccountsAccessSettings() {
                 <Section gap={0}>
                   <Section flexDirection="row" padding={0.25} gap={0.5}>
                     {pats.length === 0 ? (
-                      <Section padding={0.5} alignItems="start">
+                      <Section
+                        padding={0.5}
+                        alignItems="start"
+                        data-testid="access-token-list-status"
+                      >
                         <Text font="secondary-body" color="text-03">
                           {isLoading
                             ? "Loading tokens..."

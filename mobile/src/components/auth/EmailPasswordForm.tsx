@@ -91,6 +91,12 @@ export function EmailPasswordForm({
 
   const errorMessage = isSignup ? signupErrorMessage : loginErrorMessage;
 
+  // iOS's "Automatic Strong Password" overlay (triggered by the `newPassword`
+  // content type) can't be dismissed against the simulator's empty Keychain, so
+  // it blocks typing during local testing. Disable AutoFill on the signup field
+  // in dev builds only — release builds keep the proper password-manager hints.
+  const suppressAutoFill = isSignup && __DEV__;
+
   return (
     <FormProvider {...form}>
       <TextInputField<EmailPasswordValues, "email">
@@ -130,8 +136,16 @@ export function EmailPasswordForm({
               },
             }),
           }}
-          autoComplete={isSignup ? "new-password" : "current-password"}
-          textContentType={isSignup ? "newPassword" : "password"}
+          autoComplete={
+            suppressAutoFill
+              ? "off"
+              : isSignup
+                ? "new-password"
+                : "current-password"
+          }
+          textContentType={
+            suppressAutoFill ? "none" : isSignup ? "newPassword" : "password"
+          }
           returnKeyType="go"
           onSubmitEditing={() => onSubmit()}
         />

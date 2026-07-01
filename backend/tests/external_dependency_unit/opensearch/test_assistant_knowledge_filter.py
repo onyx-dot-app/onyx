@@ -49,6 +49,7 @@ def _get_search_filters(
         project_id_filter=project_id_filter,
         persona_id_filter=persona_id_filter,
         time_cutoff=None,
+        time_cutoff_upper=None,
         min_chunk_index=None,
         max_chunk_index=None,
         max_chunk_size=None,

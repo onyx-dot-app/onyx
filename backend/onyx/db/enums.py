@@ -527,6 +527,7 @@ class Permission(str, PyEnum):
     READ_CHAT = "read:chat"
     WRITE_CHAT = "write:chat"
     READ_ADMIN = "read:admin"
+    GENERATE_IMAGE = "generate:image"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -567,6 +568,7 @@ Permission.IMPLIED = frozenset(
         Permission.READ_CHAT,
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
+        Permission.GENERATE_IMAGE,
     }
 )
 
@@ -574,6 +576,14 @@ Permission.IMPLIED = frozenset(
 class PersonaSharePermission(str, PyEnum):
     """Level granted by a persona share row (user or group), or to the whole
     org via `Persona.public_permission`."""
+
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class SkillSharePermission(str, PyEnum):
+    """Level granted by a skill share row (user or group), or to the whole org
+    via `Skill.public_permission`."""
 
     EDITOR = "EDITOR"
     VIEWER = "VIEWER"

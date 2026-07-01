@@ -1,13 +1,6 @@
-import { ChatScreen, CenteredContent } from "@/components/chat/ChatScreen";
-import { WelcomeMessage } from "@/components/chat/WelcomeMessage";
+import { ChatConversation } from "@/components/chat/ChatConversation";
 
-// New-chat landing (mirrors web's centered WelcomeMessage empty state).
+// New-chat landing; first send creates a session and navigates to /chat/[id].
 export default function NewChatScreen() {
-  return (
-    <ChatScreen>
-      <CenteredContent>
-        <WelcomeMessage />
-      </CenteredContent>
-    </ChatScreen>
-  );
+  return <ChatConversation sessionId={null} />;
 }

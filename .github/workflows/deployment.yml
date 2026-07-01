@@ -39,7 +39,7 @@ jobs:
       short-sha: ${{ steps.check.outputs.short-sha }}
     steps:
       - name: Checkout (for git tags)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -164,7 +164,7 @@ jobs:
       security-events: read # read Dependabot alerts
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -192,7 +192,7 @@ jobs:
     if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -217,7 +217,7 @@ jobs:
     environment: release
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -245,7 +245,7 @@ jobs:
       release-id: ${{ steps.create-release.outputs.id }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -321,7 +321,7 @@ jobs:
     timeout-minutes: 90
     environment: release
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7.0.0
         with:
           # NOTE: persist-credentials is needed for tauri-action to upload assets to GitHub releases.
           persist-credentials: true # zizmor: ignore[artipacked]
@@ -493,7 +493,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -523,8 +523,17 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
+      # Docker account credentials (the account must have access to the DHI catalog).
+      - name: Login to Docker Hardened Images (dhi.io)
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
+          registry: dhi.io
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
@@ -566,7 +575,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -596,8 +605,17 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
+      # Docker account credentials (the account must have access to the DHI catalog).
+      - name: Login to Docker Hardened Images (dhi.io)
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
+          registry: dhi.io
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
@@ -624,6 +642,8 @@ jobs:
       - determine-builds
       - build-web-amd64
       - build-web-arm64
+      - image-audit
+    if: always() && needs.build-web-amd64.result == 'success' && needs.build-web-arm64.result == 'success' && needs.image-audit.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -654,7 +674,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -707,7 +727,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -737,8 +757,17 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
+      # Docker account credentials (the account must have access to the DHI catalog).
+      - name: Login to Docker Hardened Images (dhi.io)
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
+          registry: dhi.io
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
@@ -791,7 +820,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -821,8 +850,17 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
+      # Docker account credentials (the account must have access to the DHI catalog).
+      - name: Login to Docker Hardened Images (dhi.io)
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
+          registry: dhi.io
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
@@ -860,6 +898,8 @@ jobs:
       - determine-builds
       - build-web-cloud-amd64
       - build-web-cloud-arm64
+      - image-audit
+    if: always() && needs.build-web-cloud-amd64.result == 'success' && needs.build-web-cloud-arm64.result == 'success' && needs.image-audit.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -890,7 +930,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -937,7 +977,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -967,7 +1007,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1009,7 +1049,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -1039,7 +1079,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1066,6 +1106,8 @@ jobs:
       - determine-builds
       - build-backend-amd64
       - build-backend-arm64
+      - image-audit
+    if: always() && needs.build-backend-amd64.result == 'success' && needs.build-backend-arm64.result == 'success' && needs.image-audit.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1096,7 +1138,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1150,7 +1192,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -1182,7 +1224,7 @@ jobs:
           buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1227,7 +1269,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -1259,7 +1301,7 @@ jobs:
           buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1288,6 +1330,8 @@ jobs:
       - determine-builds
       - build-model-server-amd64
       - build-model-server-arm64
+      - image-audit
+    if: always() && needs.build-model-server-amd64.result == 'success' && needs.build-model-server-arm64.result == 'success' && needs.image-audit.result == 'success'
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1318,7 +1362,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1370,7 +1414,7 @@ jobs:
       SANDBOX_CONTEXT: backend/onyx/server/features/build/sandbox/image
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -1399,7 +1443,7 @@ jobs:
 
       - name: Login to Docker Hub
         if: needs.determine-builds.outputs.is-test-run != 'true' && vars.DOCKER_NO_CACHE != 'true'
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1444,7 +1488,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -1474,7 +1518,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1517,7 +1561,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -1547,7 +1591,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1573,7 +1617,8 @@ jobs:
       - prepare-sandbox
       - build-sandbox-amd64
       - build-sandbox-arm64
-    if: always() && needs.prepare-sandbox.result == 'success' && (needs.prepare-sandbox.outputs.context-exists == 'true' || (needs.build-sandbox-amd64.result == 'success' && needs.build-sandbox-arm64.result == 'success'))
+      - image-audit
+    if: always() && needs.prepare-sandbox.result == 'success' && needs.image-audit.result == 'success' && (needs.prepare-sandbox.outputs.context-exists == 'true' || (needs.build-sandbox-amd64.result == 'success' && needs.build-sandbox-arm64.result == 'success'))
     runs-on:
       - runs-on
       - runner=2cpu-linux-x64
@@ -1606,7 +1651,7 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
@@ -1675,7 +1720,14 @@ jobs:
       - merge-backend
       - merge-model-server
       - merge-sandbox
-    if: needs.determine-builds.outputs.is-cloud-tag == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
+    if: >-
+      always()
+      && needs.merge-web-cloud.result == 'success'
+      && needs.merge-backend.result == 'success'
+      && needs.merge-model-server.result == 'success'
+      && needs.merge-sandbox.result == 'success'
+      && needs.determine-builds.outputs.is-cloud-tag == 'true'
+      && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -1714,30 +1766,40 @@ jobs:
             -f event_type=new-cloud-image \
             -F "client_payload[version]=${VERSION}"
 
-  trivy-scan:
+  # Scan each freshly built image (amd64 digest) via `ods audit image`, reusing
+  # osv-scanner and the shared S3 allowlist from the dependency `audit-gate`.
+  # Runs before merge-* and every merge-* depends on it, so an unsuppressed
+  # CRITICAL blocks the public tags. SARIF goes to the Security tab regardless.
+  image-audit:
     needs:
       - determine-builds
-      - merge-web
-      - merge-web-cloud
-      - merge-backend
-      - merge-model-server
-      - merge-sandbox
+      - build-web-amd64
+      - build-web-cloud-amd64
+      - build-backend-amd64
+      - build-model-server-amd64
+      - build-sandbox-amd64
     if: >-
       always() && !cancelled() &&
-      (needs.merge-web.result == 'success' ||
-       needs.merge-web-cloud.result == 'success' ||
-       needs.merge-backend.result == 'success' ||
-       needs.merge-model-server.result == 'success' ||
-       needs.merge-sandbox.result == 'success')
+      (needs.build-web-amd64.result == 'success' ||
+       needs.build-web-cloud-amd64.result == 'success' ||
+       needs.build-backend-amd64.result == 'success' ||
+       needs.build-model-server-amd64.result == 'success' ||
+       needs.build-sandbox-amd64.result == 'success')
     runs-on:
       - runs-on
-      - runner=2cpu-linux-arm64
-      - run-id=${{ github.run_id }}-trivy-scan-${{ matrix.component }}
+      # amd64 to match the images scanned: `ods audit image` uses the docker CLI,
+      # which won't pull an amd64 image onto an arm64 host.
+      - runner=2cpu-linux-x64
+      # osv-scanner pulls the image and writes a full `docker save` tar (~2x its
+      # size); size the root volume up so large images don't fill the disk.
+      - volume=60gb
+      - run-id=${{ github.run_id }}-image-audit-${{ matrix.component }}
       - extras=ecr-cache
     permissions:
-      contents: read # needed to checkout the repo on private repos (no-op on public)
-      security-events: write # needed for SARIF uploads
-    timeout-minutes: 10
+      contents: read # checkout + uv project context
+      id-token: write # OIDC for fetching the S3 allowlist
+      security-events: write # SARIF uploads
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -1748,7 +1810,6 @@ jobs:
             registry-image: onyxdotapp/onyx-web-server-cloud
           - component: backend
             registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
-            trivyignore: backend/.trivyignore
           - component: model-server
             registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
           - component: sandbox
@@ -1758,11 +1819,11 @@ jobs:
         id: should-run
         run: |
           case "$COMPONENT" in
-            web) RESULT="$MERGE_WEB" ;;
-            web-cloud) RESULT="$MERGE_WEB_CLOUD" ;;
-            backend) RESULT="$MERGE_BACKEND" ;;
-            model-server) RESULT="$MERGE_MODEL_SERVER" ;;
-            sandbox) RESULT="$MERGE_SANDBOX" ;;
+            web) RESULT="$BUILD_WEB" ;;
+            web-cloud) RESULT="$BUILD_WEB_CLOUD" ;;
+            backend) RESULT="$BUILD_BACKEND" ;;
+            model-server) RESULT="$BUILD_MODEL_SERVER" ;;
+            sandbox) RESULT="$BUILD_SANDBOX" ;;
           esac
           if [ "$RESULT" == "success" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -1771,55 +1832,105 @@ jobs:
           fi
         env:
           COMPONENT: ${{ matrix.component }}
-          MERGE_WEB: ${{ needs.merge-web.result }}
-          MERGE_WEB_CLOUD: ${{ needs.merge-web-cloud.result }}
-          MERGE_BACKEND: ${{ needs.merge-backend.result }}
-          MERGE_MODEL_SERVER: ${{ needs.merge-model-server.result }}
-          MERGE_SANDBOX: ${{ needs.merge-sandbox.result }}
+          BUILD_WEB: ${{ needs.build-web-amd64.result }}
+          BUILD_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.result }}
+          BUILD_BACKEND: ${{ needs.build-backend-amd64.result }}
+          BUILD_MODEL_SERVER: ${{ needs.build-model-server-amd64.result }}
+          BUILD_SANDBOX: ${{ needs.build-sandbox-amd64.result }}
 
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
         if: steps.should-run.outputs.run == 'true'
 
       - name: Checkout
-        if: steps.should-run.outputs.run == 'true' && matrix.trivyignore != ''
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        if: steps.should-run.outputs.run == 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
+      - name: Setup uv
+        if: steps.should-run.outputs.run == 'true'
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        with:
+          version: "0.11.25"
+          enable-cache: false
+
+      - name: Configure AWS credentials
+        if: steps.should-run.outputs.run == 'true'
+        continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # ratchet:aws-actions/configure-aws-credentials@v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Login to Docker Hub
+        if: steps.should-run.outputs.run == 'true'
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      # Scan the by-digest image the build pushed, before merge-* tags it (same
+      # content in the ECR cache for test runs).
       - name: Determine scan image
         if: steps.should-run.outputs.run == 'true'
         id: scan-image
         run: |
+          case "$COMPONENT" in
+            web) DIGEST="$DIGEST_WEB" ;;
+            web-cloud) DIGEST="$DIGEST_WEB_CLOUD" ;;
+            backend) DIGEST="$DIGEST_BACKEND" ;;
+            model-server) DIGEST="$DIGEST_MODEL_SERVER" ;;
+            sandbox) DIGEST="$DIGEST_SANDBOX" ;;
+          esac
           if [ "$IS_TEST_RUN" == "true" ]; then
-            echo "image=${RUNS_ON_ECR_CACHE}:${TAG_PREFIX}-${SANITIZED_TAG}" >> "$GITHUB_OUTPUT"
+            echo "image=${RUNS_ON_ECR_CACHE}@${DIGEST}" >> "$GITHUB_OUTPUT"
           else
-            echo "image=docker.io/${REGISTRY_IMAGE}:${REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "image=docker.io/${REGISTRY_IMAGE}@${DIGEST}" >> "$GITHUB_OUTPUT"
           fi
         env:
+          COMPONENT: ${{ matrix.component }}
           IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
-          TAG_PREFIX: ${{ matrix.component }}
-          SANITIZED_TAG: ${{ needs.determine-builds.outputs.sanitized-tag }}
           REGISTRY_IMAGE: ${{ matrix.registry-image }}
-          REF_NAME: ${{ github.ref_name }}
+          DIGEST_WEB: ${{ needs.build-web-amd64.outputs.digest }}
+          DIGEST_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.outputs.digest }}
+          DIGEST_BACKEND: ${{ needs.build-backend-amd64.outputs.digest }}
+          DIGEST_MODEL_SERVER: ${{ needs.build-model-server-amd64.outputs.digest }}
+          DIGEST_SANDBOX: ${{ needs.build-sandbox-amd64.outputs.digest }}
 
-      - name: Run Trivy vulnerability scanner
+      - name: Run image vulnerability audit
         if: steps.should-run.outputs.run == 'true'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
-        with:
-          image-ref: ${{ steps.scan-image.outputs.image }}
-          severity: CRITICAL,HIGH
-          format: "sarif"
-          output: "trivy-results.sarif"
-          trivyignores: ${{ matrix.trivyignore }}
+        # Exits non-zero on unsuppressed CRITICAL (gates the release). On a hard
+        # scan failure nothing is written, so seed a valid empty SARIF to keep the
+        # always() upload below from choking; either way it reaches the Security tab.
+        run: |
+          uv run --no-sync --with onyx-devtools ods audit image "$IMAGE" \
+            --fail-on=critical --format=sarif > image-audit.sarif || status=$?
+          if [ ! -s image-audit.sarif ]; then
+            # $schema is a literal SARIF key, not a shell variable.
+            # shellcheck disable=SC2016
+            echo '{"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[]}' > image-audit.sarif
+          fi
+          exit "${status:-0}"
         env:
-          TRIVY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          TRIVY_PASSWORD: ${{ secrets.DOCKER_TOKEN }}
+          IMAGE: ${{ steps.scan-image.outputs.image }}
 
-      - name: Upload Trivy scan results to GitHub Security tab
-        if: steps.should-run.outputs.run == 'true'
+      # Rolling main-HEAD builds (nightly-latest / edge) map to refs/heads/main so
+      # the Security tab stays authoritative for main and alerts auto-resolve on
+      # later main builds. Test runs (manual workflow_dispatch) upload against their
+      # own ref/sha instead, so the scan + upload can be verified without polluting
+      # main's alerts. Release/beta tags sit on older commits — they still gate, they
+      # just don't upload.
+      - name: Upload audit results to GitHub Security tab
+        if: >-
+          always() && steps.should-run.outputs.run == 'true' &&
+          ((env.EDGE_TAG == 'true' && needs.determine-builds.outputs.is-test-run != 'true') ||
+           needs.determine-builds.outputs.is-test-run == 'true')
         uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
         with:
-          sarif_file: "trivy-results.sarif"
+          sarif_file: image-audit.sarif
+          category: image-audit-${{ matrix.component }}
+          ref: ${{ needs.determine-builds.outputs.is-test-run == 'true' && github.ref || 'refs/heads/main' }}
+          sha: ${{ github.sha }}
 
   notify-slack-on-failure:
     needs:
@@ -1843,14 +1954,15 @@ jobs:
       - build-sandbox-amd64
       - build-sandbox-arm64
       - merge-sandbox
-    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+      - image-audit
+    if: always() && (needs.audit-gate.result == 'failure' || needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure' || needs.image-audit.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
     environment: release
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 

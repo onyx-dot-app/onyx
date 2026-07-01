@@ -18,8 +18,6 @@ const esmPackages = [
   // UI Libraries
   "@radix-ui",
   "@floating-ui",
-  "@headlessui",
-  "@phosphor-icons",
   // Testing & Mocking
   "msw",
   "until-async",
@@ -179,6 +177,7 @@ module.exports = {
         "**/src/refresh-pages/**/*.test.tsx",
         "**/src/hooks/**/*.test.tsx",
         "**/src/sections/**/*.test.tsx",
+        "**/src/views/**/*.test.tsx",
         // Add more patterns here as you add more integration tests
       ],
     },

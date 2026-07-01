@@ -23,9 +23,10 @@ from sqlalchemy.orm import Session
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import fetch_skill_for_user
+from onyx.db.skill import list_skills_for_sandbox_injection
 from onyx.db.skill import list_skills_for_user
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill.api import _ensure_custom
+from onyx.server.features.skill.mutation_helpers import ensure_custom_skill
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
@@ -99,7 +100,36 @@ class TestAvailabilityGate:
             for s in list_skills_for_user(test_user, db_session)
             if s.built_in_skill_id is not None
         }
-        assert set(BUILT_IN_SKILLS) <= visible_built_ins
+        # Some built-ins gate on environment availability (e.g. image-generation
+        # needs a configured provider); only those available here must be visible.
+        available_built_ins = {
+            built_in_skill_id
+            for built_in_skill_id, definition in BUILT_IN_SKILLS.items()
+            if definition.is_available(db_session)
+        }
+        assert available_built_ins <= visible_built_ins
+
+    def test_browser_built_in_gated_on_enable_browser(
+        self,
+        db_session: Session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _seed_canonical(db_session)
+
+        monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", False)
+        off = {
+            s.built_in_skill_id
+            for s in list_skills_for_sandbox_injection(test_user, db_session)
+        }
+        assert "browser" not in off
+
+        monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", True)
+        on = {
+            s.built_in_skill_id
+            for s in list_skills_for_sandbox_injection(test_user, db_session)
+        }
+        assert "browser" in on
 
     def test_unavailable_built_in_cannot_be_fetched_by_id(
         self,
@@ -127,7 +157,7 @@ class TestAvailabilityGate:
 class TestBuiltInIsImmutable:
     """Built-in skill rows reject every admin mutation path: PATCH,
     bundle-replace, grants-replace, delete. Enforcement lives at the
-    API layer via ``_ensure_custom`` and the discriminator is
+    service layer via ``ensure_custom_skill`` and the discriminator is
     ``built_in_skill_id IS NOT NULL``."""
 
     def test_ensure_custom_rejects_built_in_rows(self, db_session: Session) -> None:
@@ -135,13 +165,13 @@ class TestBuiltInIsImmutable:
         db_session.commit()
 
         with pytest.raises(OnyxError, match="cannot be modified"):
-            _ensure_custom(row)
+            ensure_custom_skill(row)
 
     def test_ensure_custom_accepts_custom_rows(self, db_session: Session) -> None:
         custom = make_skill(db_session, slug=f"custom-{uuid4().hex[:8]}")
         db_session.commit()
 
-        _ensure_custom(custom)  # no raise
+        ensure_custom_skill(custom)  # no raise
 
 
 class TestNonUniqueBuiltInId:

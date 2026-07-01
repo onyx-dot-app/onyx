@@ -86,6 +86,9 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     "skill": {"*": "allow", "customize-opencode": "deny"},
     "question": "allow",
     "webfetch": "allow",
+    # Connect-app tool: a no-op tool the agent calls to request connecting an
+    # external app it isn't set up for.
+    "connect_app": "ask",
 }
 
 _TMP_EXTERNAL_DIRECTORY_RULES: dict[str, str] = {

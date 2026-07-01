@@ -141,6 +141,22 @@ def test_build_vertex_provider_with_missing_project_id() -> None:
         get_image_generation_provider("vertex_ai", credentials)
 
 
+def test_vertex_malformed_json_does_not_escape_validate_credentials() -> None:
+    """Malformed vertex_credentials JSON must surface as a clean
+    ImageProviderCredentialsError / False, not a raw JSONDecodeError — otherwise
+    is_image_generation_configured can't gate gracefully and the skills listing
+    500s."""
+    credentials = _get_default_image_gen_creds()
+    credentials.custom_config = {
+        "vertex_credentials": "{not valid json",
+        "vertex_location": "global",
+    }
+
+    assert VertexImageGenerationProvider.validate_credentials(credentials) is False
+    with pytest.raises(ImageProviderCredentialsError):
+        get_image_generation_provider("vertex_ai", credentials)
+
+
 def test_openai_provider_uses_image_generation_without_reference_images() -> None:
     provider = OpenAIImageGenerationProvider(
         api_key="test-key",

@@ -25,6 +25,7 @@ from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
+from sqlalchemy import Numeric
 from sqlalchemy import PrimaryKeyConstraint
 from sqlalchemy import Sequence
 from sqlalchemy import String
@@ -36,12 +37,14 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine.interfaces import Dialect
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import validates
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from typing_extensions import TypedDict  # noreorder
@@ -96,6 +99,7 @@ from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
+from onyx.db.enums import SkillSharePermission
 from onyx.db.enums import SwitchoverType
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
@@ -633,6 +637,30 @@ class Persona__User(Base):
     )
 
     user: Mapped["User | None"] = relationship("User")
+
+
+class Skill__User(Base):
+    __tablename__ = "skill__user"
+
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+
+    user: Mapped["User"] = relationship("User")
+
+    __table_args__ = (Index("ix_skill__user_user_id", "user_id"),)
 
 
 class DocumentSet__User(Base):
@@ -4329,8 +4357,24 @@ class Skill(Base):
         ForeignKey("user.id", ondelete="SET NULL"),
         nullable=True,
     )
-    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    public_permission: Mapped[SkillSharePermission | None] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=True,
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    @hybrid_property
+    def is_public(self) -> bool:
+        return self.public_permission is not None
+
+    @is_public.inplace.setter
+    def _is_public_setter(self, value: bool) -> None:
+        self.public_permission = SkillSharePermission.VIEWER if value else None
+
+    @is_public.inplace.expression
+    @classmethod
+    def _is_public_expression(cls) -> ColumnElement[bool]:
+        return cls.public_permission.isnot(None)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -4347,10 +4391,27 @@ class Skill(Base):
         foreign_keys=[author_user_id],
     )
 
+    users: Mapped[list[User]] = relationship(
+        "User",
+        secondary=Skill__User.__table__,
+        viewonly=True,
+        overlaps="user_shares",
+    )
+    user_shares: Mapped[list[Skill__User]] = relationship(
+        "Skill__User",
+        viewonly=True,
+        overlaps="users",
+    )
+    group_shares: Mapped[list["Skill__UserGroup"]] = relationship(
+        "Skill__UserGroup",
+        viewonly=True,
+        overlaps="groups",
+    )
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="skill__user_group",
         viewonly=True,
+        overlaps="group_shares",
     )
 
     __table_args__ = (
@@ -4508,6 +4569,14 @@ class Skill__UserGroup(Base):
         ForeignKey("user_group.id", ondelete="CASCADE"),
         primary_key=True,
     )
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+
+    user_group: Mapped["UserGroup"] = relationship("UserGroup")
 
 
 class LLMProvider__Persona(Base):
@@ -4635,13 +4704,25 @@ class TokenRateLimit(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    token_budget: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Null side skips its gate; at least one must be set (check constraint below).
+    token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # USD cents; Numeric(18,6) exact accumulation, 6dp for sub-cent per-token deltas.
+    cost_budget_cents: Mapped[float | None] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=True
+    )
     period_hours: Mapped[int] = mapped_column(Integer, nullable=False)
     scope: Mapped[TokenRateLimitScope] = mapped_column(
         Enum(TokenRateLimitScope, native_enum=False)
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "token_budget IS NOT NULL OR cost_budget_cents IS NOT NULL",
+            name="ck_token_rate_limit_budget_set",
+        ),
     )
 
 
@@ -5386,6 +5467,122 @@ class TenantUsage(Base):
     __table_args__ = (
         # Ensure only one row per window start (tenant_id is in the schema name)
         UniqueConstraint("window_start", name="uq_tenant_usage_window"),
+    )
+
+
+class UserUsage(Base):
+    """
+    Per-user LLM usage rollup within a time window — the source of truth for
+    per-user cost/token attribution and budget checks. Mirrors TenantUsage's
+    window-rollup model (one accumulating row per window+dims, not a per-call
+    ledger).
+
+    One row per (user, window, model, flow, provider), accumulated in place;
+    windows match the tenant-usage alignment so per-user and per-tenant totals
+    reconcile.
+    """
+
+    __tablename__ = "user_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # No index=True: uq_user_usage_dims (user_id-first) covers user-only lookups.
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+
+    window_start: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    flow: Mapped[str] = mapped_column(String, nullable=False)
+    # '' not NULL: unique index dedups pre-PG15 without NULLS NOT DISTINCT.
+    provider: Mapped[str] = mapped_column(
+        String, nullable=False, default="", server_default=""
+    )
+
+    input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    cache_read_tokens: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+    cost_cents: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False, default=0.0
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        # Upsert key: accumulate into one row per dimension tuple per window.
+        # provider is non-null ('' when absent), so a plain unique index dedups
+        # correctly on every Postgres version (no NULLS NOT DISTINCT needed).
+        Index(
+            "uq_user_usage_dims",
+            "user_id",
+            "window_start",
+            "model",
+            "flow",
+            "provider",
+            unique=True,
+        ),
+    )
+
+
+class ModelCostOverride(Base):
+    """Admin-set per-model rates that supersede litellm pricing.
+
+    Negotiated enterprise rates win over litellm's published numbers, so cost
+    computation consults this table before falling back to litellm.
+    """
+
+    __tablename__ = "model_cost_override"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # litellm-style model name (e.g. "gpt-4o").
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    # Empty string (not NULL) for a provider-agnostic override, so the unique key
+    # below works on every Postgres version without NULLS NOT DISTINCT (PG15+).
+    provider: Mapped[str] = mapped_column(
+        String, nullable=False, default="", server_default=""
+    )
+
+    # Rates in USD per million tokens.
+    input_cost_per_mtok: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
+    )
+    output_cost_per_mtok: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
+    )
+    # Cache-read rate; null bills cache reads at the input rate (litellm default).
+    cache_read_cost_per_mtok: Mapped[float | None] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=True
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        # provider+model so the same model can be priced per provider.
+        UniqueConstraint(
+            "provider", "model", name="uq_model_cost_override_provider_model"
+        ),
     )
 
 
@@ -6183,6 +6380,14 @@ class ExternalAppUserCredential(Base):
     # Read via .get_value(apply_mask=False).
     user_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
         EncryptedJson(), nullable=False, default=dict
+    )
+    # OAuth scopes the user actually granted for this app. NULL means
+    # we have no authoritative record of the grant (provider doesn't report
+    # scopes, or the best-effort lookup failed); a non-null list is the exact
+    # set the user granted. Consumers must distinguish the two.
+    granted_scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String),
+        nullable=True,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),

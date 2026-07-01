@@ -13,12 +13,14 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from pypdfium2 import PdfiumError
 
 from onyx.file_processing import extract_file_text
 from onyx.file_processing.extract_file_text import count_pdf_embedded_images
 from onyx.file_processing.extract_file_text import pdf_to_text
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.password_validation import is_pdf_protected
+from onyx.utils.process_isolation import IsolatedProcessCrashed
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -49,22 +51,45 @@ class TestReadPdfFile:
         assert "Page one content" in text
         assert "Page two content" in text
 
-    def test_falls_back_to_pypdf_when_pdfium_fails(
-        self, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize(
+        "isolation_failure",
+        [
+            # pypdf is more lenient than PDFium and reads some PDFs it rejects.
+            PdfiumError("Failed to load document (PDFium: Data format error)."),
+            # A malformed PDF can hard-abort PDFium (SIGABRT); the isolation layer
+            # surfaces that as a crash, not a Python exception.
+            IsolatedProcessCrashed(6),
+        ],
+        ids=["pdfium_error", "native_crash"],
+    )
+    def test_text_extraction_falls_back_to_pypdf_on_isolation_failure(
+        self, monkeypatch: pytest.MonkeyPatch, isolation_failure: Exception
     ) -> None:
-        """PDFium is stricter than pypdf and rejects some PDFs pypdf can read.
-        When PDFium raises, text extraction falls back to pypdf so the document
-        is still indexed rather than silently dropped."""
+        """PDFium runs in an isolated subprocess; whether it raises a PdfiumError
+        or hard-crashes, extraction must fall back to pypdf so the document is
+        still indexed instead of dropped or failing the whole attempt."""
 
-        from pypdfium2 import PdfiumError
+        def _fail(*_args: object, **_kwargs: object) -> str:
+            raise isolation_failure
 
-        def _raise(*_args: object, **_kwargs: object) -> str:
-            raise PdfiumError("Failed to load document (PDFium: Data format error).")
-
-        monkeypatch.setattr(extract_file_text, "_extract_pdf_text_pdfium", _raise)
+        monkeypatch.setattr(extract_file_text, "run_in_isolated_process", _fail)
         text, _, _ = read_pdf_file(_load("multipage.pdf"))
         assert "Page one content" in text
         assert "Page two content" in text
+
+    def test_image_extraction_survives_isolation_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When isolated text extraction fails, the in-process image extraction
+        must still run. A text-extraction crash must not drop the embedded images
+        (they're parsed separately, after the fallback)."""
+
+        def _crash(*_args: object, **_kwargs: object) -> str:
+            raise IsolatedProcessCrashed(6)
+
+        monkeypatch.setattr(extract_file_text, "run_in_isolated_process", _crash)
+        _, _, images = read_pdf_file(_load("with_image.pdf"), extract_images=True)
+        assert len(images) >= 1
 
     def test_metadata_extraction(self) -> None:
         _, pdf_metadata, _ = read_pdf_file(_load("with_metadata.pdf"))

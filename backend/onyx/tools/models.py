@@ -335,3 +335,5 @@ class LlmPythonExecutionResult(BaseModel):
     timed_out: bool
     generated_files: list[PythonExecutionFile]
     error: str | None = None
+    # Set when some session files are absent
+    staging_notice: str | None = None

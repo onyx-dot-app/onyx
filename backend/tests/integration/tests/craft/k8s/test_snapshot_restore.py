@@ -306,6 +306,7 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
         llm_config=default_llm_config(),
         nextjs_port=None,
         skills_section="No skills available.",
+        connectable_apps_section="No connectable apps available.",
     )
 
     listing = pod_exec(
