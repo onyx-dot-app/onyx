@@ -2,12 +2,13 @@
 // keeps writing by sessionId after the landing screen unmounts navigating into /chat/[id].
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { QUERY_KEYS } from "@/api/query-keys";
 import {
   createChatSession,
   getChatSession,
+  renameChatSession,
   stopChatSession,
 } from "@/api/chat/sessions";
 import {
@@ -31,6 +32,29 @@ import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 
 const FLUSH_INTERVAL_MS = 50;
+// the run can finish before the ChatSession row is committed; let it settle before naming (web too)
+const AUTO_NAME_DELAY_MS = 200;
+
+interface AutoNameContext {
+  serverUrl: string | null;
+  queryClient: QueryClient;
+}
+
+async function nameNewSession(
+  sessionId: string,
+  ctx: AutoNameContext,
+): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, AUTO_NAME_DELAY_MS));
+  try {
+    await renameChatSession(sessionId);
+  } catch {
+    // best-effort; the refresh below still surfaces the chat (as "New Chat")
+  } finally {
+    void ctx.queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.chatSessions(ctx.serverUrl),
+    });
+  }
+}
 
 async function runChatStream(
   sessionId: string,
@@ -38,11 +62,13 @@ async function runChatStream(
   agentNodeId: number,
   body: SendMessageBody,
   signal: AbortSignal,
+  autoName: AutoNameContext | null,
 ): Promise<void> {
   const store = useChatSessionStore;
   let pending: Packet[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let sawStreaming = false;
+  let hadError = false;
 
   function flush() {
     if (pending.length === 0) return;
@@ -96,6 +122,7 @@ async function runChatStream(
   } catch (error) {
     // Abort is the normal stop path; any other failure marks the assistant node errored.
     if (!signal.aborted) {
+      hadError = true;
       const message =
         error instanceof Error ? error.message : "Something went wrong.";
       store.getState().patchNode(sessionId, agentNodeId, {
@@ -108,6 +135,10 @@ async function runChatStream(
     flush();
     store.getState().updateChatState(sessionId, "input");
     store.getState().setAbortController(sessionId, null);
+    // name a new session once it streamed output; skip stop/abort and thrown transport failures
+    if (autoName && !signal.aborted && sawStreaming && !hadError) {
+      void nameNewSession(sessionId, autoName);
+    }
   }
 }
 
@@ -124,6 +155,7 @@ export interface ChatController {
 export function useChatController(sessionId: string | null): ChatController {
   const [input, setInput] = useState("");
   const serverUrl = useSession((state) => state.serverUrl);
+  const queryClient = useQueryClient();
   const sessionData = useChatSessionStore((state) =>
     sessionId ? state.sessions.get(sessionId) : undefined,
   );
@@ -165,6 +197,7 @@ export function useChatController(sessionId: string | null): ChatController {
     // (the input is empty → canSend is false).
     setInput("");
 
+    const isNewSession = sessionId == null;
     let activeId = sessionId;
     if (activeId != null) {
       const current = useChatSessionStore.getState().sessions.get(activeId);
@@ -222,8 +255,9 @@ export function useChatController(sessionId: string | null): ChatController {
       initialAgentNode.nodeId,
       body,
       controller.signal,
+      isNewSession ? { serverUrl, queryClient } : null,
     );
-  }, [input, sessionId]);
+  }, [input, sessionId, serverUrl, queryClient]);
 
   const stop = useCallback(() => {
     if (sessionId == null) return;
