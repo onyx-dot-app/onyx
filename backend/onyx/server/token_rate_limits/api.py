@@ -11,7 +11,9 @@ from onyx.db.token_limit import delete_token_rate_limit
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.token_limit import insert_global_token_rate_limit
 from onyx.db.token_limit import update_token_rate_limit
-from onyx.server.query_and_chat.token_limit import any_rate_limit_exists
+from onyx.server.query_and_chat.token_limit import (
+    invalidate_any_rate_limit_exists_cache,
+)
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 from onyx.server.token_rate_limits.models import TokenRateLimitDisplay
 
@@ -44,7 +46,7 @@ def create_global_token_limit_settings(
         insert_global_token_rate_limit(db_session, token_limit_settings)
     )
     # clear cache in case this was the first rate limit created
-    any_rate_limit_exists.cache_clear()
+    invalidate_any_rate_limit_exists_cache()
     return rate_limit_display
 
 
