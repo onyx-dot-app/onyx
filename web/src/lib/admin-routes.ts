@@ -185,6 +185,12 @@ export const ADMIN_ROUTES = {
     title: "Spending Limits",
     sidebarLabel: "Spending Limits",
   },
+  TRACING: {
+    path: "/admin/tracing",
+    icon: SvgBarChart,
+    title: "Tracing",
+    sidebarLabel: "Tracing",
+  },
   USAGE: {
     path: "/admin/performance/usage",
     icon: SvgActivity,

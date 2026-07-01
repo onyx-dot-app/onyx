@@ -133,6 +133,10 @@ function buildItems(
 
   // 6. Usage (admin only)
   if (!isCurator) {
+    // Tracing config is not supported on multi-tenant cloud.
+    if (!enableCloud) {
+      add(SECTIONS.USAGE, ADMIN_ROUTES.TRACING);
+    }
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.TOKEN_RATE_LIMITS, Tier.ENTERPRISE);
     if (
