@@ -240,7 +240,7 @@ kombu==5.5.4
     # via celery
 kubernetes==31.0.0
     # via onyx
-litellm==1.83.0
+litellm==1.85.1
     # via onyx
 markupsafe==3.0.3
     # via jinja2
@@ -306,7 +306,7 @@ oauthlib==3.2.2
     # via
     #   kubernetes
     #   requests-oauthlib
-openai==2.14.0
+openai==2.38.0
     # via
     #   litellm
     #   onyx
@@ -469,7 +469,7 @@ tenacity==9.1.2
     #   voyageai
 threadpoolctl==3.6.0
     # via scikit-learn
-tiktoken==0.7.0
+tiktoken==0.8.0
     # via litellm
 tokenizers==0.22.2
     # via

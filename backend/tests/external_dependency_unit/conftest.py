@@ -15,6 +15,13 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.full_setup import ensure_full_deployment_setup
 
+# Opt into the shared @pytest.mark.secrets / test_secrets infrastructure.
+from tests.utils.pytest_secrets import (
+    pytest_collection_modifyitems as pytest_collection_modifyitems,
+)
+from tests.utils.pytest_secrets import pytest_configure as pytest_configure
+from tests.utils.pytest_secrets import test_secrets as test_secrets
+
 
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
