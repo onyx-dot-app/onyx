@@ -1684,7 +1684,14 @@ jobs:
       - merge-backend
       - merge-model-server
       - merge-sandbox
-    if: needs.determine-builds.outputs.is-cloud-tag == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
+    if: >-
+      always()
+      && needs.merge-web-cloud.result == 'success'
+      && needs.merge-backend.result == 'success'
+      && needs.merge-model-server.result == 'success'
+      && needs.merge-sandbox.result == 'success'
+      && needs.determine-builds.outputs.is-cloud-tag == 'true'
+      && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 10
