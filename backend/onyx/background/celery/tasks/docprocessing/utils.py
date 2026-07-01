@@ -221,8 +221,14 @@ def should_index(
             # )
             return False
 
-    # When switching over models, always index at least once
-    if search_settings_instance.status == IndexModelStatus.FUTURE:
+    # Legacy FUTURE reindex indexes once, then stops so the swap can fire. A
+    # port-flow FUTURE polls continuously like PRESENT (its synthetic seed primes
+    # the cursor), so skip this block and fall through.
+    # TODO(subash): drop this branch once all FUTUREs use the port flow.
+    if (
+        search_settings_instance.status == IndexModelStatus.FUTURE
+        and not search_settings_instance.use_port_flow
+    ):
         if last_index_attempt:
             # No new index if the last index attempt succeeded
             # Once is enough. The model will never be able to swap otherwise.

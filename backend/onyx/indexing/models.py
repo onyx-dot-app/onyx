@@ -197,8 +197,6 @@ class IndexingSetting(EmbeddingModelDetail):
     reduced_dimension: int | None = None
 
     switchover_type: SwitchoverType = SwitchoverType.REINDEX
-    # Reindex "port" flow gate; see SearchSettings.use_port_flow.
-    use_port_flow: bool = False
     enable_contextual_rag: bool
     contextual_rag_model_configuration_id: int | None = None
     # Deprecated: accepted for backward compat but silently ignored on write.
@@ -230,7 +228,6 @@ class IndexingSetting(EmbeddingModelDetail):
             embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
             switchover_type=search_settings.switchover_type,
-            use_port_flow=search_settings.use_port_flow,
             enable_contextual_rag=search_settings.enable_contextual_rag,
             contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         )
