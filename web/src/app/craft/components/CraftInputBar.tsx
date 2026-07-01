@@ -59,6 +59,8 @@ export interface CraftInputBarProps {
   isInterrupting?: boolean;
   /** Fired instead of adding a chip when the `/compact` command is selected. */
   onCompact?: () => void;
+  /** When false, the `/compact` command is hidden from the picker. */
+  canCompact?: boolean;
   contextUsage?: {
     usedTokens: number;
     contextLimit: number | null;
@@ -83,6 +85,7 @@ const CraftInputBar = memo(
         onInterrupt,
         isInterrupting = false,
         onCompact,
+        canCompact = false,
         contextUsage,
         initialEntries,
       },
@@ -101,10 +104,11 @@ const CraftInputBar = memo(
 
       const { data: skillsData } = useUserSkills();
       const { data: appsData } = useUserExternalApps();
-      const pickerSections = useMemo(
-        () => toPickerSections(skillsData, appsData),
-        [skillsData, appsData]
-      );
+      const pickerSections = useMemo(() => {
+        const sections = toPickerSections(skillsData, appsData);
+        // Only surface commands (e.g. /compact) when they can actually run.
+        return canCompact ? sections : { ...sections, commands: [] };
+      }, [skillsData, appsData, canCompact]);
 
       const { data: libraryTree, mutate: mutateLibrary } = useSWR(
         SWR_KEYS.buildUserLibraryTree,

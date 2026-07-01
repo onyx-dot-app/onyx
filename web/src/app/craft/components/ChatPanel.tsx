@@ -563,7 +563,8 @@ export default function BuildChatPanel({
     !displayIsRunning &&
     !isViewingSubagent &&
     !!session?.agentProvider &&
-    !!session?.agentModel;
+    !!session?.agentModel &&
+    (session?.messages.length ?? 0) > 0;
   const onCompact = useCallback(() => {
     if (canCompact && sessionId) void compact(sessionId);
   }, [canCompact, sessionId, compact]);
@@ -805,6 +806,7 @@ export default function BuildChatPanel({
                       scheduledRunInFlight ? undefined : handleInterrupt
                     }
                     onCompact={onCompact}
+                    canCompact={canCompact}
                     disabled={isViewingSubagent || scheduledRunInFlight}
                     placeholder={
                       isViewingSubagent
