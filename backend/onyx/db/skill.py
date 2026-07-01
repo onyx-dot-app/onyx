@@ -20,6 +20,7 @@ multi-step admin flow (e.g. create row + replace grants) can roll back atomicall
 
 import hashlib
 import struct
+from collections.abc import Mapping
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -464,13 +465,6 @@ def create_skill__no_commit(
     author_user_id: UUID | None,
     db_session: Session,
 ) -> Skill:
-    existing = db_session.scalars(select(Skill.id).where(Skill.slug == slug)).first()
-    if existing is not None:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"A skill with slug '{slug}' already exists.",
-        )
-
     skill = Skill(
         slug=slug,
         name=name,
@@ -519,15 +513,6 @@ def create_built_in_skill_row__no_commit(
     ``OnyxError(DUPLICATE_RESOURCE)``, which is the desired "connect Slack once"
     behaviour.
     """
-    existing = db_session.scalars(
-        select(Skill.id).where(Skill.slug == built_in_skill_id)
-    ).first()
-    if existing is not None:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"A skill with slug '{built_in_skill_id}' already exists.",
-        )
-
     skill = Skill(
         slug=built_in_skill_id,
         name=name,
@@ -605,6 +590,27 @@ def replace_skill_bundle(
     return skill, old_bundle_file_id
 
 
+def update_skill_fields(
+    *,
+    skill: Skill,
+    db_session: Session,
+    is_public: bool | None = None,
+    public_permission: SkillSharePermission | None = None,
+    enabled: bool | None = None,
+) -> Skill:
+    if is_public is not None or public_permission is not None:
+        skill.public_permission = _public_permission_for_update(
+            current_permission=skill.public_permission,
+            is_public=is_public,
+            public_permission=public_permission,
+        )
+    if enabled is not None:
+        skill.enabled = enabled
+
+    db_session.flush()
+    return skill
+
+
 def patch_skill(
     *,
     skill_id: UUID,
@@ -618,36 +624,131 @@ def patch_skill(
             f"Skill {skill_id} not found.",
         )
 
-    if not isinstance(patch.is_public, UnsetType):
-        skill.public_permission = _public_permission_for_update(
-            current_permission=skill.public_permission,
-            is_public=patch.is_public,
-            public_permission=None,
-        )
-    if not isinstance(patch.enabled, UnsetType):
-        skill.enabled = patch.enabled
+    return update_skill_fields(
+        skill=skill,
+        db_session=db_session,
+        is_public=None if isinstance(patch.is_public, UnsetType) else patch.is_public,
+        enabled=None if isinstance(patch.enabled, UnsetType) else patch.enabled,
+    )
 
-    db_session.flush()
-    return skill
+
+def replace_skill_shares(
+    *,
+    skill: Skill,
+    db_session: Session,
+    user_shares: Mapping[UUID, SkillSharePermission] | None = None,
+    group_shares: Mapping[int, SkillSharePermission] | None = None,
+) -> None:
+    if user_shares is not None:
+        db_session.execute(delete(Skill__User).where(Skill__User.skill_id == skill.id))
+        for user_id, permission in user_shares.items():
+            db_session.add(
+                Skill__User(skill_id=skill.id, user_id=user_id, permission=permission)
+            )
+
+    if group_shares is not None:
+        db_session.execute(
+            delete(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill.id)
+        )
+        for group_id, permission in group_shares.items():
+            db_session.add(
+                Skill__UserGroup(
+                    skill_id=skill.id,
+                    user_group_id=group_id,
+                    permission=permission,
+                )
+            )
+
+    try:
+        db_session.flush()
+    except IntegrityError as e:
+        if is_fk_violation(e):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "One or more share targets do not exist.",
+            ) from e
+        raise
+
+
+def transfer_skill_ownership(
+    *,
+    skill: Skill,
+    new_owner_user_id: UUID,
+    db_session: Session,
+) -> None:
+    if skill.built_in_skill_id is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Skill '{skill.slug}' is a built-in and cannot have its ownership transferred.",
+        )
+
+    previous_owner_user_id = skill.author_user_id
+    if new_owner_user_id == previous_owner_user_id:
+        return
+
+    try:
+        with db_session.no_autoflush:
+            skill.author_user_id = new_owner_user_id
+
+            db_session.execute(
+                delete(Skill__User).where(
+                    Skill__User.skill_id == skill.id,
+                    Skill__User.user_id == new_owner_user_id,
+                )
+            )
+
+            if previous_owner_user_id is not None:
+                existing_share = db_session.scalar(
+                    select(Skill__User).where(
+                        Skill__User.skill_id == skill.id,
+                        Skill__User.user_id == previous_owner_user_id,
+                    )
+                )
+                if existing_share is not None:
+                    existing_share.permission = SkillSharePermission.EDITOR
+                else:
+                    db_session.add(
+                        Skill__User(
+                            skill_id=skill.id,
+                            user_id=previous_owner_user_id,
+                            permission=SkillSharePermission.EDITOR,
+                        )
+                    )
+
+        db_session.flush()
+    except IntegrityError as e:
+        if is_fk_violation(e):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "New owner user does not exist.",
+            ) from e
+        raise
 
 
 def replace_skill_grants(
     skill_id: UUID, group_ids: Sequence[int], db_session: Session
 ) -> None:
-    if fetch_skill_by_id(skill_id, db_session) is None:
+    skill = fetch_skill_by_id(skill_id, db_session)
+    if skill is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"Skill {skill_id} not found.",
         )
-    db_session.execute(
-        delete(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill_id)
-    )
-    seen: set[int] = set()
+    group_shares: dict[int, SkillSharePermission] = {}
     for group_id in group_ids:
-        if group_id in seen:
-            continue
-        seen.add(group_id)
-        db_session.add(Skill__UserGroup(skill_id=skill_id, user_group_id=group_id))
+        group_shares.setdefault(group_id, SkillSharePermission.VIEWER)
+
+    db_session.execute(
+        delete(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill.id)
+    )
+    for group_id, permission in group_shares.items():
+        db_session.add(
+            Skill__UserGroup(
+                skill_id=skill.id,
+                user_group_id=group_id,
+                permission=permission,
+            )
+        )
     try:
         db_session.flush()
     except IntegrityError as e:
