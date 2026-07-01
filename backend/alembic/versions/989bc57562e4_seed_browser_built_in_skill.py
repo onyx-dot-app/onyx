@@ -47,7 +47,7 @@ _skill_table = sa.table(
     sa.column("bundle_file_id", sa.String),
     sa.column("bundle_sha256", sa.String),
     sa.column("author_user_id", postgresql.UUID(as_uuid=True)),
-    sa.column("is_public", sa.Boolean),
+    sa.column("public_permission", sa.String),
     sa.column("enabled", sa.Boolean),
 )
 
@@ -78,7 +78,7 @@ def upgrade() -> None:
                 "bundle_file_id": None,
                 "bundle_sha256": None,
                 "author_user_id": None,
-                "is_public": True,
+                "public_permission": "VIEWER",
                 "enabled": True,
             }
         ]
