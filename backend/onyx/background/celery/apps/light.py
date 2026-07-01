@@ -70,6 +70,7 @@ def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: AR
 def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
     task_name = getattr(sender, "name", None) or str(sender)
     on_celery_task_revoked(kwargs.get("task_id"), task_name)
+    app_base.on_task_revoked(**kwargs)
 
 
 @signals.task_rejected.connect
