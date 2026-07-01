@@ -28,16 +28,19 @@ class PgRedisKVStore(KeyValueStore):
         return self._cache
 
     def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
-        # Not encrypted in Cache backend (typically Redis), but encrypted in Postgres
+        # Encrypted values are protected at rest in Postgres; never mirror them to the
+        # cache backend (typically Redis) in plaintext. Cache only non-encrypted values,
+        # and drop any stale plaintext entry a prior write may have left for this key.
         try:
-            self._get_cache().set(
-                REDIS_KEY_PREFIX + key, json.dumps(val), ex=KV_REDIS_KEY_EXPIRATION
-            )
+            if encrypt:
+                self._get_cache().delete(REDIS_KEY_PREFIX + key)
+            else:
+                self._get_cache().set(
+                    REDIS_KEY_PREFIX + key, json.dumps(val), ex=KV_REDIS_KEY_EXPIRATION
+                )
         except Exception as e:
             # Fallback gracefully to Postgres if Cache backend fails
-            logger.error(
-                "Failed to set value in Cache backend for key '%s': %s", key, str(e)
-            )
+            logger.error("Failed to update Cache backend for key '%s': %s", key, str(e))
 
         encrypted_val = val if encrypt else None
         plain_val = val if not encrypt else None
@@ -70,22 +73,27 @@ class PgRedisKVStore(KeyValueStore):
 
             if obj.value is not None:
                 value = obj.value
+                cacheable = True
             elif obj.encrypted_value is not None:
                 # Unwrap SensitiveValue - this is internal backend use
                 value = obj.encrypted_value.get_value(apply_mask=False)
+                # Encrypted-at-rest secret: never repopulate the plaintext cache
+                cacheable = False
             else:
                 value = None
+                cacheable = True
 
-            try:
-                self._get_cache().set(
-                    REDIS_KEY_PREFIX + key,
-                    json.dumps(value),
-                    ex=KV_REDIS_KEY_EXPIRATION,
-                )
-            except Exception as e:
-                logger.error(
-                    "Failed to set value in cache for key '%s': %s", key, str(e)
-                )
+            if cacheable:
+                try:
+                    self._get_cache().set(
+                        REDIS_KEY_PREFIX + key,
+                        json.dumps(value),
+                        ex=KV_REDIS_KEY_EXPIRATION,
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Failed to set value in cache for key '%s': %s", key, str(e)
+                    )
 
             return cast(JSON_ro, value)
 

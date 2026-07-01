@@ -129,3 +129,38 @@ class TestCacheFailureGracefulDegradation:
         kv.store("survive", 42)
         loaded = kv.load("survive")
         assert loaded == 42
+
+
+class TestEncryptedValuesNotCached:
+    """Encrypted-at-rest KV values (connector secrets, OAuth tokens) must never be
+    mirrored to the cache backend in plaintext."""
+
+    def test_store_with_encrypt_does_not_cache_plaintext(
+        self, kv_store: PgRedisKVStore, pg_cache: PostgresCacheBackend
+    ) -> None:
+        kv_store.store("secret_a", {"token": "s3cr3t"}, encrypt=True)
+
+        # the secret is never written to the cache backend...
+        assert pg_cache.get(REDIS_KEY_PREFIX + "secret_a") is None
+        # ...but still loads correctly from Postgres
+        assert kv_store.load("secret_a") == {"token": "s3cr3t"}
+
+    def test_encrypted_load_does_not_repopulate_cache(
+        self, kv_store: PgRedisKVStore, pg_cache: PostgresCacheBackend
+    ) -> None:
+        kv_store.store("secret_b", {"token": "abc"}, encrypt=True)
+
+        # a load is a cache miss that falls through to Postgres. It must not
+        # repopulate the cache with the decrypted secret
+        assert kv_store.load("secret_b") == {"token": "abc"}
+        assert pg_cache.get(REDIS_KEY_PREFIX + "secret_b") is None
+
+    def test_store_with_encrypt_drops_stale_plaintext_entry(
+        self, kv_store: PgRedisKVStore, pg_cache: PostgresCacheBackend
+    ) -> None:
+        # a plaintext entry left by an earlier (pre-fix) write
+        pg_cache.set(REDIS_KEY_PREFIX + "secret_c", json.dumps({"old": "plain"}))
+
+        kv_store.store("secret_c", {"token": "new"}, encrypt=True)
+
+        assert pg_cache.get(REDIS_KEY_PREFIX + "secret_c") is None
