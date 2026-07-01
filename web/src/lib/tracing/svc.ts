@@ -77,7 +77,8 @@ export async function disconnectTracingProvider(
     body: JSON.stringify({
       provider_type: providerType,
       api_key: null,
-      api_key_changed: false,
+      // Clear any stored credential rather than keeping it on a disabled row.
+      api_key_changed: true,
       config,
       enabled: false,
     }),

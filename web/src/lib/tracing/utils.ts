@@ -44,6 +44,13 @@ export const TRACING_PROVIDER_DETAILS: Record<
         defaultValue: "Onyx",
         help: "Braintrust project name traces are logged to.",
       },
+      {
+        name: "api_url",
+        label: "API URL",
+        placeholder: "https://api.braintrust.dev",
+        optional: true,
+        help: "Default to the US region. Paste your Braintrust API URL for other regions or self-hosting.",
+      },
     ],
   },
   langfuse: {
