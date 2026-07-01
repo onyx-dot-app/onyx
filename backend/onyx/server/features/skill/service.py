@@ -1,4 +1,4 @@
-from typing import Final
+from typing import BinaryIO
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -26,22 +26,16 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.server.features.skill.models import SkillShareRequest
 from onyx.server.features.skill.models import TransferSkillOwnershipRequest
-from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
+from onyx.server.features.skill.mutation_helpers import ingested_skill_bundle
+from onyx.server.features.skill.mutation_helpers import reject_reserved_skill_slug
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import read_custom_bundle_instructions
 from onyx.skills.bundle import rewrite_custom_bundle_skill_md
-from onyx.skills.bundle import slug_from_filename
 from onyx.skills.content import read_custom_skill_bundle_bytes
 from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.ingest import save_skill_bundle_bytes
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
-
-_RESERVED_SKILL_SLUGS: Final[frozenset[str]] = frozenset(BUILT_IN_SKILLS) | frozenset(
-    EXTERNAL_APP_BUILT_IN_SKILL_IDS.values()
-)
 
 
 def user_permission_for_skill(
@@ -136,19 +130,13 @@ def get_editable_custom_skill(
 
 def create_custom_skill_for_user(
     *,
-    bundle_bytes: bytes,
+    bundle_file: BinaryIO,
     filename: str | None,
     user: User,
     db_session: Session,
 ) -> Skill:
-    slug = slug_from_filename(filename)
-    if slug in _RESERVED_SKILL_SLUGS:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
-
-    file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(bundle_bytes, filename, file_store, slug=slug)
-
-    try:
+    reject_reserved_skill_slug(filename)
+    with ingested_skill_bundle(bundle_file=bundle_file, filename=filename) as ingested:
         skill = create_skill__no_commit(
             slug=ingested.slug,
             name=ingested.name,
@@ -160,9 +148,6 @@ def create_custom_skill_for_user(
             db_session=db_session,
         )
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     push_skill_to_affected_sandboxes(skill, db_session)
     return skill
@@ -397,22 +382,18 @@ def transfer_custom_skill_ownership_for_user(
 def replace_custom_skill_bundle_for_user(
     *,
     skill_id: UUID,
-    bundle_bytes: bytes,
+    bundle_file: BinaryIO,
     filename: str | None,
     user: User,
     db_session: Session,
 ) -> Skill:
     skill = get_editable_custom_skill(skill_id, user, db_session)
 
-    file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        bundle_bytes,
-        filename,
-        file_store,
+    with ingested_skill_bundle(
+        bundle_file=bundle_file,
+        filename=filename,
         slug=skill.slug,
-    )
-
-    try:
+    ) as ingested:
         old_file_id = replace_skill_bundle(
             skill=skill,
             new_bundle_file_id=ingested.bundle_file_id,
@@ -422,13 +403,10 @@ def replace_custom_skill_bundle_for_user(
             db_session=db_session,
         )
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     updated = _refetch_skill_or_404(skill_id, db_session)
     push_skill_to_affected_sandboxes(updated, db_session)
-    delete_bundle_blob(file_store, old_file_id)
+    delete_bundle_blob(get_default_file_store(), old_file_id)
     return updated
 
 
