@@ -44,99 +44,22 @@ from onyx.server.features.skill.models import PersonalSkillPatchRequest
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.server.features.skill.models import SkillPreviewResponse
 from onyx.server.features.skill.models import SkillsList
-from onyx.server.features.skill.service import ensure_custom_skill
-from onyx.server.features.skill.service import ensure_owned_personal_skill
-from onyx.server.features.skill.service import ingested_skill_bundle
-from onyx.server.features.skill.service import reject_reserved_skill_slug
-from onyx.server.features.skill.service import replace_custom_skill_bundle_contents
+from onyx.server.features.skill.mutation_helpers import ensure_custom_skill
+from onyx.server.features.skill.mutation_helpers import ensure_owned_personal_skill
+from onyx.server.features.skill.mutation_helpers import ingested_skill_bundle
+from onyx.server.features.skill.mutation_helpers import reject_reserved_skill_slug
+from onyx.server.features.skill.mutation_helpers import (
+    replace_custom_skill_bundle_contents,
+)
+from onyx.server.features.skill.response_helpers import preview_response_for_skill
+from onyx.server.features.skill.response_helpers import split_skill_rows
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.content import read_builtin_skill_instructions
-from onyx.skills.content import read_custom_skill_bundle_instructions
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/skills")
 user_router = APIRouter(prefix="/skills")
-
-
-def _split_rows(
-    rows: list[Skill],
-    db_session: Session,
-    *,
-    include_grants: bool,
-) -> tuple[list[BuiltinSkillResponse], list[CustomSkillResponse]]:
-    """Partition a flat row list into built-in + custom responses.
-
-    A row with an unknown ``built_in_skill_id`` (definition was removed
-    in code without cleaning up the seeded row) is logged and dropped —
-    we don't surface a half-broken built-in to admins. ``include_grants``
-    only applies to custom skills; built-ins are not group-shareable.
-    """
-    builtins: list[BuiltinSkillResponse] = []
-    customs: list[CustomSkillResponse] = []
-
-    # User paths withhold group ids but still need grant existence so a
-    # grants-shared skill isn't reported as personal.
-    custom_ids = [s.id for s in rows if s.built_in_skill_id is None]
-    granted_skill_ids: set[UUID] = set()
-    if custom_ids:
-        granted_skill_ids = skill_ids_with_grants(custom_ids, db_session)
-
-    for skill in rows:
-        if skill.built_in_skill_id is not None:
-            definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
-            if definition is None:
-                logger.warning(
-                    "Skill row %s references unknown built-in %s; hiding from listing",
-                    skill.slug,
-                    skill.built_in_skill_id,
-                )
-                continue
-            builtins.append(
-                BuiltinSkillResponse.from_row(skill, definition, db_session)
-            )
-        elif include_grants:
-            group_ids = get_group_ids_for_skill(skill.id, db_session)
-            customs.append(
-                CustomSkillResponse.from_model(
-                    skill,
-                    group_ids=group_ids,
-                    has_grants=skill.id in granted_skill_ids,
-                )
-            )
-        else:
-            customs.append(
-                CustomSkillResponse.from_model(
-                    skill,
-                    group_ids=[],
-                    has_grants=skill.id in granted_skill_ids,
-                )
-            )
-
-    return builtins, customs
-
-
-def _preview_response_for_skill(
-    skill: Skill,
-) -> SkillPreviewResponse:
-    if skill.built_in_skill_id is not None:
-        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
-        if definition is None:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-        return SkillPreviewResponse.from_builtin(
-            skill,
-            instructions_markdown=read_builtin_skill_instructions(definition),
-        )
-
-    instructions_markdown = read_custom_skill_bundle_instructions(skill)
-    return SkillPreviewResponse.from_custom(
-        skill,
-        instructions_markdown=instructions_markdown,
-    )
 
 
 @admin_router.get("")
@@ -151,7 +74,7 @@ def list_skills_admin(
             db_session=db_session,
         )
     )
-    builtins, customs = _split_rows(rows, db_session, include_grants=True)
+    builtins, customs = split_skill_rows(rows, db_session, include_grants=True)
     return SkillsList(builtins=builtins, customs=customs)
 
 
@@ -164,7 +87,7 @@ def preview_skill_admin(
     skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    return _preview_response_for_skill(skill)
+    return preview_response_for_skill(skill)
 
 
 @admin_router.post("/custom")
@@ -306,7 +229,7 @@ def list_skills_for_current_user(
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
     rows = list(list_skills_for_user(user=user, db_session=db_session))
-    builtins, customs = _split_rows(rows, db_session, include_grants=False)
+    builtins, customs = split_skill_rows(rows, db_session, include_grants=False)
     return SkillsList(builtins=builtins, customs=customs)
 
 
@@ -353,7 +276,7 @@ def preview_skill_for_current_user(
     if found is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    return _preview_response_for_skill(found)
+    return preview_response_for_skill(found)
 
 
 @user_router.post("/custom")

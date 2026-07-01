@@ -19,7 +19,7 @@ from onyx.server.features.skill.api import patch_personal_skill
 from onyx.server.features.skill.api import replace_personal_skill_bundle
 from onyx.server.features.skill.models import CustomSkillResponse
 from onyx.server.features.skill.models import PersonalSkillPatchRequest
-from onyx.server.features.skill.service import ensure_owned_personal_skill
+from onyx.server.features.skill.mutation_helpers import ensure_owned_personal_skill
 
 
 def _custom_skill(
@@ -78,7 +78,7 @@ def test_directly_shared_skill_cannot_use_personal_mutation_path(
     user = cast(User, SimpleNamespace(id=author_user_id))
     db_session = cast(Session, MagicMock())
     monkeypatch.setattr(
-        "onyx.server.features.skill.service.skill_ids_with_grants",
+        "onyx.server.features.skill.mutation_helpers.skill_ids_with_grants",
         lambda _skill_ids, _db_session: {skill.id},
     )
 
@@ -102,7 +102,7 @@ def test_create_personal_skill_rejects_quota_before_reading_bundle(
         lambda _user_id, _db_session: MAX_PERSONAL_SKILLS_PER_USER,
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.service.read_bundle_file", read_bundle_file
+        "onyx.server.features.skill.mutation_helpers.read_bundle_file", read_bundle_file
     )
 
     with pytest.raises(OnyxError):
@@ -128,7 +128,7 @@ def test_replace_personal_skill_bundle_authorizes_before_reading_bundle(
         lambda _skill_id, _db_session: skill,
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.service.read_bundle_file", read_bundle_file
+        "onyx.server.features.skill.mutation_helpers.read_bundle_file", read_bundle_file
     )
 
     with pytest.raises(OnyxError):
@@ -156,7 +156,7 @@ def test_noop_personal_patch_does_not_push_sandboxes(
         lambda _skill_id, _db_session: skill,
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.service.skill_ids_with_grants",
+        "onyx.server.features.skill.mutation_helpers.skill_ids_with_grants",
         lambda _skill_ids, _db_session: set(),
     )
     monkeypatch.setattr(

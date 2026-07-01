@@ -25,7 +25,7 @@ from onyx.db.models import User
 from onyx.db.skill import fetch_skill_for_user
 from onyx.db.skill import list_skills_for_user
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill.service import ensure_custom_skill
+from onyx.server.features.skill.mutation_helpers import ensure_custom_skill
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
