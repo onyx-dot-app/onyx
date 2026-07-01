@@ -53,6 +53,7 @@ from onyx.db.port_attempt import get_active_port_attempt
 from onyx.db.port_attempt import get_latest_port_attempt
 from onyx.db.port_attempt import get_port_attempt
 from onyx.db.port_attempt import get_stale_in_progress_port_attempts
+from onyx.db.port_attempt import mark_port_canceled
 from onyx.db.port_attempt import mark_port_failed
 from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
@@ -173,6 +174,11 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 attempt.status.value,
             )
             return
+        if attempt.cancel_requested:
+            # nothing written yet; ack immediately
+            mark_port_canceled(db_session, port_attempt_id)
+            log.info("Port cancel requested at startup; acknowledged and stopping")
+            return
 
         cc_pair_id = attempt.cc_pair_id
         # Replace extra (a read-only Mapping) so every later line carries the cc_pair.
@@ -223,12 +229,17 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
     start_monotonic = time.monotonic()
     chunks_ported = 0
 
-    # Per page: abort if the attempt went terminal (e.g. cancelled by a deletion),
-    # else heartbeat so the stall watchdog doesn't fail a port mid-batch.
+    # Per page: stop on terminal or cancel_requested, else heartbeat so the watchdog
+    # doesn't fail a live port. Aborting stops writes; the ack (-> CANCELED) happens
+    # at the batch-loop top, after this page, keeping cleanup the last writer.
     def _should_abort() -> bool:
         with get_session_with_current_tenant() as db_session:
             attempt = get_port_attempt(db_session, port_attempt_id)
-            if attempt is None or attempt.status.is_terminal():
+            if (
+                attempt is None
+                or attempt.status.is_terminal()
+                or attempt.cancel_requested
+            ):
                 return True
             touch_port_progress(db_session, port_attempt_id)
             return False
@@ -247,11 +258,20 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             if attempt is None or attempt.status.is_terminal():
                 log.info("PortAttempt gone/terminal, stopping")
                 return
+            if attempt.cancel_requested:
+                # ack between batches, after our last write: this unblocks the waiting
+                # deletion, so its cleanup writes strictly after us
+                mark_port_canceled(db_session, port_attempt_id)
+                log.info("Port cancel requested; acknowledged and stopping")
+                return
             cc_pair = get_connector_credential_pair_from_id(db_session, cc_pair_id)
             if (
                 cc_pair is None
                 or cc_pair.status == ConnectorCredentialPairStatus.DELETING
             ):
+                # A deletion is waiting on us; ack now (between batches, after our last
+                # write) so it proceeds next tick instead of waiting out the watchdog.
+                mark_port_canceled(db_session, port_attempt_id)
                 log.info("cc_pair gone/deleting, stopping port")
                 return
             doc_ids = get_document_ids_for_cc_pair_batch(

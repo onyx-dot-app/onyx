@@ -37,6 +37,11 @@ from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
 logger = setup_logger()
 
+# Chunks per create-only write. AUGMENTATION buffers a whole batch into one page, so
+# an unbounded write could run minutes with no heartbeat and get a live port falsely
+# stall-failed. Matches the MODEL_ONLY per-page size the watchdog already tolerates.
+_PORT_WRITE_PAGE_SIZE = 1000
+
 
 def _build_augmentation_ctx(
     future_search_settings: SearchSettings,
@@ -115,8 +120,14 @@ def copy_present_chunks_to_future(
             reembedded = [c for c in reembedded if c.document_id in surviving]
             if not reembedded:
                 continue
-        future_index.index_raw_chunks(reembedded, use_create_only=True)
-        chunks_written += len(reembedded)
+        # Sub-page the write, heartbeating (via should_abort) before each, so one
+        # write can't outlast the watchdog and get this live port falsely failed.
+        for i in range(0, len(reembedded), _PORT_WRITE_PAGE_SIZE):
+            if should_abort is not None and should_abort():
+                return chunks_written
+            sub = reembedded[i : i + _PORT_WRITE_PAGE_SIZE]
+            future_index.index_raw_chunks(sub, use_create_only=True)
+            chunks_written += len(sub)
     return chunks_written
 
 

@@ -10,6 +10,12 @@ Mode C (INSTANT) swaps immediately; the legacy (flag-off) path is untouched.
 `_port_swap_ready` is tested directly with an explicit required list (isolated
 from other cc_pairs); the `check_and_perform_index_swap` cases patch
 `_perform_index_swap` so no destructive real swap runs.
+
+The two-phase-cancel tests at the bottom cover the port_attempt DB contract that
+keeps connector deletion the last writer: `request_port_cancel` leaves an IN_PROGRESS
+port active until the task acks CANCELED after its last write, cancels a NOT_STARTED
+port outright, `mark_port_in_progress` starts only NOT_STARTED (no double writer), and
+`cancel_active_port_attempts` (the swap path) uses the same two-phase rule.
 """
 
 from collections.abc import Generator
@@ -23,14 +29,19 @@ from onyx.configs.constants import DocumentSource
 from onyx.db import swap_index
 from onyx.db.document import mark_document_synced_secondary_pending
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import PortAttemptStatus
 from onyx.db.enums import SwitchoverType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import PortAttempt
 from onyx.db.models import SearchSettings
+from onyx.db.port_attempt import cancel_active_port_attempts
 from onyx.db.port_attempt import create_port_attempt
+from onyx.db.port_attempt import get_active_port_attempt
+from onyx.db.port_attempt import mark_port_canceled
 from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
+from onyx.db.port_attempt import request_port_cancel
 from onyx.db.swap_index import _port_swap_ready
 from onyx.db.swap_index import _required_cc_pairs_for_switchover
 from onyx.db.swap_index import check_and_perform_index_swap
@@ -250,3 +261,129 @@ def test_legacy_path_does_not_consult_port_helpers(
     # legacy REINDEX holds (cc_pairs without successful FUTURE indexings) -> no swap
     assert result is None
     mock_swap.assert_not_called()
+
+
+# --- two-phase cancel: the port_attempt contract that keeps deletion the last writer
+
+
+def _port_row(db_session: Session, attempt_id: int) -> PortAttempt:
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt_id)
+    assert row is not None
+    return row
+
+
+def test_request_cancel_not_started_terminalizes(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """NOT_STARTED: cancel outright so a waiting deletion can proceed — a mere flag
+    would wedge it (NOT_STARTED is invisible to the stall watchdog)."""
+    cc_pair, future_id = cc_pair_and_future
+    attempt = create_port_attempt(db_session, cc_pair.id, future_id)
+
+    request_port_cancel(db_session, attempt.id)
+
+    assert _port_row(db_session, attempt.id).status == PortAttemptStatus.CANCELED
+    assert get_active_port_attempt(db_session, cc_pair.id, future_id) is None
+
+
+def test_request_cancel_in_progress_flags_but_stays_active(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """IN_PROGRESS: flag only, row stays active — a waiter must keep blocking until
+    the task itself acks after its last write."""
+    cc_pair, future_id = cc_pair_and_future
+    attempt = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, attempt.id)
+
+    request_port_cancel(db_session, attempt.id)
+
+    row = _port_row(db_session, attempt.id)
+    assert row.status == PortAttemptStatus.IN_PROGRESS
+    assert row.cancel_requested is True
+    still_active = get_active_port_attempt(db_session, cc_pair.id, future_id)
+    assert still_active is not None and still_active.id == attempt.id
+
+
+def test_in_progress_ack_unblocks_waiter(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The task's ack (mark_port_canceled) is what flips the row terminal and lets
+    the waiter proceed — get_active_port_attempt returns None only after it."""
+    cc_pair, future_id = cc_pair_and_future
+    attempt = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, attempt.id)
+    request_port_cancel(db_session, attempt.id)
+    assert get_active_port_attempt(db_session, cc_pair.id, future_id) is not None
+
+    mark_port_canceled(db_session, attempt.id)
+
+    assert _port_row(db_session, attempt.id).status == PortAttemptStatus.CANCELED
+    assert get_active_port_attempt(db_session, cc_pair.id, future_id) is None
+
+
+def test_request_cancel_terminal_is_noop(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, future_id = cc_pair_and_future
+    attempt = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, attempt.id)
+    mark_port_succeeded(db_session, attempt.id)
+
+    request_port_cancel(db_session, attempt.id)
+
+    row = _port_row(db_session, attempt.id)
+    assert row.status == PortAttemptStatus.SUCCESS
+    assert row.cancel_requested is False
+
+
+def test_mark_in_progress_rejects_duplicate_and_terminal(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Only a NOT_STARTED row may start. A re-dispatched duplicate (already
+    IN_PROGRESS) and a terminal row are both rejected, so one attempt never runs two
+    concurrent writers."""
+    cc_pair, future_id = cc_pair_and_future
+    attempt = create_port_attempt(db_session, cc_pair.id, future_id)
+
+    assert mark_port_in_progress(db_session, attempt.id) is True
+    assert mark_port_in_progress(db_session, attempt.id) is False  # duplicate
+
+    mark_port_canceled(db_session, attempt.id)
+    assert mark_port_in_progress(db_session, attempt.id) is False  # terminal
+
+
+def test_cancel_active_port_attempts_is_two_phase(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """The swap-path bulk cancel uses the same two-phase rule: NOT_STARTED ->
+    CANCELED, IN_PROGRESS -> flagged-but-active (so a concurrent deletion waiting on
+    that port isn't unblocked mid-write)."""
+    future_id = make_future_search_settings(db_session).id
+    # active-unique is per (cc_pair, ss), so use two cc_pairs on one FUTURE
+    not_started_pair = make_cc_pair(db_session)
+    in_progress_pair = make_cc_pair(db_session)
+    try:
+        ns = create_port_attempt(db_session, not_started_pair.id, future_id)
+        ip = create_port_attempt(db_session, in_progress_pair.id, future_id)
+        mark_port_in_progress(db_session, ip.id)
+
+        affected = cancel_active_port_attempts(db_session, future_id)
+
+        assert affected == 2
+        assert _port_row(db_session, ns.id).status == PortAttemptStatus.CANCELED
+        ip_row = _port_row(db_session, ip.id)
+        assert ip_row.status == PortAttemptStatus.IN_PROGRESS
+        assert ip_row.cancel_requested is True
+        assert (
+            get_active_port_attempt(db_session, in_progress_pair.id, future_id)
+            is not None
+        )
+    finally:
+        for pair in (not_started_pair, in_progress_pair):
+            cleanup_cc_pair(db_session, pair)
+        db_session.query(PortAttempt).filter(
+            PortAttempt.search_settings_id == future_id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
