@@ -592,37 +592,43 @@ def transfer_skill_ownership(
     if new_owner_user_id == previous_owner_user_id:
         return
 
-    skill.author_user_id = new_owner_user_id
+    try:
+        with db_session.no_autoflush:
+            skill.author_user_id = new_owner_user_id
 
-    db_session.execute(
-        delete(Skill__User).where(
-            Skill__User.skill_id == skill.id,
-            Skill__User.user_id == new_owner_user_id,
-        )
-    )
-
-    if (
-        previous_owner_user_id is not None
-        and previous_owner_user_id != new_owner_user_id
-    ):
-        existing_share = db_session.scalar(
-            select(Skill__User).where(
-                Skill__User.skill_id == skill.id,
-                Skill__User.user_id == previous_owner_user_id,
-            )
-        )
-        if existing_share is not None:
-            existing_share.permission = SkillSharePermission.EDITOR
-        else:
-            db_session.add(
-                Skill__User(
-                    skill_id=skill.id,
-                    user_id=previous_owner_user_id,
-                    permission=SkillSharePermission.EDITOR,
+            db_session.execute(
+                delete(Skill__User).where(
+                    Skill__User.skill_id == skill.id,
+                    Skill__User.user_id == new_owner_user_id,
                 )
             )
 
-    db_session.flush()
+            if previous_owner_user_id is not None:
+                existing_share = db_session.scalar(
+                    select(Skill__User).where(
+                        Skill__User.skill_id == skill.id,
+                        Skill__User.user_id == previous_owner_user_id,
+                    )
+                )
+                if existing_share is not None:
+                    existing_share.permission = SkillSharePermission.EDITOR
+                else:
+                    db_session.add(
+                        Skill__User(
+                            skill_id=skill.id,
+                            user_id=previous_owner_user_id,
+                            permission=SkillSharePermission.EDITOR,
+                        )
+                    )
+
+        db_session.flush()
+    except IntegrityError as e:
+        if is_fk_violation(e):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "New owner user does not exist.",
+            ) from e
+        raise
 
 
 def delete_skill(skill: Skill, db_session: Session) -> str | None:
