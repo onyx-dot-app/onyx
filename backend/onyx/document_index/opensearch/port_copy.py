@@ -82,8 +82,10 @@ def copy_present_chunks_to_future(
     augmentation_ctx: AugmentationReembedContext | None = None,
     surviving_doc_ids: Callable[[], set[str]] | None = None,
     should_abort: Callable[[], bool] | None = None,
-) -> int:
-    """Port one batch of documents PRESENT -> FUTURE; returns chunks written.
+) -> tuple[int, bool]:
+    """Port one batch PRESENT -> FUTURE; returns (chunks written, aborted).
+    aborted=True means should_abort stopped the copy mid-batch, so the caller
+    must not advance its cursor past this partially-ported batch.
 
     Both callbacks run per page right before the write (after the slow re-embed):
     surviving_doc_ids drops chunks of docs deleted mid-batch (no resurrection);
@@ -112,7 +114,7 @@ def copy_present_chunks_to_future(
             continue
         # Stop writing the instant the attempt is cancelled (e.g. by a deletion).
         if should_abort is not None and should_abort():
-            break
+            return chunks_written, True
         # Drop chunks of docs deleted mid-batch — create-only would otherwise
         # re-add them to FUTURE (resurrection).
         if surviving_doc_ids is not None:
@@ -124,11 +126,11 @@ def copy_present_chunks_to_future(
         # write can't outlast the watchdog and get this live port falsely failed.
         for i in range(0, len(reembedded), _PORT_WRITE_PAGE_SIZE):
             if should_abort is not None and should_abort():
-                return chunks_written
+                return chunks_written, True
             sub = reembedded[i : i + _PORT_WRITE_PAGE_SIZE]
             future_index.index_raw_chunks(sub, use_create_only=True)
             chunks_written += len(sub)
-    return chunks_written
+    return chunks_written, False
 
 
 class PortCopier:
@@ -162,7 +164,7 @@ class PortCopier:
         doc_ids: list[str],
         surviving_doc_ids: Callable[[], set[str]] | None = None,
         should_abort: Callable[[], bool] | None = None,
-    ) -> int:
+    ) -> tuple[int, bool]:
         return copy_present_chunks_to_future(
             present_client=self._present_client,
             future_index=self._future_index,

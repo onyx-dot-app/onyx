@@ -111,8 +111,10 @@ def _copy_batch_with_retry(
     log: logging.LoggerAdapter,
     surviving_doc_ids: Callable[[], set[str]] | None = None,
     should_abort: Callable[[], bool] | None = None,
-) -> int:
+) -> tuple[int, bool]:
     """Copy one batch, retrying up to _PORT_BATCH_MAX_RETRIES on any failure.
+    Returns (chunks written, aborted); aborted=True means should_abort stopped
+    the copy mid-batch, so the caller must not advance its cursor past it.
 
     Re-raises the last error on exhaustion so the caller fails the attempt with
     the cursor still at the prior good batch. Retrying is safe because the write
@@ -294,7 +296,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 )
 
         try:
-            chunks_ported += _copy_batch_with_retry(
+            batch_chunks, aborted = _copy_batch_with_retry(
                 copier,
                 doc_ids,
                 log,
@@ -306,6 +308,12 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             with get_session_with_current_tenant() as db_session:
                 mark_port_failed(db_session, port_attempt_id, error_msg=str(e))
             return
+
+        chunks_ported += batch_chunks
+        if aborted:
+            # Tail was never written; advancing the cursor would skip it forever
+            # on a FAILED resume. Loop back so the top does the terminal/cancel ack.
+            continue
 
         cursor = doc_ids[-1]
         docs_ported += len(doc_ids)
