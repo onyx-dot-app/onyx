@@ -62,13 +62,16 @@ def update_token_limit_settings(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> TokenRateLimitDisplay:
-    return TokenRateLimitDisplay.from_db(
+    rate_limit_display = TokenRateLimitDisplay.from_db(
         update_token_rate_limit(
             db_session=db_session,
             token_rate_limit_id=token_rate_limit_id,
             token_rate_limit_settings=token_limit_settings,
         )
     )
+    # enabling/disabling a limit changes whether any rate limit exists
+    invalidate_any_rate_limit_exists_cache()
+    return rate_limit_display
 
 
 @router.delete("/rate-limit/{token_rate_limit_id}")
@@ -77,7 +80,9 @@ def delete_token_limit_settings(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    return delete_token_rate_limit(
+    delete_token_rate_limit(
         db_session=db_session,
         token_rate_limit_id=token_rate_limit_id,
     )
+    # removing a limit can change whether any rate limit exists
+    invalidate_any_rate_limit_exists_cache()
