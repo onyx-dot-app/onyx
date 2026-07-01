@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import AbstractContextManager
 from contextlib import nullcontext
@@ -151,6 +152,28 @@ class OpenSearchServerSideTimeout(Exception):
     """
     A server-side timeout occurred when searching an OpenSearch index.
     """
+
+
+def _summarize_bulk_errors(errors: list[dict[str, Any]]) -> str:
+    """Reduce raw bulk per-item errors to (op, status, type) counts.
+
+    error.reason / caused_by echo a preview of the offending document's field
+    values; dumping them into an exception message would leak indexed content
+    into logs, so only op/status/type are surfaced.
+    """
+    counts: Counter[tuple[str, Any, str]] = Counter()
+    for error in errors:
+        op, item = next(iter(error.items()), ("", {}))
+        item = item if isinstance(item, dict) else {}
+        err_obj = item.get("error")
+        err_type = err_obj.get("type", "") if isinstance(err_obj, dict) else ""
+        counts[(op, item.get("status", 0), err_type)] += 1
+    return ", ".join(
+        f"{count}x op={op or 'unknown'} status={status} type={err_type or 'unknown'}"
+        for (op, status, err_type), count in sorted(
+            counts.items(), key=lambda kv: str(kv)
+        )
+    )
 
 
 def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
@@ -996,7 +1019,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         if fatal:
             raise OpenSearchIndexError(
                 f"Failed to bulk index documents for index {self._index_name}. "
-                f"{len(fatal)} fatal error(s) occurred: {fatal}"
+                f"{len(fatal)} fatal error(s) occurred: {_summarize_bulk_errors(fatal)}"
             )
         return benign
 
@@ -1287,8 +1310,9 @@ class OpenSearchIndexClient(OpenSearchClient):
 
             if fatal_errors:
                 raise OpenSearchUpdateError(
-                    f"Failed to bulk update document chunks for index {self._index_name}. At least "
-                    f"one fatal error occurred: {fatal_errors[0]}"
+                    f"Failed to bulk update document chunks for index {self._index_name}. "
+                    f"{len(fatal_errors)} fatal error(s) occurred: "
+                    f"{_summarize_bulk_errors(fatal_errors)}"
                 )
 
             data = []
