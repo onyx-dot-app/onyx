@@ -26,7 +26,7 @@ export function TracingDisconnectModal({
   async function handleDisconnect() {
     setIsSubmitting(true);
     try {
-      await disconnectTracingProvider(target.providerType);
+      await disconnectTracingProvider(target.providerType, target.config);
       toast.success(`${target.label} disconnected`);
       await onDisconnected();
       onClose?.();

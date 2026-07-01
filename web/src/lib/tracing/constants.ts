@@ -1,3 +1,5 @@
+import { SvgBraintrust, SvgLangfuse } from "@opal/logos";
+import type { IconFunctionComponent } from "@opal/types";
 import type { TracingProviderType } from "@/lib/tracing/types";
 
 export interface TracingFieldSpec {
@@ -15,6 +17,7 @@ export interface TracingProviderMeta {
   type: TracingProviderType;
   label: string;
   description: string;
+  logo: IconFunctionComponent;
   secretField: TracingFieldSpec;
   configFields: TracingFieldSpec[];
 }
@@ -24,11 +27,12 @@ export const TRACING_PROVIDERS: TracingProviderMeta[] = [
     type: "braintrust",
     label: "Braintrust",
     description: "LLM evaluation and monitoring",
+    logo: SvgBraintrust,
     secretField: {
       name: "api_key",
       label: "API Key",
       placeholder: "API Key",
-      help: "Paste your API key from Braintrust.",
+      help: "Paste your [API key](https://www.braintrust.dev/app/settings/api-keys) from Braintrust.",
     },
     configFields: [
       {
@@ -45,25 +49,25 @@ export const TRACING_PROVIDERS: TracingProviderMeta[] = [
     type: "langfuse",
     label: "Langfuse",
     description: "Cloud or self-hosted open-source observability platform",
+    logo: SvgLangfuse,
     secretField: {
       name: "api_key",
       label: "Secret Key",
       placeholder: "Secret Key",
-      help: "Paste your secret key from Langfuse.",
+      help: "Paste your [API key](https://cloud.langfuse.com) from Langfuse.",
     },
     configFields: [
       {
         name: "public_key",
         label: "Public Key",
         placeholder: "Public Key",
-        help: "Paste your public key from Langfuse.",
       },
       {
         name: "host",
         label: "API Base URL",
         placeholder: "https://cloud.langfuse.com",
         optional: true,
-        help: "Defaults to the EU region. Paste your Langfuse base URL for other regions or self-hosting.",
+        help: "Default to EU region. Paste your Langfuse base URL for other regions or self-hosting.",
       },
     ],
   },

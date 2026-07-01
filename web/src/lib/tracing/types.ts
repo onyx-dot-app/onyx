@@ -14,4 +14,5 @@ export interface TracingProviderView {
 export interface TracingDisconnectTarget {
   providerType: TracingProviderType;
   label: string;
+  config: Record<string, string>;
 }

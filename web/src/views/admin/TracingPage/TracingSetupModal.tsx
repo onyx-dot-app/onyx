@@ -2,7 +2,7 @@
 
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { SvgArrowExchange, SvgBarChart, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
@@ -101,7 +101,7 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
           {({ isSubmitting, isValid }) => (
             <Form>
               <Modal.Header
-                icon={SvgBarChart}
+                icon={meta.logo}
                 moreIcon1={SvgArrowExchange}
                 moreIcon2={SvgOnyxLogo}
                 title={

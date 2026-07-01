@@ -41,6 +41,7 @@ export default function TracingPage() {
   const [disconnectTarget, setDisconnectTarget] = useState<{
     providerType: TracingProviderView["provider_type"];
     label: string;
+    config: Record<string, string>;
   } | null>(null);
   const setupModal = useCreateModal();
   const disconnectModal = useCreateModal();
@@ -79,14 +80,11 @@ export default function TracingPage() {
             const provider =
               providers.find((p) => p.provider_type === meta.type) ?? null;
             const connected = provider?.connected ?? false;
-            // Only DB-backed providers can be disconnected (env config lives
-            // outside the UI).
-            const canDisconnect = provider?.source === "db";
 
             return (
               <ProviderCard
                 key={meta.type}
-                icon={route.icon}
+                icon={meta.logo}
                 title={meta.label}
                 description={meta.description}
                 status={connected ? "selected" : "disconnected"}
@@ -104,11 +102,12 @@ export default function TracingPage() {
                     : undefined
                 }
                 onDisconnect={
-                  connected && canDisconnect
+                  connected
                     ? () => {
                         setDisconnectTarget({
                           providerType: meta.type,
                           label: meta.label,
+                          config: provider?.config ?? {},
                         });
                         disconnectModal.toggle(true);
                       }

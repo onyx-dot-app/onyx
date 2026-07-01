@@ -64,11 +64,23 @@ export async function connectTracingProvider({
   }
 }
 
+// Disconnect by disabling the provider. Writing a disabled row overrides any
+// env-var config (DB config wins), so this stops traces even when the provider
+// was configured via environment variables.
 export async function disconnectTracingProvider(
-  providerType: TracingProviderType
+  providerType: TracingProviderType,
+  config: Record<string, string>
 ): Promise<void> {
-  const res = await fetch(`${TRACING_PROVIDERS_URL}/${providerType}`, {
-    method: "DELETE",
+  const res = await fetch(TRACING_PROVIDERS_URL, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      provider_type: providerType,
+      api_key: null,
+      api_key_changed: false,
+      config,
+      enabled: false,
+    }),
   });
   if (!res.ok) {
     throw new Error(
