@@ -83,15 +83,21 @@ export default function useNotifications({
     if (!data) return [];
 
     const seenNotificationIds = new Set<number>();
-    return data.flatMap((page) =>
-      page.notifications.filter((notification) => {
+    return data.flatMap((page) => {
+      // Guard against a malformed page (`notifications` not an array): this hook
+      // feeds always-mounted UI (sidebar, notifications popover), so throwing
+      // here would crash the app rather than degrade gracefully.
+      const pageNotifications = Array.isArray(page?.notifications)
+        ? page.notifications
+        : [];
+      return pageNotifications.filter((notification) => {
         if (seenNotificationIds.has(notification.id)) {
           return false;
         }
         seenNotificationIds.add(notification.id);
         return true;
-      })
-    );
+      });
+    });
   }, [data]);
   const firstPage = data?.[0];
   const lastPage = data?.[data.length - 1];
