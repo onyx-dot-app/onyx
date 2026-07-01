@@ -77,7 +77,9 @@ def datetime_from_utc_timestamp(timestamp: int) -> datetime:
 
 def basic_expert_info_representation(info: BasicExpertInfo) -> str | None:
     if info.first_name and info.last_name:
-        return f"{info.first_name} {info.middle_initial} {info.last_name}"
+        if info.middle_initial:
+            return f"{info.first_name} {info.middle_initial} {info.last_name}"
+        return f"{info.first_name} {info.last_name}"
 
     if info.display_name:
         return info.display_name
