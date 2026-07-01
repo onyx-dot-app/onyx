@@ -55,9 +55,11 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# (providerID, modelID) → context window. Process-wide: clients are rebuilt per
-# turn, and models.dev limits are stable per model, so one fetch serves all turns.
-_CONTEXT_LIMIT_CACHE: dict[tuple[str, str], int] = {}
+# (directory, providerID, modelID) → context window. Directory-scoped so a
+# per-workspace opencode config can't leak one tenant's limit to another; still
+# process-wide, so one fetch serves every turn of a session (clients are rebuilt
+# per turn).
+_CONTEXT_LIMIT_CACHE: dict[tuple[str, str, str], int] = {}
 
 # opencode permission category emitted by the no-op ``connect_app`` tool
 _CONNECT_APP_PERMISSION = "connect_app"
@@ -1309,7 +1311,7 @@ class OpencodeServeClient:
     ) -> int | None:
         if not model_provider or not model_id:
             return None
-        key = (model_provider, model_id)
+        key = (directory, model_provider, model_id)
         cached = _CONTEXT_LIMIT_CACHE.get(key)
         if cached is not None:
             return cached
