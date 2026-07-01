@@ -218,6 +218,7 @@ class DocumentSource(str, Enum):
     GURU = "guru"
     BOOKSTACK = "bookstack"
     OUTLINE = "outline"
+    DOCMOST = "docmost"
     CONFLUENCE = "confluence"
     JIRA = "jira"
     SLAB = "slab"
