@@ -26,6 +26,7 @@ def upgrade() -> None:
             nullable=True,
         ),
     )
+    op.execute("UPDATE skill SET public_permission = 'VIEWER' WHERE is_public = true")
     op.drop_column("skill", "is_public")
     op.add_column(
         "skill__user_group",
@@ -59,4 +60,6 @@ def downgrade() -> None:
         "skill",
         sa.Column("is_public", sa.Boolean(), nullable=False, server_default=sa.false()),
     )
+    op.execute("UPDATE skill SET is_public = true WHERE public_permission IS NOT NULL")
+    op.alter_column("skill", "is_public", server_default=None)
     op.drop_column("skill", "public_permission")
