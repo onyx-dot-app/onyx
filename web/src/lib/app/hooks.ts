@@ -1,8 +1,11 @@
+"use client";
+
 import { useLayoutEffect } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import { APP_SLOGAN } from "@/lib/constants";
-import type { AppFocus } from "@/hooks/useAppFocus";
-import type { ChatSession } from "@/app/app/interfaces";
+import useAppFocus from "@/hooks/useAppFocus";
+import useChatSessions from "@/hooks/useChatSessions";
+import { usePathname } from "next/navigation";
 
 export function useCustomFooterContent(): string {
   const settings = useSettings();
@@ -12,11 +15,11 @@ export function useCustomFooterContent(): string {
   );
 }
 
-export function useAppDocumentTitle(
-  appFocus: AppFocus,
-  currentChatSession: ChatSession | null,
-  appName: string
-): void {
+export function useAppDocumentTitle(): void {
+  const { appName } = useSettings();
+  const appFocus = useAppFocus();
+  const { currentChatSession } = useChatSessions();
+
   useLayoutEffect(() => {
     const appendChatName =
       (appFocus.isChat() || appFocus.isSharedChat()) && currentChatSession;
@@ -26,13 +29,18 @@ export function useAppDocumentTitle(
   }, [currentChatSession?.name, appName, appFocus]);
 }
 
-export function useAdminDocumentTitle(pathname: string, appName: string): void {
+export function useAdminDocumentTitle(): void {
+  const { appName } = useSettings();
+  const pathname = usePathname();
+
   useLayoutEffect(() => {
     document.title = `Admin — ${appName}`;
   }, [pathname, appName]);
 }
 
-export function useAuthDocumentTitle(appName: string): void {
+export function useAuthDocumentTitle(): void {
+  const { appName } = useSettings();
+
   useLayoutEffect(() => {
     document.title = appName;
   }, [appName]);

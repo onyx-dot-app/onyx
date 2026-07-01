@@ -484,12 +484,8 @@ interface AppChromeProps {
 
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
-
   const appFocus = useAppFocus();
-  const { appName } = useSettings();
-  const { currentChatSession } = useChatSessions();
-
-  useAppDocumentTitle(appFocus, currentChatSession, appName);
+  useAppDocumentTitle();
 
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();

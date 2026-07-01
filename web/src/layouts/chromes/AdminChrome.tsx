@@ -22,10 +22,8 @@ export default function AdminChrome({ children }: AdminChromeProps) {
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
-  const { appName, vectorDbEnabled, isLoading, application_status } =
-    useSettings();
-
-  useAdminDocumentTitle(pathname, appName);
+  const { vectorDbEnabled, isLoading, application_status } = useSettings();
+  useAdminDocumentTitle();
 
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
