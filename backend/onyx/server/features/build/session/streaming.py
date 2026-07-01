@@ -31,6 +31,7 @@ from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
+from onyx.server.features.build import connect_app
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import update_session_activity
@@ -39,6 +40,7 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.packets import ApprovalRequestedPacket
 from onyx.server.features.build.packets import BuildPacket
+from onyx.server.features.build.packets import ConnectAppRequestPacket
 from onyx.server.features.build.packets import ErrorPacket
 from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -250,7 +252,15 @@ def event_to_sse(event: Any) -> str:
     """
     if isinstance(event, SSEKeepalive):
         return SSE_KEEPALIVE
-    if isinstance(event, (ApprovalRequestedPacket, ErrorPacket, SubagentStartedPacket)):
+    if isinstance(
+        event,
+        (
+            ApprovalRequestedPacket,
+            ErrorPacket,
+            SubagentStartedPacket,
+            ConnectAppRequestPacket,
+        ),
+    ):
         return _format_packet_event(event)
     return _serialize_sandbox_event(event, _get_event_type(event))
 
@@ -265,11 +275,12 @@ def merge_events_with_announces(
     session_id: UUID,
     tenant_id: str,
 ) -> Generator[Any, None, None]:
-    """Merge sandbox events and approval announces into one stream.
+    """Merge sandbox events and announces into one stream.
 
-    Two producer threads feed a shared queue: the sandbox-event iterator, and a
-    BLPOP poller that emits `ApprovalRequestedPacket` when the proxy
-    signals a new approval. Announce latency is bounded by the 1s BLPOP.
+    Three producer threads feed a shared queue: the sandbox-event iterator, and
+    two BLPOP pollers that inject an `ApprovalRequestedPacket` / a
+    `ConnectAppRequestPacket` when a request is announced from another worker.
+    Announce latency is bounded by the 1s BLPOP.
     """
     output: queue_lib.Queue[Any] = queue_lib.Queue()
     stop = threading.Event()
@@ -309,6 +320,29 @@ def merge_events_with_announces(
                 ApprovalRequestedPacket(approval_id=approval_id, session_id=session_id)
             )
 
+    def drive_connect_app_announces() -> None:
+        cache = get_cache_backend(tenant_id=tenant_id)
+        while not stop.is_set():
+            try:
+                request = connect_app.pop_announcement(
+                    str(session_id), timeout_s=1, cache=cache
+                )
+            except Exception:
+                logger.exception(
+                    "connect_app.announce_poll_failed session_id=%s", session_id
+                )
+                time.sleep(1)
+                continue
+            if request is None:
+                continue
+            output.put(
+                ConnectAppRequestPacket(
+                    request_id=request.request_id,
+                    app_slug=request.app_slug,
+                    reason=request.reason,
+                )
+            )
+
     # Spawn via the context-preserving helper so the event iterator's lazy
     # tenant-scoped DB access (e.g. event-bus creation) sees the caller's
     # contextvars instead of raising "Tenant ID is not set".
@@ -323,6 +357,11 @@ def merge_events_with_announces(
     )
     start_thread_with_context(
         drive_announces, name=f"announce-pump-{session_id}", daemon=True
+    )
+    start_thread_with_context(
+        drive_connect_app_announces,
+        name=f"connect-app-pump-{session_id}",
+        daemon=True,
     )
     try:
         while True:

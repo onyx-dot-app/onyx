@@ -27,6 +27,8 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
+from onyx.file_store.staging import build_tracking_raw_file_callback
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.server.metrics.pruning_metrics import inc_pruning_rate_limit_error
@@ -144,6 +146,17 @@ def extract_ids_from_runnable_connector(
     all_raw_id_to_parent: dict[str, str | None] = {}
     all_hierarchy_nodes: list[HierarchyNode] = []
 
+    # Pruning only needs doc ids, but non-slim tabular connectors won't yield a
+    # doc without staging its CSV. Stage to a tracked list and reap in the finally
+    # — no index attempt for the standard staging reapers to key on.
+    staging_callback, staged_csv_ids = build_tracking_raw_file_callback(
+        metadata={
+            "context": "pruning-id-enumeration",
+            "connector_type": connector_type,
+        }
+    )
+    runnable_connector.set_raw_file_callback(staging_callback)
+
     # Sequence (covariant) lets all the specific list[...] iterator types unify here
     raw_batch_generator: (
         Iterator[Sequence[Document | SlimDocument | HierarchyNode | ConnectorFailure]]
@@ -209,6 +222,10 @@ def extract_ids_from_runnable_connector(
             inc_pruning_rate_limit_error(connector_type)
         raise
     finally:
+        delete_files_best_effort(
+            staged_csv_ids,
+            context=f"pruning-id-enumeration cleanup ({connector_type})",
+        )
         observe_pruning_enumeration_duration(
             time.monotonic() - enumeration_start, connector_type
         )

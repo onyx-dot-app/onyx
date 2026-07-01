@@ -29,6 +29,7 @@ from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -84,6 +85,7 @@ def _process_file(
     metadata: dict[str, Any] | None,
     pdf_pass: str | None,
     file_type: str | None,
+    stage: RawFileCallback | None,
 ) -> list[Document]:
     """
     Process a file and return a list of Documents.
@@ -201,6 +203,12 @@ def _process_file(
     doc_file_id = None
     if is_tabular_file(file_name):
         doc_file_id = file_id
+        if stage is None:
+            logger.warning(
+                "Skipping tabular file %s because raw_file_callback is not set",
+                file_name,
+            )
+            return []
 
         # Produce TabularSections
         lowered_name = file_name.lower()
@@ -216,6 +224,7 @@ def _process_file(
                 tabular_file_to_sections(
                     file=tabular_source,
                     file_name=file_name,
+                    stage=stage,
                     link=link or "",
                 )
             )
@@ -354,6 +363,7 @@ class LocalFileConnector(LoadConnector):
                 metadata=metadata,
                 pdf_pass=self.pdf_pass,
                 file_type=file_record.file_type,
+                stage=self.raw_file_callback,
             )
             documents.extend(new_docs)
 

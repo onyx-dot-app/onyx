@@ -99,7 +99,14 @@ class TestAvailabilityGate:
             for s in list_skills_for_user(test_user, db_session)
             if s.built_in_skill_id is not None
         }
-        assert set(BUILT_IN_SKILLS) <= visible_built_ins
+        # Some built-ins gate on environment availability (e.g. image-generation
+        # needs a configured provider); only those available here must be visible.
+        available_built_ins = {
+            built_in_skill_id
+            for built_in_skill_id, definition in BUILT_IN_SKILLS.items()
+            if definition.is_available(db_session)
+        }
+        assert available_built_ins <= visible_built_ins
 
     def test_unavailable_built_in_cannot_be_fetched_by_id(
         self,

@@ -15,6 +15,7 @@ import pytest
 
 from ee.onyx.db.user_group import update_user_group
 from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.db.models import UserRole
 
 
 def _audit_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
@@ -52,7 +53,7 @@ def test_update_user_group_emits_on_membership_change(
     existing = uuid4()
     added = uuid4()
     db_session = _make_db_session([existing], [10])
-    admin = MagicMock(id="admin-1", email="admin@example.com")
+    admin = MagicMock(id="admin-1", email="admin@example.com", role=UserRole.ADMIN)
 
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         update_user_group(
@@ -89,7 +90,7 @@ def test_update_user_group_cc_pair_only_emits_nothing(
 ) -> None:
     existing = uuid4()
     db_session = _make_db_session([existing], [10])
-    admin = MagicMock(id="admin-1", email="admin@example.com")
+    admin = MagicMock(id="admin-1", email="admin@example.com", role=UserRole.ADMIN)
 
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         update_user_group(

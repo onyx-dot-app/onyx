@@ -15,6 +15,7 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppPolicy
 from onyx.db.models import ExternalAppUserCredential
+from onyx.db.models import User
 from onyx.db.utils import is_set
 from onyx.db.utils import UNSET
 from onyx.db.utils import UnsetType
@@ -145,6 +146,30 @@ def get_external_app_by_skill_id(
     them via ``get_policies``."""
     stmt = select(ExternalApp).where(ExternalApp.skill_id == skill_id)
     return db_session.scalar(stmt)
+
+
+def get_connectable_apps_for_user(
+    db_session: Session,
+    user: User,
+) -> list[ExternalApp]:
+    """Apps the user could connect but hasn't: enabled, visible to them (public /
+    group-granted / personal), requiring per-user credentials the org hasn't
+    pre-filled, with no complete credential row yet.
+
+    Apps whose skill the user can't see are excluded — they'd never be injected
+    even once connected. Org-credentialed apps (no user-required keys) are usable
+    by everyone, so there's nothing to set up."""
+    # Local import breaks the external_app <-> skill module cycle.
+    from onyx.db.skill import all_skills_for_user_incl_external_apps
+
+    visible_skill_ids = all_skills_for_user_incl_external_apps(user, db_session)
+    user_creds_by_app = get_user_credentials_by_app_id(db_session, user.id)
+    return [
+        app
+        for app in get_external_apps(db_session)
+        if app.skill_id in visible_skill_ids
+        and not is_user_authenticated_for_app(app, user_creds_by_app.get(app.id))
+    ]
 
 
 def get_external_apps(

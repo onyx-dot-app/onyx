@@ -32,6 +32,10 @@ _DANSWER_TELEMETRY_ENDPOINT = "https://telemetry.onyx.app/anonymous_telemetry"
 _CACHED_UUID: str | None = None
 _CACHED_INSTANCE_DOMAIN: str | None = None
 
+# Cap each telemetry POST so a slow or unreachable endpoint cannot pin a sender
+# thread indefinitely and let threads accumulate.
+_TELEMETRY_POST_TIMEOUT_SECONDS = 5
+
 
 class RecordType(str, Enum):
     VERSION = "version"
@@ -132,6 +136,7 @@ def optional_telemetry(
                     _DANSWER_TELEMETRY_ENDPOINT,
                     headers={"Content-Type": "application/json"},
                     json=payload,
+                    timeout=_TELEMETRY_POST_TIMEOUT_SECONDS,
                 )
 
             except Exception:

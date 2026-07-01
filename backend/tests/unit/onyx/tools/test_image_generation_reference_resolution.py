@@ -8,11 +8,13 @@ messages and the JSON returned by prior generate_image calls), so we
 don't re-validate against an allow-list in the tool itself.
 """
 
+from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
 
+from onyx.image_gen.interfaces import ImageShape
 from onyx.tools.models import ToolCallException
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -25,6 +27,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 def _make_tool(
     supports_reference_images: bool = True,
     max_reference_images: int = 16,
+    model: str = "gpt-image-1",
 ) -> ImageGenerationTool:
     """Construct a tool with a mock provider so no credentials/network are needed."""
     with patch(
@@ -33,13 +36,18 @@ def _make_tool(
         mock_provider = MagicMock()
         mock_provider.supports_reference_images = supports_reference_images
         mock_provider.max_reference_images = max_reference_images
+        item = MagicMock()
+        item.model_dump.return_value = {"b64_json": "YWJj", "revised_prompt": "r"}
+        response = MagicMock()
+        response.data = [item]
+        mock_provider.generate_image.return_value = response
         mock_get_provider.return_value = mock_provider
 
         return ImageGenerationTool(
             image_generation_credentials=MagicMock(),
             tool_id=1,
             emitter=MagicMock(),
-            model="gpt-image-1",
+            model=model,
             provider="openai",
         )
 
@@ -108,3 +116,23 @@ class TestResolveReferenceImageFileIds:
             llm_kwargs={REFERENCE_IMAGE_FILE_IDS_FIELD: ["a", "b", "c", "d"]},
         )
         assert result == ["a", "b"]
+
+
+class TestGenerateImageSize:
+    @pytest.mark.parametrize(
+        "model,shape,expected",
+        [
+            ("gpt-image-1", ImageShape.SQUARE, "1024x1024"),
+            ("gpt-image-1", ImageShape.LANDSCAPE, "1536x1024"),
+            ("gpt-image-1", ImageShape.PORTRAIT, "1024x1536"),
+            ("dall-e-3", ImageShape.LANDSCAPE, "1792x1024"),
+            ("dall-e-3", ImageShape.PORTRAIT, "1024x1792"),
+        ],
+    )
+    def test_size_forwarded_to_provider(
+        self, model: str, shape: ImageShape, expected: str
+    ) -> None:
+        tool = _make_tool(model=model)
+        tool._generate_image(prompt="a cat", shape=shape)
+        provider = cast(MagicMock, tool.img_provider)
+        assert provider.generate_image.call_args.kwargs["size"] == expected

@@ -149,6 +149,13 @@ interface HorizontalProps extends InputLayoutProps {
   center?: boolean;
   /** Optional icon rendered beside the title. */
   icon?: IconFunctionComponent;
+  /**
+   * When true, the control stacks between the title and the description on
+   * narrow viewports (and floats back to the right at the `sm` breakpoint),
+   * instead of always sitting to the right. Best for text inputs; avoid for
+   * compact controls like toggles/switches.
+   */
+  responsive?: boolean;
 }
 
 function Horizontal({
@@ -162,6 +169,7 @@ function Horizontal({
   tag,
   description,
   suffix,
+  responsive,
 }: HorizontalProps) {
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
@@ -179,6 +187,7 @@ function Horizontal({
         width="full"
         padding="fit"
         center={center}
+        responsive={responsive}
         rightChildren={children}
       />
       {fieldName && <FormikInputError name={fieldName} />}

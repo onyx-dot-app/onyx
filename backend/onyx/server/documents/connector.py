@@ -97,8 +97,6 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserRole
-from onyx.file_processing.file_types import PLAIN_TEXT_MIME_TYPE
-from onyx.file_processing.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -537,27 +535,12 @@ def upload_files(
                 deduped_file_names.append(file.filename)
                 continue
 
-            # Since we can't render docx files in the UI,
-            # we store them in the file store as plain text
-            if file.content_type == WORD_PROCESSING_MIME_TYPE:
-                # Lazy load to avoid importing markitdown when not needed
-                from onyx.file_processing.extract_file_text import read_docx_file
-
-                text, _ = read_docx_file(file.file, file.filename)
-                file_id = file_store.save_file(
-                    content=BytesIO(text.encode("utf-8")),
-                    display_name=file.filename,
-                    file_origin=file_origin,
-                    file_type=PLAIN_TEXT_MIME_TYPE,
-                )
-
-            else:
-                file_id = file_store.save_file(
-                    content=file.file,
-                    display_name=file.filename,
-                    file_origin=file_origin,
-                    file_type=file.content_type or "text/plain",
-                )
+            file_id = file_store.save_file(
+                content=file.file,
+                display_name=file.filename,
+                file_origin=file_origin,
+                file_type=file.content_type or "text/plain",
+            )
             deduped_file_paths.append(file_id)
             deduped_file_names.append(file.filename)
 
@@ -1916,7 +1899,7 @@ def google_drive_callback(
 
 @router.get("/connector", tags=PUBLIC_API_TAGS)
 def get_connectors(
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorSnapshot]:
     connectors = fetch_connectors(db_session)
@@ -1943,7 +1926,7 @@ def get_indexed_sources(
 @router.get("/connector/{connector_id}", tags=PUBLIC_API_TAGS)
 def get_connector_by_id(
     connector_id: int,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)

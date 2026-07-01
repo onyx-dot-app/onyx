@@ -884,6 +884,14 @@ for _redis_tls_name, _redis_tls_path in (
 
 CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
 
+# A failed prune is skipped for this long before the beat re-dispatches it.
+# Floor: the re-dispatch interval (BLOCK_PRUNING = 60s * beat_multiplier, ~8 min
+# in cloud) so a failure can't hot-loop. Ceiling: prune_freq, so it still retries
+# well before the next scheduled prune. 30m is a midpoint with transient slack.
+PRUNE_FAILURE_BACKOFF_SECONDS = int(
+    os.environ.get("PRUNE_FAILURE_BACKOFF_SECONDS") or 30 * 60
+)
+
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#broker-pool-limit
 # Setting to None may help when there is a proxy in the way closing idle connections
 _CELERY_BROKER_POOL_LIMIT_DEFAULT = 10
@@ -1378,11 +1386,10 @@ MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
 )
 
-# A worksheet whose uncompressed XML exceeds this is streamed to a file-backed
-# TabularSection (CSV staged in the file store) instead of an in-memory string,
-# so a huge sheet stays off the worker heap rather than being truncated.
-XLSX_STREAM_SHEET_BYTES = max(
-    0, int(os.environ.get("XLSX_STREAM_SHEET_BYTES") or 50 * 1024 * 1024)
+# PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
+# or hang); this is the timeout before the subprocess is killed and pypdf runs.
+PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS = float(
+    os.environ.get("PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS") or 120
 )
 
 # Use document summary for contextual rag
@@ -1420,6 +1427,27 @@ CODE_INTERPRETER_DEFAULT_TIMEOUT_MS = int(
 
 CODE_INTERPRETER_MAX_OUTPUT_LENGTH = int(
     os.environ.get("CODE_INTERPRETER_MAX_OUTPUT_LENGTH") or 50_000
+)
+
+# Backstop on per-execution file staging. Session files accumulate over a chat
+# (generated artifacts get carried forward), and staging each one is a blocking
+# object-store read + upload in the request worker; an unbounded set can block
+# longer than the api-server liveness window. Cap by count and cumulative bytes
+# and drop the overflow (oldest first).
+CODE_INTERPRETER_MAX_STAGED_FILES = int(
+    os.environ.get("CODE_INTERPRETER_MAX_STAGED_FILES") or 25
+)
+
+CODE_INTERPRETER_MAX_STAGED_BYTES = int(
+    os.environ.get("CODE_INTERPRETER_MAX_STAGED_BYTES") or 100 * 1024 * 1024
+)
+
+# Bounds the fan-out of both staging phases — reading files from the object
+# store and uploading cache misses to the sandbox — so neither blocks the
+# request worker serially nor overwhelms a backend with a burst. Each I/O call
+# is individually bounded by its own per-request timeout.
+CODE_INTERPRETER_STAGING_CONCURRENCY = int(
+    os.environ.get("CODE_INTERPRETER_STAGING_CONCURRENCY") or 8
 )
 
 # Per-call MCP read timeout; configurable since some tools (e.g. data-agent

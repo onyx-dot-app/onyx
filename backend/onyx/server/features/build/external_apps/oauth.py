@@ -27,6 +27,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.external_apps.models import OAuthCallbackRequest
 from onyx.server.features.build.external_apps.models import OAuthCallbackResponse
 from onyx.server.features.build.external_apps.models import OAuthStartResponse
+from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -120,6 +121,9 @@ def start_external_app_oauth(
         "state": state,
         **oauth.extra_authorize_params,
     }
+    # Set after extra_authorize_params so a provider can't clobber it.
+    if oauth.optional_scope:
+        params[oauth.optional_scope_param] = oauth.optional_scope
     # urlencode so URI-shaped scopes (Google) get `:` and `/`
     # percent-encoded.
     authorize_url = f"{oauth.authorize_url}?{urlencode(params)}"
@@ -238,6 +242,11 @@ def handle_external_app_oauth_callback(
         user_id=user.id,
         user_credentials=stored_credentials,
     )
+
+    # Authenticating opens this user's per-user gate; refresh their sandboxes so
+    # the now-usable skill bundle lands
+    push_skills_for_users({user.id}, db_session)
+    db_session.commit()
 
     # One-shot — prevent replay.
     r.delete(redis_key)

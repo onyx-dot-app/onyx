@@ -9,6 +9,71 @@
  * without needing @jest-environment comments in every test file.
  */
 
+// Packages that ship as ESM and must be transformed to CommonJS for Jest.
+// Add packages here when you encounter: "SyntaxError: Unexpected token 'export'".
+// Entries are regex fragments matched against the package name.
+const esmPackages = [
+  // Auth & Security
+  "jose",
+  // UI Libraries
+  "@radix-ui",
+  "@floating-ui",
+  // Testing & Mocking
+  "msw",
+  "until-async",
+  // Language Detection
+  "linguist-languages",
+  // Markdown & Syntax Highlighting
+  "react-markdown",
+  "remark-.*", // All remark packages
+  "rehype-.*", // All rehype packages
+  "unified",
+  "lowlight",
+  "highlight\\.js",
+  // Markdown Utilities
+  "bail",
+  "is-plain-obj",
+  "trough",
+  "vfile",
+  "vfile-.*", // All vfile packages
+  "unist-.*", // All unist packages
+  "mdast-.*", // All mdast packages
+  "hast-.*", // All hast packages
+  "hastscript",
+  "micromark.*", // All micromark packages
+  "decode-named-character-reference",
+  "character-entities.*", // All character-entities packages (incl. -html4, -legacy)
+  "devlop",
+  "comma-separated-tokens",
+  "property-information",
+  "space-separated-tokens",
+  "html-void-elements",
+  "html-url-attributes",
+  "aria-attributes",
+  "web-namespaces",
+  "svg-tag-names",
+  "style-to-object",
+  "inline-style-parser",
+  "ccount",
+  "escape-string-regexp",
+  "markdown-table",
+  "longest-streak",
+  "zwitch",
+  "trim-lines",
+  "stringify-entities",
+  "estree-.*", // All estree packages
+  "mime",
+];
+
+// Match the ESM packages in both bun layouts:
+//   hoisted:  node_modules/<pkg>/...
+//   isolated: node_modules/.bun/<pkg>@<version>/node_modules/<pkg>/...  (configVersion 1+)
+// In the isolated layout the scope separator "/" is encoded as "+"
+// (e.g. @radix-ui/react-dialog -> @radix-ui+react-dialog@1.1.17), so the
+// package name is followed by "@", "+", or "/" depending on position.
+const esmPackagesPattern =
+  "/node_modules/(?!(\\.bun/)?(" + esmPackages.join("|") + ")[@/+])";
+
 // Shared configuration
 const sharedConfig = {
   preset: "ts-jest",
@@ -38,66 +103,9 @@ const sharedConfig = {
 
   testPathIgnorePatterns: ["/node_modules/", "/tests/e2e/", "/.next/"],
 
-  // Transform ES Modules in node_modules to CommonJS for Jest compatibility
-  // Add packages here when you encounter: "SyntaxError: Unexpected token 'export'"
-  // These packages ship as ESM and need to be transformed to work in Jest
-  transformIgnorePatterns: [
-    "/node_modules/(?!(" +
-      [
-        // Auth & Security
-        "jose",
-        // UI Libraries
-        "@radix-ui",
-        "@headlessui",
-        "@phosphor-icons",
-        // Testing & Mocking
-        "msw",
-        "until-async",
-        // Language Detection
-        "linguist-languages",
-        // Markdown & Syntax Highlighting
-        "react-markdown",
-        "remark-.*", // All remark packages
-        "rehype-.*", // All rehype packages
-        "unified",
-        "lowlight",
-        "highlight\\.js",
-        // Markdown Utilities
-        "bail",
-        "is-plain-obj",
-        "trough",
-        "vfile",
-        "vfile-.*", // All vfile packages
-        "unist-.*", // All unist packages
-        "mdast-.*", // All mdast packages
-        "hast-.*", // All hast packages
-        "hastscript",
-        "micromark.*", // All micromark packages
-        "decode-named-character-reference",
-        "character-entities.*", // All character-entities packages (incl. -html4, -legacy)
-        "devlop",
-        "comma-separated-tokens",
-        "property-information",
-        "space-separated-tokens",
-        "html-void-elements",
-        "html-url-attributes",
-        "aria-attributes",
-        "web-namespaces",
-        "svg-tag-names",
-        "style-to-object",
-        "inline-style-parser",
-        "ccount",
-        "escape-string-regexp",
-        "markdown-table",
-        "longest-streak",
-        "zwitch",
-        "trim-lines",
-        "stringify-entities",
-        "estree-.*", // All estree packages
-        "mime",
-      ].join("|") +
-      ")/)",
-  ],
+  // Transform ES Modules in node_modules to CommonJS for Jest compatibility.
+  // See `esmPackages` above to add packages.
+  transformIgnorePatterns: [esmPackagesPattern],
 
   transform: {
     "^.+\\.(t|j)sx?$": [
@@ -169,6 +177,7 @@ module.exports = {
         "**/src/refresh-pages/**/*.test.tsx",
         "**/src/hooks/**/*.test.tsx",
         "**/src/sections/**/*.test.tsx",
+        "**/src/views/**/*.test.tsx",
         // Add more patterns here as you add more integration tests
       ],
     },

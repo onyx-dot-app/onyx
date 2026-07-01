@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
-import { Dialog } from "@headlessui/react";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
+import { InputErrorText } from "@opal/layouts";
+import Modal from "@/refresh-components/Modal";
 import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 import { useModalContext } from "@/components/context/ModalContext";
@@ -32,7 +33,7 @@ export default function NewTeamModal() {
   const [error, setError] = useState<string | null>(null);
 
   const { user } = useUser();
-  const appDomain = user?.email.split("@")[1];
+  const appDomain = user?.email.split("@")[1] ?? "";
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -126,83 +127,68 @@ export default function NewTeamModal() {
   // Only render if showNewTeamModal is true
   if (!showNewTeamModal || isLoading) return null;
 
+  const headerIcon = hasRequestedInvite ? SvgCheckCircle : SvgOrganization;
+  const headerTitle = hasRequestedInvite
+    ? "Join Request Sent"
+    : `We found an existing team for ${appDomain}`;
+
   return (
-    <Dialog
+    <Modal
       open={showNewTeamModal}
-      onClose={handleClose}
-      className="relative z-1000"
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
     >
-      {/* Modal backdrop */}
-      <div className="fixed inset-0 bg-mask-03" aria-hidden="true" />
+      <Modal.Content width="sm" preventAccidentalClose={false}>
+        <Modal.Header
+          icon={headerIcon}
+          title={headerTitle}
+          onClose={handleClose}
+        />
 
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-background-neutral-00 p-6 shadow-xl border">
-          <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
-            {hasRequestedInvite ? (
-              <>
-                <SvgCheckCircle className="mr-2 h-5 w-5 stroke-text-05" />
-                Join Request Sent
-              </>
-            ) : (
-              <>
-                <SvgOrganization className="mr-2 h-5 w-5 stroke-text-04" />
-                We found an existing team for {appDomain}
-              </>
-            )}
-          </Dialog.Title>
-
-          {isLoading ? (
-            <div className="py-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-border-05 mx-auto mb-4"></div>
-              <p>Loading team information...</p>
-            </div>
-          ) : error ? (
-            <div className="space-y-4">
-              <p className="text-status-text-error-05">{error}</p>
-              <div className="flex w-full pt-2">
-                <Button
-                  onClick={handleContinueToNewOrg}
-                  width="full"
-                  rightIcon={SvgArrowRight}
-                >
-                  Continue with new team
-                </Button>
-              </div>
-            </div>
+        <Modal.Body>
+          {error ? (
+            <InputErrorText>{error}</InputErrorText>
           ) : hasRequestedInvite ? (
-            <div className="space-y-4">
-              <p className="text-text-04">
-                Your join request has been sent. You can explore as your own
-                team while waiting for an admin of {appDomain} to approve your
-                request.
-              </p>
-              <div className="flex w-full pt-2">
-                <Button
-                  onClick={handleContinueToNewOrg}
-                  width="full"
-                  rightIcon={SvgArrowRight}
-                >
-                  Try Onyx while waiting
-                </Button>
-              </div>
-            </div>
+            <Text font="main-ui-body" color="text-04">
+              {`Your join request has been sent. You can explore as your own team while waiting for an admin of ${appDomain} to approve your request.`}
+            </Text>
           ) : (
-            <div className="space-y-4">
-              <p className="text-text-03 text-sm mb-2">
-                Your join request can be approved by any admin of {appDomain}.
-              </p>
-              <div className="flex flex-col items-center justify-center gap-4 mt-4">
-                <Button
-                  disabled={isSubmitting}
-                  onClick={handleRequestInvite}
-                  width="full"
-                  icon={isSubmitting ? SvgSimpleLoader : SvgArrowUp}
-                >
-                  {isSubmitting
-                    ? "Sending request..."
-                    : "Request to join your team"}
-                </Button>
-              </div>
+            <Text font="main-ui-body" color="text-03">
+              {`Your join request can be approved by any admin of ${appDomain}.`}
+            </Text>
+          )}
+        </Modal.Body>
+
+        <Modal.Footer flexDirection="column" alignItems="stretch">
+          {error ? (
+            <Button
+              onClick={handleContinueToNewOrg}
+              width="full"
+              rightIcon={SvgArrowRight}
+            >
+              Continue with new team
+            </Button>
+          ) : hasRequestedInvite ? (
+            <Button
+              onClick={handleContinueToNewOrg}
+              width="full"
+              rightIcon={SvgArrowRight}
+            >
+              Try Onyx while waiting
+            </Button>
+          ) : (
+            <>
+              <Button
+                disabled={isSubmitting}
+                onClick={handleRequestInvite}
+                width="full"
+                icon={isSubmitting ? SvgSimpleLoader : SvgArrowUp}
+              >
+                {isSubmitting
+                  ? "Sending request..."
+                  : "Request to join your team"}
+              </Button>
               <Button
                 onClick={handleContinueToNewOrg}
                 width="full"
@@ -211,10 +197,10 @@ export default function NewTeamModal() {
               >
                 Continue with new team
               </Button>
-            </div>
+            </>
           )}
-        </Dialog.Panel>
-      </div>
-    </Dialog>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
   );
 }

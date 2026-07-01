@@ -1,4 +1,5 @@
 import io
+from collections.abc import Callable
 from typing import cast
 from typing import IO
 
@@ -10,6 +11,20 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabul
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     tabular_file_to_sections,
 )
+
+
+def _make_stage_callback() -> tuple[
+    dict[str, tuple[bytes, str]],
+    Callable[[IO[bytes], str], str],
+]:
+    staged: dict[str, tuple[bytes, str]] = {}
+
+    def fake_stage(content: IO[bytes], content_type: str) -> str:
+        file_id = f"csv-{len(staged)}"
+        staged[file_id] = (content.read(), content_type)
+        return file_id
+
+    return staged, fake_stage
 
 
 def _make_xlsx_bytes(sheets: dict[str, list[list[str]]]) -> io.BytesIO:
@@ -55,50 +70,51 @@ class TestTabularFileToSections:
             }
         )
 
+        staged, fake_stage = _make_stage_callback()
         sections = tabular_file_to_sections(
             xlsm_bytes,
             file_name="budget.xlsm",
+            stage=fake_stage,
         )
         assert len(sections) == 1
-        assert "Alice" in (sections[0].text or "")
+        assert "Alice" in staged[sections[0].csv_file_id][0].decode("utf-8")
         assert sections[0].heading == "budget.xlsm :: Sheet1"
 
     def test_unknown_extension_raises(self) -> None:
         with pytest.raises(ValueError):
-            tabular_file_to_sections(io.BytesIO(b""), file_name="notes.pdf")
+            tabular_file_to_sections(
+                io.BytesIO(b""),
+                file_name="notes.pdf",
+                stage=lambda _content, _content_type: "unused",
+            )
+
+    def test_empty_csv_returns_no_sections(self) -> None:
+        _staged, fake_stage = _make_stage_callback()
+
+        sections = tabular_file_to_sections(
+            io.BytesIO(b"\n\n"),
+            file_name="empty.csv",
+            stage=fake_stage,
+        )
+
+        assert sections == []
 
 
 class TestFileBackedXlsx:
-    """Within a workbook routed to streaming, each sheet is handled by size:
-    oversized sheets are file-backed (no inline text, not truncated); small
-    sheets stay inline so they keep their descriptor chunks downstream."""
+    """Every non-empty workbook sheet is staged as CSV and referenced by
+    `csv_file_id`."""
 
-    def test_oversized_sheet_is_file_backed_no_truncation(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import onyx.connectors.cross_connector_utils.tabular_section_utils as mod
-
+    def test_sheet_is_staged_no_truncation(self) -> None:
         rows = [["name", "score"]] + [[f"user{i}", str(i)] for i in range(200)]
         xlsx = _make_xlsx_bytes({"Sheet1": rows})
-        # Enter the streaming path and force this sheet over the inline threshold
-        # without needing a multi-MB fixture.
-        monkeypatch.setattr(mod, "xlsx_has_large_sheet", lambda _f: True)
-        monkeypatch.setattr(mod, "XLSX_STREAM_SHEET_BYTES", 10)
+        staged, fake_stage = _make_stage_callback()
 
-        staged: dict[str, tuple[bytes, str]] = {}
-
-        def fake_callback(content: IO[bytes], content_type: str) -> str:
-            file_id = f"csv-{len(staged)}"
-            staged[file_id] = (content.read(), content_type)
-            return file_id
-
-        sections = mod.tabular_file_to_sections(
-            xlsx, file_name="big.xlsx", raw_file_callback=fake_callback
+        sections = tabular_file_to_sections(
+            xlsx, file_name="big.xlsx", stage=fake_stage
         )
 
         assert len(sections) == 1
         section = sections[0]
-        assert section.text is None
         assert section.csv_file_id is not None
         assert section.heading == "big.xlsx :: Sheet1"
 
@@ -111,31 +127,13 @@ class TestFileBackedXlsx:
         data_rows = [line for line in csv_text.splitlines() if line.strip()]
         assert len(data_rows) == 201  # header + 200 rows
 
-    def test_small_sheet_in_streaming_workbook_stays_inline(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import onyx.connectors.cross_connector_utils.tabular_section_utils as mod
-
+    def test_small_workbook_also_stages_sheet(self) -> None:
         xlsx = _make_xlsx_bytes({"Sheet1": [["a", "b"], ["1", "2"]]})
-        # Streaming path, but this sheet is tiny -> inline (keeps descriptors).
-        monkeypatch.setattr(mod, "xlsx_has_large_sheet", lambda _f: True)
-        sections = mod.tabular_file_to_sections(
-            xlsx, file_name="mixed.xlsx", raw_file_callback=lambda _c, _t: "unused"
+        staged, fake_stage = _make_stage_callback()
+
+        sections = tabular_file_to_sections(
+            xlsx, file_name="small.xlsx", stage=fake_stage
         )
         assert len(sections) == 1
-        assert sections[0].csv_file_id is None
-        assert "a,b" in (sections[0].text or "")
-
-    def test_small_workbook_uses_inline_path(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import onyx.connectors.cross_connector_utils.tabular_section_utils as mod
-
-        xlsx = _make_xlsx_bytes({"Sheet1": [["a", "b"], ["1", "2"]]})
-        monkeypatch.setattr(mod, "xlsx_has_large_sheet", lambda _f: False)
-        sections = mod.tabular_file_to_sections(
-            xlsx, file_name="small.xlsx", raw_file_callback=lambda _c, _t: "unused"
-        )
-        assert len(sections) == 1
-        assert sections[0].csv_file_id is None
-        assert "a,b" in (sections[0].text or "")
+        assert sections[0].csv_file_id is not None
+        assert staged[sections[0].csv_file_id][0].decode("utf-8") == "a,b\n1,2\n"

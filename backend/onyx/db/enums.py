@@ -239,6 +239,14 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class SupportedLanguage(str, PyEnum):
+    EN = "en"
+    ES = "es"
+    PT = "pt"
+    FR = "fr"
+    DE = "de"
+
+
 class DefaultAppMode(str, PyEnum):
     AUTO = "AUTO"
     CHAT = "CHAT"
@@ -519,6 +527,7 @@ class Permission(str, PyEnum):
     READ_CHAT = "read:chat"
     WRITE_CHAT = "write:chat"
     READ_ADMIN = "read:admin"
+    GENERATE_IMAGE = "generate:image"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -541,8 +550,6 @@ class Permission(str, PyEnum):
     # identity may use. PAT-only; never granted to a group/user.
     CRAFT_SANDBOX = "craft_sandbox"
 
-    CRAFT_REQUEST_APP_SETUP = "craft:request_app_setup"
-
     # Override — any permission check passes
     FULL_ADMIN_PANEL_ACCESS = "admin"
 
@@ -561,7 +568,7 @@ Permission.IMPLIED = frozenset(
         Permission.READ_CHAT,
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
-        Permission.CRAFT_REQUEST_APP_SETUP,
+        Permission.GENERATE_IMAGE,
     }
 )
 
@@ -569,6 +576,14 @@ Permission.IMPLIED = frozenset(
 class PersonaSharePermission(str, PyEnum):
     """Level granted by a persona share row (user or group), or to the whole
     org via `Persona.public_permission`."""
+
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class SkillSharePermission(str, PyEnum):
+    """Level granted by a skill share row (user or group), or to the whole org
+    via `Skill.public_permission`."""
 
     EDITOR = "EDITOR"
     VIEWER = "VIEWER"

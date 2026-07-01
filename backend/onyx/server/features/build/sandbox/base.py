@@ -166,6 +166,7 @@ class SandboxManager(_ServeMixin, ABC):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
@@ -183,6 +184,7 @@ class SandboxManager(_ServeMixin, ABC):
             llm_config: LLM provider configuration (passed to AGENTS.md rendering)
             nextjs_port: Port for the Next.js dev server, or None for headless.
             skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
+            connectable_apps_section: Pre-rendered ``{{CONNECTABLE_APPS_LIST}}`` (may be empty).
             user_name: User's name for personalization in AGENTS.md
 
         Raises:
@@ -246,6 +248,7 @@ class SandboxManager(_ServeMixin, ABC):
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         """Restore a session workspace from a snapshot.
 

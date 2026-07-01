@@ -291,6 +291,7 @@ class StubSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         self.setup_session_workspace_count += 1
@@ -300,6 +301,7 @@ class StubSandboxManager(SandboxManager):
             "llm_config": llm_config,
             "nextjs_port": nextjs_port,
             "skills_section": skills_section,
+            "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
         }
         if not self.setup_session_workspace_silent:
@@ -367,6 +369,7 @@ class StubSandboxManager(SandboxManager):
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         self.restore_snapshot_count += 1
         self.last_restore_snapshot_payload = {
@@ -376,6 +379,7 @@ class StubSandboxManager(SandboxManager):
             "nextjs_port": nextjs_port,
             "llm_config": llm_config,
             "skills_section": skills_section,
+            "connectable_apps_section": connectable_apps_section,
         }
         if not self.restore_snapshot_silent:
             raise _not_configured("restore_snapshot")
