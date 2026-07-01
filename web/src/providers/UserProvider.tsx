@@ -23,7 +23,7 @@ import {
   useAuthTypeMetadata,
   AuthTypeMetadata,
 } from "@/hooks/useAuthTypeMetadata";
-import { updateUserPersonalization as persistPersonalization } from "@/lib/userSettings";
+import { updateUserPersonalization as persistPersonalization } from "@/lib/users/svc";
 import { useTheme } from "next-themes";
 
 interface UserContextType {

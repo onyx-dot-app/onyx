@@ -1,12 +1,12 @@
 import { mutate } from "swr";
-import { User } from "@/lib/types";
+import { User, UserPersonalization } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
-export const checkUserIsNoAuthUser = (userId: string) => {
+export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
-};
+}
 
-export const getCurrentUser = async (): Promise<User | null> => {
+export async function getCurrentUser(): Promise<User | null> {
   const response = await fetch("/api/me", {
     credentials: "include",
   });
@@ -15,9 +15,9 @@ export const getCurrentUser = async (): Promise<User | null> => {
   }
   const user = await response.json();
   return user;
-};
+}
 
-export const logout = async (): Promise<Response> => {
+export async function logout(): Promise<Response> {
   const response = await fetch("/auth/logout", {
     method: "POST",
     credentials: "include",
@@ -28,13 +28,13 @@ export const logout = async (): Promise<Response> => {
     await mutate(SWR_KEYS.me, null, { revalidate: false });
   }
   return response;
-};
+}
 
-export const basicLogin = async (
+export async function basicLogin(
   email: string,
   password: string,
   captchaToken?: string
-): Promise<Response> => {
+): Promise<Response> {
   const params = new URLSearchParams([
     ["username", email],
     ["password", password],
@@ -47,31 +47,29 @@ export const basicLogin = async (
     headers["X-Captcha-Token"] = captchaToken;
   }
 
-  const response = await fetch("/api/auth/login", {
+  return fetch("/api/auth/login", {
     method: "POST",
     credentials: "include",
     headers,
     body: params,
   });
-  return response;
-};
+}
 
-export const basicSignup = async (
+export async function basicSignup(
   email: string,
   password: string,
   referralSource?: string,
   captchaToken?: string
-) => {
+): Promise<Response> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
-  // Add captcha token to headers if provided
   if (captchaToken) {
     headers["X-Captcha-Token"] = captchaToken;
   }
 
-  const response = await fetch("/api/auth/register", {
+  return fetch("/api/auth/register", {
     method: "POST",
     credentials: "include",
     headers,
@@ -83,8 +81,7 @@ export const basicSignup = async (
       captcha_token: captchaToken,
     }),
   });
-  return response;
-};
+}
 
 export interface CustomRefreshTokenResponse {
   access_token: string;
@@ -107,7 +104,6 @@ export async function refreshToken(
 ): Promise<CustomRefreshTokenResponse | null> {
   try {
     console.debug("Sending request to custom refresh URL");
-    // support both absolute and relative
     const url = customRefreshUrl.startsWith("http")
       ? new URL(customRefreshUrl)
       : new URL(customRefreshUrl, window.location.origin);
@@ -128,10 +124,8 @@ export async function refreshToken(
 }
 
 export function getUserDisplayName(user: User | null): string {
-  // Prioritize custom personal name, if set.
   if (user?.personalization?.name) return user.personalization.name;
 
-  // Then, prioritize personal email.
   if (user?.email) {
     const atIndex = user.email.indexOf("@");
     if (atIndex > 0) {
@@ -139,15 +133,11 @@ export function getUserDisplayName(user: User | null): string {
     }
   }
 
-  // If nothing works, then fall back to anonymous user name
   return "Anonymous";
 }
 
 export function getUserEmail(user: User | null): string {
-  // Prioritize personal email.
   if (user?.email) return user.email;
-
-  // If nothing works, then fall back to anonymous email.
   return "anonymous@email.com";
 }
 
@@ -200,4 +190,24 @@ export function getUserInitials(
     if (/^[A-Z]$/.test(result)) return result;
   }
   return null;
+}
+
+export async function setUserDefaultModel(
+  model: string | null
+): Promise<Response> {
+  return fetch(`/api/user/default-model`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ default_model: model }),
+  });
+}
+
+export async function updateUserPersonalization(
+  personalization: Partial<UserPersonalization>
+): Promise<Response> {
+  return fetch(`/api/user/personalization`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(personalization),
+  });
 }
