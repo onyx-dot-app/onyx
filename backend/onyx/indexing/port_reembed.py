@@ -53,7 +53,7 @@ from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 
 # Reused from the chunker (not replicated) so the rebuilt tail stays byte-identical
 # to indexing and the skip test mirrors it exactly; replicating either risks drift.
-from onyx.indexing.chunker import _get_metadata_suffix_for_document_index
+from onyx.indexing.chunker import get_metadata_suffix_for_document_index
 from onyx.indexing.chunker import MAX_METADATA_PERCENTAGE
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
@@ -118,7 +118,7 @@ def rebuild_semantic_tail(chunk: DocumentChunkWithoutVectors) -> str:
     if not chunk.metadata_list:
         return ""
     metadata = convert_metadata_list_of_strings_to_dict(chunk.metadata_list)
-    semantic_suffix, _ = _get_metadata_suffix_for_document_index(
+    semantic_suffix, _ = get_metadata_suffix_for_document_index(
         metadata, include_separator=True
     )
     return semantic_suffix

@@ -30,7 +30,7 @@ from onyx.document_index.chunk_content_enrichment import (
 )
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
-from onyx.indexing.chunker import _get_metadata_suffix_for_document_index
+from onyx.indexing.chunker import get_metadata_suffix_for_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding
@@ -168,7 +168,7 @@ def test_rebuild_semantic_tail() -> None:
     metadata_list = convert_metadata_dict_to_list_of_strings(
         {"author": "Jane Doe", "team": "finance"}
     )
-    expected, _ = _get_metadata_suffix_for_document_index(
+    expected, _ = get_metadata_suffix_for_document_index(
         convert_metadata_list_of_strings_to_dict(metadata_list), include_separator=True
     )
     assert rebuild_semantic_tail(
@@ -181,7 +181,7 @@ def test_recover_embedding_input_swaps_semantic_tail() -> None:
     metadata_list = convert_metadata_dict_to_list_of_strings(
         {"author": "Jane Doe", "team": "finance"}
     )
-    semantic, keyword = _get_metadata_suffix_for_document_index(
+    semantic, keyword = get_metadata_suffix_for_document_index(
         convert_metadata_list_of_strings_to_dict(metadata_list), include_separator=True
     )
     assert semantic != keyword  # precondition: the two tails genuinely differ
@@ -225,7 +225,7 @@ def test_recover_embedding_input_skips_oversized_metadata_tail() -> None:
     metadata_list = convert_metadata_dict_to_list_of_strings(
         {"author": "Jane Doe", "team": "finance"}
     )
-    semantic, keyword = _get_metadata_suffix_for_document_index(
+    semantic, keyword = get_metadata_suffix_for_document_index(
         convert_metadata_list_of_strings_to_dict(metadata_list), include_separator=True
     )
     # Tiny budget so the tail exceeds MAX_METADATA_PERCENTAGE — the index-time
@@ -270,7 +270,7 @@ def _augmented_stored_chunk() -> tuple[DocumentChunkWithoutVectors, str]:
     """A stored chunk whose content carries title prefix + doc summary +
     chunk context + keyword metadata tail. Returns (chunk, bare_text)."""
     metadata_list = convert_metadata_dict_to_list_of_strings({"author": "Jane"})
-    _semantic, keyword = _get_metadata_suffix_for_document_index(
+    _semantic, keyword = get_metadata_suffix_for_document_index(
         convert_metadata_list_of_strings_to_dict(metadata_list), include_separator=True
     )
     title = "My Title"
@@ -366,7 +366,7 @@ def test_augmentation_enrich_on_generates_and_reembeds(
 
     bare = "the body text"
     metadata_list = convert_metadata_dict_to_list_of_strings({"author": "Jane"})
-    _semantic, keyword = _get_metadata_suffix_for_document_index(
+    _semantic, keyword = get_metadata_suffix_for_document_index(
         convert_metadata_list_of_strings_to_dict(metadata_list), include_separator=True
     )
     # PRESENT had RAG off: no doc_summary/chunk_context glued in.
@@ -556,7 +556,7 @@ def test_model_only_reembed_vector_differs_from_naive_stored_content() -> None:
     metadata_list = convert_metadata_dict_to_list_of_strings(
         {"author": "Jane Doe", "team": "finance"}
     )
-    semantic, keyword = _get_metadata_suffix_for_document_index(
+    semantic, keyword = get_metadata_suffix_for_document_index(
         convert_metadata_list_of_strings_to_dict(metadata_list), include_separator=True
     )
     assert semantic != keyword  # precondition: the two tails genuinely differ

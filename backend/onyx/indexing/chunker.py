@@ -39,7 +39,7 @@ DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS = MAX_CONTEXT_TOKENS * (
 logger = setup_logger()
 
 
-def _get_metadata_suffix_for_document_index(
+def get_metadata_suffix_for_document_index(
     metadata: dict[str, str | list[str]], include_separator: bool = False
 ) -> tuple[str, str]:
     """
@@ -214,7 +214,7 @@ class Chunker:
             (
                 metadata_suffix_semantic,
                 metadata_suffix_keyword,
-            ) = _get_metadata_suffix_for_document_index(
+            ) = get_metadata_suffix_for_document_index(
                 document.metadata, include_separator=True
             )
             metadata_tokens = len(self.tokenizer.encode(metadata_suffix_semantic))
