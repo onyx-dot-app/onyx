@@ -72,7 +72,7 @@ def user_permission_for_skill(
     return None
 
 
-def custom_skill_response_for_user(
+def skill_response_for_user(
     skill: Skill,
     user: User,
     db_session: Session,
@@ -81,6 +81,12 @@ def custom_skill_response_for_user(
     curated_user_group_ids: set[int] | None = None,
     include_share_details: bool = False,
 ) -> SkillResponse:
+    if skill.built_in_skill_id is not None:
+        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
+        if definition is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+        return SkillResponse.from_builtin(skill, definition, db_session)
+
     if user_group_ids is None:
         user_group_ids = get_user_group_ids_for_user(db_session, user.id)
     if curated_user_group_ids is None and user.role == UserRole.CURATOR:
@@ -95,27 +101,6 @@ def custom_skill_response_for_user(
             user_group_ids,
             curated_user_group_ids,
         ),
-        include_share_details=include_share_details,
-    )
-
-
-def skill_response_for_user(
-    skill: Skill,
-    user: User,
-    db_session: Session,
-    *,
-    include_share_details: bool = False,
-) -> SkillResponse:
-    if skill.built_in_skill_id is not None:
-        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
-        if definition is None:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-        return SkillResponse.from_builtin(skill, definition, db_session)
-
-    return custom_skill_response_for_user(
-        skill,
-        user,
-        db_session,
         include_share_details=include_share_details,
     )
 
@@ -149,7 +134,7 @@ def skills_list_response_for_user(
             continue
 
         customs.append(
-            custom_skill_response_for_user(
+            skill_response_for_user(
                 skill,
                 user,
                 db_session,

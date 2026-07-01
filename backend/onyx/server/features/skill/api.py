@@ -19,7 +19,6 @@ from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.skill import create_skill__no_commit
 from onyx.db.skill import delete_skill
 from onyx.db.skill import fetch_skill
-from onyx.db.skill import fetch_skill_by_id_for_system
 from onyx.db.skill import list_skills
 from onyx.db.skill import replace_skill_bundle
 from onyx.db.skill import replace_skill_shares
@@ -37,7 +36,6 @@ from onyx.server.features.skill.models import SkillResponse
 from onyx.server.features.skill.models import SkillShareRequest
 from onyx.server.features.skill.models import SkillsList
 from onyx.server.features.skill.models import TransferSkillOwnershipRequest
-from onyx.server.features.skill.response_helpers import custom_skill_response_for_user
 from onyx.server.features.skill.response_helpers import skill_preview_response
 from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.server.features.skill.response_helpers import skills_list_response_for_user
@@ -154,7 +152,7 @@ def create_custom_skill(
         db_session.commit()
 
     push_skill_to_affected_sandboxes(skill, db_session)
-    return custom_skill_response_for_user(
+    return skill_response_for_user(
         skill,
         user,
         db_session,
@@ -177,7 +175,7 @@ def fetch_custom_skill_for_edit(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    response = custom_skill_response_for_user(
+    response = skill_response_for_user(
         skill,
         user,
         db_session,
@@ -222,13 +220,11 @@ def replace_current_user_skill_bundle(
         )
         db_session.commit()
 
-    updated = fetch_skill_by_id_for_system(skill_id, db_session)
-    if updated is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    push_skill_to_affected_sandboxes(updated, db_session)
+    db_session.expire(skill)
+    push_skill_to_affected_sandboxes(skill, db_session)
     delete_bundle_blob(file_store, old_file_id)
-    return custom_skill_response_for_user(
-        updated,
+    return skill_response_for_user(
+        skill,
         user,
         db_session,
         include_share_details=True,
@@ -254,7 +250,7 @@ def patch_current_user_skill(
         _ensure_can_edit_org_visibility(skill, user)
 
     if not (patch_req.has_details_update or patch_req.has_db_field_update):
-        return custom_skill_response_for_user(
+        return skill_response_for_user(
             skill,
             user,
             db_session,
@@ -330,21 +326,19 @@ def patch_current_user_skill(
             delete_bundle_blob(file_store, new_bundle_file_id)
         raise
 
-    updated = fetch_skill_by_id_for_system(skill_id, db_session)
-    if updated is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    db_session.expire(skill)
     visibility_changed = old_visibility != (
-        updated.public_permission,
-        updated.enabled,
+        skill.public_permission,
+        skill.enabled,
     )
     if patch_req.has_details_update or visibility_changed:
-        after_affected = affected_user_ids_for_skill(updated, db_session)
+        after_affected = affected_user_ids_for_skill(skill, db_session)
         push_skills_for_users(before_affected | after_affected, db_session)
 
     if file_store is not None and old_bundle_file_id is not None:
         delete_bundle_blob(file_store, old_bundle_file_id)
-    return custom_skill_response_for_user(
-        updated,
+    return skill_response_for_user(
+        skill,
         user,
         db_session,
         include_share_details=True,
@@ -371,7 +365,7 @@ def share_current_user_skill(
         and share_req.group_shares is None
         and "public_permission" not in share_req.model_fields_set
     ):
-        return custom_skill_response_for_user(
+        return skill_response_for_user(
             skill,
             user,
             db_session,
@@ -414,13 +408,11 @@ def share_current_user_skill(
     )
 
     db_session.commit()
-    updated = fetch_skill_by_id_for_system(skill.id, db_session)
-    if updated is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    after_affected = affected_user_ids_for_skill(updated, db_session)
+    db_session.expire(skill)
+    after_affected = affected_user_ids_for_skill(skill, db_session)
     push_skills_for_users(before_affected | after_affected, db_session)
-    return custom_skill_response_for_user(
-        updated,
+    return skill_response_for_user(
+        skill,
         user,
         db_session,
         include_share_details=True,
@@ -493,13 +485,11 @@ def transfer_current_user_skill_ownership(
     )
 
     db_session.commit()
-    updated = fetch_skill_by_id_for_system(skill.id, db_session)
-    if updated is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    after_affected = affected_user_ids_for_skill(updated, db_session)
+    db_session.expire(skill)
+    after_affected = affected_user_ids_for_skill(skill, db_session)
     push_skills_for_users(before_affected | after_affected, db_session)
-    return custom_skill_response_for_user(
-        updated,
+    return skill_response_for_user(
+        skill,
         user,
         db_session,
         include_share_details=True,

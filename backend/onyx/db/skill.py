@@ -375,18 +375,6 @@ def fetch_skill(
     return db_session.scalars(stmt).one_or_none()
 
 
-def fetch_skill_by_id_for_system(skill_id: UUID, db_session: Session) -> Skill | None:
-    """Fetch a skill by id without applying user access policy.
-
-    Only use this for system flows that have already made an authorization
-    decision, such as post-commit reloads or sandbox invalidation.
-    """
-    stmt = _skill_select_with_eager_load(order_by_name=False).where(
-        Skill.id == skill_id
-    )
-    return db_session.scalars(stmt).one_or_none()
-
-
 def create_skill__no_commit(
     *,
     slug: str,
