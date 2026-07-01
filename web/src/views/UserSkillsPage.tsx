@@ -109,6 +109,11 @@ export default function UserSkillsPage() {
         item.description.toLowerCase().includes(q)
     );
   }, [items, searchQuery]);
+  const previewUnavailableReason =
+    previewTarget?.source === "builtin" && !previewTarget.is_available
+      ? (previewTarget.unavailable_reason ??
+        "This skill is currently unavailable.")
+      : null;
 
   return (
     <SettingsLayouts.Root data-testid="UserSkillsPage/container">
@@ -212,6 +217,7 @@ export default function UserSkillsPage() {
         open={previewTarget !== null}
         skillId={previewTarget?.id ?? null}
         fallbackTitle={previewTarget?.name}
+        unavailableReason={previewUnavailableReason}
         onClose={() => setPreviewTarget(null)}
       />
     </SettingsLayouts.Root>
