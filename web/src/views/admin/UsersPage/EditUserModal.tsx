@@ -17,7 +17,7 @@ import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import useGroups from "@/hooks/useGroups";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCurrentUser } from "@/lib/users/hooks";
 import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
 import { cn } from "@opal/utils";

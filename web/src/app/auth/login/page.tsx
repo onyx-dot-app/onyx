@@ -1,10 +1,7 @@
 import { User } from "@/lib/types";
-import {
-  getCurrentUserSS,
-  getAuthUrlSS,
-  getAuthTypeMetadataSS,
-  AuthTypeMetadata,
-} from "@/lib/userSS";
+import { getCurrentUserSS } from "@/lib/users/svcSS";
+import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
