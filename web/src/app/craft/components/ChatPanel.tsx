@@ -169,6 +169,7 @@ export default function BuildChatPanel({
   );
   const {
     streamMessage,
+    compact,
     interruptStreaming,
     streamScheduledRunEvents,
     streamTurnEvents,
@@ -554,6 +555,20 @@ export default function BuildChatPanel({
     if (sessionId) void interruptStreaming(sessionId);
   }, [sessionId, interruptStreaming]);
 
+  // Available once the session's opencode session/model are known, not
+  // running, and not while viewing a subagent.
+  const canCompact =
+    !!sessionId &&
+    !!session?.isLoaded &&
+    !displayIsRunning &&
+    !isViewingSubagent &&
+    !!session?.agentProvider &&
+    !!session?.agentModel &&
+    (session?.messages.length ?? 0) > 0;
+  const onCompact = useCallback(() => {
+    if (canCompact && sessionId) void compact(sessionId);
+  }, [canCompact, sessionId, compact]);
+
   const handleQueueMessage = useCallback(
     (text: string) => {
       if (sessionId) enqueueMessage(sessionId, text);
@@ -790,6 +805,8 @@ export default function BuildChatPanel({
                     onInterrupt={
                       scheduledRunInFlight ? undefined : handleInterrupt
                     }
+                    onCompact={onCompact}
+                    canCompact={canCompact}
                     disabled={isViewingSubagent || scheduledRunInFlight}
                     placeholder={
                       isViewingSubagent

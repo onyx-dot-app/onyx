@@ -10,11 +10,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Popover, Text } from "@opal/components";
+import { SvgFold } from "@opal/icons";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   filterPickerSections,
   flattenSections,
   type PickerApp,
+  type PickerCommand,
   type PickerEntry,
   type PickerSections,
 } from "@/lib/skills/picker";
@@ -181,15 +183,22 @@ function buildMenuChildren({
     ];
   }
 
+  const commandsCount = filtered.commands.length;
   const skillsCount = filtered.skills.length;
+  const skillsStart = commandsCount;
+  const appsStart = commandsCount + skillsCount;
   const children: ReactNode[] = [];
 
   flatEntries.forEach((entry, idx) => {
-    if (idx === 0 && skillsCount > 0) {
+    if (idx === 0 && commandsCount > 0) {
+      children.push(<SectionHeader key="commands-header" label="Commands" />);
+    }
+    if (idx === skillsStart && skillsCount > 0) {
+      if (commandsCount > 0) children.push(null);
       children.push(<SectionHeader key="skills-header" label="Skills" />);
     }
-    if (idx === skillsCount && filtered.apps.length > 0) {
-      if (skillsCount > 0) children.push(null);
+    if (idx === appsStart && filtered.apps.length > 0) {
+      if (commandsCount > 0 || skillsCount > 0) children.push(null);
       children.push(<SectionHeader key="apps-header" label="Apps" />);
     }
     const selected = idx === selectedIndex;
@@ -198,6 +207,15 @@ function buildMenuChildren({
         <AppRow
           key={`app-${entry.slug}`}
           app={entry}
+          selected={selected}
+          onHover={() => onHover(idx)}
+          onPick={() => onSelect(entry)}
+          rowIndex={idx}
+        />
+      ) : entry.kind === "command" ? (
+        <CommandRow
+          key={`command-${entry.slug}`}
+          command={entry}
           selected={selected}
           onHover={() => onHover(idx)}
           onPick={() => onSelect(entry)}
@@ -263,6 +281,45 @@ function SkillRow({
         data-testid={`skill-picker-row-${slug}`}
       >
         {`/${slug}`}
+      </LineItem>
+    </div>
+  );
+}
+
+interface CommandRowProps {
+  command: PickerCommand;
+  selected: boolean;
+  onHover: () => void;
+  onPick: () => void;
+  rowIndex: number;
+}
+
+function CommandRow({
+  command,
+  selected,
+  onHover,
+  onPick,
+  rowIndex,
+}: CommandRowProps) {
+  return (
+    <div className="cursor-pointer">
+      <LineItem
+        interactive={false}
+        selected={selected}
+        emphasized={selected}
+        description={command.description}
+        onMouseEnter={onHover}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          onPick();
+        }}
+        data-row-index={rowIndex}
+        data-testid={`skill-picker-row-${command.slug}`}
+      >
+        <span className="inline-flex items-center gap-2">
+          <SvgFold className="size-4 shrink-0 stroke-text-04" />
+          <span>{`/${command.slug}`}</span>
+        </span>
       </LineItem>
     </div>
   );

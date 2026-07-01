@@ -441,6 +441,59 @@ def test_send_message_omits_model_when_only_one_arg_supplied(
 
 
 # ---------------------------------------------------------------------------
+# Compact action
+# ---------------------------------------------------------------------------
+
+
+def test_send_message_action_compact_posts_summarize_not_prompt_async(
+    bus: PodEventBus,
+) -> None:
+    """``action="compact"`` must call ``POST /session/{id}/summarize`` with
+    ``{providerID, modelID, auto: False}`` instead of ``prompt_async``, and
+    ignore ``message``."""
+    posted_bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/summarize"):
+            posted_bodies.append(httpx.Response(200, content=request.content).json())
+        return httpx.Response(204)
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(bus, transport)
+    events: list[Any] = []
+
+    def runner() -> None:
+        for evt in client.send_message(
+            _SESSION,
+            "unused",
+            directory=_DIRECTORY,
+            model_provider="anthropic",
+            model_id="claude-opus-4-7",
+            timeout=5.0,
+            action="compact",
+        ):
+            events.append(evt)
+
+    t = threading.Thread(target=runner, daemon=True)
+    t.start()
+    try:
+        assert _wait_for(lambda: len(posted_bodies) == 1)
+        assert not any(
+            request.url.path.endswith("/prompt_async") for request in transport.requests
+        )
+        _dispatch_session_idle(bus)
+        assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
+    finally:
+        t.join(timeout=3.0)
+
+    assert posted_bodies[0] == {
+        "providerID": "anthropic",
+        "modelID": "claude-opus-4-7",
+        "auto": False,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Error paths
 # ---------------------------------------------------------------------------
 

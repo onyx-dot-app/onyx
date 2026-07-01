@@ -468,6 +468,7 @@ def yield_sandbox_events(
     opencode_session_id: str | None,
     agent_provider: str | None,
     agent_model: str | None,
+    kind: str = "prompt",
     should_interrupt: Callable[[], bool] | None = None,
 ) -> Generator[Any, None, None]:
     """Drive the agent to completion, yielding raw sandbox events.
@@ -499,6 +500,7 @@ def yield_sandbox_events(
         agent_model=agent_model,
         on_opencode_session_resolved=_persist_resolved_id,
         should_interrupt=should_interrupt,
+        action="compact" if kind == "compact" else "prompt",
     )
 
 

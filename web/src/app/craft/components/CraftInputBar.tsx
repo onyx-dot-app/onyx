@@ -57,6 +57,10 @@ export interface CraftInputBarProps {
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
+  /** Fired instead of adding a chip when the `/compact` command is selected. */
+  onCompact?: () => void;
+  /** When false, the `/compact` command is hidden from the picker. */
+  canCompact?: boolean;
   contextUsage?: {
     usedTokens: number;
     contextLimit: number | null;
@@ -80,6 +84,8 @@ const CraftInputBar = memo(
         onRemoveQueuedMessage,
         onInterrupt,
         isInterrupting = false,
+        onCompact,
+        canCompact = false,
         contextUsage,
         initialEntries,
       },
@@ -98,10 +104,11 @@ const CraftInputBar = memo(
 
       const { data: skillsData } = useUserSkills();
       const { data: appsData } = useUserExternalApps();
-      const pickerSections = useMemo(
-        () => toPickerSections(skillsData, appsData),
-        [skillsData, appsData]
-      );
+      const pickerSections = useMemo(() => {
+        const sections = toPickerSections(skillsData, appsData);
+        // Only surface commands (e.g. /compact) when they can actually run.
+        return canCompact ? sections : { ...sections, commands: [] };
+      }, [skillsData, appsData, canCompact]);
 
       const { data: libraryTree, mutate: mutateLibrary } = useSWR(
         SWR_KEYS.buildUserLibraryTree,
@@ -135,9 +142,21 @@ const CraftInputBar = memo(
         setActiveEntries((prev) => prev.filter((e) => e.slug !== slug));
       }, []);
 
+      // Commands act immediately instead of becoming a chip.
+      const handleEntrySelect = useCallback(
+        (entry: PickerEntry) => {
+          if (entry.kind === "command" && entry.slug === "compact") {
+            onCompact?.();
+            return;
+          }
+          addEntry(entry);
+        },
+        [addEntry, onCompact]
+      );
+
       const slashPicker = useSlashPicker({
         inputRef: baseRef,
-        onSelect: addEntry,
+        onSelect: handleEntrySelect,
       });
 
       const interruptible = !!onInterrupt && isRunning;
@@ -170,12 +189,12 @@ const CraftInputBar = memo(
               null)
             : null;
           if (entry) {
-            addEntry(entry);
+            handleEntrySelect(entry);
             return true;
           }
           return false;
         },
-        [pickerSections, addEntry]
+        [pickerSections, handleEntrySelect]
       );
 
       const handleSubmit = useCallback(

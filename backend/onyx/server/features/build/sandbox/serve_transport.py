@@ -484,6 +484,7 @@ class _ServeMixin:
         *,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        action: str = "prompt",
     ) -> Generator[SandboxEvent, None, None]:
         """Stream sandbox events via the in-sandbox ``opencode serve``. Preflight
         ``opencode_session_id`` via :meth:`ensure_opencode_session` to avoid
@@ -533,6 +534,7 @@ class _ServeMixin:
                     model_provider=agent_provider,
                     model_id=agent_model,
                     should_interrupt=should_interrupt,
+                    action=action,
                 ):
                     events_count += 1
                     if isinstance(event, PromptResponse):

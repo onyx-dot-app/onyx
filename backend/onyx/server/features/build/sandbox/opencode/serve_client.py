@@ -1319,6 +1319,7 @@ class OpencodeServeClient:
         model_id: str | None = None,
         timeout: float = SANDBOX_TURN_TIMEOUT_SECONDS,
         should_interrupt: Callable[[], bool] | None = None,
+        action: str = "prompt",
     ) -> Generator[SandboxEvent, None, None]:
         """Stream one turn of SandboxEvents via the shared per-pod bus.
 
@@ -1326,6 +1327,11 @@ class OpencodeServeClient:
         — opencode-serve scopes its Instance (and therefore the session
         store) per ``?directory=`` query param; calling with a different
         directory will 404 the session.
+
+        ``action="compact"`` calls opencode's ``summarize`` instead of
+        ``prompt_async`` (``message`` is unused); it still emits events
+        through the same bus and terminates on ``session.idle`` like a
+        normal turn.
 
         ``GeneratorExit`` (browser disconnect) → POST ``/abort``.
         Wall-clock timeout → POST ``/abort`` and yield :class:`Error`.
@@ -1360,13 +1366,21 @@ class OpencodeServeClient:
                 return
 
             try:
-                self._post_prompt_async(
-                    opencode_session_id,
-                    message,
-                    model_provider,
-                    model_id,
-                    directory=directory,
-                )
+                if action == "compact":
+                    self._post_summarize(
+                        opencode_session_id,
+                        model_provider,
+                        model_id,
+                        directory=directory,
+                    )
+                else:
+                    self._post_prompt_async(
+                        opencode_session_id,
+                        message,
+                        model_provider,
+                        model_id,
+                        directory=directory,
+                    )
                 prompt_posted = True
             except httpx.HTTPStatusError as e:
                 yield Error.model_validate(
@@ -1377,10 +1391,11 @@ class OpencodeServeClient:
                 )
                 return
             except httpx.HTTPError as e:
+                op = "summarize" if action == "compact" else "prompt_async"
                 yield Error.model_validate(
                     {
                         "code": TURN_ERROR_CODE_TRANSPORT,
-                        "message": f"prompt_async failed: {e}",
+                        "message": f"{op} failed: {e}",
                     }
                 )
                 return
@@ -1611,6 +1626,36 @@ class OpencodeServeClient:
             idempotent=False,
         )
         _raise_for_status(r, "prompt_async")
+
+    def _post_summarize(
+        self,
+        opencode_session_id: str,
+        model_provider: str | None,
+        model_id: str | None,
+        *,
+        directory: str,
+    ) -> None:
+        """POST /session/.../summarize.
+
+        Generates a summary message (``info.summary == True``) and publishes
+        ``session.compacted``, then goes idle like a normal turn. Requires a
+        model — callers must not invoke this without both
+        ``model_provider``/``model_id`` resolved.
+        """
+        body = {
+            "providerID": model_provider,
+            "modelID": model_id,
+            "auto": False,
+        }
+        # idempotent=False: only the 401 reload retries this POST.
+        r = self._request(
+            "POST",
+            f"/session/{opencode_session_id}/summarize",
+            params={"directory": directory},
+            json=body,
+            idempotent=False,
+        )
+        _raise_for_status(r, "summarize")
 
     def _handle_permission_ask(
         self, evt: dict[str, Any], state: _TurnState, *, directory: str
