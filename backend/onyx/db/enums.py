@@ -581,6 +581,14 @@ class PersonaSharePermission(str, PyEnum):
     VIEWER = "VIEWER"
 
 
+class SkillSharePermission(str, PyEnum):
+    """Level granted by a skill share row (user or group), or to the whole org
+    via `Skill.public_permission`."""
+
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
 class PersonaAccessLevel(str, PyEnum):
     """Computed access the requesting user holds on a persona.
 

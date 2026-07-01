@@ -12,6 +12,7 @@ from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppPolicy
 from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Skill
+from onyx.db.models import Skill__User
 from onyx.db.models import Skill__UserGroup
 
 # Parent -> child order (FKs all point child -> parent). Restore/insert in this
@@ -19,6 +20,7 @@ from onyx.db.models import Skill__UserGroup
 _SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
     Skill,
     ExternalApp,
+    Skill__User,
     Skill__UserGroup,
     ExternalAppPolicy,
     ExternalAppUserCredential,
