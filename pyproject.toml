@@ -60,7 +60,7 @@ backend = [
     "httpx[http2]==0.28.1",
     "httpx-oauth==0.15.1",
     "jira==3.10.5",
-    "kubernetes==31.0.0",
+    "kubernetes==36.0.2",
     "trafilatura==1.12.2",
     "langchain-core==1.3.3",
     "lxml==6.1.0",
