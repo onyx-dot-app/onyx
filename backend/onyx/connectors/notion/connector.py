@@ -157,6 +157,11 @@ class NotionConnector(LoadConnector, PollConnector):
         # Maps data_source_id -> database_id (populated in _read_pages_from_database).
         # Used to resolve data_source_id parent types back to the database.
         self._data_source_to_database_map: dict[str, str] = {}
+        # Page IDs that are parents of standalone databases (discovered via the search
+        # API in _yield_database_hierarchy_nodes). These pages must emit a hierarchy
+        # node in _read_pages even if they have no block-detected children, so that the
+        # STUB created for them during database upsert gets promoted.
+        self._database_parent_page_ids: set[str] = set()
 
     @classmethod
     @override
@@ -885,9 +890,14 @@ class NotionConnector(LoadConnector, PollConnector):
                 page_title = raw_page_title or f"Untitled Page with ID {page.id}"
                 parent_raw_id = self._get_parent_raw_id(page.parent, page_id=page.id)
 
-                # If this page has children (pages or databases), yield it as a hierarchy node FIRST
-                # This ensures parent nodes are created before child documents reference them
-                if block_output.child_page_ids or block_output.hierarchy_nodes:
+                # Yield as a hierarchy node if this page has block-detected children,
+                # OR if it was discovered as the parent of a standalone database (in
+                # which case a STUB exists for it and needs to be promoted here).
+                if (
+                    block_output.child_page_ids
+                    or block_output.hierarchy_nodes
+                    or page.id in self._database_parent_page_ids
+                ):
                     hierarchy_node = self._maybe_yield_hierarchy_node(
                         raw_node_id=page.id,
                         raw_parent_id=parent_raw_id,
@@ -986,7 +996,7 @@ class NotionConnector(LoadConnector, PollConnector):
         res.raise_for_status()
         return NotionSearchResponse(**res.json())
 
-    # The | Document is needed for mypy type checking
+    # The | Document is needed for type-checking
     def _yield_database_hierarchy_nodes(
         self,
     ) -> Generator[HierarchyNode | Document, None, None]:
@@ -1028,6 +1038,15 @@ class NotionConnector(LoadConnector, PollConnector):
                     db_url = (
                         db_page.url or f"https://notion.so/{db_id.replace('-', '')}"
                     )
+                    # Track page parents so _read_pages can emit their hierarchy nodes
+                    # even when those pages have no block-detected children.
+                    db_parent = db_page.parent
+                    if (
+                        db_parent
+                        and db_parent.get("type") == "page_id"
+                        and parent_raw_id
+                    ):
+                        self._database_parent_page_ids.add(parent_raw_id)
                 except requests.exceptions.RequestException as e:
                     logger.warning(
                         "Could not fetch database '%s', "

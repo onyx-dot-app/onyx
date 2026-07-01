@@ -39,11 +39,11 @@ from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
 from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft.conftest import (
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.stubs import StubSandboxManager
+from tests.external_dependency_unit.craft.redis_helpers import (
     assert_lock_serializes_two_threads,
 )
-from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
 # Built-in skill rows are seeded by ``setup_postgres`` (run once per
 # tenant in ``full_setup``) and persist across tests. The session
@@ -838,11 +838,6 @@ class TestPortAllocator:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # Plan calls for OnyxError here, but the implementation in
-        # ``onyx.server.features.build.db.build_session.allocate_nextjs_port``
-        # raises ``RuntimeError`` with the documented "No available ports"
-        # message. We pin the current behaviour and flag the divergence in
-        # the report. See manager.py / build_session.py for the call sites.
         monkeypatch.setattr(
             "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
             50100,
@@ -864,8 +859,9 @@ class TestPortAllocator:
             )
         db_session.commit()
 
-        with pytest.raises(RuntimeError, match="No available ports"):
+        with pytest.raises(OnyxError) as exc_info:
             allocate_nextjs_port(db_session)
+        assert exc_info.value.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
 
 
 # =============================================================================
@@ -882,7 +878,9 @@ class TestConcurrentCreateLock:
         # Same lock contract as sessions_api.create_session: lock key is
         # ``session_create:{user_id}``. Two threads contend; the second
         # observes the first holding it.
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         lock_key = f"session_create:{test_user.id}"
 
         assert_lock_serializes_two_threads(redis_client, lock_key)
@@ -971,7 +969,7 @@ class TestRestoreSession:
         snapshot = Snapshot(
             id=uuid4(),
             session_id=idle_session.id,
-            storage_path=f"{TEST_TENANT_ID}/snapshots/{idle_session.id}/latest.tar.gz",
+            storage_path=f"{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/snapshots/{idle_session.id}/latest.tar.gz",
             size_bytes=123,
         )
         db_session.add(snapshot)
@@ -1022,6 +1020,54 @@ class TestRestoreSession:
             stub_sandbox_manager.last_write_files_to_sandbox_payload["mount_path"]
             == USER_LIBRARY_MOUNT_PATH
         )
+
+    def test_restore_preserves_port_exhaustion_onyx_error(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        session_manager_with_stub: SessionManager,  # noqa: ARG002
+        stub_sandbox_manager: StubSandboxManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        idle_session = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="restore-port-exhausted",
+            status=BuildSessionStatus.IDLE,
+            nextjs_port=None,
+        )
+        db_session.add(idle_session)
+        db_session.commit()
+
+        stub_sandbox_manager.health_check_returns = True
+        stub_sandbox_manager.session_workspace_exists_returns = False
+
+        monkeypatch.setattr(
+            "onyx.server.features.build.session.api.get_sandbox_manager",
+            lambda: stub_sandbox_manager,
+        )
+
+        def _raise_port_exhausted(_db_session: Session) -> int:
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "No available ports in configured range",
+            )
+
+        monkeypatch.setattr(
+            "onyx.server.features.build.session.api.allocate_nextjs_port",
+            _raise_port_exhausted,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            restore_session(
+                session_id=idle_session.id,
+                user=test_user,
+                db_session=db_session,
+            )
+
+        assert exc_info.value.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
 
 
 # =============================================================================

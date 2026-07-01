@@ -45,7 +45,11 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
 
     if sandbox.encrypted_pat and len(existing_craft_pats) == 1:
         raw_token = sandbox.encrypted_pat.get_value(apply_mask=False)
-        if hash_pat(raw_token) == existing_craft_pats[0].hashed_token:
+        existing = existing_craft_pats[0]
+        # Re-mint if the stored PAT's scopes drifted from the current role scope
+        if hash_pat(raw_token) == existing.hashed_token and existing.scopes == [
+            Permission.CRAFT_SANDBOX.value
+        ]:
             return raw_token
 
     for pat in existing_craft_pats:
@@ -57,7 +61,7 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
         name=f"craft-{user.id}",
         expiration_days=_PAT_EXPIRATION_DAYS,
         pat_type=PatType.CRAFT,
-        scopes=[Permission.READ_SEARCH],
+        scopes=[Permission.CRAFT_SANDBOX],
     )
 
     sandbox.encrypted_pat = raw_token  # ty: ignore[invalid-assignment]
@@ -229,6 +233,11 @@ def get_snapshots_for_session(db_session: Session, session_id: UUID) -> list[Sna
         .order_by(Snapshot.created_at.desc())
     )
     return list(db_session.execute(stmt).scalars().all())
+
+
+def delete_snapshot__no_commit(db_session: Session, snapshot: Snapshot) -> None:
+    """Delete a snapshot row. Caller owns the transaction boundary."""
+    db_session.delete(snapshot)
 
 
 def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:

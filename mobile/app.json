@@ -96,7 +96,8 @@
             ]
           }
         }
-      ]
+      ],
+      "react-native-enriched-markdown"
     ],
     "experiments": {
       "typedRoutes": true

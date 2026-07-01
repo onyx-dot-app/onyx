@@ -5,6 +5,7 @@ import {
   SvgGithub,
   SvgGoogleCalendar,
   SvgGoogleDrive,
+  SvgHubspot,
 } from "@opal/logos";
 import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
@@ -17,6 +18,7 @@ export type ExternalAppType =
   | "GMAIL"
   | "LINEAR"
   | "GITHUB"
+  | "HUBSPOT"
   | "CUSTOM";
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
@@ -27,6 +29,7 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
     GMAIL: SvgGmail,
     LINEAR: SvgLinear,
     GITHUB: SvgGithub,
+    HUBSPOT: SvgHubspot,
   };
 
 /** Logo for a known `app_type`, with a generic fallback for CUSTOM /
@@ -102,6 +105,8 @@ export interface ExternalAppUserResponse {
   credential_keys: string[];
   credential_values: Record<string, string>;
   authenticated: boolean;
+  // OAuth apps connect via a popup; others via the credential form.
+  supports_oauth: boolean;
 }
 
 /**

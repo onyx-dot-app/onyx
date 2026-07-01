@@ -20,6 +20,7 @@ import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAppFocus from "@/hooks/useAppFocus";
+import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
@@ -28,10 +29,7 @@ import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
-import {
-  ProjectFile,
-  UserFileStatus,
-} from "@/app/app/projects/projectsService";
+import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
 import {
@@ -205,6 +203,55 @@ const AppInputBar = React.memo(
     const isSearchMode =
       (isNewSession && appMode === "search") || isSearchActive;
 
+    // Keyed by chat session id, or "new" until the session is created.
+    const chatSessionId = appFocus.isChat() ? appFocus.getId() : null;
+    const chatDraftStorageKey = draftKey("chat", chatSessionId ?? "new");
+    const {
+      draft: chatDraft,
+      loaded: chatDraftLoaded,
+      save: saveChatDraft,
+      clear: clearChatDraft,
+    } = useDraft<string>({ key: chatDraftStorageKey });
+    const draftSeededRef = useRef(false);
+    const skipNextDraftSaveRef = useRef(false);
+    const prevDraftKeyRef = useRef(chatDraftStorageKey);
+    // Snapshot of message, read non-reactively in the restore effect so seeding
+    // doesn't re-run on every keystroke.
+    const messageRef = useRef(message);
+    messageRef.current = message;
+
+    useEffect(() => {
+      draftSeededRef.current = false;
+      // Clear the previous session's leftover text instead of leaking it into
+      // this one.
+      if (prevDraftKeyRef.current !== chatDraftStorageKey) {
+        prevDraftKeyRef.current = chatDraftStorageKey;
+        clearMessage();
+      }
+    }, [chatDraftStorageKey, clearMessage]);
+
+    // Restore once read: a URL prompt wins and a non-empty input is never
+    // clobbered.
+    useEffect(() => {
+      if (!chatDraftLoaded || draftSeededRef.current) return;
+      draftSeededRef.current = true;
+      if (chatDraft && !initialMessage && !messageRef.current) {
+        // Skip the save effect's next run; it would fire with the stale empty
+        // message and wipe what we just seeded.
+        skipNextDraftSaveRef.current = true;
+        setMessage(chatDraft);
+      }
+    }, [chatDraftLoaded, chatDraft, initialMessage, setMessage]);
+
+    useEffect(() => {
+      if (!chatDraftLoaded || !draftSeededRef.current) return;
+      if (skipNextDraftSaveRef.current) {
+        skipNextDraftSaveRef.current = false;
+        return;
+      }
+      saveChatDraft(message);
+    }, [message, chatDraftLoaded, saveChatDraft]);
+
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
       setIsRecording((prevIsRecording) => {
         if (!prevIsRecording && nextIsRecording) {
@@ -228,8 +275,9 @@ const AppInputBar = React.memo(
           return;
         }
         handleSubmit(text);
+        clearChatDraft();
       },
-      [handleSubmit]
+      [handleSubmit, clearChatDraft]
     );
 
     // Expose reset and focus methods to parent via ref
@@ -237,6 +285,7 @@ const AppInputBar = React.memo(
       reset: () => {
         if (!isAutoSending.current) {
           clearMessage();
+          clearChatDraft();
         }
       },
       focus: () => {
@@ -739,6 +788,9 @@ const AppInputBar = React.memo(
                 if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
                   enqueueCurrentMessage(message.trim());
                   clearMessage();
+                  // Drop the draft now; a reload could outrace the debounced
+                  // empty-save.
+                  clearChatDraft();
                 }
               } else if (chatState == "streaming") {
                 stopTTS({ manual: true });
@@ -768,10 +820,10 @@ const AppInputBar = React.memo(
             ref={containerRef}
             id="onyx-chat-input"
             className={cn(
-              "relative w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
+              "relative w-full flex flex-col shadow-box-01 bg-background-neutral-00 rounded-16"
               // # Note (from @raunakab):
               //
-              // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
+              // `shadow-box-01` extends ~14px below the element (2px offset + 12px blur).
               // Because the content area in `Root` (app-layouts.tsx) uses `overflow-auto`,
               // shadows that exceed the container bounds are clipped.
               //
@@ -886,7 +938,8 @@ const AppInputBar = React.memo(
                         )
                           return;
 
-                        // Enter to submit or queue (Shift+Enter falls through to browser default: inserts <br>)
+                        // Enter to submit or queue (Shift+Enter falls through
+                        // to browser default: inserts <br>).
                         if (
                           event.key === "Enter" &&
                           !showPrompts &&
@@ -915,6 +968,9 @@ const AppInputBar = React.memo(
                           ) {
                             enqueueCurrentMessage(message.trim());
                             clearMessage();
+                            // Drop the draft now; a reload could outrace the
+                            // debounced empty-save.
+                            clearChatDraft();
                           }
                         }
                       }}

@@ -1,5 +1,6 @@
 """Tests for llm_loop.py, including history construction and empty-response paths."""
 
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -8,6 +9,7 @@ from onyx.chat.llm_loop import _build_empty_llm_response_error
 from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_loop import EmptyLLMResponseError
+from onyx.chat.llm_loop import select_reminder_text
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ContextFileMetadata
@@ -19,6 +21,8 @@ from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
+from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ToolCallKickoff
 
@@ -1298,3 +1302,44 @@ class TestEmptyLlmResponseClassification:
         assert err.error_code == "EMPTY_LLM_RESPONSE"
         assert err.is_retryable is True
         assert "quota" not in err.client_error_msg.lower()
+
+
+class TestSelectReminderText:
+    """The open_url nudge must be suppressed when the open_url tool is disabled,
+    otherwise the model is told to call a tool it doesn't have (confusing
+    "open_url is not available" replies)."""
+
+    def _select(self, **overrides: Any) -> str | None:
+        kwargs: dict[str, Any] = dict(
+            ran_image_gen=False,
+            just_ran_web_search=False,
+            has_open_url_tool=True,
+            out_of_cycles=False,
+            persona_task_prompt=None,
+            include_citation_reminder=False,
+            include_file_reminder=False,
+        )
+        kwargs.update(overrides)
+        return select_reminder_text(**kwargs)
+
+    def test_open_url_reminder_when_tool_available(self) -> None:
+        result = self._select(just_ran_web_search=True, has_open_url_tool=True)
+        assert result == OPEN_URL_REMINDER
+
+    def test_no_open_url_reminder_when_tool_disabled(self) -> None:
+        """Web search ran but open_url is disabled -> fall back, never nudge open_url."""
+        result = self._select(just_ran_web_search=True, has_open_url_tool=False)
+        assert result != OPEN_URL_REMINDER
+        assert result is None  # nothing else to remind about in this scenario
+
+    def test_open_url_reminder_suppressed_on_last_cycle(self) -> None:
+        result = self._select(
+            just_ran_web_search=True, has_open_url_tool=True, out_of_cycles=True
+        )
+        assert result != OPEN_URL_REMINDER
+
+    def test_image_gen_reminder_takes_precedence(self) -> None:
+        result = self._select(
+            ran_image_gen=True, just_ran_web_search=True, has_open_url_tool=True
+        )
+        assert result == IMAGE_GEN_REMINDER

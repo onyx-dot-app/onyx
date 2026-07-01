@@ -26,10 +26,10 @@ from onyx.server.features.build.db.action_approval import (
     list_session_pending_action_approvals,
 )
 from onyx.server.features.build.db.action_approval import try_record_decision
-from tests.external_dependency_unit.craft._test_helpers import _set_created_at
-from tests.external_dependency_unit.craft._test_helpers import action_entry
-from tests.external_dependency_unit.craft._test_helpers import default_action_entries
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.common.craft.payloads import action_entry
+from tests.common.craft.payloads import default_action_entries
+from tests.external_dependency_unit.craft.db_helpers import force_approval_created_at
+from tests.external_dependency_unit.craft.db_helpers import make_user
 
 
 def _seed_pending(
@@ -95,37 +95,6 @@ def test_insert_action_approval_rejects_empty_actions(
             app_name="Shell",
             payload={"cmd": "ls"},
         )
-
-
-def test_try_record_decision_happy_path_refreshes_in_memory_row(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    build_session_with_user: Callable[..., BuildSession],
-) -> None:
-    """Pins the ``db_session.refresh(row)`` fix.
-
-    Without it the identity-mapped ORM object still reads ``decision=None``
-    even after Postgres has the new value.
-    """
-    user = make_user(db_session)
-    bs = build_session_with_user(user=user)
-    row = _seed_pending(db_session, bs.id)
-    assert row.decision is None
-
-    returned = try_record_decision(
-        db_session,
-        approval_id=row.approval_id,
-        decision=ApprovalDecision.REJECTED,
-    )
-    db_session.commit()
-
-    assert returned is not None
-    assert returned.approval_id == row.approval_id
-    assert returned.decision == ApprovalDecision.REJECTED
-    assert returned.decided_at is not None
-    # The same ORM object reference must reflect the new state (refresh fix).
-    assert row.decision == ApprovalDecision.REJECTED
-    assert row.decided_at is not None
 
 
 def test_try_record_decision_lost_race_returns_none_and_preserves_decision(
@@ -215,7 +184,7 @@ def test_list_session_pending_action_approvals_filters_by_created_after(
     new_row = _seed_pending(db_session, bs.id, payload={"cmd": "new"})
 
     one_hour_ago = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
-    _set_created_at(db_session, ActionApproval, old_row.approval_id, one_hour_ago)
+    force_approval_created_at(db_session, old_row.approval_id, one_hour_ago)
 
     cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)
     rows = list_session_pending_action_approvals(

@@ -8,11 +8,11 @@ Companion docs:
 
 ## 1. Goal
 
-Add `/admin/skills` (admin CRUD) and `/skills` (user read) HTTP endpoints, backed by the existing DB module (`backend/onyx/db/skill.py`), built-in registry (`backend/onyx/skills/registry.py`), and bundle validator (`backend/onyx/skills/bundle.py`). Mutations push bundle bytes into running sandbox pods via `SandboxManager.push_to_sandboxes` (see `docs/craft/features/sandbox-file-push.md`); the FileStore blob is still written for persistence and cold-start hydration.
+Add `/admin/skills` (admin CRUD) and `/skills` (user read) HTTP endpoints, backed by the existing DB module (`backend/onyx/db/skill.py`), built-in registry (`backend/onyx/skills/registry.py`), and bundle validator (`backend/onyx/skills/bundle.py`). Mutations push bundle bytes into running sandbox pods via `SandboxManager.push_to_sandboxes`; the FileStore blob is still written for persistence and cold-start hydration.
 
 ## 2. Out of Scope
 
-- Extending `SandboxManager` with the push API and per-backend `write_files_to_sandbox` implementation (separate workstream — see `sandbox-file-push.md`).
+- Extending `SandboxManager` with the push API and per-backend `write_files_to_sandbox` implementation (separate workstream).
 - Built-in skill source files / registrations (registry exists; registering specific built-ins is a separate workstream).
 - Cold-start hydration plumbing in `setup_session_workspace` (owned by the push-primitive workstream).
 - ~~Orphan-blob sweep job~~ — resolved: delete/replace endpoints now clean up old blobs inline via `_delete_old_bundle` (best-effort, logs on failure).
@@ -479,7 +479,7 @@ Cover the admin happy paths plus the load-bearing error cases:
 
 ## 9. Suggested Subagent Decomposition
 
-**Hard dependency**: this work depends on `SandboxManager` having `push_to_sandbox` / `push_to_sandboxes` methods landed (see sandbox-file-push.md workstream); can be stubbed for testing in the meantime.
+**Hard dependency**: this work depends on `SandboxManager` having `push_to_sandbox` / `push_to_sandboxes` methods landed; can be stubbed for testing in the meantime.
 
 Stage 1 (sequential — establishes the contract):
 - **A. Models + skeleton router** — write `models.py`, `api.py` with route signatures returning `NotImplementedError`, and register them in `main.py`. Add `SkillPatch` dataclass to `db/skill.py`. Add `get_sandbox_user_map` to `backend/onyx/server/features/build/db/sandbox.py`. Output: typecheck-clean skeleton.

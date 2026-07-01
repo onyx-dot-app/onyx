@@ -1,25 +1,77 @@
 # Values overlay for the Craft K8s CI lane (pr-craft-k8s-tests.yml).
 #
-# The CI workflow renders specific templates with `helm template --show-only`
-# and applies them to a kind cluster, so chart edits flow into the test lane
-# automatically. When you add a new chart component that the K8s sandbox tests
-# depend on, render it here and apply it in the workflow.
+# The workflow installs the chart into a kind cluster so the Craft tests run
+# against a real deployed API, Celery workers, sandbox proxy, and sandbox pods.
+# Keep this overlay representative while sizing nonessential components down for
+# the CI runner.
+
+vectorDB:
+  enabled: true
+
+opensearch:
+  enabled: true
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1500m
+      memory: 2Gi
+  persistence:
+    enabled: true
+    size: 1Gi
+  opensearchJavaOpts: "-Xmx512m -Xms512m"
+
+nginx:
+  enabled: false
+
+ingress:
+  enabled: false
+
+letsencrypt:
+  enabled: false
+
+codeInterpreter:
+  enabled: false
 
 configMap:
   ENABLE_CRAFT: "true"
-  # Placeholder; the K8s sandbox tests don't call back to it. Required to
-  # satisfy the chart's fail() guard for ENABLE_CRAFT=true.
-  SANDBOX_API_SERVER_URL: "http://api.invalid"
+  INTEGRATION_TESTS_MODE: "true"
+  DISABLE_TELEMETRY: "true"
+  # EE so tier-gated routes work (test_skill_push user-groups); license seeded by the workflow.
+  ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
+  # No model server in this lane; skips the GPU-status probe that would hang API startup.
+  DISABLE_MODEL_SERVER: "true"
+  # Sandbox pods call the chart-managed API service, matching production.
+  SANDBOX_API_SERVER_URL: "http://onyx-api-service.onyx.svc.cluster.local:8080"
   # Sandbox image the kind cluster pulls (built+pushed by the CI workflow).
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
-  # Tiny requests so the 4 vCPU runner can fit 4 concurrent sandbox pods.
+  # Tiny requests so the sandbox pod schedules alongside the full Onyx stack on
+  # the single kind node.
   SANDBOX_POD_CPU_REQUEST: "100m"
   SANDBOX_POD_MEMORY_REQUEST: "256Mi"
   SANDBOX_POD_CPU_LIMIT: "2000m"
-  SANDBOX_POD_MEMORY_LIMIT: "4Gi"
-  # kind runner disks are small; production default is 5Gi/20Gi.
-  SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST: "512Mi"
-  SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT: "4Gi"
+  SANDBOX_POD_MEMORY_LIMIT: "6Gi"
+  # Sandbox pods do real disk work over their lifetime (shared bun cache, build
+  # outputs, opencode data); without an ephemeral-storage request the kubelet
+  # evicts them first under node disk pressure. Prod default is 5Gi/20Gi.
+  SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST: "2Gi"
+  SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT: "8Gi"
+  # Shrink the approval-gate park window so timeout-path tests don't wait the
+  # 180s production default.
+  SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS: "20"
+
+postgresql:
+  cluster:
+    storage:
+      size: 1Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
 
 # test_sigterm_drain_unblocks_parked_request deletes "the" proxy pod via an
 # arbitrary `items[0]` from the label selector and expects that pod to be the
@@ -28,15 +80,12 @@ configMap:
 sandboxProxy:
   replicaCount: 1
 
-# Placeholder secret values so auth-secrets.yaml renders without erroring.
-# Postgres/Redis run in docker-compose alongside the kind
-# cluster in this lane (see pr-craft-k8s-tests.yml), so the in-chart values
-# only need to satisfy the chart's pre-validate fail() guards.
+# CI-only secret values for chart-managed dependencies in the kind cluster.
 auth:
   postgresql:
     values:
       username: "postgres"
-      # Must match the docker-compose Postgres the proxy reads from.
+      # Must match the runner-side POSTGRES_PASSWORD used after port-forwarding.
       password: "password"
   redis:
     values:
@@ -50,18 +99,107 @@ auth:
       rootUser: "minioadmin"
       rootPassword: "minioadmin"
   opensearch:
+    enabled: true
     values:
-      opensearch_admin_password: "ci-test-not-used"
+      opensearch_admin_username: "admin"
+      opensearch_admin_password: "OpenSearch1!"
   sandboxPushSecret:
     enabled: true
     values:
-      private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      private_key: ""
 
 # Keep MinIO chart-backed in CI so the workflow exercises chart object-storage
-# wiring, but size it for the 4 CPU runner.
+# wiring, but size it down for the CI runner.
 minio:
   persistence:
     size: 1Gi
   resources:
     requests:
       memory: 256Mi
+
+# Web image isn't built for this lane; the Craft tests drive the API directly.
+webserver:
+  replicaCount: 0
+
+api:
+  replicaCount: 1
+  # The workflow runs `alembic upgrade head` once after Postgres is reachable.
+  # Keep API startup from racing that centralized migration step.
+  runStartupMigrations: false
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+celery_beat:
+  replicaCount: 1
+
+celery_worker_primary:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+celery_worker_light:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+celery_worker_heavy:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+celery_worker_docfetching:
+  replicaCount: 0
+
+celery_worker_docprocessing:
+  replicaCount: 0
+
+celery_worker_user_file_processing:
+  replicaCount: 0
+
+celery_worker_scheduled_tasks:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+celery_worker_monitoring:
+  replicaCount: 0
+
+slackbot:
+  enabled: false
+
+discordbot:
+  enabled: false
+
+mcpServer:
+  enabled: false
+
+inferenceCapability:
+  replicaCount: 0
+
+indexCapability:
+  replicaCount: 0

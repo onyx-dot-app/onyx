@@ -5,11 +5,12 @@ import type {
 import type {
   BuiltinSkill,
   CustomSkill,
-} from "@/refresh-pages/admin/SkillsPage/interfaces";
+} from "@/views/admin/SkillsPage/interfaces";
 
 export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
   return {
     source: "builtin",
+    id: "builtin-1",
     slug: "pptx",
     name: "PPTX",
     description: "Build PowerPoint decks.",
@@ -51,6 +52,7 @@ export function appFixture(
     credential_keys: ["token"],
     credential_values: over.authenticated === false ? {} : { token: "***" },
     authenticated: true,
+    supports_oauth: false,
     ...over,
   };
 }

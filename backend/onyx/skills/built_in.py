@@ -35,6 +35,7 @@ from pydantic import model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
+from onyx.image_gen.generation import is_image_generation_configured
 
 # On-disk root for built-in skill content (one ``<skill_id>/`` dir each). Pushed
 # to sandboxes at session setup; not baked into the sandbox image.
@@ -167,7 +168,14 @@ class BuiltInSkillRegistry:
 _REGISTRY: Final = BuiltInSkillRegistry(
     providers=(
         SeededBuiltInProvider(skill_id="pptx"),
-        SeededBuiltInProvider(skill_id="image-generation"),
+        SeededBuiltInProvider(
+            skill_id="image-generation",
+            is_available=is_image_generation_configured,
+            unavailable_reason=(
+                "No image generation provider is configured — an admin can set "
+                "one up at /admin/configuration/image-generation."
+            ),
+        ),
         SeededBuiltInProvider(skill_id="company-search"),
         ExternalAppBuiltInProvider(skill_id="slack", app_type=ExternalAppType.SLACK),
         ExternalAppBuiltInProvider(skill_id="linear", app_type=ExternalAppType.LINEAR),
@@ -179,6 +187,9 @@ _REGISTRY: Final = BuiltInSkillRegistry(
         ),
         ExternalAppBuiltInProvider(skill_id="gmail", app_type=ExternalAppType.GMAIL),
         ExternalAppBuiltInProvider(skill_id="github", app_type=ExternalAppType.GITHUB),
+        ExternalAppBuiltInProvider(
+            skill_id="hubspot", app_type=ExternalAppType.HUBSPOT
+        ),
     )
 )
 

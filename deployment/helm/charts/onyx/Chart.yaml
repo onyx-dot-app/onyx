@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.4
+version: 0.6.7
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,10 +17,11 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: security
-      description: Set readOnlyRootFilesystem on the Craft sandbox egress proxy
-        (it holds tenant credentials) so an RCE cannot drop or persist a binary.
-        The proxy logs to stdout only (LOG_TO_FILE=false), leaving the mitmproxy
-        CA confdir as the single writable mount, which also serves as TMPDIR.
+      description: Add an egress NetworkPolicy on the Craft sandbox pods restricting their egress to
+        the sandbox proxy (:8080) and kube-dns (:53) only. CNI-layer backstop to the in-pod iptables
+        in firewall-init.sh, so a sandbox that bypasses that iptables still cannot reach anything but
+        the proxy. DNS is allowed because sandbox-init resolves the proxy FQDN before its iptables
+        closes DNS.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

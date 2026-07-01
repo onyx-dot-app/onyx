@@ -3,7 +3,7 @@
 LOAD-BEARING: referenced by every "Celery <name>" configuration in
 .vscode/launch.json (both local and k8s variants). Deleting or renaming this
 file will break the vscode debugger for celery. See also CONTRIBUTING.md
-("VSCode Debugger") and docs/dev/local-kubernetes.md.
+("VSCode Debugger") and docs/craft/dev/local-kubernetes.md.
 
 The reloader runs inside the debugged process and re-launches via fork;
 debugpy follows the fork when launch.json sets `subProcess: true`. The

@@ -97,8 +97,6 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserRole
-from onyx.file_processing.file_types import PLAIN_TEXT_MIME_TYPE
-from onyx.file_processing.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -135,6 +133,10 @@ from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
 from onyx.server.utils_vector_db import require_vector_db
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.threadpool_concurrency import CallableProtocol
@@ -533,27 +535,12 @@ def upload_files(
                 deduped_file_names.append(file.filename)
                 continue
 
-            # Since we can't render docx files in the UI,
-            # we store them in the file store as plain text
-            if file.content_type == WORD_PROCESSING_MIME_TYPE:
-                # Lazy load to avoid importing markitdown when not needed
-                from onyx.file_processing.extract_file_text import read_docx_file
-
-                text, _ = read_docx_file(file.file, file.filename)
-                file_id = file_store.save_file(
-                    content=BytesIO(text.encode("utf-8")),
-                    display_name=file.filename,
-                    file_origin=file_origin,
-                    file_type=PLAIN_TEXT_MIME_TYPE,
-                )
-
-            else:
-                file_id = file_store.save_file(
-                    content=file.file,
-                    display_name=file.filename,
-                    file_origin=file_origin,
-                    file_type=file.content_type or "text/plain",
-                )
+            file_id = file_store.save_file(
+                content=file.file,
+                display_name=file.filename,
+                file_origin=file_origin,
+                file_type=file.content_type or "text/plain",
+            )
             deduped_file_paths.append(file_id)
             deduped_file_names.append(file.filename)
 
@@ -1568,6 +1555,14 @@ def create_connector_from_model(
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
 
+        emit_audit_event(
+            AuditAction.CONNECTOR_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="connector",
+            resource_id=connector_response.id,
+            extra={"source": connector_data.source.value},
+        )
         return connector_response
     except ValueError as e:
         logger.error("Error creating connector: %s", e)
@@ -1690,6 +1685,14 @@ def update_connector_from_model(
             status_code=404, detail=f"Connector {connector_id} does not exist"
         )
 
+    emit_audit_event(
+        AuditAction.CONNECTOR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="connector",
+        resource_id=updated_connector.id,
+    )
+
     return ConnectorSnapshot(
         id=updated_connector.id,
         name=updated_connector.name,
@@ -1714,17 +1717,26 @@ def update_connector_from_model(
 )
 def delete_connector_by_id(
     connector_id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     try:
         with db_session.begin():
-            return delete_connector(
+            result = delete_connector(
                 db_session=db_session,
                 connector_id=connector_id,
             )
     except AssertionError:
         raise HTTPException(status_code=400, detail="Connector is not deletable")
+
+    emit_audit_event(
+        AuditAction.CONNECTOR_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="connector",
+        resource_id=connector_id,
+    )
+    return result
 
 
 @router.post("/admin/connector/run-once", tags=PUBLIC_API_TAGS)
@@ -1887,7 +1899,7 @@ def google_drive_callback(
 
 @router.get("/connector", tags=PUBLIC_API_TAGS)
 def get_connectors(
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorSnapshot]:
     connectors = fetch_connectors(db_session)
@@ -1914,7 +1926,7 @@ def get_indexed_sources(
 @router.get("/connector/{connector_id}", tags=PUBLIC_API_TAGS)
 def get_connector_by_id(
     connector_id: int,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)

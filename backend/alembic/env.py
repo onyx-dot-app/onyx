@@ -1,5 +1,6 @@
 from typing import Any
 from onyx.db.engine.iam_auth import get_iam_auth_token
+from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PORT
@@ -270,6 +271,7 @@ async def run_async_migrations() -> None:
     engine = create_async_engine(
         build_connection_string(),
         poolclass=pool.NullPool,
+        connect_args={"ssl": create_pg_ssl_context()},
     )
 
     if USE_IAM_AUTH:

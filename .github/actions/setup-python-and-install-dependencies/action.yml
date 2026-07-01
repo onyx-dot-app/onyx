@@ -19,27 +19,41 @@ runs:
       run: |
         # Hash the contents of the specified requirement files
         hash=""
+        files=()
         while IFS= read -r req; do
           if [ -n "$req" ] && [ -f "$req" ]; then
             hash="$hash$(sha256sum "$req")"
+            files+=("$req")
           fi
         done <<< "$REQUIREMENTS"
         echo "hash=$(echo "$hash" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+        # set_id namespaces the cache by *which* requirement files are installed
+        # (sorted list of paths, not their contents) so e.g. a default+dev job
+        # never restores or re-saves a default+dev+model_server+ee cache through
+        # restore-keys.
+        set_id=$(printf '%s\n' "${files[@]}" | sort | sha256sum | cut -c1-12)
+        echo "set_id=$set_id" >> "$GITHUB_OUTPUT"
 
-    # NOTE: This comes before Setup uv since clean-ups run in reverse chronological order
-    # such that Setup uv's prune-cache is able to prune the cache before we upload.
+    # The key is scoped by arch + set_id so a job only warm-starts from a cache
+    # built for the same architecture and the same set of requirement files.
+    # Otherwise a small (e.g. default+dev) job restores and then re-saves a
+    # larger job's full cache, and an arm64 job could restore x86_64 wheels.
+    # We deliberately do NOT run `uv cache prune` here: uv installs by
+    # hardlinking from the unzipped wheels in ~/.cache/uv/archive-v0, and it
+    # does not retain the zipped wheels separately, so pruning archive-v0 guts
+    # the cache and forces a full re-download from PyPI on the next run.
     - name: Cache uv cache directory
       uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
       with:
         path: ~/.cache/uv
-        key: ${{ runner.os }}-uv-${{ steps.req-hash.outputs.hash }}
+        key: ${{ runner.os }}-${{ runner.arch }}-uv-${{ steps.req-hash.outputs.set_id }}-${{ steps.req-hash.outputs.hash }}
         restore-keys: |
-          ${{ runner.os }}-uv-
+          ${{ runner.os }}-${{ runner.arch }}-uv-${{ steps.req-hash.outputs.set_id }}-
 
     - name: Setup uv
       uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # ratchet:astral-sh/setup-uv@v7
       with:
-        version: "0.9.9"
+        version: "0.11.25"
       # TODO: Enable caching once there is a uv.lock file checked in.
       # with:
       #   enable-cache: true

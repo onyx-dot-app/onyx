@@ -1005,6 +1005,31 @@ class TestOpenSearchClient:
                 properties_to_update={"hidden": True},
             )
 
+    def test_update_nonexistent_document_ignore_missing(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Tests updating a nonexistent document with ignore_missing does not
+        raise.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Under test and postcondition.
+        # Updating a document that doesn't exist is a no-op when ignore_missing
+        # is set.
+        test_client.update_document(
+            document_chunk_id="test_source__nonexistent__512__0",
+            properties_to_update={"hidden": True},
+            ignore_missing=True,
+        )
+
     def test_bulk_update_documents(
         self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -1110,6 +1135,65 @@ class TestOpenSearchClient:
                 ],
                 properties_to_update={"hidden": True},
             )
+
+    def test_bulk_update_nonexistent_documents_ignore_missing(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Tests bulk updating with ignore_missing skips nonexistent chunks while
+        still applying updates to the chunks that do exist.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Create a single document; the rest of the update targets won't exist.
+        doc = _create_test_document_chunk(
+            document_id="test-doc-bulk-update-ignore-missing",
+            chunk_index=0,
+            content="Original content",
+            tenant_state=tenant_state,
+        )
+        test_client.index_document(document=doc, tenant_state=tenant_state)
+        existing_id = get_opensearch_doc_chunk_id(
+            tenant_state=tenant_state,
+            document_id=doc.document_id,
+            chunk_index=doc.chunk_index,
+            max_chunk_size=doc.max_chunk_size,
+        )
+
+        # Under test.
+        # Mix of one existing chunk and two nonexistent ones.
+        test_client.bulk_update_documents(
+            document_chunk_ids=[
+                existing_id,
+                "test_source__nonexistent-1__512__0",
+                "test_source__nonexistent-2__512__0",
+            ],
+            properties_to_update={"hidden": True, "global_boost": 9},
+            ignore_missing=True,
+        )
+
+        # Postcondition.
+        # The existing chunk is updated; the missing ones are silently skipped.
+        updated_doc = test_client.get_document(document_chunk_id=existing_id)
+        assert updated_doc.hidden is True
+        assert updated_doc.global_boost == 9
+
+        # All-missing is also a no-op when ignore_missing is set.
+        test_client.bulk_update_documents(
+            document_chunk_ids=[
+                "test_source__nonexistent-3__512__0",
+                "test_source__nonexistent-4__512__0",
+            ],
+            properties_to_update={"hidden": True},
+            ignore_missing=True,
+        )
 
     def test_bulk_update_documents_retries_retryable_errors(
         self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch

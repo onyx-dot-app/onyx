@@ -198,7 +198,7 @@ def litellm_exception_to_error_msg(
         error_code = "CONTENT_POLICY"
         is_retryable = False
     elif isinstance(core_exception, BadRequestError):
-        error_msg = "Bad request: The server couldn't process your request. Please check your input."
+        error_msg = f"Bad request: {str(core_exception)}"
         error_code = "BAD_REQUEST"
         is_retryable = True
     elif isinstance(core_exception, AuthenticationError):
@@ -207,13 +207,13 @@ def litellm_exception_to_error_msg(
         is_retryable = False
     elif isinstance(core_exception, PermissionDeniedError):
         error_msg = (
-            "Permission denied: You don't have the necessary permissions for this operation. "
+            f"Permission denied: {str(core_exception)}"
             "Ensure you have access to this model."
         )
         error_code = "PERMISSION_DENIED"
         is_retryable = False
     elif isinstance(core_exception, NotFoundError):
-        error_msg = "Resource not found: The requested resource doesn't exist."
+        error_msg = f"Resource not found: {str(core_exception)}"
         error_code = "NOT_FOUND"
         is_retryable = False
     elif isinstance(core_exception, UnprocessableEntityError):
@@ -298,6 +298,19 @@ def litellm_exception_to_error_msg(
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
         error_code = "CONNECTION_ERROR"
         is_retryable = True
+    elif str(getattr(core_exception, "status_code", "")) == "413" or (
+        "413" in error_msg and "request entity too large" in error_msg.lower()
+    ):
+        # Upstream proxy/gateway (e.g. nginx) rejected the request body as too large.
+        error_msg = (
+            "Request too large: The LLM endpoint rejected the request because it "
+            "exceeded the maximum allowed size (HTTP 413). This commonly happens "
+            "when sending images to a model behind a proxy/gateway. Increase the "
+            "maximum request body size on the gateway in front of your LLM "
+            "endpoint (e.g. nginx `client_max_body_size`)."
+        )
+        error_code = "REQUEST_TOO_LARGE"
+        is_retryable = False
     elif isinstance(core_exception, APIError):
         error_msg = f"API error: An error occurred while communicating with the API. Details: {str(core_exception)}"
         error_code = "API_ERROR"

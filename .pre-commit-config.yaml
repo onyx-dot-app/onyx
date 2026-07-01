@@ -71,8 +71,9 @@ repos:
         types_or: [python]
         # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
         # are sandbox-only scripts importing deps absent from the backend venv
-        # (lxml, PIL, office.*). loadtest/ is a standalone uv project with its
-        # own venv (locust). All are excluded from the full ty run via
+        # (lxml, PIL, office.*). loadtest/ imports locust/gevent, which live in
+        # the non-default `loadtest` dependency group and so aren't in the venv
+        # ty runs against. All are excluded from the full ty run via
         # [tool.ty.src] in pyproject; repeat here because pre-commit passes
         # explicit filenames, which bypass that discovery-time exclude.
         exclude: ^(backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)|loadtest/)
@@ -185,6 +186,22 @@ repos:
         entry: bash -c 'cd web && bun install --frozen-lockfile && bun run --cwd lib/shared build:tokens && bun lib/opal/scripts/bundle-css.mjs'
         pass_filenames: false
         files: ^web/lib/(opal/src/.*\.css|opal/scripts/bundle-css\.mjs|shared/(tokens/.*\.json|style-dictionary\.config\.mjs))$
+        stages: [post-checkout, post-merge, post-rewrite]
+
+      # Turbopack's persistent dev cache (.next) tracks file content, but can't see
+      # dependency / build-config changes that cross its boundary: a checkout, pull, or
+      # rebase that changes deps, design tokens, opal CSS, or the Next/Tailwind build
+      # config leaves stale compiled output + CSS in .next — the phantom compile errors
+      # and stale styles that otherwise need a manual `rm -rf .next`. Drop it here, in
+      # lockstep with bun-install / opal-css-rebuild. Plain source edits are left alone:
+      # Turbopack invalidates those incrementally, so same-deps switches keep a warm cache.
+      - id: clear-web-build-cache
+        name: clear stale web build cache
+        description: "Drop the Turbopack .next dev cache after checkout/pull/rebase when deps, tokens, opal CSS, or build config change"
+        language: system
+        entry: bash -c 'rm -rf web/.next'
+        pass_filenames: false
+        files: ^web/(package\.json|bun\.lock|lib/opal/package\.json|lib/opal/src/.*\.css|lib/shared/tokens/.*\.json|next\.config\.js|postcss\.config\.js|tailwind\.config\.js|tailwind-themes/)
         stages: [post-checkout, post-merge, post-rewrite]
 
       - id: root-bun-install

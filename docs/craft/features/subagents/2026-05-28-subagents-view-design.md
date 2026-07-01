@@ -24,17 +24,15 @@ disrupting the main chat.
 
 ## Important Notes
 
-- **This PR depends on the universal-panel refactor** described in
-  `docs/craft/features/universal-panel/2026-05-28-universal-panel-refactor-design.md`.
-  That refactor generalizes the side panel's transient-tab system so this
-  PR can add a `kind: "subagent"` tab cleanly. Ship the refactor first.
-- **Child tool calls already stream on the same SSE channel.** Per
-  `docs/craft/opencode-serve-test-report.md:153-157, 329`, when the
-  parent runs the `task` tool, the child session emits its own
-  `message.updated` events to the same `/event` stream. Each child event's
-  `state.metadata` contains `parentSessionId` and `sessionId` (child).
-  Today the frontend strictly filters on parent session ID, dropping
-  them. That filter is the load-bearing change.
+- **This PR depends on the universal-panel refactor** that generalizes the
+  side panel's transient-tab system so this PR can add a `kind: "subagent"`
+  tab cleanly. Ship the refactor first.
+- **Child tool calls already stream on the same SSE channel.** When the parent
+  runs the `task` tool, the child session emits its own `message.updated`
+  events to the same `/event` stream. Each child event's `state.metadata`
+  contains `parentSessionId` and `sessionId` (child). Today the frontend
+  strictly filters on parent session ID, dropping them. That filter is the
+  load-bearing change.
 - **The DB schema already supports nested tool calls — no migration
   needed.** Per `backend/onyx/db/models.py:2911-2970`, `tool_call` has a
   `parent_tool_call_id` self-reference (nullable) and `parent_chat_message_id`

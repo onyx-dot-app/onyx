@@ -184,6 +184,9 @@ _PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # Registered in the opencode config only when the proxy is wired up; otherwise
 # it would no-op (no HTTP(S)_PROXY to re-tag).
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+# Surfaces the no-op `connect_app` tool; always on. Its "ask" permission is what
+# the api-server intercepts to drive the connect-app OAuth flow.
+_OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
 _MUTABLE_SANDBOX_IMAGE_TAGS = {"latest", "beta", "edge"}
 
 # In-container opencode-history archive builder: reuses the sandbox_daemon
@@ -436,11 +439,12 @@ def _proxy_env_vars(
 ) -> dict[str, str]:
     """Proxy-enabled env additions for the sandbox container.
 
-    Mirrors ``kubernetes_sandbox_manager._proxy_main_container_env_vars`` but
-    layered on the docker env dict instead of a list of V1EnvVars. Includes the
-    firewall-init.sh contract vars since the script runs as the container's
-    entrypoint wrapper and reads them from its own environment. Proxy ports come
-    from build config and are injected as internal env, not caller arguments.
+    The Kubernetes lane injects the equivalent vars via the Helm pod template
+    (``onyx.sandboxProxyEnv``); here they're layered on the docker env dict.
+    Includes the firewall-init.sh contract vars since the script runs as the
+    container's entrypoint wrapper and reads them from its own environment.
+    Proxy ports come from build config and are injected as internal env, not
+    caller arguments.
     """
     proxy_url = f"http://{sandbox_proxy_host}:{SANDBOX_PROXY_PORT}"
     return {
@@ -575,7 +579,8 @@ def build_container_create_kwargs(
       starts. ``restart_policy: unless-stopped`` re-enters the same fail-fast
       init -- no cumulative exposure, no user code reachable during the window.
     - The named proxy-CA volume is mounted read-only at ``/sandbox-ca`` for
-      ``firewall-init.sh`` to read ``ca.crt``.
+      ``firewall-init.sh`` to read ``ca.crt``. That volume also contains
+      root-only ``ca.key``; the agent runs as UID 1000 after init.
 
     ``ONYX_SERVER_URL`` must be the *public* Onyx URL (the one onyx-cli inside
     the sandbox will hit over HTTPS) — not an internal compose DNS name. We emit
@@ -891,12 +896,11 @@ class DockerSandboxManager(SandboxManager):
             # opencode-serve reads provider config from env at startup; must be
             # in create_kwargs before the container ever runs.
             opencode_password = secrets.token_urlsafe(32)
-            # Only register the egress-tagging plugin when the proxy is wired
-            # up; otherwise it would no-op (no HTTP(S)_PROXY to re-tag). Mirrors
-            # the K8s manager's gating.
-            session_tag_plugins = (
-                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
-            )
+            # connect_app is always loaded; the egress-tagging plugin only when
+            # the proxy is wired up (else it no-ops — no HTTP(S)_PROXY to re-tag).
+            plugins = [_OPENCODE_CONNECT_APP_PLUGIN_PATH]
+            if SANDBOX_PROXY_HOST:
+                plugins.append(_OPENCODE_SESSION_TAG_PLUGIN_PATH)
             # Proxy posture: Real PAT + LLM api_key never enter the sandbox. The
             # proxy reads `Sandbox.encrypted_pat` and the per-provider key from
             # Postgres, swaps the placeholder for the real bearer on the wire
@@ -913,7 +917,7 @@ class DockerSandboxManager(SandboxManager):
                     default_provider=llm_config.provider,
                     default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
-                    plugins=session_tag_plugins,
+                    plugins=plugins,
                 )
             )
             self._ensure_sandbox_image()
@@ -1101,12 +1105,14 @@ class DockerSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> str:
         """Shell-escaped AGENTS.md for ``printf '%s' '...'``."""
         agent_instructions = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1122,6 +1128,7 @@ class DockerSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         container = self._require_container(sandbox_id)
@@ -1130,6 +1137,7 @@ class DockerSandboxManager(SandboxManager):
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
 
@@ -1471,6 +1479,7 @@ echo "Session cleanup complete"
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
@@ -1537,6 +1546,7 @@ fi
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
         )
 
         if nextjs_port is not None:
@@ -1559,6 +1569,7 @@ fi
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         """
         Rewrite AGENTS.md and the skills symlink post-restore. opencode.json is
@@ -1569,6 +1580,7 @@ fi
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
         )
         script = f"""
 set -e

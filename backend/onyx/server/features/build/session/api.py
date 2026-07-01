@@ -13,6 +13,7 @@ from fastapi import File
 from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import exists
@@ -26,6 +27,7 @@ from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.models import BuildMessage
+from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -47,6 +49,7 @@ from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import ArtifactResponse
 from onyx.server.features.build.session.models import DetailedSessionResponse
+from onyx.server.features.build.session.models import OpencodeHistorySnapshotResponse
 from onyx.server.features.build.session.models import PptxPreviewResponse
 from onyx.server.features.build.session.models import PreProvisionedCheckResponse
 from onyx.server.features.build.session.models import SessionCreateRequest
@@ -56,7 +59,11 @@ from onyx.server.features.build.session.models import SessionResponse
 from onyx.server.features.build.session.models import SessionUpdateRequest
 from onyx.server.features.build.session.models import SetSessionSharingRequest
 from onyx.server.features.build.session.models import SetSessionSharingResponse
+from onyx.server.features.build.session.models import SnapshotResponse
 from onyx.server.features.build.session.models import WebappInfo
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    create_session_snapshot_keep_latest,
+)
 from onyx.server.features.build.session.sandbox_lifecycle import (
     snapshot_opencode_history_before_recovery,
 )
@@ -436,8 +443,8 @@ def restore_session(
 
                 snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
-                skills_section, skills_files = build_user_skills_payload(
-                    user, db_session
+                skills_section, connectable_apps_section, skills_files = (
+                    build_user_skills_payload(user, db_session)
                 )
                 if snapshot:
                     try:
@@ -448,6 +455,7 @@ def restore_session(
                             nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
                             skills_section=skills_section,
+                            connectable_apps_section=connectable_apps_section,
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         db_session.commit()
@@ -465,6 +473,7 @@ def restore_session(
                         llm_config=llm_config,
                         nextjs_port=session.nextjs_port,
                         skills_section=skills_section,
+                        connectable_apps_section=connectable_apps_section,
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()
@@ -495,6 +504,9 @@ def restore_session(
                 sandbox.status,
             )
 
+    except OnyxError:
+        db_session.rollback()
+        raise
     except Exception as e:
         logger.error("Failed to restore session %s: %s", session_id, e, exc_info=True)
         # Recover so the next attempt isn't blocked by a half-finished state.
@@ -539,6 +551,83 @@ def restore_session(
     return DetailedSessionResponse.from_session_response(
         base_response, session_loaded_in_sandbox=True
     )
+
+
+# =============================================================================
+# Snapshot Endpoints
+# =============================================================================
+
+
+def _owned_session_sandbox(
+    session_id: UUID, user: User, db_session: Session
+) -> Sandbox:
+    """Return the caller's sandbox after verifying they own the session."""
+    if get_build_session(session_id, user.id, db_session) is None:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    if sandbox is None:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+    return sandbox
+
+
+@router.post("/{session_id}/snapshot")
+def create_session_snapshot(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Snapshot the owned session's outputs/attachments and record it. Returns
+    204 when there is nothing to snapshot (no outputs) or snapshots are
+    disabled."""
+    sandbox = _owned_session_sandbox(session_id, user, db_session)
+    sandbox_manager = get_sandbox_manager()
+
+    try:
+        result = create_session_snapshot_keep_latest(
+            sandbox_manager=sandbox_manager,
+            db_session=db_session,
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+            tenant_id=get_current_tenant_id(),
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+    except RuntimeError as e:
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
+    if result is None:
+        return Response(status_code=204)
+
+    return JSONResponse(
+        content=SnapshotResponse(
+            storage_path=result.storage_path,
+            size_bytes=result.size_bytes,
+        ).model_dump()
+    )
+
+
+@router.post("/{session_id}/opencode-history-snapshot")
+def create_session_opencode_history_snapshot(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> OpencodeHistorySnapshotResponse:
+    """Snapshot sandbox-global opencode history for the owned session."""
+    sandbox = _owned_session_sandbox(session_id, user, db_session)
+
+    sandbox_manager = get_sandbox_manager()
+    if not sandbox_manager.supports_opencode_history_persistence:
+        return OpencodeHistorySnapshotResponse(created=False)
+
+    try:
+        created = sandbox_manager.create_opencode_history_snapshot(
+            sandbox.id,
+            get_current_tenant_id(),
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+    except RuntimeError as e:
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
+    return OpencodeHistorySnapshotResponse(created=created)
 
 
 # =============================================================================

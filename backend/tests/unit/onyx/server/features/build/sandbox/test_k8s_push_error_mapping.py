@@ -96,34 +96,36 @@ def _push_private_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sidecar, "_push_public_key_b64", None, raising=False)
 
 
-def _make_manager(*, pod_read_exc: Exception | None = None) -> KubernetesSandboxManager:
+def _service_host(mgr: KubernetesSandboxManager) -> Callable[[UUID], str]:
+    """Mirror the manager's sidecar host resolver: the per-pod Service FQDN."""
+    return lambda sandbox_id: (
+        f"{mgr._get_pod_name(sandbox_id)}.{mgr._namespace}.svc.cluster.local"
+    )
+
+
+def _make_manager() -> KubernetesSandboxManager:
     """Construct a manager without invoking _initialize (which needs a K8s config).
 
-    ``write_files_to_sandbox`` resolves hosts via ``_sandbox_pod_hosts`` (the
-    Service FQDN plus the pod IP read from ``read_namespaced_pod``), then POSTs
-    over the mocked ``httpx.Client``. Pass ``pod_read_exc`` to simulate a
-    gone/unreadable pod. Bypass ``__new__`` cache with object.__new__.
+    ``write_files_to_sandbox`` resolves the sidecar host via the Service FQDN,
+    then POSTs over the mocked ``httpx.Client``. Bypass ``__new__`` cache with
+    object.__new__.
     """
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
 
     core_api = MagicMock()
-    if pod_read_exc is not None:
-        core_api.read_namespaced_pod.side_effect = pod_read_exc
-    else:
-        pod_obj = MagicMock()
-        pod_obj.status.pod_ip = "10.0.0.1"
-        pod_obj.status.container_statuses = [
-            SimpleNamespace(
-                name="sandbox",
-                ready=True,
-                state=SimpleNamespace(running=object(), terminated=None),
-            )
-        ]
-        core_api.read_namespaced_pod.return_value = pod_obj
+    pod_obj = MagicMock()
+    pod_obj.status.container_statuses = [
+        SimpleNamespace(
+            name="sandbox",
+            ready=True,
+            state=SimpleNamespace(running=object(), terminated=None),
+        )
+    ]
+    core_api.read_namespaced_pod.return_value = pod_obj
 
     mgr._core_api = core_api  # type: ignore[attr-defined]
     mgr._namespace = "sandbox-test"  # type: ignore[attr-defined]
-    mgr._sidecar_client = SidecarClient(hosts=mgr._sandbox_pod_hosts)  # type: ignore[attr-defined]
+    mgr._sidecar_client = SidecarClient(host=_service_host(mgr))  # type: ignore[attr-defined]
     return mgr
 
 
@@ -321,7 +323,7 @@ def test_push_archive_sends_signed_mount_path_request() -> None:
         patch(_HTTPX_CLIENT_PATH, MagicMock(return_value=ctx)),
         patch.object(sidecar_client.time, "time", return_value=1234567890),
     ):
-        SidecarClient(hosts=lambda _sandbox_id: ["sidecar.local"]).push_archive(
+        SidecarClient(host=lambda _sandbox_id: "sidecar.local").push_archive(
             sandbox_id=sandbox_id,
             mount_path=mount_path,
             archive=archive,
@@ -343,7 +345,7 @@ def test_push_archive_sends_signed_mount_path_request() -> None:
     _assert_signature(headers, mount_path, sha256_hex)
 
 
-def test_stream_new_snapshot_falls_back_and_streams_signed_response() -> None:
+def test_stream_new_snapshot_streams_signed_response() -> None:
     sandbox_id = _sandbox_id()
     body = b'{"session_id":"00000000-0000-0000-0000-000000000001"}'
     sha256_hex = hashlib.sha256(body).hexdigest()
@@ -355,8 +357,6 @@ def test_stream_new_snapshot_falls_back_and_streams_signed_response() -> None:
 
     def stream_handler(_method: str, url: str, **kwargs: object) -> MagicMock:
         calls.append((url, kwargs))
-        if "sidecar-fqdn" in url:
-            raise httpx.ConnectError("service not routable yet")
         return _stream_context(response)
 
     client_instance = MagicMock()
@@ -370,7 +370,7 @@ def test_stream_new_snapshot_falls_back_and_streams_signed_response() -> None:
         patch.object(sidecar_client.time, "time", return_value=1234567890),
     ):
         with SidecarClient(
-            hosts=lambda _sandbox_id: ["sidecar-fqdn", "10.0.0.1"]
+            host=lambda _sandbox_id: "sidecar.local"
         ).request_and_stream_new_snapshot(
             sandbox_id=sandbox_id,
             endpoint_path=SIDECAR_SNAPSHOT_CREATE_PATH,
@@ -383,8 +383,7 @@ def test_stream_new_snapshot_falls_back_and_streams_signed_response() -> None:
             assert stream.read() == b"tarbytes"
 
     assert [url for url, _kwargs in calls] == [
-        f"http://sidecar-fqdn:8731{SIDECAR_SNAPSHOT_CREATE_PATH}",
-        f"http://10.0.0.1:8731{SIDECAR_SNAPSHOT_CREATE_PATH}",
+        f"http://sidecar.local:8731{SIDECAR_SNAPSHOT_CREATE_PATH}",
     ]
     headers = cast(dict[str, str], calls[-1][1]["headers"])
     assert headers["Content-Type"] == "application/json"
@@ -592,60 +591,8 @@ def test_tar_build_is_byte_for_byte_deterministic() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Multi-host fallback: Service FQDN first, raw pod IP second
+# Sidecar reachability: single Service-FQDN host
 # ---------------------------------------------------------------------------
-
-
-def _fqdn_unreachable_then(
-    pod_ip_resp: Callable[[], MagicMock],
-) -> Callable[[str], MagicMock]:
-    def handler(url: str) -> MagicMock:
-        if "10.0.0.1" in url:
-            return pod_ip_resp()
-        raise httpx.ConnectError("FQDN unreachable")
-
-    return handler
-
-
-def test_push_falls_back_to_pod_ip_when_fqdn_unreachable() -> None:
-    mgr = _make_manager()
-    factory = _mock_httpx_per_url(_fqdn_unreachable_then(lambda: _resp(200, "ok")))
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        mgr.write_files_to_sandbox(
-            sandbox_id=_sandbox_id(),
-            mount_path="/workspace/managed/skills",
-            files=_files(),
-        )
-
-
-def test_push_maps_http_status_on_fallback_host() -> None:
-    """A 4xx from the fallback host is mapped (fatal), not retried onward."""
-    mgr = _make_manager()
-    factory = _mock_httpx_per_url(_fqdn_unreachable_then(lambda: _resp(400, "bad")))
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        with pytest.raises(FatalWriteError, match="400"):
-            mgr.write_files_to_sandbox(
-                sandbox_id=_sandbox_id(),
-                mount_path="/workspace/managed/skills",
-                files=_files(),
-            )
-
-
-def test_snapshot_restore_falls_back_to_pod_ip() -> None:
-    mgr = _make_manager()
-    sandbox_id = _sandbox_id()
-    archive_body = b"snapshot archive"
-    session_id = _sandbox_id()
-    factory = _mock_httpx_per_url(_fqdn_unreachable_then(lambda: _resp(204)))
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        SidecarClient(hosts=mgr._sandbox_pod_hosts).post_archive(
-            sandbox_id=sandbox_id,
-            endpoint_path=sidecar_snapshot_restore_path(session_id),
-            archive_file=io.BytesIO(archive_body),
-            sha256_hex=hashlib.sha256(archive_body).hexdigest(),
-            operation_label="Snapshot restore",
-            timeout_seconds=300.0,
-        )
 
 
 def test_snapshot_restore_raises_when_all_hosts_fail() -> None:
@@ -658,7 +605,7 @@ def test_snapshot_restore_raises_when_all_hosts_fail() -> None:
     archive_body = b"snapshot archive"
     with patch(_HTTPX_CLIENT_PATH, _mock_httpx_per_url(handler)):
         with pytest.raises(RuntimeError, match="Snapshot restore request failed"):
-            SidecarClient(hosts=mgr._sandbox_pod_hosts).post_archive(
+            SidecarClient(host=_service_host(mgr)).post_archive(
                 sandbox_id=sandbox_id,
                 endpoint_path=sidecar_snapshot_restore_path(_sandbox_id()),
                 archive_file=io.BytesIO(archive_body),
@@ -666,20 +613,6 @@ def test_snapshot_restore_raises_when_all_hosts_fail() -> None:
                 operation_label="Snapshot restore",
                 timeout_seconds=0.01,
             )
-
-
-def test_mark_restored_falls_back_to_pod_ip() -> None:
-    mgr = _make_manager()
-    sandbox_id = _sandbox_id()
-    factory = _mock_httpx_per_url(_fqdn_unreachable_then(lambda: _resp(204)))
-
-    with patch(_HTTPX_CLIENT_PATH, factory):
-        SidecarClient(hosts=mgr._sandbox_pod_hosts).post_empty(
-            sandbox_id=sandbox_id,
-            endpoint_path=SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
-            operation_label="opencode history restore marker",
-            timeout_seconds=1.0,
-        )
 
 
 def test_mark_restored_raises_on_non_204() -> None:
@@ -691,7 +624,7 @@ def test_mark_restored_raises_on_non_204() -> None:
         with pytest.raises(
             RuntimeError, match="opencode history restore marker failed"
         ):
-            SidecarClient(hosts=mgr._sandbox_pod_hosts).post_empty(
+            SidecarClient(host=_service_host(mgr)).post_empty(
                 sandbox_id=sandbox_id,
                 endpoint_path=SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
                 operation_label="opencode history restore marker",
@@ -707,17 +640,15 @@ def test_sandbox_service_publishes_not_ready_addresses() -> None:
     assert service.spec.publish_not_ready_addresses is True
 
 
-def test_sandbox_pod_hosts_degrades_to_fqdn_when_pod_unreadable() -> None:
-    """A gone/unreadable pod must not break host resolution — the Service FQDN
-    still routes; the pod-IP candidate is simply dropped."""
-    mgr = _make_manager(pod_read_exc=ApiException(status=404, reason="Not Found"))
-    hosts = mgr._sandbox_pod_hosts(_sandbox_id())
-    assert len(hosts) == 1
-    assert hosts[0].endswith(".sandbox-test.svc.cluster.local")
+def test_sidecar_host_is_the_service_fqdn() -> None:
+    """The sidecar is reached only via the per-pod Service FQDN (in-cluster)."""
+    mgr = _make_manager()
+    host = mgr._sidecar_client._host(_sandbox_id())  # type: ignore[attr-defined]
+    assert host.endswith(".sandbox-test.svc.cluster.local")
 
 
-def test_push_pod_404_is_retriable() -> None:
-    mgr = _make_manager(pod_read_exc=ApiException(status=404, reason="Not Found"))
+def test_push_connect_error_is_retriable() -> None:
+    mgr = _make_manager()
     factory = _mock_httpx_client(raise_exc=httpx.ConnectError("no endpoints"))
     with patch(_HTTPX_CLIENT_PATH, factory):
         with pytest.raises(RetriableWriteError):
@@ -983,7 +914,7 @@ def test_provision_conflicting_not_ready_pod_runs_startup_restore(
     monkeypatch.setattr(
         mgr,
         "restore_opencode_history_snapshot",
-        MagicMock(side_effect=lambda *_args: calls.append("restore")),
+        MagicMock(side_effect=lambda *_args, **_kwargs: calls.append("restore")),
     )
     monkeypatch.setattr(
         mgr,

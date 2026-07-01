@@ -69,6 +69,7 @@ from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_chat_background
 from onyx.db.user_preferences import update_user_default_app_mode
 from onyx.db.user_preferences import update_user_default_model
+from onyx.db.user_preferences import update_user_language
 from onyx.db.user_preferences import update_user_paste_as_tile
 from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
@@ -100,6 +101,7 @@ from onyx.server.manage.models import BulkInviteResponse
 from onyx.server.manage.models import ChatBackgroundRequest
 from onyx.server.manage.models import DefaultAppModeRequest
 from onyx.server.manage.models import EmailInviteStatus
+from onyx.server.manage.models import LanguageRequest
 from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
@@ -119,6 +121,10 @@ from onyx.server.models import UserGroupInfo
 from onyx.server.security.store import get_security_settings
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.csv_utils import sanitize_csv_cell
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -174,6 +180,19 @@ def set_user_role(
         )(db_session, user_to_update)
 
     update_user_role(user_to_update, requested_role, db_session)
+
+    emit_audit_event(
+        AuditAction.USER_ROLE_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(user_to_update.id),
+        extra={
+            "target_email": user_to_update.email,
+            "old_role": current_role.value,
+            "new_role": requested_role.value,
+        },
+    )
 
 
 class TestUpsertRequest(BaseModel):
@@ -599,6 +618,17 @@ def bulk_invite_users(
                         )
             raise e
 
+    # Genuinely-new invites (not existing or already-invited) are the accounts
+    # an admin is provisioning access for; re-invites of known emails are no-ops.
+    if emails_needing_seats:
+        emit_audit_event(
+            AuditAction.USER_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(current_user),
+            resource_type="user",
+            extra={"invited_emails": emails_needing_seats},
+        )
+
     return BulkInviteResponse(
         invited_count=number_of_invited_users,
         email_invite_status=email_invite_status,
@@ -663,6 +693,15 @@ def deactivate_user_api(
 
     deactivate_user(user_to_deactivate, db_session)
 
+    emit_audit_event(
+        AuditAction.USER_DEACTIVATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(user_to_deactivate.id),
+        extra={"target_email": user_to_deactivate.email},
+    )
+
     # Invalidate license cache so used_seats reflects the new count
     # Only for self-hosted (non-multi-tenant) deployments
     if not MULTI_TENANT:
@@ -674,7 +713,9 @@ def deactivate_user_api(
 @router.delete("/manage/admin/delete-user", tags=PUBLIC_API_TAGS)
 async def delete_user(
     user_email: UserByEmail,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_delete = get_user_by_email(
@@ -689,6 +730,10 @@ async def delete_user(
             status_code=400, detail="User must be deactivated before deleting"
         )
 
+    # Capture identifiers before the row is detached/deleted below.
+    deleted_user_id = str(user_to_delete.id)
+    deleted_user_email = user_to_delete.email
+
     # Detach the user from the current session
     db_session.expunge(user_to_delete)
 
@@ -699,6 +744,15 @@ async def delete_user(
         )([user_email.user_email], tenant_id)
         delete_user_from_db(user_to_delete, db_session)
         logger.info("Deleted user %s", user_to_delete.email)
+
+        emit_audit_event(
+            AuditAction.USER_DELETE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(current_user),
+            resource_type="user",
+            resource_id=deleted_user_id,
+            extra={"target_email": deleted_user_email},
+        )
 
         # Invalidate license cache so used_seats reflects the new count
         # Only for self-hosted (non-multi-tenant) deployments
@@ -716,7 +770,9 @@ async def delete_user(
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
 def activate_user_api(
     user_email: UserByEmail,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_activate = get_user_by_email(
@@ -732,6 +788,15 @@ def activate_user_api(
     enforce_seat_limit_locked(db_session)
 
     activate_user(user_to_activate, db_session)
+
+    emit_audit_event(
+        AuditAction.USER_REACTIVATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(user_to_activate.id),
+        extra={"target_email": user_to_activate.email},
+    )
 
     # Invalidate license cache so used_seats reflects the new count
     # Only for self-hosted (non-multi-tenant) deployments
@@ -1006,6 +1071,15 @@ def update_user_theme_preference_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_theme_preference(user.id, request.theme_preference, db_session)
+
+
+@router.patch("/user/language")
+def update_user_language_api(
+    request: LanguageRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_language(user.id, request.language.value, db_session)
 
 
 @router.patch("/user/chat-background")

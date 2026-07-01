@@ -12,7 +12,7 @@ export default function AuthFlowContainer({
 }) {
   return (
     <div className="p-4 flex flex-col items-center justify-center min-h-screen bg-background">
-      <div className="w-full max-w-md flex items-start flex-col bg-background-tint-00 rounded-16 shadow-lg shadow-02 p-6">
+      <div className="w-full max-w-md flex items-start flex-col bg-background-tint-00 rounded-16 shadow-lg shadow-box-02 p-6">
         <SvgOnyxLogo size={44} className="text-theme-primary-05" />
         <div className="w-full mt-3">{children}</div>
       </div>

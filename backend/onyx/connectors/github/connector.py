@@ -31,6 +31,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
 from onyx.connectors.github.utils import deserialize_repository
@@ -698,7 +699,7 @@ class GithubConnector(
         Returns:
             list[Repository.Repository]: The configured repositories.
         """
-        assert self.github_client is not None  # mypy
+        assert self.github_client is not None  # for type-checking
         if self.repositories:
             if "," in self.repositories:
                 return self.get_github_repos(self.github_client)
@@ -735,7 +736,7 @@ class GithubConnector(
                 "Re-tried listing repo files too many times. "
                 "Something is going wrong with fetching objects from Github"
             )
-        assert self.github_client is not None  # mypy
+        assert self.github_client is not None  # for type-checking
         try:
             git_tree = repo.get_git_tree(repo.default_branch, recursive=True)
             truncated = bool(git_tree.raw_data.get("truncated"))
@@ -765,7 +766,7 @@ class GithubConnector(
                 "Re-tried fetching file content too many times. "
                 "Something is going wrong with fetching objects from Github"
             )
-        assert self.github_client is not None  # mypy
+        assert self.github_client is not None  # for type-checking
         try:
             content = repo.get_contents(path, ref=repo.default_branch)
             if isinstance(content, list):
@@ -1349,8 +1350,13 @@ class GithubConnector(
                     f"Unexpected GitHub error (status={e.status}): {e.data}"
                 )
 
+        except ValidationError:
+            # Let typed validation errors propagate so the API can surface the
+            # real reason instead of collapsing them into a generic 500.
+            raise
+
         except Exception as exc:
-            raise Exception(
+            raise UnexpectedValidationError(
                 f"Unexpected error during GitHub settings validation: {exc}"
             )
 

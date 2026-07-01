@@ -100,11 +100,15 @@ class LLMProviderManager:
 
     @staticmethod
     def delete(
-        llm_provider: DATestLLMProvider,
+        llm_provider: DATestLLMProvider | LLMProviderView,
         user_performing_action: DATestUser,
+        force: bool = False,
     ) -> bool:
+        url = f"{API_SERVER_URL}/admin/llm/provider/{llm_provider.id}"
+        if force:
+            url += "?force=true"
         response = client.delete(
-            f"{API_SERVER_URL}/admin/llm/provider/{llm_provider.id}",
+            url,
             headers=user_performing_action.headers,
         )
         response.raise_for_status()

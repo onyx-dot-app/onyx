@@ -72,7 +72,6 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
@@ -146,6 +145,9 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
 POD_READY_TIMEOUT_SECONDS = 60
 
+OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 300.0
+POD_IP_POLL_INTERVAL_SECONDS = 0.5
+
 # Resource deletion timeout and polling interval
 # Kubernetes deletes are async - we need to wait for resources to actually be
 # gone.
@@ -153,9 +155,6 @@ RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 
 
-# Proxy CA bundle path; still referenced by _proxy_main_container_env_vars().
-_PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
-_PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # Pinned to the proxy IP via pod hostAliases — the iptables lockdown blocks DNS,
 # so the sandbox can't resolve it on its own.
 _PROXY_ALIAS = "sandbox-proxy"
@@ -168,15 +167,13 @@ _PODTEMPLATE_NAME = "sandbox-pod"
 # Per-session egress tagging plugin, baked into the sandbox image (see
 # docker/Dockerfile). Path must match the COPY destination there.
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+# Surfaces the no-op `connect_app` tool; always on. Its "ask" permission is what
+# the api-server intercepts to drive the connect-app OAuth flow.
+_OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
 
 
 _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
 _PROXY_RESOLVE_RETRY_BACKOFF_S = 0.5
-
-
-# Loopback only: the firewall permits nothing else to bypass the proxy, and the
-# Onyx API host must transit the proxy so the PAT can be injected on the wire.
-_NO_PROXY = "127.0.0.1,localhost"
 
 
 def _placeholder_llm_configs(
@@ -191,26 +188,6 @@ def _placeholder_llm_configs(
         if c.api_key
         else c
         for c in configs
-    ]
-
-
-def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
-    proxy_url = f"http://{_PROXY_ALIAS}:{SANDBOX_PROXY_PORT}"
-    no_proxy = _NO_PROXY
-    return [
-        client.V1EnvVar(name="HTTPS_PROXY", value=proxy_url),
-        client.V1EnvVar(name="HTTP_PROXY", value=proxy_url),
-        client.V1EnvVar(name="https_proxy", value=proxy_url),
-        client.V1EnvVar(name="http_proxy", value=proxy_url),
-        client.V1EnvVar(name="NO_PROXY", value=no_proxy),
-        client.V1EnvVar(name="no_proxy", value=no_proxy),
-        # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
-        client.V1EnvVar(name="NODE_EXTRA_CA_CERTS", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="REQUESTS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="SSL_CERT_FILE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="AWS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
     ]
 
 
@@ -343,7 +320,11 @@ class KubernetesSandboxManager(SandboxManager):
         self._image = SANDBOX_CONTAINER_IMAGE
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
         self._snapshot_manager = SnapshotManager(get_default_file_store())
-        self._sidecar_client = SidecarClient(hosts=self._sandbox_pod_hosts)
+        self._sidecar_client = SidecarClient(
+            host=lambda sandbox_id: (
+                f"{self._get_pod_name(sandbox_id)}.{self._namespace}.svc.cluster.local"
+            )
+        )
 
         self._init_serve_state()
 
@@ -360,10 +341,6 @@ class KubernetesSandboxManager(SandboxManager):
     def _get_pod_name(self, sandbox_id: str | UUID) -> str:
         """Generate pod name from sandbox ID."""
         return f"sandbox-{str(sandbox_id)[:8]}"
-
-    def _get_service_name(self, sandbox_id: str) -> str:
-        """Generate service name from sandbox ID."""
-        return self._get_pod_name(sandbox_id)
 
     def _get_opencode_secret_name(self, sandbox_id: str | UUID) -> str:
         """Per-pod K8s Secret holding OPENCODE_SERVER_PASSWORD."""
@@ -479,12 +456,13 @@ class KubernetesSandboxManager(SandboxManager):
         Returns:
             Internal cluster URL for the Next.js server on the specified port
         """
-        service_name = self._get_service_name(sandbox_id)
+        service_name = self._get_pod_name(sandbox_id)
         return f"http://{service_name}.{self._namespace}.svc.cluster.local:{port}"
 
     def _load_agent_instructions(
         self,
         skills_section: str,
+        connectable_apps_section: str,
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
@@ -495,6 +473,7 @@ class KubernetesSandboxManager(SandboxManager):
         return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
@@ -622,7 +601,7 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_id_str: str = str(sandbox_id)
         tenant_id_str: str = str(tenant_id)
 
-        service_name = self._get_service_name(sandbox_id_str)
+        service_name = self._get_pod_name(sandbox_id_str)
 
         ports = [
             client.V1ServicePort(
@@ -680,7 +659,7 @@ class KubernetesSandboxManager(SandboxManager):
         This prevents a race condition where provision reuses an existing pod
         but the old service is still being deleted.
         """
-        service_name = self._get_service_name(str(sandbox_id))
+        service_name = self._get_pod_name(str(sandbox_id))
 
         try:
             svc = self._core_api.read_namespaced_service(
@@ -964,6 +943,30 @@ class KubernetesSandboxManager(SandboxManager):
         logger.warning("Timeout waiting for pod %s to become ready", pod_name)
         return False
 
+    def _wait_for_pod_ip(self, pod_name: str, deadline: float) -> bool:
+        """Poll until the pod is assigned an IP, or the monotonic deadline.
+
+        Waits for IP assignment only, never readiness: the init sidecar serves
+        the restore endpoint while its startup probe stays blocked, so waiting
+        for readiness here would deadlock the restore handshake.
+        """
+        while time.monotonic() < deadline:
+            try:
+                pod = self._core_api.read_namespaced_pod(
+                    name=pod_name, namespace=self._namespace
+                )
+            except ApiException as e:
+                if e.status == 404:
+                    raise RuntimeError(f"Pod {pod_name} was deleted")
+                raise
+            if pod.status.pod_ip:
+                logger.info("Pod %s assigned IP %s", pod_name, pod.status.pod_ip)
+                return True
+            time.sleep(POD_IP_POLL_INTERVAL_SECONDS)
+
+        logger.warning("Timeout waiting for pod %s to be assigned an IP", pod_name)
+        return False
+
     def _pod_exists_and_healthy(self, pod_name: str) -> bool:
         """Check if a pod exists and the sandbox app container is ready.
 
@@ -1110,7 +1113,10 @@ class KubernetesSandboxManager(SandboxManager):
                     default_provider=llm_config.provider,
                     default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
-                    plugins=[_OPENCODE_SESSION_TAG_PLUGIN_PATH],
+                    plugins=[
+                        _OPENCODE_CONNECT_APP_PLUGIN_PATH,
+                        _OPENCODE_SESSION_TAG_PLUGIN_PATH,
+                    ],
                 )
             )
             self._provision_opencode_secret(str(sandbox_id), opencode_config_json)
@@ -1155,12 +1161,24 @@ class KubernetesSandboxManager(SandboxManager):
             # 2. Create Service (handles terminating services)
             self._ensure_service_exists(sandbox_id, tenant_id)
 
-            # 3. Restore opencode history before the sandbox app container starts.
-            # The restartable init sidecar serves the restore endpoint but its
-            # startup probe stays blocked until restore is complete or explicitly
-            # marked unnecessary, so opencode-serve cannot open an empty DB first.
+            # 3. Restore opencode history before the sandbox app container starts;
+            # the init sidecar serves the restore endpoint while its startup probe
+            # stays blocked, so opencode-serve can't open an empty DB first. The IP
+            # wait and the restore draw from one deadline so slow scheduling leaves
+            # less budget for the restore rather than stacking two full timeouts.
             if startup_restore_required:
-                self.restore_opencode_history_snapshot(sandbox_id, tenant_id)
+                restore_deadline = (
+                    time.monotonic() + OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+                )
+                if not self._wait_for_pod_ip(pod_name, restore_deadline):
+                    raise RuntimeError(
+                        f"Timeout waiting for sandbox pod {pod_name} to be assigned an IP"
+                    )
+                self.restore_opencode_history_snapshot(
+                    sandbox_id,
+                    tenant_id,
+                    timeout_seconds=restore_deadline - time.monotonic(),
+                )
 
             # 4. Wait for pod to be ready
             logger.info("Waiting for pod %s to become ready...", pod_name)
@@ -1293,7 +1311,7 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_id = str(sandbox_id)
 
         pod_name = self._get_pod_name(sandbox_id)
-        service_name = self._get_service_name(sandbox_id)
+        service_name = self._get_pod_name(sandbox_id)
 
         # Delete in reverse order of creation
         service_deleted = False
@@ -1354,6 +1372,7 @@ class KubernetesSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
@@ -1384,6 +1403,7 @@ class KubernetesSandboxManager(SandboxManager):
         # Attachments section is injected dynamically when first file is uploaded.
         agent_instructions = self._load_agent_instructions(
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1647,7 +1667,7 @@ echo "Session cleanup complete"
         self,
         sandbox_id: UUID,
         tenant_id: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
     ) -> bool:
         if not self._snapshot_manager.has_opencode_history_snapshot(
             tenant_id, str(sandbox_id)
@@ -1693,7 +1713,7 @@ echo "Session cleanup complete"
         self,
         *,
         sandbox_id: UUID,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
     ) -> None:
         self._sidecar_client.post_empty(
             sandbox_id=sandbox_id,
@@ -1810,6 +1830,7 @@ echo "Session cleanup complete"
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         """Restore a FileStore-backed snapshot through the sidecar filesystem API.
 
@@ -1861,6 +1882,7 @@ echo "Session cleanup complete"
                 llm_config=llm_config,
                 nextjs_port=nextjs_port,
                 skills_section=skills_section,
+                connectable_apps_section=connectable_apps_section,
             )
 
             if nextjs_port is not None:
@@ -1888,6 +1910,7 @@ echo "Session cleanup complete"
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         """Regenerate session configuration files after snapshot restore.
 
@@ -1905,6 +1928,7 @@ echo "Session cleanup complete"
         """
         agent_instructions = self._load_agent_instructions(
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1960,7 +1984,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
     ) -> ServeConnectionInfo | None:
         """Build serve connection info from the per-pod Secret. URL uses
         the Service DNS (not pod IP) so telepresence dev paths work."""
-        service_name = self._get_service_name(str(sandbox_id))
+        service_name = self._get_pod_name(str(sandbox_id))
         return ServeConnectionInfo(
             base_url=(
                 f"http://{service_name}.{self._namespace}.svc.cluster.local"
@@ -1968,17 +1992,6 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             ),
             password=self._read_opencode_password(sandbox_id),
         )
-
-    def _serve_health_check_base_url(self, sandbox_id: UUID) -> str | None:
-        """Pod-IP fallback probe candidate for the readiness wait: out-of-cluster
-        CI routes pod IPs but can't resolve the Service FQDN. ``None`` until the
-        pod IP is assigned."""
-        pod_name = self._get_pod_name(str(sandbox_id))
-        try:
-            pod_ip = self._get_pod_ip(pod_name)
-        except (FatalWriteError, RetriableWriteError):
-            return None
-        return f"http://{pod_ip}:{OPENCODE_SERVE_PORT}"
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
@@ -2585,35 +2598,6 @@ fi
             f"failed to resolve proxy ClusterIP for SANDBOX_PROXY_HOST={host!r} "
             f"after {_PROXY_RESOLVE_RETRY_ATTEMPTS} attempts: {last_err}"
         )
-
-    def _get_pod_ip(self, pod_name: str) -> str:
-        """Read pod IP. Raises FatalWriteError on 404, RetriableWriteError otherwise."""
-        try:
-            pod = self._core_api.read_namespaced_pod(
-                name=pod_name,
-                namespace=self._namespace,
-            )
-        except ApiException as e:
-            if e.status == 404:
-                raise FatalWriteError(f"Pod {pod_name} not found") from e
-            raise RetriableWriteError(f"Failed to read pod {pod_name}: {e}") from e
-
-        pod_ip = pod.status.pod_ip
-        if not pod_ip:
-            raise RetriableWriteError(f"Pod {pod_name} has no IP yet")
-        return pod_ip
-
-    def _sandbox_pod_hosts(self, sandbox_id: UUID) -> list[str]:
-        """Hosts to reach the pod sidecar, in preference order: Service FQDN
-        (routes in prod + telepresence), then raw pod IP (out-of-cluster CI,
-        which routes pod IPs but has no cluster DNS)."""
-        service_name = self._get_service_name(str(sandbox_id))
-        hosts = [f"{service_name}.{self._namespace}.svc.cluster.local"]
-        try:
-            hosts.append(self._get_pod_ip(self._get_pod_name(str(sandbox_id))))
-        except (FatalWriteError, RetriableWriteError):
-            pass
-        return hosts
 
     def write_files_to_sandbox(
         self,

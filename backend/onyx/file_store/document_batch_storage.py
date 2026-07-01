@@ -20,6 +20,20 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def _has_legacy_tabular_section(doc_dict: dict) -> bool:
+    """True if a section is a pre-`csv_file_id` tabular section (inline text only).
+    Such a section was staged by an older docfetcher and the current file-backed-only
+    `TabularSection` can't validate it; during rolling-deploy skew we skip the doc
+    rather than fail the whole batch on `model_validate`."""
+    sections = doc_dict.get("sections")
+    if not isinstance(sections, list):
+        return False
+    return any(
+        isinstance(s, dict) and s.get("type") == "tabular" and not s.get("csv_file_id")
+        for s in sections
+    )
+
+
 class DocumentBatchStorageStateType(str, Enum):
     EXTRACTION = "extraction"
     INDEXING = "indexing"
@@ -91,10 +105,19 @@ class DocumentBatchStorage(ABC):
     def _deserialize_documents(self, data: str) -> list[Document]:
         """Deserialize documents from JSON string."""
         doc_dicts = json.loads(data)
-        return [
-            Document.model_validate(self._normalize_doc_dict(doc_dict))
-            for doc_dict in doc_dicts
-        ]
+        documents: list[Document] = []
+        for doc_dict in doc_dicts:
+            if _has_legacy_tabular_section(doc_dict):
+                logger.warning(
+                    "Skipping doc %s with a legacy inline tabular section "
+                    "(no csv_file_id); it re-indexes on the next attempt",
+                    doc_dict.get("id", "unknown"),
+                )
+                continue
+            documents.append(
+                Document.model_validate(self._normalize_doc_dict(doc_dict))
+            )
+        return documents
 
     def _normalize_doc_dict(self, doc_dict: dict) -> dict:
         """Normalize document dict to handle legacy data with non-string metadata values.

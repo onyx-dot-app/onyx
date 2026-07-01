@@ -55,6 +55,10 @@ export {
   type TextFont,
   type TextColor,
 } from "@opal/components/text/components";
+export {
+  default as CompactMarkdown,
+  type CompactMarkdownProps,
+} from "@opal/components/text/CompactMarkdown";
 
 /* Tag */
 export {
@@ -153,3 +157,9 @@ export {
   type TabsListProps,
   type TabsTriggerProps,
 } from "@opal/components/tabs/components";
+
+/* EndOfList */
+export {
+  EndOfList,
+  type EndOfListProps,
+} from "@opal/components/end-of-list/components";

@@ -32,6 +32,7 @@ from mitmproxy import http as mitm_http
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
+from onyx.sandbox_proxy.addons import gate
 from onyx.sandbox_proxy.addons.gate import _IdentityResolver
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -158,6 +159,14 @@ def upstream() -> Iterator[int]:
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.fixture(autouse=True)
+def _allow_loopback_egress(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests route through 127.0.0.1 (loopback = internal), which the egress
+    guard correctly blocks in production. They exercise response streaming, not the
+    egress boundary, so bypass the guard here."""
+    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host, _port: False)
 
 
 def _start_proxy(

@@ -48,9 +48,6 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
 )
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    tabular_file_to_sections,
-)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
@@ -882,28 +879,29 @@ def _convert_driveitem_to_document_with_permissions(
         image_section.link = driveitem.web_url
         sections.append(image_section)
     elif is_tabular_file(driveitem.name):
+        # Tabular content is always staged via the callback; without it we can't
+        # produce the section, so fail the item rather than emit an empty-section
+        # Document that could overwrite indexed content.
+        if raw_file_callback is None:
+            return _create_document_failure(
+                driveitem,
+                f"raw_file_callback not set; cannot stage tabular file {driveitem.name}",
+            )
         try:
-            if raw_file_callback is not None:
-                result = extract_and_stage_tabular_file(
-                    file=io.BytesIO(content_bytes),
-                    file_name=driveitem.name,
-                    content_type=mime_type or "application/octet-stream",
-                    raw_file_callback=raw_file_callback,
-                    link=driveitem.web_url or "",
-                )
-                sections.extend(result.sections)
-                staged_file_id = result.staged_file_id
-            else:
-                sections.extend(
-                    tabular_file_to_sections(
-                        file=io.BytesIO(content_bytes),
-                        file_name=driveitem.name,
-                        link=driveitem.web_url or "",
-                    )
-                )
+            result = extract_and_stage_tabular_file(
+                file=io.BytesIO(content_bytes),
+                file_name=driveitem.name,
+                content_type=mime_type or "application/octet-stream",
+                raw_file_callback=raw_file_callback,
+                link=driveitem.web_url or "",
+            )
+            sections.extend(result.sections)
+            staged_file_id = result.staged_file_id
         except Exception as e:
-            logger.warning(
-                "Failed to extract tabular sections for '%s': %s", driveitem.name, e
+            return _create_document_failure(
+                driveitem,
+                f"Failed to extract tabular sections for {driveitem.name}: {e}",
+                e,
             )
     else:
         extraction_result = extract_text_and_images(
@@ -2020,7 +2018,7 @@ class SharepointConnector(
 
         initial_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta"
         if use_timestamp_token:
-            assert start is not None  # mypy
+            assert start is not None  # for type-checking
             token = quote(start.isoformat(timespec="seconds"))
             initial_url += f"?token={token}"
 

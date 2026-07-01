@@ -5,9 +5,17 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import sync_model_configurations
-from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import SyncModelEntry
+
+
+def _make_existing_model(name: str, flow_types: list[LLMModelFlowType]) -> MagicMock:
+    model = MagicMock()
+    model.id = 42
+    model.name = name
+    model.llm_model_flow_types = flow_types
+    return model
 
 
 class TestSyncModelConfigurations:
@@ -23,7 +31,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             models = [
                 SyncModelEntry(
@@ -42,7 +50,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name=LlmProviderNames.OPENAI,
+                provider_id=1,
                 models=models,
             )
 
@@ -53,10 +61,11 @@ class TestSyncModelConfigurations:
             mock_session.commit.assert_called_once()
 
     def test_skips_existing_models(self) -> None:
-        """Test that existing models are not overwritten."""
-        # Mock existing model
-        mock_existing_model = MagicMock()
-        mock_existing_model.name = "gpt-4"
+        """Existing models with up-to-date flows are left untouched."""
+        # Existing model already has the capabilities the source reports.
+        mock_existing_model = _make_existing_model(
+            "gpt-4", [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+        )
 
         mock_provider = MagicMock()
         mock_provider.id = 1
@@ -65,7 +74,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             models = [
                 SyncModelEntry(
@@ -84,7 +93,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name=LlmProviderNames.OPENAI,
+                provider_id=1,
                 models=models,
             )
 
@@ -92,9 +101,10 @@ class TestSyncModelConfigurations:
             assert mock_session.execute.call_count == 3
 
     def test_no_commit_when_no_new_models(self) -> None:
-        """Test that commit is not called when no new models."""
-        mock_existing_model = MagicMock()
-        mock_existing_model.name = "gpt-4"
+        """Test that commit is not called when nothing new or upgraded."""
+        mock_existing_model = _make_existing_model(
+            "gpt-4", [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+        )
 
         mock_provider = MagicMock()
         mock_provider.id = 1
@@ -103,7 +113,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             models = [
                 SyncModelEntry(
@@ -116,7 +126,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name=LlmProviderNames.OPENAI,
+                provider_id=1,
                 models=models,
             )
 
@@ -127,11 +137,11 @@ class TestSyncModelConfigurations:
         """Test that ValueError is raised when provider not found."""
         mock_session = MagicMock()
 
-        with patch("onyx.db.llm.fetch_existing_llm_provider", return_value=None):
+        with patch("onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=None):
             with pytest.raises(ValueError, match="not found"):
                 sync_model_configurations(
                     db_session=mock_session,
-                    provider_name="nonexistent",
+                    provider_id=999,
                     models=[SyncModelEntry(name="model", display_name="Model")],
                 )
 
@@ -144,7 +154,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             models = [
                 SyncModelEntry(
@@ -158,7 +168,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name=LlmProviderNames.OPENAI,
+                provider_id=1,
                 models=models,
             )
 
@@ -176,7 +186,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             # Model with only required fields (max_input_tokens and supports_image_input default)
             models = [
@@ -188,7 +198,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name="custom",
+                provider_id=1,
                 models=models,
             )
 
@@ -196,3 +206,73 @@ class TestSyncModelConfigurations:
             # Verify execute was called with correct defaults
             call_args = mock_session.execute.call_args
             assert call_args is not None
+
+    def test_upgrades_existing_model_vision_flow(self) -> None:
+        """Existing model gains a VISION flow when the source newly reports it.
+
+        Repairs rows synced before the source exposed vision (e.g. a Bifrost
+        model added before vision detection resolved correctly). Returns 0 new
+        models but commits the added flow.
+        """
+        mock_existing_model = _make_existing_model("gemini", [LLMModelFlowType.CHAT])
+
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.model_configurations = [mock_existing_model]
+
+        mock_session = MagicMock()
+
+        with patch(
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
+        ):
+            models = [
+                SyncModelEntry(
+                    name="gemini",
+                    display_name="Gemini",
+                    supports_image_input=True,
+                ),
+            ]
+
+            result = sync_model_configurations(
+                db_session=mock_session,
+                provider_id=1,
+                models=models,
+            )
+
+            assert result == 0  # No new models, only an upgraded flow
+            assert mock_session.execute.call_count == 1  # One VISION flow insert
+            mock_session.commit.assert_called_once()
+
+    def test_does_not_remove_flows(self) -> None:
+        """Capability flags are only added, never removed: a model that already
+        has VISION keeps it even if the source omits it this fetch."""
+        mock_existing_model = _make_existing_model(
+            "gemini", [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
+        )
+
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.model_configurations = [mock_existing_model]
+
+        mock_session = MagicMock()
+
+        with patch(
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
+        ):
+            models = [
+                SyncModelEntry(
+                    name="gemini",
+                    display_name="Gemini",
+                    supports_image_input=False,
+                ),
+            ]
+
+            result = sync_model_configurations(
+                db_session=mock_session,
+                provider_id=1,
+                models=models,
+            )
+
+            assert result == 0
+            mock_session.execute.assert_not_called()
+            mock_session.commit.assert_not_called()

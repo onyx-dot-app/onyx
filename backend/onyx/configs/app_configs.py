@@ -9,6 +9,7 @@ from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import QueryHistoryType
+from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
@@ -209,6 +210,12 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 # lifetime, so a paired-up cookie + token never outlive each other.
 CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
 
+# Redis TTL for cached control-plane billing/trial lookups. 24h default —
+# trial→paid conversions propagate within this window in the worst case,
+# and the admin panel call sites invalidate on write so immediate UI
+# refreshes are not stale. Env-tunable for emergency tightening.
+BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "86400"))
+
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
 OAUTH_CLIENT_ID = (
@@ -388,9 +395,76 @@ OPENSEARCH_ADMIN_PASSWORD = os.environ.get(
     "OPENSEARCH_ADMIN_PASSWORD", "StrongPassword123!"
 )
 OPENSEARCH_USE_SSL = os.environ.get("OPENSEARCH_USE_SSL", "true").lower() == "true"
+# Verify the OpenSearch server certificate. Defaults to False to preserve the
+# existing behavior (the bundled OpenSearch ships self-signed certs). Set True —
+# with OPENSEARCH_CA_CERTS for a private CA — to actually authenticate the
+# server instead of merely encrypting the connection.
+OPENSEARCH_VERIFY_CERTS = (
+    os.environ.get("OPENSEARCH_VERIFY_CERTS", "").lower() == "true"
+)
+# CA bundle to verify the server cert against when OPENSEARCH_VERIFY_CERTS=true.
+# Falls back to the system trust store if unset.
+OPENSEARCH_CA_CERTS: str | None = os.environ.get("OPENSEARCH_CA_CERTS") or None
+# Client certificate + key for mutual TLS (OpenSearch authenticating us). Both
+# must be set together.
+OPENSEARCH_CLIENT_CERT: str | None = os.environ.get("OPENSEARCH_CLIENT_CERT") or None
+OPENSEARCH_CLIENT_KEY: str | None = os.environ.get("OPENSEARCH_CLIENT_KEY") or None
+
+# Authentication method for connecting to OpenSearch. "basic" uses
+# OPENSEARCH_ADMIN_USERNAME / OPENSEARCH_ADMIN_PASSWORD (HTTP basic auth); the
+# default and the only option for self-hosted / docker-compose OpenSearch. "iam"
+# uses AWS SigV4 request signing and is only valid against an AWS managed domain
+# whose fine-grained access control master is an IAM ARN. This is independent of
+# USING_AWS_MANAGED_OPENSEARCH: AWS managed domains can use a master user too.
+OPENSEARCH_AUTH_METHOD = OpenSearchAuthMethod(
+    (
+        os.environ.get("OPENSEARCH_AUTH_METHOD") or OpenSearchAuthMethod.BASIC.value
+    ).lower()
+)
+# AWS region of the managed OpenSearch domain. Required when
+# OPENSEARCH_AUTH_METHOD=iam; used to compute the SigV4 signature.
+OPENSEARCH_AWS_REGION: str | None = os.environ.get("OPENSEARCH_AWS_REGION") or None
+# AWS service name for SigV4 signing: "es" for managed OpenSearch domains,
+# "aoss" for OpenSearch Serverless.
+OPENSEARCH_AWS_SERVICE = os.environ.get("OPENSEARCH_AWS_SERVICE") or "es"
+
+if OPENSEARCH_VERIFY_CERTS and not OPENSEARCH_USE_SSL:
+    logger.warning(
+        "OPENSEARCH_VERIFY_CERTS=true has no effect when OPENSEARCH_USE_SSL is "
+        "false (the connection is not encrypted)."
+    )
+if bool(OPENSEARCH_CLIENT_CERT) != bool(OPENSEARCH_CLIENT_KEY):
+    raise ValueError(
+        "OPENSEARCH_CLIENT_CERT and OPENSEARCH_CLIENT_KEY must both be set "
+        "(mutual TLS needs a client certificate and its private key)."
+    )
+for _os_name, _os_path in (
+    ("OPENSEARCH_CA_CERTS", OPENSEARCH_CA_CERTS),
+    ("OPENSEARCH_CLIENT_CERT", OPENSEARCH_CLIENT_CERT),
+    ("OPENSEARCH_CLIENT_KEY", OPENSEARCH_CLIENT_KEY),
+):
+    if _os_path and not os.path.exists(_os_path):
+        raise ValueError(f"{_os_name}={_os_path!r} does not exist.")
+
+if OPENSEARCH_AUTH_METHOD == OpenSearchAuthMethod.IAM and not OPENSEARCH_AWS_REGION:
+    raise ValueError(
+        "OPENSEARCH_AWS_REGION must be set when OPENSEARCH_AUTH_METHOD=iam "
+        "(AWS SigV4 signing needs the domain's region)."
+    )
+
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
+
+if (
+    OPENSEARCH_AUTH_METHOD == OpenSearchAuthMethod.IAM
+    and not USING_AWS_MANAGED_OPENSEARCH
+):
+    raise ValueError(
+        "OPENSEARCH_AUTH_METHOD=iam is only supported for "
+        "AWS-managed instances of OpenSearch."
+    )
+
 # Profiling adds some overhead to OpenSearch operations. This overhead is
 # unknown right now. Defaults to True.
 OPENSEARCH_PROFILING_DISABLED = (
@@ -562,6 +636,108 @@ POSTGRES_TCP_KEEPALIVES_COUNT = int(
 # RDS IAM authentication - enables IAM-based authentication for PostgreSQL
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
+# TLS for non-IAM PostgreSQL connections.
+#
+# POSTGRES_SSLMODE follows libpq's vocabulary. Only `verify-ca` / `verify-full`
+# authenticate the server (and require POSTGRES_SSLROOTCERT to verify against);
+# `require` encrypts but does NOT protect against a man-in-the-middle. All of
+# this is ignored when USE_IAM_AUTH is true (IAM enforces its own TLS).
+POSTGRES_SSLMODE: str | None = os.environ.get("POSTGRES_SSLMODE") or None
+# Path to the CA bundle used to verify the server certificate for `verify-ca` /
+# `verify-full`. Required by managed providers (RDS, Cloud SQL, Azure) whose
+# server certs don't chain to a system-trusted CA; point it at the system bundle
+# if the server uses a publicly-trusted certificate.
+POSTGRES_SSLROOTCERT: str | None = os.environ.get("POSTGRES_SSLROOTCERT") or None
+# Client certificate + key for mutual TLS (the server authenticating us). Both
+# must be set together, and are only used when POSTGRES_SSLMODE negotiates SSL
+# (require / verify-ca / verify-full).
+POSTGRES_SSLCERT: str | None = os.environ.get("POSTGRES_SSLCERT") or None
+POSTGRES_SSLKEY: str | None = os.environ.get("POSTGRES_SSLKEY") or None
+POSTGRES_SSLKEY_PASSWORD: str | None = (
+    os.environ.get("POSTGRES_SSLKEY_PASSWORD") or None
+)
+
+_VALID_POSTGRES_SSLMODES = frozenset(
+    {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
+)
+_CA_VERIFYING_SSLMODES = frozenset({"verify-ca", "verify-full"})
+# Modes that always negotiate SSL — a client certificate is only reliably
+# presented under one of these.
+_SSL_NEGOTIATING_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
+_POSTGRES_SSL_FILE_SETTINGS = (
+    ("POSTGRES_SSLROOTCERT", POSTGRES_SSLROOTCERT),
+    ("POSTGRES_SSLCERT", POSTGRES_SSLCERT),
+    ("POSTGRES_SSLKEY", POSTGRES_SSLKEY),
+)
+# True when any non-mode TLS setting (including the key password) is present —
+# all of these are dead config without a POSTGRES_SSLMODE.
+_HAS_POSTGRES_SSL_SECONDARY = any(
+    [POSTGRES_SSLROOTCERT, POSTGRES_SSLCERT, POSTGRES_SSLKEY, POSTGRES_SSLKEY_PASSWORD]
+)
+
+if USE_IAM_AUTH:
+    # IAM auth manages the database TLS connection itself, so the explicit
+    # POSTGRES_SSL* settings are ignored — warn rather than silently drop them.
+    if POSTGRES_SSLMODE or _HAS_POSTGRES_SSL_SECONDARY:
+        logger.warning(
+            "USE_IAM_AUTH is enabled; ignoring POSTGRES_SSLMODE / POSTGRES_SSL* "
+            "(IAM auth manages the database TLS connection)."
+        )
+elif POSTGRES_SSLMODE:
+    if POSTGRES_SSLMODE not in _VALID_POSTGRES_SSLMODES:
+        raise ValueError(
+            f"Invalid POSTGRES_SSLMODE={POSTGRES_SSLMODE!r}. "
+            f"Must be one of: {sorted(_VALID_POSTGRES_SSLMODES)}"
+        )
+    if POSTGRES_SSLMODE in _CA_VERIFYING_SSLMODES and not POSTGRES_SSLROOTCERT:
+        # Without a CA bundle these modes can't verify the server cert: libpq
+        # errors out and asyncpg silently falls back to the system trust store.
+        # Fail loudly so the intended CA-pinned trust model is explicit.
+        raise ValueError(
+            f"POSTGRES_SSLMODE={POSTGRES_SSLMODE!r} verifies the server "
+            "certificate and requires POSTGRES_SSLROOTCERT (path to the CA "
+            "bundle). Set it to your provider's CA, or to the system CA bundle "
+            "if the server uses a publicly-trusted certificate."
+        )
+    if POSTGRES_SSLMODE == "require" and POSTGRES_SSLROOTCERT:
+        logger.warning(
+            "POSTGRES_SSLROOTCERT is set but POSTGRES_SSLMODE=require does not "
+            "verify the server certificate; use verify-ca or verify-full to "
+            "verify against the CA bundle."
+        )
+    # Mutual TLS: client cert + key must be provided together, under a mode that
+    # actually negotiates SSL.
+    if bool(POSTGRES_SSLCERT) != bool(POSTGRES_SSLKEY):
+        raise ValueError(
+            "POSTGRES_SSLCERT and POSTGRES_SSLKEY must both be set (mutual TLS "
+            "needs a client certificate and its private key)."
+        )
+    if POSTGRES_SSLKEY_PASSWORD and not POSTGRES_SSLCERT:
+        raise ValueError(
+            "POSTGRES_SSLKEY_PASSWORD is set without a client certificate; it "
+            "only decrypts POSTGRES_SSLKEY. Set POSTGRES_SSLCERT/POSTGRES_SSLKEY "
+            "or unset the password."
+        )
+    if POSTGRES_SSLCERT and POSTGRES_SSLMODE not in _SSL_NEGOTIATING_SSLMODES:
+        raise ValueError(
+            f"POSTGRES_SSLCERT / POSTGRES_SSLKEY require POSTGRES_SSLMODE to be "
+            f"one of {sorted(_SSL_NEGOTIATING_SSLMODES)} so TLS is negotiated; "
+            f"got {POSTGRES_SSLMODE!r}."
+        )
+    for _name, _path in _POSTGRES_SSL_FILE_SETTINGS:
+        if _path and not os.path.exists(_path):
+            raise ValueError(f"{_name}={_path!r} does not exist.")
+elif _HAS_POSTGRES_SSL_SECONDARY:
+    # CA bundle / client cert / key password without a mode is dead config: SSL
+    # stays off and the connection runs unverified despite the operator supplying
+    # certs. Fail loudly so this can't masquerade as a verified/mutually-
+    # authenticated link.
+    raise ValueError(
+        "POSTGRES_SSLROOTCERT / POSTGRES_SSLCERT / POSTGRES_SSLKEY / "
+        "POSTGRES_SSLKEY_PASSWORD are set but POSTGRES_SSLMODE is not. Set a "
+        "POSTGRES_SSLMODE (e.g. verify-full) so TLS is actually negotiated."
+    )
+
 # Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
 # Note: This is separate from RDS IAM auth as they use different authentication mechanisms
 USE_REDIS_IAM_AUTH = os.getenv("USE_REDIS_IAM_AUTH", "False").lower() == "true"
@@ -572,6 +748,58 @@ REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 
 # this assumes that other redis settings remain the same as the primary
 REDIS_REPLICA_HOST = os.environ.get("REDIS_REPLICA_HOST") or REDIS_HOST
+
+# Redis Sentinel for high availability. When REDIS_SENTINEL_HOSTS is set, the app
+# (and Celery) connect via Sentinel — which discovers the current master and
+# follows failover — instead of REDIS_HOST/REDIS_PORT directly. Format is a
+# comma-separated list of host:port sentinel nodes. REDIS_PASSWORD still
+# authenticates the master/replica; REDIS_SENTINEL_PASSWORD (optional) is for the
+# sentinel nodes themselves if they require separate auth. TLS (REDIS_SSL +
+# certs) applies to both the sentinel and the data connections.
+_REDIS_SENTINEL_HOSTS_STR = os.environ.get("REDIS_SENTINEL_HOSTS", "").strip()
+
+
+def _parse_sentinel_hosts(raw: str) -> list[tuple[str, int]]:
+    hosts: list[tuple[str, int]] = []
+    for entry in (h.strip() for h in raw.split(",") if h.strip()):
+        host, sep, port = entry.rpartition(":")
+        if not sep or not host or not port.isdigit():
+            raise ValueError(
+                f"Invalid REDIS_SENTINEL_HOSTS entry {entry!r}; expected host:port."
+            )
+        port_num = int(port)
+        if not 1 <= port_num <= 65535:
+            raise ValueError(
+                f"Invalid REDIS_SENTINEL_HOSTS port {port!r}; must be 1-65535."
+            )
+        hosts.append((host, port_num))
+    return hosts
+
+
+REDIS_SENTINEL_HOSTS: list[tuple[str, int]] = _parse_sentinel_hosts(
+    _REDIS_SENTINEL_HOSTS_STR
+)
+REDIS_SENTINEL_MASTER_NAME = os.environ.get(
+    "REDIS_SENTINEL_MASTER_NAME", "mymaster"
+).strip()
+REDIS_SENTINEL_PASSWORD = os.environ.get("REDIS_SENTINEL_PASSWORD") or None
+
+# Fail loudly rather than silently falling back to a direct connection when the
+# operator clearly intended Sentinel.
+if _REDIS_SENTINEL_HOSTS_STR and not REDIS_SENTINEL_HOSTS:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS is set but no valid host:port pairs were parsed."
+    )
+if REDIS_SENTINEL_HOSTS and not REDIS_SENTINEL_MASTER_NAME:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS is set but REDIS_SENTINEL_MASTER_NAME is empty."
+    )
+if REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH cannot be combined: Sentinel "
+        "is for self-managed HA Redis, while IAM auth targets AWS ElastiCache "
+        "(which manages failover itself)."
+    )
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
 
@@ -630,8 +858,39 @@ REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 12
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
 REDIS_SSL_CA_CERTS = os.getenv("REDIS_SSL_CA_CERTS", None)
+# Client certificate + key for Redis mutual TLS (the server authenticating us).
+# Both must be set together and require REDIS_SSL=true. A managed Redis may hand
+# these out base64-encoded — decode them to files (e.g. a mounted secret) and
+# point these at the paths.
+REDIS_SSL_CERTFILE: str | None = os.getenv("REDIS_SSL_CERTFILE") or None
+REDIS_SSL_KEYFILE: str | None = os.getenv("REDIS_SSL_KEYFILE") or None
+
+if bool(REDIS_SSL_CERTFILE) != bool(REDIS_SSL_KEYFILE):
+    raise ValueError(
+        "REDIS_SSL_CERTFILE and REDIS_SSL_KEYFILE must both be set (mutual TLS "
+        "needs a client certificate and its private key)."
+    )
+if (REDIS_SSL_CERTFILE or REDIS_SSL_KEYFILE) and not REDIS_SSL:
+    raise ValueError(
+        "REDIS_SSL_CERTFILE / REDIS_SSL_KEYFILE require REDIS_SSL=true so a TLS "
+        "connection is negotiated."
+    )
+for _redis_tls_name, _redis_tls_path in (
+    ("REDIS_SSL_CERTFILE", REDIS_SSL_CERTFILE),
+    ("REDIS_SSL_KEYFILE", REDIS_SSL_KEYFILE),
+):
+    if _redis_tls_path and not os.path.exists(_redis_tls_path):
+        raise ValueError(f"{_redis_tls_name}={_redis_tls_path!r} does not exist.")
 
 CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
+
+# A failed prune is skipped for this long before the beat re-dispatches it.
+# Floor: the re-dispatch interval (BLOCK_PRUNING = 60s * beat_multiplier, ~8 min
+# in cloud) so a failure can't hot-loop. Ceiling: prune_freq, so it still retries
+# well before the next scheduled prune. 30m is a midpoint with transient slack.
+PRUNE_FAILURE_BACKOFF_SECONDS = int(
+    os.environ.get("PRUNE_FAILURE_BACKOFF_SECONDS") or 30 * 60
+)
 
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#broker-pool-limit
 # Setting to None may help when there is a proxy in the way closing idle connections
@@ -893,6 +1152,13 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
+# Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
+# fetch. Native Docs report no `size`, so the fetch can't be checked from
+# metadata; larger Docs are indexed via the basic text export.
+GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
+    os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
+)
+
 # Cap the total text retained per file across a connector's extracted sections,
 # bounding worker memory when a source can't be size-checked before fetch —
 # e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
@@ -1120,6 +1386,12 @@ MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
 )
 
+# PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
+# or hang); this is the timeout before the subprocess is killed and pypdf runs.
+PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS = float(
+    os.environ.get("PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS") or 120
+)
+
 # Use document summary for contextual rag
 USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
 # Use chunk summary for contextual rag
@@ -1155,6 +1427,27 @@ CODE_INTERPRETER_DEFAULT_TIMEOUT_MS = int(
 
 CODE_INTERPRETER_MAX_OUTPUT_LENGTH = int(
     os.environ.get("CODE_INTERPRETER_MAX_OUTPUT_LENGTH") or 50_000
+)
+
+# Backstop on per-execution file staging. Session files accumulate over a chat
+# (generated artifacts get carried forward), and staging each one is a blocking
+# object-store read + upload in the request worker; an unbounded set can block
+# longer than the api-server liveness window. Cap by count and cumulative bytes
+# and drop the overflow (oldest first).
+CODE_INTERPRETER_MAX_STAGED_FILES = int(
+    os.environ.get("CODE_INTERPRETER_MAX_STAGED_FILES") or 25
+)
+
+CODE_INTERPRETER_MAX_STAGED_BYTES = int(
+    os.environ.get("CODE_INTERPRETER_MAX_STAGED_BYTES") or 100 * 1024 * 1024
+)
+
+# Bounds the fan-out of both staging phases — reading files from the object
+# store and uploading cache misses to the sandbox — so neither blocks the
+# request worker serially nor overwhelms a backend with a burst. Each I/O call
+# is individually bounded by its own per-request timeout.
+CODE_INTERPRETER_STAGING_CONCURRENCY = int(
+    os.environ.get("CODE_INTERPRETER_STAGING_CONCURRENCY") or 8
 )
 
 # Per-call MCP read timeout; configurable since some tools (e.g. data-agent
@@ -1257,6 +1550,11 @@ VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT = os.environ.get(
 )
 
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
+
+# Size of the api-server anyio threadpool that runs sync endpoints, including the
+# streaming chat generator (each long request holds one thread for its duration).
+# 0 keeps the anyio default (40). Set via the api.threadpoolSize Helm value.
+API_SERVER_THREADPOOL_SIZE = int(os.environ.get("ONYX_API_THREADPOOL_SIZE") or "0")
 
 PARSE_WITH_TRAFILATURA = os.environ.get("PARSE_WITH_TRAFILATURA", "").lower() == "true"
 
@@ -1581,6 +1879,8 @@ EXT_APP_LINEAR_CLIENT_ID = os.environ.get("EXT_APP_LINEAR_CLIENT_ID", "")
 EXT_APP_LINEAR_CLIENT_SECRET = os.environ.get("EXT_APP_LINEAR_CLIENT_SECRET", "")
 EXT_APP_GITHUB_CLIENT_ID = os.environ.get("EXT_APP_GITHUB_CLIENT_ID", "")
 EXT_APP_GITHUB_CLIENT_SECRET = os.environ.get("EXT_APP_GITHUB_CLIENT_SECRET", "")
+EXT_APP_HUBSPOT_CLIENT_ID = os.environ.get("EXT_APP_HUBSPOT_CLIENT_ID", "")
+EXT_APP_HUBSPOT_CLIENT_SECRET = os.environ.get("EXT_APP_HUBSPOT_CLIENT_SECRET", "")
 
 INSTANCE_TYPE = (
     "managed"

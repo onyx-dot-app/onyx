@@ -10,6 +10,7 @@ import shutil
 import stat
 import zipfile
 from pathlib import Path
+from typing import BinaryIO
 from typing import Final
 
 import yaml
@@ -59,6 +60,17 @@ def slug_from_filename(filename: str | None) -> str:
         candidate = candidate[:-4]
     check_slug(candidate)
     return candidate
+
+
+def read_bundle_file(bundle_file: BinaryIO) -> bytes:
+    """Read a bundle stream without buffering an arbitrarily large body."""
+    data = bundle_file.read(DEFAULT_TOTAL_MAX_BYTES + 1)
+    if len(data) > DEFAULT_TOTAL_MAX_BYTES:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            f"Skill bundle exceeds the {DEFAULT_TOTAL_MAX_BYTES} byte limit.",
+        )
+    return data
 
 
 def parse_skill_md_metadata(zip_bytes: bytes) -> tuple[str, str]:
@@ -124,6 +136,42 @@ def parse_skill_md_metadata(zip_bytes: bytes) -> tuple[str, str]:
             "SKILL.md frontmatter must include a non-empty 'description'",
         )
     return name.strip(), description.strip()
+
+
+def strip_skill_md_frontmatter(content: str) -> str:
+    match = _FRONTMATTER_REGEX.match(content)
+    if match is None:
+        return content.strip()
+    return content[match.end() :].strip()
+
+
+def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile as exc:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Stored skill bundle is not a valid zip.",
+        ) from exc
+
+    with zf:
+        try:
+            raw_skill_md = zf.read(SKILL_MD_NAME)
+        except KeyError as exc:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "Stored skill bundle is missing SKILL.md.",
+            ) from exc
+
+    try:
+        skill_md = raw_skill_md.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Stored skill bundle SKILL.md must be UTF-8 encoded.",
+        ) from exc
+
+    return strip_skill_md_frontmatter(skill_md)
 
 
 def _is_symlink(info: zipfile.ZipInfo) -> bool:

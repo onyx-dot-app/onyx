@@ -32,6 +32,8 @@ from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import Error
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TRANSPORT
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
 from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
@@ -477,7 +479,7 @@ def test_send_message_yields_error_on_prompt_async_connection_error(
     )
     assert len(events) == 1
     assert isinstance(events[0], Error)
-    assert events[0].code == -3
+    assert events[0].code == TURN_ERROR_CODE_TRANSPORT
     assert "prompt_async failed" in events[0].message
 
 
@@ -524,7 +526,7 @@ def test_send_message_errors_when_stream_ready_never_set(
     )
     assert len(events) == 1
     assert isinstance(events[0], Error)
-    assert events[0].code == -3
+    assert events[0].code == TURN_ERROR_CODE_TRANSPORT
     assert "did not become ready" in events[0].message
     assert not any(
         request.url.path.endswith("/prompt_async") for request in transport.requests
@@ -614,7 +616,9 @@ def test_send_message_wall_clock_timeout_aborts(bus: PodEventBus) -> None:
     events = list(
         client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=0.3)
     )
-    assert any(isinstance(e, Error) and e.code == -1 for e in events)
+    assert any(
+        isinstance(e, Error) and e.code == TURN_ERROR_CODE_TIMEOUT for e in events
+    )
     assert any("/abort" in p for p in aborts)
 
 

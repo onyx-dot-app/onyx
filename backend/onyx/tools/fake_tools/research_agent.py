@@ -68,6 +68,8 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
+from onyx.tools.utils import compute_all_tool_tokens
+from onyx.tools.utils import compute_tool_definition_tokens
 from onyx.tools.utils import generate_tools_description
 from onyx.tracing.framework.create import function_span
 from onyx.utils.logger import setup_logger
@@ -286,11 +288,10 @@ def run_research_agent_call(
                     if any(isinstance(tool, WebSearchTool) for tool in current_tools)
                     else ""
                 )
-                open_urls_tip = (
-                    OPEN_URLS_TOOL_DESCRIPTION
-                    if any(isinstance(tool, OpenURLTool) for tool in current_tools)
-                    else ""
+                has_open_url_tool: bool = any(
+                    isinstance(tool, OpenURLTool) for tool in current_tools
                 )
+                open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION if has_open_url_tool else ""
                 if is_reasoning_model and open_urls_tip:
                     open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION_REASONING
 
@@ -314,7 +315,8 @@ def run_research_agent_call(
                     message_type=MessageType.SYSTEM,
                 )
 
-                if just_ran_web_search:
+                # Gate the open_url nudge on the tool actually being available.
+                if just_ran_web_search and has_open_url_tool:
                     reminder_message = ChatMessageSimple(
                         message=OPEN_URL_REMINDER_RESEARCH_AGENT,
                         token_count=100,
@@ -323,18 +325,24 @@ def run_research_agent_call(
                 else:
                     reminder_message = None
 
+                research_agent_tools = get_research_agent_additional_tool_definitions(
+                    include_think_tool=not is_reasoning_model
+                )
+                tool_token_budget = compute_all_tool_tokens(
+                    current_tools, token_counter
+                ) + compute_tool_definition_tokens(research_agent_tools, token_counter)
+
                 constructed_history = construct_message_history(
                     system_prompt=system_prompt,
                     custom_agent_prompt=None,
                     simple_chat_history=msg_history,
                     reminder_message=reminder_message,
                     context_files=None,
-                    available_tokens=llm.config.max_input_tokens,
+                    available_tokens=max(
+                        0, llm.config.max_input_tokens - tool_token_budget
+                    ),
                 )
 
-                research_agent_tools = get_research_agent_additional_tool_definitions(
-                    include_think_tool=not is_reasoning_model
-                )
                 # Use think tool processor for non-reasoning models to convert
                 # think_tool calls to reasoning content (same as dr_loop.py)
                 custom_processor = (

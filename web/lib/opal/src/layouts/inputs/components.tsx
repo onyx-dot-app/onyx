@@ -1,18 +1,17 @@
 "use client";
 
 import "@opal/layouts/inputs/styles.css";
+import { useContext } from "react";
+import { useField, FormikContext } from "formik";
 import type {
+  ColorTypes,
   IconFunctionComponent,
   RichStr,
   WithoutStyles,
 } from "@opal/types";
-import { Text, Divider } from "@opal/components";
-import type { TagProps } from "@opal/components";
+import { Text, Divider, type TagProps } from "@opal/components";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
-import { useContext } from "react";
-import { useField, FormikContext } from "formik";
-import { Section } from "@opal/layouts/general/components";
-import { Content, ContentAction } from "@opal/layouts";
+import { Content, ContentAction, Section } from "@opal/layouts";
 
 // ---------------------------------------------------------------------------
 // Label
@@ -71,7 +70,7 @@ interface InputLayoutProps {
 // Vertical
 // ---------------------------------------------------------------------------
 
-export interface VerticalProps extends InputLayoutProps {
+interface VerticalProps extends InputLayoutProps {
   subDescription?: string | RichStr;
 }
 
@@ -121,11 +120,18 @@ function Vertical({
 // Horizontal
 // ---------------------------------------------------------------------------
 
-export interface HorizontalProps extends InputLayoutProps {
+interface HorizontalProps extends InputLayoutProps {
   /** Align input to the center (middle) of the label/description. */
   center?: boolean;
   /** Optional icon rendered beside the title. */
   icon?: IconFunctionComponent;
+  /**
+   * When true, the control stacks between the title and the description on
+   * narrow viewports (and floats back to the right at the `sm` breakpoint),
+   * instead of always sitting to the right. Best for text inputs; avoid for
+   * compact controls like toggles/switches.
+   */
+  responsive?: boolean;
 }
 
 function Horizontal({
@@ -139,6 +145,7 @@ function Horizontal({
   tag,
   description,
   suffix,
+  responsive,
 }: HorizontalProps) {
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
@@ -156,6 +163,7 @@ function Horizontal({
         width="full"
         padding="fit"
         center={center}
+        responsive={responsive}
         rightChildren={children}
       />
       {fieldName && <FormikInputError name={fieldName} />}
@@ -200,7 +208,7 @@ function FormikInputErrorInner({ name }: FormikInputErrorProps) {
   const hasWarning = warning;
 
   if (hasError)
-    return <InputErrorText type="error">{meta.error}</InputErrorText>;
+    return <InputErrorText type="error">{meta.error!}</InputErrorText>;
   else if (hasWarning)
     return <InputErrorText type="warning">{warning}</InputErrorText>;
   else return null;
@@ -210,10 +218,10 @@ function FormikInputErrorInner({ name }: FormikInputErrorProps) {
 // InputErrorText
 // ---------------------------------------------------------------------------
 
-export type InputErrorType = "error" | "warning";
+type InputErrorType = "error" | "warning";
 
 interface InputErrorTextProps {
-  children?: React.ReactNode;
+  children: string | RichStr;
   type?: InputErrorType;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -224,26 +232,18 @@ function InputErrorText({
   ref,
 }: InputErrorTextProps) {
   const Icon = type === "error" ? SvgXOctagon : SvgAlertCircle;
-  const colorClass =
-    type === "error" ? "text-status-error-05" : "text-status-warning-05";
-  const strokeClass =
-    type === "error" ? "stroke-status-error-05" : "stroke-status-warning-05";
+  const color: ColorTypes = type === "error" ? "danger" : "warning";
 
   return (
     <div ref={ref} className="px-1">
-      {/* TODO(@raunakab): update this with `Content` when it supports custom colours */}
-      <Section flexDirection="row" justifyContent="start" gap={0.25}>
-        <Icon size={12} className={strokeClass} />
-        <span className={colorClass} role="alert">
-          {typeof children === "string" ? (
-            <Text font="secondary-body" color="inherit">
-              {children}
-            </Text>
-          ) : (
-            children
-          )}
-        </span>
-      </Section>
+      <Content
+        sizePreset="secondary"
+        variant="body"
+        icon={Icon}
+        title={children}
+        color={color}
+        role="alert"
+      />
     </div>
   );
 }
@@ -275,12 +275,15 @@ function InputPadder({ ref, ...props }: InputPadderProps) {
 export {
   Label,
   type LabelProps,
+  type VerticalProps,
   Vertical,
+  type HorizontalProps,
   Horizontal,
   FormikInputError,
   type FormikInputErrorProps,
-  InputErrorText,
+  type InputErrorType,
   type InputErrorTextProps,
+  InputErrorText,
   InputDivider,
   InputPadder,
   type InputPadderProps,

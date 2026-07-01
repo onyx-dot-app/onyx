@@ -2,7 +2,6 @@ import Svg, { Path } from "react-native-svg";
 
 import type { IconProps } from "@/icons/types";
 
-// RN variant of web Opal `SvgBubbleText` (web/lib/opal/src/icons/bubble-text.tsx).
 const SvgBubbleText = ({ size = 16, ...props }: IconProps) => (
   <Svg
     width={size}

@@ -78,6 +78,15 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     fontconfig \
     fonts-dejavu-core \
     fonts-liberation \
+    fonts-crosextra-carlito \
+    fonts-crosextra-caladea \
+    fonts-noto-core \
+    fonts-noto-color-emoji \
+    fonts-inter \
+    fonts-montserrat \
+    fonts-lato \
+    fonts-ebgaramond \
+    fonts-firacode \
     && rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -101,6 +110,7 @@ RUN mkdir -p /workspace/sessions /workspace/templates /workspace/managed && \
     chown -R sandbox:sandbox /workspace
 
 COPY --exclude=.next --exclude=node_modules templates/outputs /workspace/templates/outputs
+COPY --exclude=.DS_Store templates/pptx /workspace/templates/pptx
 RUN chown -R sandbox:sandbox /workspace/templates
 
 COPY initial-requirements.txt /tmp/initial-requirements.txt

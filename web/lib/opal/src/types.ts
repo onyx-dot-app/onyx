@@ -86,6 +86,18 @@ export type RoundingVariants = Extract<
 export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
 
 /**
+ * Shadow depth variants.
+ *
+ * | Variant  | Effect                          |
+ * |----------|---------------------------------|
+ * | `"none"` | No shadow (default)             |
+ * | `"sm"`   | Subtle lift (`--shadow-01`)     |
+ * | `"md"`   | Medium elevation (`--shadow-02`)|
+ * | `"lg"`   | Strong elevation (`--shadow-03`)|
+ */
+export type ShadowVariants = "none" | Extract<SizeVariants, "sm" | "md" | "lg">;
+
+/**
  * Size variants with numeric overrides.
  *
  * Allows size specification as a named preset or a custom numeric value.
@@ -135,7 +147,12 @@ export type BackgroundVariants = "none" | "light" | "heavy";
  * - `"danger"` — destructive / error state
  * - `"interactive"` — follows the interactive coloring system (`currentColor` / `--interactive-foreground`)
  */
-export type ColorTypes = "default" | "muted" | "danger" | "interactive";
+export type ColorTypes =
+  | "default"
+  | "muted"
+  | "danger"
+  | "warning"
+  | "interactive";
 
 // ---------------------------------------------------------------------------
 // Status Variants

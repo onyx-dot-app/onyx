@@ -52,8 +52,13 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
         Permission.READ_SEARCH.value,
         Permission.READ_CHAT.value,
         Permission.WRITE_CHAT.value,
+        Permission.GENERATE_IMAGE.value,
     },
     Permission.WRITE_CHAT.value: {Permission.READ_CHAT.value},
+    Permission.CRAFT_SANDBOX.value: {
+        Permission.READ_SEARCH.value,
+        Permission.GENERATE_IMAGE.value,
+    },
 }
 
 # Permissions that cannot be toggled via the group-permission API.
@@ -64,6 +69,7 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
     {
         Permission.BASIC_ACCESS,
         Permission.FULL_ADMIN_PANEL_ACCESS,
+        Permission.CRAFT_SANDBOX,
     }
     | Permission.IMPLIED
 )
@@ -113,11 +119,13 @@ def require_permission(
         token_scopes: list[Permission] | None = getattr(
             request.state, "token_scopes", None
         )
-        permitted_by_user = required in get_effective_permissions(user)
-        permitted_by_token = token_scopes is None or required.value in (
+        token_implies = token_scopes is not None and required.value in (
             resolve_effective_permissions({s.value for s in token_scopes})
         )
-        if not (permitted_by_user and permitted_by_token):
+        permitted_by_user = required in get_effective_permissions(user)
+        permitted_by_token = token_scopes is None or token_implies
+        permitted = permitted_by_user and permitted_by_token
+        if not permitted:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "You do not have the required permissions for this action.",

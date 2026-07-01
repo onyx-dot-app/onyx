@@ -1,7 +1,6 @@
 # Validates the compose merge + exercises DockerEventsLookup against a real
-# docker socket. A full compose-flavored analogue of `test_approval_gate.py` is
-# a follow-up; The gate logic is backend-agnostic and already covered by the K8s
-# lane + in-process unit tests.
+# docker socket. Full compose-flavored Craft integration lives in
+# pr-craft-compose-integration.yml; this lane stays narrow and fast.
 name: Craft Docker-Compose Sandbox Tests
 concurrency:
   group: Craft-Compose-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref }}

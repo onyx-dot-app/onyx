@@ -16,6 +16,7 @@ from celery.signals import task_prerun
 from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
 from celery.worker import strategy  # ty: ignore[unresolved-import]
+from celery.worker.control import control_command  # ty: ignore[unresolved-import]
 from redis.lock import Lock as RedisLock
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text
@@ -74,6 +75,26 @@ if SENTRY_DSN:
     )
 else:
     logger.debug("Sentry DSN not provided, skipping Sentry initialization")
+
+
+@control_command()
+def clear_revoked(state: Any, **kwargs: Any) -> dict[str, Any]:  # noqa: ARG001
+    """Remote command to wipe this worker's in-memory revoked-task set.
+
+    The set lives only in memory, propagates between workers via mingle, and its
+    cross-node entries don't expire — so after a mass-revoke it can pin at its 50k
+    cap and won't self-heal or clear on a rolling restart. Broadcast this to clear
+    the fleet without restarting. Deliberate use only: revoked state is dropped.
+
+    Intentionally ungated, like Celery's built-in shutdown/terminate/revoke control
+    commands: the trust boundary is broker access, not a per-command check.
+    """
+    from celery.worker import state as worker_state  # ty: ignore[unresolved-import]
+
+    count = len(worker_state.revoked)
+    worker_state.revoked.clear()
+    task_logger.warning("clear_revoked: cleared %d revoked task ids", count)
+    return {"ok": f"cleared {count} revoked task ids"}
 
 
 class TenantAwareTask(Task):

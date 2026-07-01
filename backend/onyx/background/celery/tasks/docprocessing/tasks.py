@@ -94,11 +94,12 @@ from onyx.db.indexing_coordination import CoordinationStatus
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
-from onyx.db.notification import create_notification
-from onyx.db.notification import get_notifications
+from onyx.db.notification import batch_create_notifications
+from onyx.db.notification import delete_notifications_by_additional_data
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.db.users import get_active_admin_users
 from onyx.document_index.factory import get_all_document_indices
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
@@ -622,19 +623,13 @@ def check_indexing_completion(
             if cc_pair.in_repeated_error_state:
                 cc_pair.in_repeated_error_state = False
 
-                # Delete any existing error notification for this CC pair so a
-                # fresh one is created if the connector fails again later.
-                for notif in get_notifications(
-                    user=None,
-                    db_session=db_session,
+                # Clear every admin's error notification for this connector so a
+                # fresh one is created if it fails again later.
+                delete_notifications_by_additional_data(
                     notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
-                    include_dismissed=True,
-                ):
-                    if (
-                        notif.additional_data
-                        and notif.additional_data.get("cc_pair_id") == cc_pair.id
-                    ):
-                        db_session.delete(notif)
+                    db_session=db_session,
+                    additional_data={"cc_pair_id": cc_pair.id},
+                )
 
                 db_session.commit()
                 on_connector_error_state_change(
@@ -1002,8 +997,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     )
                     source = cc_pair.connector.source.value
                     connector_url = f"/admin/connector/{cc_pair.id}"
-                    create_notification(
-                        user_id=None,
+                    admin_ids = [
+                        admin.id for admin in get_active_admin_users(db_session)
+                    ]
+                    batch_create_notifications(
+                        user_ids=admin_ids,
                         notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
                         db_session=db_session,
                         title=f"Connector '{connector_name}' has entered repeated error state",
@@ -1859,22 +1857,37 @@ def _docprocessing_task(
 
         # Update batch completion and document counts atomically using database coordination
 
-        with get_session_with_current_tenant() as db_session, cross_batch_db_lock:
-            with time_stage(IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id):
-                IndexingCoordination.update_batch_completion_and_docs(
-                    db_session=db_session,
-                    index_attempt_id=index_attempt_id,
-                    total_docs_indexed=index_pipeline_result.total_docs,
-                    new_docs_indexed=index_pipeline_result.new_docs,
-                    total_chunks=index_pipeline_result.total_chunks,
+        # Time the lock-acquire wait (the contention signal); record it after
+        # release (below) so the metric write doesn't extend this shared lock.
+        lock_acquire_start = time.monotonic()
+        cross_batch_db_lock.acquire()
+        lock_acquire_ms = max(0, int((time.monotonic() - lock_acquire_start) * 1000))
+        try:
+            with get_session_with_current_tenant() as db_session:
+                with time_stage(
+                    IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id
+                ):
+                    IndexingCoordination.update_batch_completion_and_docs(
+                        db_session=db_session,
+                        index_attempt_id=index_attempt_id,
+                        total_docs_indexed=index_pipeline_result.total_docs,
+                        new_docs_indexed=index_pipeline_result.new_docs,
+                        total_chunks=index_pipeline_result.total_chunks,
+                    )
+
+                _resolve_indexing_document_errors(
+                    cc_pair_id,
+                    index_pipeline_result.failures,
+                    documents,
                 )
+        finally:
+            cross_batch_db_lock.release()
+        safe_record_single_event(
+            IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT, index_attempt_id, lock_acquire_ms
+        )
 
-            _resolve_indexing_document_errors(
-                cc_pair_id,
-                index_pipeline_result.failures,
-                documents,
-            )
-
+        # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.
+        _finalization_start = time.monotonic()
         coordination_status = None
         # Record failures in the database
         if index_pipeline_result.failures:
@@ -1921,6 +1934,11 @@ def _docprocessing_task(
         )
         # Clean up this batch after successful processing
         storage.delete_batch_by_num(batch_num)
+        safe_record_single_event(
+            IndexAttemptStage.FINALIZATION,
+            index_attempt_id,
+            max(0, int((time.monotonic() - _finalization_start) * 1000)),
+        )
 
         # FIX: Explicitly clear document batch from memory and force garbage collection
         # This helps prevent memory accumulation across multiple batches
@@ -1929,7 +1947,8 @@ def _docprocessing_task(
         # NOTE: We assign None rather than `del` so the variable stays bound;
         # the except block under PERSISTENT_INDEXING needs to safely inspect it.
         documents = None
-        gc.collect()
+        with time_stage(IndexAttemptStage.GC_COLLECT, index_attempt_id):
+            gc.collect()
 
         # FIX: Log final memory usage to track problematic tenants/CC pairs
         emit_process_memory(

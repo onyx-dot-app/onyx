@@ -1,5 +1,6 @@
 import re
 from typing import Any
+from typing import cast
 from uuid import UUID
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppPolicy
 from onyx.db.models import ExternalAppUserCredential
+from onyx.db.models import User
 from onyx.db.utils import is_set
 from onyx.db.utils import UNSET
 from onyx.db.utils import UnsetType
@@ -144,6 +146,30 @@ def get_external_app_by_skill_id(
     them via ``get_policies``."""
     stmt = select(ExternalApp).where(ExternalApp.skill_id == skill_id)
     return db_session.scalar(stmt)
+
+
+def get_connectable_apps_for_user(
+    db_session: Session,
+    user: User,
+) -> list[ExternalApp]:
+    """Apps the user could connect but hasn't: enabled, visible to them (public /
+    group-granted / personal), requiring per-user credentials the org hasn't
+    pre-filled, with no complete credential row yet.
+
+    Apps whose skill the user can't see are excluded — they'd never be injected
+    even once connected. Org-credentialed apps (no user-required keys) are usable
+    by everyone, so there's nothing to set up."""
+    # Local import breaks the external_app <-> skill module cycle.
+    from onyx.db.skill import visible_skill_ids_for_user
+
+    visible_skill_ids = visible_skill_ids_for_user(user, db_session)
+    user_creds_by_app = get_user_credentials_by_app_id(db_session, user.id)
+    return [
+        app
+        for app in get_external_apps(db_session)
+        if app.skill_id in visible_skill_ids
+        and not is_user_authenticated_for_app(app, user_creds_by_app.get(app.id))
+    ]
 
 
 def get_external_apps(
@@ -443,16 +469,32 @@ def upsert_external_app_user_credential(
     external_app_id: int,
     user_id: UUID,
     user_credentials: dict[str, Any],
+    resolve_masked_values: bool = False,
 ) -> ExternalAppUserCredential:
     """Create or replace the calling user's credentials for the app, and commit.
     Atomic via ON CONFLICT on (external_app_id, user_id). Raises
-    ``OnyxError(NOT_FOUND)`` if the app doesn't exist.
+    ``OnyxError(NOT_FOUND)`` if the app doesn't exist. ``resolve_masked_values``
+    is for user form submissions that may echo masked display values; internal
+    OAuth writers should store provider-returned values as-is.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"External app with id {external_app_id} not found.",
+        )
+
+    if resolve_masked_values:
+        existing_credential = get_external_app_user_credential(
+            db_session,
+            external_app_id=external_app_id,
+            user_id=user_id,
+        )
+        user_credentials = resolve_masked_credentials(
+            cast(dict[str, str], user_credentials),
+            existing_credential.user_credentials
+            if existing_credential is not None
+            else None,
         )
 
     stmt = pg_insert(ExternalAppUserCredential).values(

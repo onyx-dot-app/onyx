@@ -28,6 +28,7 @@ _USER_CREDENTIALS: dict[str, str] = {
     "access_token": "USER_ACCESS_TOKEN",
     "refresh_token": "USER_REFRESH_TOKEN",
 }
+_MASKED_USER_CREDENTIALS: dict[str, Any] = mask_credential_dict(_USER_CREDENTIALS)
 _EXPECTED_USER_KEYS = {"access_token", "refresh_token"}
 
 
@@ -79,6 +80,8 @@ def _assert_user_response_shape_is_safe(
     for org_key in _ORG_CREDENTIALS:
         assert org_key not in user_app.credential_keys
         assert org_key not in user_app.credential_values
+    for raw_credential_value in _USER_CREDENTIALS.values():
+        assert raw_credential_value not in user_app.credential_values.values()
 
 
 # =============================================================================
@@ -130,7 +133,7 @@ def test_admin_creates_app_user_configures_credentials(
     )
     _assert_user_response_shape_is_safe(user_app_after)
     assert user_app_after.authenticated is True
-    assert user_app_after.credential_values == _USER_CREDENTIALS
+    assert user_app_after.credential_values == _MASKED_USER_CREDENTIALS
     assert set(user_app_after.credential_keys) == _EXPECTED_USER_KEYS
 
     admin_apps_after = ExternalAppManager.list_admin(user_performing_action=admin_user)
@@ -282,13 +285,16 @@ def test_user_credentials_are_isolated_between_users(
     )
 
     assert view_1.authenticated is True
-    assert view_1.credential_values == _USER_CREDENTIALS
+    assert view_1.credential_values == _MASKED_USER_CREDENTIALS
 
     # User 2: not authenticated (missing refresh_token), sees only their value.
     assert view_2.authenticated is False
-    assert view_2.credential_values == second_user_creds
+    assert view_2.credential_values == mask_credential_dict(second_user_creds)
     # And critically — user 2 does not see user 1's access_token value.
-    assert view_2.credential_values["access_token"] != _USER_CREDENTIALS["access_token"]
+    assert (
+        view_2.credential_values["access_token"]
+        != _MASKED_USER_CREDENTIALS["access_token"]
+    )
 
 
 # =============================================================================
@@ -356,7 +362,7 @@ def test_disabled_app_hidden_from_users_but_credentials_preserved_on_re_enable(
         user_performing_action=basic_user, app_id=created.id
     )
     assert restored.authenticated is True
-    assert restored.credential_values == _USER_CREDENTIALS
+    assert restored.credential_values == _MASKED_USER_CREDENTIALS
 
 
 # =============================================================================
@@ -405,7 +411,7 @@ def test_update_app_reshapes_user_credential_keys(
     assert user_view.credential_keys == ["refresh_token"]
     # User's stale access_token is filtered out — frontend will not see it.
     assert user_view.credential_values == {
-        "refresh_token": _USER_CREDENTIALS["refresh_token"],
+        "refresh_token": _MASKED_USER_CREDENTIALS["refresh_token"],
     }
     # Still authenticated because refresh_token (the only remaining key) is set.
     assert user_view.authenticated is True
@@ -484,7 +490,7 @@ def test_partial_credentials_keep_app_unauthenticated_full_org_template_is_immed
     )
     assert partial_view.authenticated is False
     assert partial_view.credential_values == {
-        "access_token": "USER_ACCESS_TOKEN",
+        "access_token": _MASKED_USER_CREDENTIALS["access_token"],
     }
     assert set(partial_view.credential_keys) == _EXPECTED_USER_KEYS
 

@@ -49,6 +49,13 @@ interface ContentMdProps {
   /** Optional description text below the title. */
   description?: string | RichStr;
 
+  /**
+   * Slot for a control/action (e.g. an input) rendered to the right of the
+   * title and description on desktop, and stacked between them on narrow
+   * viewports.
+   */
+  rightChildren?: React.ReactNode;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 
@@ -70,8 +77,8 @@ interface ContentMdProps {
   /** Tag rendered beside the title. */
   tag?: TagProps;
 
-  /** Let the title wrap to multiple lines instead of truncating to one. */
-  titleWrap?: boolean;
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  titleMaxLines?: number;
 
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
@@ -135,13 +142,14 @@ function ContentMd({
   icon: Icon,
   title,
   description,
+  rightChildren,
   descriptionMaxLines,
   editable,
   onTitleChange,
   suffix,
   auxIcon,
   tag,
-  titleWrap,
+  titleMaxLines,
   sizePreset = "main-ui",
   ref,
 }: ContentMdProps) {
@@ -163,7 +171,19 @@ function ContentMd({
   }
 
   return (
-    <div ref={ref} className="opal-content-md" data-opal-content>
+    <div
+      ref={ref}
+      className="opal-content-md"
+      data-opal-content
+      data-stacked={rightChildren ? true : undefined}
+      style={
+        rightChildren && Icon
+          ? ({
+              "--opal-content-md-desc-indent": config.descriptionIndent,
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
       <div
         className="opal-content-md-header"
         data-editing={editing || undefined}
@@ -218,7 +238,7 @@ function ContentMd({
             <Text
               font={config.titleFont}
               color="inherit"
-              maxLines={titleWrap ? undefined : 1}
+              maxLines={titleMaxLines}
               title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
             >
@@ -273,10 +293,18 @@ function ContentMd({
         </div>
       </div>
 
+      {rightChildren && (
+        <div className="opal-content-md-right-children">{rightChildren}</div>
+      )}
+
       {description && toPlainString(description) && (
         <div
           className="opal-content-md-description"
-          style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
+          style={
+            Icon && !rightChildren
+              ? { paddingLeft: config.descriptionIndent }
+              : undefined
+          }
         >
           <Text
             font="secondary-body"

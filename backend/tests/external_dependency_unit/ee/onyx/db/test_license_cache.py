@@ -23,7 +23,7 @@ from ee.onyx.server.license.models import LicensePayload
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.license.models import PlanType
 from onyx.redis.redis_pool import get_redis_client
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 @pytest.fixture(autouse=True)
@@ -40,7 +40,7 @@ def _setup(
       resolves to the test tenant.
     - We wipe the license cache before and after each test for isolation.
     """
-    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     redis_client.delete(LICENSE_METADATA_KEY)
     yield
     redis_client.delete(LICENSE_METADATA_KEY)
@@ -66,18 +66,22 @@ def _payload(
 def test_writes_under_expected_key() -> None:
     """The cache layer writes to the documented LICENSE_METADATA_KEY."""
     update_license_cache(
-        _payload(), source=LicenseSource.MANUAL_UPLOAD, tenant_id=TEST_TENANT_ID
+        _payload(),
+        source=LicenseSource.MANUAL_UPLOAD,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
-    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert redis_client.exists(LICENSE_METADATA_KEY) == 1
 
 
 def test_sets_24h_ttl() -> None:
     """The cache entry expires after LICENSE_CACHE_TTL_SECONDS (24h)."""
     update_license_cache(
-        _payload(), source=LicenseSource.AUTO_FETCH, tenant_id=TEST_TENANT_ID
+        _payload(),
+        source=LicenseSource.AUTO_FETCH,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
-    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     ttl = redis_client.ttl(LICENSE_METADATA_KEY)
     # Allow a few seconds of drift between SET and TTL read.
     assert LICENSE_CACHE_TTL_SECONDS - 10 <= ttl <= LICENSE_CACHE_TTL_SECONDS
@@ -88,9 +92,11 @@ def test_round_trip_preserves_tier_and_source() -> None:
     update_license_cache(
         _payload(CustomerTier.BUSINESS),
         source=LicenseSource.AUTO_FETCH,
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
-    metadata = get_cached_license_metadata(tenant_id=TEST_TENANT_ID)
+    metadata = get_cached_license_metadata(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    )
     assert metadata is not None
     assert metadata.customer_tier == CustomerTier.BUSINESS
     assert metadata.source == LicenseSource.AUTO_FETCH
@@ -102,14 +108,16 @@ def test_singleton_subsequent_write_overwrites() -> None:
     update_license_cache(
         _payload(CustomerTier.BUSINESS),
         source=LicenseSource.MANUAL_UPLOAD,
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
     update_license_cache(
         _payload(CustomerTier.ENTERPRISE),
         source=LicenseSource.AUTO_FETCH,
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
-    metadata = get_cached_license_metadata(tenant_id=TEST_TENANT_ID)
+    metadata = get_cached_license_metadata(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    )
     assert metadata is not None
     assert metadata.customer_tier == CustomerTier.ENTERPRISE
     assert metadata.source == LicenseSource.AUTO_FETCH
@@ -123,8 +131,10 @@ def test_legacy_payload_keeps_customer_tier_none_through_cache() -> None:
     update_license_cache(
         _payload(customer_tier=None),
         source=LicenseSource.MANUAL_UPLOAD,
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
-    metadata = get_cached_license_metadata(tenant_id=TEST_TENANT_ID)
+    metadata = get_cached_license_metadata(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    )
     assert metadata is not None
     assert metadata.customer_tier is None

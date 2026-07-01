@@ -2,10 +2,11 @@
 
 import {
   useCallback,
+  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  useEffect,
   type ReactNode,
 } from "react";
 import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
@@ -42,7 +43,9 @@ import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
+  SvgFitWidth,
   SvgFolderIn,
+  SvgFullWidth,
   SvgMoreHorizontal,
   SvgSearchMenu,
   SvgShare,
@@ -56,6 +59,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useCustomFooterContent } from "@/lib/app/hooks";
+import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 
 // ---------------------------------------------------------------------------
 // Header
@@ -69,6 +73,7 @@ function Header() {
   const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
+  const { fullWidthChat, toggleFullWidthChat } = useFullWidthChat();
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
@@ -394,6 +399,14 @@ function Header() {
                     >
                       Share
                     </Button>
+                    <Button
+                      icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
+                      prominence="tertiary"
+                      onClick={toggleFullWidthChat}
+                      tooltip={fullWidthChat ? "Fit width" : "Full width"}
+                      aria-label="Toggle full width chat"
+                      aria-pressed={fullWidthChat}
+                    />
                     <SimplePopover
                       trigger={
                         <Button
@@ -440,7 +453,7 @@ function Footer() {
           // # Note (from @raunakab):
           //
           // The conditional rendering of vertical padding based on the current page is intentional.
-          // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
+          // The `AppInputBar` has `shadow-box-01` applied, which extends ~14px below it.
           // Because the content area in `AppChrome` uses `overflow-auto`, the shadow would be
           // clipped at the container boundary — causing a visible rendering artefact.
           //
@@ -474,6 +487,17 @@ export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
 
   const appFocus = useAppFocus();
+  const { appName } = useSettings();
+  const { currentChatSession } = useChatSessions();
+
+  useLayoutEffect(() => {
+    const appendChatNameToDocumentTitle =
+      (appFocus.isChat() || appFocus.isSharedChat()) && currentChatSession;
+    document.title = appendChatNameToDocumentTitle
+      ? `${currentChatSession.name} — ${appName}`
+      : appName;
+  }, [currentChatSession?.name, appName, appFocus]);
+
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();
   const { isSafari } = useBrowserInfo();

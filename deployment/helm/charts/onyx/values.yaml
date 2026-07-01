@@ -5,7 +5,7 @@
 # Companion overlays in this directory:
 #   - values-lite.yaml      Minimal deploy (no vector DB / Redis / model servers).
 #   - values-localdev.yaml  Laptop-sized overlay for kind/minikube; see
-#                           /docs/dev/local-kubernetes.md for the full workflow.
+#                           /docs/craft/dev/local-kubernetes.md for the full workflow.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
@@ -164,7 +164,10 @@ inferenceCapability:
   livenessProbe: {}
   podSecurityContext: {}
   securityContext:
-    privileged: true
+    # `privileged` is not needed by this workload and is intentionally omitted.
+    # root is kept only so the optional customCACerts feature can run
+    # update-ca-certificates; to run non-root, override this and
+    # podSecurityContext (see codeInterpreter below for the pattern).
     runAsUser: 0
   nodeSelector: {}
   tolerations: []
@@ -222,7 +225,10 @@ indexCapability:
   livenessProbe: {}
   podSecurityContext: {}
   securityContext:
-    privileged: true
+    # `privileged` is not needed by this workload and is intentionally omitted.
+    # root is kept only so the optional customCACerts feature can run
+    # update-ca-certificates; to run non-root, override this and
+    # podSecurityContext (see codeInterpreter below for the pattern).
     runAsUser: 0
   nodeSelector: {}
   tolerations: []
@@ -291,7 +297,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "4"
+      onyx.app/nginx-config-version: "5"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -427,6 +433,25 @@ api:
   containerPorts:
     server: 8080
 
+  # Uvicorn worker processes per pod. Each worker is its own process with its own
+  # event loop and threadpool, so >1 adds parallel capacity and keeps a wedged
+  # worker from taking down the pod's /health. The app lifespan runs per worker
+  # (same as adding replicas, which already run it concurrently), so this is
+  # safe; size against pod CPU and per-worker memory. Default 1 = prior behavior.
+  workers: 1
+
+  # Max concurrent connections per uvicorn worker. When set, the worker rejects
+  # new connections past this (503) instead of queueing into a thread-starvation
+  # wedge. Empty = no cap (uvicorn default). Example: 200.
+  limitConcurrency: ""
+
+  # Size of the anyio threadpool serving sync endpoints, including the streaming
+  # chat generator (each long-running request — deep research, code interpreter —
+  # holds one thread for its whole duration). 0 keeps the anyio default (40).
+  # Raise for workloads with many concurrent long agent requests; each thread is
+  # real, so size against CPU/memory.
+  threadpoolSize: 0
+
   podSecurityContext:
     {}
     # fsGroup: 2000
@@ -501,6 +526,8 @@ api:
   tolerations: []
   affinity: {}
 
+  # Disable only when a separate deployment step runs migrations.
+  runStartupMigrations: true
   # Run update-ca-certificates before starting the server.
   # DEPRECATED: prefer the top-level customCACerts block, which covers all
   # outbound-TLS pods. This flag only affects the API server; useful when
@@ -548,7 +575,10 @@ celery_shared:
     timeoutSeconds: 3
   podSecurityContext: {}
   securityContext:
-    privileged: true
+    # `privileged` is not needed by this workload and is intentionally omitted.
+    # root is kept only so the optional customCACerts feature can run
+    # update-ca-certificates; to run non-root, override this and
+    # podSecurityContext (see codeInterpreter below for the pattern).
     runAsUser: 0
 
 celery_beat:
@@ -1464,7 +1494,6 @@ configMap:
   # Query Options
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""
-  EDIT_KEYWORD_QUERY: ""
   # Don't change the NLP models unless you know what you're doing
   EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""
@@ -1481,14 +1510,12 @@ configMap:
   INDEXING_WORKER_MEMORY_LIMIT_MB: ""
   INDEXING_WORKER_TRACEMALLOC: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
-  DASK_JOB_CLIENT_ENABLED: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""
-  EXPERIMENTAL_CHECKPOINTING_ENABLED: ""
   CONFLUENCE_CONNECTOR_LABELS_TO_SKIP: ""
   JIRA_CLOUD_API_VERSION: ""
   JIRA_SERVER_API_VERSION: ""
   GONG_CONNECTOR_START_TIME: ""
-  NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP: ""
+  NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Worker Parallelism
   CELERY_WORKER_DOCPROCESSING_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
@@ -1497,7 +1524,6 @@ configMap:
   # OnyxBot SlackBot Configs
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
-  ONYX_BOT_RESPOND_EVERY_CHANNEL: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
   DISCORD_BOT_TOKEN: ""
   DISCORD_BOT_INVOKE_CHAR: ""
@@ -1512,7 +1538,6 @@ configMap:
   # (INFO/DEBUG/etc.) — that will render `--loglevel=<value>` into the worker
   # command and take precedence over LOG_LEVEL for that worker only.
   LOG_LEVEL: ""
-  LOG_ALL_MODEL_INTERACTIONS: ""
   LOG_ONYX_MODEL_INTERACTIONS: ""
   # Shared or Non-backend Related
   WEB_DOMAIN: "http://localhost:3000"
@@ -1533,6 +1558,23 @@ configMap:
 craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
   extraBoundServiceAccounts: []
+  # CIDR(s) of any non-pod cluster DNS listener the sandbox must reach for firewall-init.sh's
+  # proxy-FQDN getent lookup. A NodeLocal DNS cache is a hostNetwork endpoint (its listen IP is
+  # cluster-specific — commonly 169.254.20.10, but configurable), so it is not a CoreDNS pod and
+  # the kube-dns podSelector in the sandbox-egress NetworkPolicy can't match it; without an allow
+  # here its DNS query hits the default-deny and bricks sandbox init. Set this to the actual
+  # listener IP(s), e.g. ["169.254.20.10/32"]. Empty (default) = standard CoreDNS, resolved via
+  # the podSelector alone (no NodeLocal DNS).
+  dnsExtraCIDRs: []
+  # CIDR(s) of the egress proxy when it is NOT a chart-labeled pod. The sandbox-egress NetworkPolicy
+  # selects the proxy by pod label (app.kubernetes.io/component: sandbox-proxy), but
+  # configMap.SANDBOX_PROXY_HOST may be overridden to an external proxy (FQDN/IP) or a Service whose
+  # pods don't carry that label. firewall-init.sh allows whatever the host resolves to, but a
+  # NetworkPolicy can't follow a hostname, so on NP-enforcing clusters such a proxy is dropped and
+  # all sandbox egress breaks. Set this to the proxy CIDR(s), e.g. ["10.0.5.6/32"], on those setups.
+  # Empty (default) = the chart-deployed proxy, covered by the podSelector (incl. the
+  # SANDBOX_PROXY_NAMESPACE shared-proxy path); leave empty unless you point at a non-pod proxy.
+  proxyExtraCIDRs: []
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.

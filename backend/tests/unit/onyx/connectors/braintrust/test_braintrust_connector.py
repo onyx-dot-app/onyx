@@ -5,6 +5,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Any
+from typing import IO
 from unittest.mock import patch
 
 import pytest
@@ -153,9 +154,22 @@ def _docs(outputs: list[Any]) -> dict[str, Document]:
 
 
 @pytest.fixture
-def connector() -> BraintrustConnector:
+def staged_csvs() -> dict[str, bytes]:
+    return {}
+
+
+@pytest.fixture
+def connector(staged_csvs: dict[str, bytes]) -> BraintrustConnector:
     connector = BraintrustConnector(experiment_row_lookback_days=0)
     connector.load_credentials({"braintrust_api_key": "test-key"})
+
+    def raw_file_callback(content: IO[bytes], content_type: str) -> str:
+        assert content_type == "text/csv"
+        file_id = f"csv-{len(staged_csvs)}"
+        staged_csvs[file_id] = content.read()
+        return file_id
+
+    connector.set_raw_file_callback(raw_file_callback)
     return connector
 
 
@@ -177,6 +191,7 @@ def test_full_sweep_produces_prompt_dataset_experiment_docs(
 
 def test_dataset_doc_has_text_and_tabular_sections(
     connector: BraintrustConnector,
+    staged_csvs: dict[str, bytes],
 ) -> None:
     """The dataset doc carries a prose header section plus a CSV table of all
     rows."""
@@ -188,7 +203,8 @@ def test_dataset_doc_has_text_and_tabular_sections(
     assert "merge-cases" in (text.text or "")
     assert "1 rows" in (text.text or "")
     assert isinstance(tabular, TabularSection)
-    header, row = tabular.text.split("\n")
+    assert doc.file_id == tabular.csv_file_id
+    header, row = staged_csvs[tabular.csv_file_id].decode("utf-8").strip().split("\n")
     assert header == "id,created,input,expected,metadata,tags"
     assert row.startswith("row-1,")
     assert '""doc"": ""a.md""' in row
@@ -196,6 +212,7 @@ def test_dataset_doc_has_text_and_tabular_sections(
 
 def test_experiment_doc_combines_summary_and_score_table(
     connector: BraintrustConnector,
+    staged_csvs: dict[str, bytes],
 ) -> None:
     """The experiment doc leads with the prose score summary and includes a
     table with one flattened column per score."""
@@ -210,7 +227,8 @@ def test_experiment_doc_combines_summary_and_score_table(
     assert "+0.05" in body
     assert "3 improvements / 1 regressions" in body
     assert isinstance(tabular, TabularSection)
-    header, row = tabular.text.split("\n")
+    assert doc.file_id == tabular.csv_file_id
+    header, row = staged_csvs[tabular.csv_file_id].decode("utf-8").strip().split("\n")
     assert header == "id,created,input,output,expected,correctness"
     assert row.startswith("row-2,") and row.endswith(",0.9")
     assert tabular.link == _SUMMARY["experiment_url"]
@@ -266,10 +284,20 @@ def test_lookback_drops_table_but_keeps_summary() -> None:
     assert "correctness 0.9" in (doc.sections[0].text or "")
 
 
-def test_btql_keyset_pagination_accumulates_table() -> None:
+def test_btql_keyset_pagination_accumulates_table(
+    staged_csvs: dict[str, bytes],
+) -> None:
     """Full pages chain via `_pagination_key <` filters until a short page."""
     connector = BraintrustConnector(experiment_row_lookback_days=0)
     connector.load_credentials({"braintrust_api_key": "test-key"})
+
+    def raw_file_callback(content: IO[bytes], content_type: str) -> str:
+        assert content_type == "text/csv"
+        file_id = f"csv-{len(staged_csvs)}"
+        staged_csvs[file_id] = content.read()
+        return file_id
+
+    connector.set_raw_file_callback(raw_file_callback)
     page1 = [
         {**_DATASET_ROW, "id": f"row-{i}", "_pagination_key": f"p{900 - i}"}
         for i in range(500)
@@ -297,7 +325,11 @@ def test_btql_keyset_pagination_accumulates_table() -> None:
 
     tabular = doc.sections[1]
     assert isinstance(tabular, TabularSection)
-    assert len(tabular.text.split("\n")) == 1 + 501
+    assert doc.file_id == tabular.csv_file_id
+    assert (
+        len(staged_csvs[tabular.csv_file_id].decode("utf-8").strip().split("\n"))
+        == 1 + 501
+    )
     assert len(seen_filters) == 2
     assert "_pagination_key < 'p401'" in seen_filters[1]
 

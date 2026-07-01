@@ -442,19 +442,36 @@ def _apply_group_remove(
     members: list[dict],
     removed_ids: list[str],
 ) -> None:
-    """Remove members from a group."""
+    """Remove members from a group.
+
+    Supports both IdP encodings of a member removal:
+      - Okta:  path = ``members[value eq "user-id"]``
+      - Entra ID (Azure AD): path = ``members`` with the members to remove in a
+        ``value`` list — the same shape Entra uses for ``add``.
+    """
     if not op.path:
         raise ScimPatchError("Remove operation requires a path")
 
     match = _MEMBER_FILTER_RE.match(op.path)
-    if not match:
-        raise ScimPatchError(
-            f"Unsupported remove path '{op.path}'. Expected: members[value eq \"user-id\"]"
-        )
+    if match:
+        _remove_member_ids(members, [match.group(1)], removed_ids)
+        return
 
-    target_id = match.group(1)
-    original_len = len(members)
-    members[:] = [m for m in members if m.get("value") != target_id]
+    if op.path.lower() == "members" and isinstance(op.value, list):
+        _remove_member_ids(members, [m.value for m in op.value], removed_ids)
+        return
 
-    if len(members) < original_len:
-        removed_ids.append(target_id)
+    raise ScimPatchError(
+        f"Unsupported remove path '{op.path}'. Expected: members[value eq \"user-id\"]"
+    )
+
+
+def _remove_member_ids(
+    members: list[dict],
+    target_ids: list[str],
+    removed_ids: list[str],
+) -> None:
+    """Drop the given member IDs from the group, recording those present."""
+    targets = set(target_ids)
+    removed_ids.extend(m["value"] for m in members if m.get("value") in targets)
+    members[:] = [m for m in members if m.get("value") not in targets]

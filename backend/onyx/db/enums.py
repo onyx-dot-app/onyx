@@ -239,6 +239,14 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class SupportedLanguage(str, PyEnum):
+    EN = "en"
+    ES = "es"
+    PT = "pt"
+    FR = "fr"
+    DE = "de"
+
+
 class DefaultAppMode(str, PyEnum):
     AUTO = "AUTO"
     CHAT = "CHAT"
@@ -394,6 +402,7 @@ class ExternalAppType(str, PyEnum):
     SLACK = "SLACK"
     LINEAR = "LINEAR"
     GITHUB = "GITHUB"
+    HUBSPOT = "HUBSPOT"
     CUSTOM = "CUSTOM"
 
     @property
@@ -445,6 +454,10 @@ class HierarchyNodeType(str, PyEnum):
 
     # Root-level type
     SOURCE = "source"  # Root node for a source (e.g., "Google Drive")
+
+    # Placeholder created when a child is indexed before its parent exists in the DB.
+    # Promoted to the real type when the parent page is later processed.
+    STUB = "stub"
 
     # Google Drive
     SHARED_DRIVE = "shared_drive"
@@ -514,6 +527,7 @@ class Permission(str, PyEnum):
     READ_CHAT = "read:chat"
     WRITE_CHAT = "write:chat"
     READ_ADMIN = "read:admin"
+    GENERATE_IMAGE = "generate:image"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -531,6 +545,10 @@ class Permission(str, PyEnum):
     CREATE_USER_API_KEYS = "create:user_api_keys"
     CREATE_SERVICE_ACCOUNT_API_KEYS = "create:service_account_api_keys"
     CREATE_SLACK_DISCORD_BOTS = "create:slack_discord_bots"
+
+    # Role scopes — a bundle token implying the surfaces a given machine
+    # identity may use. PAT-only; never granted to a group/user.
+    CRAFT_SANDBOX = "craft_sandbox"
 
     # Override — any permission check passes
     FULL_ADMIN_PANEL_ACCESS = "admin"
@@ -550,6 +568,7 @@ Permission.IMPLIED = frozenset(
         Permission.READ_CHAT,
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
+        Permission.GENERATE_IMAGE,
     }
 )
 

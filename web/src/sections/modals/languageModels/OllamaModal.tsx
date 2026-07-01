@@ -78,7 +78,7 @@ function OllamaModalInternals({
       : formikProps.values.api_base;
     const { models, error } = await fetchOllamaModels({
       api_base: apiBase,
-      provider_name: existingLlmProvider?.name ?? undefined,
+      provider_id: existingLlmProvider?.id ?? undefined,
       signal,
     });
     if (signal?.aborted) return;

@@ -732,15 +732,16 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             IndexingDocument(
                 **document.model_dump(),
                 processed_sections=[
-                    Section(
-                        type=section.type,
-                        text="" if isinstance(section, ImageSection) else section.text,
-                        link=section.link,
-                        image_file_id=(
-                            section.image_file_id
-                            if isinstance(section, ImageSection)
-                            else None
-                        ),
+                    (
+                        Section(
+                            type=section.type,
+                            text="",
+                            link=section.link,
+                            image_file_id=section.image_file_id,
+                            heading=section.heading,
+                        )
+                        if isinstance(section, ImageSection)
+                        else section.model_copy()
                     )
                     for section in document.sections
                 ],
@@ -760,14 +761,9 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
 
         for section in document.sections:
             if not isinstance(section, ImageSection):
-                processed_sections.append(
-                    Section(
-                        type=section.type,
-                        text=section.text or "",
-                        link=section.link,
-                        image_file_id=None,
-                    )
-                )
+                # model_copy keeps the concrete section (incl. a TabularSection's
+                # csv_file_id) intact; rebuilding as a base Section would drop it.
+                processed_sections.append(section.model_copy())
                 continue
 
             processed_section = Section(
@@ -775,6 +771,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 link=section.link,
                 image_file_id=section.image_file_id,
                 text="",
+                heading=section.heading,
             )
             processed_sections.append(processed_section)
 

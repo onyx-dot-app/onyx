@@ -45,6 +45,9 @@ interface ContentBaseProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  titleMaxLines?: number;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 
@@ -113,8 +116,8 @@ type MdContentProps = ContentBaseProps & {
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
   /** Tag rendered beside the title. */
   tag?: TagProps;
-  /** Let the title wrap to multiple lines instead of truncating to one. */
-  titleWrap?: boolean;
+  /** Slot for a control rendered to the right (desktop) / between title and description (mobile). See ContentMd. */
+  rightChildren?: React.ReactNode;
 };
 
 /** ContentSm does not support descriptions or inline editing. */
@@ -126,6 +129,8 @@ type SmContentProps = Omit<
   variant: "body";
   /** Layout orientation. Default: `"inline"`. */
   orientation?: ContentSmOrientation;
+  /** ARIA role forwarded to the title text element. */
+  role?: string;
 };
 
 type ContentProps =
