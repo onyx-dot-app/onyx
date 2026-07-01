@@ -5,8 +5,7 @@ import { basicLogin, basicSignup } from "@/lib/user";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "@/lib/auth/svc";
-import { useMemo, useState } from "react";
-import { Spinner } from "@/components/Spinner";
+import { useMemo } from "react";
 import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
 import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
@@ -45,7 +44,6 @@ export default function EmailPasswordForm({
 
   const { user, authTypeMetadata } = useUser();
   const passwordMinLength = authTypeMetadata?.passwordMinLength ?? 8;
-  const [isWorking, setIsWorking] = useState(false);
   const { getCaptchaToken } = useCaptcha();
 
   const initialValues: FormValues = {
@@ -74,7 +72,6 @@ export default function EmailPasswordForm({
     const email = values.email.toLowerCase();
 
     if (isSignup) {
-      setIsWorking(true);
       const captchaToken = await getCaptchaToken("signup");
       const response = await basicSignup(
         email,
@@ -84,7 +81,6 @@ export default function EmailPasswordForm({
       );
 
       if (!response.ok) {
-        setIsWorking(false);
         const errorBody: any = await response.json();
         const errorDetail = errorBody.detail;
         let errorMsg = "Unknown error";
@@ -119,7 +115,6 @@ export default function EmailPasswordForm({
           `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
       }
     } else {
-      setIsWorking(false);
       const errorDetail: any = (await loginResponse.json()).detail;
       let errorMsg = "Unknown error";
       if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
@@ -137,73 +132,69 @@ export default function EmailPasswordForm({
   };
 
   return (
-    <>
-      {isWorking && <Spinner />}
+    <Formik
+      initialValues={initialValues}
+      validateOnChange={true}
+      validateOnBlur={true}
+      validationSchema={validationSchema}
+      onSubmit={handleSubmit}
+    >
+      {({ isSubmitting, isValid, dirty }) => {
+        return (
+          <AuthLayouts.FormBody>
+            <AuthLayouts.Fields>
+              <InputVertical title="Email Address" withLabel="email">
+                <InputTypeInField
+                  name="email"
+                  placeholder="email@yourcompany.com"
+                  data-testid="email"
+                  autoComplete="username"
+                />
+              </InputVertical>
 
-      <Formik
-        initialValues={initialValues}
-        validateOnChange={true}
-        validateOnBlur={true}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-      >
-        {({ isSubmitting, isValid, dirty }) => {
-          return (
-            <AuthLayouts.FormBody>
-              <AuthLayouts.Fields>
-                <InputVertical title="Email Address" withLabel="email">
-                  <InputTypeInField
-                    name="email"
-                    placeholder="email@yourcompany.com"
-                    data-testid="email"
-                    autoComplete="username"
-                  />
-                </InputVertical>
+              <InputVertical
+                title="Password"
+                withLabel="password"
+                subDescription={
+                  isSignup
+                    ? `Password must be at least ${passwordMinLength} characters`
+                    : undefined
+                }
+                topRight={
+                  isSignup
+                    ? undefined
+                    : markdown("[Forgot Password?](/auth/reset-password)")
+                }
+              >
+                <PasswordInputTypeInField
+                  name="password"
+                  placeholder="Password"
+                  data-testid="password"
+                  autoComplete={isSignup ? "new-password" : "current-password"}
+                />
+              </InputVertical>
+            </AuthLayouts.Fields>
 
-                <InputVertical
-                  title="Password"
-                  withLabel="password"
-                  subDescription={
-                    isSignup
-                      ? `Password must be at least ${passwordMinLength} characters`
-                      : undefined
-                  }
-                  topRight={markdown(
-                    "[Forgot Password?](/auth/reset-password)"
-                  )}
-                >
-                  <PasswordInputTypeInField
-                    name="password"
-                    placeholder="Password"
-                    data-testid="password"
-                    autoComplete={
-                      isSignup ? "new-password" : "current-password"
-                    }
-                  />
-                </InputVertical>
-              </AuthLayouts.Fields>
+            <AuthLayouts.Submit
+              label={label}
+              isSubmitting={isSubmitting}
+              isValid={isValid}
+              dirty={dirty}
+            />
 
-              <AuthLayouts.Submit
-                label={label}
-                isSubmitting={isSubmitting}
-                isValid={isValid}
-                dirty={dirty}
-              />
-
-              {user?.is_anonymous_user && (
-                <Link
-                  href="/app"
-                  className="text-xs text-action-link-05 cursor-pointer text-center w-full font-medium mx-auto"
-                >
-                  <span className="hover:border-b hover:border-dotted hover:border-action-link-05">
-                    or continue as guest
-                  </span>
-                </Link>
-              )}
-            </AuthLayouts.FormBody>
-          );
-        }}
-      </Formik>
-    </>
+            {user?.is_anonymous_user && (
+              <Link
+                href="/app"
+                className="text-xs text-action-link-05 cursor-pointer text-center w-full font-medium mx-auto"
+              >
+                <span className="hover:border-b hover:border-dotted hover:border-action-link-05">
+                  or continue as guest
+                </span>
+              </Link>
+            )}
+          </AuthLayouts.FormBody>
+        );
+      }}
+    </Formik>
   );
 }
