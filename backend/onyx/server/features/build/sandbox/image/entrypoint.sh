@@ -23,9 +23,11 @@ fi
 # from there) so browser HTTPS works. Best-effort — a failure, or no browser
 # runtime, must not block boot.
 import_proxy_ca() {
-    command -v certutil >/dev/null 2>&1 || return 0
+    # Non-zero on no-import so the caller logs the "not imported" branch rather
+    # than falsely claiming success (a browser image with a broken CA mount).
+    command -v certutil >/dev/null 2>&1 || return 1
     local bundle="${SANDBOX_PROXY_CA_BUNDLE_DST:-/etc/ssl/sandbox/ca-bundle.crt}"
-    [ -f "$bundle" ] || return 0
+    [ -f "$bundle" ] || return 1
     local nssdb="${HOME:-/home/sandbox}/.pki/nssdb"
     mkdir -p "$nssdb"
     [ -f "$nssdb/cert9.db" ] || certutil -d "sql:$nssdb" -N --empty-password
