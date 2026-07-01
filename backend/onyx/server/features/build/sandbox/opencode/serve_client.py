@@ -55,13 +55,6 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-
-# Model context window (models.dev limit.context), cached in the shared cache
-# keyed by (provider, model). The limit is stable per model for the pinned
-# opencode version, so a modest TTL avoids re-fetching it every turn.
-_CONTEXT_LIMIT_CACHE_PREFIX = "craft:context_limit:"
-_CONTEXT_LIMIT_TTL_SECONDS = 3600
-
 # opencode permission category emitted by the no-op ``connect_app`` tool
 _CONNECT_APP_PERMISSION = "connect_app"
 
@@ -150,7 +143,6 @@ class _TurnState:
     pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
     # Set from BOTH message.updated and hydration — text deltas race ahead of message.updated.
     summary_message_ids: set[str] = field(default_factory=set)
-    context_limit: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -471,9 +463,7 @@ def _is_summary_message(state: _TurnState, msg_id: Any) -> bool:
     return isinstance(msg_id, str) and msg_id in state.summary_message_ids
 
 
-def _context_usage_from_info(
-    info: dict[str, Any], context_limit: int | None
-) -> ContextUsagePacket | None:
+def _context_usage_from_info(info: dict[str, Any]) -> ContextUsagePacket | None:
     if info.get("summary") is True:
         return None
     tokens = info.get("tokens")
@@ -497,44 +487,8 @@ def _context_usage_from_info(
     cost = info.get("cost")
     return ContextUsagePacket(
         used_tokens=used,
-        context_limit=context_limit,
         cost=float(cost) if isinstance(cost, (int, float)) else None,
     )
-
-
-def _extract_context_limit(catalog: Any, provider: str, model: str) -> int | None:
-    if not isinstance(catalog, dict):
-        return None
-    providers = catalog.get("providers")
-    prov_obj: Any = None
-    if isinstance(providers, list):
-        prov_obj = next(
-            (p for p in providers if isinstance(p, dict) and p.get("id") == provider),
-            None,
-        )
-    elif isinstance(providers, dict):
-        prov_obj = providers.get(provider)
-    if not isinstance(prov_obj, dict):
-        return None
-
-    models = prov_obj.get("models")
-    model_obj: Any = None
-    if isinstance(models, dict):
-        model_obj = models.get(model)
-    elif isinstance(models, list):
-        model_obj = next(
-            (m for m in models if isinstance(m, dict) and m.get("id") == model),
-            None,
-        )
-    if not isinstance(model_obj, dict):
-        return None
-
-    limit = model_obj.get("limit")
-    if isinstance(limit, dict):
-        ctx = limit.get("context")
-        if isinstance(ctx, (int, float)) and ctx > 0:
-            return int(ctx)
-    return None
 
 
 def _fetch_summary_text(
@@ -763,7 +717,7 @@ def translate_opencode_event(
         finish = info.get("finish")
         if isinstance(finish, str):
             state.last_finish = finish
-        usage = _context_usage_from_info(info, state.context_limit)
+        usage = _context_usage_from_info(info)
         if usage is not None:
             yield usage
         # A message error DOES kill the turn — surface it.
@@ -1307,42 +1261,6 @@ class OpencodeServeClient:
             return cast(list[dict[str, Any]], data)
         return []
 
-    def get_context_limit(
-        self, model_provider: str | None, model_id: str | None, *, directory: str
-    ) -> int | None:
-        if not model_provider or not model_id:
-            return None
-        cache = get_cache_backend()
-        cache_key = f"{_CONTEXT_LIMIT_CACHE_PREFIX}{model_provider}:{model_id}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            try:
-                return int(cached)
-            except ValueError:
-                pass
-
-        limit: int | None = None
-        try:
-            r = self._request(
-                "GET",
-                "/config/providers",
-                params={"directory": directory},
-                idempotent=True,
-            )
-            if r.status_code == 200:
-                limit = _extract_context_limit(r.json(), model_provider, model_id)
-            else:
-                logger.warning(
-                    "opencode-serve: /config/providers -> HTTP %s", r.status_code
-                )
-        except (httpx.HTTPError, ValueError) as e:
-            logger.warning("opencode-serve: context-limit fetch failed: %s", e)
-
-        # Cache successes only — a transient failure must not mask the real limit.
-        if limit is not None:
-            cache.set(cache_key, limit, ex=_CONTEXT_LIMIT_TTL_SECONDS)
-        return limit
-
     def abort(self, opencode_session_id: str, *, directory: str) -> None:
         try:
             self._http.post(
@@ -1419,9 +1337,6 @@ class OpencodeServeClient:
             )
 
         state = _TurnState(session_id=opencode_session_id)
-        state.context_limit = self.get_context_limit(
-            model_provider, model_id, directory=directory
-        )
         turn_started_at = time.monotonic()
         prompt_posted = False
 

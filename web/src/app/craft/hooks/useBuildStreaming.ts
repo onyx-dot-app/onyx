@@ -755,7 +755,6 @@ export function useBuildStreaming() {
             updateSessionData(sessionId, {
               contextUsage: {
                 usedTokens: parsed.usedTokens,
-                contextLimit: parsed.contextLimit,
               },
             });
             break;

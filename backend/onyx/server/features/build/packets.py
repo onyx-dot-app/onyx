@@ -94,7 +94,6 @@ class ConnectAppRequestPacket(BasePacket):
 class ContextUsagePacket(BasePacket):
     type: Literal["context_usage"] = "context_usage"
     used_tokens: int
-    context_limit: int | None = None
     cost: float | None = None
 
 

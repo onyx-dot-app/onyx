@@ -118,8 +118,8 @@ export default function BuildChatPanel({
   const contextUsage = useMemo(() => {
     const usage = session?.contextUsage;
     if (!usage) return null;
-    let limit = usage.contextLimit;
-    if (limit == null && selectedModel) {
+    let limit: number | null = null;
+    if (selectedModel) {
       const provider = llmProviders?.find(
         (p) => p.provider === selectedModel.provider
       );

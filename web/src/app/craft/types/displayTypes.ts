@@ -108,7 +108,6 @@ export type StreamItem =
 
 export interface ContextUsage {
   usedTokens: number;
-  contextLimit: number | null;
 }
 
 /**

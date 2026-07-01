@@ -197,7 +197,6 @@ export interface ParsedConnectAppRequest {
 export interface ParsedContextUsage {
   type: "context_usage";
   usedTokens: number;
-  contextLimit: number | null;
 }
 
 export interface ParsedCompaction {

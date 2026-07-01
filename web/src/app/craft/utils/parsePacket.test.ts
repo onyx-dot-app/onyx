@@ -157,21 +157,15 @@ describe("parsePacket", () => {
   });
 
   it("parses context_usage from persisted (snake_case) and live (camelCase) shapes", () => {
-    expect(
-      parsePacket({
-        type: "context_usage",
-        used_tokens: 15526,
-        context_limit: 1000000,
-      })
-    ).toEqual({
+    expect(parsePacket({ type: "context_usage", used_tokens: 15526 })).toEqual({
       type: "context_usage",
       usedTokens: 15526,
-      contextLimit: 1000000,
     });
 
-    expect(
-      parsePacket({ type: "context_usage", usedTokens: 42, contextLimit: null })
-    ).toEqual({ type: "context_usage", usedTokens: 42, contextLimit: null });
+    expect(parsePacket({ type: "context_usage", usedTokens: 42 })).toEqual({
+      type: "context_usage",
+      usedTokens: 42,
+    });
   });
 
   it("parses compaction packets, defaulting a missing summary to null", () => {

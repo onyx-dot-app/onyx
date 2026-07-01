@@ -195,10 +195,7 @@ function deriveContextUsage(messages: BuildMessage[]): ContextUsage | null {
     if (!metadata || typeof metadata !== "object") continue;
     const packet = parsePacket(metadata);
     if (packet.type === "context_usage") {
-      return {
-        usedTokens: packet.usedTokens,
-        contextLimit: packet.contextLimit,
-      };
+      return { usedTokens: packet.usedTokens };
     }
   }
   return null;

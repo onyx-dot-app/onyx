@@ -89,12 +89,6 @@ export function parsePacket(raw: unknown): ParsedPacket {
       return {
         type: "context_usage",
         usedTokens: Number(p.used_tokens ?? p.usedTokens ?? 0),
-        contextLimit:
-          p.context_limit != null
-            ? Number(p.context_limit)
-            : p.contextLimit != null
-              ? Number(p.contextLimit)
-              : null,
       };
 
     case "compaction":

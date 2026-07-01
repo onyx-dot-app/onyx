@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { Text, Tooltip } from "@opal/components";
 import { cn } from "@opal/utils";
-import { formatTokens } from "@/app/craft/utils/formatTokens";
 
 interface ContextRingProps {
   usedTokens: number;
@@ -41,17 +40,7 @@ export default function ContextRing({
         ? "stroke-status-warning-05"
         : "stroke-text-04";
 
-  // Cost intentionally omitted — matches Claude/Codex: this indicator is about context, not spend.
-  const tooltip = (
-    <div className="flex flex-col gap-0.5">
-      <Text font="main-ui-action" color="text-light-05" nowrap>
-        {`${formatTokens(usedTokens)} / ${formatTokens(contextLimit!)} tokens`}
-      </Text>
-      <Text font="secondary-body" color="text-light-03" nowrap>
-        {`${view.displayPct}% of context used`}
-      </Text>
-    </div>
-  );
+  const tooltip = `${view.displayPct}% of context used`;
 
   return (
     <Tooltip tooltip={tooltip} side="top" align="end">

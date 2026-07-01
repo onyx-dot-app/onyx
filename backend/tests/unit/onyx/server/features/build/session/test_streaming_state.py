@@ -414,7 +414,7 @@ def test_persist_context_usage_and_compaction(
         fake_db,
         session_id,
         state,
-        ContextUsagePacket(used_tokens=100, context_limit=200000),
+        ContextUsagePacket(used_tokens=100),
     )
     streaming.persist_sandbox_event(fake_db, session_id, state, chunk("world"))
     # Compaction flushes the merged text first, then persists the marker.
@@ -429,7 +429,6 @@ def test_persist_context_usage_and_compaction(
     assert persisted[0]["content"]["text"] == "hello world"
     assert persisted[1]["summary"] == "recap"
     assert persisted[2]["used_tokens"] == 100
-    assert persisted[2]["context_limit"] == 200000
 
     # A second finalize (e.g. from the executor's except path) must not
     # re-write the usage row.

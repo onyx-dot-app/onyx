@@ -21,9 +21,6 @@ from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
 from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.serve_client import (
-    _extract_context_limit,
-)
-from onyx.server.features.build.sandbox.opencode.serve_client import (
     _synthesize_tool_content,
 )
 from onyx.server.features.build.sandbox.opencode.serve_client import _tool_status
@@ -1802,7 +1799,6 @@ def test_message_updated_emits_context_usage() -> None:
     assert len(usage) == 1
     assert usage[0].used_tokens == 165
     assert usage[0].cost == 0.4
-    assert usage[0].context_limit is None
 
 
 def test_message_updated_no_usage_when_tokens_zero() -> None:
@@ -1864,37 +1860,3 @@ def test_session_compacted_emits_marker_with_summary() -> None:
     markers = [e for e in out if isinstance(e, CompactionPacket)]
     assert len(markers) == 1
     assert markers[0].summary == "Recap"
-
-
-def test_context_usage_carries_resolved_limit() -> None:
-    s = _state()
-    s.context_limit = 200000
-    out = _drain(translate_opencode_event(_msg_updated("m1", tokens=_TOKENS), s))
-    usage = [e for e in out if isinstance(e, ContextUsagePacket)]
-    assert len(usage) == 1
-    assert usage[0].context_limit == 200000
-
-
-def test_extract_context_limit_dict_shape() -> None:
-    catalog = {
-        "providers": [
-            {
-                "id": "anthropic",
-                "models": {"claude-x": {"limit": {"context": 200000, "output": 8192}}},
-            }
-        ]
-    }
-    assert _extract_context_limit(catalog, "anthropic", "claude-x") == 200000
-    assert _extract_context_limit(catalog, "anthropic", "missing") is None
-    assert _extract_context_limit(catalog, "openai", "claude-x") is None
-
-
-def test_extract_context_limit_list_shape_and_bad_input() -> None:
-    catalog = {
-        "providers": {
-            "openai": {"models": [{"id": "gpt", "limit": {"context": 400000}}]}
-        }
-    }
-    assert _extract_context_limit(catalog, "openai", "gpt") == 400000
-    assert _extract_context_limit(None, "openai", "gpt") is None
-    assert _extract_context_limit({"providers": []}, "openai", "gpt") is None
