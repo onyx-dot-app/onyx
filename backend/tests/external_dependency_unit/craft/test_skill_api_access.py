@@ -9,8 +9,9 @@ from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill import api as skill_api
-from onyx.server.features.skill import service as skill_service
+from onyx.server.features.skill.api import fetch_skill_for_current_user
+from onyx.server.features.skill.api import patch_custom_skill
+from onyx.server.features.skill.api import patch_personal_skill
 from onyx.server.features.skill.models import CustomSkillResponse
 from onyx.server.features.skill.models import PersonalSkillPatchRequest
 from onyx.server.features.skill.models import SkillPatchRequest
@@ -32,10 +33,13 @@ def test_admin_mutation_uses_edit_policy_for_curator_scope(
     add_user_to_group(db_session, curator, group)
     private_skill = make_skill(db_session, is_public=False, enabled=True)
     share_skill_with_group(db_session, private_skill, group)
-    monkeypatch.setattr(skill_service, "push_skills_for_users", lambda *_args: None)
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.push_skills_for_users",
+        lambda *_args: None,
+    )
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_api.patch_custom_skill(
+        patch_custom_skill(
             private_skill.id,
             SkillPatchRequest(enabled=False),
             user=curator,
@@ -55,7 +59,7 @@ def test_fetch_direct_shared_skill_is_not_personal(
     private_skill = make_skill(db_session, is_public=False, enabled=True)
     share_skill_with_user(db_session, private_skill, user)
 
-    response = skill_api.fetch_skill_for_current_user(
+    response = fetch_skill_for_current_user(
         str(private_skill.id),
         user=user,
         db_session=db_session,
@@ -79,10 +83,13 @@ def test_personal_mutation_rejects_direct_shared_skill(
         author_user_id=owner.id,
     )
     share_skill_with_user(db_session, private_skill, shared_user)
-    monkeypatch.setattr(skill_service, "push_skills_for_users", lambda *_args: None)
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.push_skills_for_users",
+        lambda *_args: None,
+    )
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_api.patch_personal_skill(
+        patch_personal_skill(
             private_skill.id,
             PersonalSkillPatchRequest(enabled=False),
             user=owner,

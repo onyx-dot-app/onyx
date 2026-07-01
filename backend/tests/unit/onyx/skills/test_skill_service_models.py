@@ -6,14 +6,19 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import MAX_PERSONAL_SKILLS_PER_USER
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill import service as skill_service
+from onyx.server.features.skill.api import create_personal_skill
+from onyx.server.features.skill.api import patch_personal_skill
+from onyx.server.features.skill.api import replace_personal_skill_bundle
 from onyx.server.features.skill.models import CustomSkillResponse
+from onyx.server.features.skill.models import PersonalSkillPatchRequest
 from onyx.server.features.skill.service import ensure_owned_personal_skill
 
 
@@ -33,6 +38,13 @@ def _custom_skill(
         author_user_id=author_user_id,
         public_permission=public_permission,
         enabled=True,
+    )
+
+
+def _upload(filename: str) -> UploadFile:
+    return cast(
+        UploadFile,
+        SimpleNamespace(file=io.BytesIO(b"bundle"), filename=filename),
     )
 
 
@@ -82,21 +94,20 @@ def test_create_personal_skill_rejects_quota_before_reading_bundle(
     read_bundle_file = MagicMock()
 
     monkeypatch.setattr(
-        skill_service,
-        "lock_personal_skills_for_user",
+        "onyx.server.features.skill.api.lock_personal_skills_for_user",
         lambda _user_id, _db_session: None,
     )
     monkeypatch.setattr(
-        skill_service,
-        "count_personal_skills_for_user",
-        lambda _user_id, _db_session: skill_service.MAX_PERSONAL_SKILLS_PER_USER,
+        "onyx.server.features.skill.api.count_personal_skills_for_user",
+        lambda _user_id, _db_session: MAX_PERSONAL_SKILLS_PER_USER,
     )
-    monkeypatch.setattr(skill_service, "read_bundle_file", read_bundle_file)
+    monkeypatch.setattr(
+        "onyx.server.features.skill.service.read_bundle_file", read_bundle_file
+    )
 
     with pytest.raises(OnyxError):
-        skill_service.create_personal_skill(
-            bundle_file=io.BytesIO(b"bundle"),
-            filename="quota-test.zip",
+        create_personal_skill(
+            bundle=_upload("quota-test.zip"),
             user=user,
             db_session=db_session,
         )
@@ -113,17 +124,17 @@ def test_replace_personal_skill_bundle_authorizes_before_reading_bundle(
     read_bundle_file = MagicMock()
 
     monkeypatch.setattr(
-        skill_service,
-        "fetch_skill_by_id",
+        "onyx.server.features.skill.api.fetch_skill_by_id",
         lambda _skill_id, _db_session: skill,
     )
-    monkeypatch.setattr(skill_service, "read_bundle_file", read_bundle_file)
+    monkeypatch.setattr(
+        "onyx.server.features.skill.service.read_bundle_file", read_bundle_file
+    )
 
     with pytest.raises(OnyxError):
-        skill_service.replace_personal_skill_bundle(
+        replace_personal_skill_bundle(
             skill_id=skill.id,
-            bundle_file=io.BytesIO(b"bundle"),
-            filename="replace-test.zip",
+            bundle=_upload("replace-test.zip"),
             user=user,
             db_session=db_session,
         )
@@ -141,33 +152,32 @@ def test_noop_personal_patch_does_not_push_sandboxes(
     push_skills_for_users = MagicMock()
 
     monkeypatch.setattr(
-        skill_service,
-        "fetch_skill_by_id",
+        "onyx.server.features.skill.api.fetch_skill_by_id",
         lambda _skill_id, _db_session: skill,
     )
     monkeypatch.setattr(
-        skill_service,
-        "skill_ids_with_grants",
+        "onyx.server.features.skill.service.skill_ids_with_grants",
         lambda _skill_ids, _db_session: set(),
     )
     monkeypatch.setattr(
-        skill_service,
-        "affected_user_ids_for_skill",
+        "onyx.server.features.skill.api.affected_user_ids_for_skill",
         lambda _skill, _db_session: {user_id},
     )
     monkeypatch.setattr(
-        skill_service,
-        "patch_skill",
+        "onyx.server.features.skill.api.patch_skill",
         lambda **_kwargs: skill,
     )
-    monkeypatch.setattr(skill_service, "push_skills_for_users", push_skills_for_users)
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.push_skills_for_users",
+        push_skills_for_users,
+    )
 
-    updated = skill_service.patch_personal_skill(
+    response = patch_personal_skill(
         skill_id=skill.id,
-        enabled=True,
+        patch_req=PersonalSkillPatchRequest(enabled=True),
         user=user,
         db_session=db_session,
     )
 
-    assert updated is skill
+    assert response.id == skill.id
     push_skills_for_users.assert_not_called()
