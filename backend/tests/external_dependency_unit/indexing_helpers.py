@@ -215,12 +215,11 @@ def make_future_search_settings(
     """
     present = get_current_search_settings(db_session)
     saved = SavedSearchSettings.from_db_model(present).model_copy(
-        update={
-            "index_name": f"test_future_{uuid4().hex[:8]}",
-            "use_port_flow": use_port_flow,
-        }
+        update={"index_name": f"test_future_{uuid4().hex[:8]}"}
     )
-    return create_search_settings(saved, db_session, status=status)
+    return create_search_settings(
+        saved, db_session, status=status, use_port_flow=use_port_flow
+    )
 
 
 def seed_cc_pair_documents(
