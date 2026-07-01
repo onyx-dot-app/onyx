@@ -253,13 +253,15 @@ def get_stale_in_progress_port_attempts(
 def mark_port_in_progress(
     db_session: Session, port_attempt_id: int, celery_task_id: str | None = None
 ) -> bool:
-    """Flip the attempt to IN_PROGRESS, returning True. Returns False without
-    changing anything if it's already terminal — a supersede/cancel that landed
-    during the task's startup must not be flipped back to IN_PROGRESS. The row lock
-    serializes this against the cancel, so first-terminal-write-wins holds."""
+    """Flip NOT_STARTED -> IN_PROGRESS, returning True. Returns False (no change) for
+    any other status under the row lock: a terminal row (a supersede/cancel that
+    landed during startup), or an already-IN_PROGRESS row (a re-dispatched duplicate —
+    a second concurrent writer would let one worker's cancel-ack unblock deletion
+    while the other writes). A resume is always a fresh attempt id, so requiring
+    NOT_STARTED rejects nothing valid."""
     try:
         attempt = _get_locked(db_session, port_attempt_id)
-        if attempt.status.is_terminal():
+        if attempt.status != PortAttemptStatus.NOT_STARTED:
             db_session.rollback()
             return False
         attempt.status = PortAttemptStatus.IN_PROGRESS
@@ -319,6 +321,31 @@ def mark_port_canceled(db_session: Session, port_attempt_id: int) -> None:
     _mark_terminal(db_session, port_attempt_id, PortAttemptStatus.CANCELED)
 
 
+def request_port_cancel(db_session: Session, port_attempt_id: int) -> None:
+    """Ask a port to stop so a waiter (connector deletion) can be the last writer.
+    Under the row lock (serializes vs mark_port_in_progress):
+      - NOT_STARTED: cancel outright. Must terminalize, not just flag: a NOT_STARTED
+        attempt is invisible to the stall watchdog and isn't re-enqueued once the
+        cc_pair is DELETING, so a flag alone would wedge the waiter forever.
+      - IN_PROGRESS: flag only; the task acks (-> CANCELED) after its last write.
+      - terminal: no-op.
+    Idempotent."""
+    try:
+        attempt = _get_locked(db_session, port_attempt_id)
+        if attempt.status.is_terminal():
+            db_session.rollback()
+            return
+        if attempt.status == PortAttemptStatus.NOT_STARTED:
+            attempt.status = PortAttemptStatus.CANCELED
+            attempt.time_completed = func.now()
+        else:  # IN_PROGRESS
+            attempt.cancel_requested = True
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
+        raise
+
+
 def _mark_terminal(
     db_session: Session,
     port_attempt_id: int,
@@ -353,15 +380,17 @@ def cancel_active_port_attempts(
     search_settings_id: int,
     reason: str = "Canceled: superseded by a newer reindex",
 ) -> int:
-    """Cancel all active (NOT_STARTED / IN_PROGRESS) port attempts for a FUTURE
-    (superseded by a newer reindex, or promoted by a swap). A running port re-reads
-    its row each batch/page and stops on CANCELED; only active rows are touched, so
-    first-terminal-write-wins holds. Returns the number canceled."""
-    result = db_session.execute(
+    """Stop all active port attempts for a FUTURE (superseded/promoted by a swap),
+    via the same two-phase cancel as request_port_cancel so a concurrently-waiting
+    deletion stays the last writer: NOT_STARTED -> CANCELED, IN_PROGRESS -> flag (the
+    task acks after its last write, rather than being terminalized mid-write here).
+    Two scoped UPDATEs: an attempt flipping NOT_STARTED -> IN_PROGRESS between them is
+    still caught by the second. Returns the number affected."""
+    not_started = db_session.execute(
         update(PortAttempt)
         .where(
             PortAttempt.search_settings_id == search_settings_id,
-            PortAttempt.status.in_(_ACTIVE_STATUSES),
+            PortAttempt.status == PortAttemptStatus.NOT_STARTED,
         )
         .values(
             status=PortAttemptStatus.CANCELED,
@@ -369,5 +398,15 @@ def cancel_active_port_attempts(
             error_msg=reason,
         )
     )
+    in_progress = db_session.execute(
+        update(PortAttempt)
+        .where(
+            PortAttempt.search_settings_id == search_settings_id,
+            PortAttempt.status == PortAttemptStatus.IN_PROGRESS,
+        )
+        .values(cancel_requested=True)
+    )
     db_session.commit()
-    return result.rowcount  # ty: ignore[unresolved-attribute]
+    ns_count = not_started.rowcount  # ty: ignore[unresolved-attribute]
+    ip_count = in_progress.rowcount  # ty: ignore[unresolved-attribute]
+    return (ns_count or 0) + (ip_count or 0)

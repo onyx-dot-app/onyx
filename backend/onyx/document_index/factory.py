@@ -24,29 +24,35 @@ def _build_tenant_state() -> TenantState:
     return TenantState(tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT)
 
 
-def _build_opensearch_pair(
+def build_opensearch_document_index(
     search_settings: SearchSettings,
-    secondary_search_settings: SearchSettings | None,
-) -> OpenSearchIndexPair:
-    tenant_state = _build_tenant_state()
+) -> OpenSearchDocumentIndex:
+    """A single OpenSearch index handle for one search settings.
+
+    The reindex port needs the lone index (to scan a PIT / call index_raw_chunks),
+    not the primary+secondary pair `get_default_document_index` returns. Shared
+    with `_build_opensearch_pair` so the construction lives in one place.
+    """
     indexing_setting = IndexingSetting.from_db_model(search_settings)
-    primary = OpenSearchDocumentIndex(
-        tenant_state=tenant_state,
+    return OpenSearchDocumentIndex(
+        tenant_state=_build_tenant_state(),
         index_name=search_settings.index_name,
         embedding_dim=indexing_setting.final_embedding_dim,
         embedding_precision=indexing_setting.embedding_precision,
     )
+
+
+def _build_opensearch_pair(
+    search_settings: SearchSettings,
+    secondary_search_settings: SearchSettings | None,
+) -> OpenSearchIndexPair:
+    primary = build_opensearch_document_index(search_settings)
     if secondary_search_settings is None:
         return OpenSearchIndexPair(primary=primary, secondary=None)
     secondary_indexing_setting = IndexingSetting.from_db_model(
         secondary_search_settings
     )
-    secondary = OpenSearchDocumentIndex(
-        tenant_state=tenant_state,
-        index_name=secondary_search_settings.index_name,
-        embedding_dim=secondary_indexing_setting.final_embedding_dim,
-        embedding_precision=secondary_indexing_setting.embedding_precision,
-    )
+    secondary = build_opensearch_document_index(secondary_search_settings)
     return OpenSearchIndexPair(
         primary=primary,
         secondary=secondary,
