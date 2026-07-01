@@ -247,7 +247,7 @@ def test_org_wide_editor_permission_grants_edit(
         is_public=True,
         public_permission=SkillSharePermission.VIEWER,
     )
-    assert public_viewer.is_public is True
+    assert public_viewer.public_permission is not None
     assert public_viewer.public_permission == SkillSharePermission.VIEWER
     _assert_edit_hidden(skill_id, other_user)
 
@@ -258,7 +258,7 @@ def test_org_wide_editor_permission_grants_edit(
         public_permission=SkillSharePermission.EDITOR,
     )
 
-    assert public_editor.is_public is True
+    assert public_editor.public_permission is not None
     assert public_editor.public_permission == SkillSharePermission.EDITOR
     editable = SkillManager.get_editable(skill_id, other_user)
     assert editable.user_permission == SkillAccessLevel.EDITOR
@@ -291,7 +291,7 @@ def test_switching_from_org_wide_to_scoped_share_removes_org_visibility(
         ],
     )
 
-    assert scoped.is_public is False
+    assert scoped.public_permission is None
     assert [str(share.user.id) for share in scoped.user_shares] == [shared_user.id]
     assert SkillManager.get_for_user(str(skill_id), shared_user).id == skill_id
     _assert_skill_hidden(skill_id, unshared_user)

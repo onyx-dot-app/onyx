@@ -13,6 +13,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from onyx.db.enums import SkillSharePermission
 from onyx.server.features.skill.models import SkillPatchRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -40,7 +41,7 @@ def test_create_personal_skill_visibility(
     slug = f"personal-vis-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
     assert skill.is_personal is True
-    assert skill.is_public is False
+    assert skill.public_permission is None
 
     own_list = SkillManager.list_for_user(basic_user).customs
     mine = [skill for skill in own_list if skill.slug == slug]
@@ -171,9 +172,11 @@ def test_owner_can_share_org_wide_and_retain_edit_permissions(
     skill = SkillManager.create_personal(basic_user, slug=slug)
 
     promoted = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(is_public=True)
+        skill,
+        basic_user,
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
     )
-    assert promoted.is_public is True
+    assert promoted.public_permission is not None
     assert promoted.is_personal is False
 
     other_list = SkillManager.list_for_user(other_basic_user).customs
@@ -234,7 +237,11 @@ def test_owner_can_toggle_after_sharing_org_wide(
 ) -> None:
     slug = f"personal-toggle-promo-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
-    SkillManager.patch_personal(skill, basic_user, SkillPatchRequest(is_public=True))
+    SkillManager.patch_personal(
+        skill,
+        basic_user,
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
+    )
 
     disabled = SkillManager.patch_personal(
         skill, basic_user, SkillPatchRequest(enabled=False)
@@ -250,7 +257,11 @@ def test_admin_disable_then_owner_reenable(
     listed (greyed) for the owner and the owner can re-enable it."""
     slug = f"personal-admin-toggle-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
-    SkillManager.patch_personal(skill, basic_user, SkillPatchRequest(is_public=True))
+    SkillManager.patch_personal(
+        skill,
+        basic_user,
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
+    )
 
     SkillManager.patch_custom(skill, admin_user, SkillPatchRequest(enabled=False))
     own = [
