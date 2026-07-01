@@ -51,10 +51,10 @@ from onyx.document_index.chunk_content_enrichment import (
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 
-# The chunker's canonical metadata-suffix builder. Reused (rather than
-# replicated) so the rebuilt semantic tail is byte-identical to what indexing
-# produced; replicating it would risk silent drift in the embedding input.
+# Reused from the chunker (not replicated) so the rebuilt tail stays byte-identical
+# to indexing and the skip test mirrors it exactly; replicating either risks drift.
 from onyx.indexing.chunker import _get_metadata_suffix_for_document_index
+from onyx.indexing.chunker import MAX_METADATA_PERCENTAGE
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import IndexChunk
@@ -124,14 +124,35 @@ def rebuild_semantic_tail(chunk: DocumentChunkWithoutVectors) -> str:
     return semantic_suffix
 
 
-def recover_embedding_input(chunk: DocumentChunkWithoutVectors) -> str:
+def _semantic_tail_was_embedded(
+    semantic_tail: str, max_chunk_size: int, tokenizer: BaseTokenizer
+) -> bool:
+    """Whether indexing embedded the semantic tail. The chunker drops it from the
+    embedding when it exceeds MAX_METADATA_PERCENTAGE of the chunk budget, yet still
+    stores the keyword tail on `content` — so recovery must reproduce the skip or it
+    re-embeds metadata the vector never saw. `tokenizer` is the FUTURE model's, a
+    coarse proxy for the PRESENT one that the 25% threshold tolerates."""
+    if not semantic_tail:
+        return False
+    metadata_tokens = len(tokenizer.encode(semantic_tail))
+    return metadata_tokens < max_chunk_size * MAX_METADATA_PERCENTAGE
+
+
+def recover_embedding_input(
+    chunk: DocumentChunkWithoutVectors, tokenizer: BaseTokenizer
+) -> str:
     """Rebuild the text that was actually embedded when this chunk was indexed.
 
-    The stored `content` is that text except for the metadata at its end: it is
-    stored in keyword form ("Jane Doe") but was embedded in labeled form
-    ("Metadata: author - Jane Doe"). So drop the stored keyword metadata
-    (`metadata_suffix`) and append the labeled form rebuilt from `metadata_list`.
-    If the chunk has no appended metadata, return `content` as-is.
+    Stored `content` ends in the metadata's keyword form ("Jane Doe"); the embedding
+    used the labeled form ("Metadata: author - Jane Doe"). So swap the keyword tail
+    (`metadata_suffix`) for the labeled form rebuilt from `metadata_list` — but only
+    when indexing embedded it: the chunker skips an oversized labeled tail while
+    still storing the keyword one, so re-appending it would drift the vector (see
+    `_semantic_tail_was_embedded`). No stored metadata -> return `content` as-is.
+
+    Residual: a second chunker branch (title + metadata nearly filling the budget)
+    also drops the labeled tail but isn't reconstructible here without the PRESENT
+    search settings, so that rare case is left uncorrected.
     """
     keyword_metadata = chunk.metadata_suffix or ""
     if not keyword_metadata:
@@ -141,7 +162,10 @@ def recover_embedding_input(chunk: DocumentChunkWithoutVectors) -> str:
     # return it unchanged rather than appending a second metadata block.
     if without_metadata == chunk.content:
         return chunk.content
-    return without_metadata + rebuild_semantic_tail(chunk)
+    semantic_tail = rebuild_semantic_tail(chunk)
+    if not _semantic_tail_was_embedded(semantic_tail, chunk.max_chunk_size, tokenizer):
+        return without_metadata
+    return without_metadata + semantic_tail
 
 
 def _title_prefix(chunk: DocumentChunkWithoutVectors) -> str:
@@ -208,6 +232,11 @@ def _match_embeddings_by_identity(
             f"Embedder returned {len(embedded)} chunks for {len(stored_chunks)} inputs."
         )
     by_identity = {(ic.source_document.id, ic.chunk_id): ic for ic in embedded}
+    if len(by_identity) != len(embedded):
+        raise RuntimeError(
+            "Duplicate (document_id, chunk_index) identities among re-embedded "
+            "chunks; cannot pair vectors to stored chunks unambiguously."
+        )
     matched: list[IndexChunk] = []
     for stored in stored_chunks:
         ic = by_identity.get((stored.document_id, stored.chunk_index))
@@ -245,7 +274,10 @@ def re_embed_chunks(
             )
         return _augmentation_reembed(stored_chunks, embedder, augmentation_ctx)
 
-    embed_inputs = [recover_embedding_input(chunk) for chunk in stored_chunks]
+    tokenizer = embedder.embedding_model.tokenizer
+    embed_inputs = [
+        recover_embedding_input(chunk, tokenizer) for chunk in stored_chunks
+    ]
     doc_aware_chunks = [
         _stored_chunk_to_doc_aware(chunk, embed_input)
         for chunk, embed_input in zip(stored_chunks, embed_inputs)

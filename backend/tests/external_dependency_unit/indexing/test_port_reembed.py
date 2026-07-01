@@ -45,6 +45,7 @@ from onyx.indexing.port_reembed import rebuild_semantic_tail
 from onyx.indexing.port_reembed import recover_embedding_input
 from onyx.indexing.port_reembed import ReembedStrategy
 from onyx.indexing.port_reembed import select_reembed_strategy
+from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.pydantic_util import shallow_model_dump
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
@@ -59,11 +60,13 @@ def _stored_chunk(
     chunk_index: int = 0,
     doc_summary: str = "",
     chunk_context: str = "",
+    max_chunk_size: int = 512,
 ) -> DocumentChunkWithoutVectors:
     return DocumentChunkWithoutVectors(
         document_id=document_id,
         chunk_index=chunk_index,
         content=content,
+        max_chunk_size=max_chunk_size,
         source_type=DocumentSource.FILE.value,
         metadata_list=metadata_list,
         metadata_suffix=metadata_suffix,
@@ -77,6 +80,17 @@ def _stored_chunk(
         chunk_context=chunk_context,
         tenant_id=TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False),
     )
+
+
+class _CharTokenizer:
+    """One-token-per-char BaseTokenizer stand-in: exercises the metadata-budget skip
+    without loading a real model (char count >= token count, a conservative proxy)."""
+
+    def encode(self, text: str) -> list[int]:
+        return [ord(ch) for ch in text]
+
+
+_TOKENIZER = cast(BaseTokenizer, _CharTokenizer())
 
 
 def _vec(text: str) -> list[float]:
@@ -178,21 +192,21 @@ def test_recover_embedding_input_swaps_semantic_tail() -> None:
         metadata_suffix=keyword,
         metadata_list=metadata_list,
     )
-    embed_input = recover_embedding_input(chunk)
+    embed_input = recover_embedding_input(chunk, _TOKENIZER)
     assert embed_input == "the body text" + semantic
     # the crux: the embedding input is NOT the stored (keyword-tailed) content
     assert embed_input != chunk.content
 
     # no suffix (chunker dropped it) -> content passes through unchanged
     plain = _stored_chunk("just body", metadata_suffix=None, metadata_list=None)
-    assert recover_embedding_input(plain) == "just body"
+    assert recover_embedding_input(plain, _TOKENIZER) == "just body"
 
     # no keyword tail was glued in (empty metadata_suffix) -> don't add a tail,
     # even if metadata_list is present
     no_tail = _stored_chunk(
         "just body", metadata_suffix=None, metadata_list=metadata_list
     )
-    assert recover_embedding_input(no_tail) == "just body"
+    assert recover_embedding_input(no_tail, _TOKENIZER) == "just body"
 
     # content doesn't actually end with the stored suffix -> embed as-is, never
     # double-append a tail
@@ -201,7 +215,28 @@ def test_recover_embedding_input_swaps_semantic_tail() -> None:
         metadata_suffix="\n\r\nMetadata: x",
         metadata_list=metadata_list,
     )
-    assert recover_embedding_input(mismatched) == "body without the tail"
+    assert recover_embedding_input(mismatched, _TOKENIZER) == "body without the tail"
+
+
+def test_recover_embedding_input_skips_oversized_metadata_tail() -> None:
+    """Oversized metadata: indexing embedded the chunk without the semantic tail but
+    still stored the keyword tail. Recovery must reproduce that skip — strip the
+    keyword tail and stop, not re-append the semantic tail the vector never saw."""
+    metadata_list = convert_metadata_dict_to_list_of_strings(
+        {"author": "Jane Doe", "team": "finance"}
+    )
+    semantic, keyword = _get_metadata_suffix_for_document_index(
+        convert_metadata_list_of_strings_to_dict(metadata_list), include_separator=True
+    )
+    # Tiny budget so the tail exceeds MAX_METADATA_PERCENTAGE — the index-time
+    # condition that drops it from the embedding.
+    chunk = _stored_chunk(
+        "the body text" + keyword,
+        metadata_suffix=keyword,
+        metadata_list=metadata_list,
+        max_chunk_size=8,
+    )
+    assert recover_embedding_input(chunk, _TOKENIZER) == "the body text"
 
 
 def test_to_doc_aware_chunk_feeds_embed_input() -> None:
@@ -209,7 +244,7 @@ def test_to_doc_aware_chunk_feeds_embed_input() -> None:
     recovered embedding input (not the stored content), and carries the title
     for the title vector with a semantic_identifier fallback."""
     chunk = _stored_chunk("body", title="My Title")
-    embed_input = recover_embedding_input(chunk)
+    embed_input = recover_embedding_input(chunk, _TOKENIZER)
     doc_aware = _stored_chunk_to_doc_aware(chunk, embed_input)
 
     assert generate_enriched_content_for_chunk_embedding(doc_aware) == embed_input
@@ -299,7 +334,7 @@ def test_augmentation_strip_off_reembeds_bare() -> None:
     assert result.content_vector == _vec(strip_embed_input)
     # ... and that genuinely differs from the MODEL_ONLY embed input, which
     # keeps the doc summary + chunk context.
-    model_only_embed_input = recover_embedding_input(chunk)
+    model_only_embed_input = recover_embedding_input(chunk, _TOKENIZER)
     assert result.content_vector != _vec(model_only_embed_input)
     # non-augmentation fields are preserved
     assert result.metadata_suffix == keyword
