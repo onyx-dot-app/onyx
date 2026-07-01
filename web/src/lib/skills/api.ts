@@ -49,8 +49,7 @@ export interface PatchCustomSkillInput {
   name?: string;
   description?: string;
   instructions_markdown?: string;
-  is_public?: boolean;
-  public_permission?: SkillSharePermission;
+  public_permission?: SkillSharePermission | null;
   enabled?: boolean;
 }
 
@@ -63,8 +62,7 @@ export interface SkillShareUpdatePayload {
     group_id: number;
     permission: SkillSharePermission;
   }[];
-  is_public?: boolean;
-  public_permission?: SkillSharePermission;
+  public_permission?: SkillSharePermission | null;
 }
 
 export async function replaceUserSkillBundle(

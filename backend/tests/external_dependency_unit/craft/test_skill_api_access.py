@@ -115,10 +115,7 @@ def test_create_reserved_slug_rejects_before_reading_bundle(
 ) -> None:
     user = make_user(db_session, role=UserRole.BASIC)
     read_bundle_file = MagicMock()
-    monkeypatch.setattr(
-        "onyx.server.features.skill.mutation_helpers.read_bundle_file",
-        read_bundle_file,
-    )
+    monkeypatch.setattr(skill_api, "read_bundle_file", read_bundle_file)
 
     with pytest.raises(OnyxError) as exc_info:
         skill_api.create_custom_skill(
@@ -151,10 +148,7 @@ def test_replace_bundle_authorizes_before_reading_bundle(
         SkillSharePermission.VIEWER,
     )
     read_bundle_file = MagicMock()
-    monkeypatch.setattr(
-        "onyx.server.features.skill.mutation_helpers.read_bundle_file",
-        read_bundle_file,
-    )
+    monkeypatch.setattr(skill_api, "read_bundle_file", read_bundle_file)
 
     with pytest.raises(OnyxError) as exc_info:
         skill_api.replace_current_user_skill_bundle(

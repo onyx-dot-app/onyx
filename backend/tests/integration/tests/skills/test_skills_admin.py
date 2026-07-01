@@ -12,6 +12,7 @@ from sqlalchemy import select
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import SkillSharePermission
 from onyx.db.models import FileRecord
 from onyx.db.models import Skill
 from onyx.file_store.file_store import get_default_file_store
@@ -79,9 +80,11 @@ def test_patch_skill_metadata(admin_user: DATestUser) -> None:
     skill = SkillManager.create_custom(admin_user, slug=f"patch-test-{uuid4().hex[:6]}")
 
     public = SkillManager.patch_custom(
-        skill, admin_user, SkillPatchRequest(is_public=True)
+        skill,
+        admin_user,
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
     )
-    assert public.is_public is True
+    assert public.public_permission == SkillSharePermission.VIEWER
 
     disabled = SkillManager.patch_custom(
         skill, admin_user, SkillPatchRequest(enabled=False)
@@ -398,7 +401,7 @@ def test_basic_user_can_create_private_skill(basic_user: DATestUser) -> None:
     skill = SkillManager.create_custom(
         basic_user, slug=f"basic-create-{uuid4().hex[:6]}"
     )
-    assert skill.is_public is False
+    assert skill.public_permission is None
     assert skill.user_permission == "OWNER"
 
 

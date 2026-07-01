@@ -93,7 +93,7 @@ class SkillManager:
 
         if is_public or group_ids:
             share_req = SkillShareRequest(
-                is_public=is_public,
+                public_permission=SkillSharePermission.VIEWER if is_public else None,
                 group_shares=[
                     SkillGroupShareRequest(
                         group_id=group_id,
@@ -104,7 +104,7 @@ class SkillManager:
             )
             share_response = client.patch(
                 f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
-                json=share_req.model_dump(mode="json", exclude_none=True),
+                json=share_req.model_dump(mode="json", exclude_unset=True),
                 headers=user_performing_action.headers,
             )
             share_response.raise_for_status()
@@ -254,16 +254,24 @@ class SkillManager:
         user_shares: Sequence[SkillUserShareRequest] | None = None,
         group_shares: Sequence[SkillGroupShareRequest] | None = None,
     ) -> SkillResponse:
+        org_public_permission: SkillSharePermission | None = None
+        include_org_visibility = is_public is not None or public_permission is not None
+        if public_permission is not None:
+            org_public_permission = public_permission
+        elif is_public is True:
+            org_public_permission = SkillSharePermission.VIEWER
+
         share_req = SkillShareRequest(
             user_shares=list(user_shares) if user_shares is not None else None,
             group_shares=list(group_shares) if group_shares is not None else None,
-            is_public=is_public,
-            public_permission=public_permission,
+            public_permission=org_public_permission,
         )
+        if include_org_visibility:
+            share_req.model_fields_set.add("public_permission")
 
         response = client.patch(
             f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
-            json=share_req.model_dump(mode="json", exclude_none=True),
+            json=share_req.model_dump(mode="json", exclude_unset=True),
             headers=user_performing_action.headers,
         )
         response.raise_for_status()

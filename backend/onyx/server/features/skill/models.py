@@ -39,7 +39,6 @@ class SkillResponse(BaseModel):
     is_available: bool | None = None
     unavailable_reason: str | None = None
 
-    is_public: bool | None = None
     enabled: bool | None = None
     author_user_id: UUID | None = None
     author_email: str | None = None
@@ -97,14 +96,12 @@ class SkillResponse(BaseModel):
         ]
         visible_user_shares = user_shares if include_share_details else []
         visible_group_shares = group_shares if include_share_details else []
-        is_org_shared = skill.public_permission is not None
         return cls(
             source="custom",
             id=skill.id,
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
-            is_public=is_org_shared,
             enabled=skill.enabled,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
@@ -121,7 +118,9 @@ class SkillResponse(BaseModel):
             user_shares=visible_user_shares,
             group_shares=visible_group_shares,
             public_permission=skill.public_permission,
-            is_personal=not is_org_shared and not user_shares and not group_shares,
+            is_personal=skill.public_permission is None
+            and not user_shares
+            and not group_shares,
             user_permission=user_permission,
         )
 
@@ -182,7 +181,6 @@ class SkillPatchRequest(BaseModel):
     name: str | None = None
     description: str | None = None
     instructions_markdown: str | None = None
-    is_public: bool | None = None
     public_permission: SkillSharePermission | None = None
     enabled: bool | None = None
 
@@ -195,8 +193,6 @@ class SkillPatchRequest(BaseModel):
                 "name",
                 "description",
                 "instructions_markdown",
-                "is_public",
-                "public_permission",
                 "enabled",
             ):
                 if field in data and data[field] is None:
@@ -223,9 +219,7 @@ class SkillPatchRequest(BaseModel):
 
     @property
     def has_db_field_update(self) -> bool:
-        return bool(
-            self.model_fields_set & {"is_public", "public_permission", "enabled"}
-        )
+        return bool(self.model_fields_set & {"public_permission", "enabled"})
 
 
 class SkillUserShareRequest(BaseModel):
@@ -239,9 +233,10 @@ class SkillGroupShareRequest(BaseModel):
 
 
 class SkillShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     user_shares: list[SkillUserShareRequest] | None = None
     group_shares: list[SkillGroupShareRequest] | None = None
-    is_public: bool | None = None
     public_permission: SkillSharePermission | None = None
 
 

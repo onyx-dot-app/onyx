@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
 import onyx.skills.bundle as skill_bundle
+import onyx.skills.ingest as skill_ingest
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import Skill

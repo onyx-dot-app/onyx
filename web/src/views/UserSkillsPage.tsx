@@ -72,8 +72,7 @@ export default function UserSkillsPage() {
       }));
     const customItems: SkillCardItem[] = data.customs
       .filter(
-        (c): c is CustomSkill =>
-          c.source === "custom" && c.is_public !== null && c.enabled !== null
+        (c): c is CustomSkill => c.source === "custom" && c.enabled !== null
       )
       .map((c) => ({
         id: c.id,

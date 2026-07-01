@@ -4,7 +4,6 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-import onyx.server.features.skill.service as skill_service
 from onyx.db.enums import AccountType
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill
@@ -13,6 +12,7 @@ from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.skill import api as skill_api
 from onyx.server.features.skill.models import TransferSkillOwnershipRequest
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox
 from tests.external_dependency_unit.craft.db_helpers import make_skill
@@ -44,7 +44,7 @@ def _share_row(
 def push_calls(monkeypatch: pytest.MonkeyPatch) -> list[set[object]]:
     calls: list[set[object]] = []
     monkeypatch.setattr(
-        skill_service,
+        skill_api,
         "push_skills_for_users",
         lambda user_ids, _db_session: calls.append(set(user_ids)),
     )
@@ -65,16 +65,18 @@ def test_owner_transfers_to_active_user(
         SkillSharePermission.VIEWER,
     )
 
-    transferred = skill_service.transfer_custom_skill_ownership_for_user(
-        skill_id=skill.id,
-        transfer=TransferSkillOwnershipRequest(new_owner_user_id=new_owner.id),
+    response = skill_api.transfer_current_user_skill_ownership(
+        skill.id,
+        TransferSkillOwnershipRequest(new_owner_user_id=new_owner.id),
         user=owner,
         db_session=db_session,
     )
+    db_session.refresh(skill)
 
-    assert transferred.author_user_id == new_owner.id
-    assert _share_row(db_session, transferred, new_owner) is None
-    previous_owner_share = _share_row(db_session, transferred, owner)
+    assert response.author_user_id == new_owner.id
+    assert skill.author_user_id == new_owner.id
+    assert _share_row(db_session, skill, new_owner) is None
+    previous_owner_share = _share_row(db_session, skill, owner)
     assert previous_owner_share is not None
     assert previous_owner_share.permission == SkillSharePermission.EDITOR
     assert push_calls == [set()]
@@ -90,9 +92,9 @@ def test_transfer_pushes_previous_and_new_owner_sandboxes(
     make_sandbox(db_session, new_owner)
     skill = _owned_skill(db_session, owner)
 
-    skill_service.transfer_custom_skill_ownership_for_user(
-        skill_id=skill.id,
-        transfer=TransferSkillOwnershipRequest(new_owner_user_id=new_owner.id),
+    skill_api.transfer_current_user_skill_ownership(
+        skill.id,
+        TransferSkillOwnershipRequest(new_owner_user_id=new_owner.id),
         user=owner,
         db_session=db_session,
     )
@@ -116,9 +118,9 @@ def test_non_owner_sharee_cannot_transfer(
     share_skill_with_user(db_session, skill, sharee, permission)
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_service.transfer_custom_skill_ownership_for_user(
-            skill_id=skill.id,
-            transfer=TransferSkillOwnershipRequest(new_owner_user_id=target.id),
+        skill_api.transfer_current_user_skill_ownership(
+            skill.id,
+            TransferSkillOwnershipRequest(new_owner_user_id=target.id),
             user=sharee,
             db_session=db_session,
         )
@@ -141,9 +143,9 @@ def test_transfer_rejects_inactive_target(
     db_session.flush()
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_service.transfer_custom_skill_ownership_for_user(
-            skill_id=skill.id,
-            transfer=TransferSkillOwnershipRequest(new_owner_user_id=target.id),
+        skill_api.transfer_current_user_skill_ownership(
+            skill.id,
+            TransferSkillOwnershipRequest(new_owner_user_id=target.id),
             user=owner,
             db_session=db_session,
         )
@@ -169,9 +171,9 @@ def test_transfer_rejects_unsupported_target_account_type(
     db_session.flush()
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_service.transfer_custom_skill_ownership_for_user(
-            skill_id=skill.id,
-            transfer=TransferSkillOwnershipRequest(new_owner_user_id=target.id),
+        skill_api.transfer_current_user_skill_ownership(
+            skill.id,
+            TransferSkillOwnershipRequest(new_owner_user_id=target.id),
             user=owner,
             db_session=db_session,
         )
@@ -191,15 +193,17 @@ def test_admin_transfers_vacant_skill(
     target = make_user(db_session, role=UserRole.BASIC)
     skill = make_skill(db_session)
 
-    transferred = skill_service.transfer_custom_skill_ownership_for_user(
-        skill_id=skill.id,
-        transfer=TransferSkillOwnershipRequest(new_owner_user_id=target.id),
+    response = skill_api.transfer_current_user_skill_ownership(
+        skill.id,
+        TransferSkillOwnershipRequest(new_owner_user_id=target.id),
         user=admin,
         db_session=db_session,
     )
+    db_session.refresh(skill)
 
-    assert transferred.author_user_id == target.id
-    assert _share_row(db_session, transferred, admin) is None
+    assert response.author_user_id == target.id
+    assert skill.author_user_id == target.id
+    assert _share_row(db_session, skill, admin) is None
     assert push_calls == [set()]
 
 
@@ -213,9 +217,9 @@ def test_admin_cannot_transfer_owned_skill(
     skill = _owned_skill(db_session, owner)
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_service.transfer_custom_skill_ownership_for_user(
-            skill_id=skill.id,
-            transfer=TransferSkillOwnershipRequest(new_owner_user_id=target.id),
+        skill_api.transfer_current_user_skill_ownership(
+            skill.id,
+            TransferSkillOwnershipRequest(new_owner_user_id=target.id),
             user=admin,
             db_session=db_session,
         )
@@ -235,9 +239,9 @@ def test_transfer_rejects_missing_target(
     skill = _owned_skill(db_session, owner)
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_service.transfer_custom_skill_ownership_for_user(
-            skill_id=skill.id,
-            transfer=TransferSkillOwnershipRequest(new_owner_user_id=uuid4()),
+        skill_api.transfer_current_user_skill_ownership(
+            skill.id,
+            TransferSkillOwnershipRequest(new_owner_user_id=uuid4()),
             user=owner,
             db_session=db_session,
         )

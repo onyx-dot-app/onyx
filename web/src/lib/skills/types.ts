@@ -31,7 +31,6 @@ export interface Skill {
   is_available: boolean | null;
   unavailable_reason: string | null;
 
-  is_public: boolean | null;
   /** True for private personal skills: not public, no direct/group shares. */
   is_personal: boolean;
   enabled: boolean | null;
@@ -57,7 +56,6 @@ export type BuiltinSkill = Skill & {
 
 export type CustomSkill = Skill & {
   source: "custom";
-  is_public: boolean;
   enabled: boolean;
 };
 

@@ -63,7 +63,7 @@ function getSharingStatus(skill: SkillEditableDetail): {
   description: string;
   color: "blue" | "gray" | "purple";
 } {
-  if (skill.is_public) {
+  if (skill.public_permission !== null) {
     return {
       title: "Organization",
       description:

@@ -177,7 +177,7 @@ export default function ShareSkillModal({
     if (!open || !skill) return;
     const nextState: ShareDraftState = {
       groupShares: skill.group_shares,
-      isPublic: skill.is_public,
+      isPublic: skill.public_permission !== null,
       publicPermission: skill.public_permission ?? "VIEWER",
       userShares: skill.user_shares,
     };
@@ -350,9 +350,10 @@ export default function ShareSkillModal({
           group_id: share.group_id,
           permission: share.permission,
         })),
-        is_public: canEditOrgVisibility ? effectiveState.isPublic : undefined,
         public_permission: canEditOrgVisibility
-          ? effectiveState.publicPermission
+          ? effectiveState.isPublic
+            ? effectiveState.publicPermission
+            : null
           : undefined,
         user_shares: effectiveState.userShares
           .filter((share) => share.user.id !== skill.owner?.id)

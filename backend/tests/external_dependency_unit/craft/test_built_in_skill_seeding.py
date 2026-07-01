@@ -25,8 +25,6 @@ from onyx.db.models import User
 from onyx.db.skill import fetch_skill
 from onyx.db.skill import list_skills
 from onyx.db.skill import SkillAccessPolicy
-from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill.service import get_editable_custom_skill
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
@@ -190,8 +188,15 @@ class TestBuiltInIsImmutable:
         row = make_built_in_skill_row(db_session, built_in_skill_id="pptx")
         db_session.commit()
 
-        with pytest.raises(OnyxError, match="Skill not found"):
-            get_editable_custom_skill(row.id, test_user, db_session)
+        assert (
+            fetch_skill(
+                row.id,
+                policy=SkillAccessPolicy.EDIT,
+                user=test_user,
+                db_session=db_session,
+            )
+            is None
+        )
 
     def test_edit_fetch_accepts_owned_custom_rows(
         self,
@@ -202,7 +207,13 @@ class TestBuiltInIsImmutable:
         custom.author_user_id = test_user.id
         db_session.commit()
 
-        skill = get_editable_custom_skill(custom.id, test_user, db_session)
+        skill = fetch_skill(
+            custom.id,
+            policy=SkillAccessPolicy.EDIT,
+            user=test_user,
+            db_session=db_session,
+        )
+        assert skill is not None
         assert skill.id == custom.id
 
 
