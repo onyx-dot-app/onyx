@@ -232,7 +232,10 @@ def compact_session(
 
         check_build_rate_limits(user=user, db_session=db_session)
 
-        turn_index = count_user_messages(session_id, db_session)
+        # Attach the compaction marker to the last user turn rather than the
+        # next one: a compact turn creates no user row, so reusing the next
+        # index would collide with the following send-message turn.
+        turn_index = max(count_user_messages(session_id, db_session) - 1, 0)
 
         turn = create_interactive_turn(
             cache=cache,
