@@ -43,3 +43,23 @@ export async function requestEmailVerification(
     body: JSON.stringify({ email }),
   });
 }
+
+export async function impersonateUser(
+  email: string,
+  apiKey: string
+): Promise<void> {
+  const response = await fetch("/api/tenants/impersonate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ email }),
+    credentials: "same-origin",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error?.detail || "Failed to impersonate user");
+  }
+}

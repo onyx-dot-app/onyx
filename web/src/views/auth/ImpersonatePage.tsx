@@ -9,6 +9,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { Formik, Form, type FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { toast } from "@/hooks/useToast";
+import { impersonateUser } from "@/lib/auth/svc";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { markdown } from "@opal/utils";
@@ -43,22 +44,8 @@ export default function ImpersonatePage() {
     helpers: FormikHelpers<{ email: string; apiKey: string }>
   ) {
     try {
-      const response = await fetch("/api/tenants/impersonate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${values.apiKey}`,
-        },
-        body: JSON.stringify({ email: values.email }),
-        credentials: "same-origin",
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        toast.error(errorData.detail || "Failed to impersonate user");
-      } else {
-        router.push("/app" as Route);
-      }
+      await impersonateUser(values.email, values.apiKey);
+      router.push("/app" as Route);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to impersonate user"
