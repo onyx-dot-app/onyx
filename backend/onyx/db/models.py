@@ -6217,6 +6217,14 @@ class ExternalAppUserCredential(Base):
     user_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
         EncryptedJson(), nullable=False, default=dict
     )
+    # OAuth scopes the user actually granted for this app. NULL means
+    # we have no authoritative record of the grant (provider doesn't report
+    # scopes, or the best-effort lookup failed); a non-null list is the exact
+    # set the user granted. Consumers must distinguish the two.
+    granted_scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String),
+        nullable=True,
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
