@@ -77,10 +77,14 @@ def _perform_index_swap(
                     credential_id=cc_pair.credential_id,
                 )
 
-    # Record the index being promoted-from so a port can keep reading it once it
-    # becomes PAST (only INSTANT actually backfills post-swap, but recording it for
-    # every port-flow swap keeps the source lookup uniform).
-    if new_search_settings.use_port_flow:
+    # Record the index being promoted-from so the INSTANT post-swap port keeps
+    # reading it once it becomes PAST. Only INSTANT backfills after the swap; setting
+    # this for a non-INSTANT swap wrongly keeps the old index un-deletable, since a
+    # lingering FAILED port row keeps is_active_port_backfill_source True forever.
+    if (
+        new_search_settings.use_port_flow
+        and new_search_settings.switchover_type == SwitchoverType.INSTANT
+    ):
         new_search_settings.port_backfill_source_id = current_search_settings.id
 
     # swap over search settings
