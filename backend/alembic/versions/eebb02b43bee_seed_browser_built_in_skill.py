@@ -11,7 +11,7 @@ Availability is gated per-deployment by the skill's registry ``is_available``
 the row.
 
 Revision ID: eebb02b43bee
-Revises: 99c855a8f2a1
+Revises: a4c9d2e7f1b8
 Create Date: 2026-06-30 10:55:42.145894
 
 """
@@ -24,7 +24,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "eebb02b43bee"
-down_revision = "99c855a8f2a1"
+down_revision = "a4c9d2e7f1b8"
 branch_labels = None
 depends_on = None
 
