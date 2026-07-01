@@ -18,7 +18,7 @@ const validationSchema = Yup.object().shape({
   email: Yup.string().email().required(),
 });
 
-function ForgotPasswordPage() {
+export default function ForgotPasswordPage() {
   const router = useRouter();
   const { logoUrl } = useSettings();
 
@@ -74,5 +74,3 @@ function ForgotPasswordPage() {
     </AuthLayouts.Card>
   );
 }
-
-export default ForgotPasswordPage;

@@ -1,3 +1,5 @@
+"use client";
+
 import useSWR, { type KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { User } from "@/lib/types";
