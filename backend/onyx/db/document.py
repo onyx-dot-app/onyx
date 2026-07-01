@@ -171,17 +171,17 @@ def count_documents_by_needs_sync_or_secondary_pending(session: Session) -> int:
     generates drain tasks — a deferred doc has its needs_sync already cleared, so
     count_documents_by_needs_sync alone would miss it.
     """
-    return (
-        session.query(DbDocument.id)
-        .filter(
+    return session.execute(
+        select(func.count())
+        .select_from(DbDocument)
+        .where(
             or_(
                 DbDocument.last_modified > DbDocument.last_synced,
                 DbDocument.last_synced.is_(None),
                 DbDocument.secondary_only_sync_pending.is_(True),
             )
         )
-        .count()
-    )
+    ).scalar_one()
 
 
 def construct_document_id_select_by_needs_sync_or_secondary_pending() -> CompoundSelect:
@@ -208,7 +208,7 @@ def construct_document_id_select_by_needs_sync_or_secondary_pending() -> Compoun
         DbDocument.secondary_only_sync_pending.is_(True),
         ~needs_sync_predicate,
     )
-    return needs_sync.union(deferred_only)
+    return needs_sync.union_all(deferred_only)
 
 
 def construct_document_id_select_for_connector_credential_pair(
