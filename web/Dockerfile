@@ -1,18 +1,14 @@
-# Registry prefix for the bun binary source below. Defaults to Docker Hub; CI overrides this to
-# the ECR pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid
-# Docker Hub rate limits. NOTE: this applies only to `bun_source` -- the hardened Node base
-# images come from Docker Hardened Images (dhi.io), a separate registry that is NOT served by
-# the pull-through cache and requires `docker login dhi.io`.
+# Registry prefix for the bun binary source below. Defaults to Docker Hub; CI overrides it to
+# the ECR pull-through cache to dodge rate limits. Applies only to `bun_source` -- the DHI Node
+# bases come from dhi.io, a separate registry not served by the cache (see the FROM lines below).
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# bun binary source. Pinned via the registry prefix in its own stage because buildx
-# rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
-# Use the glibc (Debian) build so the binary runs on the glibc-based DHI node images below.
+# bun binary source, in its own stage because buildx only expands the registry ARG in a FROM,
+# not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc DHI node images.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
 
-# Step 1. Install dependencies + rebuild the source code only when needed.
-# The DHI "-dev" variant runs as root and ships a shell, apt, npm/npx, and git for the build.
-# TODO(pin): pin by digest once resolvable -- `docker login dhi.io` then
+# Build stage. The DHI "-dev" variant runs as root and ships a shell, apt, and npm/npx.
+# TODO(pin): pin by digest -- `docker login dhi.io` then
 # `docker buildx imagetools inspect dhi.io/node:24-debian13-dev`.
 FROM dhi.io/node:24-debian13-dev AS builder
 COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
@@ -102,10 +98,9 @@ RUN --mount=type=secret,id=sentry_auth_token \
     fi && \
     NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
-# Step 2. Production image, copy all the files and run next.
-# The DHI runtime variant is near-distroless: no shell, no package manager, and it already
-# runs as the non-root `node` user (uid 1000) with WORKDIR /app and ENTRYPOINT ["node"].
-# TODO(pin): pin by digest once resolvable -- `docker login dhi.io` then
+# Runtime stage. The DHI runtime variant is near-distroless: no shell or package manager, runs
+# as the non-root `node` user (uid 1000), WORKDIR /app and ENTRYPOINT ["node"] pre-set.
+# TODO(pin): pin by digest -- `docker login dhi.io` then
 # `docker buildx imagetools inspect dhi.io/node:24-debian13`.
 FROM dhi.io/node:24-debian13 AS runner
 
@@ -124,11 +119,7 @@ WORKDIR /app
 # Disable automatic telemetry collection
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# The DHI runtime image already runs as the non-root `node` user (uid 1000); there is no
-# global node_modules to remove and no shell to run a cleanup step, so both are dropped.
-
-# The `/app` directory is root-owned, so build artifacts are re-owned to `node` on copy.
-# Add back in if we add anything to `public`
+# `/app` is root-owned, so re-own build artifacts to `node` on copy.
 COPY --from=builder --chown=node:node /app/public ./public
 
 # Automatically leverage output traces to reduce image size
@@ -201,5 +192,5 @@ ENV ONYX_VERSION=${ONYX_VERSION}
 # name only — breaking loopback healthchecks. Force 0.0.0.0 instead.
 ENV HOSTNAME="0.0.0.0"
 
-# The DHI runtime image sets ENTRYPOINT ["node"], so the command is just the script path.
+# DHI presets ENTRYPOINT ["node"], so CMD is just the script path.
 CMD ["server.js"]
