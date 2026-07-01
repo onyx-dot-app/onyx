@@ -8,7 +8,7 @@ import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { AuthType } from "@/lib/constants";
 import { AuthLayouts } from "@opal/layouts";
-import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
+import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import SignInButton from "@/sections/auth/SignInButton";
 
@@ -37,6 +37,17 @@ export default function JoinPage() {
   const { logoUrl } = useSettings();
 
   useEffect(() => {
+    const error = searchParams.get("error");
+    if (error) {
+      toast.error(
+        error === "Anonymous"
+          ? "Your team does not have anonymous access enabled."
+          : "An error occurred."
+      );
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (user === undefined) return;
 
     if (user && user.is_active && !user.is_anonymous_user) {
@@ -63,10 +74,6 @@ export default function JoinPage() {
       description="Sign in to accept your team invitation."
       logoSrc={logoUrl}
     >
-      <AuthErrorDisplay
-        searchParams={Object.fromEntries(searchParams.entries())}
-      />
-
       {isCloud && authUrl && (
         <>
           <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />

@@ -1,12 +1,16 @@
 "use client";
-import { redirect } from "next/navigation";
+
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "@/hooks/useToast";
 
 export default function AnonymousPage({
   anonymousPath,
 }: {
   anonymousPath: string;
 }) {
+  const router = useRouter();
+
   const loginAsAnonymousUser = async () => {
     try {
       const response = await fetch(
@@ -23,14 +27,12 @@ export default function AnonymousPage({
       );
 
       if (!response.ok) {
-        console.error("Failed to login as anonymous user", response);
         throw new Error("Failed to login as anonymous user");
       }
-      // Redirect to the chat page and force a refresh
       window.location.href = "/app";
-    } catch (error) {
-      console.error("Error logging in as anonymous user:", error);
-      redirect("/auth/signup?error=Anonymous");
+    } catch {
+      toast.error("Your team does not have anonymous access enabled.");
+      router.replace("/auth/signup");
     }
   };
 

@@ -7,7 +7,7 @@ import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { AuthType } from "@/lib/constants";
 import { AuthLayouts } from "@opal/layouts";
-import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
+import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
@@ -21,6 +21,17 @@ export default function SignupPage() {
   const { authTypeMetadata } = useAuthTypeMetadata();
   const { logoUrl, appName } = useSettings();
   const isSignupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
+
+  useEffect(() => {
+    const error = searchParams.get("error");
+    if (error) {
+      toast.error(
+        error === "Anonymous"
+          ? "Your team does not have anonymous access enabled."
+          : "An error occurred."
+      );
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (user === undefined) return;
@@ -66,9 +77,6 @@ export default function SignupPage() {
       bottomPrompt={bottomPrompt}
       logoSrc={logoUrl}
     >
-      <AuthErrorDisplay
-        searchParams={Object.fromEntries(searchParams.entries())}
-      />
       <EmailPasswordForm
         label="create"
         shouldVerify={authTypeMetadata.requiresVerification}
