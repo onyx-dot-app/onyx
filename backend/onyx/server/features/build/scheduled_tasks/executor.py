@@ -76,6 +76,22 @@ SUMMARY_MAX_CHARS = 120
 PROVISIONING_WAIT_SECONDS = 120
 
 
+def _clip_summary(text: str) -> str:
+    """Clip to ~SUMMARY_MAX_CHARS at a word boundary, with an ellipsis.
+
+    Only backtracks to the last space when it sits past the halfway point,
+    so a long unbroken token (e.g. a URL) degrades to a mid-token cut
+    instead of discarding most of the snippet.
+    """
+    if len(text) <= SUMMARY_MAX_CHARS:
+        return text
+    clipped = text[:SUMMARY_MAX_CHARS]
+    last_space = clipped.rfind(" ")
+    if last_space > SUMMARY_MAX_CHARS // 2:
+        clipped = clipped[:last_space]
+    return clipped.rstrip() + "…"
+
+
 def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
     """Build a ~120-char summary from accumulated agent message text.
 
@@ -85,8 +101,8 @@ def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
     if state.message_chunks:
         full = "".join(state.message_chunks).strip()
         if full:
-            return full[:SUMMARY_MAX_CHARS]
-    return fallback[:SUMMARY_MAX_CHARS] if fallback else ""
+            return _clip_summary(full)
+    return _clip_summary(fallback) if fallback else ""
 
 
 def _summary_from_session_messages(session_id: UUID, db_session: Any) -> str:
@@ -108,7 +124,7 @@ def _summary_from_session_messages(session_id: UUID, db_session: Any) -> str:
         if isinstance(content, dict):
             text = content.get("text") or ""
             if isinstance(text, str) and text.strip():
-                return text.strip()[:SUMMARY_MAX_CHARS]
+                return _clip_summary(text.strip())
     return ""
 
 
