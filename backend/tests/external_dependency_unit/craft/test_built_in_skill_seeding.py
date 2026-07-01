@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import fetch_skill_for_user
+from onyx.db.skill import list_skills_for_sandbox_injection
 from onyx.db.skill import list_skills_for_user
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.mutation_helpers import ensure_custom_skill
@@ -107,6 +108,28 @@ class TestAvailabilityGate:
             if definition.is_available(db_session)
         }
         assert available_built_ins <= visible_built_ins
+
+    def test_browser_built_in_gated_on_enable_browser(
+        self,
+        db_session: Session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _seed_canonical(db_session)
+
+        monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", False)
+        off = {
+            s.built_in_skill_id
+            for s in list_skills_for_sandbox_injection(test_user, db_session)
+        }
+        assert "browser" not in off
+
+        monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", True)
+        on = {
+            s.built_in_skill_id
+            for s in list_skills_for_sandbox_injection(test_user, db_session)
+        }
+        assert "browser" in on
 
     def test_unavailable_built_in_cannot_be_fetched_by_id(
         self,
