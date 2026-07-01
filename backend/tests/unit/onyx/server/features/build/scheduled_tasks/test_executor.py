@@ -14,7 +14,8 @@ def test_clip_summary_exactly_max_passthrough() -> None:
 def test_clip_summary_clips_at_word_boundary_with_ellipsis() -> None:
     text = ("word " * 40).strip()
     clipped = _clip_summary(text)
-    assert clipped == "word " * 23 + "word…"
+    words_kept = SUMMARY_MAX_CHARS // len("word ") - 1
+    assert clipped == "word " * words_kept + "word…"
     assert len(clipped) <= SUMMARY_MAX_CHARS + 1
 
 
