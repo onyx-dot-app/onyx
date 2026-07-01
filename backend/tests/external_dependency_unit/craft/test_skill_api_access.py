@@ -17,7 +17,10 @@ from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill import api as skill_api
+from onyx.server.features.skill.api import create_custom_skill
+from onyx.server.features.skill.api import fetch_skill_for_current_user
+from onyx.server.features.skill.api import patch_current_user_skill
+from onyx.server.features.skill.api import replace_current_user_skill_bundle
 from onyx.server.features.skill.models import SkillPatchRequest
 from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
 from tests.external_dependency_unit.craft.db_helpers import make_group
@@ -45,7 +48,7 @@ def test_curator_without_group_scope_cannot_patch_shared_skill(
     share_skill_with_group(db_session, private_skill, group)
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_api.patch_current_user_skill(
+        patch_current_user_skill(
             private_skill.id,
             SkillPatchRequest(enabled=False),
             user=curator,
@@ -65,7 +68,7 @@ def test_fetch_direct_shared_skill_is_not_personal(
     private_skill = make_skill(db_session, is_public=False, enabled=True)
     share_skill_with_user(db_session, private_skill, user)
 
-    response = skill_api.fetch_skill_for_current_user(
+    response = fetch_skill_for_current_user(
         private_skill.id,
         user=user,
         db_session=db_session,
@@ -96,7 +99,7 @@ def test_viewer_share_cannot_patch_skill(
     )
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_api.patch_current_user_skill(
+        patch_current_user_skill(
             private_skill.id,
             SkillPatchRequest(enabled=False),
             user=shared_user,
@@ -115,10 +118,13 @@ def test_create_reserved_slug_rejects_before_reading_bundle(
 ) -> None:
     user = make_user(db_session, role=UserRole.BASIC)
     read_bundle_file = MagicMock()
-    monkeypatch.setattr(skill_api, "read_bundle_file", read_bundle_file)
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.read_bundle_file",
+        read_bundle_file,
+    )
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_api.create_custom_skill(
+        create_custom_skill(
             bundle=_upload("pptx.zip"),
             user=user,
             db_session=db_session,
@@ -148,10 +154,13 @@ def test_replace_bundle_authorizes_before_reading_bundle(
         SkillSharePermission.VIEWER,
     )
     read_bundle_file = MagicMock()
-    monkeypatch.setattr(skill_api, "read_bundle_file", read_bundle_file)
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.read_bundle_file",
+        read_bundle_file,
+    )
 
     with pytest.raises(OnyxError) as exc_info:
-        skill_api.replace_current_user_skill_bundle(
+        replace_current_user_skill_bundle(
             private_skill.id,
             bundle=_upload("replace-test.zip"),
             user=shared_user,

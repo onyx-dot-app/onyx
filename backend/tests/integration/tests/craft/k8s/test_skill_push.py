@@ -33,7 +33,7 @@ from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.server.features.skill.models import SkillResponse
 from onyx.server.features.skill.models import SkillUserShareRequest
-from onyx.skills import built_in as built_in_module
+from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
 from onyx.skills.push import push_skill_to_affected_sandboxes
@@ -679,9 +679,9 @@ class TestSkillPushLowLevel:
         pycache.mkdir()
         (pycache / "foo.pyc").write_bytes(b"\x00\x01")
 
-        monkeypatch.setattr(built_in_module, "BUILTIN_SKILLS_PATH", skills_root)
+        monkeypatch.setattr("onyx.skills.built_in.BUILTIN_SKILLS_PATH", skills_root)
         monkeypatch.setitem(
-            built_in_module.BUILT_IN_SKILLS,
+            BUILT_IN_SKILLS,
             slug,
             BuiltInSkillDefinition(built_in_skill_id=slug),
         )

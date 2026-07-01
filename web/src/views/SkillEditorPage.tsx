@@ -37,8 +37,8 @@ import {
   InputVertical,
   SettingsLayouts,
 } from "@opal/layouts";
+import { Section } from "@/layouts/general-layouts";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -345,7 +345,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
           {skill && !isLoading && !error && (
             <>
-              <GeneralLayouts.Section alignItems="stretch">
+              <Section alignItems="stretch">
                 <InputVertical withLabel="name" title="Name">
                   <InputTypeIn
                     id="name"
@@ -374,11 +374,11 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                     variant={canManageSkill ? "primary" : "disabled"}
                   />
                 </InputVertical>
-              </GeneralLayouts.Section>
+              </Section>
 
               <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-              <GeneralLayouts.Section alignItems="stretch">
+              <Section alignItems="stretch">
                 <div className="flex w-full items-start justify-between gap-2">
                   <Content
                     title="Instructions"
@@ -414,15 +414,11 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                     </div>
                   )}
                 </Card>
-              </GeneralLayouts.Section>
+              </Section>
 
               <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-              <GeneralLayouts.Section
-                gap={0.5}
-                alignItems="stretch"
-                height="auto"
-              >
+              <Section gap={0.5} alignItems="stretch" height="auto">
                 <Content
                   title="Management"
                   description="Control who can use this skill and whether Craft can currently select it."
@@ -430,7 +426,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                   variant="section"
                 />
                 <Card border="solid" rounding="lg">
-                  <GeneralLayouts.Section>
+                  <Section>
                     {sharingStatus && (
                       <InputHorizontal
                         title="Sharing"
@@ -495,16 +491,16 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                         />
                       </InputHorizontal>
                     )}
-                  </GeneralLayouts.Section>
+                  </Section>
                 </Card>
-              </GeneralLayouts.Section>
+              </Section>
 
               {canManageSkill && (
                 <>
                   <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
                   <Card border="solid" rounding="lg">
-                    <GeneralLayouts.Section>
+                    <Section>
                       <InputHorizontal
                         title="Delete this skill"
                         description="Anyone using this skill will lose access. Deletion cannot be undone."
@@ -521,7 +517,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                           Delete skill
                         </Button>
                       </InputHorizontal>
-                    </GeneralLayouts.Section>
+                    </Section>
                   </Card>
                 </>
               )}

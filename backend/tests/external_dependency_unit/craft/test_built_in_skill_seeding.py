@@ -25,7 +25,6 @@ from onyx.db.models import User
 from onyx.db.skill import fetch_skill
 from onyx.db.skill import list_skills
 from onyx.db.skill import SkillAccessPolicy
-from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
 from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
@@ -70,9 +69,9 @@ class TestAvailabilityGate:
         _seed_canonical(db_session)
 
         gated_id = "pptx"
-        original = built_in_module.BUILT_IN_SKILLS[gated_id]
+        original = BUILT_IN_SKILLS[gated_id]
         monkeypatch.setitem(
-            built_in_module.BUILT_IN_SKILLS,
+            BUILT_IN_SKILLS,
             gated_id,
             BuiltInSkillDefinition(
                 built_in_skill_id=original.built_in_skill_id,
@@ -124,7 +123,7 @@ class TestAvailabilityGate:
     ) -> None:
         _seed_canonical(db_session)
 
-        monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", False)
+        monkeypatch.setattr("onyx.skills.built_in.ENABLE_BROWSER", False)
         off = {
             s.built_in_skill_id
             for s in list_skills(
@@ -135,7 +134,7 @@ class TestAvailabilityGate:
         }
         assert "browser" not in off
 
-        monkeypatch.setattr(built_in_module, "ENABLE_BROWSER", True)
+        monkeypatch.setattr("onyx.skills.built_in.ENABLE_BROWSER", True)
         on = {
             s.built_in_skill_id
             for s in list_skills(
@@ -156,9 +155,9 @@ class TestAvailabilityGate:
 
         gated_id = "pptx"
         row = _row(db_session, gated_id)
-        original = built_in_module.BUILT_IN_SKILLS[gated_id]
+        original = BUILT_IN_SKILLS[gated_id]
         monkeypatch.setitem(
-            built_in_module.BUILT_IN_SKILLS,
+            BUILT_IN_SKILLS,
             gated_id,
             BuiltInSkillDefinition(
                 built_in_skill_id=original.built_in_skill_id,
