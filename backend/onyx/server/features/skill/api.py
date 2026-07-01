@@ -80,7 +80,7 @@ def list_skills_for_current_user(
         user=user,
         db_session=db_session,
     )
-    return skills_list_response_for_user(list(rows), user, db_session)
+    return skills_list_response_for_user(rows, user, db_session)
 
 
 @user_router.get("/{skill_id}")

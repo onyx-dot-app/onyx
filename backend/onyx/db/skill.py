@@ -19,7 +19,6 @@ multi-step admin flow (e.g. create row + replace shares) can roll back atomicall
 """
 
 from collections.abc import Mapping
-from collections.abc import Sequence
 from enum import Enum
 from uuid import UUID
 
@@ -350,7 +349,7 @@ def list_skills(
     policy: SkillAccessPolicy,
     db_session: Session,
     user: User,
-) -> Sequence[Skill]:
+) -> list[Skill]:
     stmt = _skill_select_for_access_policy(
         policy=policy,
         db_session=db_session,
