@@ -10,6 +10,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { requestEmailVerification } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
+import { redirect } from "next/navigation";
 
 export default function EmailVerificationPage() {
   const router = useRouter();
@@ -19,12 +20,7 @@ export default function EmailVerificationPage() {
   const { logoUrl } = useSettings();
 
   useEffect(() => {
-    if (user === undefined) return;
-
-    if (!user) {
-      router.replace("/auth/login" as Route);
-      return;
-    }
+    if (!user) return;
 
     if (searchParams.get("resend")) {
       router.replace("/auth/email-verification" as Route);
@@ -48,7 +44,7 @@ export default function EmailVerificationPage() {
     }
   }, [user, authTypeMetadata, router, searchParams]);
 
-  if (!user) return null;
+  if (!user) redirect("/auth/login");
 
   return (
     <AuthLayouts.Card
