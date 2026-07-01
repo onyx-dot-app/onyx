@@ -73,6 +73,24 @@ export default function Layout({ children }: LayoutProps) {
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, interactive-widget=resizes-content"
         />
 
+        {/* When running inside the Tauri desktop wrapper, tag <html> as desktop
+            so the native title-bar reservation in css/desktop-titlebar.css
+            engages before paint. Tauri injects its IPC globals via an init
+            script that runs before page scripts, so this synchronous check sees
+            them; the class then persists across client-side navigations. No-op
+            in a browser. */}
+        <Script
+          id="onyx-desktop-detector"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('__TAURI_INTERNALS__' in window || '__TAURI__' in window) {
+                document.documentElement.classList.add('onyx-desktop');
+              }
+            `,
+          }}
+        />
+
         {GTM_ENABLED && (
           <Script
             id="google-tag-manager"
