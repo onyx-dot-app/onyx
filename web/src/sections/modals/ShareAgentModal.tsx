@@ -3,24 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mutate } from "swr";
 import useShareableGroups, {
-  MinimalUserGroupSnapshot,
+  type MinimalUserGroupSnapshot,
 } from "@/hooks/useShareableGroups";
 import useShareableUsers from "@/hooks/useShareableUsers";
 import { toast } from "@/hooks/useToast";
 import { useAgent } from "@/lib/agents/hooks";
-import {
-  PersonaGroupShare,
-  PersonaSharePermission,
-  PersonaUserShare,
-  type FullAgent,
-} from "@/lib/agents/types";
+import type { FullAgent, PersonaSharePermission } from "@/lib/agents/types";
 import {
   removeSelfFromAgentShares,
   transferAgentOwnership,
   updateAgentShares,
 } from "@/lib/agents/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { MinimalUserSnapshot } from "@/lib/types";
+import type { MinimalUserSnapshot } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import Modal from "@/refresh-components/Modal";
@@ -37,17 +32,24 @@ import {
   SvgUserManage,
   SvgUsers,
 } from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
-import { Content } from "@opal/layouts";
 import { copyText, markdown } from "@opal/utils";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
+import {
+  StaticPermissionLabel,
+  TransferTrailingButton,
+} from "@/sections/modals/ShareModalPermissionControls";
 import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";
 import {
   PERMISSION_OPTIONS,
   SCOPE_OPTIONS,
 } from "@/sections/modals/shareAccessConstants";
+import {
+  applyStagedShares,
+  serializeDraftState,
+  type ShareDraftState as BaseShareDraftState,
+} from "@/sections/modals/shareDraftState";
 import {
   TransferOwnershipTarget,
   TransferOwnershipView,
@@ -55,12 +57,7 @@ import {
 
 type ShareModalView = "share" | "transfer";
 
-export interface ShareDraftState {
-  groupShares: PersonaGroupShare[];
-  isPublic: boolean;
-  publicPermission: PersonaSharePermission;
-  userShares: PersonaUserShare[];
-}
+export type ShareDraftState = BaseShareDraftState<PersonaSharePermission>;
 
 export interface ShareAgentModalProps {
   agentId?: number;
@@ -111,57 +108,6 @@ function buildInitialDraftState(
   };
 }
 
-function serializeDraftState(state: ShareDraftState): string {
-  const normalizedUsers = [...state.userShares]
-    .map((share) => ({ id: share.user.id, permission: share.permission }))
-    .sort((first, second) => first.id.localeCompare(second.id));
-  const normalizedGroups = [...state.groupShares]
-    .map((share) => ({ id: share.group_id, permission: share.permission }))
-    .sort((first, second) => first.id - second.id);
-
-  return JSON.stringify({
-    groupShares: normalizedGroups,
-    isPublic: state.isPublic,
-    publicPermission: state.publicPermission,
-    userShares: normalizedUsers,
-  });
-}
-
-function applyStagedShares(
-  draftState: ShareDraftState,
-  stagedUsers: MinimalUserSnapshot[],
-  stagedGroups: MinimalUserGroupSnapshot[],
-  stagedPermission: PersonaSharePermission
-): ShareDraftState {
-  const userShareMap = new Map(
-    draftState.userShares.map((share) => [share.user.id, share])
-  );
-  const groupShareMap = new Map(
-    draftState.groupShares.map((share) => [share.group_id, share])
-  );
-
-  stagedUsers.forEach((user) => {
-    userShareMap.set(user.id, {
-      permission: stagedPermission,
-      user,
-    });
-  });
-
-  stagedGroups.forEach((group) => {
-    groupShareMap.set(group.id, {
-      group_id: group.id,
-      group_name: group.name,
-      permission: stagedPermission,
-    });
-  });
-
-  return {
-    ...draftState,
-    groupShares: Array.from(groupShareMap.values()),
-    userShares: Array.from(userShareMap.values()),
-  };
-}
-
 async function refreshAgentShareCaches(agentId: number) {
   await Promise.all([
     mutate(SWR_KEYS.personas),
@@ -171,45 +117,6 @@ async function refreshAgentShareCaches(agentId: number) {
       (key) => typeof key === "string" && key.startsWith(SWR_KEYS.adminAgents)
     ),
   ]);
-}
-
-interface StaticPermissionLabelProps {
-  icon: IconFunctionComponent;
-  label: string;
-  muted?: boolean;
-}
-
-// Non-interactive permission display sitting in the row's permission column
-function StaticPermissionLabel({
-  icon,
-  label,
-  muted = false,
-}: StaticPermissionLabelProps) {
-  return (
-    <Content
-      color={muted ? "muted" : undefined}
-      icon={icon}
-      sizePreset="main-ui"
-      title={label}
-      variant="section"
-    />
-  );
-}
-
-interface TransferTrailingButtonProps {
-  onTransfer: () => void;
-}
-
-function TransferTrailingButton({ onTransfer }: TransferTrailingButtonProps) {
-  return (
-    <Button
-      icon={SvgArrowExchange}
-      onClick={onTransfer}
-      prominence="tertiary"
-      size="sm"
-      tooltip="Transfer Ownership"
-    />
-  );
 }
 
 export default function ShareAgentModal({
