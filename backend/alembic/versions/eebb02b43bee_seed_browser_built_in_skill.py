@@ -29,7 +29,6 @@ branch_labels = None
 depends_on = None
 
 _BROWSER_SLUG = "browser"
-_BROWSER_NAME = "browser"
 _BROWSER_DESCRIPTION = (
     "Drive a real (headless) browser for anything webfetch can't do: navigating "
     "JS-rendered pages, clicking, filling forms, multi-step flows, taking "
@@ -73,7 +72,7 @@ def upgrade() -> None:
             {
                 "id": uuid.uuid4(),
                 "slug": _BROWSER_SLUG,
-                "name": _BROWSER_NAME,
+                "name": _BROWSER_SLUG,
                 "description": _BROWSER_DESCRIPTION,
                 "built_in_skill_id": _BROWSER_SLUG,
                 "bundle_file_id": None,
