@@ -832,8 +832,6 @@ class TestOpenSearchClient:
             use_create_only=True,
         )
 
-        # FIX: the stale port write did not clobber. Fresh content and the
-        # revoked ACL both survive -- the victim stays revoked.
         after = test_client.get_document(chunk_id)
         assert after.content == "live-fresh"
         assert after.access_control_list == []

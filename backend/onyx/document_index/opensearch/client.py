@@ -1600,7 +1600,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         """Opens a point-in-time (PIT) over this index for a consistent scan.
 
         The PIT pins the index across searches so concurrent writes don't shift
-        the result set. The caller threads the returned id into
+        the result set. The caller passes the returned id into
         fetch_chunks_for_doc_ids and releases it with close_pit when done.
 
         Args:
@@ -1644,10 +1644,10 @@ class OpenSearchIndexClient(OpenSearchClient):
     ) -> tuple[list[DocumentChunkWithoutVectors], list[object] | None, str]:
         """Fetches one page of regular chunks for a batch of documents from a PIT.
 
-        Filters to regular chunks (max_chunk_size == DEFAULT_MAX_CHUNK_SIZE) so
-        large/mini chunks are never ported, sorts by (document_id, chunk_index),
-        and pages with search_after. Vectors are excluded — the port re-embeds.
-        If the PIT expired the scan re-opens it and retries once.
+        Filters to regular chunks (max_chunk_size == DEFAULT_MAX_CHUNK_SIZE),
+        sorts by (document_id, chunk_index), and pages with search_after.
+        Vectors are excluded — the port re-embeds. If the PIT expired the scan
+        re-opens it and retries once.
 
         Args:
             pit_id: The point-in-time id from open_pit.
@@ -1665,7 +1665,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         Returns:
             A tuple of (chunks, next_search_after, pit_id_in_use). next_search_after
             is None once the batch is exhausted; pit_id_in_use reflects the new PIT
-            when the scan re-opened, so the caller threads it forward.
+            when the scan re-opened, so the caller passes it forward.
         """
         if not doc_ids:
             return [], None, pit_id
@@ -1781,6 +1781,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 "bool": {
                     "filter": [
                         {"terms": {DOCUMENT_ID_FIELD_NAME: doc_ids}},
+                        # OpenSearch holds no large/mini chunks today, so this
+                        # matches everything; kept as a guard if that changes
                         {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
                     ]
                 }
