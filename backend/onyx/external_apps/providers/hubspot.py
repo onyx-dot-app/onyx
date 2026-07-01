@@ -17,7 +17,19 @@ from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.base import OrgCredentialField
+from onyx.external_apps.providers.base import parse_granted_scopes
 from onyx.external_apps.providers.base import token_response_error
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+# HubSpot's token response omits the granted scopes, so the actual per-user
+# grant (which diverges under `optional_scope`, ENG-4260) is read from the
+# token-info endpoint, which returns a `scopes` array.
+_TOKEN_INFO_URL = "https://api.hubapi.com/oauth/v1/access-tokens/{access_token}"
+
+# Bounded so a slow/hung token-info call can't pin the OAuth connect flow.
+_TOKEN_INFO_TIMEOUT_SECONDS = 15.0
 
 
 class HubspotAction(ExternalAppAction):
@@ -232,3 +244,30 @@ class HubspotProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         if response_data.get("expires_in"):
             creds["expires_in"] = response_data["expires_in"]
         return creds
+
+    def extract_granted_scopes(self, response_data: dict[str, Any]) -> list[str] | None:
+        """HubSpot omits the granted scopes from the token response, so read
+        them from the token-info endpoint. Strictly best-effort: any
+        network/HTTP/JSON error returns ``None`` (grant unknown) rather than
+        breaking connect — the caller persists the credential regardless.
+        """
+        access_token = response_data.get("access_token")
+        if not access_token:
+            return None
+        try:
+            response = requests.get(
+                _TOKEN_INFO_URL.format(access_token=access_token),
+                timeout=_TOKEN_INFO_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            body = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning(
+                "Could not fetch HubSpot granted scopes from the token-info "
+                "endpoint; recording the grant as unknown: %s",
+                exc,
+            )
+            return None
+        return parse_granted_scopes(
+            body.get("scopes") if isinstance(body, dict) else None
+        )

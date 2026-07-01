@@ -1,3 +1,4 @@
+import re
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import Mapping
@@ -53,6 +54,31 @@ def token_response_error(http_response: requests.Response, body: Any) -> str | N
     if body.get("ok") is False:
         return body.get("error") or "unknown"
     return None
+
+
+# OAuth scope tokens never contain whitespace or commas, so splitting on either
+# unambiguously handles the space-delimited (RFC 6749 §3.3), comma-delimited
+# (GitHub, Slack), and already-tokenised forms with one rule.
+_SCOPE_DELIMITERS = re.compile(r"[,\s]+")
+
+
+def parse_granted_scopes(raw: Any) -> list[str] | None:
+    """Normalise a provider's granted-scope signal into a scope list, or
+    ``None`` when the provider gave us nothing authoritative.
+
+    Accepts a delimited string (space or comma) or an already-split list.
+    Returns ``None`` — never ``[]`` — for an absent/empty signal, so callers
+    record "grant unknown" rather than fabricating an empty grant (an empty
+    grant is meaningless for OAuth: a token always carries its base scopes).
+    """
+    if isinstance(raw, str):
+        scopes = _SCOPE_DELIMITERS.split(raw.strip())
+    elif isinstance(raw, list):
+        scopes = [str(scope).strip() for scope in raw]
+    else:
+        return None
+    scopes = [scope for scope in scopes if scope]
+    return scopes or None
 
 
 class OrgCredentialField(BaseModel):
@@ -243,6 +269,19 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         credentials to persist for the user (e.g. pull the user access token out
         of Slack's nested ``authed_user``). Raise ``OnyxError`` if the expected
         token is absent."""
+
+    def extract_granted_scopes(self, response_data: dict[str, Any]) -> list[str] | None:
+        """The OAuth scopes the user actually granted, from the initial-grant
+        token response — or ``None`` when the provider gives no authoritative
+        signal (so the caller records the grant as unknown rather than empty).
+
+        Default: the RFC 6749 §3.3 space-delimited ``scope`` field, which most
+        providers echo with the *granted* (post-downscope) scopes. Override for
+        providers that nest it (Slack's ``authed_user.scope``) or omit it from
+        the token response and require a separate lookup (HubSpot). Read only at
+        connect time: a refresh cannot change what a grant authorised.
+        """
+        return parse_granted_scopes(response_data.get("scope"))
 
     # --- Refresh template method (override a hook below, not this) ---
 

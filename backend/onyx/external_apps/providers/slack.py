@@ -15,6 +15,7 @@ from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.base import OrgCredentialField
+from onyx.external_apps.providers.base import parse_granted_scopes
 
 
 class SlackAction(ExternalAppAction):
@@ -180,3 +181,9 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         if authed_user.get("expires_in"):
             creds["expires_in"] = authed_user["expires_in"]
         return creds
+
+    def extract_granted_scopes(self, response_data: dict[str, Any]) -> list[str] | None:
+        # The user token's granted scopes live under `authed_user.scope` (the
+        # top-level `scope` would be the bot's), comma-delimited.
+        authed_user = response_data.get("authed_user") or {}
+        return parse_granted_scopes(authed_user.get("scope"))

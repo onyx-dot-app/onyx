@@ -5,6 +5,7 @@ from uuid import UUID
 from uuid import uuid4
 
 from sqlalchemy import delete
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
@@ -469,6 +470,7 @@ def upsert_external_app_user_credential(
     external_app_id: int,
     user_id: UUID,
     user_credentials: dict[str, Any],
+    granted_scopes: list[str] | None = None,
     resolve_masked_values: bool = False,
 ) -> ExternalAppUserCredential:
     """Create or replace the calling user's credentials for the app, and commit.
@@ -476,6 +478,11 @@ def upsert_external_app_user_credential(
     ``OnyxError(NOT_FOUND)`` if the app doesn't exist. ``resolve_masked_values``
     is for user form submissions that may echo masked display values; internal
     OAuth writers should store provider-returned values as-is.
+
+    ``granted_scopes`` is the authoritative OAuth grant, captured at connect
+    time. ``None`` means "don't touch it": an existing grant is preserved, so
+    the refresh and credential-form paths (which don't re-derive scopes) can't
+    clobber it. Pass a list only from the connect flow.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -501,13 +508,24 @@ def upsert_external_app_user_credential(
         external_app_id=external_app_id,
         user_id=user_id,
         user_credentials=user_credentials,
+        granted_scopes=granted_scopes,
     )
+    # A hand-built ON CONFLICT DO UPDATE doesn't fire the column's `onupdate`,
+    # so bump `updated_at` explicitly to keep it truthful on reconnect.
+    update_set: dict[str, Any] = {
+        "user_credentials": stmt.excluded.user_credentials,
+        "updated_at": func.now(),
+    }
+    # Only overwrite granted_scopes when the caller supplied a fresh grant;
+    # otherwise leave the stored value untouched.
+    if granted_scopes is not None:
+        update_set["granted_scopes"] = stmt.excluded.granted_scopes
     stmt = stmt.on_conflict_do_update(
         index_elements=[
             ExternalAppUserCredential.external_app_id,
             ExternalAppUserCredential.user_id,
         ],
-        set_={"user_credentials": stmt.excluded.user_credentials},
+        set_=update_set,
     ).returning(ExternalAppUserCredential)
 
     cred = db_session.scalars(stmt).one()
