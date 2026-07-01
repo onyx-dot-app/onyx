@@ -160,9 +160,9 @@ def get_connectable_apps_for_user(
     even once connected. Org-credentialed apps (no user-required keys) are usable
     by everyone, so there's nothing to set up."""
     # Local import breaks the external_app <-> skill module cycle.
-    from onyx.db.skill import visible_skill_ids_for_user
+    from onyx.db.skill import all_skills_for_user_incl_external_apps
 
-    visible_skill_ids = visible_skill_ids_for_user(user, db_session)
+    visible_skill_ids = all_skills_for_user_incl_external_apps(user, db_session)
     user_creds_by_app = get_user_credentials_by_app_id(db_session, user.id)
     return [
         app

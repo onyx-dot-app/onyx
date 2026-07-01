@@ -80,6 +80,13 @@ class OAuthFlowSpec(BaseModel):
     # The query param the `scope` value rides under. Slack uses `user_scope`
     # to request user-acting tokens; without it Slack assumes bot scopes.
     scope_param: str
+    # Space-joined scopes requested as optional. Providers that honor them
+    # (e.g. HubSpot) drop any the account can't grant rather than failing the
+    # whole authorize page, so writes don't lock out read-only tiers. Empty
+    # means the param is omitted.
+    optional_scope: str = ""
+    # The query param `optional_scope` rides under, mirroring `scope_param`.
+    optional_scope_param: str = "optional_scope"
     extra_authorize_params: dict[str, str] = {}
 
 
