@@ -134,9 +134,13 @@ class DocmostConnector(LoadConnector, PollConnector, SlimConnector):
         end: SecondsSinceUnixEpoch | None = None,
         callback: Any | None = None,
     ) -> GenerateSlimDocumentOutput:
-        """ID-only pass used by the pruning job."""
+        """ID-only pass used by the pruning job.
+
+        Intentionally enumerates ALL documents (ignoring start/end) because
+        pruning needs the full set of IDs to detect deletions.
+        """
         slim_batch: list[SlimDocument] = []
-        for page in self._iter_pages(start=None, end=None):
+        for page in self._iter_pages(start=None, end=None, fetch_content=False):
             page_id = page.get(PAGE_ID_FIELD)
             if not page_id:
                 continue
@@ -186,15 +190,25 @@ class DocmostConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         start: SecondsSinceUnixEpoch | None,
         end: SecondsSinceUnixEpoch | None,
+        fetch_content: bool = True,
     ) -> Iterator[dict[str, Any]]:
         """Yield raw page records, filtered by space allow-list and time window.
 
         Pages are pulled via /pages/recent (recency-ordered). For a poll we stop
         once updatedAt drops below ``start``. For a full load we read to the end.
+
+        When ``fetch_content`` is False, skips the per-page /pages/info call
+        (used by slim-doc retrieval where only IDs are needed).
         """
         allowed_ids = self._allowed_space_ids()
 
         for page in self.client.paginate(_PAGES_RECENT):
+            # Apply space filter first so that pages from non-allowed spaces
+            # don't trigger the early-break on the time window boundary.
+            if allowed_ids is not None:
+                if page.get(PAGE_SPACE_ID_FIELD) not in allowed_ids:
+                    continue
+
             updated_at = self._parse_updated(page.get(PAGE_UPDATED_FIELD))
 
             # Recency-ordered: once we're older than the window start, we're done.
@@ -205,12 +219,8 @@ class DocmostConnector(LoadConnector, PollConnector, SlimConnector):
                 if updated_at.timestamp() > end:
                     continue
 
-            if allowed_ids is not None:
-                if page.get(PAGE_SPACE_ID_FIELD) not in allowed_ids:
-                    continue
-
             # /pages/recent may return a summary; fetch full content if missing.
-            if not page.get(PAGE_CONTENT_FIELD):
+            if fetch_content and not page.get(PAGE_CONTENT_FIELD):
                 page = self._fetch_page_full(page) or page
 
             yield page
@@ -274,26 +284,3 @@ class DocmostConnector(LoadConnector, PollConnector, SlimConnector):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
-
-
-if __name__ == "__main__":
-    import os
-    import time
-
-    connector = DocmostConnector(
-        space_filter=os.environ.get("DOCMOST_SPACE_FILTER", "").split(",")
-    )
-    connector.load_credentials(
-        {
-            "docmost_base_url": os.environ["DOCMOST_BASE_URL"],
-            "docmost_api_token": os.environ["DOCMOST_API_TOKEN"],
-        }
-    )
-    connector.validate_connector_settings()
-
-    all_docs = list(connector.load_from_state())
-    print(f"load_from_state -> {sum(len(b) for b in all_docs)} docs")
-
-    now = time.time()
-    recent = list(connector.poll_source(now - 7 * 24 * 3600, now))
-    print(f"poll_source(7d) -> {sum(len(b) for b in recent)} docs")
