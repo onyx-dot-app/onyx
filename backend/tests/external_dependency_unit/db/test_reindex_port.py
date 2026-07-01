@@ -545,7 +545,12 @@ def test_copy_present_chunks_to_future_orchestration() -> None:
         ],
     ) as mock_reembed:
         written, aborted = copy_present_chunks_to_future(
-            present_client, future_index, ["d1", "d2"], strategy, embedder
+            present_client,
+            future_index,
+            ["d1", "d2"],
+            strategy,
+            embedder,
+            present_tokenizer=MagicMock(),
         )
 
     assert written == 3

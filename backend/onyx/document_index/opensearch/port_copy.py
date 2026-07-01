@@ -31,6 +31,7 @@ from onyx.indexing.port_reembed import re_embed_chunks
 from onyx.indexing.port_reembed import ReembedStrategy
 from onyx.indexing.port_reembed import select_reembed_strategy
 from onyx.llm.factory import get_contextual_rag_llm_for_search_settings
+from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
@@ -76,6 +77,7 @@ def copy_present_chunks_to_future(
     doc_ids: list[str],
     strategy: ReembedStrategy,
     embedder: IndexingEmbedder,
+    present_tokenizer: BaseTokenizer,
     augmentation_ctx: AugmentationReembedContext | None = None,
     surviving_doc_ids: Callable[[], set[str]] | None = None,
     should_abort: Callable[[], bool] | None = None,
@@ -105,7 +107,11 @@ def copy_present_chunks_to_future(
     chunks_written = 0
     for page_chunks in pages:
         reembedded = re_embed_chunks(
-            page_chunks, strategy, embedder, augmentation_ctx=augmentation_ctx
+            page_chunks,
+            strategy,
+            embedder,
+            augmentation_ctx=augmentation_ctx,
+            present_tokenizer=present_tokenizer,
         )
         if not reembedded:
             continue
@@ -152,6 +158,12 @@ class PortCopier:
         self._embedder = DefaultIndexingEmbedder.from_db_search_settings(
             future_search_settings
         )
+        # The PRESENT model's tokenizer (what indexing used) — MODEL_ONLY needs it to
+        # reproduce the metadata-tail skip; the FUTURE embedder's would flip it.
+        self._present_tokenizer = get_tokenizer(
+            model_name=present_search_settings.model_name,
+            provider_type=present_search_settings.provider_type,
+        )
         self._augmentation_ctx: AugmentationReembedContext | None = None
         if self._strategy is ReembedStrategy.AUGMENTATION:
             self._augmentation_ctx = _build_augmentation_ctx(future_search_settings)
@@ -168,6 +180,7 @@ class PortCopier:
             doc_ids=doc_ids,
             strategy=self._strategy,
             embedder=self._embedder,
+            present_tokenizer=self._present_tokenizer,
             augmentation_ctx=self._augmentation_ctx,
             surviving_doc_ids=surviving_doc_ids,
             should_abort=should_abort,

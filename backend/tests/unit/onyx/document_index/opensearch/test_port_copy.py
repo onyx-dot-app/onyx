@@ -38,6 +38,7 @@ def test_copier_drops_docs_deleted_mid_batch(mock_reembed: MagicMock) -> None:
         doc_ids=["doc_a", "doc_b"],
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
+        present_tokenizer=MagicMock(),
         surviving_doc_ids=lambda: {"doc_a"},  # doc_b deleted mid-batch
     )
 
@@ -60,6 +61,7 @@ def test_copier_skips_write_when_whole_batch_deleted(mock_reembed: MagicMock) ->
         doc_ids=["doc_a"],
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
+        present_tokenizer=MagicMock(),
         surviving_doc_ids=lambda: set(),  # everything deleted
     )
 
@@ -89,6 +91,7 @@ def test_copier_aborts_write_when_cancelled_mid_batch(mock_reembed: MagicMock) -
         doc_ids=["doc_a", "doc_b"],
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
+        present_tokenizer=MagicMock(),
         should_abort=lambda: next(aborts),
     )
 
@@ -115,6 +118,7 @@ def test_copier_writes_all_without_filter(mock_reembed: MagicMock) -> None:
         doc_ids=["doc_a", "doc_b"],
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
+        present_tokenizer=MagicMock(),
     )
 
     assert written == 2

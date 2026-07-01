@@ -29,6 +29,7 @@ from onyx.document_index.chunk_content_enrichment import (
     generate_enriched_content_for_chunk_embedding,
 )
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.indexing.chunker import get_metadata_suffix_for_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder
@@ -47,6 +48,7 @@ from onyx.indexing.port_reembed import ReembedStrategy
 from onyx.indexing.port_reembed import select_reembed_strategy
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.pydantic_util import shallow_model_dump
+from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 
@@ -218,6 +220,16 @@ def test_recover_embedding_input_swaps_semantic_tail() -> None:
     assert recover_embedding_input(mismatched, _TOKENIZER) == "body without the tail"
 
 
+def test_skip_threshold_budget_matches_index_time() -> None:
+    # recover_embedding_input reconstructs the index-time metadata-tail skip using
+    # the stored max_chunk_size as the budget. That equals the chunker's index-time
+    # chunk_token_limit only because ported (regular) chunks have
+    # max_chunk_size == DEFAULT_MAX_CHUNK_SIZE == DOC_EMBEDDING_CONTEXT_SIZE. These
+    # constants live in separate modules; if they drift the skip threshold silently
+    # diverges, so pin the equality here.
+    assert DEFAULT_MAX_CHUNK_SIZE == DOC_EMBEDDING_CONTEXT_SIZE
+
+
 def test_recover_embedding_input_skips_oversized_metadata_tail() -> None:
     """Oversized metadata: indexing embedded the chunk without the semantic tail but
     still stored the keyword tail. Recovery must reproduce that skip — strip the
@@ -263,6 +275,15 @@ def test_augmentation_requires_context() -> None:
     with pytest.raises(ValueError):
         re_embed_chunks(
             [_stored_chunk("body")], ReembedStrategy.AUGMENTATION, MagicMock()
+        )
+
+
+def test_model_only_requires_present_tokenizer() -> None:
+    # The skip check must run against the PRESENT tokenizer; refusing None guards
+    # against silently falling back to the FUTURE embedder's tokenizer.
+    with pytest.raises(ValueError):
+        re_embed_chunks(
+            [_stored_chunk("body")], ReembedStrategy.MODEL_ONLY, MagicMock()
         )
 
 
@@ -490,6 +511,7 @@ def test_reembed_pairs_embeddings_by_identity_not_position() -> None:
         [c0, c1, c2],
         ReembedStrategy.MODEL_ONLY,
         cast(IndexingEmbedder, _ReversingEmbedder()),
+        present_tokenizer=_TOKENIZER,
     )
 
     # output follows stored order...
@@ -530,7 +552,9 @@ def test_re_embed_preserves_all_fields_swaps_only_vectors() -> None:
     embedder = cast(IndexingEmbedder, _FakeEmbedder())
     assert re_embed_chunks([], ReembedStrategy.MODEL_ONLY, embedder) == []
 
-    [result] = re_embed_chunks([stored], ReembedStrategy.MODEL_ONLY, embedder)
+    [result] = re_embed_chunks(
+        [stored], ReembedStrategy.MODEL_ONLY, embedder, present_tokenizer=_TOKENIZER
+    )
 
     # only the two vectors are new
     assert result.content_vector == fake_cv
@@ -570,7 +594,10 @@ def test_model_only_reembed_vector_differs_from_naive_stored_content() -> None:
 
     # MODEL_ONLY re-embed: input is the recovered (semantic-tail) text.
     [result] = re_embed_chunks(
-        [chunk], ReembedStrategy.MODEL_ONLY, cast(IndexingEmbedder, embedder)
+        [chunk],
+        ReembedStrategy.MODEL_ONLY,
+        cast(IndexingEmbedder, embedder),
+        present_tokenizer=_TOKENIZER,
     )
 
     # Naive: embed the RAW stored content (keyword tail) with the SAME embedder.

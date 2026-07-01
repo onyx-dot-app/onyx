@@ -122,21 +122,23 @@ def rebuild_semantic_tail(chunk: DocumentChunkWithoutVectors) -> str:
 
 
 def _semantic_tail_was_embedded(
-    semantic_tail: str, max_chunk_size: int, tokenizer: BaseTokenizer
+    semantic_tail: str, max_chunk_size: int, present_tokenizer: BaseTokenizer
 ) -> bool:
     """Whether indexing embedded the semantic tail. The chunker drops it from the
     embedding when it exceeds MAX_METADATA_PERCENTAGE of the chunk budget, yet still
     stores the keyword tail on `content` — so recovery must reproduce the skip or it
-    re-embeds metadata the vector never saw. `tokenizer` is the FUTURE model's, a
-    coarse proxy for the PRESENT one that the 25% threshold tolerates."""
+    re-embeds metadata the vector never saw. Both inputs must be PRESENT-side to
+    match the index-time decision: `max_chunk_size` is the stored PRESENT budget and
+    `present_tokenizer` is the PRESENT model's — the FUTURE model's can count the
+    tail differently and flip the threshold."""
     if not semantic_tail:
         return False
-    metadata_tokens = len(tokenizer.encode(semantic_tail))
+    metadata_tokens = len(present_tokenizer.encode(semantic_tail))
     return metadata_tokens < max_chunk_size * MAX_METADATA_PERCENTAGE
 
 
 def recover_embedding_input(
-    chunk: DocumentChunkWithoutVectors, tokenizer: BaseTokenizer
+    chunk: DocumentChunkWithoutVectors, present_tokenizer: BaseTokenizer
 ) -> str:
     """Rebuild the text that was actually embedded when this chunk was indexed.
 
@@ -146,6 +148,9 @@ def recover_embedding_input(
     when indexing embedded it: the chunker skips an oversized labeled tail while
     still storing the keyword one, so re-appending it would drift the vector (see
     `_semantic_tail_was_embedded`). No stored metadata -> return `content` as-is.
+
+    `present_tokenizer` must be the PRESENT model's (what indexing used); the FUTURE
+    embedder's would defeat the skip check on a model change.
 
     Residual: a second chunker branch (title + metadata nearly filling the budget)
     also drops the labeled tail but isn't reconstructible here without the PRESENT
@@ -160,7 +165,9 @@ def recover_embedding_input(
     if without_metadata == chunk.content:
         return chunk.content
     semantic_tail = rebuild_semantic_tail(chunk)
-    if not _semantic_tail_was_embedded(semantic_tail, chunk.max_chunk_size, tokenizer):
+    if not _semantic_tail_was_embedded(
+        semantic_tail, chunk.max_chunk_size, present_tokenizer
+    ):
         return without_metadata
     return without_metadata + semantic_tail
 
@@ -251,6 +258,7 @@ def re_embed_chunks(
     strategy: ReembedStrategy,
     embedder: IndexingEmbedder,
     augmentation_ctx: AugmentationReembedContext | None = None,
+    present_tokenizer: BaseTokenizer | None = None,
 ) -> list[DocumentChunk]:
     """Re-embed stored chunks under a prebuilt strategy + embedder (no DB access).
 
@@ -261,6 +269,12 @@ def re_embed_chunks(
     FUTURE-RAG-on must carry the contextual LLM). Chunks may span documents, but
     each document's chunks must ALL be in the same call — the doc-text
     reconstruction needs the document complete.
+
+    `present_tokenizer` (required for MODEL_ONLY) is the PRESENT embedding model's
+    tokenizer — the one indexing used — needed to reproduce the metadata-tail skip
+    exactly. The FUTURE embedder's tokenizer must NOT be substituted: on a model
+    change it can count the tail differently and flip the threshold, re-embedding
+    text the PRESENT index never did.
     """
     if not stored_chunks:
         return []
@@ -271,9 +285,10 @@ def re_embed_chunks(
             )
         return _augmentation_reembed(stored_chunks, embedder, augmentation_ctx)
 
-    tokenizer = embedder.embedding_model.tokenizer
+    if present_tokenizer is None:
+        raise ValueError("MODEL_ONLY re-embed requires the PRESENT tokenizer")
     embed_inputs = [
-        recover_embedding_input(chunk, tokenizer) for chunk in stored_chunks
+        recover_embedding_input(chunk, present_tokenizer) for chunk in stored_chunks
     ]
     doc_aware_chunks = [
         _stored_chunk_to_doc_aware(chunk, embed_input)
