@@ -1,18 +1,13 @@
-import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
-
-// Langfuse mark, rendered in its brand red + blue.
-const SvgLangfuse = ({ size, className, ...props }: IconProps) => (
+const SvgLangfuse = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
     viewBox="0 0 24 24"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    className={cn(className)}
     {...props}
   >
-    <title>Langfuse</title>
     <path
       d="M5.48324 8.44701C4.82491 8.10099 4.16062 7.67148 3.58579 7.26838C3.09167 7.82047 2.69322 8.4304 2.39509 9.11096C2.94799 9.50395 3.58513 9.91636 4.25949 10.2758C4.52112 9.58087 4.96384 8.97295 5.48324 8.44701Z"
       fill="#FF5D5F"
@@ -63,5 +58,4 @@ const SvgLangfuse = ({ size, className, ...props }: IconProps) => (
     />
   </svg>
 );
-
 export default SvgLangfuse;

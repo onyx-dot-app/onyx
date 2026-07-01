@@ -13,8 +13,7 @@ export interface TracingFieldSpec {
   defaultValue?: string;
 }
 
-export interface TracingProviderMeta {
-  type: TracingProviderType;
+export interface TracingProviderDetail {
   label: string;
   description: string;
   logo: IconFunctionComponent;
@@ -22,9 +21,11 @@ export interface TracingProviderMeta {
   configFields: TracingFieldSpec[];
 }
 
-export const TRACING_PROVIDERS: TracingProviderMeta[] = [
-  {
-    type: "braintrust",
+export const TRACING_PROVIDER_DETAILS: Record<
+  TracingProviderType,
+  TracingProviderDetail
+> = {
+  braintrust: {
     label: "Braintrust",
     description: "LLM evaluation and monitoring",
     logo: SvgBraintrust,
@@ -45,8 +46,7 @@ export const TRACING_PROVIDERS: TracingProviderMeta[] = [
       },
     ],
   },
-  {
-    type: "langfuse",
+  langfuse: {
     label: "Langfuse",
     description: "Cloud or self-hosted open-source observability platform",
     logo: SvgLangfuse,
@@ -71,4 +71,8 @@ export const TRACING_PROVIDERS: TracingProviderMeta[] = [
       },
     ],
   },
-];
+};
+
+export const TRACING_PROVIDER_ORDER = Object.keys(
+  TRACING_PROVIDER_DETAILS
+) as TracingProviderType[];

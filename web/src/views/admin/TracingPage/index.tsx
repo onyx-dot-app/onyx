@@ -9,8 +9,11 @@ import { PageLoader } from "@/refresh-components/PageLoader";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useTracingProviders } from "@/lib/tracing/hooks";
-import { TRACING_PROVIDERS } from "@/lib/tracing/constants";
-import type { TracingProviderView } from "@/lib/tracing/types";
+import {
+  TRACING_PROVIDER_DETAILS,
+  TRACING_PROVIDER_ORDER,
+} from "@/lib/tracing/utils";
+import type { TracingDisconnectTarget } from "@/lib/tracing/types";
 import {
   TracingSetupModal,
   type TracingSetupModalState,
@@ -21,7 +24,11 @@ const route = ADMIN_ROUTES.TRACING;
 const DESCRIPTION =
   "Connect observability platforms to monitor and evaluate LLM calls.";
 
-function Shell({ children }: { children: ReactNode }) {
+interface ShellProps {
+  children: ReactNode;
+}
+
+function Shell({ children }: ShellProps) {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -38,11 +45,8 @@ function Shell({ children }: { children: ReactNode }) {
 export default function TracingPage() {
   const [activeProvider, setActiveProvider] =
     useState<TracingSetupModalState | null>(null);
-  const [disconnectTarget, setDisconnectTarget] = useState<{
-    providerType: TracingProviderView["provider_type"];
-    label: string;
-    config: Record<string, string>;
-  } | null>(null);
+  const [disconnectTarget, setDisconnectTarget] =
+    useState<TracingDisconnectTarget | null>(null);
   const setupModal = useCreateModal();
   const disconnectModal = useCreateModal();
   const { providers, error, isLoading, mutateProviders } =
@@ -76,27 +80,28 @@ export default function TracingPage() {
     <>
       <Shell>
         <div className="flex w-full flex-col gap-2">
-          {TRACING_PROVIDERS.map((meta) => {
+          {TRACING_PROVIDER_ORDER.map((providerType) => {
+            const detail = TRACING_PROVIDER_DETAILS[providerType];
             const provider =
-              providers.find((p) => p.provider_type === meta.type) ?? null;
+              providers.find((p) => p.provider_type === providerType) ?? null;
             const connected = provider?.connected ?? false;
 
             return (
               <ProviderCard
-                key={meta.type}
-                icon={meta.logo}
-                title={meta.label}
-                description={meta.description}
+                key={providerType}
+                icon={detail.logo}
+                title={detail.label}
+                description={detail.description}
                 status={connected ? "selected" : "disconnected"}
                 selectedLabel="Connected"
                 onConnect={() => {
-                  setActiveProvider({ meta, provider });
+                  setActiveProvider({ providerType, detail, provider });
                   setupModal.toggle(true);
                 }}
                 onEdit={
                   connected
                     ? () => {
-                        setActiveProvider({ meta, provider });
+                        setActiveProvider({ providerType, detail, provider });
                         setupModal.toggle(true);
                       }
                     : undefined
@@ -105,8 +110,8 @@ export default function TracingPage() {
                   connected
                     ? () => {
                         setDisconnectTarget({
-                          providerType: meta.type,
-                          label: meta.label,
+                          providerType,
+                          label: detail.label,
                           config: provider?.config ?? {},
                         });
                         disconnectModal.toggle(true);
@@ -115,10 +120,11 @@ export default function TracingPage() {
                 }
                 disconnectModalOpen={
                   disconnectModal.isOpen &&
-                  disconnectTarget?.providerType === meta.type
+                  disconnectTarget?.providerType === providerType
                 }
                 setupModalOpen={
-                  setupModal.isOpen && activeProvider?.meta.type === meta.type
+                  setupModal.isOpen &&
+                  activeProvider?.providerType === providerType
                 }
               />
             );

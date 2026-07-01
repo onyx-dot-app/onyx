@@ -4,13 +4,17 @@ import { markdown } from "@opal/utils";
 import { InputVertical } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
-import type { TracingFieldSpec } from "@/lib/tracing/constants";
+import type { TracingFieldSpec } from "@/lib/tracing/utils";
 
 function fieldTitle(field: TracingFieldSpec): string {
   return field.optional ? `${field.label} (Optional)` : field.label;
 }
 
-export function SecretField({ field }: { field: TracingFieldSpec }) {
+interface SecretFieldProps {
+  field: TracingFieldSpec;
+}
+
+export function SecretField({ field }: SecretFieldProps) {
   return (
     <InputVertical
       title={fieldTitle(field)}
@@ -25,7 +29,11 @@ export function SecretField({ field }: { field: TracingFieldSpec }) {
   );
 }
 
-export function ConfigField({ field }: { field: TracingFieldSpec }) {
+interface ConfigFieldProps {
+  field: TracingFieldSpec;
+}
+
+export function ConfigField({ field }: ConfigFieldProps) {
   return (
     <InputVertical
       title={fieldTitle(field)}
