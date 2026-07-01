@@ -49,6 +49,8 @@ from onyx.db.permission_sync_attempt import (
 from onyx.db.permission_sync_attempt import (
     delete_external_group_permission_sync_attempts__no_commit,
 )
+from onyx.db.port_attempt import get_active_port_attempt
+from onyx.db.port_attempt import request_port_cancel
 from onyx.db.search_settings import get_all_search_settings
 from onyx.db.sync_record import cleanup_sync_records
 from onyx.db.sync_record import insert_sync_record
@@ -320,6 +322,23 @@ def try_generate_document_cc_pair_cleanup_tasks(
                 inc_deletion_blocked(tenant_id, "indexing")
                 raise TaskDependencyError(
                     "Connector deletion - Delayed (indexing in progress): "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={search_settings.id}"
+                )
+
+            # A running port could re-add docs we're deleting (create-only write).
+            # request_port_cancel asks it to stop but leaves it active, so
+            # get_active_port_attempt keeps returning it until the port acks terminal
+            # after its last write — making cleanup the last writer. A dead port is
+            # failed by the stall watchdog.
+            active_port = get_active_port_attempt(
+                db_session, cc_pair_id, search_settings.id
+            )
+            if active_port is not None:
+                request_port_cancel(db_session, active_port.id)
+                inc_deletion_blocked(tenant_id, "port")
+                raise TaskDependencyError(
+                    "Connector deletion - Delayed (waiting for in-progress port to stop): "
                     f"cc_pair={cc_pair_id} "
                     f"search_settings={search_settings.id}"
                 )
