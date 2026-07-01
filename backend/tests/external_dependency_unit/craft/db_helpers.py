@@ -131,6 +131,7 @@ def make_skill(
     is_public: bool = False,
     public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
     enabled: bool = True,
+    author_user_id: UUID | None = None,
 ) -> Skill:
     """Create a single custom ``Skill`` row.
 
@@ -147,6 +148,7 @@ def make_skill(
         bundle_sha256="0" * 64,
         public_permission=public_permission if is_public else None,
         enabled=enabled,
+        author_user_id=author_user_id,
     )
     db_session.add(skill)
     db_session.flush()

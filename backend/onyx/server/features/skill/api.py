@@ -23,6 +23,7 @@ from onyx.db.skill import count_personal_skills_for_user
 from onyx.db.skill import create_skill__no_commit
 from onyx.db.skill import delete_skill
 from onyx.db.skill import fetch_skill_by_id
+from onyx.db.skill import fetch_skill_for_edit
 from onyx.db.skill import fetch_skill_for_user
 from onyx.db.skill import fetch_skill_for_user_by_slug
 from onyx.db.skill import get_group_ids_for_skill
@@ -152,7 +153,8 @@ def _ensure_owned_personal(skill: Skill, user: User, db_session: Session) -> Non
     _ensure_custom(skill)
     if skill.author_user_id != user.id:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    if skill.is_public or get_group_ids_for_skill(skill.id, db_session):
+    has_grants = skill.id in skill_ids_with_grants([skill.id], db_session)
+    if skill.is_public or has_grants:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This skill is managed by your organization and can no longer "
@@ -249,14 +251,14 @@ def create_custom_skill(
 def patch_custom_skill(
     skill_id: UUID,
     patch_req: SkillPatchRequest,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     """Toggle ``enabled``/``is_public`` on a custom skill. Built-in
     rows are rejected — their identity and lifecycle are codified."""
     domain_patch = patch_req.to_domain()
 
-    skill = fetch_skill_by_id(skill_id, db_session)
+    skill = fetch_skill_for_edit(skill_id, user, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
@@ -285,10 +287,10 @@ def patch_custom_skill(
 def replace_custom_skill_bundle(
     skill_id: UUID,
     bundle: UploadFile = File(...),
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
-    skill = fetch_skill_by_id(skill_id, db_session)
+    skill = fetch_skill_for_edit(skill_id, user, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
@@ -323,10 +325,10 @@ def replace_custom_skill_bundle(
 def replace_custom_skill_grants(
     skill_id: UUID,
     body: GrantsReplace,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
-    skill = fetch_skill_by_id(skill_id, db_session)
+    skill = fetch_skill_for_edit(skill_id, user, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
@@ -348,10 +350,10 @@ def replace_custom_skill_grants(
 @admin_router.delete("/custom/{skill_id}")
 def delete_custom_skill(
     skill_id: UUID,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    skill = fetch_skill_by_id(skill_id, db_session)
+    skill = fetch_skill_for_edit(skill_id, user, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
@@ -404,7 +406,7 @@ def fetch_skill_for_current_user(
     return CustomSkillResponse.from_model(
         found,
         group_ids=[],
-        has_grants=bool(get_group_ids_for_skill(found.id, db_session)),
+        has_grants=found.id in skill_ids_with_grants([found.id], db_session),
     )
 
 
