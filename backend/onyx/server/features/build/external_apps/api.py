@@ -55,7 +55,7 @@ from onyx.server.features.build.external_apps.models import UpsertUserCredential
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.skills.bundle import read_bundle_file
 from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.ingest import ingest_skill_bundle
+from onyx.skills.ingest import ingested_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.encryption import mask_string
@@ -296,10 +296,11 @@ def create_custom_external_app(
         )
 
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store
-    )
-    try:
+    with ingested_skill_bundle(
+        read_bundle_file(bundle.file),
+        bundle.filename,
+        file_store,
+    ) as ingested:
         app = create_external_app(
             db_session=db_session,
             name=name.strip(),
@@ -317,9 +318,6 @@ def create_custom_external_app(
         # Push before commit so a failure rolls back the create + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     return _to_admin_response(app)
 
@@ -343,10 +341,12 @@ def replace_custom_app_bundle(
         )
 
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store, slug=app.skill.slug
-    )
-    try:
+    with ingested_skill_bundle(
+        read_bundle_file(bundle.file),
+        bundle.filename,
+        file_store,
+        slug=app.skill.slug,
+    ) as ingested:
         app, old_bundle_file_id = update_external_app(
             db_session=db_session,
             external_app_id=external_app_id,
@@ -357,9 +357,6 @@ def replace_custom_app_bundle(
         # Push before commit so a failure rolls back the swap + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     # Drop the superseded blob only after the swap committed.
     if old_bundle_file_id:

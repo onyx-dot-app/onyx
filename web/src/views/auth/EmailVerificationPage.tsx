@@ -4,13 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
-import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { requestEmailVerification, verifyEmail } from "@/lib/auth/svc";
-import RequestNewVerificationEmail from "@/sections/auth/RequestNewVerificationEmail";
 import { toast } from "@/hooks/useToast";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { redirect } from "next/navigation";
@@ -79,29 +77,6 @@ export default function EmailVerificationPage() {
   }, [token, searchParams, user, router]);
 
   if (!user && !token) redirect("/auth/login");
-
-  if (token) {
-    return (
-      <AuthLayouts.Card title="Verify Email" logoSrc={logoUrl}>
-        {!verifyError ? (
-          <Text font="main-ui-body" color="text-03">
-            Verifying your email...
-          </Text>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <Text font="main-ui-body" color="text-03">
-              {verifyError}
-            </Text>
-            {user && (
-              <RequestNewVerificationEmail email={user.email}>
-                Get new verification email
-              </RequestNewVerificationEmail>
-            )}
-          </div>
-        )}
-      </AuthLayouts.Card>
-    );
-  }
 
   return (
     <AuthLayouts.Card

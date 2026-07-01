@@ -15,7 +15,7 @@ import {
   NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED,
   TENANT_ID_COOKIE_NAME,
 } from "@/lib/constants";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCurrentUser } from "@/lib/users/hooks";
 
 const initialValues = { password: "", confirmPassword: "" };
 

@@ -589,6 +589,14 @@ class SkillSharePermission(str, PyEnum):
     VIEWER = "VIEWER"
 
 
+class SkillAccessLevel(str, PyEnum):
+    """Computed access the requesting user holds on a skill."""
+
+    OWNER = "OWNER"
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
 class PersonaAccessLevel(str, PyEnum):
     """Computed access the requesting user holds on a persona.
 

@@ -35,3 +35,8 @@ class WebContentProviderType(str, Enum):
     FIRECRAWL = "firecrawl"
     EXA = "exa"
     TAVILY = "tavily"
+
+
+class TracingProviderType(str, Enum):
+    BRAINTRUST = "braintrust"
+    LANGFUSE = "langfuse"

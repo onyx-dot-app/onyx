@@ -69,6 +69,10 @@ SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get("SANDBOX_SERVICE_ACCOUNT_NAME", "s
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
+# Gates the built-in `browser` skill. Distinct from the sandbox image's
+# build-time ENABLE_BROWSER ARG — set this runtime env to match it.
+ENABLE_BROWSER = os.environ.get("ENABLE_BROWSER", "false").lower() == "true"
+
 SANDBOX_PUSH_PRIVATE_KEY = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY", "")
 
 

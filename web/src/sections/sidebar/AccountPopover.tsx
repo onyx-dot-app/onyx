@@ -9,7 +9,7 @@ import {
   getUserDisplayName,
   getUserEmail,
   logout,
-} from "@/lib/user";
+} from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { Popover, PopoverMenu } from "@opal/components";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";

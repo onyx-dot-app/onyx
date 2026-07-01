@@ -1,4 +1,4 @@
-import { getAuthTypeMetadataSS, logoutSS } from "@/lib/userSS";
+import { getAuthTypeMetadataSS, logoutSS } from "@/lib/auth/svcSS";
 import { SERVER_SIDE_ONLY__AUTH_COOKIE_NAME } from "@/lib/constants";
 import { NextRequest } from "next/server";
 
