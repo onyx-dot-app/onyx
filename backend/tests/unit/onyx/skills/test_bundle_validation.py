@@ -18,6 +18,7 @@ from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import parse_skill_md_metadata
 from onyx.skills.bundle import read_custom_bundle_instructions
+from onyx.skills.bundle import rewrite_custom_bundle_skill_md
 from onyx.skills.bundle import slug_from_filename
 from onyx.skills.bundle import strip_skill_md_frontmatter
 from onyx.skills.bundle import validate_custom_bundle
@@ -197,6 +198,34 @@ def test_read_custom_bundle_instructions_returns_instruction_body() -> None:
 def test_read_custom_bundle_instructions_does_not_require_frontmatter() -> None:
     zip_bytes = _build_zip([("SKILL.md", b"# Instructions\n\nDo it.")])
     assert read_custom_bundle_instructions(zip_bytes) == "# Instructions\n\nDo it."
+
+
+def test_rewrite_custom_bundle_skill_md_preserves_supporting_files() -> None:
+    original = _build_zip(
+        [
+            (
+                "SKILL.md",
+                b"---\nname: Old\ndescription: Old desc\n---\n\nOld instructions.",
+            ),
+            ("scripts/run.py", b"print('hi')\n"),
+            ("docs/notes.md", b"# Notes\n"),
+        ]
+    )
+
+    rewritten = rewrite_custom_bundle_skill_md(
+        original,
+        slug="hello",
+        name="New",
+        description="New desc",
+        instructions_markdown="# New instructions\n\nDo it.",
+    )
+
+    assert validate_custom_bundle(rewritten, slug="hello") is None
+    assert parse_skill_md_metadata(rewritten) == ("New", "New desc")
+    assert read_custom_bundle_instructions(rewritten) == "# New instructions\n\nDo it."
+    with zipfile.ZipFile(io.BytesIO(rewritten)) as zf:
+        assert zf.read("scripts/run.py") == b"print('hi')\n"
+        assert zf.read("docs/notes.md") == b"# Notes\n"
 
 
 def _zip_with_patched_compression_method(payload: bytes, method: int) -> bytes:

@@ -103,6 +103,7 @@ jobs:
               - 'backend/Dockerfile'
               - 'backend/onyx/sandbox_proxy/**'
               - 'backend/onyx/server/features/build/**'
+              - 'backend/onyx/server/features/skill/**'
               - 'backend/onyx/skills/**'
               - 'backend/shared_configs/**'
               - 'deployment/helm/**'

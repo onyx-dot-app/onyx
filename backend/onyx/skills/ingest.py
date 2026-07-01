@@ -20,6 +20,20 @@ class IngestedBundle(NamedTuple):
     description: str
 
 
+def save_skill_bundle_bytes(
+    bundle_bytes: bytes,
+    *,
+    display_name: str,
+    file_store: FileStore,
+) -> str:
+    return file_store.save_file(
+        content=io.BytesIO(bundle_bytes),
+        display_name=display_name,
+        file_origin=FileOrigin.SKILL_BUNDLE,
+        file_type="application/zip",
+    )
+
+
 def ingest_skill_bundle(
     bundle_bytes: bytes,
     filename: str | None,
@@ -44,11 +58,10 @@ def ingest_skill_bundle(
     name, description = parse_skill_md_metadata(bundle_bytes)
     sha = compute_bundle_sha256(bundle_bytes)
 
-    bundle_file_id = file_store.save_file(
-        content=io.BytesIO(bundle_bytes),
+    bundle_file_id = save_skill_bundle_bytes(
+        bundle_bytes,
         display_name=f"{slug}.zip",
-        file_origin=FileOrigin.SKILL_BUNDLE,
-        file_type="application/zip",
+        file_store=file_store,
     )
     return IngestedBundle(
         slug=slug,

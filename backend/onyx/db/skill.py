@@ -15,13 +15,11 @@ immediately (skills sync via S3-backed bundles, so blob retention isn't
 needed).
 
 These helpers never commit — callers control the transaction boundary so a
-multi-step admin flow (e.g. create row + replace grants) can roll back atomically.
+multi-step admin flow (e.g. create row + replace shares) can roll back atomically.
 """
 
-import hashlib
-import struct
+from collections.abc import Mapping
 from collections.abc import Sequence
-from dataclasses import dataclass
 from enum import Enum
 from uuid import UUID
 
@@ -29,11 +27,9 @@ from sqlalchemy import and_
 from sqlalchemy import ColumnElement
 from sqlalchemy import delete
 from sqlalchemy import exists
-from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
-from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
@@ -52,14 +48,9 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.utils import is_fk_violation
 from onyx.db.utils import is_unique_violation
-from onyx.db.utils import UNSET
-from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 SKILL_SLUG_UNIQUE_CONSTRAINT = "uq_skill_slug"
 
@@ -68,12 +59,6 @@ class SkillAccessPolicy(str, Enum):
     VIEW = "view"
     EDIT = "edit"
     USE = "use"
-
-
-@dataclass(frozen=True, kw_only=True)
-class SkillPatch:
-    is_public: bool | UnsetType = UNSET
-    enabled: bool | UnsetType = UNSET
 
 
 def _is_shared_with_user(
@@ -108,30 +93,6 @@ def _is_shared_with_user_group(
     return stmt.exists()
 
 
-def _any_share_exists() -> ColumnElement[bool]:
-    user_share_exists = (
-        select(Skill__User.skill_id).where(Skill__User.skill_id == Skill.id).exists()
-    )
-    group_share_exists = (
-        select(Skill__UserGroup.skill_id)
-        .where(Skill__UserGroup.skill_id == Skill.id)
-        .exists()
-    )
-    return or_(user_share_exists, group_share_exists)
-
-
-def _personal_skill_clause(user_id: UUID) -> ColumnElement[bool]:
-    """Predicate matching *user_id*'s personal skills: custom, non-public,
-    zero direct/group shares, authored by the user."""
-    no_shares = ~_any_share_exists()
-    return and_(
-        Skill.author_user_id == user_id,
-        Skill.built_in_skill_id.is_(None),
-        Skill.public_permission.is_(None),
-        no_shares,
-    )
-
-
 def _is_group_shared_only_with_curator_scope(user: User) -> ColumnElement[bool]:
     """Curators can manage skills only when all group shares are in their scope."""
     curator_scope_group_ids = select(User__UserGroup.user_group_id).where(
@@ -163,37 +124,11 @@ def _is_group_shared_only_with_curator_scope(user: User) -> ColumnElement[bool]:
     return and_(share_in_curator_scope_exists.exists(), no_group_share_outside_scope)
 
 
-def all_skills_for_user_incl_external_apps(
-    user: User, db_session: Session
-) -> set[UUID]:
-    """Enabled skill ids the user can see, including external-app-backed rows.
-
-    Used by the external-app API to decide which apps a user may connect. This
-    deliberately does not apply the per-user external-app credential gate.
-    """
-    stmt = (
-        select(Skill.id)
-        .where(Skill.enabled.is_(True))
-        .where(
-            or_(
-                Skill.public_permission.isnot(None),
-                _is_shared_with_user(user),
-                _is_shared_with_user_group(user),
-                and_(
-                    Skill.author_user_id == user.id,
-                    Skill.built_in_skill_id.is_(None),
-                ),
-            )
-        )
-    )
-    return set(db_session.scalars(stmt))
-
-
 def _exclude_unavailable_built_in_skills(
     stmt: Select[tuple[Skill]], db_session: Session
 ) -> Select[tuple[Skill]]:
     """Hide built-ins whose codified ``is_available(db)`` returns False.
-    User reads use this; admin reads don't (admins see all rows)."""
+    User-facing reads use this; admin VIEW reads don't (admins see all rows)."""
     unavailable = [
         d.built_in_skill_id
         for d in BUILT_IN_SKILLS.values()
@@ -321,6 +256,8 @@ def _skill_select_for_access_policy(
         available_external_app_skill_ids = _external_app_skill_ids_available_to_user(
             user, db_session
         )
+        # Non-external-app skills are always available; external-app skills
+        # need credentials from the user to be available
         available_in_sandbox = or_(
             ExternalApp.id.is_(None),
             Skill.id.in_(available_external_app_skill_ids),
@@ -335,346 +272,37 @@ def _skill_select_for_access_policy(
     raise ValueError(f"Unknown skill access policy: {policy}")
 
 
-def list_skills(
-    *,
-    policy: SkillAccessPolicy,
-    db_session: Session,
-    user: User,
-) -> Sequence[Skill]:
-    stmt = _skill_select_for_access_policy(
-        policy=policy,
-        db_session=db_session,
-        user=user,
-        order_by_name=True,
-    )
-    return list(db_session.scalars(stmt))
-
-
-def fetch_skill(
-    skill_id: UUID,
-    *,
-    policy: SkillAccessPolicy,
-    db_session: Session,
-    user: User,
-) -> Skill | None:
-    stmt = _skill_select_for_access_policy(
-        policy=policy,
-        db_session=db_session,
-        user=user,
-        order_by_name=False,
-    ).where(Skill.id == skill_id)
-    return db_session.scalars(stmt).one_or_none()
-
-
-def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
-    """Skills the user sees in the skills endpoint.
-
-    External-app-backed skills are excluded unconditionally — they're
-    surfaced (and mutated) via the external-apps API only. Use
-    ``list_skills_for_sandbox_injection`` to get the wider set the
-    sandbox actually receives (which includes authenticated external
-    apps).
-
-    Disabled skills are hidden EXCEPT the user's own personal skills,
-    which stay listed (greyed out in the UI) so the owner can re-enable
-    them. Sandbox injection never includes disabled skills.
-    """
-    return list_skills(
-        policy=SkillAccessPolicy.VIEW,
-        user=user,
-        db_session=db_session,
-    )
-
-
-def fetch_skill_for_user(
-    skill_id: UUID, user: User, db_session: Session
-) -> Skill | None:
-    """Skill the user can read via the skills endpoint. Returns ``None``
-    for external-app-backed rows even when the id matches — the skills
-    endpoint must not be a mutation seam for external apps. Disabled
-    skills resolve only for their owner (own-personal rows)."""
-    return fetch_skill(
-        skill_id,
-        policy=SkillAccessPolicy.VIEW,
-        user=user,
-        db_session=db_session,
-    )
-
-
-def fetch_skill_for_user_by_slug(
-    slug: str, user: User, db_session: Session
-) -> Skill | None:
-    """Slug variant of ``fetch_skill_for_user``. Same exclusion: never
-    returns external-app-backed skills."""
-    stmt = _skill_select_for_access_policy(
-        policy=SkillAccessPolicy.VIEW,
-        db_session=db_session,
-        user=user,
-        order_by_name=False,
-    ).where(Skill.slug == slug)
-    return db_session.scalars(stmt).one_or_none()
-
-
-def fetch_skill_for_edit(
-    skill_id: UUID, user: User, db_session: Session
-) -> Skill | None:
-    return fetch_skill(
-        skill_id,
-        policy=SkillAccessPolicy.EDIT,
-        user=user,
-        db_session=db_session,
-    )
-
-
-def list_skills_for_sandbox_injection(
+def all_skills_for_user_incl_external_apps(
     user: User, db_session: Session
-) -> Sequence[Skill]:
-    """Skills delivered into *user*'s sandbox: every regular skill they
-    can see, plus the external-app-backed skills they've authenticated
-    for. Used by the sandbox skill-push path, NOT by the skills
-    endpoint (which excludes external apps entirely)."""
-    return list_skills(
-        policy=SkillAccessPolicy.USE,
-        user=user,
-        db_session=db_session,
-    )
+) -> set[UUID]:
+    """Enabled skill ids the user can see, including external-app-backed rows.
 
-
-def fetch_skill_by_id(skill_id: UUID, db_session: Session) -> Skill | None:
-    stmt = _skill_select_with_eager_load(order_by_name=False).where(
-        Skill.id == skill_id
-    )
-    return db_session.scalars(stmt).one_or_none()
-
-
-def list_skills_for_admin(db_session: Session) -> Sequence[Skill]:
-    stmt = _skill_select_with_eager_load(order_by_name=True)
-    return list(db_session.scalars(stmt))
-
-
-def create_skill__no_commit(
-    *,
-    slug: str,
-    name: str,
-    description: str,
-    bundle_file_id: str,
-    bundle_sha256: str,
-    is_public: bool,
-    public_permission: SkillSharePermission | None = None,
-    author_user_id: UUID | None,
-    db_session: Session,
-) -> Skill:
-    existing = db_session.scalars(select(Skill.id).where(Skill.slug == slug)).first()
-    if existing is not None:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"A skill with slug '{slug}' already exists.",
-        )
-
-    skill = Skill(
-        slug=slug,
-        name=name,
-        description=description,
-        bundle_file_id=bundle_file_id,
-        bundle_sha256=bundle_sha256,
-        public_permission=_public_permission_for_update(
-            current_permission=None,
-            is_public=is_public,
-            public_permission=public_permission,
-        ),
-        author_user_id=author_user_id,
-        enabled=True,
-    )
-    db_session.add(skill)
-    try:
-        db_session.flush()
-    except IntegrityError as e:
-        if is_unique_violation(e, SKILL_SLUG_UNIQUE_CONSTRAINT):
-            raise OnyxError(
-                OnyxErrorCode.DUPLICATE_RESOURCE,
-                f"A skill with slug '{slug}' already exists.",
-            ) from e
-        raise
-    return skill
-
-
-def create_built_in_skill_row__no_commit(
-    *,
-    built_in_skill_id: str,
-    name: str,
-    description: str,
-    is_public: bool,
-    enabled: bool,
-    author_user_id: UUID | None = None,
-    public_permission: SkillSharePermission | None = None,
-    db_session: Session,
-) -> Skill:
-    """Create a built-in-style ``Skill`` row: ``built_in_skill_id`` set,
-    ``slug == built_in_skill_id`` (the stable on-disk dir name), bundle fields
-    NULL (per the XOR check constraint). Used for external-app providers, whose
-    rows are created on demand rather than seeded.
-
-    Because the slug is the (globally unique) built-in id, a tenant can hold at
-    most one row per provider — a second attempt raises
-    ``OnyxError(DUPLICATE_RESOURCE)``, which is the desired "connect Slack once"
-    behaviour.
+    Used by the external-app API to decide which apps a user may connect. This
+    deliberately does not apply the per-user external-app credential gate.
     """
-    existing = db_session.scalars(
-        select(Skill.id).where(Skill.slug == built_in_skill_id)
-    ).first()
-    if existing is not None:
-        raise OnyxError(
-            OnyxErrorCode.DUPLICATE_RESOURCE,
-            f"A skill with slug '{built_in_skill_id}' already exists.",
+    stmt = (
+        select(Skill.id)
+        .where(Skill.enabled.is_(True))
+        .where(
+            or_(
+                Skill.public_permission.isnot(None),
+                _is_shared_with_user(user),
+                _is_shared_with_user_group(user),
+                and_(
+                    Skill.author_user_id == user.id,
+                    Skill.built_in_skill_id.is_(None),
+                ),
+            )
         )
-
-    skill = Skill(
-        slug=built_in_skill_id,
-        name=name,
-        description=description,
-        built_in_skill_id=built_in_skill_id,
-        bundle_file_id=None,
-        bundle_sha256=None,
-        public_permission=_public_permission_for_update(
-            current_permission=None,
-            is_public=is_public,
-            public_permission=public_permission,
-        ),
-        author_user_id=author_user_id,
-        enabled=enabled,
     )
-    db_session.add(skill)
-    try:
-        db_session.flush()
-    except IntegrityError as e:
-        if is_unique_violation(e, SKILL_SLUG_UNIQUE_CONSTRAINT):
-            raise OnyxError(
-                OnyxErrorCode.DUPLICATE_RESOURCE,
-                f"A skill with slug '{built_in_skill_id}' already exists.",
-            ) from e
-        raise
-    return skill
-
-
-def replace_skill_bundle(
-    *,
-    skill_id: UUID,
-    new_bundle_file_id: str,
-    new_bundle_sha256: str,
-    new_name: str,
-    new_description: str,
-    db_session: Session,
-) -> tuple[Skill, str]:
-    """Swap a skill's bundle blob and refresh its display metadata.
-
-    Returns ``(skill, old_bundle_file_id)`` so the caller can delete the
-    old blob from FileStore AFTER the transaction commits — never
-    inline.
-
-    Name and description come from the new bundle's SKILL.md frontmatter so
-    the DB row stays in lockstep with what's actually pushed to sandboxes.
-
-    Rejects built-in rows — they have no bundle.
-    """
-    skill = fetch_skill_by_id(skill_id, db_session)
-    if skill is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"Skill {skill_id} not found.",
-        )
-    if skill.built_in_skill_id is not None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.slug}' is a built-in and has no bundle.",
-        )
-
-    # Custom rows always have a bundle (XOR check constraint), but guard
-    # explicitly rather than assert so a corrupt row fails loud, not silent.
-    if skill.bundle_file_id is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.slug}' has no bundle to replace.",
-        )
-
-    old_bundle_file_id = skill.bundle_file_id
-    skill.bundle_file_id = new_bundle_file_id
-    skill.bundle_sha256 = new_bundle_sha256
-    skill.name = new_name
-    skill.description = new_description
-    db_session.flush()
-    return skill, old_bundle_file_id
-
-
-def patch_skill(
-    *,
-    skill_id: UUID,
-    patch: SkillPatch,
-    db_session: Session,
-) -> Skill:
-    skill = fetch_skill_by_id(skill_id, db_session)
-    if skill is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"Skill {skill_id} not found.",
-        )
-
-    if not isinstance(patch.is_public, UnsetType):
-        skill.public_permission = _public_permission_for_update(
-            current_permission=skill.public_permission,
-            is_public=patch.is_public,
-            public_permission=None,
-        )
-    if not isinstance(patch.enabled, UnsetType):
-        skill.enabled = patch.enabled
-
-    db_session.flush()
-    return skill
-
-
-def replace_skill_grants(
-    skill_id: UUID, group_ids: Sequence[int], db_session: Session
-) -> None:
-    if fetch_skill_by_id(skill_id, db_session) is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"Skill {skill_id} not found.",
-        )
-    db_session.execute(
-        delete(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill_id)
-    )
-    seen: set[int] = set()
-    for group_id in group_ids:
-        if group_id in seen:
-            continue
-        seen.add(group_id)
-        db_session.add(Skill__UserGroup(skill_id=skill_id, user_group_id=group_id))
-    try:
-        db_session.flush()
-    except IntegrityError as e:
-        if is_fk_violation(e):
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "One or more group IDs do not exist.",
-            ) from e
-        raise
-
-
-def delete_skill(skill_id: UUID, db_session: Session) -> str | None:
-    """Hard-delete a skill and return its `bundle_file_id` for caller cleanup."""
-    skill = fetch_skill_by_id(skill_id, db_session)
-    if skill is None:
-        return None
-    bundle_file_id = skill.bundle_file_id
-    db_session.delete(skill)
-    db_session.flush()
-    return bundle_file_id
+    return set(db_session.scalars(stmt))
 
 
 def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
-    """Return user IDs with an active sandbox who should have this skill.
+    """Return user IDs with a running sandbox that should contain this skill.
 
-    Does not filter by ``enabled`` — callers use this for both enable and
-    disable transitions (the pushed fileset handles the actual filtering).
+    Deliberately does not filter by ``enabled``: disable/delete flows still need
+    the previous recipients so the push pipeline can remove the skill files.
     """
     if skill.public_permission is not None:
         stmt = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
@@ -717,64 +345,294 @@ def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
     return user_ids
 
 
-def count_personal_skills_for_user(user_id: UUID, db_session: Session) -> int:
-    stmt = select(func.count(Skill.id)).where(_personal_skill_clause(user_id))
-    return db_session.scalar(stmt) or 0
-
-
-# Namespaced + user-hashed so unrelated users don't block each other and the
-# lock id can't collide with other advisory locks in the codebase.
-_PERSONAL_SKILL_LOCK_NAMESPACE = "onyx_personal_skill_lock"
-
-
-def _personal_skill_lock_id(user_id: UUID) -> int:
-    digest = hashlib.sha256(
-        f"{_PERSONAL_SKILL_LOCK_NAMESPACE}:{user_id}".encode()
-    ).digest()
-    # Full 64-bit key (not 32-bit hashtext) so distinct users don't collide;
-    # explicit big-endian so the id is stable across platforms.
-    # pg_advisory_xact_lock takes a signed 8-byte int.
-    return struct.unpack(">q", digest[:8])[0]
-
-
-def lock_personal_skills_for_user(user_id: UUID, db_session: Session) -> None:
-    """Serialize a user's concurrent personal-skill creates so the
-    count-then-insert cap check is race-free; released at transaction end."""
-    lock_id = _personal_skill_lock_id(user_id)
-    logger.debug(
-        "Acquiring personal-skill advisory lock for user %s (lock_id=%d)",
-        user_id,
-        lock_id,
-    )
-    db_session.execute(
-        text("SELECT pg_advisory_xact_lock(:lock_id)"),
-        {"lock_id": lock_id},
-    )
-    logger.debug("Acquired personal-skill advisory lock for user %s", user_id)
-
-
-def skill_ids_with_grants(skill_ids: Sequence[UUID], db_session: Session) -> set[UUID]:
-    """Subset of *skill_ids* that have at least one direct or group share row."""
-    if not skill_ids:
-        return set()
-
-    group_share_stmt = (
-        select(Skill__UserGroup.skill_id)
-        .where(Skill__UserGroup.skill_id.in_(skill_ids))
-        .distinct()
-    )
-    user_share_stmt = (
-        select(Skill__User.skill_id)
-        .where(Skill__User.skill_id.in_(skill_ids))
-        .distinct()
-    )
-    return set(db_session.scalars(group_share_stmt)) | set(
-        db_session.scalars(user_share_stmt)
-    )
-
-
-def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
-    stmt = select(Skill__UserGroup.user_group_id).where(
-        Skill__UserGroup.skill_id == skill_id
+def list_skills(
+    *,
+    policy: SkillAccessPolicy,
+    db_session: Session,
+    user: User,
+) -> Sequence[Skill]:
+    stmt = _skill_select_for_access_policy(
+        policy=policy,
+        db_session=db_session,
+        user=user,
+        order_by_name=True,
     )
     return list(db_session.scalars(stmt))
+
+
+def fetch_skill(
+    skill_id: UUID,
+    *,
+    policy: SkillAccessPolicy,
+    db_session: Session,
+    user: User,
+) -> Skill | None:
+    stmt = _skill_select_for_access_policy(
+        policy=policy,
+        db_session=db_session,
+        user=user,
+        order_by_name=False,
+    ).where(Skill.id == skill_id)
+    return db_session.scalars(stmt).one_or_none()
+
+
+def fetch_skill_by_id_for_system(skill_id: UUID, db_session: Session) -> Skill | None:
+    """Fetch a skill by id without applying user access policy.
+
+    Only use this for system flows that have already made an authorization
+    decision, such as post-commit reloads or sandbox invalidation.
+    """
+    stmt = _skill_select_with_eager_load(order_by_name=False).where(
+        Skill.id == skill_id
+    )
+    return db_session.scalars(stmt).one_or_none()
+
+
+def _add_skill_with_unique_slug__no_commit(
+    skill: Skill,
+    *,
+    slug: str,
+    db_session: Session,
+) -> Skill:
+    existing = db_session.scalars(select(Skill.id).where(Skill.slug == slug)).first()
+    if existing is not None:
+        raise OnyxError(
+            OnyxErrorCode.DUPLICATE_RESOURCE,
+            f"A skill with slug '{slug}' already exists.",
+        )
+
+    db_session.add(skill)
+    try:
+        db_session.flush()
+    except IntegrityError as e:
+        if is_unique_violation(e, SKILL_SLUG_UNIQUE_CONSTRAINT):
+            raise OnyxError(
+                OnyxErrorCode.DUPLICATE_RESOURCE,
+                f"A skill with slug '{slug}' already exists.",
+            ) from e
+        raise
+    return skill
+
+
+def create_skill__no_commit(
+    *,
+    slug: str,
+    name: str,
+    description: str,
+    bundle_file_id: str,
+    bundle_sha256: str,
+    is_public: bool,
+    public_permission: SkillSharePermission | None = None,
+    author_user_id: UUID | None,
+    db_session: Session,
+) -> Skill:
+    skill = Skill(
+        slug=slug,
+        name=name,
+        description=description,
+        bundle_file_id=bundle_file_id,
+        bundle_sha256=bundle_sha256,
+        public_permission=_public_permission_for_update(
+            current_permission=None,
+            is_public=is_public,
+            public_permission=public_permission,
+        ),
+        author_user_id=author_user_id,
+        enabled=True,
+    )
+    return _add_skill_with_unique_slug__no_commit(
+        skill,
+        slug=slug,
+        db_session=db_session,
+    )
+
+
+def create_built_in_skill_row__no_commit(
+    *,
+    built_in_skill_id: str,
+    name: str,
+    description: str,
+    is_public: bool,
+    enabled: bool,
+    author_user_id: UUID | None = None,
+    public_permission: SkillSharePermission | None = None,
+    db_session: Session,
+) -> Skill:
+    """Create a built-in-style ``Skill`` row: ``built_in_skill_id`` set,
+    ``slug == built_in_skill_id`` (the stable on-disk dir name), bundle fields
+    NULL (per the XOR check constraint). Used for external-app providers, whose
+    rows are created on demand rather than seeded.
+
+    Because the slug is the (globally unique) built-in id, a tenant can hold at
+    most one row per provider — a second attempt raises
+    ``OnyxError(DUPLICATE_RESOURCE)``, which is the desired "connect Slack once"
+    behaviour.
+    """
+    skill = Skill(
+        slug=built_in_skill_id,
+        name=name,
+        description=description,
+        built_in_skill_id=built_in_skill_id,
+        bundle_file_id=None,
+        bundle_sha256=None,
+        public_permission=_public_permission_for_update(
+            current_permission=None,
+            is_public=is_public,
+            public_permission=public_permission,
+        ),
+        author_user_id=author_user_id,
+        enabled=enabled,
+    )
+    return _add_skill_with_unique_slug__no_commit(
+        skill,
+        slug=built_in_skill_id,
+        db_session=db_session,
+    )
+
+
+def replace_skill_bundle(
+    *,
+    skill: Skill,
+    new_bundle_file_id: str,
+    new_bundle_sha256: str,
+    new_name: str,
+    new_description: str,
+    db_session: Session,
+) -> str:
+    """Swap a skill's bundle blob and refresh its display metadata.
+
+    Returns the old bundle file id so the caller can delete the old blob from
+    FileStore after the transaction commits.
+
+    Name and description come from the new bundle's SKILL.md frontmatter so
+    the DB row stays in lockstep with what's actually pushed to sandboxes.
+
+    Rejects built-in rows — they have no bundle.
+    """
+    if skill.built_in_skill_id is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Skill '{skill.slug}' is a built-in and has no bundle.",
+        )
+
+    # Custom rows always have a bundle (XOR check constraint), but guard
+    # explicitly rather than assert so a corrupt row fails loud, not silent.
+    if skill.bundle_file_id is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Skill '{skill.slug}' has no bundle to replace.",
+        )
+
+    old_bundle_file_id = skill.bundle_file_id
+    skill.bundle_file_id = new_bundle_file_id
+    skill.bundle_sha256 = new_bundle_sha256
+    skill.name = new_name
+    skill.description = new_description
+    db_session.flush()
+    return old_bundle_file_id
+
+
+def update_skill_fields(
+    *,
+    skill: Skill,
+    db_session: Session,
+    is_public: bool | None = None,
+    public_permission: SkillSharePermission | None = None,
+    enabled: bool | None = None,
+) -> Skill:
+    if is_public is not None or public_permission is not None:
+        skill.public_permission = _public_permission_for_update(
+            current_permission=skill.public_permission,
+            is_public=is_public,
+            public_permission=public_permission,
+        )
+    if enabled is not None:
+        skill.enabled = enabled
+    db_session.flush()
+    return skill
+
+
+def replace_skill_shares(
+    *,
+    skill: Skill,
+    db_session: Session,
+    user_shares: Mapping[UUID, SkillSharePermission] | None = None,
+    group_shares: Mapping[int, SkillSharePermission] | None = None,
+) -> None:
+    if user_shares is not None:
+        db_session.execute(delete(Skill__User).where(Skill__User.skill_id == skill.id))
+        for user_id, permission in user_shares.items():
+            db_session.add(
+                Skill__User(skill_id=skill.id, user_id=user_id, permission=permission)
+            )
+
+    if group_shares is not None:
+        db_session.execute(
+            delete(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill.id)
+        )
+        for group_id, permission in group_shares.items():
+            db_session.add(
+                Skill__UserGroup(
+                    skill_id=skill.id,
+                    user_group_id=group_id,
+                    permission=permission,
+                )
+            )
+
+    try:
+        db_session.flush()
+    except IntegrityError as e:
+        if is_fk_violation(e):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "One or more share targets do not exist.",
+            ) from e
+        raise
+
+
+def transfer_skill_ownership(
+    *,
+    skill: Skill,
+    new_owner_user_id: UUID,
+    db_session: Session,
+) -> None:
+    previous_owner_user_id = skill.author_user_id
+    skill.author_user_id = new_owner_user_id
+
+    db_session.execute(
+        delete(Skill__User).where(
+            Skill__User.skill_id == skill.id,
+            Skill__User.user_id == new_owner_user_id,
+        )
+    )
+
+    if (
+        previous_owner_user_id is not None
+        and previous_owner_user_id != new_owner_user_id
+    ):
+        existing_share = db_session.scalar(
+            select(Skill__User).where(
+                Skill__User.skill_id == skill.id,
+                Skill__User.user_id == previous_owner_user_id,
+            )
+        )
+        if existing_share is not None:
+            existing_share.permission = SkillSharePermission.EDITOR
+        else:
+            db_session.add(
+                Skill__User(
+                    skill_id=skill.id,
+                    user_id=previous_owner_user_id,
+                    permission=SkillSharePermission.EDITOR,
+                )
+            )
+
+    db_session.flush()
+
+
+def delete_skill(skill: Skill, db_session: Session) -> str | None:
+    """Hard-delete a skill and return its `bundle_file_id` for caller cleanup."""
+    bundle_file_id = skill.bundle_file_id
+    db_session.delete(skill)
+    db_session.flush()
+    return bundle_file_id
