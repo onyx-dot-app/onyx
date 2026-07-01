@@ -315,7 +315,6 @@ def _patch_openai_responses_transform_response() -> None:
     Patches LiteLLMResponsesTransformationHandler.transform_response to properly
     concatenate multiple reasoning summary parts with newlines in non-streaming responses.
     """
-    # Store the original method
     original_transform_response = (
         LiteLLMResponsesTransformationHandler.transform_response
     )
@@ -344,34 +343,9 @@ def _patch_openai_responses_transform_response() -> None:
         api_key: Optional[str] = None,
         json_mode: Optional[bool] = None,
     ) -> Any:
-        """
-        Patched transform_response that properly concatenates reasoning summary parts
-        with newlines.
-        """
-        from openai.types.responses.response import Response as ResponsesAPIResponse
+        from litellm.types.llms.openai import ResponsesAPIResponse
         from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 
-        # Check if raw_response has reasoning items that need concatenation
-        if isinstance(raw_response, ResponsesAPIResponse) and raw_response.output:
-            for item in raw_response.output:
-                if isinstance(item, ResponseReasoningItem) and item.summary:
-                    # Concatenate summary texts with double newlines
-                    summary_texts = []
-                    for summary_item in item.summary:
-                        text = getattr(summary_item, "text", "")
-                        if text:
-                            summary_texts.append(text)
-
-                    if len(summary_texts) > 1:
-                        # Modify the first summary item to contain all concatenated text
-                        combined_text = "\n\n".join(summary_texts)
-                        if hasattr(item.summary[0], "text"):
-                            # Create a modified copy of the response with concatenated text
-                            # Since OpenAI types are typically frozen, we need to work around this
-                            # by modifying the object after the fact or using the result
-                            pass  # The fix is applied in the result processing below
-
-        # Call the original method
         result = original_transform_response(
             self,
             model,
@@ -387,28 +361,26 @@ def _patch_openai_responses_transform_response() -> None:
             json_mode,
         )
 
-        # Post-process: If there are multiple summary items, fix the reasoning_content
+        combined_text: str | None = None
         if isinstance(raw_response, ResponsesAPIResponse) and raw_response.output:
             for item in raw_response.output:
-                if isinstance(item, ResponseReasoningItem) and item.summary:
-                    if len(item.summary) > 1:
-                        # Concatenate all summary texts with double newlines
-                        summary_texts = []
-                        for summary_item in item.summary:
-                            text = getattr(summary_item, "text", "")
-                            if text:
-                                summary_texts.append(text)
+                if not isinstance(item, ResponseReasoningItem) or not item.summary:
+                    continue
 
-                        if summary_texts:
-                            combined_text = "\n\n".join(summary_texts)
-                            # Update the reasoning_content in the result choices
-                            if hasattr(result, "choices"):
-                                for choice in result.choices:
-                                    if hasattr(choice, "message") and hasattr(
-                                        choice.message, "reasoning_content"
-                                    ):
-                                        choice.message.reasoning_content = combined_text
-                    break  # Only process the first reasoning item
+                summary_texts = [
+                    text
+                    for summary_item in item.summary
+                    if (text := getattr(summary_item, "text", ""))
+                ]
+                if len(summary_texts) > 1:
+                    combined_text = "\n\n".join(summary_texts)
+                break
+
+        if combined_text and hasattr(result, "choices"):
+            for choice in result.choices:
+                message = getattr(choice, "message", None)
+                if message is not None and getattr(message, "reasoning_content", None):
+                    message.reasoning_content = combined_text
 
         return result
 
