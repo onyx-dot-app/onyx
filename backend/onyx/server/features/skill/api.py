@@ -1,6 +1,5 @@
 import json
 from typing import Annotated
-from typing import Final
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -23,16 +22,17 @@ from onyx.db.skill import count_personal_skills_for_user
 from onyx.db.skill import create_skill__no_commit
 from onyx.db.skill import delete_skill
 from onyx.db.skill import fetch_skill_by_id
+from onyx.db.skill import fetch_skill_for_edit
 from onyx.db.skill import fetch_skill_for_user
 from onyx.db.skill import fetch_skill_for_user_by_slug
 from onyx.db.skill import get_group_ids_for_skill
-from onyx.db.skill import list_skills_for_admin
+from onyx.db.skill import list_skills
 from onyx.db.skill import list_skills_for_user
 from onyx.db.skill import lock_personal_skills_for_user
 from onyx.db.skill import patch_skill
-from onyx.db.skill import replace_skill_bundle
 from onyx.db.skill import replace_skill_grants
 from onyx.db.skill import skill_ids_with_grants
+from onyx.db.skill import SkillAccessPolicy
 from onyx.db.skill import SkillPatch
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -42,128 +42,52 @@ from onyx.server.features.skill.models import CustomSkillResponse
 from onyx.server.features.skill.models import GrantsReplace
 from onyx.server.features.skill.models import PersonalSkillPatchRequest
 from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.server.features.skill.models import SkillPreviewResponse
 from onyx.server.features.skill.models import SkillsList
+from onyx.server.features.skill.mutation_helpers import ensure_custom_skill
+from onyx.server.features.skill.mutation_helpers import ensure_owned_personal_skill
+from onyx.server.features.skill.mutation_helpers import ingested_skill_bundle
+from onyx.server.features.skill.mutation_helpers import reject_reserved_skill_slug
+from onyx.server.features.skill.mutation_helpers import (
+    replace_custom_skill_bundle_contents,
+)
+from onyx.server.features.skill.response_helpers import preview_response_for_skill
+from onyx.server.features.skill.response_helpers import split_skill_rows
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
-from onyx.skills.bundle import read_bundle_file
-from onyx.skills.bundle import slug_from_filename
 from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/skills")
 user_router = APIRouter(prefix="/skills")
 
-# Built-in slugs plus external-app provider slugs (rows created on demand by
-# slug — a user-claimed slug would block the org from connecting that app).
-_RESERVED_SKILL_SLUGS: Final[frozenset[str]] = frozenset(BUILT_IN_SKILLS) | frozenset(
-    EXTERNAL_APP_BUILT_IN_SKILL_IDS.values()
-)
-
-
-def _split_rows(
-    rows: list[Skill],
-    db_session: Session,
-    *,
-    include_grants: bool,
-) -> tuple[list[BuiltinSkillResponse], list[CustomSkillResponse]]:
-    """Partition a flat row list into built-in + custom responses.
-
-    A row with an unknown ``built_in_skill_id`` (definition was removed
-    in code without cleaning up the seeded row) is logged and dropped —
-    we don't surface a half-broken built-in to admins. ``include_grants``
-    only applies to custom skills; built-ins are not group-shareable.
-    """
-    builtins: list[BuiltinSkillResponse] = []
-    customs: list[CustomSkillResponse] = []
-
-    # User paths withhold group ids but still need grant existence so a
-    # grants-shared skill isn't reported as personal.
-    granted_skill_ids: set[UUID] = set()
-    if not include_grants:
-        custom_ids = [s.id for s in rows if s.built_in_skill_id is None]
-        granted_skill_ids = skill_ids_with_grants(custom_ids, db_session)
-
-    for skill in rows:
-        if skill.built_in_skill_id is not None:
-            definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
-            if definition is None:
-                logger.warning(
-                    "Skill row %s references unknown built-in %s; hiding from listing",
-                    skill.slug,
-                    skill.built_in_skill_id,
-                )
-                continue
-            builtins.append(
-                BuiltinSkillResponse.from_row(skill, definition, db_session)
-            )
-        elif include_grants:
-            group_ids = get_group_ids_for_skill(skill.id, db_session)
-            customs.append(CustomSkillResponse.from_model(skill, group_ids=group_ids))
-        else:
-            customs.append(
-                CustomSkillResponse.from_model(
-                    skill,
-                    group_ids=[],
-                    has_grants=skill.id in granted_skill_ids,
-                )
-            )
-
-    return builtins, customs
-
-
-def _ensure_custom(skill: Skill) -> None:
-    """Block any mutation on a built-in skill row.
-
-    Built-ins are codified, always-on, always-public; admins cannot
-    rename, disable, share, replace, or delete them. The check
-    discriminates on ``built_in_skill_id``."""
-    if skill.built_in_skill_id is not None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.slug}' is a built-in and cannot be modified.",
-        )
-
-
-def _reject_reserved_slug(bundle: UploadFile) -> None:
-    """Reject a bundle whose slug collides with a built-in or external-app slug,
-    before any blob is written. Applies to both admin and personal creation — a
-    reserved slug would block the org from connecting that app regardless of who
-    claims it."""
-    slug = slug_from_filename(bundle.filename)
-    if slug in _RESERVED_SKILL_SLUGS:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
-
-
-def _ensure_owned_personal(skill: Skill, user: User, db_session: Session) -> None:
-    """Gate user-endpoint mutations to the caller's own personal skills.
-
-    Non-authors get 404 (they shouldn't learn the skill exists); the
-    author of a promoted skill (public or grants-shared) gets 403 — it's
-    org-managed now."""
-    _ensure_custom(skill)
-    if skill.author_user_id != user.id:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    if skill.is_public or get_group_ids_for_skill(skill.id, db_session):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "This skill is managed by your organization and can no longer "
-            "be modified through personal skill endpoints.",
-        )
-
 
 @admin_router.get("")
 def list_skills_admin(
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
-    rows = list(list_skills_for_admin(db_session=db_session))
-    builtins, customs = _split_rows(rows, db_session, include_grants=True)
+    rows = list(
+        list_skills(
+            policy=SkillAccessPolicy.VIEW,
+            user=user,
+            db_session=db_session,
+        )
+    )
+    builtins, customs = split_skill_rows(rows, db_session, include_grants=True)
     return SkillsList(builtins=builtins, customs=customs)
+
+
+@admin_router.get("/{skill_id}/preview")
+def preview_skill_admin(
+    skill_id: UUID,
+    _: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> SkillPreviewResponse:
+    skill = fetch_skill_by_id(skill_id, db_session)
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return preview_response_for_skill(skill)
 
 
 @admin_router.post("/custom")
@@ -175,14 +99,12 @@ def create_custom_skill(
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     parsed_group_ids = _parse_group_ids(group_ids)
-    _reject_reserved_slug(bundle)
+    reject_reserved_skill_slug(bundle.filename)
 
-    file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store
-    )
-
-    try:
+    with ingested_skill_bundle(
+        bundle_file=bundle.file,
+        filename=bundle.filename,
+    ) as ingested:
         skill = create_skill__no_commit(
             slug=ingested.slug,
             name=ingested.name,
@@ -196,9 +118,6 @@ def create_custom_skill(
         if parsed_group_ids:
             replace_skill_grants(skill.id, parsed_group_ids, db_session=db_session)
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     push_skill_to_affected_sandboxes(skill, db_session)
     return CustomSkillResponse.from_model(skill, group_ids=parsed_group_ids)
@@ -208,29 +127,24 @@ def create_custom_skill(
 def patch_custom_skill(
     skill_id: UUID,
     patch_req: SkillPatchRequest,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
-    """Toggle ``enabled``/``is_public`` on a custom skill. Built-in
-    rows are rejected — their identity and lifecycle are codified."""
-    domain_patch = patch_req.to_domain()
-
-    skill = fetch_skill_by_id(skill_id, db_session)
+    """Toggle ``enabled``/``is_public`` on a custom skill."""
+    skill = fetch_skill_for_edit(skill_id, user, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    _ensure_custom(skill)
+    ensure_custom_skill(skill)
 
-    # SQLAlchemy identity map mutates in place; snapshot before patch.
-    old_is_public = skill.is_public
-    old_enabled = skill.enabled
+    old_visibility = (skill.public_permission, skill.enabled)
     before_affected = affected_user_ids_for_skill(skill, db_session)
 
-    updated = patch_skill(skill_id=skill_id, patch=domain_patch, db_session=db_session)
+    updated = patch_skill(
+        skill_id=skill_id, patch=patch_req.to_domain(), db_session=db_session
+    )
     db_session.commit()
 
-    visibility_changed = (
-        old_is_public != updated.is_public or old_enabled != updated.enabled
-    )
+    visibility_changed = old_visibility != (updated.public_permission, updated.enabled)
     if visibility_changed:
         after_affected = affected_user_ids_for_skill(updated, db_session)
         push_skills_for_users(before_affected | after_affected, db_session)
@@ -244,35 +158,20 @@ def patch_custom_skill(
 def replace_custom_skill_bundle(
     skill_id: UUID,
     bundle: UploadFile = File(...),
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
-    skill = fetch_skill_by_id(skill_id, db_session)
+    skill = fetch_skill_for_edit(skill_id, user, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    _ensure_custom(skill)
+    ensure_custom_skill(skill)
 
-    file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store, slug=skill.slug
+    updated = replace_custom_skill_bundle_contents(
+        skill=skill,
+        bundle_file=bundle.file,
+        filename=bundle.filename,
+        db_session=db_session,
     )
-
-    try:
-        updated, old_file_id = replace_skill_bundle(
-            skill_id=skill_id,
-            new_bundle_file_id=ingested.bundle_file_id,
-            new_bundle_sha256=ingested.bundle_sha256,
-            new_name=ingested.name,
-            new_description=ingested.description,
-            db_session=db_session,
-        )
-        db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
-
-    push_skill_to_affected_sandboxes(updated, db_session)
-    delete_bundle_blob(file_store, old_file_id)
     return CustomSkillResponse.from_model(
         updated, group_ids=get_group_ids_for_skill(skill_id, db_session)
     )
@@ -282,13 +181,13 @@ def replace_custom_skill_bundle(
 def replace_custom_skill_grants(
     skill_id: UUID,
     body: GrantsReplace,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
-    skill = fetch_skill_by_id(skill_id, db_session)
+    skill = fetch_skill_for_edit(skill_id, user, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    _ensure_custom(skill)
+    ensure_custom_skill(skill)
 
     before_affected = affected_user_ids_for_skill(skill, db_session)
 
@@ -307,13 +206,13 @@ def replace_custom_skill_grants(
 @admin_router.delete("/custom/{skill_id}")
 def delete_custom_skill(
     skill_id: UUID,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    skill = fetch_skill_by_id(skill_id, db_session)
+    skill = fetch_skill_for_edit(skill_id, user, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    _ensure_custom(skill)
+    ensure_custom_skill(skill)
 
     affected = affected_user_ids_for_skill(skill, db_session)
     old_file_id = delete_skill(skill_id, db_session)
@@ -330,7 +229,7 @@ def list_skills_for_current_user(
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
     rows = list(list_skills_for_user(user=user, db_session=db_session))
-    builtins, customs = _split_rows(rows, db_session, include_grants=False)
+    builtins, customs = split_skill_rows(rows, db_session, include_grants=False)
     return SkillsList(builtins=builtins, customs=customs)
 
 
@@ -363,8 +262,21 @@ def fetch_skill_for_current_user(
     return CustomSkillResponse.from_model(
         found,
         group_ids=[],
-        has_grants=bool(get_group_ids_for_skill(found.id, db_session)),
+        has_grants=found.id in skill_ids_with_grants([found.id], db_session),
     )
+
+
+@user_router.get("/{skill_id}/preview")
+def preview_skill_for_current_user(
+    skill_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SkillPreviewResponse:
+    found = fetch_skill_for_user(skill_id, user, db_session)
+    if found is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+
+    return preview_response_for_skill(found)
 
 
 @user_router.post("/custom")
@@ -384,15 +296,12 @@ def create_personal_skill(
             "personal skills. Delete one before creating another.",
         )
 
-    # Reject reserved slugs up front so we never write a bundle blob for one.
-    _reject_reserved_slug(bundle)
+    reject_reserved_skill_slug(bundle.filename)
 
-    file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store
-    )
-
-    try:
+    with ingested_skill_bundle(
+        bundle_file=bundle.file,
+        filename=bundle.filename,
+    ) as ingested:
         skill = create_skill__no_commit(
             slug=ingested.slug,
             name=ingested.name,
@@ -404,9 +313,6 @@ def create_personal_skill(
             db_session=db_session,
         )
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     push_skill_to_affected_sandboxes(skill, db_session)
     return CustomSkillResponse.from_model(skill, group_ids=[])
@@ -424,29 +330,14 @@ def replace_personal_skill_bundle(
     skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    _ensure_owned_personal(skill, user, db_session)
+    ensure_owned_personal_skill(skill, user, db_session)
 
-    file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store, slug=skill.slug
+    updated = replace_custom_skill_bundle_contents(
+        skill=skill,
+        bundle_file=bundle.file,
+        filename=bundle.filename,
+        db_session=db_session,
     )
-
-    try:
-        updated, old_file_id = replace_skill_bundle(
-            skill_id=skill_id,
-            new_bundle_file_id=ingested.bundle_file_id,
-            new_bundle_sha256=ingested.bundle_sha256,
-            new_name=ingested.name,
-            new_description=ingested.description,
-            db_session=db_session,
-        )
-        db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
-
-    push_skill_to_affected_sandboxes(updated, db_session)
-    delete_bundle_blob(file_store, old_file_id)
     return CustomSkillResponse.from_model(updated, group_ids=[])
 
 
@@ -462,8 +353,9 @@ def patch_personal_skill(
     skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    _ensure_owned_personal(skill, user, db_session)
+    ensure_owned_personal_skill(skill, user, db_session)
 
+    enabled_changed = skill.enabled != patch_req.enabled
     before_affected = affected_user_ids_for_skill(skill, db_session)
     updated = patch_skill(
         skill_id=skill_id,
@@ -472,8 +364,9 @@ def patch_personal_skill(
     )
     db_session.commit()
 
-    after_affected = affected_user_ids_for_skill(updated, db_session)
-    push_skills_for_users(before_affected | after_affected, db_session)
+    if enabled_changed:
+        after_affected = affected_user_ids_for_skill(updated, db_session)
+        push_skills_for_users(before_affected | after_affected, db_session)
     return CustomSkillResponse.from_model(updated, group_ids=[])
 
 
@@ -486,7 +379,7 @@ def delete_personal_skill(
     skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    _ensure_owned_personal(skill, user, db_session)
+    ensure_owned_personal_skill(skill, user, db_session)
 
     affected = affected_user_ids_for_skill(skill, db_session)
     old_file_id = delete_skill(skill_id, db_session)

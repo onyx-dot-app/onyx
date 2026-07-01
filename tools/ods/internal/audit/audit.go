@@ -32,6 +32,7 @@ const (
 const (
 	SourceOSV        = "osv-scanner"
 	SourceDependabot = "dependabot"
+	SourceImage      = "osv-scanner-image"
 )
 
 // rank gives an orderable weight to a severity; higher is more severe.

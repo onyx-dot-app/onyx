@@ -186,10 +186,15 @@ export async function startExternalAppOAuth(
   return res.json();
 }
 
+interface OAuthCallbackResponse {
+  success: boolean;
+  external_app_id: number;
+}
+
 export async function completeExternalAppOAuthCallback(
   code: string,
   state: string
-): Promise<void> {
+): Promise<OAuthCallbackResponse> {
   const res = await fetch(`${BUILD_API_BASE}/apps/oauth/callback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -197,6 +202,31 @@ export async function completeExternalAppOAuthCallback(
   });
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "OAuth exchange failed"));
+  }
+  return res.json();
+}
+
+export type ConnectAppDecision = "connected" | "declined";
+
+/**
+ * Resolve a parked `connect_app` request. The api-server is blocking the
+ * agent's tool call on this decision: "connected" allows it, "declined" hands
+ * the agent a rejection result so it can choose an alternative.
+ */
+export async function postConnectAppDecision(
+  requestId: string,
+  decision: ConnectAppDecision
+): Promise<void> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/apps/connect/${requestId}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, "Failed to resolve connection"));
   }
 }
 

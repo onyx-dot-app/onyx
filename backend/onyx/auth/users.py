@@ -153,6 +153,7 @@ from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params
+from onyx.utils.url import sanitize_next_url
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import async_return_default_schema
 from shared_configs.configs import MULTI_TENANT
@@ -2073,11 +2074,19 @@ async def current_user(
     return user
 
 
+_CURATOR_OR_ADMIN_ROLES = frozenset(
+    {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
+)
+
+
+def is_user_curator_or_admin(user: User) -> bool:
+    return user.role in _CURATOR_OR_ADMIN_ROLES
+
+
 async def current_curator_or_admin_user(
     user: User = Depends(current_user),
 ) -> User:
-    allowed_roles = {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
-    if user.role not in allowed_roles:
+    if not is_user_curator_or_admin(user):
         raise BasicAuthenticationError(
             detail="Access denied. User is not a curator or admin.",
         )
@@ -2341,7 +2350,7 @@ def get_oauth_router(
             callback_path = request.app.url_path_for(callback_route_name)
             authorize_redirect_url = f"{WEB_DOMAIN}{callback_path}"
 
-        next_url = request.query_params.get("next", "/")
+        next_url = sanitize_next_url(request.query_params.get("next"))
 
         csrf_token = generate_csrf_token()
         state_data: Dict[str, str] = {
@@ -2614,7 +2623,7 @@ def get_oauth_router(
                     ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
                 )
 
-            next_url = state_data.get("next_url", "/")
+            next_url = sanitize_next_url(state_data.get("next_url"))
             referral_source = state_data.get("referral_source", None)
             try:
                 tenant_id = fetch_ee_implementation_or_noop(

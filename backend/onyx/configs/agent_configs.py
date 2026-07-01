@@ -24,10 +24,6 @@ AGENT_ANSWER_GENERATION_BY_FAST_LLM = (
     os.environ.get("AGENT_ANSWER_GENERATION_BY_FAST_LLM", "").lower() == "true"
 )
 
-AGENT_RETRIEVAL_STATS = (
-    not os.environ.get("AGENT_RETRIEVAL_STATS") == "False"
-) or True  # default True
-
 AGENT_MAX_VERIFICATION_HITS = int(
     os.environ.get("AGENT_MAX_VERIFICATION_HITS") or AGENT_DEFAULT_MAX_VERIFIVATION_HITS
 )  # 30
@@ -37,11 +33,6 @@ AGENT_MAX_QUERY_RETRIEVAL_RESULTS = int(
 )  # 15
 
 # Reranking agent configs
-# Reranking stats - no influence on flow outside of stats collection
-AGENT_RERANKING_STATS = (
-    not os.environ.get("AGENT_RERANKING_STATS") == "True"
-) or False  # default False
-
 AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESULTS = int(
     os.environ.get("AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESULTS")
     or AGENT_DEFAULT_RERANKING_HITS

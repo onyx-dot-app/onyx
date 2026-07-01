@@ -138,6 +138,42 @@ def parse_skill_md_metadata(zip_bytes: bytes) -> tuple[str, str]:
     return name.strip(), description.strip()
 
 
+def strip_skill_md_frontmatter(content: str) -> str:
+    match = _FRONTMATTER_REGEX.match(content)
+    if match is None:
+        return content.strip()
+    return content[match.end() :].strip()
+
+
+def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile as exc:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Stored skill bundle is not a valid zip.",
+        ) from exc
+
+    with zf:
+        try:
+            raw_skill_md = zf.read(SKILL_MD_NAME)
+        except KeyError as exc:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "Stored skill bundle is missing SKILL.md.",
+            ) from exc
+
+    try:
+        skill_md = raw_skill_md.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Stored skill bundle SKILL.md must be UTF-8 encoded.",
+        ) from exc
+
+    return strip_skill_md_frontmatter(skill_md)
+
+
 def _is_symlink(info: zipfile.ZipInfo) -> bool:
     """True if the zip entry was archived as a Unix symlink.
 

@@ -14,12 +14,16 @@ import BuiltinSkillsTable from "@/views/admin/SkillsPage/BuiltinSkillsTable";
 import CustomSkillsTable from "@/views/admin/SkillsPage/CustomSkillsTable";
 import UploadSkillModal from "@/views/admin/SkillsPage/UploadSkillModal";
 import ShareSkillModal from "@/views/admin/SkillsPage/ShareSkillModal";
+import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import {
   deleteCustomSkill,
   patchCustomSkill,
   replaceCustomSkillBundle,
 } from "@/lib/skills/api";
-import type { CustomSkill } from "@/views/admin/SkillsPage/interfaces";
+import type {
+  BuiltinSkill,
+  CustomSkill,
+} from "@/views/admin/SkillsPage/interfaces";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -34,6 +38,9 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<CustomSkill | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<
+    BuiltinSkill | CustomSkill | null
+  >(null);
   const replaceBundleTarget = useRef<CustomSkill | null>(null);
   const replaceFileRef = useRef<HTMLInputElement>(null);
 
@@ -134,7 +141,10 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
                   description="Built-ins ship with the deploy."
                 />
               ) : (
-                <BuiltinSkillsTable skills={data.builtins} />
+                <BuiltinSkillsTable
+                  skills={data.builtins}
+                  onPreviewSkill={setPreviewTarget}
+                />
               )}
             </Section>
 
@@ -154,6 +164,7 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
                 onReplaceBundle={handleReplaceBundleClick}
                 onToggleEnabled={handleToggleEnabled}
                 onDeleteSkill={handleDelete}
+                onPreviewSkill={setPreviewTarget}
               />
             </Section>
           </Section>
@@ -181,6 +192,14 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
         open={shareTarget !== null}
         onClose={() => setShareTarget(null)}
         onSaved={refresh}
+      />
+
+      <SkillPreviewModal
+        open={previewTarget !== null}
+        mode="admin"
+        skillId={previewTarget?.id ?? null}
+        fallbackTitle={previewTarget?.name}
+        onClose={() => setPreviewTarget(null)}
       />
     </SettingsLayouts.Root>
   );

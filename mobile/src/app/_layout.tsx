@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useColorScheme } from "react-native";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { StatusBar } from "expo-status-bar";
@@ -49,25 +50,27 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={themeVars} className="flex-1">
-      <SafeAreaProvider>
-        <PersistQueryClientProvider
-          client={queryClient}
-          persistOptions={{
-            persister,
-            maxAge: persistMaxAge,
-            dehydrateOptions,
-          }}
-        >
-          {/* PortalHost is the last child of the themed root so the sidebar overlay renders above all screens while inheriting the vars() theme + insets. */}
-          <SidebarProvider>
-            <StatusBar style="auto" />
-            <AuthGate>
-              <Stack screenOptions={{ headerShown: false }} />
-            </AuthGate>
-            <PortalHost />
-          </SidebarProvider>
-        </PersistQueryClientProvider>
-      </SafeAreaProvider>
+      <KeyboardProvider>
+        <SafeAreaProvider>
+          <PersistQueryClientProvider
+            client={queryClient}
+            persistOptions={{
+              persister,
+              maxAge: persistMaxAge,
+              dehydrateOptions,
+            }}
+          >
+            {/* PortalHost is the last child of the themed root so the sidebar overlay renders above all screens while inheriting the vars() theme + insets. */}
+            <SidebarProvider>
+              <StatusBar style="auto" />
+              <AuthGate>
+                <Stack screenOptions={{ headerShown: false }} />
+              </AuthGate>
+              <PortalHost />
+            </SidebarProvider>
+          </PersistQueryClientProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

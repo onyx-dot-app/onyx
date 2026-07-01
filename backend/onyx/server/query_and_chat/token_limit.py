@@ -2,8 +2,9 @@ from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
-from functools import lru_cache
+from threading import RLock
 
+from cachetools import TTLCache
 from dateutil import tz
 from fastapi import Depends
 from fastapi import HTTPException
@@ -20,6 +21,7 @@ from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -105,6 +107,9 @@ def _is_rate_limited(
     If at least one rate limit is exceeded, return True
     """
     for rate_limit in rate_limits:
+        if rate_limit.token_budget is None:
+            continue
+
         tokens_used = sum(
             u_token_count
             for u_date, u_token_count in usage
@@ -118,13 +123,29 @@ def _is_rate_limited(
     return False
 
 
-@lru_cache()
+_ANY_RATE_LIMIT_EXISTS_CACHE_TTL_SECONDS = 60
+_any_rate_limit_exists_lock = RLock()
+# tenant_id -> whether that tenant has any enabled token rate limit. Keyed by tenant so
+# one tenant's answer never suppresses another's enforcement in a shared worker. The
+# short TTL bounds staleness across processes without an explicit cross-process bust.
+_any_rate_limit_exists_cache: TTLCache[str, bool] = TTLCache(
+    maxsize=10_000, ttl=_ANY_RATE_LIMIT_EXISTS_CACHE_TTL_SECONDS
+)
+
+
 def any_rate_limit_exists() -> bool:
-    """Checks if any rate limit exists in the database. Is cached, so that if no rate limits
-    are setup, we don't have any effect on average query latency."""
+    """Whether the current tenant has any enabled token rate limit. Cached per tenant so
+    the common no-limits case stays a cheap fast-path on the chat dependency without a DB
+    query per message."""
+    tenant_id = get_current_tenant_id()
+    with _any_rate_limit_exists_lock:
+        cached = _any_rate_limit_exists_cache.get(tenant_id)
+    if cached is not None:
+        return cached
+
     logger.debug("Checking for any rate limits...")
     with get_session_with_current_tenant() as db_session:
-        return (
+        exists = (
             db_session.scalar(
                 select(TokenRateLimit.id).where(
                     TokenRateLimit.enabled == True  # noqa: E712
@@ -132,3 +153,14 @@ def any_rate_limit_exists() -> bool:
             )
             is not None
         )
+
+    with _any_rate_limit_exists_lock:
+        _any_rate_limit_exists_cache[tenant_id] = exists
+    return exists
+
+
+def invalidate_any_rate_limit_exists_cache() -> None:
+    """Drop the current tenant's cached flag after a rate-limit write so the change is
+    picked up on this process without waiting for the TTL."""
+    with _any_rate_limit_exists_lock:
+        _any_rate_limit_exists_cache.pop(get_current_tenant_id(), None)

@@ -187,6 +187,13 @@ export interface ParsedSubagentStarted {
   parentSessionId: string | null;
 }
 
+export interface ParsedConnectAppRequest {
+  type: "connect_app_request";
+  requestId: string;
+  appSlug: string;
+  reason: string | null;
+}
+
 export interface ParsedUnknown {
   type: "unknown";
 }
@@ -200,5 +207,6 @@ export type ParsedPacket =
   | ParsedArtifact
   | ParsedApprovalRequested
   | ParsedSubagentStarted
+  | ParsedConnectAppRequest
   | ParsedError
   | ParsedUnknown;

@@ -1,10 +1,12 @@
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.models import ActionPolicyView
+from onyx.server.features.build.connect_app import ConnectAppDecision
 
 
 class CreateBuiltInExternalAppRequest(BaseModel):
@@ -107,6 +109,7 @@ class ExternalAppUserResponse(BaseModel):
     credential_keys: list[str]
     credential_values: dict[str, Any]
     authenticated: bool
+    supports_oauth: bool
 
 
 class OAuthStartResponse(BaseModel):
@@ -121,3 +124,8 @@ class OAuthCallbackRequest(BaseModel):
 class OAuthCallbackResponse(BaseModel):
     success: bool
     external_app_id: int
+
+
+class ConnectAppDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: ConnectAppDecision

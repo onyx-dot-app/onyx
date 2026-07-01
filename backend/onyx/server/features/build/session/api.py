@@ -443,8 +443,8 @@ def restore_session(
 
                 snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
-                skills_section, skills_files = build_user_skills_payload(
-                    user, db_session
+                skills_section, connectable_apps_section, skills_files = (
+                    build_user_skills_payload(user, db_session)
                 )
                 if snapshot:
                     try:
@@ -455,6 +455,7 @@ def restore_session(
                             nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
                             skills_section=skills_section,
+                            connectable_apps_section=connectable_apps_section,
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         db_session.commit()
@@ -472,6 +473,7 @@ def restore_session(
                         llm_config=llm_config,
                         nextjs_port=session.nextjs_port,
                         skills_section=skills_section,
+                        connectable_apps_section=connectable_apps_section,
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()

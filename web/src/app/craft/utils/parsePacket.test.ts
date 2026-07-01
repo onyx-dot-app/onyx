@@ -139,4 +139,20 @@ describe("parsePacket", () => {
         "task_id: child-session-1 (for resuming to continue this task if needed)\n\n<task_result>done</task_result>",
     });
   });
+
+  it("parses connect-app requests with their correlation id and slug", () => {
+    expect(
+      parsePacket({
+        type: "connect_app_request",
+        request_id: "req-1",
+        app_slug: "google_calendar",
+        reason: "to schedule events",
+      })
+    ).toEqual({
+      type: "connect_app_request",
+      requestId: "req-1",
+      appSlug: "google_calendar",
+      reason: "to schedule events",
+    });
+  });
 });

@@ -172,6 +172,11 @@ web/
 
 Frontend standards for the `web/` and `desktop/` projects live in `web/AGENTS.md`.
 
+Standards for the **mobile** app (React Native + Expo) live in `mobile/AGENTS.md`. Mobile differs
+from web on several points (no DOM, NativeWind instead of web Tailwind — e.g. spacing classes are
+pixel-valued, not web's rem step scale — expo-router, RN primitives), so do **not** assume the web
+rules apply when working in `mobile/`.
+
 ## Database & Migrations
 
 ### Running Migrations

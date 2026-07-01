@@ -30,7 +30,10 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
+from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
+
+logger = setup_logger()
 
 _BASE_URL = "https://api.braintrust.dev"
 _API_KEY = "braintrust_api_key"
@@ -349,15 +352,23 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
         if len(rows) >= _MAX_TABLE_ROWS:
             lines.append(f"Table truncated to the {_MAX_TABLE_ROWS} most recent rows.")
         csv_text = _rows_to_csv(_DATASET_COLUMNS, rows)
+        csv_file_id = self._stage_csv(csv_text)
+        sections: list[TextSection | TabularSection] = [
+            TextSection(text="\n".join(lines))
+        ]
+        if csv_file_id is None:
+            logger.warning(
+                "Skipping tabular section for Braintrust dataset %s because raw_file_callback is not set",
+                ref.id,
+            )
+        else:
+            sections.append(TabularSection(csv_file_id=csv_file_id, link=""))
         return Document(
             id=f"braintrust:ds:{ref.id}",
             source=DocumentSource.BRAINTRUST,
             title=f"Braintrust dataset: {ref.name}",
             semantic_identifier=f"Dataset: {ref.name}",
-            sections=[
-                TextSection(text="\n".join(lines)),
-                TabularSection(text=csv_text, link=""),
-            ],
+            sections=sections,
             metadata=_coerce_metadata(
                 {
                     "object_type": "dataset",
@@ -367,7 +378,7 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
                 }
             ),
             doc_updated_at=_parse_time(ref.created),
-            file_id=self._stage_csv(csv_text),
+            file_id=csv_file_id,
         )
 
     def _experiment_summary_lines(
@@ -441,10 +452,19 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
                     f"Table truncated to the {_MAX_TABLE_ROWS} most recent rows."
                 )
             csv_text = _rows_to_csv(columns, flat_rows)
-            sections.append(
-                TabularSection(text=csv_text, link=summary.get("experiment_url") or "")
-            )
             file_id = self._stage_csv(csv_text)
+            if file_id is None:
+                logger.warning(
+                    "Skipping tabular section for Braintrust experiment %s because raw_file_callback is not set",
+                    ref.id,
+                )
+            else:
+                sections.append(
+                    TabularSection(
+                        csv_file_id=file_id,
+                        link=summary.get("experiment_url") or "",
+                    )
+                )
         sections.insert(
             0,
             TextSection(text="\n".join(lines), link=summary.get("experiment_url")),

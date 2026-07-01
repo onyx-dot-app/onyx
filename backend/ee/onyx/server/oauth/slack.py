@@ -40,7 +40,7 @@ class SlackOAuth:
 
     TOKEN_URL = "https://slack.com/api/oauth.v2.access"
 
-    # SCOPE is per https://docs.danswer.dev/connectors/slack
+    # SCOPE is per https://docs.onyx.app/admins/connectors/official/slack/slack_indexed
     BOT_SCOPE = (
         "channels:history,"
         "channels:read,"

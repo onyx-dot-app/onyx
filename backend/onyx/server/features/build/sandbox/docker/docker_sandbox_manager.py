@@ -184,6 +184,9 @@ _PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # Registered in the opencode config only when the proxy is wired up; otherwise
 # it would no-op (no HTTP(S)_PROXY to re-tag).
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+# Surfaces the no-op `connect_app` tool; always on. Its "ask" permission is what
+# the api-server intercepts to drive the connect-app OAuth flow.
+_OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
 _MUTABLE_SANDBOX_IMAGE_TAGS = {"latest", "beta", "edge"}
 
 # In-container opencode-history archive builder: reuses the sandbox_daemon
@@ -893,12 +896,11 @@ class DockerSandboxManager(SandboxManager):
             # opencode-serve reads provider config from env at startup; must be
             # in create_kwargs before the container ever runs.
             opencode_password = secrets.token_urlsafe(32)
-            # Only register the egress-tagging plugin when the proxy is wired
-            # up; otherwise it would no-op (no HTTP(S)_PROXY to re-tag). Mirrors
-            # the K8s manager's gating.
-            session_tag_plugins = (
-                [_OPENCODE_SESSION_TAG_PLUGIN_PATH] if SANDBOX_PROXY_HOST else None
-            )
+            # connect_app is always loaded; the egress-tagging plugin only when
+            # the proxy is wired up (else it no-ops — no HTTP(S)_PROXY to re-tag).
+            plugins = [_OPENCODE_CONNECT_APP_PLUGIN_PATH]
+            if SANDBOX_PROXY_HOST:
+                plugins.append(_OPENCODE_SESSION_TAG_PLUGIN_PATH)
             # Proxy posture: Real PAT + LLM api_key never enter the sandbox. The
             # proxy reads `Sandbox.encrypted_pat` and the per-provider key from
             # Postgres, swaps the placeholder for the real bearer on the wire
@@ -915,7 +917,7 @@ class DockerSandboxManager(SandboxManager):
                     default_provider=llm_config.provider,
                     default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
-                    plugins=session_tag_plugins,
+                    plugins=plugins,
                 )
             )
             self._ensure_sandbox_image()
@@ -1103,12 +1105,14 @@ class DockerSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> str:
         """Shell-escaped AGENTS.md for ``printf '%s' '...'``."""
         agent_instructions = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
@@ -1124,6 +1128,7 @@ class DockerSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         container = self._require_container(sandbox_id)
@@ -1132,6 +1137,7 @@ class DockerSandboxManager(SandboxManager):
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
 
@@ -1473,6 +1479,7 @@ echo "Session cleanup complete"
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
@@ -1539,6 +1546,7 @@ fi
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
         )
 
         if nextjs_port is not None:
@@ -1561,6 +1569,7 @@ fi
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         """
         Rewrite AGENTS.md and the skills symlink post-restore. opencode.json is
@@ -1571,6 +1580,7 @@ fi
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
         )
         script = f"""
 set -e

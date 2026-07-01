@@ -24,6 +24,7 @@ class BuiltinSkillResponse(BaseModel):
     this response — they're row-level implementation detail."""
 
     source: Literal["builtin"] = "builtin"
+    id: UUID
     slug: str
     name: str
     description: str
@@ -38,6 +39,7 @@ class BuiltinSkillResponse(BaseModel):
         db_session: Session,
     ) -> "BuiltinSkillResponse":
         return cls(
+            id=skill.id,
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
@@ -73,15 +75,16 @@ class CustomSkillResponse(BaseModel):
         # still pass grant existence so grants-shared skills aren't marked
         # personal.
         grants_exist = bool(group_ids) if has_grants is None else has_grants
+        is_org_shared = skill.public_permission is not None
         is_personal = (
-            skill.built_in_skill_id is None and not skill.is_public and not grants_exist
+            skill.built_in_skill_id is None and not is_org_shared and not grants_exist
         )
         return cls(
             id=skill.id,
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
-            is_public=skill.is_public,
+            is_public=is_org_shared,
             enabled=skill.enabled,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
@@ -95,6 +98,47 @@ class CustomSkillResponse(BaseModel):
 class SkillsList(BaseModel):
     builtins: list[BuiltinSkillResponse]
     customs: list[CustomSkillResponse]
+
+
+class SkillPreviewResponse(BaseModel):
+    source: Literal["builtin", "custom"]
+    id: UUID
+    name: str
+    description: str
+    author_email: str | None = None
+    instructions_markdown: str
+
+    @classmethod
+    def from_builtin(
+        cls,
+        skill: Skill,
+        *,
+        instructions_markdown: str,
+    ) -> "SkillPreviewResponse":
+        return cls(
+            source="builtin",
+            id=skill.id,
+            name=skill.name,
+            description=skill.description,
+            author_email=None,
+            instructions_markdown=instructions_markdown,
+        )
+
+    @classmethod
+    def from_custom(
+        cls,
+        skill: Skill,
+        *,
+        instructions_markdown: str,
+    ) -> "SkillPreviewResponse":
+        return cls(
+            source="custom",
+            id=skill.id,
+            name=skill.name,
+            description=skill.description,
+            author_email=skill.author.email if skill.author is not None else None,
+            instructions_markdown=instructions_markdown,
+        )
 
 
 class SkillPatchRequest(BaseModel):
