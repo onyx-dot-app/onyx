@@ -243,6 +243,41 @@ runs:
 	}
 }
 
+func TestParseTagPages(t *testing.T) {
+	// Modern gh --paginate merges pages into one array.
+	single := []byte(`[{"name":"v1","commit":{"sha":"aaa"}},{"name":"v2","commit":{"sha":"bbb"}}]`)
+	tags, err := parseTagPages(single)
+	if err != nil || len(tags) != 2 {
+		t.Fatalf("single: (%d tags, %v), want 2 tags", len(tags), err)
+	}
+
+	// Older gh --paginate concatenates one array per page without a wrapper.
+	concat := []byte(`[{"name":"v1","commit":{"sha":"aaa"}}][{"name":"v2","commit":{"sha":"bbb"}}]`)
+	tags, err = parseTagPages(concat)
+	if err != nil || len(tags) != 2 {
+		t.Fatalf("concatenated: (%d tags, %v), want 2 tags", len(tags), err)
+	}
+	if tags[1].Name != "v2" || tags[1].Commit.SHA != "bbb" {
+		t.Errorf("second tag wrong: %+v", tags[1])
+	}
+
+	if tags, err := parseTagPages([]byte(`[]`)); err != nil || len(tags) != 0 {
+		t.Errorf("empty page: (%d, %v), want 0 tags", len(tags), err)
+	}
+}
+
+func TestInRangeToleratesDuplicateZeroEvents(t *testing.T) {
+	// Malformed advisory with two introduced:0 events must not violate the sort's
+	// ordering contract (panic) and should still evaluate correctly.
+	events := []map[string]string{{"introduced": "0"}, {"introduced": "0"}, {"fixed": "2.0.0"}}
+	if !inRange("1.0.0", events) {
+		t.Error("1.0.0 should be affected (< fixed 2.0.0)")
+	}
+	if inRange("2.0.0", events) {
+		t.Error("2.0.0 should be patched (== fixed)")
+	}
+}
+
 func mkTag(name, sha string) ghTag {
 	t := ghTag{Name: name}
 	t.Commit.SHA = sha

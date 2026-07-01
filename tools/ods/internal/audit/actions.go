@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -79,17 +80,25 @@ func scanActions() ([]Finding, error) {
 
 	// Query advisories once per unique action name.
 	advisories := make(map[string][]osvVuln)
-	for _, name := range uniqueActionNames(refs) {
+	names := uniqueActionNames(refs)
+	failed := 0
+	for _, name := range names {
 		vulns, err := queryActionAdvisories(client, name)
 		if err != nil {
 			// A single flaky query shouldn't sink the whole audit; the lockfile
 			// scan is the primary gate. Warn and treat the action as clean.
 			log.Warnf("OSV query failed for action %s: %v", name, err)
+			failed++
 			continue
 		}
 		if len(vulns) > 0 {
 			advisories[name] = vulns
 		}
+	}
+	// If every query failed, OSV.dev is effectively unavailable; surface that as a
+	// scan error rather than reporting a clean, no-findings result.
+	if failed > 0 && failed == len(names) {
+		return nil, fmt.Errorf("all %d OSV.dev advisory queries failed", failed)
 	}
 	if len(advisories) == 0 {
 		return nil, nil
@@ -414,9 +423,28 @@ func resolveActionTags(name string) ([]ghTag, error) {
 		}
 		return nil, err
 	}
-	var tags []ghTag
-	if err := json.Unmarshal(out, &tags); err != nil {
+	tags, err := parseTagPages(out)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse tags for %s: %w", name, err)
+	}
+	return tags, nil
+}
+
+// parseTagPages flattens the output of `gh api --paginate`. Depending on the gh
+// version it emits either a single merged JSON array or one array per page
+// (concatenated without a wrapper); decoding the stream of arrays handles both.
+func parseTagPages(data []byte) ([]ghTag, error) {
+	var tags []ghTag
+	dec := json.NewDecoder(bytes.NewReader(data))
+	for {
+		var page []ghTag
+		if err := dec.Decode(&page); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, err
+		}
+		tags = append(tags, page...)
 	}
 	return tags, nil
 }
@@ -487,6 +515,9 @@ func inRange(version string, events []map[string]string) bool {
 		}
 	}
 	sort.SliceStable(evs, func(i, j int) bool {
+		if evs[i].ver == evs[j].ver {
+			return false
+		}
 		// "introduced: 0" is the lower bound and always sorts first.
 		if evs[i].ver == "0" {
 			return true

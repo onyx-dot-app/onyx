@@ -137,6 +137,12 @@ func Run(opts Options) (*Result, error) {
 	scanDependabot := runAll || opts.Dependabot
 	scanActionsSrc := runAll || opts.Actions
 
+	// A lockfile scan (web/python) is the primary deploy gate. While one is
+	// running, a flaky Dependabot/Actions backend is downgraded to a warning;
+	// otherwise a failure of an explicitly requested backend is fatal, so the
+	// audit can't report success without having actually checked anything.
+	lockfileGate := scanWeb || scanPython
+
 	var findings []Finding
 
 	if scanWeb || scanPython {
@@ -154,10 +160,7 @@ func Run(opts Options) (*Result, error) {
 	if scanDependabot {
 		fs, err := auditDependabot()
 		if err != nil {
-			// When this is the only requested source, surface the error. Otherwise
-			// the lockfile scan is the primary gate, so warn and continue rather
-			// than fail the whole audit on an API hiccup.
-			if isOnlySource(opts, opts.Dependabot) {
+			if !lockfileGate {
 				return nil, fmt.Errorf("dependabot audit failed: %w", err)
 			}
 			log.Warnf("Dependabot audit skipped: %v", err)
@@ -169,7 +172,7 @@ func Run(opts Options) (*Result, error) {
 	if scanActionsSrc {
 		fs, err := scanActions()
 		if err != nil {
-			if isOnlySource(opts, opts.Actions) {
+			if !lockfileGate {
 				return nil, fmt.Errorf("github actions audit failed: %w", err)
 			}
 			log.Warnf("GitHub Actions audit skipped: %v", err)
@@ -209,22 +212,6 @@ func Run(opts Options) (*Result, error) {
 		return nil, err
 	}
 	return result, nil
-}
-
-// isOnlySource reports whether sel is the single explicitly requested source, so
-// a backend failure should fail the whole audit instead of being downgraded to a
-// warning. It is false during an all-sources run (no selector flags set).
-func isOnlySource(opts Options, sel bool) bool {
-	if !sel {
-		return false
-	}
-	n := 0
-	for _, s := range []bool{opts.Web, opts.Python, opts.Dependabot, opts.Actions} {
-		if s {
-			n++
-		}
-	}
-	return n == 1
 }
 
 // lockfilePaths returns the lockfiles to scan based on the selectors, skipping
