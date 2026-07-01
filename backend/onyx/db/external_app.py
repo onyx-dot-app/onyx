@@ -300,7 +300,6 @@ def create_external_app(
             author_user_id=author_user_id,
             db_session=db_session,
         )
-        # `create_skill` hardcodes enabled=True; honour the caller's intent.
         if not enabled:
             skill.enabled = False
 
