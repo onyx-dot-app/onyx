@@ -2074,11 +2074,19 @@ async def current_user(
     return user
 
 
+_CURATOR_OR_ADMIN_ROLES = frozenset(
+    {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
+)
+
+
+def is_user_curator_or_admin(user: User) -> bool:
+    return user.role in _CURATOR_OR_ADMIN_ROLES
+
+
 async def current_curator_or_admin_user(
     user: User = Depends(current_user),
 ) -> User:
-    allowed_roles = {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
-    if user.role not in allowed_roles:
+    if not is_user_curator_or_admin(user):
         raise BasicAuthenticationError(
             detail="Access denied. User is not a curator or admin.",
         )
