@@ -108,6 +108,7 @@ def _run_turn_with_events(
             session_id_arg: UUID,
             prompt: str,
             *,
+            kind: str = "prompt",  # noqa: ARG002
             should_interrupt: object,
         ) -> Iterator[object]:
             assert sandbox_id_arg == sandbox_id
@@ -376,6 +377,7 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
             session_id_arg: UUID,
             prompt: str,
             *,
+            kind: str = "prompt",  # noqa: ARG002
             should_interrupt: object,
         ) -> Iterator[object]:
             nonlocal reclaimed

@@ -20,14 +20,33 @@ export interface PickerApp {
   authenticated: boolean;
 }
 
-export type PickerEntry = PickerSkill | PickerApp;
+export interface PickerCommand {
+  kind: "command";
+  slug: string;
+  name: string;
+  description: string;
+}
+
+export const COMPACT_COMMAND: PickerCommand = {
+  kind: "command",
+  slug: "compact",
+  name: "Compact context",
+  description: "Summarize earlier context to free up space",
+};
+
+export type PickerEntry = PickerSkill | PickerApp | PickerCommand;
 
 export interface PickerSections {
+  commands: PickerCommand[];
   skills: PickerSkill[];
   apps: PickerApp[];
 }
 
-const EMPTY_SECTIONS: PickerSections = { skills: [], apps: [] };
+const EMPTY_SECTIONS: PickerSections = {
+  commands: [COMPACT_COMMAND],
+  skills: [],
+  apps: [],
+};
 
 // `/api/skills` omits external-app-backed skills; the Apps section is built
 // from `/api/build/apps` instead.
@@ -74,7 +93,7 @@ export function toPickerSections(
   skills.sort((a, b) => a.slug.localeCompare(b.slug));
   apps.sort((a, b) => a.slug.localeCompare(b.slug));
 
-  return { skills, apps };
+  return { commands: [COMPACT_COMMAND], skills, apps };
 }
 
 export interface SlashTrigger {
@@ -115,13 +134,14 @@ export function filterPickerSections(
   const q = query.trim().toLowerCase();
   if (!q) return sections;
   return {
+    commands: sections.commands.filter((c) => matchesQuery(c, q)),
     skills: sections.skills.filter((s) => matchesQuery(s, q)),
     apps: sections.apps.filter((a) => matchesQuery(a, q)),
   };
 }
 
-// Skills first, then apps — must match the popover's visual render order so
-// keyboard nav indices line up.
+// Commands first, then skills, then apps — must match the popover's visual
+// render order so keyboard nav indices line up.
 export function flattenSections(sections: PickerSections): PickerEntry[] {
-  return [...sections.skills, ...sections.apps];
+  return [...sections.commands, ...sections.skills, ...sections.apps];
 }

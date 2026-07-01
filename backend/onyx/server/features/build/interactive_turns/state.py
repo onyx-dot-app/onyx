@@ -52,6 +52,7 @@ class InteractiveTurn:
     last_heartbeat_at: datetime | None = None
     error_detail: str | None = None
     runner_id: str | None = None
+    kind: str = "prompt"
 
     @property
     def is_active(self) -> bool:
@@ -75,6 +76,7 @@ def create_interactive_turn(
     client_request_id: str,
     prompt: str,
     turn_index: int,
+    kind: str = "prompt",
 ) -> InteractiveTurn:
     now = datetime.now(tz=timezone.utc)
     turn = InteractiveTurn(
@@ -85,6 +87,7 @@ def create_interactive_turn(
         status=TURN_STATUS_QUEUED,
         turn_index=turn_index,
         last_heartbeat_at=now,
+        kind=kind,
     )
     _save_turn(cache, turn, ex=ACTIVE_TURN_TTL_SECONDS)
     cache.set(
@@ -297,6 +300,7 @@ def _load_turn(raw: bytes | None) -> InteractiveTurn | None:
             last_heartbeat_at=_parse_dt(payload.get("last_heartbeat_at")),
             error_detail=payload.get("error_detail"),
             runner_id=payload.get("runner_id"),
+            kind=payload.get("kind", "prompt"),
         )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         return None

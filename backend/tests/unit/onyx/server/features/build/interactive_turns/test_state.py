@@ -61,6 +61,41 @@ def _create_turn(
     return session_id, user_id, turn
 
 
+def test_create_turn_kind_defaults_to_prompt_and_round_trips() -> None:
+    cache = FakeCache()
+    _, _, turn = _create_turn(cache)
+    assert turn.kind == "prompt"
+
+    loaded = get_turn(cache, turn.turn_id)
+    assert loaded is not None
+    assert loaded.kind == "prompt"
+
+
+def test_create_turn_compact_kind_round_trips_through_save_and_load() -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    lock = acquire_active_turn_lock(cache, session_id)
+    try:
+        turn = create_interactive_turn(
+            cache=cache,
+            session_id=session_id,
+            user_id=user_id,
+            client_request_id="req-compact",
+            prompt="",
+            turn_index=0,
+            kind="compact",
+        )
+    finally:
+        lock.release()
+
+    assert turn.kind == "compact"
+    loaded = get_turn(cache, turn.turn_id)
+    assert loaded is not None
+    assert loaded.kind == "compact"
+    assert loaded.prompt == ""
+
+
 def test_create_turn_records_active_and_request_mappings() -> None:
     cache = FakeCache()
     request_id = "req-1"

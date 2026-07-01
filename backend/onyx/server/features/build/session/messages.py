@@ -185,6 +185,93 @@ def send_message(
     return InteractiveTurnResponse.from_turn(turn)
 
 
+@router.post("/sessions/{session_id}/compact", tags=PUBLIC_API_TAGS)
+def compact_session(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> InteractiveTurnResponse:
+    """Run a manual `/compact` turn: summarize context via opencode's
+    `summarize` endpoint, reusing the interactive-turn machinery so the
+    resulting compaction marker streams live and persists on reload.
+
+    No user message is created; the turn carries an empty prompt.
+    """
+    session = get_build_session(session_id, user.id, db_session)
+    if session is None:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+
+    if not session.opencode_session_id or not (
+        session.agent_provider and session.agent_model
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "This session cannot be compacted yet — it needs an active "
+            "opencode session and a known model.",
+        )
+
+    cache = get_cache_backend()
+    client_request_id = str(uuid4())
+
+    try:
+        lock = acquire_active_turn_lock(cache, session_id)
+    except InteractiveTurnLockError as exc:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "This session is busy with a previous turn.",
+        ) from exc
+
+    lock_released = False
+    try:
+        active = get_active_turn(cache=cache, session_id=session_id, user_id=user.id)
+        if active is not None:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "This session is busy with a previous turn.",
+            )
+
+        check_build_rate_limits(user=user, db_session=db_session)
+
+        turn_index = count_user_messages(session_id, db_session)
+
+        turn = create_interactive_turn(
+            cache=cache,
+            session_id=session_id,
+            user_id=user.id,
+            client_request_id=client_request_id,
+            prompt="",
+            turn_index=turn_index,
+            kind="compact",
+        )
+
+        try:
+            db_session.commit()
+        except Exception:
+            db_session.rollback()
+            lock.release()
+            lock_released = True
+            finish_turn(
+                cache=cache,
+                turn_id=turn.turn_id,
+                status=TURN_STATUS_FAILED,
+                error_detail="Failed to create compact turn.",
+            )
+            raise
+    finally:
+        if not lock_released:
+            lock.release()
+
+    try:
+        start_interactive_turn_runner(turn.turn_id)
+    except Exception:
+        logger.exception(
+            "Failed to start interactive turn %s; attach endpoints will retry",
+            turn.turn_id,
+        )
+
+    return InteractiveTurnResponse.from_turn(turn)
+
+
 @router.post(
     "/sessions/{session_id}/subagents/{subagent_session_id}/send-message",
     tags=PUBLIC_API_TAGS,

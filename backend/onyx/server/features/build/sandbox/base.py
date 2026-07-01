@@ -348,6 +348,7 @@ class SandboxManager(_ServeMixin, ABC):
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        action: str = "prompt",
     ) -> Generator[SandboxEvent, None, None]:
         """Stream typed sandbox events for one user message via
         opencode-serve.
@@ -359,6 +360,8 @@ class SandboxManager(_ServeMixin, ABC):
         - ``on_opencode_session_resolved``: invoked with the resolved id
           when it differs from the caller's. Caller persists it so later
           turns don't orphan a fresh session each time.
+        - ``action``: ``"prompt"`` sends ``message``; ``"compact"`` calls
+          opencode's ``summarize`` instead and ignores ``message``.
         """
         yield from self._send_message_via_serve(
             sandbox_id,
@@ -369,6 +372,7 @@ class SandboxManager(_ServeMixin, ABC):
             agent_model,
             on_opencode_session_resolved=on_opencode_session_resolved,
             should_interrupt=should_interrupt,
+            action=action,
         )
 
     def send_subagent_message(

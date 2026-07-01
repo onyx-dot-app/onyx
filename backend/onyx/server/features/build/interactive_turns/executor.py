@@ -104,6 +104,7 @@ def run_claimed_interactive_build_turn(
             user_id=turn.user_id,
             prompt=turn.prompt,
             turn_index=turn.turn_index,
+            kind=turn.kind,
             budget_seconds=budget_seconds,
             runner_id=runner_id,
         )
@@ -128,6 +129,7 @@ def _drive_interactive_turn(
     user_id: UUID,
     prompt: str,
     turn_index: int,
+    kind: str,
     budget_seconds: int,
     runner_id: str | None,
 ) -> None:
@@ -192,6 +194,7 @@ def _drive_interactive_turn(
                 sandbox.id,
                 session_id,
                 prompt,
+                kind=kind,
                 should_interrupt=interrupt_requested,
             )
 

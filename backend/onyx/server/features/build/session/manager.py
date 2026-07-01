@@ -815,6 +815,7 @@ class SessionManager:
         sandbox_id: UUID,
         session_id: UUID,
         user_message_content: str,
+        kind: str = "prompt",
         should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[Any, None, None]:
         build_session = _streaming.load_turn_session(
@@ -831,6 +832,7 @@ class SessionManager:
             opencode_session_id=build_session.opencode_session_id,
             agent_provider=build_session.agent_provider,
             agent_model=build_session.agent_model,
+            kind=kind,
             should_interrupt=should_interrupt,
         )
 

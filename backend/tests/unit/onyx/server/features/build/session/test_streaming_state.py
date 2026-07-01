@@ -38,6 +38,7 @@ class _FakeStreamingSandboxManager:
         agent_model: str | None = None,
         on_opencode_session_resolved: Any = None,  # noqa: ARG002
         should_interrupt: Any = None,  # noqa: ARG002
+        action: str = "prompt",
     ) -> Any:
         self.last_payload = {
             "sandbox_id": sandbox_id,
@@ -46,6 +47,7 @@ class _FakeStreamingSandboxManager:
             "opencode_session_id": opencode_session_id,
             "agent_provider": agent_provider,
             "agent_model": agent_model,
+            "action": action,
         }
         if on_opencode_session_resolved is not None:
             if self.resolved_opencode_session_id is not None:

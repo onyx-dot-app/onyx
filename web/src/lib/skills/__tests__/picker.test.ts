@@ -1,4 +1,5 @@
 import {
+  COMPACT_COMMAND,
   detectSlashTrigger,
   filterPickerSections,
   flattenSections,
@@ -46,11 +47,18 @@ describe("toPickerSections", () => {
     return { builtins: [], customs: [], ...over };
   }
 
-  it("returns empty sections when no data", () => {
+  it("returns empty skills/apps but still includes the compact command when no data", () => {
     expect(toPickerSections(undefined, undefined)).toEqual({
+      commands: [COMPACT_COMMAND],
       skills: [],
       apps: [],
     });
+  });
+
+  it("always includes the compact command", () => {
+    expect(toPickerSections(skillsList(), []).commands).toEqual([
+      COMPACT_COMMAND,
+    ]);
   });
 
   it("places plain built-ins in `skills`", () => {
@@ -123,6 +131,7 @@ describe("toPickerSections", () => {
 
 describe("filterPickerSections", () => {
   const sections: PickerSections = {
+    commands: [COMPACT_COMMAND],
     skills: [
       {
         kind: "skill",
@@ -163,14 +172,22 @@ describe("filterPickerSections", () => {
 
   it("returns empty sections when nothing matches", () => {
     const empty = filterPickerSections(sections, "zzz");
+    expect(empty.commands).toEqual([]);
     expect(empty.skills).toEqual([]);
     expect(empty.apps).toEqual([]);
+  });
+
+  it("matches the compact command on a partial query", () => {
+    expect(
+      filterPickerSections(sections, "comp").commands.map((c) => c.slug)
+    ).toEqual(["compact"]);
   });
 });
 
 describe("flattenSections", () => {
-  it("returns skills before apps in render order", () => {
+  it("returns commands, then skills, then apps in render order", () => {
     const sections: PickerSections = {
+      commands: [COMPACT_COMMAND],
       skills: [
         { kind: "skill", slug: "a", name: "A", description: "" },
         { kind: "skill", slug: "b", name: "B", description: "" },
@@ -187,6 +204,7 @@ describe("flattenSections", () => {
       ],
     };
     expect(flattenSections(sections).map((e) => e.slug)).toEqual([
+      "compact",
       "a",
       "b",
       "c",
