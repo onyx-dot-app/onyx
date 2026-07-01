@@ -149,7 +149,7 @@ def _flush_batch(
         document_indices=document_indices,
         ignore_time_skip=True,
         # FUTURE/secondary build: skip the PRESENT-only content_hash dedup.
-        index_to_secondary=not search_settings.status.is_current(),
+        index_to_secondary=search_settings.status.is_future(),
         db_session=db_session,
         tenant_id=tenant_id,
         document_batch=documents,

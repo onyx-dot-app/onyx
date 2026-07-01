@@ -1800,9 +1800,7 @@ def _docprocessing_task(
             from_beginning: bool = index_attempt.from_beginning
             # FUTURE build: skip the PRESENT-only content_hash dedup so the two
             # indices don't suppress each other's writes.
-            index_to_secondary: bool = (
-                not index_attempt.search_settings.status.is_current()
-            )
+            index_to_secondary: bool = index_attempt.search_settings.status.is_future()
 
         # Session is now closed; no connection held during embedding.
 

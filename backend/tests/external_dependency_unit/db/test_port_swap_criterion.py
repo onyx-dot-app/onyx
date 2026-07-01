@@ -220,7 +220,7 @@ def test_swap_holds_when_port_not_ready(
 def test_mode_c_swaps_immediately(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    cc_pair, future_id = cc_pair_and_future
+    _, future_id = cc_pair_and_future
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
     future_ss.use_port_flow = True
@@ -235,13 +235,15 @@ def test_mode_c_swaps_immediately(
 
     assert result is sentinel
     mock_swap.assert_called_once()
-    assert mock_swap.call_args.kwargs["cleanup_documents"] is True
+    # port-flow INSTANT swaps live WITHOUT the wipe: the port backfills the new
+    # index, so cleanup_documents would destroy live data — the swap omits it.
+    assert mock_swap.call_args.kwargs.get("cleanup_documents") is not True
 
 
 def test_legacy_path_does_not_consult_port_helpers(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    cc_pair, future_id = cc_pair_and_future  # use_port_flow stays False (default)
+    _, future_id = cc_pair_and_future  # use_port_flow stays False (default)
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
     future_ss.switchover_type = SwitchoverType.REINDEX  # non-INSTANT legacy path
