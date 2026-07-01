@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from "@jest/globals";
 import type { Mock } from "jest-mock";
 import * as React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
@@ -7,9 +14,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createChatSession,
   getChatSession,
+  nameChatSession,
   stopChatSession,
 } from "@/api/chat/sessions";
 import { streamChatMessage, type StreamEvent } from "@/api/chat/stream";
+import { QUERY_KEYS } from "@/api/query-keys";
+import {
+  buildImmediateMessages,
+  SYSTEM_NODE_ID,
+  upsertMessages,
+} from "@/chat/messageTree";
 import { PacketType } from "@/chat/streamingModels";
 import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/state/chatSessionStore";
@@ -27,10 +41,12 @@ jest.mock("@/api/chat/stream", () => ({
     "obj" in event && "placement" in event,
   isMessageIdInfo: (event: { user_message_id?: unknown }) =>
     "user_message_id" in event,
+  isStreamingError: (event: { error?: unknown }) => "error" in event,
 }));
 jest.mock("@/api/chat/sessions", () => ({
   createChatSession: jest.fn(),
   getChatSession: jest.fn(),
+  nameChatSession: jest.fn(),
   stopChatSession: jest.fn(),
 }));
 
@@ -45,6 +61,9 @@ const getSessionMock = getChatSession as unknown as Mock<
 >;
 const stopSessionMock = stopChatSession as unknown as Mock<
   (id: string) => Promise<void>
+>;
+const nameSessionMock = nameChatSession as unknown as Mock<
+  (id: string) => Promise<string>
 >;
 
 function startPacket(content: string): StreamEvent {
@@ -95,9 +114,18 @@ function accumulated(packets: { obj: { type: string; content?: string } }[]) {
 describe("useChatController", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    nameSessionMock.mockResolvedValue("Generated Name");
     useChatSessionStore.setState({
       currentSessionId: null,
       sessions: new Map(),
+    });
+  });
+
+  // Drain the ~200ms auto-naming timer (wrapped in act so late store updates don't warn)
+  // so a stray nameChatSession call can't bleed into the next test.
+  afterEach(async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 220));
     });
   });
 
@@ -152,6 +180,105 @@ describe("useChatController", () => {
         true,
       ),
     );
+    // drain the naming timer so it doesn't bleed into later tests
+    await waitFor(() =>
+      expect(nameSessionMock).toHaveBeenCalledWith("new-session"),
+    );
+  });
+
+  it("names the new chat and refreshes the sidebar after the first response", async () => {
+    createSessionMock.mockResolvedValue("new-session");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    const invalidateSpy = jest.spyOn(client, "invalidateQueries");
+    function localWrapper({ children }: { children: React.ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+
+    const { result } = renderHook(() => useChatController(null), {
+      wrapper: localWrapper,
+    });
+    act(() => result.current.setInput("hello"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    await waitFor(() =>
+      expect(nameSessionMock).toHaveBeenCalledWith("new-session"),
+    );
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: QUERY_KEYS.chatSessions("https://example.test"),
+      }),
+    );
+  });
+
+  it("does not auto-name a session that already has prior messages", async () => {
+    // seed s1 with a prior exchange → a real ongoing chat
+    const { initialUserNode, initialAgentNode } = buildImmediateMessages(
+      SYSTEM_NODE_ID,
+      "earlier message",
+      [],
+    );
+    useChatSessionStore
+      .getState()
+      .hydrateSession(
+        "s1",
+        upsertMessages(new Map(), [initialUserNode, initialAgentNode], true),
+      );
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    act(() => result.current.setInput("follow up"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    expect(nameSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("auto-names an opened-but-empty session on its first message", async () => {
+    // reopened, unnamed, no user messages yet — must still name on the first message
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    act(() => result.current.setInput("hi"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    await waitFor(() => expect(nameSessionMock).toHaveBeenCalledWith("s1"));
+  });
+
+  it("renders a backend streaming error on the assistant node (live)", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    // root-level StreamingError over a 200, not a wrapped packet
+    streamMock.mockReturnValue(
+      scripted([
+        { error: "Error from gpt-4o-mini: empty response" } as StreamEvent,
+      ]),
+    );
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    act(() => result.current.setInput("hi"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    await waitFor(() => {
+      const last = result.current.messages[result.current.messages.length - 1];
+      expect(last?.type).toBe("error");
+    });
+    const errorNode = result.current.messages.find((m) => m.type === "error");
+    expect(errorNode?.message).toBe("Error from gpt-4o-mini: empty response");
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
   });
 
   it("stop aborts the stream and stops the backend run", async () => {

@@ -31,6 +31,18 @@ export async function getChatSession(
   return apiFetch<BackendChatSession>(`/chat/get-chat-session/${sessionId}`);
 }
 
+// name=null → backend LLM-generates the name. Callers refetch the list to show it.
+export async function nameChatSession(sessionId: string): Promise<string> {
+  const { new_name } = await apiFetch<{ new_name: string }>(
+    "/chat/rename-chat-session",
+    {
+      method: "PUT",
+      body: { chat_session_id: sessionId, name: null },
+    },
+  );
+  return new_name;
+}
+
 // client abort alone leaves the backend generating
 export async function stopChatSession(sessionId: string): Promise<void> {
   await apiFetch<void>(`/chat/stop-chat-session/${sessionId}`, {

@@ -6,7 +6,11 @@ import { getBaseUrl } from "@/api/config";
 import { getToken } from "@/api/auth/tokenStore";
 import { createNdjsonBuffer } from "@/chat/ndjson";
 import { FileDescriptor } from "@/chat/interfaces";
-import { MessageResponseIDInfo, Packet } from "@/chat/streamingModels";
+import {
+  MessageResponseIDInfo,
+  Packet,
+  StreamingError,
+} from "@/chat/streamingModels";
 
 export interface SendMessageBody {
   message: string;
@@ -19,7 +23,7 @@ export interface SendMessageBody {
 }
 
 // The wire mixes wrapped packets ({placement, obj}) with root control objects; discriminate by field, not `type`.
-export type StreamEvent = Packet | MessageResponseIDInfo;
+export type StreamEvent = Packet | MessageResponseIDInfo | StreamingError;
 
 export function isPacket(event: StreamEvent): event is Packet {
   return "obj" in event && "placement" in event;
@@ -29,6 +33,10 @@ export function isMessageIdInfo(
   event: StreamEvent,
 ): event is MessageResponseIDInfo {
   return "user_message_id" in event;
+}
+
+export function isStreamingError(event: StreamEvent): event is StreamingError {
+  return "error" in event;
 }
 
 // Heartbeats come wrapped or at root; drop both.

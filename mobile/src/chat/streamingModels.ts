@@ -84,3 +84,13 @@ export interface MessageResponseIDInfo {
   user_message_id: number | null;
   reserved_assistant_message_id: number;
 }
+
+// Root object (not wrapped in Packet), streamed over a 200 when generation fails.
+// Discriminate by "error" presence. Mirrors backend `StreamingError`.
+export interface StreamingError {
+  error: string;
+  stack_trace?: string;
+  error_code?: string;
+  is_retryable?: boolean;
+  details?: Record<string, unknown>;
+}

@@ -2,17 +2,20 @@
 // keeps writing by sessionId after the landing screen unmounts navigating into /chat/[id].
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { QUERY_KEYS } from "@/api/query-keys";
 import {
+  ChatSessionSummary,
   createChatSession,
   getChatSession,
+  nameChatSession,
   stopChatSession,
 } from "@/api/chat/sessions";
 import {
   isMessageIdInfo,
   isPacket,
+  isStreamingError,
   SendMessageBody,
   streamChatMessage,
 } from "@/api/chat/stream";
@@ -31,6 +34,40 @@ import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 
 const FLUSH_INTERVAL_MS = 50;
+// stream "finished" can beat the session's DB commit; wait before naming (web does too).
+const NAMING_DELAY_MS = 200;
+
+// Name from the cached sidebar list, to avoid re-naming an already-named chat.
+function getCachedSessionName(
+  queryClient: QueryClient,
+  serverUrl: string | null,
+  sessionId: string,
+): string | null {
+  const data = queryClient.getQueryData<{
+    pages: { sessions: ChatSessionSummary[] }[];
+  }>(QUERY_KEYS.chatSessions(serverUrl));
+  const session = data?.pages
+    .flatMap((page) => page.sessions)
+    .find((item) => item.id === sessionId);
+  return session?.name ?? null;
+}
+
+// After the first response: name the chat, then refetch the sidebar so the name shows.
+async function finalizeNewChatSession(
+  sessionId: string,
+  serverUrl: string | null,
+  queryClient: QueryClient,
+): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, NAMING_DELAY_MS));
+  try {
+    await nameChatSession(sessionId);
+  } catch {
+    // best-effort; still refetch so the chat shows (unnamed)
+  }
+  await queryClient.invalidateQueries({
+    queryKey: QUERY_KEYS.chatSessions(serverUrl),
+  });
+}
 
 async function runChatStream(
   sessionId: string,
@@ -84,6 +121,16 @@ async function runChatStream(
         });
         continue;
       }
+      // root error object → mark the node errored; else it's dropped and stuck on "…"
+      // until a reload hydrates the persisted error (web parity).
+      if (isStreamingError(event)) {
+        pending = [];
+        store.getState().patchNode(sessionId, agentNodeId, {
+          type: "error",
+          message: event.error,
+        });
+        break;
+      }
       if (isPacket(event)) {
         if (!sawStreaming) {
           sawStreaming = true;
@@ -124,6 +171,7 @@ export interface ChatController {
 export function useChatController(sessionId: string | null): ChatController {
   const [input, setInput] = useState("");
   const serverUrl = useSession((state) => state.serverUrl);
+  const queryClient = useQueryClient();
   const sessionData = useChatSessionStore((state) =>
     sessionId ? state.sessions.get(sessionId) : undefined,
   );
@@ -165,12 +213,17 @@ export function useChatController(sessionId: string | null): ChatController {
     // (the input is empty → canSend is false).
     setInput("");
 
+    const isNewSession = sessionId == null;
     let activeId = sessionId;
     if (activeId != null) {
       const current = useChatSessionStore.getState().sessions.get(activeId);
       if (current && current.chatState !== "input") return; // a run is already active
     } else {
       activeId = await createChatSession();
+      // show the new chat immediately (unnamed); finalize refetches once it's named
+      void queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.chatSessions(serverUrl),
+      });
     }
 
     const store = useChatSessionStore.getState();
@@ -180,6 +233,11 @@ export function useChatController(sessionId: string | null): ChatController {
       useChatSessionStore.getState().sessions.get(activeId)?.messageTree ??
       new Map();
     const chain = getLatestMessageChain(tree);
+    // name on the first user message of an unnamed session — keyed on history, not
+    // `sessionId == null`, so a reopened empty session still gets named (web parity).
+    const shouldAutoName =
+      !chain.some((node) => node.type === "user") &&
+      !getCachedSessionName(queryClient, serverUrl, activeId)?.trim();
     const lastNode = chain[chain.length - 1];
     const parentNodeId = lastNode ? lastNode.nodeId : SYSTEM_NODE_ID;
     // -3 (synthetic root) → null; null = first message.
@@ -212,18 +270,23 @@ export function useChatController(sessionId: string | null): ChatController {
     };
 
     // replace so Back doesn't return to the empty landing
-    if (sessionId == null) {
+    if (isNewSession) {
       router.replace({ pathname: "/chat/[id]", params: { id: activeId } });
     }
 
-    void runChatStream(
+    const streamDone = runChatStream(
       activeId,
       initialUserNode.nodeId,
       initialAgentNode.nodeId,
       body,
       controller.signal,
     );
-  }, [input, sessionId]);
+    if (shouldAutoName) {
+      void streamDone
+        .then(() => finalizeNewChatSession(activeId, serverUrl, queryClient))
+        .catch(() => {});
+    }
+  }, [input, sessionId, serverUrl, queryClient]);
 
   const stop = useCallback(() => {
     if (sessionId == null) return;
