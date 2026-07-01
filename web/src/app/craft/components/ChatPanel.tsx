@@ -115,6 +115,25 @@ export default function BuildChatPanel({
   const selectedModel =
     (sessionId ? modelBySession[sessionId] : undefined) ?? sessionModel;
 
+  const contextUsage = useMemo(() => {
+    const usage = session?.contextUsage;
+    if (!usage) return null;
+    let limit = usage.contextLimit;
+    if (limit == null && selectedModel) {
+      const provider = llmProviders?.find(
+        (p) => p.provider === selectedModel.provider
+      );
+      const config = provider?.model_configurations.find(
+        (m) => m.name === selectedModel.modelName
+      );
+      limit = config?.max_input_tokens ?? null;
+    }
+    return {
+      usedTokens: usage.usedTokens,
+      contextLimit: limit,
+    };
+  }, [session?.contextUsage, selectedModel, llmProviders]);
+
   // Main-column view mode: chat (main agent) vs a subagent transcript.
   const viewedSubagentSessionId = useViewedSubagentSessionId();
   const isViewingSubagent = viewedSubagentSessionId !== null;
@@ -782,6 +801,7 @@ export default function BuildChatPanel({
                     queuedMessages={queuedMessages}
                     onQueueMessage={handleQueueMessage}
                     onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                    contextUsage={contextUsage}
                   />
                 </div>
               </div>

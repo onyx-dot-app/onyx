@@ -17,6 +17,7 @@ import {
   StreamItem,
   ToolCallState,
   TodoListState,
+  type ContextUsage,
   type PanelTab,
   panelTabId,
   type SubagentState,
@@ -172,13 +173,35 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
         }
         break;
 
-      // agent_plan_update and other packet types are not rendered as stream items
+      case "compaction":
+        items.push({
+          type: "compaction",
+          id: message.id || genId("compaction"),
+          summary: packet.summary,
+        });
+        break;
+
       default:
         break;
     }
   }
 
   return items;
+}
+
+function deriveContextUsage(messages: BuildMessage[]): ContextUsage | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const metadata = messages[i]?.message_metadata;
+    if (!metadata || typeof metadata !== "object") continue;
+    const packet = parsePacket(metadata);
+    if (packet.type === "context_usage") {
+      return {
+        usedTokens: packet.usedTokens,
+        contextLimit: packet.contextLimit,
+      };
+    }
+  }
+  return null;
 }
 
 /**
@@ -612,6 +635,7 @@ export interface BuildSessionData {
   abortController: AbortController;
   lastAccessed: Date;
   isLoaded: boolean;
+  contextUsage: ContextUsage | null;
   outputPanelOpen: boolean;
   /** Counter to trigger webapp refresh when web/ files change (increments on each edit) */
   webappNeedsRefresh: number;
@@ -846,6 +870,7 @@ const createInitialSessionData = (
   abortController: new AbortController(),
   lastAccessed: new Date(),
   isLoaded: false,
+  contextUsage: null,
   outputPanelOpen: false,
   webappNeedsRefresh: 0,
   filesNeedsRefresh: 0,
@@ -1520,6 +1545,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         activeTurnLocalOwner: useDbMessages
           ? false
           : currentSession!.activeTurnLocalOwner,
+        contextUsage: useDbMessages
+          ? deriveContextUsage(messages)
+          : currentSession!.contextUsage,
         error: null,
         isLoaded: true,
       });

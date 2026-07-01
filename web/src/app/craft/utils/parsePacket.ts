@@ -85,6 +85,24 @@ export function parsePacket(raw: unknown): ParsedPacket {
         reason: (p.reason ?? null) as string | null,
       };
 
+    case "context_usage":
+      return {
+        type: "context_usage",
+        usedTokens: Number(p.used_tokens ?? p.usedTokens ?? 0),
+        contextLimit:
+          p.context_limit != null
+            ? Number(p.context_limit)
+            : p.contextLimit != null
+              ? Number(p.contextLimit)
+              : null,
+      };
+
+    case "compaction":
+      return {
+        type: "compaction",
+        summary: (p.summary ?? null) as string | null,
+      };
+
     case "error":
       return { type: "error", message: (p.message ?? "") as string };
 

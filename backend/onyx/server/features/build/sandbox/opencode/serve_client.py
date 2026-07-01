@@ -34,6 +34,8 @@ from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
+from onyx.server.features.build.packets import CompactionPacket
+from onyx.server.features.build.packets import ContextUsagePacket
 from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
@@ -52,6 +54,10 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# (providerID, modelID) → context window. Process-wide: clients are rebuilt per
+# turn, and models.dev limits are stable per model, so one fetch serves all turns.
+_CONTEXT_LIMIT_CACHE: dict[tuple[str, str], int] = {}
 
 # opencode permission category emitted by the no-op ``connect_app`` tool
 _CONNECT_APP_PERMISSION = "connect_app"
@@ -139,6 +145,9 @@ class _TurnState:
     # decision endpoint answers directly); reject an undecided request for a clean
     # decline. A late reject after the user answered is a harmless no-op.
     pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
+    # Set from BOTH message.updated and hydration — text deltas race ahead of message.updated.
+    summary_message_ids: set[str] = field(default_factory=set)
+    context_limit: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +341,8 @@ def _hydrate_message(
     )
     if role == "assistant":
         state.assistant_message_ids.add(msg_id)
+        if info.get("summary") is True:
+            state.summary_message_ids.add(msg_id)
     elif role == "user":
         state.user_message_ids.add(msg_id)
     else:
@@ -380,6 +391,8 @@ def _emit_text_delta(
     # Assistant-only filter. Deltas race ~300ms ahead of message.updated;
     # _is_assistant_message hydrates via REST when the role is unknown.
     if not _is_assistant_message(state, msg_id, fetch_message):
+        return
+    if isinstance(msg_id, str) and msg_id in state.summary_message_ids:
         return
     if field_name != "text":
         # Non-text fields (e.g. tool input streaming, future extensions)
@@ -449,6 +462,95 @@ def _state_for_session(state: _TurnState, session_id: str) -> _TurnState:
         child_state = _TurnState(session_id=session_id)
         state.child_states[session_id] = child_state
     return child_state
+
+
+def _is_summary_message(state: _TurnState, msg_id: Any) -> bool:
+    return isinstance(msg_id, str) and msg_id in state.summary_message_ids
+
+
+def _context_usage_from_info(
+    info: dict[str, Any], context_limit: int | None
+) -> ContextUsagePacket | None:
+    if info.get("summary") is True:
+        return None
+    tokens = info.get("tokens")
+    if not isinstance(tokens, dict):
+        return None
+    cache = tokens.get("cache")
+    cache = cache if isinstance(cache, dict) else {}
+
+    def _n(value: Any) -> int:
+        return int(value) if isinstance(value, (int, float)) else 0
+
+    used = (
+        _n(tokens.get("input"))
+        + _n(tokens.get("output"))
+        + _n(tokens.get("reasoning"))
+        + _n(cache.get("read"))
+        + _n(cache.get("write"))
+    )
+    if used <= 0:
+        return None
+    cost = info.get("cost")
+    return ContextUsagePacket(
+        used_tokens=used,
+        context_limit=context_limit,
+        cost=float(cost) if isinstance(cost, (int, float)) else None,
+    )
+
+
+def _extract_context_limit(catalog: Any, provider: str, model: str) -> int | None:
+    if not isinstance(catalog, dict):
+        return None
+    providers = catalog.get("providers")
+    prov_obj: Any = None
+    if isinstance(providers, list):
+        prov_obj = next(
+            (p for p in providers if isinstance(p, dict) and p.get("id") == provider),
+            None,
+        )
+    elif isinstance(providers, dict):
+        prov_obj = providers.get(provider)
+    if not isinstance(prov_obj, dict):
+        return None
+
+    models = prov_obj.get("models")
+    model_obj: Any = None
+    if isinstance(models, dict):
+        model_obj = models.get(model)
+    elif isinstance(models, list):
+        model_obj = next(
+            (m for m in models if isinstance(m, dict) and m.get("id") == model),
+            None,
+        )
+    if not isinstance(model_obj, dict):
+        return None
+
+    limit = model_obj.get("limit")
+    if isinstance(limit, dict):
+        ctx = limit.get("context")
+        if isinstance(ctx, (int, float)) and ctx > 0:
+            return int(ctx)
+    return None
+
+
+def _fetch_summary_text(
+    state: _TurnState,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None,
+) -> str | None:
+    if fetch_message is None or not state.summary_message_ids:
+        return None
+    texts: list[str] = []
+    for msg_id in state.summary_message_ids:
+        body = fetch_message(msg_id)
+        if not isinstance(body, dict):
+            continue
+        for part in body.get("parts") or []:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text = part.get("text")
+                if isinstance(text, str) and text:
+                    texts.append(text)
+    return "\n\n".join(texts) or None
 
 
 def translate_opencode_event(
@@ -597,11 +699,15 @@ def translate_opencode_event(
         if part_type == "reasoning":
             if not _is_assistant_message(state, part.get("messageID"), fetch_message):
                 return
+            if _is_summary_message(state, part.get("messageID")):
+                return
             yield from _reconcile_reasoning_part(part, state)
             return
 
         if part_type == "text":
             if not _is_assistant_message(state, part.get("messageID"), fetch_message):
+                return
+            if _is_summary_message(state, part.get("messageID")):
                 return
             yield from _reconcile_text_part(part, state)
             return
@@ -649,9 +755,14 @@ def translate_opencode_event(
         msg_id = info.get("id")
         if isinstance(msg_id, str):
             state.assistant_message_ids.add(msg_id)
+            if info.get("summary") is True:
+                state.summary_message_ids.add(msg_id)
         finish = info.get("finish")
         if isinstance(finish, str):
             state.last_finish = finish
+        usage = _context_usage_from_info(info, state.context_limit)
+        if usage is not None:
+            yield usage
         # A message error DOES kill the turn — surface it.
         err = info.get("error")
         if err and isinstance(err, dict):
@@ -676,6 +787,10 @@ def translate_opencode_event(
         err = props.get("error") or {}
         if isinstance(err, dict):
             yield from _emit_terminator(state, error=err)
+        return
+
+    if etype == "session.compacted":
+        yield CompactionPacket(summary=_fetch_summary_text(state, fetch_message))
         return
 
     # Everything else (server.heartbeat, session.created, session.diff,
@@ -1189,6 +1304,40 @@ class OpencodeServeClient:
             return cast(list[dict[str, Any]], data)
         return []
 
+    def get_context_limit(
+        self, model_provider: str | None, model_id: str | None, *, directory: str
+    ) -> int | None:
+        if not model_provider or not model_id:
+            return None
+        key = (model_provider, model_id)
+        cached = _CONTEXT_LIMIT_CACHE.get(key)
+        if cached is not None:
+            return cached
+
+        limit: int | None = None
+        try:
+            r = self._request(
+                "GET",
+                "/config/providers",
+                params={"directory": directory},
+                idempotent=True,
+            )
+            if r.status_code == 200:
+                limit = _extract_context_limit(r.json(), model_provider, model_id)
+            else:
+                logger.warning(
+                    "opencode-serve: /config/providers -> HTTP %s", r.status_code
+                )
+        except (httpx.HTTPError, ValueError) as e:
+            logger.warning("opencode-serve: context-limit fetch failed: %s", e)
+
+        # Cache successes only — a transient failure must not poison the limit
+        # process-wide. models.dev limits are stable per model, so one successful
+        # fetch serves every future turn (clients are rebuilt per turn).
+        if limit is not None:
+            _CONTEXT_LIMIT_CACHE[key] = limit
+        return limit
+
     def abort(self, opencode_session_id: str, *, directory: str) -> None:
         try:
             self._http.post(
@@ -1265,6 +1414,9 @@ class OpencodeServeClient:
             )
 
         state = _TurnState(session_id=opencode_session_id)
+        state.context_limit = self.get_context_limit(
+            model_provider, model_id, directory=directory
+        )
         turn_started_at = time.monotonic()
         prompt_posted = False
 

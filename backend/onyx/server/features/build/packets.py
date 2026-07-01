@@ -91,6 +91,18 @@ class ConnectAppRequestPacket(BasePacket):
     reason: str | None = None
 
 
+class ContextUsagePacket(BasePacket):
+    type: Literal["context_usage"] = "context_usage"
+    used_tokens: int
+    context_limit: int | None = None
+    cost: float | None = None
+
+
+class CompactionPacket(BasePacket):
+    type: Literal["compaction"] = "compaction"
+    summary: str | None = None
+
+
 # =============================================================================
 # Union Type for Custom Onyx Packets
 # =============================================================================
@@ -100,4 +112,6 @@ BuildPacket = (
     | ApprovalRequestedPacket
     | SubagentStartedPacket
     | ConnectAppRequestPacket
+    | ContextUsagePacket
+    | CompactionPacket
 )
