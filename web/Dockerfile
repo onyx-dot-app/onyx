@@ -99,7 +99,7 @@ RUN --mount=type=secret,id=sentry_auth_token \
     NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
 # Runtime stage. The DHI runtime variant is near-distroless: no shell or package manager, runs
-# as the non-root `node` user (uid 1000), WORKDIR /app and ENTRYPOINT ["node"] pre-set.
+# as the non-root `node` user (uid 1000) with WORKDIR /app pre-set.
 # TODO(pin): pin by digest -- `docker login dhi.io` then
 # `docker buildx imagetools inspect dhi.io/node:24-debian13`.
 FROM dhi.io/node:24-debian13 AS runner
@@ -192,5 +192,5 @@ ENV ONYX_VERSION=${ONYX_VERSION}
 # name only — breaking loopback healthchecks. Force 0.0.0.0 instead.
 ENV HOSTNAME="0.0.0.0"
 
-# DHI presets ENTRYPOINT ["node"], so CMD is just the script path.
-CMD ["server.js"]
+# The DHI runtime image sets no default ENTRYPOINT, so invoke node explicitly.
+CMD ["node", "server.js"]
