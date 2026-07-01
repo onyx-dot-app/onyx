@@ -127,7 +127,7 @@
     "@typescript/native-preview": "^7.0.0-dev.20260424.2",
     "babel-plugin-react-compiler": "^1.0.0",
     "baseline-browser-mapping": "^2.9.19",
-    "dotenv": "^16.6.1",
+    "dotenv": "^17.4.2",
     "esbuild-plugin-preserve-directives": "^0.0.11",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^29.7.0",
