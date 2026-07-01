@@ -50,9 +50,6 @@ from onyx.document_index.chunk_content_enrichment import (
 )
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
-
-# Reused from the chunker (not replicated) so the rebuilt tail stays byte-identical
-# to indexing and the skip test mirrors it exactly; replicating either risks drift.
 from onyx.indexing.chunker import get_metadata_suffix_for_document_index
 from onyx.indexing.chunker import MAX_METADATA_PERCENTAGE
 from onyx.indexing.embedder import IndexingEmbedder
