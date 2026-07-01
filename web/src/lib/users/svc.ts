@@ -1,6 +1,7 @@
 import { mutate } from "swr";
 import { User, UserPersonalization } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { CustomRefreshTokenResponse } from "@/lib/users/types";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
@@ -81,22 +82,6 @@ export async function basicSignup(
       captcha_token: captchaToken,
     }),
   });
-}
-
-export interface CustomRefreshTokenResponse {
-  access_token: string;
-  refresh_token: string;
-  session: {
-    exp: number;
-  };
-  userinfo: {
-    sub: string;
-    familyName: string;
-    givenName: string;
-    fullName: string;
-    userId: string;
-    email: string;
-  };
 }
 
 export async function refreshToken(
