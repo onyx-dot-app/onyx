@@ -77,12 +77,8 @@ PROVISIONING_WAIT_SECONDS = 120
 
 
 def _clip_summary(text: str) -> str:
-    """Clip to ~SUMMARY_MAX_CHARS at a word boundary, with an ellipsis.
-
-    Only backtracks to the last space when it sits past the halfway point,
-    so a long unbroken token (e.g. a URL) degrades to a mid-token cut
-    instead of discarding most of the snippet.
-    """
+    """Only backtracks to a space past the halfway point so one long token
+    (e.g. a URL) can't discard most of the snippet."""
     if len(text) <= SUMMARY_MAX_CHARS:
         return text
     clipped = text[:SUMMARY_MAX_CHARS]

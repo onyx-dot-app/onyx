@@ -84,17 +84,12 @@ interface SummaryCellProps {
   row: ScheduledRunSummary;
 }
 
-// Run summaries are LLM-generated markdown of arbitrary length; the table
-// cell has a fixed height, so render them as plain text clamped to two lines
-// (exactly the cell's height) with a hover tooltip carrying the longer text.
 function SummaryCell({ row }: SummaryCellProps) {
   const reason = getNonClickableReason(row);
   const raw = row.summary ?? row.skip_reason ?? row.error_class;
-  // Heading markers are stripped from the raw text (line-anchored, before
-  // toPlainString collapses newlines) so mid-sentence "# " survives.
-  // toPlainString only strips paired inline markers; server-side truncation
-  // can leave unpaired ones behind, which the last two passes sweep up —
-  // `__` only at marker positions so word-internal `foo__bar` is preserved.
+  // Headings must be stripped before toPlainString collapses newlines (else
+  // mid-sentence "# " gets eaten); the trailing passes sweep unpaired markers
+  // left by server truncation — `__` only at marker edges so `foo__bar` survives.
   const stripped = raw
     ? toPlainString(markdown(raw.replace(/^#{1,6}\s+/gm, "")))
         .replace(/\*\*|~~|`/g, "")
@@ -107,6 +102,7 @@ function SummaryCell({ row }: SummaryCellProps) {
   const tooltip = showTooltip ? clipAtWordBoundary(plain) : undefined;
 
   const text = (
+    // Two 20px lines exactly fill the table's fixed 40px cell; three would clip.
     <Text font="main-ui-body" color="text-03" maxLines={2}>
       {plain ?? "—"}
     </Text>
