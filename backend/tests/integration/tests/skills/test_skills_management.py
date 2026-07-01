@@ -199,6 +199,7 @@ def test_direct_viewer_share_grants_view_not_edit(
     assert shared.user_shares[0].permission == SkillSharePermission.VIEWER
     visible = SkillManager.get_for_user(str(skill_id), viewer)
     assert visible.user_permission == SkillAccessLevel.VIEWER
+    assert visible.is_personal is False
     _assert_edit_hidden(skill_id, viewer)
 
 
