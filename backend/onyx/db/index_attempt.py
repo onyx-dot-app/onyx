@@ -874,6 +874,7 @@ def delete_index_attempts(
 def expire_index_attempts(
     search_settings_id: int,
     db_session: Session,
+    commit: bool = True,
 ) -> None:
     not_started_query = (
         update(IndexAttempt)
@@ -897,7 +898,8 @@ def expire_index_attempts(
     )
     db_session.execute(update_query)
 
-    db_session.commit()
+    if commit:
+        db_session.commit()
 
 
 def cancel_indexing_attempts_for_ccpair(

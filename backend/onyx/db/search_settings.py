@@ -37,6 +37,11 @@ def create_search_settings(
     search_settings: SavedSearchSettings,
     db_session: Session,
     status: IndexModelStatus = IndexModelStatus.FUTURE,
+    # Server-set, not a request field; the reindex endpoint opts into True.
+    use_port_flow: bool = False,
+    # False flushes instead of committing, so the caller can commit this row
+    # atomically with its port seeds (a seedless FUTURE makes workers re-scan).
+    commit: bool = True,
 ) -> SearchSettings:
     embedding_model = SearchSettings(
         model_name=search_settings.model_name,
@@ -53,11 +58,14 @@ def create_search_settings(
         enable_contextual_rag=search_settings.enable_contextual_rag,
         contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         switchover_type=search_settings.switchover_type,
-        use_port_flow=search_settings.use_port_flow,
+        use_port_flow=use_port_flow,
     )
 
     db_session.add(embedding_model)
-    db_session.commit()
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()  # populate id without committing
 
     return embedding_model
 
