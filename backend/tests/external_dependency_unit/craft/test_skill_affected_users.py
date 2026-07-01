@@ -1,5 +1,3 @@
-"""Affected-user join logic (regression net for SHA ``0d71db1b``)."""
-
 from __future__ import annotations
 
 from uuid import uuid4
@@ -12,11 +10,12 @@ from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
-from tests.external_dependency_unit.craft.db_helpers import grant_skill_to_group
 from tests.external_dependency_unit.craft.db_helpers import make_group
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox
 from tests.external_dependency_unit.craft.db_helpers import make_skill
 from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import share_skill_with_group
+from tests.external_dependency_unit.craft.db_helpers import share_skill_with_user
 
 
 class TestAffectedUserIdsForSkill:
@@ -39,28 +38,28 @@ class TestAffectedUserIdsForSkill:
         assert user_b.id in result
         assert user_c.id in result
 
-    def test_private_skill_returns_only_users_in_granted_groups(
+    def test_private_skill_returns_only_users_in_shared_groups(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        granted_user = make_user(db_session)
-        ungranted_user = make_user(db_session)
-        group_granted = make_group(db_session)
+        shared_user = make_user(db_session)
+        unshared_user = make_user(db_session)
+        shared_group = make_group(db_session)
         group_other = make_group(db_session)
-        add_user_to_group(db_session, granted_user, group_granted)
-        add_user_to_group(db_session, ungranted_user, group_other)
-        make_sandbox(db_session, granted_user)
-        make_sandbox(db_session, ungranted_user)
+        add_user_to_group(db_session, shared_user, shared_group)
+        add_user_to_group(db_session, unshared_user, group_other)
+        make_sandbox(db_session, shared_user)
+        make_sandbox(db_session, unshared_user)
         skill = make_skill(db_session, is_public=False)
-        grant_skill_to_group(db_session, skill, group_granted)
+        share_skill_with_group(db_session, skill, shared_group)
 
         result = affected_user_ids_for_skill(skill, db_session)
 
-        assert granted_user.id in result
-        assert ungranted_user.id not in result
+        assert shared_user.id in result
+        assert unshared_user.id not in result
 
-    def test_user_in_two_granted_groups_appears_once(
+    def test_user_in_two_shared_groups_appears_once(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
@@ -72,8 +71,8 @@ class TestAffectedUserIdsForSkill:
         add_user_to_group(db_session, user, group_y)
         make_sandbox(db_session, user)
         skill = make_skill(db_session, is_public=False)
-        grant_skill_to_group(db_session, skill, group_x)
-        grant_skill_to_group(db_session, skill, group_y)
+        share_skill_with_group(db_session, skill, group_x)
+        share_skill_with_group(db_session, skill, group_y)
 
         result = affected_user_ids_for_skill(skill, db_session)
 
@@ -82,13 +81,51 @@ class TestAffectedUserIdsForSkill:
         matches = [uid for uid in result if uid == user.id]
         assert len(matches) == 1
 
+    def test_private_skill_returns_directly_shared_user(
+        self,
+        db_session: Session,
+        test_user: User,  # noqa: ARG002
+    ) -> None:
+        shared_user = make_user(db_session)
+        unshared_user = make_user(db_session)
+        make_sandbox(db_session, shared_user)
+        make_sandbox(db_session, unshared_user)
+        skill = make_skill(db_session, is_public=False)
+        share_skill_with_user(db_session, skill, shared_user)
+
+        result = affected_user_ids_for_skill(skill, db_session)
+
+        assert shared_user.id in result
+        assert unshared_user.id not in result
+
+    def test_shared_private_skill_still_returns_author(
+        self,
+        db_session: Session,
+        test_user: User,  # noqa: ARG002
+    ) -> None:
+        author = make_user(db_session)
+        shared_user = make_user(db_session)
+        shared_group = make_group(db_session)
+        add_user_to_group(db_session, shared_user, shared_group)
+        make_sandbox(db_session, author)
+        make_sandbox(db_session, shared_user)
+        skill = make_skill(db_session, is_public=False)
+        skill.author_user_id = author.id
+        share_skill_with_group(db_session, skill, shared_group)
+        db_session.flush()
+
+        result = affected_user_ids_for_skill(skill, db_session)
+
+        assert author.id in result
+        assert shared_user.id in result
+
     def test_disabled_skill_still_returns_affected_users(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        # Per docstring at db/skill.py:267-275 — `affected_user_ids_for_skill`
-        # deliberately does NOT filter on `enabled`. This is required so that
+        # Per the `affected_user_ids_for_skill` docstring, this deliberately
+        # does NOT filter on `enabled`. This is required so that
         # when an admin disables a skill, the push pipeline can still target
         # the sandboxes that previously had it (to deliver the new
         # sans-skill fileset).
@@ -97,7 +134,7 @@ class TestAffectedUserIdsForSkill:
         add_user_to_group(db_session, user, group)
         make_sandbox(db_session, user)
         skill = make_skill(db_session, is_public=False, enabled=False)
-        grant_skill_to_group(db_session, skill, group)
+        share_skill_with_group(db_session, skill, group)
 
         result = affected_user_ids_for_skill(skill, db_session)
 
@@ -108,7 +145,7 @@ class TestAffectedUserIdsForSkill:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        # User in granted group, but with a SLEEPING sandbox (not RUNNING).
+        # User in shared group, but with a SLEEPING sandbox (not RUNNING).
         user_sleeping = make_user(db_session)
         user_terminated = make_user(db_session)
         group = make_group(db_session)
@@ -117,7 +154,7 @@ class TestAffectedUserIdsForSkill:
         make_sandbox(db_session, user_sleeping, status=SandboxStatus.SLEEPING)
         make_sandbox(db_session, user_terminated, status=SandboxStatus.TERMINATED)
         skill = make_skill(db_session, is_public=False)
-        grant_skill_to_group(db_session, skill, group)
+        share_skill_with_group(db_session, skill, group)
 
         result = affected_user_ids_for_skill(skill, db_session)
 
