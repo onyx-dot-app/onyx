@@ -41,7 +41,6 @@ export default function EmailVerificationPage() {
             );
         }
       });
-      return;
     }
 
     if (!authTypeMetadata.requiresVerification || user.is_verified) {
@@ -56,9 +55,6 @@ export default function EmailVerificationPage() {
       title="Check your inbox"
       logoSrc={logoUrl}
       description="We've sent a verification link to your email address."
-      bottomPrompt={markdown(
-        "Back to [Sign In](/auth/login) or [Create an Account](/auth/signup)"
-      )}
     >
       <AuthLayouts.Message
         title={`Email sent to ${user.email}`}
