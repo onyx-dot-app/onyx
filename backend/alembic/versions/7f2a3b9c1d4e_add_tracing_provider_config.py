@@ -1,7 +1,7 @@
 """add tracing provider config
 
 Revision ID: 7f2a3b9c1d4e
-Revises: 99c855a8f2a1
+Revises: 8c1d4f6a2e9b
 Create Date: 2026-06-29 12:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "7f2a3b9c1d4e"
-down_revision = "99c855a8f2a1"
+down_revision = "8c1d4f6a2e9b"
 branch_labels = None
 depends_on = None
 
