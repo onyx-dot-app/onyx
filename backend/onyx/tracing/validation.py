@@ -31,15 +31,16 @@ def validate_tracing_credentials(
         raise ValueError("API key is required.")
 
     if provider_type == TracingProviderType.BRAINTRUST:
-        _validate_braintrust(api_key)
+        _validate_braintrust(api_key, config)
     elif provider_type == TracingProviderType.LANGFUSE:
         _validate_langfuse(api_key, config)
 
 
-def _validate_braintrust(api_key: str) -> None:
+def _validate_braintrust(api_key: str, config: dict[str, str]) -> None:
+    base_url = (config.get("api_url") or _BRAINTRUST_API_URL).rstrip("/")
     try:
         resp = requests.get(
-            f"{_BRAINTRUST_API_URL}/v1/project",
+            f"{base_url}/v1/project",
             headers={"Authorization": f"Bearer {api_key}"},
             params={"limit": 1},
             timeout=_VALIDATION_TIMEOUT_S,
