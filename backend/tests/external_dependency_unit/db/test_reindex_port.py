@@ -528,8 +528,8 @@ def test_get_document_ids_for_cc_pair_batch(
 
 def test_copy_present_chunks_to_future_orchestration() -> None:
     """Per batch: each PIT-scan page is re-embedded and written to FUTURE
-    create-only; the return is the total chunks written. Mocks the
-    OpenSearch read/write + re-embed (covered by their own tests)."""
+    create-only; returns (chunks written, aborted). Mocks the OpenSearch
+    read/write + re-embed (covered by their own tests)."""
     present_client = MagicMock()
     future_index = MagicMock()
     strategy = cast(ReembedStrategy, MagicMock())
@@ -544,11 +544,12 @@ def test_copy_present_chunks_to_future_orchestration() -> None:
             f"re:{c}" for c in chunks
         ],
     ) as mock_reembed:
-        written = copy_present_chunks_to_future(
+        written, aborted = copy_present_chunks_to_future(
             present_client, future_index, ["d1", "d2"], strategy, embedder
         )
 
     assert written == 3
+    assert aborted is False
     present_client.iter_chunks_for_doc_ids.assert_called_once_with(["d1", "d2"])
     # re-embed once per page, with that page's chunks + prebuilt strategy/embedder
     assert mock_reembed.call_count == 2
@@ -570,7 +571,7 @@ def test_run_port_attempt_happy_path(
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
 
     mock_copier = MagicMock()
-    mock_copier.copy_doc_batch.side_effect = lambda ids, **_: len(ids)
+    mock_copier.copy_doc_batch.side_effect = lambda ids, **_: (len(ids), False)
     with patch.object(port_task, "PortCopier", return_value=mock_copier):
         run_port_attempt(attempt_id)
 
@@ -638,7 +639,7 @@ def test_run_port_attempt_resumes_from_cursor(
     )
 
     mock_copier = MagicMock()
-    mock_copier.copy_doc_batch.side_effect = lambda ids, **_: len(ids)
+    mock_copier.copy_doc_batch.side_effect = lambda ids, **_: (len(ids), False)
     with patch.object(port_task, "PortCopier", return_value=mock_copier):
         run_port_attempt(attempt_id)
 
@@ -662,9 +663,9 @@ def test_run_port_attempt_stops_when_canceled(
     doc_ids = _seed_cc_pair_documents(db_session, cc_pair, INDEX_BATCH_SIZE + 4)
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
 
-    def copy_then_cancel(ids: list[str], **_: object) -> int:
+    def copy_then_cancel(ids: list[str], **_: object) -> tuple[int, bool]:
         mark_port_canceled(db_session, attempt_id)  # operator cancels after batch 1
-        return len(ids)
+        return len(ids), False
 
     mock_copier = MagicMock()
     mock_copier.copy_doc_batch.side_effect = copy_then_cancel
