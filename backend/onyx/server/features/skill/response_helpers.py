@@ -64,10 +64,7 @@ def user_permission_for_skill(
         is_org_shared and skill.public_permission == SkillSharePermission.EDITOR
     )
 
-    if has_explicit_edit:
-        return SkillAccessLevel.EDITOR
-
-    if is_curator_managed:
+    if has_explicit_edit or is_curator_managed:
         return SkillAccessLevel.EDITOR
 
     if is_org_shared or is_shared_with_user:
