@@ -163,7 +163,9 @@ def _is_group_shared_only_with_curator_scope(user: User) -> ColumnElement[bool]:
     return and_(share_in_curator_scope_exists.exists(), no_group_share_outside_scope)
 
 
-def visible_skill_ids_for_user(user: User, db_session: Session) -> set[UUID]:
+def all_skills_for_user_incl_external_apps(
+    user: User, db_session: Session
+) -> set[UUID]:
     """Enabled skill ids the user can see, including external-app-backed rows.
 
     Used by the external-app API to decide which apps a user may connect. This
