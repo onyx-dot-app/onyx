@@ -9,14 +9,20 @@ from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import Permission
+from onyx.db.enums import SwitchoverType
+from onyx.db.index_attempt import create_synthetic_seed_attempt
 from onyx.db.index_attempt import expire_index_attempts
+from onyx.db.llm import fetch_default_contextual_rag_model
 from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import User
+from onyx.db.port_attempt import cancel_active_port_attempts
 from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import delete_search_settings
 from onyx.db.search_settings import get_current_search_settings
@@ -79,6 +85,7 @@ def set_new_search_settings(
     validate_contextual_rag_model(
         model_configuration_id=search_settings_new.contextual_rag_model_configuration_id,
         db_session=db_session,
+        enable_contextual_rag=search_settings_new.enable_contextual_rag,
     )
 
     search_settings = get_current_search_settings(db_session)
@@ -114,8 +121,23 @@ def set_new_search_settings(
             db_session=db_session,
         )
 
+        # Cancel in-flight reindex ports for the superseded FUTURE. After the PAST
+        # flip so check_for_port (which only targets the current secondary) won't
+        # enqueue a replacement; the running port task stops at its next batch
+        # boundary once it sees CANCELED.
+        cancel_active_port_attempts(
+            db_session, search_settings_id=secondary_search_settings.id
+        )
+
+    # Every new FUTURE reindexes via the port flow (re-embed PRESENT -> FUTURE in
+    # place, no connector re-fetch). commit=False here and below so the FUTURE and
+    # its seeds commit together: a FUTURE visible before its seeds makes workers
+    # re-scan from scratch instead of resuming from PRESENT's poll cursor.
     new_search_settings = create_search_settings(
-        search_settings=new_search_settings_request, db_session=db_session
+        search_settings=new_search_settings_request,
+        db_session=db_session,
+        use_port_flow=True,
+        commit=False,
     )
 
     # Ensure the document indices have the new index immediately.
@@ -131,15 +153,42 @@ def set_new_search_settings(
     # Pause index attempts for the currently in-use index to preserve resources.
     if DISABLE_INDEX_UPDATE_ON_SWAP:
         expire_index_attempts(
-            search_settings_id=search_settings.id, db_session=db_session
+            search_settings_id=search_settings.id,
+            db_session=db_session,
+            commit=False,
         )
         for cc_pair in get_connector_credential_pairs(db_session):
             resync_cc_pair(
                 cc_pair=cc_pair,
                 search_settings_id=new_search_settings.id,
                 db_session=db_session,
+                commit=False,
             )
 
+    # Seed the poll cursor: a synthetic SUCCESS IndexAttempt per in-scope cc_pair
+    # carrying PRESENT's cursor, so the promoted settings resume instead of re-scanning
+    # full history. INSTANT needs it too — it promotes immediately, so no seed means a
+    # full re-fetch. Scope mirrors the swap: ACTIVE_ONLY = active cc_pairs, else all non-deleting.
+    if new_search_settings.use_port_flow:
+        active_only = new_search_settings.switchover_type == SwitchoverType.ACTIVE_ONLY
+        for cc_pair in get_connector_credential_pairs(db_session):
+            if active_only and not cc_pair.status.is_active():
+                continue
+            if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+                continue
+            indexing_start = cc_pair.connector.indexing_start
+            earliest_index = indexing_start.timestamp() if indexing_start else 0.0
+            poll_range_end = get_last_successful_attempt_poll_range_end(
+                cc_pair.id, earliest_index, search_settings, db_session
+            )
+            create_synthetic_seed_attempt(
+                connector_credential_pair_id=cc_pair.id,
+                search_settings_id=new_search_settings.id,
+                poll_range_end=poll_range_end,
+                db_session=db_session,
+            )
+
+    # Atomic: FUTURE row and its seeds become visible together.
     db_session.commit()
     return IdReturn(id=new_search_settings.id)
 
@@ -160,6 +209,12 @@ def cancel_new_embedding(
             search_settings=secondary_search_settings,
             new_status=IndexModelStatus.PAST,
             db_session=db_session,
+        )
+
+        # Stop any in-flight reindex port for the canceled FUTURE; the running
+        # task stops at its next batch boundary once it sees CANCELED.
+        cancel_active_port_attempts(
+            db_session, search_settings_id=secondary_search_settings.id
         )
 
         # remove the old index from the vector db
@@ -243,6 +298,7 @@ def update_saved_search_settings(
     validate_contextual_rag_model(
         model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         db_session=db_session,
+        enable_contextual_rag=search_settings.enable_contextual_rag,
     )
 
     update_current_search_settings(
@@ -283,8 +339,18 @@ def delete_unstructured_api_key_endpoint(
 def validate_contextual_rag_model(
     model_configuration_id: int | None,
     db_session: Session,
+    enable_contextual_rag: bool = False,
 ) -> None:
     if model_configuration_id is None:
+        if (
+            enable_contextual_rag
+            and fetch_default_contextual_rag_model(db_session) is None
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Contextual Retrieval is enabled but no Contextual Retrieval "
+                "model is configured, and no tenant default exists.",
+            )
         return
     from onyx.db.models import ModelConfiguration
 
