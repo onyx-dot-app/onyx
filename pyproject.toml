@@ -200,7 +200,7 @@ model_server = [
     # See https://github.com/huggingface/transformers/issues/44534 and
     # https://github.com/huggingface/transformers/issues/43950 (both closed
     # wontfix upstream).
-    "transformers==4.57.6",
+    "transformers==5.3.0",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
 ]
 
