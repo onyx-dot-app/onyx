@@ -71,6 +71,22 @@ def _owner_group_from_model(persona: Persona) -> PersonaOwnerGroupSnapshot | Non
     )
 
 
+def _visible_skill_id_strs(
+    persona: Persona, visible_skill_ids: set[UUID] | None
+) -> list[str]:
+    """Attached skill ids for a snapshot, as string UUIDs.
+
+    When ``visible_skill_ids`` is given, hide attached skills the viewer can't
+    see — a co-editor's private skill stays out of a different editor's view
+    (the persona's full set still persists). ``None`` exposes every attached
+    skill (owner / admin / system paths)."""
+    return [
+        str(skill.id)
+        for skill in persona.skills
+        if visible_skill_ids is None or skill.id in visible_skill_ids
+    ]
+
+
 class HierarchyNodeSnapshot(BaseModel):
     """Minimal representation of a hierarchy node for persona responses."""
 
@@ -183,6 +199,8 @@ class PersonaUpsertRequest(BaseModel):
     hierarchy_node_ids: list[int] = Field(default_factory=list)
     # Individual documents attached for scoped search
     document_ids: list[str] = Field(default_factory=list)
+    # Skills referenced by this persona; ids the acting user can't see are dropped.
+    skill_ids: list[UUID] = Field(default_factory=list)
 
     # prompt fields
     system_prompt: str
@@ -331,6 +349,8 @@ class PersonaSnapshot(BaseModel):
     sharing_status: PersonaSharingStatus
     document_sets: list[DocumentSetSummary]
     default_model_configuration_id: int | None = None
+    # String UUIDs of attached skills, for editor rehydration.
+    skill_ids: list[str] = Field(default_factory=list)
     # Hierarchy nodes attached for scoped search
     hierarchy_nodes: list[HierarchyNodeSnapshot] = Field(default_factory=list)
     # Individual documents attached for scoped search
@@ -343,7 +363,12 @@ class PersonaSnapshot(BaseModel):
     datetime_aware: bool = True
 
     @classmethod
-    def from_model(cls, persona: Persona) -> "PersonaSnapshot":
+    def from_model(
+        cls,
+        persona: Persona,
+        *,
+        visible_skill_ids: set[UUID] | None = None,
+    ) -> "PersonaSnapshot":
         return PersonaSnapshot(
             id=persona.id,
             name=persona.name,
@@ -363,6 +388,7 @@ class PersonaSnapshot(BaseModel):
                 if should_expose_tool_to_fe(tool)
             ],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
+            skill_ids=_visible_skill_id_strs(persona, visible_skill_ids),
             hierarchy_nodes=[
                 HierarchyNodeSnapshot.from_model(node)
                 for node in persona.hierarchy_nodes
@@ -409,7 +435,11 @@ class FullPersonaSnapshot(PersonaSnapshot):
 
     @classmethod
     def from_model(
-        cls, persona: Persona, allow_deleted: bool = False
+        cls,
+        persona: Persona,
+        allow_deleted: bool = False,
+        *,
+        visible_skill_ids: set[UUID] | None = None,
     ) -> "FullPersonaSnapshot":
         if persona.deleted:
             error_msg = f"Persona with ID {persona.id} has been deleted"
@@ -446,6 +476,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 if should_expose_tool_to_fe(tool)
             ],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
+            skill_ids=_visible_skill_id_strs(persona, visible_skill_ids),
             hierarchy_nodes=[
                 HierarchyNodeSnapshot.from_model(node)
                 for node in persona.hierarchy_nodes

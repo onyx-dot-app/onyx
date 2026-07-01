@@ -83,6 +83,54 @@ class SkillManager:
         )
 
     @staticmethod
+    def create_self_serve(
+        user_performing_action: DATestUser,
+        *,
+        slug: str | None = None,
+        name: str | None = None,
+        description: str | None = None,
+        bundle_bytes: bytes | None = None,
+    ) -> DATestSkill:
+        """Author-private create via the self-serve user route.
+
+        ``POST /skills/custom`` ingests a skill *bundle* zip under the multipart
+        field ``bundle`` (same contract as the admin route), so we upload
+        ``<slug>.zip`` rather than a bare Markdown file.
+        """
+        slug = slug or f"test-skill-{uuid4().hex[:8]}"
+        if bundle_bytes is None:
+            bundle_bytes = build_minimal_bundle(
+                slug, name=name, description=description
+            )
+
+        headers = dict(user_performing_action.headers)
+        headers.pop("Content-Type", None)
+
+        response = client.post(
+            f"{API_SERVER_URL}/skills/custom",
+            files={
+                "bundle": (
+                    f"{slug}.zip",
+                    io.BytesIO(bundle_bytes),
+                    "application/zip",
+                )
+            },
+            headers=headers,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return DATestSkill(
+            id=data["id"],
+            slug=data["slug"],
+            name=data["name"],
+            description=data["description"],
+            is_public=data["is_public"],
+            enabled=data["enabled"],
+            granted_group_ids=data.get("granted_group_ids", []),
+            is_personal=data.get("is_personal", False),
+        )
+
+    @staticmethod
     def patch_custom(
         skill: DATestSkill,
         user_performing_action: DATestUser,

@@ -48,6 +48,7 @@ from onyx.db.persona import update_personas_display_priority
 from onyx.db.persona_sharing import get_persona_access_level
 from onyx.db.persona_sharing import get_user_group_ids_for_user
 from onyx.db.persona_sharing import persona_ownership_is_vacant
+from onyx.db.skill import filter_visible_skill_ids
 from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -645,7 +646,12 @@ def get_persona(
             persona.default_model_configuration_id = None
             db_session.commit()
 
-    snapshot = FullPersonaSnapshot.from_model(persona)
+    visible_skill_ids = filter_visible_skill_ids(
+        [skill.id for skill in persona.skills], user, db_session
+    )
+    snapshot = FullPersonaSnapshot.from_model(
+        persona, visible_skill_ids=visible_skill_ids
+    )
     if user is not None:
         snapshot.user_permission = get_persona_access_level(
             persona, user, user_group_ids

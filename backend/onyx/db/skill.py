@@ -40,6 +40,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.external_app import is_user_authenticated_for_app
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
+from onyx.db.models import Persona
 from onyx.db.models import Sandbox
 from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
@@ -244,6 +245,36 @@ def fetch_skill_for_user_by_slug(
     stmt = _add_user_visibility_filter(stmt, user)
     stmt = _exclude_unavailable_built_ins(stmt, db_session)
     return db_session.scalars(stmt).one_or_none()
+
+
+def filter_visible_skill_ids(
+    skill_ids: Sequence[UUID], user: User | None, db_session: Session
+) -> set[UUID]:
+    """Subset of ``skill_ids`` the user may see — same visibility as the skills
+    endpoint (``fetch_skill_for_user``). Used to validate skills a user attaches
+    to an agent and to mask a persona's attached skills per viewer. ``user`` is
+    None for anonymous callers, who can attach/see nothing here → empty set."""
+    if not skill_ids or user is None:
+        return set()
+    stmt = (
+        select(Skill)
+        .where(Skill.id.in_(list(skill_ids)))
+        .where(or_(Skill.enabled.is_(True), _personal_skill_clause(user.id)))
+        .where(Skill.id.notin_(_external_app_skill_ids_subquery()))
+    )
+    stmt = _add_user_visibility_filter(stmt, user)
+    stmt = _exclude_unavailable_built_ins(stmt, db_session)
+    return {skill.id for skill in db_session.scalars(stmt)}
+
+
+def fetch_persona_skills_visible_to_user(
+    persona: Persona, user: User | None, db_session: Session
+) -> list[Skill]:
+    """A persona's attached skills, filtered to those the viewer may see."""
+    visible = filter_visible_skill_ids(
+        [skill.id for skill in persona.skills], user, db_session
+    )
+    return [skill for skill in persona.skills if skill.id in visible]
 
 
 def list_skills_for_sandbox_injection(

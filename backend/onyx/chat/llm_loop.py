@@ -651,6 +651,10 @@ def run_llm_loop(
     include_citations: bool = True,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     inject_memories_in_prompt: bool = True,
+    # Pre-rendered text (e.g. the persona's attached-skills section) appended to
+    # whichever system prompt this turn resolves. Rendered upstream where the DB
+    # session + acting user are in scope; the loop only carries it as text.
+    system_prompt_additional_instructions: str | None = None,
 ) -> None:
     with trace(
         "run_llm_loop",
@@ -815,6 +819,23 @@ def run_llm_loop(
                         else None
                     )
                     custom_agent_prompt_msg = None
+
+            # Append the persona's attached-skills section to whichever system
+            # prompt this turn resolved (covers all branches above). When no
+            # system prompt resolved, the section becomes the system message.
+            if system_prompt_additional_instructions:
+                if system_prompt is not None:
+                    combined = (
+                        f"{system_prompt.message}\n\n"
+                        f"{system_prompt_additional_instructions}"
+                    )
+                else:
+                    combined = system_prompt_additional_instructions
+                system_prompt = ChatMessageSimple(
+                    message=combined,
+                    token_count=token_counter(combined),
+                    message_type=MessageType.SYSTEM,
+                )
 
             reminder_message_text = select_reminder_text(
                 ran_image_gen=ran_image_gen,
