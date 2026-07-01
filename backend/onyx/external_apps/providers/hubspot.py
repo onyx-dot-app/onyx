@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -256,7 +257,7 @@ class HubspotProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             return None
         try:
             response = requests.get(
-                _TOKEN_INFO_URL.format(access_token=access_token),
+                _TOKEN_INFO_URL.format(access_token=quote(access_token, safe="")),
                 timeout=_TOKEN_INFO_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
