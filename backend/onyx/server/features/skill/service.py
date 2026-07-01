@@ -1,3 +1,4 @@
+from typing import BinaryIO
 from typing import Final
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
+from onyx.skills.bundle import read_bundle_file
 from onyx.skills.bundle import slug_from_filename
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
@@ -73,7 +75,7 @@ def ensure_owned_personal_skill(
 
 def create_admin_custom_skill(
     *,
-    bundle_bytes: bytes,
+    bundle_file: BinaryIO,
     filename: str | None,
     is_public: bool,
     group_ids: list[int],
@@ -83,7 +85,7 @@ def create_admin_custom_skill(
     reject_reserved_skill_slug(filename)
 
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(bundle_bytes, filename, file_store)
+    ingested = ingest_skill_bundle(read_bundle_file(bundle_file), filename, file_store)
 
     try:
         skill = create_skill__no_commit(
@@ -109,7 +111,7 @@ def create_admin_custom_skill(
 
 def create_personal_skill(
     *,
-    bundle_bytes: bytes,
+    bundle_file: BinaryIO,
     filename: str | None,
     user: User,
     db_session: Session,
@@ -128,7 +130,7 @@ def create_personal_skill(
     reject_reserved_skill_slug(filename)
 
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(bundle_bytes, filename, file_store)
+    ingested = ingest_skill_bundle(read_bundle_file(bundle_file), filename, file_store)
 
     try:
         skill = create_skill__no_commit(
@@ -188,6 +190,7 @@ def patch_personal_skill(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     ensure_owned_personal_skill(skill, user, db_session)
 
+    enabled_changed = skill.enabled != enabled
     before_affected = affected_user_ids_for_skill(skill, db_session)
     updated = patch_skill(
         skill_id=skill_id,
@@ -196,21 +199,22 @@ def patch_personal_skill(
     )
     db_session.commit()
 
-    after_affected = affected_user_ids_for_skill(updated, db_session)
-    push_skills_for_users(before_affected | after_affected, db_session)
+    if enabled_changed:
+        after_affected = affected_user_ids_for_skill(updated, db_session)
+        push_skills_for_users(before_affected | after_affected, db_session)
     return updated
 
 
 def _replace_custom_skill_bundle(
     *,
     skill: Skill,
-    bundle_bytes: bytes,
+    bundle_file: BinaryIO,
     filename: str | None,
     db_session: Session,
 ) -> Skill:
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
-        bundle_bytes,
+        read_bundle_file(bundle_file),
         filename,
         file_store,
         slug=skill.slug,
@@ -238,7 +242,7 @@ def _replace_custom_skill_bundle(
 def replace_admin_custom_skill_bundle(
     *,
     skill_id: UUID,
-    bundle_bytes: bytes,
+    bundle_file: BinaryIO,
     filename: str | None,
     user: User,
     db_session: Session,
@@ -250,7 +254,7 @@ def replace_admin_custom_skill_bundle(
 
     return _replace_custom_skill_bundle(
         skill=skill,
-        bundle_bytes=bundle_bytes,
+        bundle_file=bundle_file,
         filename=filename,
         db_session=db_session,
     )
@@ -259,7 +263,7 @@ def replace_admin_custom_skill_bundle(
 def replace_personal_skill_bundle(
     *,
     skill_id: UUID,
-    bundle_bytes: bytes,
+    bundle_file: BinaryIO,
     filename: str | None,
     user: User,
     db_session: Session,
@@ -273,7 +277,7 @@ def replace_personal_skill_bundle(
 
     return _replace_custom_skill_bundle(
         skill=skill,
-        bundle_bytes=bundle_bytes,
+        bundle_file=bundle_file,
         filename=filename,
         db_session=db_session,
     )

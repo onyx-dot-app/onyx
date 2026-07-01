@@ -1,3 +1,4 @@
+import io
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
@@ -11,6 +12,7 @@ from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.skill import service as skill_service
 from onyx.server.features.skill.models import CustomSkillResponse
 from onyx.server.features.skill.service import ensure_owned_personal_skill
 
@@ -70,3 +72,102 @@ def test_directly_shared_skill_cannot_use_personal_mutation_path(
 
     with pytest.raises(OnyxError):
         ensure_owned_personal_skill(skill, user, db_session)
+
+
+def test_create_personal_skill_rejects_quota_before_reading_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = cast(User, SimpleNamespace(id=uuid4()))
+    db_session = cast(Session, MagicMock())
+    read_bundle_file = MagicMock()
+
+    monkeypatch.setattr(
+        skill_service,
+        "lock_personal_skills_for_user",
+        lambda _user_id, _db_session: None,
+    )
+    monkeypatch.setattr(
+        skill_service,
+        "count_personal_skills_for_user",
+        lambda _user_id, _db_session: skill_service.MAX_PERSONAL_SKILLS_PER_USER,
+    )
+    monkeypatch.setattr(skill_service, "read_bundle_file", read_bundle_file)
+
+    with pytest.raises(OnyxError):
+        skill_service.create_personal_skill(
+            bundle_file=io.BytesIO(b"bundle"),
+            filename="quota-test.zip",
+            user=user,
+            db_session=db_session,
+        )
+
+    read_bundle_file.assert_not_called()
+
+
+def test_replace_personal_skill_bundle_authorizes_before_reading_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    skill = _custom_skill(author_user_id=uuid4())
+    user = cast(User, SimpleNamespace(id=uuid4()))
+    db_session = cast(Session, MagicMock())
+    read_bundle_file = MagicMock()
+
+    monkeypatch.setattr(
+        skill_service,
+        "fetch_skill_by_id",
+        lambda _skill_id, _db_session: skill,
+    )
+    monkeypatch.setattr(skill_service, "read_bundle_file", read_bundle_file)
+
+    with pytest.raises(OnyxError):
+        skill_service.replace_personal_skill_bundle(
+            skill_id=skill.id,
+            bundle_file=io.BytesIO(b"bundle"),
+            filename="replace-test.zip",
+            user=user,
+            db_session=db_session,
+        )
+
+    read_bundle_file.assert_not_called()
+
+
+def test_noop_personal_patch_does_not_push_sandboxes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    skill = _custom_skill(author_user_id=user_id)
+    user = cast(User, SimpleNamespace(id=user_id))
+    db_session = cast(Session, MagicMock())
+    push_skills_for_users = MagicMock()
+
+    monkeypatch.setattr(
+        skill_service,
+        "fetch_skill_by_id",
+        lambda _skill_id, _db_session: skill,
+    )
+    monkeypatch.setattr(
+        skill_service,
+        "skill_ids_with_grants",
+        lambda _skill_ids, _db_session: set(),
+    )
+    monkeypatch.setattr(
+        skill_service,
+        "affected_user_ids_for_skill",
+        lambda _skill, _db_session: {user_id},
+    )
+    monkeypatch.setattr(
+        skill_service,
+        "patch_skill",
+        lambda **_kwargs: skill,
+    )
+    monkeypatch.setattr(skill_service, "push_skills_for_users", push_skills_for_users)
+
+    updated = skill_service.patch_personal_skill(
+        skill_id=skill.id,
+        enabled=True,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert updated is skill
+    push_skills_for_users.assert_not_called()

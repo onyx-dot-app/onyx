@@ -35,7 +35,6 @@ from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.server.features.skill.models import SkillPreviewResponse
 from onyx.server.features.skill.models import SkillsList
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.bundle import read_bundle_file
 from onyx.skills.content import read_builtin_skill_instructions
 from onyx.skills.content import read_custom_skill_bundle_instructions
 from onyx.utils.logger import setup_logger
@@ -44,9 +43,6 @@ logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/skills")
 user_router = APIRouter(prefix="/skills")
-
-MAX_PERSONAL_SKILLS_PER_USER = skill_service.MAX_PERSONAL_SKILLS_PER_USER
-_ensure_custom = skill_service.ensure_custom_skill
 
 
 def _split_rows(
@@ -163,7 +159,7 @@ def create_custom_skill(
 ) -> CustomSkillResponse:
     parsed_group_ids = _parse_group_ids(group_ids)
     skill = skill_service.create_admin_custom_skill(
-        bundle_bytes=read_bundle_file(bundle.file),
+        bundle_file=bundle.file,
         filename=bundle.filename,
         is_public=is_public,
         group_ids=parsed_group_ids,
@@ -201,7 +197,7 @@ def replace_custom_skill_bundle(
 ) -> CustomSkillResponse:
     updated = skill_service.replace_admin_custom_skill_bundle(
         skill_id=skill_id,
-        bundle_bytes=read_bundle_file(bundle.file),
+        bundle_file=bundle.file,
         filename=bundle.filename,
         user=user,
         db_session=db_session,
@@ -303,7 +299,7 @@ def create_personal_skill(
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     skill = skill_service.create_personal_skill(
-        bundle_bytes=read_bundle_file(bundle.file),
+        bundle_file=bundle.file,
         filename=bundle.filename,
         user=user,
         db_session=db_session,
@@ -320,7 +316,7 @@ def replace_personal_skill_bundle(
 ) -> CustomSkillResponse:
     updated = skill_service.replace_personal_skill_bundle(
         skill_id=skill_id,
-        bundle_bytes=read_bundle_file(bundle.file),
+        bundle_file=bundle.file,
         filename=bundle.filename,
         user=user,
         db_session=db_session,

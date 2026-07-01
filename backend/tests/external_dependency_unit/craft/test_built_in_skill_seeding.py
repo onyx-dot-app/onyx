@@ -25,7 +25,7 @@ from onyx.db.models import User
 from onyx.db.skill import fetch_skill_for_user
 from onyx.db.skill import list_skills_for_user
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill.api import _ensure_custom
+from onyx.server.features.skill.service import ensure_custom_skill
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
@@ -134,7 +134,7 @@ class TestAvailabilityGate:
 class TestBuiltInIsImmutable:
     """Built-in skill rows reject every admin mutation path: PATCH,
     bundle-replace, grants-replace, delete. Enforcement lives at the
-    API layer via ``_ensure_custom`` and the discriminator is
+    service layer via ``ensure_custom_skill`` and the discriminator is
     ``built_in_skill_id IS NOT NULL``."""
 
     def test_ensure_custom_rejects_built_in_rows(self, db_session: Session) -> None:
@@ -142,13 +142,13 @@ class TestBuiltInIsImmutable:
         db_session.commit()
 
         with pytest.raises(OnyxError, match="cannot be modified"):
-            _ensure_custom(row)
+            ensure_custom_skill(row)
 
     def test_ensure_custom_accepts_custom_rows(self, db_session: Session) -> None:
         custom = make_skill(db_session, slug=f"custom-{uuid4().hex[:8]}")
         db_session.commit()
 
-        _ensure_custom(custom)  # no raise
+        ensure_custom_skill(custom)  # no raise
 
 
 class TestNonUniqueBuiltInId:
