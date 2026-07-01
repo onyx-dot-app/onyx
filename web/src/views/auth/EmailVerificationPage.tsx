@@ -1,22 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef } from "react";
+import { redirect, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
 import { markdown } from "@opal/utils";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { requestEmailVerification, verifyEmail } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { redirect } from "next/navigation";
 
 export default function EmailVerificationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useCurrentUser();
+  const { user, isLoading } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
   const { logoUrl } = useSettings();
 
@@ -24,37 +24,35 @@ export default function EmailVerificationPage() {
   const firstUser =
     searchParams.get("first_user") === "true" && NEXT_PUBLIC_CLOUD_ENABLED;
 
-  const [verifyError, setVerifyError] = useState("");
+  const verifyingRef = useRef(false);
 
-  // Token flow: process the verification link from the email.
-  const verify = useCallback(async () => {
-    if (!token) return;
-    try {
-      await verifyEmail(token);
-      const loginUrl = firstUser
-        ? "/auth/login?verified=true&first_user=true"
-        : "/auth/login?verified=true";
-      window.location.href = loginUrl;
-    } catch (e) {
-      setVerifyError(
-        `Failed to verify your email — ${e instanceof Error ? e.message : "unknown error"}. Please request a new verification email.`
-      );
-    }
-  }, [token, firstUser]);
-
+  // Token flow: wait for auth state to settle, then verify once.
   useEffect(() => {
-    verify();
-  }, [verify]);
-
-  // Waiting flow: redirect to /app if already verified.
-  useEffect(() => {
-    if (!token) {
-      if (user === undefined) return;
-      if (!authTypeMetadata.requiresVerification || user?.is_verified) {
-        router.replace("/app" as Route);
-      }
-    }
-  }, [token, user, authTypeMetadata.requiresVerification, router]);
+    if (!token || isLoading || verifyingRef.current) return;
+    verifyingRef.current = true;
+    verifyEmail(token)
+      .then(() => {
+        if (user) {
+          router.replace("/app" as Route);
+        } else {
+          router.replace(
+            (firstUser
+              ? "/auth/login?verified=true&first_user=true"
+              : "/auth/login?verified=true") as Route
+          );
+        }
+      })
+      .catch((e) => {
+        toast.error(
+          `Failed to verify your email — ${e instanceof Error ? e.message : "unknown error"}.`
+        );
+        if (user) {
+          router.replace("/app" as Route);
+        } else {
+          router.replace("/auth/login" as Route);
+        }
+      });
+  }, [token, isLoading, user, firstUser, router]);
 
   // Resend flow: fire-and-forget, then strip the ?resend param.
   useEffect(() => {
@@ -76,22 +74,53 @@ export default function EmailVerificationPage() {
     }
   }, [token, searchParams, user, router]);
 
+  if (isLoading) return <PageLoader />;
+
+  // User is not signed in and has no token that needs verification.
   if (!user && !token) redirect("/auth/login");
 
-  return (
-    <AuthLayouts.Card
-      title="Check your inbox"
-      logoSrc={logoUrl}
-      description="We've sent a verification link to your email address."
-      bottomPrompt={markdown(
-        "Back to [Sign In](/auth/login) or [Create an Account](/auth/signup)"
-      )}
-    >
-      <AuthLayouts.Message
-        title={user ? `Email sent to ${user.email}` : "Redirecting..."}
-        description={markdown(
-          "Didn't receive an email? [Resend](/auth/email-verification?resend=true)"
+  // User is signed in and has not presented a token.
+  if (user && !token) {
+    // Token is not present because:
+    // - user is already verified
+    // - OR user does not need verification
+    if (user.is_verified || !authTypeMetadata.requiresVerification)
+      redirect("/app");
+
+    // Token is not present and needs to be presented first.
+    return (
+      <AuthLayouts.Card
+        title="Check your inbox"
+        logoSrc={logoUrl}
+        description="We've sent a verification link to your email address."
+        bottomPrompt={markdown(
+          "Back to [Sign In](/auth/login) or [Create an Account](/auth/signup)"
         )}
+      >
+        <AuthLayouts.Message
+          title={`Email sent to ${user.email}`}
+          description={markdown(
+            "Didn't receive an email? [Resend](/auth/email-verification?resend=true)"
+          )}
+        />
+      </AuthLayouts.Card>
+    );
+  }
+
+  // User is or is not signed in (doesn't matter much here) and *HAS* presented a token.
+  // In this case, the token should be verified by the `useEffect` hook above.
+  //
+  // Verification succeeds:
+  // - If the user is signed in, then simply redirect to `/app`.
+  // - If the user is *NOT* signed in, then redirect to `/auth/login` and prompt the user to sign in first. At this point, the user's email is verified, so all they have to do is log in.
+  //
+  // Verification fails:
+  // - An error should be raised.
+  return (
+    <AuthLayouts.Card title="Verify Email" logoSrc={logoUrl}>
+      <AuthLayouts.Message
+        title="Verifying your token..."
+        description="Give us a quick moment while we finish verifying your token."
       />
     </AuthLayouts.Card>
   );
