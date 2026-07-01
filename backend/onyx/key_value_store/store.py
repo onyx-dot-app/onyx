@@ -12,7 +12,10 @@ from onyx.utils.special_types import JSON_ro
 logger = setup_logger()
 
 
-REDIS_KEY_PREFIX = "onyx_kv_store:"
+# v2: encrypted values are no longer mirrored to the cache. The version bump abandons
+# any plaintext-secret entries written by the pre-v2 code (they expire from the old
+# prefix by TTL) instead of serving them on a cache hit.
+REDIS_KEY_PREFIX = "onyx_kv_store_v2:"
 KV_REDIS_KEY_EXPIRATION = 60 * 60 * 24  # 1 Day
 
 
@@ -93,6 +96,15 @@ class PgRedisKVStore(KeyValueStore):
                 except Exception as e:
                     logger.error(
                         "Failed to set value in cache for key '%s': %s", key, str(e)
+                    )
+            else:
+                # Evict any cache entry for a key that turns out to be encrypted (e.g.
+                # cached while plaintext, then re-stored as a secret) so it is not served.
+                try:
+                    self._get_cache().delete(REDIS_KEY_PREFIX + key)
+                except Exception as e:
+                    logger.error(
+                        "Failed to evict cache entry for key '%s': %s", key, str(e)
                     )
 
             return cast(JSON_ro, value)
