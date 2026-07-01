@@ -545,6 +545,19 @@ export const connectorConfigs: Record<
     values: [],
     advanced_values: [],
   },
+  docmost: {
+    description: "Configure DocMost connector",
+    values: [
+      {
+        type: "list",
+        query: "Space slugs to index (leave empty for all visible spaces):",
+        label: "Space Filter",
+        name: "space_filter",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   confluence: {
     description: "Configure Confluence connector",
     initialConnectorName: "cloud_name",

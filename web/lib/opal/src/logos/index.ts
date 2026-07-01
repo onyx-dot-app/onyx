@@ -18,6 +18,7 @@ export { default as SvgDatabricks } from "@opal/logos/databricks";
 export { default as SvgDeepseek } from "@opal/logos/deepseek";
 export { default as SvgDiscord } from "@opal/logos/discord";
 export { default as SvgDiscourse } from "@opal/logos/discourse";
+export { default as SvgDocmost } from "@opal/logos/docmost";
 export { default as SvgDocument360 } from "@opal/logos/document-360";
 export { default as SvgDropbox } from "@opal/logos/dropbox";
 export { default as SvgDrupal } from "@opal/logos/drupal";
