@@ -79,6 +79,8 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Intentionally gated (skip_gated defaults True): don't run the port's
+            # expensive re-embed for non-paying tenants; it pauses and self-heals on un-gate.
             "work_gated": True,
         },
     },

@@ -165,15 +165,11 @@ def set_new_search_settings(
                 commit=False,
             )
 
-    # Seed the port flow: one SUCCESS synthetic IndexAttempt per in-scope cc_pair
-    # carrying PRESENT's poll cursor, so the FUTURE connector-incremental resumes
-    # from there rather than re-scanning. INSTANT swaps immediately (nothing to
-    # poll), so it is not seeded. Scope mirrors the swap criterion: ACTIVE_ONLY
-    # seeds active cc_pairs only; otherwise all non-deleting.
-    if (
-        new_search_settings.use_port_flow
-        and new_search_settings.switchover_type != SwitchoverType.INSTANT
-    ):
+    # Seed the poll cursor: a synthetic SUCCESS IndexAttempt per in-scope cc_pair
+    # carrying PRESENT's cursor, so the promoted settings resume instead of re-scanning
+    # full history. INSTANT needs it too — it promotes immediately, so no seed means a
+    # full re-fetch. Scope mirrors the swap: ACTIVE_ONLY = active cc_pairs, else all non-deleting.
+    if new_search_settings.use_port_flow:
         active_only = new_search_settings.switchover_type == SwitchoverType.ACTIVE_ONLY
         for cc_pair in get_connector_credential_pairs(db_session):
             if active_only and not cc_pair.status.is_active():
