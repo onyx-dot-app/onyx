@@ -3449,6 +3449,41 @@ class InternetContentProvider(Base):
         return f"<InternetContentProvider(name='{self.name}', provider_type='{self.provider_type}')>"
 
 
+class TracingProviderConfig(Base):
+    """Admin-configured tracing provider (Braintrust, Langfuse), one row each.
+
+    api_key holds the Braintrust API key / Langfuse secret key; non-secret settings
+    (Braintrust project; Langfuse public_key, host) live in config.
+    """
+
+    __tablename__ = "tracing_provider_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_type: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    config: Mapped[dict[str, str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<TracingProviderConfig(provider_type='{self.provider_type}', "
+            f"enabled={self.enabled})>"
+        )
+
+
 class DocumentSet(Base):
     __tablename__ = "document_set"
 
