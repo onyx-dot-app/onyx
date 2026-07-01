@@ -22,6 +22,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -36,6 +38,7 @@ import (
 	"github.com/google/osv-scalibr/purl"
 	"github.com/google/osv-scalibr/semantic"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
@@ -55,9 +58,9 @@ type actionRef struct {
 	Manifest string // repo-relative workflow path the ref came from
 }
 
-// scanActions discovers the actions used across the repo's workflows and matches
-// them against OSV.dev advisories. Returns nil when there are no workflows or no
-// advisories affect any used action.
+// scanActions discovers the actions used across the repo's workflows and
+// composite actions and matches them against OSV.dev advisories. Returns nil when
+// nothing is referenced or no advisories affect any used action.
 func scanActions() ([]Finding, error) {
 	root, err := paths.GitRoot()
 	if err != nil {
@@ -115,20 +118,34 @@ func scanActions() ([]Finding, error) {
 	return findings, nil
 }
 
-// extractActions runs osv-scalibr's github/actions extractor over each workflow
-// file and returns the referenced actions. Returns nil when there is no
-// .github/workflows directory.
+// extractActions discovers the actions referenced across the repo's reusable
+// workflows (.github/workflows) and composite actions (.github/actions). Returns
+// nil when neither exists.
 func extractActions(root string) ([]actionRef, error) {
+	ext, err := githubactions.New(&cpb.PluginConfig{})
+	if err != nil {
+		return nil, err
+	}
+
+	workflowRefs, err := extractWorkflowActions(ext, root)
+	if err != nil {
+		return nil, err
+	}
+	compositeRefs, err := extractCompositeActions(ext, root)
+	if err != nil {
+		return nil, err
+	}
+	return append(workflowRefs, compositeRefs...), nil
+}
+
+// extractWorkflowActions runs the github/actions extractor over each
+// .github/workflows/*.{yml,yaml} file.
+func extractWorkflowActions(ext filesystem.Extractor, root string) ([]actionRef, error) {
 	dir := filepath.Join(root, ".github", "workflows")
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-
-	ext, err := githubactions.New(&cpb.PluginConfig{})
 	if err != nil {
 		return nil, err
 	}
@@ -146,25 +163,112 @@ func extractActions(root string) ([]actionRef, error) {
 		if err != nil {
 			return nil, err
 		}
-		inv, err := ext.Extract(context.Background(), &filesystem.ScanInput{Path: path, Reader: f})
+		manifest := filepath.ToSlash(filepath.Join(".github", "workflows", e.Name()))
+		rs, err := usesFromReader(ext, path, f, manifest)
 		_ = f.Close()
 		if err != nil {
 			log.Warnf("Skipping workflow %s: %v", e.Name(), err)
 			continue
 		}
-		manifest := filepath.ToSlash(filepath.Join(".github", "workflows", e.Name()))
-		for _, pkg := range inv.Packages {
-			if pkg.PURLType != purl.TypeGithub {
-				continue
-			}
-			ref := actionRef{Name: pkg.Name, Ref: pkg.Version, Manifest: manifest}
-			// The extractor records the ref as a source-code commit only when it
-			// is a full 40-char SHA, which is exactly when we need tag resolution.
-			if pkg.SourceCode != nil && pkg.SourceCode.Commit != "" {
-				ref.IsSHA = true
-			}
-			refs = append(refs, ref)
+		refs = append(refs, rs...)
+	}
+	return refs, nil
+}
+
+// extractCompositeActions discovers the actions referenced by composite actions
+// under .github/actions. The github/actions extractor only understands workflow
+// files (jobs.<id>.steps[].uses), so each composite action's runs.steps is
+// reshaped into a synthetic single-job workflow before extraction — reusing the
+// extractor's uses parsing (subpaths, docker/local skips, SHA detection) rather
+// than reimplementing it.
+func extractCompositeActions(ext filesystem.Extractor, root string) ([]actionRef, error) {
+	dir := filepath.Join(root, ".github", "actions")
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	var refs []actionRef
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if d.IsDir() || (d.Name() != "action.yml" && d.Name() != "action.yaml") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		steps, ok := compositeSteps(data)
+		if !ok {
+			return nil
+		}
+		wrapped, err := yaml.Marshal(map[string]any{
+			"jobs": map[string]any{"composite": map[string]any{"steps": steps}},
+		})
+		if err != nil {
+			return err
+		}
+		manifest := path
+		if rel, err := filepath.Rel(root, path); err == nil {
+			manifest = rel
+		}
+		manifest = filepath.ToSlash(manifest)
+		rs, err := usesFromReader(ext, path, bytes.NewReader(wrapped), manifest)
+		if err != nil {
+			log.Warnf("Skipping composite action %s: %v", manifest, err)
+			return nil
+		}
+		refs = append(refs, rs...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return refs, nil
+}
+
+// compositeSteps returns the runs.steps of a composite action.yml, or ok=false
+// when the file is not a composite action (Docker and JavaScript actions
+// reference no other actions).
+func compositeSteps(data []byte) ([]any, bool) {
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, false
+	}
+	runs, ok := doc["runs"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	if using, _ := runs["using"].(string); !strings.EqualFold(using, "composite") {
+		return nil, false
+	}
+	steps, ok := runs["steps"].([]any)
+	if !ok {
+		return nil, false
+	}
+	return steps, true
+}
+
+// usesFromReader runs the extractor over a workflow document and maps the
+// referenced GitHub actions into actionRefs tagged with the given manifest path.
+func usesFromReader(ext filesystem.Extractor, path string, r io.Reader, manifest string) ([]actionRef, error) {
+	inv, err := ext.Extract(context.Background(), &filesystem.ScanInput{Path: path, Reader: r})
+	if err != nil {
+		return nil, err
+	}
+	var refs []actionRef
+	for _, pkg := range inv.Packages {
+		if pkg.PURLType != purl.TypeGithub {
+			continue
+		}
+		ref := actionRef{Name: pkg.Name, Ref: pkg.Version, Manifest: manifest}
+		// The extractor records the ref as a source-code commit only when it is a
+		// full 40-char SHA, which is exactly when we need tag resolution.
+		if pkg.SourceCode != nil && pkg.SourceCode.Commit != "" {
+			ref.IsSHA = true
+		}
+		refs = append(refs, ref)
 	}
 	return refs, nil
 }

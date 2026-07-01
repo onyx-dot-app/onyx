@@ -215,6 +215,34 @@ func TestNormalizeVersionAndSemverish(t *testing.T) {
 	}
 }
 
+func TestCompositeSteps(t *testing.T) {
+	composite := []byte(`
+name: x
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+      shell: bash
+    - run: echo hi
+      shell: bash
+`)
+	steps, ok := compositeSteps(composite)
+	if !ok || len(steps) != 2 {
+		t.Fatalf("compositeSteps = (%d steps, %v), want (2, true)", len(steps), ok)
+	}
+
+	// Docker/JavaScript actions reference no other actions.
+	docker := []byte("name: x\nruns:\n  using: docker\n  image: Dockerfile\n")
+	if _, ok := compositeSteps(docker); ok {
+		t.Error("docker action should not be treated as composite")
+	}
+
+	// Malformed YAML must be skipped, not fail the scan.
+	if _, ok := compositeSteps([]byte("runs: [unclosed")); ok {
+		t.Error("malformed yaml should return ok=false")
+	}
+}
+
 func mkTag(name, sha string) ghTag {
 	t := ghTag{Name: name}
 	t.Commit.SHA = sha
