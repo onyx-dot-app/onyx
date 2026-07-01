@@ -473,6 +473,7 @@ function GeneralSettings() {
               description="We'll display this name in the app."
               center
               withLabel
+              responsive
             >
               <InputTypeIn
                 placeholder="Your name"
@@ -499,6 +500,7 @@ function GeneralSettings() {
               description="Share your role to better tailor responses."
               center
               withLabel
+              responsive
             >
               <InputTypeIn
                 placeholder="Your role"
