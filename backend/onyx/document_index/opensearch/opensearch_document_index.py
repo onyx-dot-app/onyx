@@ -126,7 +126,7 @@ def set_cluster_state(client: OpenSearchClient) -> None:
     )
 
 
-def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+def convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
     chunk: DocumentChunkWithoutVectors,
     score: float | None,
     highlights: dict[str, list[str]],
@@ -716,7 +716,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 search_type=OpenSearchSearchType.DOC_ID_RETRIEVAL,
             )
             inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-                _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+                convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                     search_hit.document_chunk, None, {}
                 )
                 for search_hit in search_hits
@@ -772,7 +772,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # Good place for a breakpoint to inspect the search hits if you have
         # "explain" enabled.
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -817,7 +817,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -861,7 +861,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -894,7 +894,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             search_type=OpenSearchSearchType.RANDOM,
         )
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits

@@ -270,13 +270,11 @@ def _bare_contents(stored_chunks: list[DocumentChunkWithoutVectors]) -> list[str
     # Lazy import: opensearch_document_index is a heavy module and only needed on
     # the AUGMENTATION path; keeps port_reembed's import surface light + cycle-free.
     from onyx.document_index.opensearch.opensearch_document_index import (
-        _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned,
+        convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned,
     )
 
     uncleaned = [
-        _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
-            chunk, None, {}
-        )
+        convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(chunk, None, {})
         for chunk in stored_chunks
     ]
     cleaned = cleanup_content_for_chunks(uncleaned)
