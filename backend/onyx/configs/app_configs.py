@@ -945,7 +945,10 @@ except ValueError:
 
 # Reindex-port runs on the docprocessing worker; cap concurrent port attempts well
 # below its concurrency so a large reindex leaves slots for live indexing.
-MAX_CONCURRENT_PORT_ATTEMPTS = int(os.environ.get("MAX_CONCURRENT_PORT_ATTEMPTS") or 2)
+# Floor at 1: 0 (or negative) would gate off every new port attempt.
+MAX_CONCURRENT_PORT_ATTEMPTS = max(
+    1, _non_negative_int_env("MAX_CONCURRENT_PORT_ATTEMPTS", 2)
+)
 
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:
