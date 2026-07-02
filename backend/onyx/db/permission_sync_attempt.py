@@ -469,7 +469,7 @@ def mark_external_group_sync_attempt_failed(
 
 def create_external_group_sync_error(
     external_group_sync_attempt_id: int,
-    connector_credential_pair_id: int,
+    connector_credential_pair_id: int | None,
     db_session: Session,
     failure_message: str,
     external_group_id: str | None = None,

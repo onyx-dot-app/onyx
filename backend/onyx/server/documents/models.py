@@ -422,7 +422,7 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
 class ExternalGroupSyncErrorSnapshot(BaseModel):
     id: int
     external_group_sync_attempt_id: int
-    connector_credential_pair_id: int
+    connector_credential_pair_id: int | None
     external_group_id: str | None
     external_group_name: str | None
     failure_message: str

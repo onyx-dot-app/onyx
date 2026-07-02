@@ -124,7 +124,7 @@ export interface ExternalGroupSyncAttemptSnapshot {
 export interface ExternalGroupSyncError {
   id: number;
   external_group_sync_attempt_id: number;
-  connector_credential_pair_id: number;
+  connector_credential_pair_id: number | null;
   external_group_id: string | null;
   external_group_name: string | null;
   failure_message: string;

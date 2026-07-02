@@ -289,6 +289,24 @@ class TestExternalGroupPermissionSyncAttempt:
         assert errors[0].full_exception_trace == "Traceback..."
         assert errors[0].error_type == "JIRAError"
 
+        global_attempt_id = create_external_group_sync_attempt(None, db_session)
+        global_error_id = create_external_group_sync_error(
+            external_group_sync_attempt_id=global_attempt_id,
+            connector_credential_pair_id=None,
+            db_session=db_session,
+            external_group_id="global-group-id",
+            external_group_name="Global Group",
+            failure_message="Global group sync failed",
+        )
+
+        global_errors = get_external_group_sync_errors_for_attempt(
+            external_group_sync_attempt_id=global_attempt_id,
+            db_session=db_session,
+        )
+        assert len(global_errors) == 1
+        assert global_errors[0].id == global_error_id
+        assert global_errors[0].connector_credential_pair_id is None
+
     def test_get_recent_external_group_sync_attempts_for_cc_pair(
         self, db_session: Session
     ) -> None:

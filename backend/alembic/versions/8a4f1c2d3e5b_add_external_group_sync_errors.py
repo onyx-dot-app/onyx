@@ -22,7 +22,7 @@ def upgrade() -> None:
         "external_group_sync_errors",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("external_group_sync_attempt_id", sa.Integer(), nullable=False),
-        sa.Column("connector_credential_pair_id", sa.Integer(), nullable=False),
+        sa.Column("connector_credential_pair_id", sa.Integer(), nullable=True),
         sa.Column("external_group_id", sa.String(), nullable=True),
         sa.Column("external_group_name", sa.String(), nullable=True),
         sa.Column("failure_message", sa.Text(), nullable=False),

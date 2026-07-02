@@ -5425,9 +5425,9 @@ class ExternalGroupSyncError(Base):
         nullable=False,
         index=True,
     )
-    connector_credential_pair_id: Mapped[int] = mapped_column(
+    connector_credential_pair_id: Mapped[int | None] = mapped_column(
         ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
@@ -5449,7 +5449,7 @@ class ExternalGroupSyncError(Base):
             back_populates="error_rows",
         )
     )
-    connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
+    connector_credential_pair: Mapped[ConnectorCredentialPair | None] = relationship(
         "ConnectorCredentialPair"
     )
 
