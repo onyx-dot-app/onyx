@@ -45,10 +45,15 @@ def build_opensearch_document_index(
 def _build_opensearch_pair(
     search_settings: SearchSettings,
     secondary_search_settings: SearchSettings | None,
+    primary_backfill_in_progress: bool = False,
 ) -> OpenSearchIndexPair:
     primary = build_opensearch_document_index(search_settings)
     if secondary_search_settings is None:
-        return OpenSearchIndexPair(primary=primary, secondary=None)
+        return OpenSearchIndexPair(
+            primary=primary,
+            secondary=None,
+            primary_backfill_in_progress=primary_backfill_in_progress,
+        )
     secondary_indexing_setting = IndexingSetting.from_db_model(
         secondary_search_settings
     )
@@ -58,6 +63,7 @@ def _build_opensearch_pair(
         secondary=secondary,
         secondary_embedding_dim=secondary_indexing_setting.final_embedding_dim,
         secondary_embedding_precision=secondary_indexing_setting.embedding_precision,
+        primary_backfill_in_progress=primary_backfill_in_progress,
     )
 
 
@@ -129,6 +135,7 @@ def get_all_document_indices(
     search_settings: SearchSettings,
     secondary_search_settings: SearchSettings | None,
     httpx_client: httpx.Client | None = None,
+    primary_backfill_in_progress: bool = False,
 ) -> list[DocumentIndex]:
     """Gets every document index that should be written to.
 
@@ -136,6 +143,9 @@ def get_all_document_indices(
     that there is some conflict between indexing and the migration task, it is
     assumed that the state of Vespa is more up-to-date than the state of
     OpenSearch.
+
+    ``primary_backfill_in_progress`` marks the OpenSearch primary as an INSTANT
+    reindex-port target still backfilling (see OpenSearchIndexPair.update).
     """
     if DISABLE_VECTOR_DB:
         return [DisabledDocumentIndex()]
@@ -152,6 +162,10 @@ def get_all_document_indices(
         )
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
         result.append(
-            _build_opensearch_pair(search_settings, secondary_search_settings)
+            _build_opensearch_pair(
+                search_settings,
+                secondary_search_settings,
+                primary_backfill_in_progress=primary_backfill_in_progress,
+            )
         )
     return result

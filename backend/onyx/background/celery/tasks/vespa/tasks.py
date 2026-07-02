@@ -46,6 +46,7 @@ from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import DocumentSet
 from onyx.db.models import UserGroup
+from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.sync_record import cleanup_sync_records
 from onyx.db.sync_record import insert_sync_record
@@ -473,11 +474,21 @@ def document_index_metadata_sync_task(
     try:
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
+            # INSTANT reindex-port: the promoted primary is still backfilling. Flag it so
+            # an update to a not-yet-copied doc defers below instead of clearing needs_sync
+            # (which would let the create-only port reinstall a stale ACL). See update().
+            primary_backfill_in_progress = (
+                active_search_settings.primary.port_backfill_source_id is not None
+                and port_backfill_has_pending_work(
+                    db_session, active_search_settings.primary.id
+                )
+            )
             # This flow is for updates so we get all indices.
             document_indices = get_all_document_indices(
                 search_settings=active_search_settings.primary,
                 secondary_search_settings=active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
+                primary_backfill_in_progress=primary_backfill_in_progress,
             )
 
             retry_document_indices: list[RetryDocumentIndex] = [
@@ -515,9 +526,10 @@ def document_index_metadata_sync_task(
                     hidden=doc.hidden,
                 )
 
-                # PRESENT synced but doc not in FUTURE yet (reindex port): defer
-                # rather than fail. PRESENT write already committed in the pair.
-                secondary_only_missing = False
+                # Reindex-port: doc missing from a still-populating index (FUTURE, or the
+                # INSTANT-promoted primary) — defer rather than fail; the fully-populated
+                # index's write already committed in the pair.
+                port_index_missing = False
                 for retry_document_index in retry_document_indices:
                     try:
                         # TODO(andrei): Previously there was a comment here saying
@@ -527,15 +539,15 @@ def document_index_metadata_sync_task(
                         retry_document_index.update([update_request])
                     except SecondaryIndexDocumentMissingError:
                         task_logger.debug(
-                            f"doc={document_id} not in secondary index; deferring FUTURE sync."
+                            f"doc={document_id} not in a still-porting index; deferring sync."
                         )
-                        secondary_only_missing = True
+                        port_index_missing = True
 
                 # update db last. Worst case = we crash right before this and
                 # the sync might repeat again later.
-                # Defer only if the doc can still reach FUTURE; an INVALID/DELETING-only
+                # Defer only if the doc can still be ported; an INVALID/DELETING-only
                 # doc's flag would never clear -> swap deadlock, so mark it synced.
-                if secondary_only_missing and document_has_indexable_cc_pair(
+                if port_index_missing and document_has_indexable_cc_pair(
                     db_session, document_id
                 ):
                     mark_document_synced_secondary_pending(document_id, db_session)

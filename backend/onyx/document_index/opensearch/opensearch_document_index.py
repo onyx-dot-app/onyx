@@ -955,6 +955,8 @@ class OpenSearchIndexPair(DocumentIndex):
         # TODO(andrei): This is dumb, fix this.
         secondary_embedding_dim: int | None = None,
         secondary_embedding_precision: EmbeddingPrecision | None = None,
+        # INSTANT reindex-port: primary is a promoted, still-backfilling index; see update().
+        primary_backfill_in_progress: bool = False,
     ) -> None:
         # All three secondary fields must be set together or all None — checked
         # independently so a partially-set state surfaces here rather than
@@ -973,6 +975,7 @@ class OpenSearchIndexPair(DocumentIndex):
         self._secondary = secondary
         self._secondary_embedding_dim = secondary_embedding_dim
         self._secondary_embedding_precision = secondary_embedding_precision
+        self._primary_backfill_in_progress = primary_backfill_in_progress
 
     def verify_and_create_index_if_necessary(
         self,
@@ -1007,7 +1010,17 @@ class OpenSearchIndexPair(DocumentIndex):
         return total
 
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
-        self._primary.update(update_requests)
+        if self._primary_backfill_in_progress:
+            # A doc the port hasn't copied into this now-live primary yet is silently
+            # missing; surface it (typed signal, like secondary) so the caller defers
+            # instead of clearing needs_sync and letting the create-only port reinstall
+            # a stale, possibly-revoked ACL nothing would correct.
+            try:
+                self._primary.update(update_requests, surface_document_missing=True)
+            except OpenSearchDocumentMissingError as e:
+                raise SecondaryIndexDocumentMissingError(e.missing_document_ids)
+        else:
+            self._primary.update(update_requests)
         if self._secondary is not None:
             # FUTURE may not have the doc yet (port); re-raise as a typed signal
             # carrying only the docs that were actually missing.

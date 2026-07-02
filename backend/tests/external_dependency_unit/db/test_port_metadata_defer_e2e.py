@@ -313,6 +313,77 @@ def test_deferred_metadata_sync_no_stale_permission_leak(
     assert count_secondary_only_sync_pending_documents(db_session) == baseline_deferred
 
 
+def test_instant_backfill_primary_missing_no_stale_permission_leak(
+    db_session: Session,
+    env: tuple[
+        ConnectorCredentialPair,
+        str,
+        OpenSearchIndexClient,
+        OpenSearchIndexClient,
+        str,
+        str,
+    ],
+) -> None:
+    """INSTANT post-swap symmetry of the FUTURE defer test: the promoted primary is
+    the still-populating index. A doc the port hasn't copied yet is missing from the
+    *primary*; with primary_backfill_in_progress the update is surfaced and deferred
+    (not silently dropped). After the port create-writes the doc carrying the OLD
+    access, the deferred drain re-applies and the primary ends with the NEW access --
+    proving the create-only port can't reinstall a stale (revoked) ACL permanently.
+    """
+    _pair, doc_id, present_client, _future_client, present_name, _future_name = env
+
+    # The now-live primary does NOT have the doc yet (mid INSTANT backfill).
+    pair_index = OpenSearchIndexPair(
+        primary=_index(present_name),
+        secondary=None,
+        primary_backfill_in_progress=True,
+    )
+    req = MetadataUpdateRequest(
+        document_ids=[doc_id],
+        doc_id_to_chunk_cnt={doc_id: _CHUNKS_PER_DOC},
+        access=_ACCESS_NEW,
+    )
+    baseline_deferred = count_secondary_only_sync_pending_documents(db_session)
+
+    # --- permission change while the doc is missing from the live primary -> defer,
+    #     do NOT clear needs_sync (else the port write below leaks the old ACL). ---
+    with pytest.raises(SecondaryIndexDocumentMissingError) as exc:
+        pair_index.update([req])
+    assert exc.value.document_ids == [doc_id]
+    mark_document_synced_secondary_pending(doc_id, db_session)
+
+    db_session.expire_all()
+    doc = db_session.get(DbDocument, doc_id)
+    assert doc is not None and doc.secondary_only_sync_pending is True
+    assert (
+        count_secondary_only_sync_pending_documents(db_session) == baseline_deferred + 1
+    )
+
+    # --- the port copies the doc into the live primary carrying the OLD access. ---
+    present_client.bulk_index_documents(
+        documents=[
+            _make_chunk(doc_id, c_i, _ACCESS_OLD) for c_i in range(_CHUNKS_PER_DOC)
+        ],
+        tenant_state=_TENANT_STATE,
+        use_create_only=True,
+    )
+    present_client.refresh_index()
+    assert _read_acl(present_client, doc_id, 0) == _ACL_OLD  # stale right now
+
+    # --- the deferred drain re-applies once the doc is present -> NEW access wins. ---
+    pair_index.update([req])  # doc present now -> no raise
+    mark_document_as_synced(doc_id, db_session)
+
+    present_client.refresh_index()
+    assert _read_acl(present_client, doc_id, 0) == _ACL_NEW  # no stale-permission leak
+    assert _read_acl(present_client, doc_id, 1) == _ACL_NEW
+    db_session.expire_all()
+    doc = db_session.get(DbDocument, doc_id)
+    assert doc is not None and doc.secondary_only_sync_pending is False
+    assert count_secondary_only_sync_pending_documents(db_session) == baseline_deferred
+
+
 def test_port_batch_retry_does_not_revert_a_newer_metadata_update(
     env: tuple[
         ConnectorCredentialPair,
