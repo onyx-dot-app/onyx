@@ -1,7 +1,7 @@
 """add port_attempt and sync flags
 
 Revision ID: d49e41659191
-Revises: 4d545225fd82
+Revises: 81c4872d9666
 Create Date: 2026-06-02 15:44:59.857241
 
 Reindexing port, phase 1 (additive): port_attempt table (incl. up_to_doc_id) +
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "d49e41659191"
-down_revision = "4d545225fd82"
+down_revision = "81c4872d9666"
 branch_labels = None
 depends_on = None
 

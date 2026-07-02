@@ -1,7 +1,7 @@
 """add search_settings port columns
 
 Revision ID: 81c4872d9666
-Revises: d49e41659191
+Revises: 7f2a3b9c1d4e
 Create Date: 2026-06-03 12:11:18.288792
 
 Additive port-flow columns on search_settings:
@@ -17,7 +17,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "81c4872d9666"
-down_revision = "d49e41659191"
+down_revision = "7f2a3b9c1d4e"
 branch_labels = None
 depends_on = None
 
