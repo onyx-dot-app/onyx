@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
-import { AuthType } from "@/lib/constants";
+import { AuthType } from "@/lib/auth/types";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";

@@ -1,8 +1,7 @@
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS } from "@/lib/auth/svcSS";
-import { AuthTypeMetadata } from "@/lib/auth/types";
-import { AuthType } from "@/lib/constants";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 
 /**
  * Result of an authentication check.
@@ -59,7 +58,7 @@ export async function requireAuth(): Promise<AuthCheckResult> {
     return {
       user,
       authTypeMetadata,
-      redirect: "/auth/email-verification",
+      redirect: "/auth/verify-email",
     };
   }
 

@@ -1,5 +1,4 @@
-import { AuthType } from "@/lib/constants";
-import type { AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthType, type AuthTypeMetadata } from "@/lib/auth/types";
 import type { User } from "@/lib/types";
 
 export type AuthPage = "login" | "signup" | "join";
@@ -14,7 +13,7 @@ export function getAuthRedirect(
 
   if (isAuthenticated) {
     if (authTypeMetadata.requiresVerification && !user.is_verified) {
-      return "/auth/email-verification";
+      return "/auth/verify-email";
     }
     return "/app";
   }

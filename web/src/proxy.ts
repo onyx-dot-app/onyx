@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { AuthType } from "./lib/auth/types";
 import {
-  AuthType,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_TYPE,
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,

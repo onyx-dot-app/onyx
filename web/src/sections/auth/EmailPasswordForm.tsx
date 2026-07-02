@@ -107,7 +107,7 @@ export default function EmailPasswordForm({
     if (loginResponse.ok) {
       if (isSignup && shouldVerify) {
         await requestEmailVerification(email);
-        window.location.href = "/auth/email-verification";
+        window.location.href = "/auth/verify-email";
       } else {
         const validatedNextUrl = validateInternalRedirect(nextUrl);
         window.location.href =

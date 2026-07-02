@@ -1,1 +1,1 @@
-export { default } from "@/views/auth/EmailVerificationPage";
+export { default } from "@/views/auth/email-verification/EmailVerificationPage";

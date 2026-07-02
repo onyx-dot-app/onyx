@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuthTypeMetadata, useAuthRedirect } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { AuthType } from "@/lib/constants";
+import { AuthType } from "@/lib/auth/types";
 import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";

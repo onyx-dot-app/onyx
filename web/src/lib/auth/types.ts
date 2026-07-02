@@ -1,4 +1,10 @@
-import { AuthType } from "@/lib/constants";
+export enum AuthType {
+  BASIC = "basic",
+  GOOGLE_OAUTH = "google_oauth",
+  OIDC = "oidc",
+  SAML = "saml",
+  CLOUD = "cloud",
+}
 
 export interface AuthTypeMetadata {
   authType: AuthType;

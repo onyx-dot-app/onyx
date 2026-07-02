@@ -10,7 +10,7 @@ import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import SignInButton from "@/sections/auth/SignInButton";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
-import { AuthType } from "@/lib/constants";
+import { AuthType } from "@/lib/auth/types";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { useAuthRedirect } from "@/lib/auth/hooks";
 import { markdown } from "@opal/utils";

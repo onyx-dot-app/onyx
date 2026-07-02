@@ -2,9 +2,9 @@ import "server-only";
 
 import { buildUrl, UrlBuilder } from "@/lib/utilsSS";
 import { getDomain } from "@/lib/redirectSS";
-import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
-import { AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
   const res = await fetch(buildUrl("/auth/type"));
