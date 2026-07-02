@@ -134,8 +134,8 @@ interface SubmitProps {
 }
 
 const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
-  submit: "Submit",
-  create: "Create",
+  submit: "Sign In",
+  create: "Create Account",
   join: "Join",
   reset: "Reset Password",
   impersonate: "Impersonate",

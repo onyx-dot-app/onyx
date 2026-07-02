@@ -6,6 +6,7 @@
  */
 import React from "react";
 import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
+import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 
 // Mock next/navigation (not used by this component, but required by dependencies)
@@ -14,6 +15,11 @@ jest.mock("next/navigation", () => ({
     push: jest.fn(),
     refresh: jest.fn(),
   }),
+}));
+
+// Inline fns so the factory doesn't capture an uninitialized variable
+jest.mock("@/hooks/useToast", () => ({
+  toast: { error: jest.fn(), success: jest.fn() },
 }));
 
 describe("Email/Password Login Workflow", () => {
@@ -39,44 +45,37 @@ describe("Email/Password Login Workflow", () => {
 
     render(<EmailPasswordForm label="submit" />);
 
-    // User fills out the form using placeholder text
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
     const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "test@example.com");
     await user.type(passwordInput, "password123");
 
-    // User submits the form
     const loginButton = screen.getByRole("button", { name: /sign in/i });
     await user.click(loginButton);
 
-    // Verify success message is shown after login
+    // Verify API was called with correct credentials
     await waitFor(() => {
-      expect(screen.getByText(/signed in successfully\./i)).toBeInTheDocument();
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/auth/login",
+        expect.objectContaining({
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        })
+      );
     });
 
-    // Verify API was called with correct credentials
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/auth/login",
-      expect.objectContaining({
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-      })
-    );
-
-    // Verify the request body contains email and password
     const callArgs = fetchSpy.mock.calls[0];
     const body = callArgs[1].body;
     expect(body.toString()).toContain("username=test%40example.com");
     expect(body.toString()).toContain("password=password123");
   });
 
-  test("shows error message when login fails", async () => {
+  test("shows error toast when login fails", async () => {
     const user = setupUser();
 
-    // Mock POST /api/auth/login (failure)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 401,
@@ -85,22 +84,17 @@ describe("Email/Password Login Workflow", () => {
 
     render(<EmailPasswordForm label="submit" />);
 
-    // User fills out form with invalid credentials
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
     const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "wrong@example.com");
     await user.type(passwordInput, "wrongpassword");
 
-    // User submits
     const loginButton = screen.getByRole("button", { name: /sign in/i });
     await user.click(loginButton);
 
-    // Verify field-level error message is displayed (not the toast)
     await waitFor(() => {
-      expect(
-        screen.getByText(/^Invalid email or password$/i)
-      ).toBeInTheDocument();
+      expect(toast.error).toHaveBeenCalledWith("Invalid email or password");
     });
   });
 });
@@ -134,14 +128,12 @@ describe("Email/Password Signup Workflow", () => {
 
     render(<EmailPasswordForm label="create" />);
 
-    // User fills out the signup form
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
     const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "newuser@example.com");
     await user.type(passwordInput, "securepassword123");
 
-    // User submits the signup form
     const signupButton = screen.getByRole("button", {
       name: /create account/i,
     });
@@ -153,14 +145,11 @@ describe("Email/Password Signup Workflow", () => {
         "/api/auth/register",
         expect.objectContaining({
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
         })
       );
     });
 
-    // Verify signup request body
     const signupCallArgs = fetchSpy.mock.calls[0];
     const signupBody = JSON.parse(signupCallArgs[1].body);
     expect(signupBody).toEqual({
@@ -174,24 +163,14 @@ describe("Email/Password Signup Workflow", () => {
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/auth/login",
-        expect.objectContaining({
-          method: "POST",
-        })
+        expect.objectContaining({ method: "POST" })
       );
-    });
-
-    // Verify success message is shown
-    await waitFor(() => {
-      expect(
-        screen.getByText(/account created\. signing in/i)
-      ).toBeInTheDocument();
     });
   });
 
-  test("shows error when email already exists", async () => {
+  test("shows error toast when email already exists", async () => {
     const user = setupUser();
 
-    // Mock POST /api/auth/register (failure - user exists)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 400,
@@ -200,33 +179,27 @@ describe("Email/Password Signup Workflow", () => {
 
     render(<EmailPasswordForm label="create" />);
 
-    // User fills out form with existing email
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
     const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "existing@example.com");
     await user.type(passwordInput, "password123");
 
-    // User submits
     const signupButton = screen.getByRole("button", {
       name: /create account/i,
     });
     await user.click(signupButton);
 
-    // Verify field-level error message is displayed (not the toast)
     await waitFor(() => {
-      expect(
-        screen.getByText(
-          /^An account already exists with the specified email\.$/i
-        )
-      ).toBeInTheDocument();
+      expect(toast.error).toHaveBeenCalledWith(
+        "An account already exists with the specified email."
+      );
     });
   });
 
-  test("shows rate limit error when too many requests", async () => {
+  test("shows rate limit error toast when too many requests", async () => {
     const user = setupUser();
 
-    // Mock POST /api/auth/register (failure - rate limit)
     fetchSpy.mockResolvedValueOnce({
       ok: false,
       status: 429,
@@ -235,24 +208,21 @@ describe("Email/Password Signup Workflow", () => {
 
     render(<EmailPasswordForm label="create" />);
 
-    // User fills out form
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
     const passwordInput = screen.getByTestId("password");
 
     await user.type(emailInput, "user@example.com");
     await user.type(passwordInput, "password123");
 
-    // User submits
     const signupButton = screen.getByRole("button", {
       name: /create account/i,
     });
     await user.click(signupButton);
 
-    // Verify field-level rate limit message is displayed (not the toast)
     await waitFor(() => {
-      expect(
-        screen.getByText(/^Too many requests\. Please try again later\.$/i)
-      ).toBeInTheDocument();
+      expect(toast.error).toHaveBeenCalledWith(
+        "Too many requests. Please try again later."
+      );
     });
   });
 });

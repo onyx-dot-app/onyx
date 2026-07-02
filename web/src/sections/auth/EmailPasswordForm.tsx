@@ -85,13 +85,12 @@ export default function EmailPasswordForm({
         const errorBody: any = await response.json();
         const errorDetail = errorBody.detail;
         let errorMsg = "Unknown error";
-        if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
+        if (response.status === 429) {
+          errorMsg = "Too many requests. Please try again later.";
+        } else if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
           errorMsg = "An account already exists with the specified email.";
         } else if (typeof errorDetail === "string" && errorDetail) {
           errorMsg = errorDetail;
-        }
-        if (response.status === 429) {
-          errorMsg = "Too many requests. Please try again later.";
         }
         toast.error(errorMsg);
         return;
@@ -118,15 +117,14 @@ export default function EmailPasswordForm({
     } else {
       const errorDetail: any = (await loginResponse.json()).detail;
       let errorMsg = "Unknown error";
-      if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
+      if (loginResponse.status === 429) {
+        errorMsg = "Too many requests. Please try again later.";
+      } else if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
         errorMsg = "Invalid email or password";
       } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
         errorMsg = "Create an account to set a password";
       } else if (typeof errorDetail === "string") {
         errorMsg = errorDetail;
-      }
-      if (loginResponse.status === 429) {
-        errorMsg = "Too many requests. Please try again later.";
       }
       toast.error(errorMsg);
     }
