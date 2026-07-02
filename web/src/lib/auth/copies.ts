@@ -12,7 +12,7 @@ export function backToLoginOrSignupCopy(
   signupUnavailable: boolean = false
 ): string | RichStr {
   return signupUnavailable
-    ? markdown("Back to [Sign In](/auth/login?autoRedirectToSignup=false)")
+    ? markdown("Back to [Sign In](/auth/login)")
     : markdown(
         "Back to [Sign In](/auth/login) or [Create an Account](/auth/signup)"
       );

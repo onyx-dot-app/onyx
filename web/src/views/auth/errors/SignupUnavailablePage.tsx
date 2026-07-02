@@ -27,7 +27,7 @@ export default function SignupUnavailablePage() {
     >
       <AuthLayouts.Message
         title="New account creation unavailable."
-        description="Existing accounts can still [sign in](/auth/login?autoRedirectToSignup=false). New account creation will be available again soon."
+        description="Existing accounts can still [sign in](/auth/login). New account creation will be available again soon."
       />
     </AuthLayouts.Card>
   );

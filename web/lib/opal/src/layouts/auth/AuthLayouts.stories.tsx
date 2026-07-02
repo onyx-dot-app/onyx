@@ -69,7 +69,7 @@ export const Signup: Story = {
         title="Create account"
         description="Get started with Onyx"
         bottomPrompt={markdown(
-          "Already have an account? [Sign In](/auth/login?autoRedirectToSignup=false)"
+          "Already have an account? [Sign In](/auth/login)"
         )}
       >
         <AuthLayouts.Fields>

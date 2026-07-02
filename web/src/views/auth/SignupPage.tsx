@@ -33,9 +33,7 @@ export default function SignupPage() {
     <AuthLayouts.Card
       title="Create account"
       description={`Get started with ${appName}`}
-      bottomPrompt={markdown(
-        "Already have an account? [Sign In](/auth/login?autoRedirectToSignup=false)"
-      )}
+      bottomPrompt={markdown("Already have an account? [Sign In](/auth/login)")}
       logoSrc={logoUrl}
     >
       <EmailPasswordForm
