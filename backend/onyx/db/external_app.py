@@ -480,10 +480,9 @@ def upsert_external_app_user_credential(
     OAuth writers should store provider-returned values as-is.
 
     ``granted_scopes`` is the connect-time OAuth grant: a list, or ``None`` when
-    a fresh authorize couldn't determine it — either value overwrites the stored
-    grant (``None`` clears a now-stale prior grant to "unknown"). Leave it
-    ``UNSET`` on the refresh and credential-form paths, which don't re-derive
-    scopes, to keep the stored grant untouched.
+    a fresh authorize couldn't determine it — both overwrite the stored value
+    (``None`` clears a now-stale grant to "unknown"). The refresh and form paths
+    leave it ``UNSET`` to keep the stored grant untouched.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:

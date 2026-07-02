@@ -25,8 +25,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # HubSpot's token response omits the granted scopes, so the actual per-user
-# grant (which diverges under `optional_scope`, ENG-4260) is read from the
-# token-info endpoint, which returns a `scopes` array.
+# grant (which diverges under `optional_scope`) is read from the token-info
+# endpoint, which returns a `scopes` array.
 _TOKEN_INFO_URL = "https://api.hubapi.com/oauth/v1/access-tokens/{access_token}"
 
 # Bounded so a slow/hung token-info call can't pin the OAuth connect flow.

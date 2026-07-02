@@ -1,4 +1,3 @@
-import re
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import Mapping
@@ -56,23 +55,20 @@ def token_response_error(http_response: requests.Response, body: Any) -> str | N
     return None
 
 
-# Handles space-delimited (RFC 6749 §3.3) and comma-delimited (GitHub, Slack)
-# scope strings with one rule; scope tokens contain neither whitespace nor commas.
-_SCOPE_DELIMITERS = re.compile(r"[,\s]+")
-
-
-def parse_granted_scopes(raw: Any) -> list[str] | None:
+def parse_granted_scopes(raw: object) -> list[str] | None:
     """Normalise a granted-scope signal (delimited string or list) into a scope
     list. Returns ``None`` — never ``[]`` — for an absent/empty signal, so
     callers record "grant unknown" rather than an (impossible) empty grant.
     """
     if isinstance(raw, str):
-        scopes = _SCOPE_DELIMITERS.split(raw.strip())
+        # Space- or comma-delimited (RFC 6749 §3.3; GitHub/Slack), incl. mixed
+        # forms like "repo, gist" — normalise to spaces so split() handles all.
+        parts: list[str] = raw.replace(",", " ").split()
     elif isinstance(raw, list):
-        scopes = [str(scope).strip() for scope in raw]
+        parts = [str(scope) for scope in raw]
     else:
         return None
-    scopes = [scope for scope in scopes if scope]
+    scopes = [stripped for part in parts if (stripped := part.strip())]
     return scopes or None
 
 
