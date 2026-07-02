@@ -501,7 +501,7 @@ def send_user_verification_email(
     onyx_file = OnyxRuntime.get_emailable_logo()
 
     subject = f"{application_name} Email Verification"
-    link = f"{WEB_DOMAIN}/auth/email-verification?token={token}"
+    link = f"{WEB_DOMAIN}/auth/verify-email?token={token}"
     if new_organization:
         link = add_url_params(link, {"first_user": "true"})
     message = (

@@ -1,59 +1,62 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
-import { markdown } from "@opal/utils";
-import { PageLoader } from "@/refresh-components/PageLoader";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
-import { useAuthTypeMetadata } from "@/lib/auth/hooks";
-import { requestEmailVerification } from "@/lib/auth/svc";
+import { verifyEmail } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
-import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading } = useCurrentUser();
-  const { authTypeMetadata } = useAuthTypeMetadata();
   const { logoUrl } = useSettings();
 
-  // Resend flow: fire-and-forget, then strip the ?resend param.
-  useEffect(() => {
-    if (!searchParams.get("resend") || !user) return;
-    router.replace("/auth/verify-email" as Route);
-    requestEmailVerification(user.email).then((response) => {
-      if (response.ok) {
-        toast.success("Verification email resent!");
-      } else {
-        response
-          .json()
-          .then((body) =>
-            toast.error(`Failed to resend verification email — ${body.detail}`)
-          );
-      }
-    });
-  }, [searchParams, user, router]);
+  const token = searchParams.get("token");
+  const firstUser =
+    searchParams.get("first_user") === "true" && NEXT_PUBLIC_CLOUD_ENABLED;
 
-  if (isLoading) return <PageLoader />;
-  if (!user) redirect("/auth/login");
-  if (user.is_verified || !authTypeMetadata.requiresVerification)
-    redirect("/app");
+  const verifyingRef = useRef(false);
+
+  // Token flow: wait for auth state to settle, then verify once.
+  useEffect(() => {
+    if (!token || isLoading || verifyingRef.current) return;
+    verifyingRef.current = true;
+    verifyEmail(token)
+      .then(() => {
+        if (user) {
+          router.replace("/app" as Route);
+        } else {
+          router.replace(
+            (firstUser
+              ? "/auth/login?verified=true&first_user=true"
+              : "/auth/login?verified=true") as Route
+          );
+        }
+      })
+      .catch((e) => {
+        toast.error(
+          `Failed to verify your email — ${e instanceof Error ? e.message : "unknown error"}.`
+        );
+        if (user) {
+          router.replace("/app" as Route);
+        } else {
+          router.replace("/auth/login" as Route);
+        }
+      });
+  }, [token, isLoading, user, firstUser, router]);
+
+  if (!token) redirect("/auth/send-email-verification");
 
   return (
-    <AuthLayouts.Card
-      title="Check your inbox"
-      description="We've sent a verification link to your email address."
-      bottomPrompt={backToLoginOrSignupCopy()}
-      logoSrc={logoUrl}
-    >
+    <AuthLayouts.Card title="Verify Email" logoSrc={logoUrl}>
       <AuthLayouts.Message
-        title={`Email sent to ${user.email}`}
-        description={markdown(
-          "Didn't receive an email? [Resend](/auth/verify-email?resend=true)"
-        )}
+        title="Verifying your token..."
+        description="Give us a quick moment while we finish verifying your token."
       />
     </AuthLayouts.Card>
   );

@@ -58,7 +58,7 @@ export async function requireAuth(): Promise<AuthCheckResult> {
     return {
       user,
       authTypeMetadata,
-      redirect: "/auth/verify-email",
+      redirect: "/auth/send-email-verification",
     };
   }
 
