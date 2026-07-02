@@ -6,7 +6,6 @@ import { forgotPassword } from "@/lib/auth/svc";
 import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
-import { markdown } from "@opal/utils";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import type { Route } from "next";
 
@@ -29,7 +28,7 @@ export default function ForgotPasswordPage() {
   return (
     <AuthLayouts.Card
       title="Check your inbox"
-      description={markdown(`We sent a password reset link to **${email}**.`)}
+      description={`We sent a password reset link to ${email}.`}
       bottomPrompt={backToLoginOrSignupCopy()}
       logoSrc={logoUrl}
     >
