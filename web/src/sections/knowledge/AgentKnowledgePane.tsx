@@ -412,12 +412,8 @@ function KnowledgeSearchResultsPanel({
 
         <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-        <GeneralLayouts.Section
-          gap={0}
-          alignItems="stretch"
-          height="auto"
-          className="overflow-y-auto max-h-80"
-        >
+        {/* Plain div required: GeneralLayouts.Section (display:flex) breaks overflow-y scrolling */}
+        <div className="overflow-y-auto max-h-80">
           {allResults.map((entry) => {
             if (entry.kind === "node") {
               const node = entry.item;
@@ -537,7 +533,7 @@ function KnowledgeSearchResultsPanel({
               </TableLayouts.TableRow>
             );
           })}
-        </GeneralLayouts.Section>
+        </div>
       </GeneralLayouts.Section>
     );
 
