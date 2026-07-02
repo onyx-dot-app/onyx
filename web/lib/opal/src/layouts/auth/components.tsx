@@ -159,7 +159,7 @@ function Submit({ label, isSubmitting, isValid, dirty }: SubmitProps) {
 // Message — restrictive wrapper over MessageCard for auth pages
 // ---------------------------------------------------------------------------
 
-type MessageType = "default" | "warning" | "success";
+type MessageType = "default" | "warning" | "success" | "error";
 
 interface MessageProps {
   messageType?: MessageType;
