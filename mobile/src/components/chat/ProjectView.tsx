@@ -9,7 +9,7 @@ import { useProjectDetails } from "@/api/chat/projects";
 import { useChatController } from "@/hooks/useChatController";
 
 interface ProjectViewProps {
-  projectId: number;
+  projectId: number | null;
 }
 
 // Context panel + chats, with a project-scoped input bar. Input sticks to the
