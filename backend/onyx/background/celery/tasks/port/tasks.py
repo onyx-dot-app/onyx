@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import MAX_CONCURRENT_PORT_ATTEMPTS
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
@@ -47,6 +48,7 @@ from onyx.db.enums import SwitchoverType
 from onyx.db.models import PortAttempt
 from onyx.db.models import SearchSettings
 from onyx.db.port_attempt import commit_port_cursor
+from onyx.db.port_attempt import count_active_port_attempts
 from onyx.db.port_attempt import count_consecutive_failed_port_attempts_no_progress
 from onyx.db.port_attempt import create_port_attempt
 from onyx.db.port_attempt import get_active_port_attempt
@@ -472,6 +474,11 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
                 seconds=BEAT_EXPIRES_DEFAULT
             )
 
+            # Cap concurrent attempts so the port doesn't fill every docprocessing slot
+            # and starve live indexing. Gates only NEW creation; recovery re-enqueues of
+            # already-active attempts below still run (they don't add load).
+            active_attempts = count_active_port_attempts(db_session, search_settings_id)
+
             for cc_pair_id in cc_pair_ids:
                 lock_beat.reacquire()
                 active = get_active_port_attempt(
@@ -500,6 +507,10 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
                                 "NOT_STARTED PortAttempt %s",
                                 active.id,
                             )
+                    continue
+                # At the concurrency cap: don't start new attempts this tick (the
+                # remaining cc_pairs still get recovery re-enqueues above next pass).
+                if active_attempts >= MAX_CONCURRENT_PORT_ATTEMPTS:
                     continue
                 latest = get_latest_port_attempt(
                     db_session, cc_pair_id, search_settings_id
@@ -552,6 +563,7 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
                     mark_port_failed(db_session, attempt.id, error_msg="enqueue failed")
                     continue
                 tasks_created += 1
+                active_attempts += 1
     finally:
         if lock_beat.owned():
             lock_beat.release()

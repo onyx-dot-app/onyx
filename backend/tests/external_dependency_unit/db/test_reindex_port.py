@@ -35,6 +35,7 @@ from onyx.background.celery.tasks.port import tasks as port_task
 from onyx.background.celery.tasks.port.tasks import run_check_for_port
 from onyx.background.celery.tasks.port.tasks import run_port_attempt
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import MAX_CONCURRENT_PORT_ATTEMPTS
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
@@ -937,6 +938,61 @@ def test_check_for_port_creates_and_enqueues(
     }
     assert call.kwargs["queue"] == OnyxCeleryQueues.PORT
     assert call.kwargs["expires"] == BEAT_EXPIRES_DEFAULT
+
+
+def test_check_for_port_caps_concurrent_attempts(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """More in-scope cc_pairs than MAX_CONCURRENT_PORT_ATTEMPTS -> only the cap's worth
+    of attempts are created/enqueued per tick, so the port can't fill every
+    docprocessing slot and starve live indexing."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    # cap + 2 in-scope cc_pairs so the cap genuinely bites this tick.
+    extra_pairs = [
+        make_cc_pair(db_session) for _ in range(MAX_CONCURRENT_PORT_ATTEMPTS + 1)
+    ]
+    all_ids = [cc_pair.id] + [p.id for p in extra_pairs]
+    celery_app = MagicMock()
+    try:
+        with (
+            patch.object(
+                port_task,
+                "get_secondary_search_settings",
+                lambda db, *_, **__: db.get(SearchSettings, future_id),
+            ),
+            patch.object(
+                port_task,
+                "fetch_indexable_standard_connector_credential_pair_ids",
+                lambda *_, **__: all_ids,
+            ),
+        ):
+            result = run_check_for_port(get_current_tenant_id(), celery_app)
+
+        assert result == MAX_CONCURRENT_PORT_ATTEMPTS
+        assert celery_app.send_task.call_count == MAX_CONCURRENT_PORT_ATTEMPTS
+        db_session.expire_all()
+        created = (
+            db_session.query(PortAttempt)
+            .filter(
+                PortAttempt.search_settings_id == future_id,
+                PortAttempt.cc_pair_id.in_(all_ids),
+            )
+            .count()
+        )
+        assert created == MAX_CONCURRENT_PORT_ATTEMPTS
+    finally:
+        db_session.rollback()
+        for p in extra_pairs:
+            db_session.query(PortAttempt).filter(PortAttempt.cc_pair_id == p.id).delete(
+                synchronize_session="fetch"
+            )
+            db_session.commit()
+            cleanup_cc_pair(db_session, p)
 
 
 def test_check_for_port_gated_off_when_not_port_flow(

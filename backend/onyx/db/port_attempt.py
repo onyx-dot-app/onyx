@@ -95,6 +95,20 @@ def get_active_port_attempt(
     ).scalar_one_or_none()
 
 
+def count_active_port_attempts(db_session: Session, search_settings_id: int) -> int:
+    """Active (NOT_STARTED / IN_PROGRESS) attempts across all cc_pairs for a settings.
+    check_for_port caps new attempt creation on this so the port doesn't fill every
+    docprocessing slot and starve live indexing."""
+    return db_session.execute(
+        select(func.count())
+        .select_from(PortAttempt)
+        .where(
+            PortAttempt.search_settings_id == search_settings_id,
+            PortAttempt.status.in_(_ACTIVE_STATUSES),
+        )
+    ).scalar_one()
+
+
 def port_backfill_has_pending_work(
     db_session: Session, search_settings_id: int
 ) -> bool:

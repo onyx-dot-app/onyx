@@ -357,7 +357,7 @@
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration,port"
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"
       ],
       "presentation": {
         "group": "2",
@@ -552,7 +552,7 @@
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
         "-Q",
-        "docprocessing"
+        "docprocessing,port"
       ],
       "presentation": {
         "group": "2",
@@ -645,7 +645,7 @@
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration,port"
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration"
       ],
       "presentation": {
         "group": "2",
@@ -846,7 +846,7 @@
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
         "-Q",
-        "docprocessing"
+        "docprocessing,port"
       ],
       "presentation": {
         "group": "2",
