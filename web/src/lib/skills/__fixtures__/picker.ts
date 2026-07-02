@@ -24,7 +24,7 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     user_shares: [],
     group_shares: [],
     public_permission: null,
-    user_permission: null,
+    user_permission: "VIEWER",
     ...over,
   };
 }

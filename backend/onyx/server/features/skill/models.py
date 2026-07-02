@@ -67,6 +67,7 @@ class SkillResponse(BaseModel):
             description=skill.description,
             is_available=definition.is_available(db_session),
             unavailable_reason=definition.unavailable_reason,
+            user_permission=SkillAccessLevel.VIEWER,
         )
 
     @classmethod
