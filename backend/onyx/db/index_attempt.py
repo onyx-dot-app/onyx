@@ -160,8 +160,8 @@ def create_index_attempt(
 def create_synthetic_seed_attempt(
     connector_credential_pair_id: int,
     search_settings_id: int,
-    poll_range_end: float,
     db_session: Session,
+    poll_range_end: float,
 ) -> int:
     """Insert a SUCCESS IndexAttempt with no connector run (the reindex port's
     resume marker). It carries PRESENT's poll cursor so the FUTURE

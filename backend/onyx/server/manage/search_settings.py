@@ -200,8 +200,8 @@ def set_new_search_settings(
             create_synthetic_seed_attempt(
                 connector_credential_pair_id=cc_pair.id,
                 search_settings_id=new_search_settings.id,
-                poll_range_end=poll_range_end,
                 db_session=db_session,
+                poll_range_end=poll_range_end,
             )
 
     # Atomic: FUTURE row and its seeds become visible together.

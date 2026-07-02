@@ -318,12 +318,14 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         cursor = doc_ids[-1]
         docs_ported += len(doc_ids)
         with get_session_with_current_tenant() as db_session:
-            commit_port_cursor(
+            if not commit_port_cursor(
                 db_session,
                 port_attempt_id,
                 last_processed_doc_id=cursor,
                 docs_ported=docs_ported,
-            )
+            ):
+                log.info("PortAttempt terminalized mid-batch, stopping")
+                return
 
     with get_session_with_current_tenant() as db_session:
         mark_port_succeeded(db_session, port_attempt_id)

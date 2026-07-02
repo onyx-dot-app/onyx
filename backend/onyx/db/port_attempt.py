@@ -281,15 +281,21 @@ def commit_port_cursor(
     port_attempt_id: int,
     last_processed_doc_id: str,
     docs_ported: int,
-) -> None:
+) -> bool:
     """Per-batch durability point: advance the resume cursor + progress clock.
-    `docs_ported` is the cumulative count so far."""
+    `docs_ported` is the cumulative count so far. Returns False without writing if
+    the attempt already terminalized under the lock (a cancel/stall-FAIL that landed
+    mid-batch) so the caller stops rather than writing behind cleanup's back."""
     try:
         attempt = _get_locked(db_session, port_attempt_id)
+        if attempt.status.is_terminal():
+            db_session.rollback()
+            return False
         attempt.last_processed_doc_id = last_processed_doc_id
         attempt.docs_ported = docs_ported
         attempt.last_progress_time = func.now()
         db_session.commit()
+        return True
     except Exception:
         db_session.rollback()
         raise
@@ -299,12 +305,16 @@ def touch_port_progress(db_session: Session, port_attempt_id: int) -> None:
     """Per-page heartbeat: bump last_progress_time (no cursor change) so the stall
     watchdog can tell an active port from a dead/yielded one. Unlocked — a racing
     terminal write just costs a redundant bump."""
-    db_session.execute(
-        update(PortAttempt)
-        .where(PortAttempt.id == port_attempt_id)
-        .values(last_progress_time=func.now())
-    )
-    db_session.commit()
+    try:
+        db_session.execute(
+            update(PortAttempt)
+            .where(PortAttempt.id == port_attempt_id)
+            .values(last_progress_time=func.now())
+        )
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
+        raise
 
 
 def mark_port_succeeded(db_session: Session, port_attempt_id: int) -> None:
