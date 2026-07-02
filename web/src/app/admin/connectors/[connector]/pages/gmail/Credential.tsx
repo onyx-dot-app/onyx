@@ -91,26 +91,9 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
       }
 
       if (credentialFileType === "service_account") {
-        const response = await fetch(
-          "/api/manage/admin/connector/gmail/service-account-key",
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: credentialJsonStr,
-          }
+        toast.error(
+          "Service account keys are now uploaded in Step 2 when creating a credential"
         );
-        if (response.ok) {
-          toast.success("Successfully uploaded service account key");
-          mutate(SWR_KEYS.googleConnectorServiceAccountKey("gmail"));
-          if (onSuccess) {
-            onSuccess();
-          }
-        } else {
-          const errorMsg = await response.text();
-          toast.error(`Failed to upload service account key - ${errorMsg}`);
-        }
       }
       setIsUploading(false);
     };
@@ -218,7 +201,6 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
 
 interface GmailJsonUploadSectionProps {
   appCredentialData?: { client_id: string };
-  serviceAccountCredentialData?: { service_account_email: string };
   isAdmin: boolean;
   onSuccess?: () => void;
   existingAuthCredential?: boolean;
@@ -226,23 +208,18 @@ interface GmailJsonUploadSectionProps {
 
 export const GmailJsonUploadSection = ({
   appCredentialData,
-  serviceAccountCredentialData,
   isAdmin,
   onSuccess,
   existingAuthCredential,
 }: GmailJsonUploadSectionProps) => {
   const { mutate } = useSWRConfig();
-  const [localServiceAccountData, setLocalServiceAccountData] = useState(
-    serviceAccountCredentialData
-  );
   const [localAppCredentialData, setLocalAppCredentialData] =
     useState(appCredentialData);
 
   // Update local state when props change
   useEffect(() => {
-    setLocalServiceAccountData(serviceAccountCredentialData);
     setLocalAppCredentialData(appCredentialData);
-  }, [serviceAccountCredentialData, appCredentialData]);
+  }, [appCredentialData]);
 
   const handleSuccess = () => {
     if (onSuccess) {
@@ -284,8 +261,7 @@ export const GmailJsonUploadSection = ({
         </a>
       </div>
 
-      {(localServiceAccountData?.service_account_email ||
-        localAppCredentialData?.client_id) && (
+      {localAppCredentialData?.client_id && (
         <div className="mb-4">
           <div className="relative flex flex-1 items-center">
             <label
@@ -297,12 +273,7 @@ export const GmailJsonUploadSection = ({
               <div className="flex items-center space-x-2">
                 <FiFile className="h-4 w-4 text-text-500" />
                 <span className="text-sm text-text-500">
-                  {truncateString(
-                    localServiceAccountData?.service_account_email ||
-                      localAppCredentialData?.client_id ||
-                      "",
-                    50
-                  )}
+                  {truncateString(localAppCredentialData.client_id || "", 50)}
                 </span>
               </div>
             </label>
@@ -313,9 +284,7 @@ export const GmailJsonUploadSection = ({
                 variant="danger"
                 onClick={async () => {
                   const endpoint =
-                    localServiceAccountData?.service_account_email
-                      ? SWR_KEYS.googleConnectorServiceAccountKey("gmail")
-                      : SWR_KEYS.googleConnectorAppCredential("gmail");
+                    SWR_KEYS.googleConnectorAppCredential("gmail");
 
                   const response = await fetch(endpoint, {
                     method: "DELETE",
@@ -333,19 +302,8 @@ export const GmailJsonUploadSection = ({
                       SWR_KEYS.googleConnectorServiceAccountCredential("gmail")
                     );
 
-                    toast.success(
-                      `Successfully deleted ${
-                        localServiceAccountData
-                          ? "service account key"
-                          : "app credentials"
-                      }`
-                    );
-                    // Immediately update local state
-                    if (localServiceAccountData) {
-                      setLocalServiceAccountData(undefined);
-                    } else {
-                      setLocalAppCredentialData(undefined);
-                    }
+                    toast.success("Successfully deleted app credentials");
+                    setLocalAppCredentialData(undefined);
                     handleSuccess();
                   } else {
                     const errorMsg = await response.text();
@@ -360,10 +318,9 @@ export const GmailJsonUploadSection = ({
         </div>
       )}
 
-      {!(
-        localServiceAccountData?.service_account_email ||
-        localAppCredentialData?.client_id
-      ) && <GmailCredentialUpload onSuccess={handleSuccess} />}
+      {!localAppCredentialData?.client_id && (
+        <GmailCredentialUpload onSuccess={handleSuccess} />
+      )}
     </div>
   );
 };
@@ -371,7 +328,6 @@ export const GmailJsonUploadSection = ({
 interface GmailCredentialSectionProps {
   gmailPublicCredential?: Credential<GmailCredentialJson>;
   gmailServiceAccountCredential?: Credential<GmailServiceAccountCredentialJson>;
-  serviceAccountKeyData?: { service_account_email: string };
   appCredentialData?: { client_id: string };
   refreshCredentials: () => void;
   connectorExists: boolean;
@@ -409,7 +365,6 @@ async function handleRevokeAccess(
 export const GmailAuthSection = ({
   gmailPublicCredential,
   gmailServiceAccountCredential,
-  serviceAccountKeyData,
   appCredentialData,
   refreshCredentials,
   connectorExists,
@@ -420,11 +375,15 @@ export const GmailAuthSection = ({
 }: GmailCredentialSectionProps) => {
   const router = useRouter();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [localServiceAccountData, setLocalServiceAccountData] = useState(
-    serviceAccountKeyData
-  );
   const [localAppCredentialData, setLocalAppCredentialData] =
     useState(appCredentialData);
+  const [serviceAccountKey, setServiceAccountKey] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [serviceAccountFileName, setServiceAccountFileName] = useState<
+    string | null
+  >(null);
   const [localGmailPublicCredential, setLocalGmailPublicCredential] = useState(
     gmailPublicCredential
   );
@@ -435,16 +394,10 @@ export const GmailAuthSection = ({
 
   // Update local state when props change
   useEffect(() => {
-    setLocalServiceAccountData(serviceAccountKeyData);
     setLocalAppCredentialData(appCredentialData);
     setLocalGmailPublicCredential(gmailPublicCredential);
     setLocalGmailServiceAccountCredential(gmailServiceAccountCredential);
-  }, [
-    serviceAccountKeyData,
-    appCredentialData,
-    gmailPublicCredential,
-    gmailServiceAccountCredential,
-  ]);
+  }, [appCredentialData, gmailPublicCredential, gmailServiceAccountCredential]);
 
   const existingCredential =
     localGmailPublicCredential || localGmailServiceAccountCredential;
@@ -481,96 +434,6 @@ export const GmailAuthSection = ({
               </Button>
             )}
           </Section>
-        </div>
-      </div>
-    );
-  }
-
-  // If no credentials are uploaded, show message to complete step 1 first
-  if (
-    !localServiceAccountData?.service_account_email &&
-    !localAppCredentialData?.client_id
-  ) {
-    return (
-      <div>
-        <SectionHeader>Gmail Authentication</SectionHeader>
-        <div className="mt-4">
-          <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded-sm">
-            <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
-            <p className="text-sm">
-              Please complete Step 1 by uploading either OAuth credentials or a
-              Service Account key before proceeding with authentication.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (localServiceAccountData?.service_account_email) {
-    return (
-      <div>
-        <div className="mt-4">
-          <Formik
-            initialValues={{
-              google_primary_admin: user?.email || "",
-            }}
-            validationSchema={Yup.object().shape({
-              google_primary_admin: Yup.string()
-                .email("Must be a valid email")
-                .required("Required"),
-            })}
-            onSubmit={async (values, formikHelpers) => {
-              formikHelpers.setSubmitting(true);
-              try {
-                const response = await fetch(
-                  "/api/manage/admin/connector/gmail/service-account-credential",
-                  {
-                    method: "PUT",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      google_primary_admin: values.google_primary_admin,
-                    }),
-                  }
-                );
-
-                if (response.ok) {
-                  toast.success(
-                    "Successfully created service account credential"
-                  );
-                  refreshCredentials();
-                } else {
-                  const errorMsg = await response.text();
-                  toast.error(
-                    `Failed to create service account credential - ${errorMsg}`
-                  );
-                }
-              } catch (error) {
-                toast.error(
-                  `Failed to create service account credential - ${error}`
-                );
-              } finally {
-                formikHelpers.setSubmitting(false);
-              }
-            }}
-          >
-            {({ isSubmitting }) => (
-              <Form>
-                <TextFormField
-                  name="google_primary_admin"
-                  label="Primary Admin Email:"
-                  subtext="Enter the email of an admin/owner of the Google Organization that owns the Gmail account(s) you want to index."
-                />
-                <div className="flex">
-                  <Button disabled={isSubmitting} type="submit">
-                    {isSubmitting ? "Creating..." : "Create Credential"}
-                  </Button>
-                </div>
-              </Form>
-            )}
-          </Formik>
         </div>
       </div>
     );
@@ -618,6 +481,146 @@ export const GmailAuthSection = ({
     );
   }
 
-  // This code path should not be reached with the new conditions above
-  return null;
+  return (
+    <div>
+      <SectionHeader>Gmail Authentication</SectionHeader>
+      <div className="mt-4 space-y-4">
+        <div className="relative flex flex-1 items-center">
+          <label
+            className={cn(
+              "flex h-10 items-center justify-center w-full px-4 py-2 border border-dashed rounded-md transition-colors",
+              "cursor-pointer hover:bg-background-50/30 hover:border-primary dark:hover:border-primary border-background-300 dark:border-background-600"
+            )}
+          >
+            <input
+              type="file"
+              accept=".json,application/json"
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+
+                if (!file) {
+                  setServiceAccountKey(null);
+                  setServiceAccountFileName(null);
+                  return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (loadEvent) => {
+                  if (!loadEvent?.target?.result) {
+                    setServiceAccountKey(null);
+                    setServiceAccountFileName(null);
+                    return;
+                  }
+
+                  try {
+                    const parsed = JSON.parse(
+                      loadEvent.target.result as string
+                    ) as Record<string, unknown>;
+
+                    if (parsed.type !== "service_account") {
+                      toast.error(
+                        "Invalid file provided - expected a Service Account JSON key"
+                      );
+                      setServiceAccountKey(null);
+                      setServiceAccountFileName(null);
+                      return;
+                    }
+
+                    setServiceAccountKey(parsed);
+                    setServiceAccountFileName(file.name);
+                  } catch (error) {
+                    toast.error(`Invalid file provided - ${error}`);
+                    setServiceAccountKey(null);
+                    setServiceAccountFileName(null);
+                  }
+                };
+
+                reader.readAsText(file);
+              }}
+            />
+            <div className="flex items-center space-x-2">
+              <FiFile className="h-4 w-4 text-text-500" />
+              <span className="text-sm text-text-500">
+                {serviceAccountFileName
+                  ? truncateString(serviceAccountFileName, 50)
+                  : "Upload Service Account JSON"}
+              </span>
+            </div>
+          </label>
+        </div>
+
+        <Formik
+          initialValues={{
+            google_primary_admin: user?.email || "",
+          }}
+          validationSchema={Yup.object().shape({
+            google_primary_admin: Yup.string()
+              .email("Must be a valid email")
+              .required("Required"),
+          })}
+          onSubmit={async (values, formikHelpers) => {
+            formikHelpers.setSubmitting(true);
+
+            if (!serviceAccountKey) {
+              toast.error(
+                "Please upload a service account key before creating a credential"
+              );
+              formikHelpers.setSubmitting(false);
+              return;
+            }
+
+            try {
+              const response = await fetch(
+                "/api/manage/admin/connector/gmail/service-account-credential",
+                {
+                  method: "PUT",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    google_primary_admin: values.google_primary_admin,
+                    service_account_key: serviceAccountKey,
+                  }),
+                }
+              );
+
+              if (response.ok) {
+                toast.success(
+                  "Successfully created service account credential"
+                );
+                refreshCredentials();
+              } else {
+                const errorMsg = await response.text();
+                toast.error(
+                  `Failed to create service account credential - ${errorMsg}`
+                );
+              }
+            } catch (error) {
+              toast.error(
+                `Failed to create service account credential - ${error}`
+              );
+            } finally {
+              formikHelpers.setSubmitting(false);
+            }
+          }}
+        >
+          {({ isSubmitting }) => (
+            <Form>
+              <TextFormField
+                name="google_primary_admin"
+                label="Primary Admin Email:"
+                subtext="Enter the email of an admin/owner of the Google Organization that owns the Gmail account(s) you want to index."
+              />
+              <div className="flex">
+                <Button disabled={isSubmitting} type="submit">
+                  {isSubmitting ? "Creating..." : "Create Credential"}
+                </Button>
+              </div>
+            </Form>
+          )}
+        </Formik>
+      </div>
+    </div>
+  );
 };

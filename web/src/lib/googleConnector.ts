@@ -23,19 +23,6 @@ export const useGoogleAppCredential = (service: "gmail" | "google_drive") => {
   );
 };
 
-export const useGoogleServiceAccountKey = (
-  service: "gmail" | "google_drive"
-) => {
-  const endpoint = `/api/manage/admin/connector/${
-    service === "gmail" ? GOOGLE_SERVICES.GMAIL : GOOGLE_SERVICES.GOOGLE_DRIVE
-  }/service-account-key`;
-
-  return useSWR<{ service_account_email: string }, FetchError>(
-    endpoint,
-    errorHandlingFetcher
-  );
-};
-
 export const useGoogleCredentials = (
   source: ValidSources.Gmail | ValidSources.GoogleDrive
 ) => {
@@ -61,21 +48,14 @@ export const useConnectorsByCredentialId = (credential_id: number | null) => {
 
 export const checkCredentialsFetched = (
   appCredentialData: any,
-  appCredentialError: FetchError | undefined,
-  serviceAccountKeyData: any,
-  serviceAccountKeyError: FetchError | undefined
+  appCredentialError: FetchError | undefined
 ) => {
   const appCredentialSuccessfullyFetched =
     appCredentialData ||
     (appCredentialError && appCredentialError.status === 404);
 
-  const serviceAccountKeySuccessfullyFetched =
-    serviceAccountKeyData ||
-    (serviceAccountKeyError && serviceAccountKeyError.status === 404);
-
   return {
     appCredentialSuccessfullyFetched,
-    serviceAccountKeySuccessfullyFetched,
   };
 };
 
@@ -117,5 +97,4 @@ export const refreshAllGoogleData = (
       ? GOOGLE_SERVICES.GMAIL
       : GOOGLE_SERVICES.GOOGLE_DRIVE;
   mutate(SWR_KEYS.googleConnectorAppCredential(service));
-  mutate(SWR_KEYS.googleConnectorServiceAccountKey(service));
 };
