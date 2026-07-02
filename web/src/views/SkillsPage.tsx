@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { Button, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -14,106 +16,43 @@ import SkillCard, {
   type CustomSkillCardItem,
   type SkillCardItem,
 } from "@/sections/cards/SkillCard";
-import CreatePersonalSkillModal from "@/views/UserSkillsPage/CreatePersonalSkillModal";
-import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import CreatePersonalSkillModal from "@/views/SkillsPage/CreatePersonalSkillModal";
+import UploadSkillModal from "@/sections/modals/skills/UploadSkillModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
-import {
-  deleteUserSkill,
-  patchUserSkill,
-  replaceUserSkillBundle,
-} from "@/lib/skills/api";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
-import { toast } from "@/hooks/useToast";
 
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
-export default function UserSkillsPage() {
+export default function SkillsPage() {
+  const router = useRouter();
   const { data, error, isLoading, refresh } = useUserSkills();
-  const { user } = useUser();
+  const { isAdmin, isCurator } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
-    null
-  );
+  const [personalCreateOpen, setPersonalCreateOpen] = useState(false);
+  const [orgUploadOpen, setOrgUploadOpen] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<SkillCardItem | null>(
     null
   );
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const replaceBundleTarget = useRef<CustomSkillCardItem | null>(null);
-  const replaceFileRef = useRef<HTMLInputElement>(null);
-  // Non-null while a card mutation is in flight; gates all card actions so a
-  // shared file picker can't be retargeted and toggles can't race.
-  const [pendingId, setPendingId] = useState<string | null>(null);
 
   useOnMount(() => {
     searchInputRef.current?.focus();
   });
 
-  function handleReplaceBundleClick(item: CustomSkillCardItem) {
-    if (pendingId) return;
-    replaceBundleTarget.current = item;
-    replaceFileRef.current?.click();
-  }
+  const canManageOrgSkills = isAdmin || isCurator;
 
-  async function handleReplaceBundleFile(
-    event: React.ChangeEvent<HTMLInputElement>
-  ) {
-    const target = replaceBundleTarget.current;
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    replaceBundleTarget.current = null;
-    if (!target || !file) return;
-
-    setPendingId(target.id);
-    try {
-      await replaceUserSkillBundle(target.id, file);
-      toast.success(`Replaced bundle for "${target.name}"`);
-      refresh();
-    } catch (err) {
-      console.error("Failed to replace skill bundle", err);
-      toast.error(
-        err instanceof Error ? err.message : "Failed to replace bundle"
-      );
-    } finally {
-      setPendingId(null);
+  function handleCreateClick() {
+    if (canManageOrgSkills) {
+      setOrgUploadOpen(true);
+    } else {
+      setPersonalCreateOpen(true);
     }
   }
 
-  async function handleToggleEnabled(
-    item: CustomSkillCardItem,
-    enabled: boolean
-  ) {
-    setPendingId(item.id);
-    try {
-      await patchUserSkill(item.id, { enabled });
-      toast.success(`${enabled ? "Enabled" : "Disabled"} "${item.name}"`);
-      refresh();
-    } catch (err) {
-      console.error("Failed to toggle skill", err);
-      toast.error(err instanceof Error ? err.message : "Failed to toggle");
-    } finally {
-      setPendingId(null);
-    }
-  }
-
-  async function handleDeleteConfirmed() {
-    const target = deleteTarget;
-    if (!target) return;
-    setDeleteTarget(null);
-
-    setPendingId(target.id);
-    try {
-      await deleteUserSkill(target.id);
-      toast.success(`Deleted "${target.name}"`);
-      refresh();
-    } catch (err) {
-      console.error("Failed to delete skill", err);
-      toast.error(err instanceof Error ? err.message : "Failed to delete");
-    } finally {
-      setPendingId(null);
-    }
+  function handleEdit(item: CustomSkillCardItem) {
+    router.push(`/craft/v1/skills/edit/${item.id}` as Route);
   }
 
   const items = useMemo<SkillCardItem[]>(() => {
@@ -140,9 +79,9 @@ export default function UserSkillsPage() {
         name: c.name,
         description: c.description,
         source: "custom",
+        skill: c,
         author_email: c.author_email,
-        is_personal:
-          c.is_personal && user !== null && c.author_user_id === user.id,
+        is_personal: c.is_personal && c.user_permission === "OWNER",
         enabled: c.enabled,
       }));
     // Group order: built-in, then custom (org-wide), then personal; alphabetical within each group.
@@ -159,7 +98,7 @@ export default function UserSkillsPage() {
         groupRank(a) - groupRank(b) ||
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
     );
-  }, [data, user]);
+  }, [data]);
 
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -170,17 +109,24 @@ export default function UserSkillsPage() {
         item.description.toLowerCase().includes(q)
     );
   }, [items, searchQuery]);
+  const previewUnavailableReason =
+    previewTarget?.source === "builtin" && !previewTarget.is_available
+      ? (previewTarget.unavailable_reason ??
+        "This skill is currently unavailable.")
+      : null;
 
   return (
-    <SettingsLayouts.Root data-testid="UserSkillsPage/container">
+    <SettingsLayouts.Root data-testid="SkillsPage/container">
       <SettingsLayouts.Header
         icon={SvgBlocks}
         title="Skills"
-        description="Capability bundles your Craft agent can reach for. This page shows what's currently available to you — skills granted by admins plus your own personal skills."
+        description="Capability bundles your Craft agent can reach for. This page shows built-in skills, skills shared with you, and your own personal skills."
         rightChildren={
-          <Button icon={SvgPlus} onClick={() => setCreateOpen(true)}>
-            Create skill
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button icon={SvgPlus} onClick={handleCreateClick}>
+              Create skill
+            </Button>
+          </div>
         }
       >
         <InputTypeIn
@@ -215,7 +161,7 @@ export default function UserSkillsPage() {
                 }
                 description={
                   items.length === 0
-                    ? "Your admin hasn't granted you access to any custom skills yet, and no built-ins are configured."
+                    ? "No custom skills have been shared with you yet, and no built-ins are configured."
                     : "Try a different search."
                 }
               />
@@ -230,10 +176,7 @@ export default function UserSkillsPage() {
                       <SkillCard
                         key={item.id}
                         item={item}
-                        busy={pendingId !== null}
-                        onReplaceBundle={handleReplaceBundleClick}
-                        onDelete={setDeleteTarget}
-                        onToggleEnabled={handleToggleEnabled}
+                        onEdit={handleEdit}
                         onClick={setPreviewTarget}
                       />
                     ))}
@@ -258,35 +201,26 @@ export default function UserSkillsPage() {
         )}
       </SettingsLayouts.Body>
 
-      {/* Inline file picker for the card-level "Replace bundle" action. */}
-      <input
-        ref={replaceFileRef}
-        type="file"
-        accept=".zip,application/zip"
-        className="hidden"
-        onChange={handleReplaceBundleFile}
-      />
-
       <CreatePersonalSkillModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        open={personalCreateOpen}
+        onClose={() => setPersonalCreateOpen(false)}
         onCreated={refresh}
       />
 
-      {deleteTarget && (
-        <ConfirmEntityModal
-          danger
-          entityType="skill"
-          entityName={deleteTarget.name}
-          onClose={() => setDeleteTarget(null)}
-          onSubmit={handleDeleteConfirmed}
-        />
-      )}
+      <UploadSkillModal
+        open={orgUploadOpen}
+        onClose={() => setOrgUploadOpen(false)}
+        onUploaded={(created) => {
+          refresh();
+          router.push(`/craft/v1/skills/edit/${created.id}` as Route);
+        }}
+      />
 
       <SkillPreviewModal
         open={previewTarget !== null}
         skillId={previewTarget?.id ?? null}
         fallbackTitle={previewTarget?.name}
+        unavailableReason={previewUnavailableReason}
         onClose={() => setPreviewTarget(null)}
       />
     </SettingsLayouts.Root>

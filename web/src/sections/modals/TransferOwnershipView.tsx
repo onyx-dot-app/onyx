@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
-import { FullAgent } from "@/lib/agents/types";
+import { PersonaOwnerGroup } from "@/lib/agents/types";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { Tag, Text } from "@opal/components";
 import { SvgUser, SvgUsers } from "@opal/icons";
@@ -22,7 +22,10 @@ export type TransferOwnershipTarget =
   | null;
 
 export interface TransferOwnershipViewProps {
-  agent: FullAgent | null;
+  agent: {
+    owner: MinimalUserSnapshot | null;
+    owner_group?: PersonaOwnerGroup | null;
+  } | null;
   groups: MinimalUserGroupSnapshot[];
   onSelectedTargetChange: (target: TransferOwnershipTarget) => void;
   selectedTarget: TransferOwnershipTarget;

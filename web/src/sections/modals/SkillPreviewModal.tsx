@@ -17,6 +17,7 @@ interface SkillPreviewModalProps {
   open: boolean;
   skillId: string | null;
   fallbackTitle?: string;
+  unavailableReason?: string | null;
   onClose: () => void;
 }
 
@@ -36,6 +37,7 @@ export default function SkillPreviewModal({
   open,
   skillId,
   fallbackTitle = "Skill preview",
+  unavailableReason = null,
   onClose,
 }: SkillPreviewModalProps) {
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
@@ -81,6 +83,14 @@ export default function SkillPreviewModal({
 
           {preview && !isLoading && !error && (
             <Section gap={1} alignItems="stretch">
+              {unavailableReason && (
+                <MessageCard
+                  variant="warning"
+                  title="Skill unavailable"
+                  description={unavailableReason}
+                />
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {metadataRows(preview).map((row) => (
                   <div key={row.label} className="flex flex-col gap-1">
