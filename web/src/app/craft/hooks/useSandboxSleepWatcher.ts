@@ -90,7 +90,8 @@ export function useSandboxSleepWatcher(): void {
             deadline > Date.now() ? deadline - Date.now() : RETRY_DELAY_MS
           );
         }
-      } catch {
+      } catch (err) {
+        console.warn("Sandbox sleep check failed:", err);
         if (cancelled || retried) return;
         retried = true;
         timeoutId = setTimeout(check, RETRY_DELAY_MS);
@@ -111,7 +112,8 @@ export function useSandboxSleepWatcher(): void {
           idleTimeoutSeconds = result.idle_timeout_seconds;
           heartbeat = result.last_heartbeat;
           if (result.status !== "running") return;
-        } catch {
+        } catch (err) {
+          console.warn("Sandbox sleep watcher failed to arm:", err);
           if (!cancelled) timeoutId = setTimeout(arm, RETRY_DELAY_MS);
           return;
         }
@@ -150,5 +152,5 @@ export function useSandboxSleepWatcher(): void {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("online", onOnline);
     };
-  }, [sessionId, status, lastHeartbeat, updateSessionData]);
+  }, [sessionId, status, lastHeartbeat, createdAt, updateSessionData]);
 }
