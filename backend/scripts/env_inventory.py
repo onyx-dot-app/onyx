@@ -885,9 +885,10 @@ def main() -> int:
 
     if args.write_baseline is not None:
         path = args.write_baseline
-        path.write_text(format_baseline(should_document_list(reads)), encoding="utf-8")
-        count = len(should_document_list(reads))
-        print(f"Wrote drift baseline ({count} undocumented tunables) -> {path}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        current = should_document_list(reads)
+        path.write_text(format_baseline(current), encoding="utf-8")
+        print(f"Wrote drift baseline ({len(current)} undocumented tunables) -> {path}")
         return 0
 
     if args.check_baseline is not None:
