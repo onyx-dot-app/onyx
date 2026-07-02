@@ -7,10 +7,11 @@ import type { Route } from "next";
 import { adminDeleteCredential } from "@/lib/credential";
 import { setupGoogleDriveOAuth } from "@/lib/googleDrive";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
-import { TextFormField, SectionHeader } from "@/components/Field";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
+import InputFile from "@/refresh-components/inputs/InputFile";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import {
   Credential,
   GoogleDriveCredentialJson,
@@ -374,9 +375,6 @@ export const DriveAuthSection = ({
     string,
     unknown
   > | null>(null);
-  const [serviceAccountFileName, setServiceAccountFileName] = useState<
-    string | null
-  >(null);
   const [
     localGoogleDrivePublicCredential,
     setLocalGoogleDrivePublicCredential,
@@ -477,72 +475,34 @@ export const DriveAuthSection = ({
 
   return (
     <div>
-      <SectionHeader>Google Drive Authentication</SectionHeader>
+      <Text as="h3" font="heading-h2">
+        Google Drive Authentication
+      </Text>
       <div className="mt-4 space-y-4">
-        <div className="relative flex flex-1 items-center">
-          <label
-            className={cn(
-              "flex h-10 items-center justify-center w-full px-4 py-2 border border-dashed rounded-md transition-colors",
-              "cursor-pointer hover:bg-background-50/30 hover:border-primary dark:hover:border-primary border-background-300 dark:border-background-600"
-            )}
-          >
-            <input
-              type="file"
-              accept=".json,application/json"
-              className="sr-only"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-
-                if (!file) {
-                  setServiceAccountKey(null);
-                  setServiceAccountFileName(null);
-                  return;
-                }
-
-                const reader = new FileReader();
-                reader.onload = (loadEvent) => {
-                  if (!loadEvent?.target?.result) {
-                    setServiceAccountKey(null);
-                    setServiceAccountFileName(null);
-                    return;
-                  }
-
-                  try {
-                    const parsed = JSON.parse(
-                      loadEvent.target.result as string
-                    ) as Record<string, unknown>;
-
-                    if (parsed.type !== "service_account") {
-                      toast.error(
-                        "Invalid file provided - expected a Service Account JSON key"
-                      );
-                      setServiceAccountKey(null);
-                      setServiceAccountFileName(null);
-                      return;
-                    }
-
-                    setServiceAccountKey(parsed);
-                    setServiceAccountFileName(file.name);
-                  } catch (error) {
-                    toast.error(`Invalid file provided - ${error}`);
-                    setServiceAccountKey(null);
-                    setServiceAccountFileName(null);
-                  }
-                };
-
-                reader.readAsText(file);
-              }}
-            />
-            <div className="flex items-center space-x-2">
-              <FiFile className="h-4 w-4 text-text-500" />
-              <span className="text-sm text-text-500">
-                {serviceAccountFileName
-                  ? truncateString(serviceAccountFileName, 50)
-                  : "Upload Service Account JSON"}
-              </span>
-            </div>
-          </label>
-        </div>
+        <InputFile
+          accept="application/json"
+          placeholder="Upload or paste your service account JSON key"
+          setValue={(value) => {
+            if (!value) {
+              setServiceAccountKey(null);
+              return;
+            }
+            try {
+              const parsed = JSON.parse(value) as Record<string, unknown>;
+              if (parsed.type !== "service_account") {
+                toast.error(
+                  "Invalid file provided - expected a Service Account JSON key"
+                );
+                setServiceAccountKey(null);
+                return;
+              }
+              setServiceAccountKey(parsed);
+            } catch (error) {
+              toast.error(`Invalid file provided - ${error}`);
+              setServiceAccountKey(null);
+            }
+          }}
+        />
 
         <Formik
           initialValues={{
@@ -601,11 +561,19 @@ export const DriveAuthSection = ({
         >
           {({ isSubmitting }) => (
             <Form>
-              <TextFormField
-                name="google_primary_admin"
-                label="Primary Admin Email:"
-                subtext="Enter the email of an admin/owner of the Google Organization that owns the Google Drive(s) you want to index."
-              />
+              <div className="space-y-1">
+                <Text font="main-ui-body" color="text-03">
+                  Primary Admin Email
+                </Text>
+                <InputTypeInField
+                  name="google_primary_admin"
+                  placeholder="admin@yourcompany.com"
+                />
+                <Text font="secondary-body" color="text-03">
+                  Enter the email of an admin or owner of the Google
+                  Organization that owns the Google Drive(s) you want to index.
+                </Text>
+              </div>
               <div className="flex">
                 <Button disabled={isSubmitting} type="submit">
                   {isSubmitting ? "Creating..." : "Create Credential"}
