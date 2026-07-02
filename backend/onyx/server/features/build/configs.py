@@ -110,6 +110,13 @@ SANDBOX_PROXY_HOST = os.environ.get("SANDBOX_PROXY_HOST", "")
 SANDBOX_PROXY_PORT = int(os.environ.get("SANDBOX_PROXY_PORT", "8080"))
 
 SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "8080"))
+# Bind host for the mitmproxy listener + healthz server. Defaults to IPv4
+# 0.0.0.0 (upstream/compose); set to "::" on IPv6-only clusters so the kubelet
+# probe and sandbox traffic reach the pod on its IPv6 address.
+SANDBOX_PROXY_LISTEN_HOST = os.environ.get(
+    "SANDBOX_PROXY_LISTEN_HOST",
+    "0.0.0.0",  # noqa: S104 — container scope
+)
 # Env-tunable on Helm only; compose's healthcheck.test hardcodes 8081 (can't
 # read container env), so a compose change here desyncs the probe.
 SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8081"))
