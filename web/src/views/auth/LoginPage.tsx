@@ -13,7 +13,6 @@ import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { AuthType } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { useAuthRedirect } from "@/lib/auth/hooks";
-import { MessageCard } from "@opal/components";
 import { markdown } from "@opal/utils";
 
 function getAuthUrl(authType: AuthType, nextUrl: string | null): string | null {
@@ -40,8 +39,6 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const autoRedirectDisabled =
     searchParams.get("disableAutoRedirect") === "true";
-  const autoRedirectToSignupDisabled =
-    searchParams.get("autoRedirectToSignup") === "false";
   const nextUrl = searchParams.get("next");
   const verified = searchParams.get("verified") === "true";
   const isFirstUser = searchParams.get("first_user") === "true";
@@ -69,15 +66,6 @@ export default function LoginPage() {
     const isAuthenticated = !!user && user.is_active && !user.is_anonymous_user;
     if (isAuthenticated) return;
 
-    if (
-      !authTypeMetadata.hasUsers &&
-      !autoRedirectToSignupDisabled &&
-      authTypeMetadata.authType === AuthType.BASIC
-    ) {
-      router.replace("/auth/signup" as Route);
-      return;
-    }
-
     if (authTypeMetadata.autoRedirect && authUrl && !autoRedirectDisabled) {
       router.replace(authUrl as Route);
     }
@@ -87,7 +75,6 @@ export default function LoginPage() {
     authTypeMetadata,
     authUrl,
     autoRedirectDisabled,
-    autoRedirectToSignupDisabled,
     router,
   ]);
 
