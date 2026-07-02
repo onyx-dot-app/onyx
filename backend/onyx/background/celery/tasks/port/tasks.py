@@ -350,17 +350,18 @@ def run_port_attempt_task(
     )
 
 
-def _fail_stalled_port_attempts(
-    db_session: Session, search_settings_id: int, lock_beat: RedisLock
-) -> None:
-    """Fail IN_PROGRESS attempts whose last_progress_time is past the stall
-    threshold (a dead or self-yielded worker) so a fresh attempt can resume."""
+def _fail_stalled_port_attempts(db_session: Session, lock_beat: RedisLock) -> None:
+    """Fail every stale IN_PROGRESS attempt (all settings) past the stall threshold —
+    a dead or self-yielded worker. Global on purpose: a supersede/promote (or a
+    deletion's request_port_cancel) flags old attempts cancel_requested but leaves them
+    IN_PROGRESS to ack, and those settings drop out of _resolve_port_target_settings —
+    so if that worker dies unacked, only a global sweep frees the row, else connector
+    deletion (which scans every settings) blocks forever. Also lets a fresh attempt
+    resume the current target from the cursor."""
     stale_before = datetime.now(timezone.utc) - timedelta(
         seconds=_PORT_STALL_THRESHOLD_SECONDS
     )
-    for stale in get_stale_in_progress_port_attempts(
-        db_session, search_settings_id, stale_before
-    ):
+    for stale in get_stale_in_progress_port_attempts(db_session, stale_before):
         lock_beat.reacquire()
         fresh = get_port_attempt(db_session, stale.id)
         if fresh is None or fresh.status.is_terminal():
@@ -454,6 +455,10 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
     tasks_created = 0
     try:
         with get_session_with_current_tenant() as db_session:
+            # Before the early return: the sweep must run even when there's no current
+            # target, else superseded settings' dead attempts strand (see the helper).
+            _fail_stalled_port_attempts(db_session, lock_beat)
+
             port_settings = _resolve_port_target_settings(db_session)
             if port_settings is None:
                 return None
@@ -463,8 +468,6 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
             cc_pair_ids = fetch_indexable_standard_connector_credential_pair_ids(
                 db_session, active_cc_pairs_only=not include_paused
             )
-
-            _fail_stalled_port_attempts(db_session, search_settings_id, lock_beat)
 
             # A NOT_STARTED not (re-)enqueued within the task TTL had its
             # run_port_attempt dropped (worker down/absent); re-issue it, else it

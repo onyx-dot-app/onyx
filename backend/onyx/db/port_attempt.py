@@ -226,15 +226,15 @@ def any_future_port_in_progress(db_session: Session) -> bool:
 
 
 def get_stale_in_progress_port_attempts(
-    db_session: Session, search_settings_id: int, stale_before: datetime
+    db_session: Session, stale_before: datetime
 ) -> list[PortAttempt]:
-    """IN_PROGRESS attempts for a FUTURE with no progress since `stale_before`
-    (last_progress_time older than that, or never set and started before it).
-    The watchdog fails these so a fresh attempt can resume from the cursor."""
+    """All IN_PROGRESS attempts (any FUTURE) with no progress since `stale_before`
+    (last_progress_time older, or unset and started before it) — a dead/self-yielded
+    worker. Not scoped to a settings id: superseded/promoted FUTUREs drop out of the
+    current port target but keep dead attempts the watchdog must still fail."""
     return list(
         db_session.execute(
             select(PortAttempt).where(
-                PortAttempt.search_settings_id == search_settings_id,
                 PortAttempt.status == PortAttemptStatus.IN_PROGRESS,
                 or_(
                     PortAttempt.last_progress_time < stale_before,

@@ -74,6 +74,7 @@ from onyx.db.port_attempt import mark_port_canceled
 from onyx.db.port_attempt import mark_port_failed
 from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
+from onyx.db.port_attempt import request_port_cancel
 from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.swap_index import _port_swap_ready
@@ -857,7 +858,8 @@ def test_run_port_attempt_exits_when_cc_pair_deleting(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """A cc_pair flipped to DELETING stops the port at the boundary before any
-    copy (the CASCADE will remove the attempt row)."""
+    copy: the task acks by canceling itself (last-writer) so the waiting deletion
+    can proceed; its CASCADE removes the attempt row later."""
     cc_pair, future_id = cc_pair_and_future
     _seed_cc_pair_documents(db_session, cc_pair, 3)
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
@@ -872,7 +874,7 @@ def test_run_port_attempt_exits_when_cc_pair_deleting(
     db_session.expire_all()
     row = db_session.get(PortAttempt, attempt_id)
     assert row is not None
-    assert row.status == PortAttemptStatus.IN_PROGRESS  # left for the CASCADE to remove
+    assert row.status == PortAttemptStatus.CANCELED
 
 
 def test_run_port_attempt_soft_time_limit_yields(
@@ -1022,6 +1024,34 @@ def test_check_for_port_fails_stale_in_progress(
     assert len(fresh) == 1
     assert result == 1
     celery_app.send_task.assert_called_once()
+
+
+def test_check_for_port_fails_stale_attempt_on_superseded_settings(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The watchdog must fail a dead-worker IN_PROGRESS attempt even when its settings
+    are no longer the current target, else it strands and blocks connector deletion.
+    request_port_cancel flags it but leaves it IN_PROGRESS; use_port_flow stays False so
+    _resolve_port_target_settings returns None — the pre-fix early return skipped the
+    sweep, leaving the row IN_PROGRESS."""
+    cc_pair, future_id = cc_pair_and_future
+
+    stale = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, stale.id)
+    request_port_cancel(db_session, stale.id)  # flag only; worker "dies" before acking
+    old = datetime.now(timezone.utc) - timedelta(hours=1)
+    db_session.query(PortAttempt).filter(PortAttempt.id == stale.id).update(
+        {PortAttempt.last_progress_time: old}
+    )
+    db_session.commit()
+
+    result, _ = _run_check_for_port(cc_pair, future_id)
+
+    assert result is None  # no current port-flow target to enqueue against
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, stale.id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.FAILED  # global sweep terminalized it
 
 
 def test_check_for_port_leaves_active_in_progress(
