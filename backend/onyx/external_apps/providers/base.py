@@ -7,7 +7,6 @@ from typing import ClassVar
 import requests
 from pydantic import BaseModel
 from pydantic import ConfigDict
-from pydantic import model_validator
 
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
@@ -155,18 +154,12 @@ class TokenExchangeRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     headers: dict[str, str]
-    # Exactly one of `data` (form-encoded) / `json_body` (JSON) is set; the
-    # other stays None so ``requests.post(..., data=data, json=json_body)``
-    # behaves identically to the pre-hook hardcoded form-encoded call. Setting
-    # both would let `requests` silently drop the form body in favour of JSON.
-    data: dict[str, str] | None = None
-    json_body: dict[str, str] | None = None
-
-    @model_validator(mode="after")
-    def _exactly_one_body(self) -> "TokenExchangeRequest":
-        if (self.data is None) == (self.json_body is None):
-            raise ValueError("Exactly one of 'data' or 'json_body' must be set.")
-        return self
+    body: dict[str, str]
+    # How ``body`` is encoded on the wire: JSON (``requests.post(json=...)``)
+    # when True, RFC-6749 form-encoded (``data=...``) when False. The callback
+    # route maps this to exactly one of `data`/`json` so `requests` never sees
+    # both (which would silently drop the form body in favour of JSON).
+    json_encoded: bool = False
 
 
 class ExternalAppProvider(ABC):
@@ -310,7 +303,7 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Accept": "application/json",
             },
-            data={
+            body={
                 "grant_type": "authorization_code",
                 "client_id": client_id,
                 "client_secret": client_secret,

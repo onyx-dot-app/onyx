@@ -1,6 +1,8 @@
 import base64
 from typing import Any
 
+from onyx.configs.app_configs import EXT_APP_NOTION_CLIENT_ID
+from onyx.configs.app_configs import EXT_APP_NOTION_CLIENT_SECRET
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -12,6 +14,7 @@ from onyx.external_apps.providers.base import AdminDescriptorSpec
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
+from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.base import OrgCredentialField
 from onyx.external_apps.providers.base import TokenExchangeRequest
 
@@ -186,7 +189,7 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
-class NotionProvider(OAuthExternalAppProvider):
+class NotionProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
     spec = OAuthProviderSpec(
         app_type=ExternalAppType.NOTION,
         app_name="Notion",
@@ -243,6 +246,11 @@ class NotionProvider(OAuthExternalAppProvider):
         endpoint_catalog=_ENDPOINTS,
     )
 
+    managed_org_credentials = {
+        "client_id": EXT_APP_NOTION_CLIENT_ID,
+        "client_secret": EXT_APP_NOTION_CLIENT_SECRET,
+    }
+
     def build_token_exchange_request(
         self, code: str, client_id: str, client_secret: str, redirect_uri: str
     ) -> TokenExchangeRequest:
@@ -259,11 +267,12 @@ class NotionProvider(OAuthExternalAppProvider):
                 "Accept": "application/json",
                 "Notion-Version": _NOTION_VERSION,
             },
-            json_body={
+            body={
                 "grant_type": "authorization_code",
                 "code": code,
                 "redirect_uri": redirect_uri,
             },
+            json_encoded=True,
         )
 
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:

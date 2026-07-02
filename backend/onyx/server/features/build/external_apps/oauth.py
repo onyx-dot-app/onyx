@@ -181,8 +181,8 @@ def handle_external_app_oauth_callback(
         response = requests.post(
             oauth.token_url,
             headers=token_request.headers,
-            data=token_request.data,
-            json=token_request.json_body,
+            data=None if token_request.json_encoded else token_request.body,
+            json=token_request.body if token_request.json_encoded else None,
             timeout=30,
         )
     except requests.RequestException as exc:
