@@ -1,1 +1,1 @@
-export { default } from "@/views/auth/SignupUnavailablePage";
+export { default } from "@/views/auth/errors/SignupUnavailablePage";
