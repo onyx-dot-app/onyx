@@ -40,7 +40,7 @@ const streamMock = streamChatMessage as unknown as Mock<
   (body: { origin: string }, signal: AbortSignal) => AsyncGenerator<StreamEvent>
 >;
 const createSessionMock = createChatSession as unknown as Mock<
-  () => Promise<string>
+  (personaId?: number) => Promise<string>
 >;
 const getSessionMock = getChatSession as unknown as Mock<
   (id: string) => Promise<unknown>
@@ -228,6 +228,70 @@ describe("useChatController", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 250));
     expect(renameSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("creates the new session with the selected persona id", async () => {
+    createSessionMock.mockResolvedValue("s-agent");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController(null, 42), {
+      wrapper,
+    });
+    act(() => result.current.setInput("hello"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(createSessionMock).toHaveBeenCalledWith(42);
+  });
+
+  it("sends a starter-prompt override without using the composer input", async () => {
+    createSessionMock.mockResolvedValue("s-starter");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController(null, 7), {
+      wrapper,
+    });
+    // No setInput — the text comes from the override argument (a tapped starter).
+    await act(async () => {
+      await result.current.submit("Summarize my day");
+    });
+
+    expect(createSessionMock).toHaveBeenCalledWith(7);
+    await waitFor(() =>
+      expect(useChatSessionStore.getState().sessions.has("s-starter")).toBe(
+        true,
+      ),
+    );
+    const tree = useChatSessionStore
+      .getState()
+      .sessions.get("s-starter")!.messageTree;
+    const userNode = [...tree.values()].find((node) => node.type === "user");
+    expect(userNode?.message).toBe("Summarize my day");
+  });
+
+  it("guards a rapid double starter-tap on a new chat to a single session", async () => {
+    let resolveCreate: ((id: string) => void) | undefined;
+    createSessionMock.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveCreate = resolve;
+        }),
+    );
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController(null, 5), {
+      wrapper,
+    });
+
+    await act(async () => {
+      // Two synchronous taps before the first create resolves — the second must be blocked.
+      void result.current.submit("first starter");
+      void result.current.submit("second starter");
+      resolveCreate?.("s-only");
+    });
+
+    expect(createSessionMock).toHaveBeenCalledTimes(1);
   });
 
   it("stop aborts the stream and stops the backend run", async () => {
