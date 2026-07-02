@@ -283,6 +283,12 @@ def cleanup_cc_pair_and_future(
     """
     db_session.rollback()
     if doc_prefix is not None:
+        # Drop link rows first: document_by_connector_credential_pair.id -> document.id
+        # has no ON DELETE cascade, so a linked prefixed doc can't be deleted while
+        # its join row survives.
+        db_session.query(DocumentByConnectorCredentialPair).filter(
+            DocumentByConnectorCredentialPair.id.like(f"{doc_prefix}%")
+        ).delete(synchronize_session="fetch")
         db_session.query(DBDocument).filter(
             DBDocument.id.like(f"{doc_prefix}%")
         ).delete(synchronize_session="fetch")
