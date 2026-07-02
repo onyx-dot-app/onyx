@@ -476,12 +476,3 @@ def cleanup_gmail_credentials(db_session: Session) -> None:
     for credential in gmail_credentials:
         db_session.delete(credential)
     db_session.commit()
-
-
-def cleanup_google_drive_credentials(db_session: Session) -> None:
-    google_drive_credentials = fetch_credentials_by_source(
-        db_session=db_session, document_source=DocumentSource.GOOGLE_DRIVE
-    )
-    for credential in google_drive_credentials:
-        db_session.delete(credential)
-    db_session.commit()

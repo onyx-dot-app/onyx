@@ -10,15 +10,12 @@ import {
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
 } from "@/lib/connectors/credentials";
-import { GmailAuthSection, GmailJsonUploadSection } from "./Credential";
+import { GmailAuthSection } from "./Credential";
 import { usePublicCredentials, useBasicConnectorStatus } from "@/lib/hooks";
-import Title from "@/components/ui/title";
 import { useUser } from "@/providers/UserProvider";
 import {
-  useGoogleAppCredential,
   useGoogleCredentials,
   useConnectorsByCredentialId,
-  checkCredentialsFetched,
   filterUploadedCredentials,
   checkConnectorsExist,
   refreshAllGoogleData,
@@ -40,12 +37,6 @@ export const GmailMain = ({
   onCredentialCreated,
 }: GmailMainProps) => {
   const { isAdmin, user } = useUser();
-
-  const {
-    data: appCredentialData,
-    isLoading: isAppCredentialLoading,
-    error: isAppCredentialError,
-  } = useGoogleAppCredential("gmail");
 
   const {
     data: connectorIndexingStatuses,
@@ -75,11 +66,6 @@ export const GmailMain = ({
     refreshConnectorsByCredentialId,
   } = useConnectorsByCredentialId(credential_id);
 
-  const { appCredentialSuccessfullyFetched } = checkCredentialsFetched(
-    appCredentialData,
-    isAppCredentialError
-  );
-
   const handleRefresh = () => {
     refreshCredentials();
     refreshConnectorsByCredentialId();
@@ -87,7 +73,6 @@ export const GmailMain = ({
   };
 
   if (
-    (!appCredentialSuccessfullyFetched && isAppCredentialLoading) ||
     (!connectorIndexingStatuses && isConnectorIndexingStatusesLoading) ||
     (!credentialsData && isCredentialsLoading) ||
     (!gmailCredentials && isGmailCredentialsLoading) ||
@@ -110,12 +95,6 @@ export const GmailMain = ({
 
   if (connectorIndexingStatusesError || !connectorIndexingStatuses) {
     return <ErrorCallout errorTitle="Failed to load connectors." />;
-  }
-
-  if (!appCredentialSuccessfullyFetched) {
-    return (
-      <ErrorCallout errorTitle="Error loading Gmail app credentials. Contact an administrator." />
-    );
   }
 
   if (gmailConnectorsError) {
@@ -154,28 +133,12 @@ export const GmailMain = ({
 
   return (
     <>
-      <Title className="mb-2 mt-6 ml-auto mr-auto">
-        Step 1: Provide your Credentials
-      </Title>
-      <GmailJsonUploadSection
-        appCredentialData={appCredentialData}
-        isAdmin={isAdmin}
-        onSuccess={handleRefresh}
-        existingAuthCredential={Boolean(
-          gmailPublicUploadedCredential || gmailServiceAccountCredential
-        )}
-      />
-
       {isAdmin && (
         <>
-          <Title className="mb-2 mt-6 ml-auto mr-auto">
-            Step 2: Authenticate with Onyx
-          </Title>
           <GmailAuthSection
             refreshCredentials={handleRefresh}
             gmailPublicCredential={gmailPublicUploadedCredential}
             gmailServiceAccountCredential={gmailServiceAccountCredential}
-            appCredentialData={appCredentialData}
             connectorExists={connectorExists}
             user={user}
             buildMode={buildMode}

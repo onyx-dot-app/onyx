@@ -3,7 +3,6 @@ import InputFile from "@/refresh-components/inputs/InputFile";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { toast } from "@/hooks/useToast";
 import React, { useState, useEffect } from "react";
-import { useSWRConfig } from "swr";
 import * as Yup from "yup";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -19,318 +18,18 @@ import {
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
 } from "@/lib/connectors/credentials";
-import { refreshAllGoogleData } from "@/lib/googleConnector";
+import {
+  parseOauthAppCredentialJson,
+  refreshAllGoogleData,
+} from "@/lib/googleConnector";
 import { ValidSources } from "@/lib/types";
-import { SWR_KEYS } from "@/lib/swr-keys";
-import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
-import { FiFile, FiCheck, FiLink, FiAlertTriangle } from "react-icons/fi";
-import { truncateString } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { FiCheck } from "react-icons/fi";
+import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
-
-type GmailCredentialJsonTypes = "authorized_user" | "service_account";
-
-const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
-  const { mutate } = useSWRConfig();
-  const [isUploading, setIsUploading] = useState(false);
-  const [fileName, setFileName] = useState<string | undefined>();
-  const [isDragging, setIsDragging] = useState(false);
-
-  const handleFileUpload = async (file: File) => {
-    setIsUploading(true);
-    setFileName(file.name);
-
-    const reader = new FileReader();
-    reader.onload = async (loadEvent) => {
-      if (!loadEvent?.target?.result) {
-        setIsUploading(false);
-        return;
-      }
-
-      const credentialJsonStr = loadEvent.target.result as string;
-
-      // Check credential type
-      let credentialFileType: GmailCredentialJsonTypes;
-      try {
-        const appCredentialJson = JSON.parse(credentialJsonStr);
-        if (appCredentialJson.web) {
-          credentialFileType = "authorized_user";
-        } else if (appCredentialJson.type === "service_account") {
-          credentialFileType = "service_account";
-        } else {
-          throw new Error(
-            "Unknown credential type, expected one of 'OAuth Web application' or 'Service Account'"
-          );
-        }
-      } catch (e) {
-        toast.error(`Invalid file provided - ${e}`);
-        setIsUploading(false);
-        return;
-      }
-
-      if (credentialFileType === "authorized_user") {
-        const response = await fetch(
-          "/api/manage/admin/connector/gmail/app-credential",
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: credentialJsonStr,
-          }
-        );
-        if (response.ok) {
-          toast.success("Successfully uploaded app credentials");
-          mutate(SWR_KEYS.googleConnectorAppCredential("gmail"));
-          if (onSuccess) {
-            onSuccess();
-          }
-        } else {
-          const errorMsg = await response.text();
-          toast.error(`Failed to upload app credentials - ${errorMsg}`);
-        }
-      }
-
-      if (credentialFileType === "service_account") {
-        toast.error(
-          "Service account keys are now uploaded in Step 2 when creating a credential"
-        );
-        setFileName(undefined);
-      }
-      setIsUploading(false);
-    };
-
-    reader.readAsText(file);
-  };
-
-  const handleDragEnter = (e: React.DragEvent<HTMLLabelElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!isUploading) {
-      setIsDragging(true);
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    if (isUploading) return;
-
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      const file = files[0];
-      if (
-        file !== undefined &&
-        (file.type === "application/json" || file.name.endsWith(".json"))
-      ) {
-        handleFileUpload(file);
-      } else {
-        toast.error("Please upload a JSON file");
-      }
-    }
-  };
-
-  return (
-    <div className="flex flex-col mt-4">
-      <div className="flex items-center">
-        <div className="relative flex flex-1 items-center">
-          <label
-            className={cn(
-              "flex h-10 items-center justify-center w-full px-4 py-2 border border-dashed rounded-md transition-colors",
-              isUploading
-                ? "opacity-70 cursor-not-allowed border-background-400 bg-background-50/30"
-                : isDragging
-                  ? "bg-background-50/50 border-primary dark:border-primary"
-                  : "cursor-pointer hover:bg-background-50/30 hover:border-primary dark:hover:border-primary border-background-300 dark:border-background-600"
-            )}
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-          >
-            <div className="flex items-center space-x-2">
-              {isUploading ? (
-                <div className="h-4 w-4 border-t-2 border-b-2 border-primary rounded-full animate-spin"></div>
-              ) : (
-                <FiFile className="h-4 w-4 text-text-500" />
-              )}
-              <span className="text-sm text-text-500">
-                {isUploading
-                  ? `Uploading ${truncateString(fileName || "file", 50)}...`
-                  : isDragging
-                    ? "Drop JSON file here"
-                    : truncateString(
-                        fileName || "Select or drag JSON credentials file...",
-                        50
-                      )}
-              </span>
-            </div>
-            <input
-              className="sr-only"
-              type="file"
-              accept=".json"
-              disabled={isUploading}
-              onChange={(event) => {
-                if (!event.target.files?.length) {
-                  return;
-                }
-                const file = event.target.files[0];
-                if (file === undefined) {
-                  return;
-                }
-                handleFileUpload(file);
-              }}
-            />
-          </label>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface GmailJsonUploadSectionProps {
-  appCredentialData?: { client_id: string };
-  isAdmin: boolean;
-  onSuccess?: () => void;
-  existingAuthCredential?: boolean;
-}
-
-export const GmailJsonUploadSection = ({
-  appCredentialData,
-  isAdmin,
-  onSuccess,
-  existingAuthCredential,
-}: GmailJsonUploadSectionProps) => {
-  const { mutate } = useSWRConfig();
-  const [localAppCredentialData, setLocalAppCredentialData] =
-    useState(appCredentialData);
-
-  // Update local state when props change
-  useEffect(() => {
-    setLocalAppCredentialData(appCredentialData);
-  }, [appCredentialData]);
-
-  const handleSuccess = () => {
-    if (onSuccess) {
-      onSuccess();
-    } else {
-      refreshAllGoogleData(ValidSources.Gmail);
-    }
-  };
-
-  if (!isAdmin) {
-    return (
-      <div>
-        <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded-sm">
-          <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
-          <p className="text-sm">
-            Curators are unable to set up the Gmail credentials. To add a Gmail
-            connector, please contact an administrator.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <p className="text-sm mb-3">
-        To connect your Gmail, create credentials (either OAuth App or Service
-        Account), download the JSON file, and upload it below.
-      </p>
-      <div className="mb-4">
-        <a
-          className="text-primary hover:text-primary/80 flex items-center gap-1 text-sm"
-          target="_blank"
-          href={`${DOCS_ADMINS_PATH}/connectors/official/gmail/overview`}
-          rel="noreferrer"
-        >
-          <FiLink className="h-3 w-3" />
-          View detailed setup instructions
-        </a>
-      </div>
-
-      {localAppCredentialData?.client_id && (
-        <div className="mb-4">
-          <div className="relative flex flex-1 items-center">
-            <label
-              className={cn(
-                "flex h-10 items-center justify-center w-full px-4 py-2 border border-dashed rounded-md transition-colors",
-                "cursor-pointer hover:bg-background-50/30 hover:border-primary dark:hover:border-primary border-background-300 dark:border-background-600"
-              )}
-            >
-              <div className="flex items-center space-x-2">
-                <FiFile className="h-4 w-4 text-text-500" />
-                <span className="text-sm text-text-500">
-                  {truncateString(localAppCredentialData.client_id || "", 50)}
-                </span>
-              </div>
-            </label>
-          </div>
-          {isAdmin && !existingAuthCredential && (
-            <div className="mt-2">
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  const endpoint =
-                    SWR_KEYS.googleConnectorAppCredential("gmail");
-
-                  const response = await fetch(endpoint, {
-                    method: "DELETE",
-                  });
-
-                  if (response.ok) {
-                    mutate(endpoint);
-                    // Also mutate the credential endpoints to ensure Step 2 is reset
-                    mutate(buildSimilarCredentialInfoURL(ValidSources.Gmail));
-
-                    // Add additional mutations to refresh all credential-related endpoints
-                    mutate(SWR_KEYS.googleConnectorCredentials("gmail"));
-                    mutate(SWR_KEYS.googleConnectorPublicCredential("gmail"));
-                    mutate(
-                      SWR_KEYS.googleConnectorServiceAccountCredential("gmail")
-                    );
-
-                    toast.success("Successfully deleted app credentials");
-                    setLocalAppCredentialData(undefined);
-                    handleSuccess();
-                  } else {
-                    const errorMsg = await response.text();
-                    toast.error(`Failed to delete credentials - ${errorMsg}`);
-                  }
-                }}
-              >
-                Delete Credentials
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {!localAppCredentialData?.client_id && (
-        <GmailCredentialUpload onSuccess={handleSuccess} />
-      )}
-    </div>
-  );
-};
 
 interface GmailCredentialSectionProps {
   gmailPublicCredential?: Credential<GmailCredentialJson>;
   gmailServiceAccountCredential?: Credential<GmailServiceAccountCredentialJson>;
-  appCredentialData?: { client_id: string };
   refreshCredentials: () => void;
   connectorExists: boolean;
   user: User | null;
@@ -367,7 +66,6 @@ async function handleRevokeAccess(
 export const GmailAuthSection = ({
   gmailPublicCredential,
   gmailServiceAccountCredential,
-  appCredentialData,
   refreshCredentials,
   connectorExists,
   user,
@@ -377,9 +75,11 @@ export const GmailAuthSection = ({
 }: GmailCredentialSectionProps) => {
   const router = useRouter();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [localAppCredentialData, setLocalAppCredentialData] =
-    useState(appCredentialData);
   const [serviceAccountKey, setServiceAccountKey] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [oauthAppCredential, setOauthAppCredential] = useState<Record<
     string,
     unknown
   > | null>(null);
@@ -393,10 +93,9 @@ export const GmailAuthSection = ({
 
   // Update local state when props change
   useEffect(() => {
-    setLocalAppCredentialData(appCredentialData);
     setLocalGmailPublicCredential(gmailPublicCredential);
     setLocalGmailServiceAccountCredential(gmailServiceAccountCredential);
-  }, [appCredentialData, gmailPublicCredential, gmailServiceAccountCredential]);
+  }, [gmailPublicCredential, gmailServiceAccountCredential]);
 
   const existingCredential =
     localGmailPublicCredential || localGmailServiceAccountCredential;
@@ -438,54 +137,66 @@ export const GmailAuthSection = ({
     );
   }
 
-  if (localAppCredentialData?.client_id) {
-    return (
-      <div className="w-full">
-        <div className="bg-background-50/30 dark:bg-background-900/20 rounded-sm mb-4">
-          <p className="text-sm">
-            Next, you need to authenticate with Gmail via OAuth. This gives us
-            read access to the emails you have access to in your Gmail account.
-          </p>
-        </div>
-        <Button
-          disabled={isAuthenticating}
-          onClick={async () => {
-            setIsAuthenticating(true);
-            try {
-              if (buildMode) {
-                Cookies.set(CRAFT_OAUTH_COOKIE_NAME, "true", {
-                  path: "/",
-                });
-              }
-              const [authUrl, errorMsg] = await setupGmailOAuth({
-                isAdmin: true,
-              });
-
-              if (authUrl) {
-                onOAuthRedirect?.();
-                router.push(authUrl as Route);
-              } else {
-                toast.error(errorMsg);
-                setIsAuthenticating(false);
-              }
-            } catch (error) {
-              toast.error(`Failed to authenticate with Gmail - ${error}`);
-              setIsAuthenticating(false);
-            }
-          }}
-        >
-          {isAuthenticating ? "Authenticating..." : "Authenticate with Gmail"}
-        </Button>
-      </div>
-    );
-  }
-
   return (
     <div className="w-full">
       <Text as="h3" font="heading-h2">
         Gmail Authentication
       </Text>
-      <div className="mt-4 space-y-4">
+      <div className="mt-4 w-full space-y-4">
+        <Text as="p" font="main-ui-action">
+          Option 1: OAuth app
+        </Text>
+        <Text as="p" font="secondary-body" color="text-03">
+          {markdown(
+            `Upload the OAuth app JSON from Google Cloud Console ([setup instructions](${DOCS_ADMINS_PATH}/connectors/official/gmail/overview)), then authenticate with the Google account whose Gmail you want to index.`
+          )}
+        </Text>
+        <InputFile
+          accept="application/json"
+          placeholder="Upload or paste your OAuth app JSON"
+          setValue={(value) => {
+            setOauthAppCredential(
+              value ? parseOauthAppCredentialJson(value) : null
+            );
+          }}
+        />
+        <div className="flex w-full justify-end">
+          <Button
+            disabled={!oauthAppCredential || isAuthenticating}
+            onClick={async () => {
+              if (!oauthAppCredential) {
+                return;
+              }
+              setIsAuthenticating(true);
+              try {
+                if (buildMode) {
+                  Cookies.set(CRAFT_OAUTH_COOKIE_NAME, "true", {
+                    path: "/",
+                  });
+                }
+                const [authUrl, errorMsg] = await setupGmailOAuth({
+                  isAdmin: true,
+                  appCredential: oauthAppCredential,
+                });
+                if (authUrl) {
+                  onOAuthRedirect?.();
+                  router.push(authUrl as Route);
+                } else {
+                  toast.error(errorMsg);
+                  setIsAuthenticating(false);
+                }
+              } catch (error) {
+                toast.error(`Failed to authenticate with Gmail - ${error}`);
+                setIsAuthenticating(false);
+              }
+            }}
+          >
+            {isAuthenticating ? "Authenticating..." : "Authenticate with Gmail"}
+          </Button>
+        </div>
+        <Text as="p" font="main-ui-action">
+          Option 2: Service account
+        </Text>
         <InputFile
           accept="application/json"
           placeholder="Upload or paste your service account JSON key"
