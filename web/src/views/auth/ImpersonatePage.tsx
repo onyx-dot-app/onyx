@@ -13,6 +13,7 @@ import { impersonateUser } from "@/lib/auth/svc";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { markdown } from "@opal/utils";
+import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
 
 const initialValues = { email: "", apiKey: "" };
 
@@ -59,6 +60,7 @@ export default function ImpersonatePage() {
     <AuthLayouts.Card
       title="Impersonate User"
       description="Cloud superuser access only."
+      bottomPrompt={backToLoginOrSignupCopy()}
       logoSrc={logoUrl}
     >
       <Formik

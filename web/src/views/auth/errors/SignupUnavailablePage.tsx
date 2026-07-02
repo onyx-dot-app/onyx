@@ -14,7 +14,8 @@ export default function SignupUnavailablePage() {
   const { logoUrl, appName } = useSettings();
 
   useEffect(() => {
-    if (!signupDisabled) router.replace("/auth/login" as Route);
+    if (signupDisabled) return;
+    router.replace("/auth/login" as Route);
   }, [signupDisabled, router]);
 
   if (!signupDisabled) return null;

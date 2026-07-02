@@ -10,8 +10,6 @@ export function getAuthRedirect(
   currentPage: AuthPage,
   signupDisabled?: boolean
 ): string | null {
-  if (user === undefined) return null;
-
   const isAuthenticated = !!user && user.is_active && !user.is_anonymous_user;
 
   if (isAuthenticated) {
