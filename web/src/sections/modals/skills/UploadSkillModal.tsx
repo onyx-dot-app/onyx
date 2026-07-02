@@ -28,6 +28,11 @@ export default function UploadSkillModal({
 
   function reset() {
     setFile(null);
+    // Clear the native input too — otherwise re-selecting the same file
+    // after a cancel fires no change event.
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   }
 
   function handleClose() {
