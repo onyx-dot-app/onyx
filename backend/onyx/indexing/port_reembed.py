@@ -266,9 +266,10 @@ def re_embed_chunks(
     `content_vector`/`title_vector` change; every other field is copied through.
     For AUGMENTATION the stored `content`, `doc_summary` and `chunk_context` are
     also rebuilt under FUTURE settings (`augmentation_ctx` is required, and for
-    FUTURE-RAG-on must carry the contextual LLM). Chunks may span documents, but
-    each document's chunks must ALL be in the same call — the doc-text
-    reconstruction needs the document complete.
+    FUTURE-RAG-on must carry the contextual LLM). Chunks may span documents; only
+    when FUTURE RAG is on must a document's chunks ALL be in one call — the LLM's
+    doc-text reconstruction needs it complete. FUTURE-RAG-off and MODEL_ONLY re-embed
+    each chunk independently, so the caller may split a document across calls.
 
     `present_tokenizer` (required for MODEL_ONLY) is the PRESENT embedding model's
     tokenizer — the one indexing used — needed to reproduce the metadata-tail skip

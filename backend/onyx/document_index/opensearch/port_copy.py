@@ -7,12 +7,13 @@ stale backlog write can't clobber a fresher one). The port Celery task drives th
 batch and owns lifecycle (cursor, stall); keeping the OpenSearch specifics here
 keeps them off the generic docprocessing worker.
 
-The AUGMENTATION strategy (contextual-RAG toggle/model change) re-enriches each
-document, which needs all of a document's chunks together to reconstruct the doc
-text — and a document's chunks can span PIT pages — so that path buffers the
-batch into a single page, while MODEL_ONLY streams page by page.
+Contextual-RAG-ON AUGMENTATION re-embeds one document per page — its per-chunk LLM
+re-enrichment is the slow, unheartbeated phase, and needs a doc's chunks complete
+(they span PIT pages) to rebuild the doc text. RAG-off / MODEL_ONLY have no LLM step,
+so they stream PIT pages.
 """
 
+from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Iterable
 
@@ -35,9 +36,7 @@ from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
-# Chunks per create-only write. AUGMENTATION buffers a whole batch into one page, so
-# an unbounded write could run minutes with no heartbeat and get a live port falsely
-# stall-failed. Matches the MODEL_ONLY per-page size the watchdog already tolerates.
+# Cap per bulk write so it can't run long unheartbeated and get a live port stall-failed.
 _PORT_WRITE_PAGE_SIZE = 1000
 
 
@@ -83,29 +82,37 @@ def copy_present_chunks_to_future(
     should_abort: Callable[[], bool] | None = None,
 ) -> tuple[int, bool]:
     """Port one batch PRESENT -> FUTURE; returns (chunks written, aborted).
-    aborted=True means should_abort stopped the copy mid-batch, so the caller
-    must not advance its cursor past this partially-ported batch.
+    aborted=True means should_abort stopped the copy mid-batch, so the caller must not
+    advance its cursor past this partial batch.
 
-    Both callbacks run per page right before the write (after the slow re-embed):
-    surviving_doc_ids drops chunks of docs deleted mid-batch (no resurrection);
-    should_abort stops writing once the attempt is cancelled."""
+    should_abort brackets each re-embed and precedes each write — it aborts a cancelled
+    attempt and heartbeats so a slow-but-live port isn't stall-failed. surviving_doc_ids
+    drops chunks of docs deleted mid-batch (no resurrection)."""
     pages: Iterable[list[DocumentChunkWithoutVectors]]
-    if strategy is ReembedStrategy.AUGMENTATION:
-        # Buffer the batch into one page: re-enrichment needs each document's
-        # chunks complete (they can span PIT pages), and one page also means one
-        # embed round-trip + one bulk write for the whole batch.
-        pages = [
-            [
-                chunk
-                for page in present_client.iter_chunks_for_doc_ids(doc_ids)
-                for chunk in page
-            ]
-        ]
+    # RAG-on AUGMENTATION: buffer to reassemble each doc (chunks span PIT pages), then
+    # re-embed one doc per page so its unheartbeated per-chunk LLM re-enrichment can't
+    # outlast the stall watchdog on a whole batch. Residual: a single huge doc can still
+    # exceed it (a doc is atomic for re-enrichment). Others stream PIT pages.
+    rag_on_augmentation = (
+        strategy is ReembedStrategy.AUGMENTATION
+        and augmentation_ctx is not None
+        and augmentation_ctx.future_enable_contextual_rag
+    )
+    if rag_on_augmentation:
+        by_doc: dict[str, list[DocumentChunkWithoutVectors]] = defaultdict(list)
+        for page in present_client.iter_chunks_for_doc_ids(doc_ids):
+            for chunk in page:
+                by_doc[chunk.document_id].append(chunk)
+        pages = list(by_doc.values())
     else:
         pages = present_client.iter_chunks_for_doc_ids(doc_ids)
 
     chunks_written = 0
     for page_chunks in pages:
+        # Heartbeat before re_embed (the longest gap), not just before writes; also
+        # skips a needless re_embed on cancel.
+        if should_abort is not None and should_abort():
+            return chunks_written, True
         reembedded = re_embed_chunks(
             page_chunks,
             strategy,
@@ -125,8 +132,7 @@ def copy_present_chunks_to_future(
             reembedded = [c for c in reembedded if c.document_id in surviving]
             if not reembedded:
                 continue
-        # Sub-page the write, heartbeating (via should_abort) before each, so one
-        # write can't outlast the watchdog and get this live port falsely failed.
+        # Heartbeat before each sub-page write.
         for i in range(0, len(reembedded), _PORT_WRITE_PAGE_SIZE):
             if should_abort is not None and should_abort():
                 return chunks_written, True
