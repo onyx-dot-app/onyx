@@ -40,7 +40,9 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.packets import ApprovalRequestedPacket
 from onyx.server.features.build.packets import BuildPacket
+from onyx.server.features.build.packets import CompactionPacket
 from onyx.server.features.build.packets import ConnectAppRequestPacket
+from onyx.server.features.build.packets import ContextUsagePacket
 from onyx.server.features.build.packets import ErrorPacket
 from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -95,6 +97,8 @@ class BuildStreamingState:
 
         # For upserting agent_plan_update - track ID so we can update in place
         self.plan_message_id: UUID | None = None
+
+        self.latest_context_usage: dict[str, Any] | None = None
 
         # Track what type of chunk we were last receiving
         self._last_chunk_type: str | None = None
@@ -259,6 +263,8 @@ def event_to_sse(event: Any) -> str:
             ErrorPacket,
             SubagentStartedPacket,
             ConnectAppRequestPacket,
+            ContextUsagePacket,
+            CompactionPacket,
         ),
     ):
         return _format_packet_event(event)
@@ -602,11 +608,29 @@ def persist_sandbox_event(
     if isinstance(sandbox_event, SSEKeepalive):
         return
 
+    # Must return BEFORE should_finalize_chunks — routing it through would fragment
+    # the in-progress streaming text. Captured here, persisted once at finalize.
+    if isinstance(sandbox_event, ContextUsagePacket):
+        state.latest_context_usage = sandbox_event.model_dump(
+            mode="json", by_alias=True
+        )
+        return
+
     # Flush any pending chunks if the event type changed.
     event_type = _get_event_type(sandbox_event)
     event_routing_meta = _routing_meta_from_event(sandbox_event) or routing_meta
     if state.should_finalize_chunks(event_type, event_routing_meta):
         _save_pending_chunks(db_session, session_id, state)
+
+    if isinstance(sandbox_event, CompactionPacket):
+        create_message(
+            session_id=session_id,
+            message_type=MessageType.ASSISTANT,
+            turn_index=state.turn_index,
+            message_metadata=sandbox_event.model_dump(mode="json", by_alias=True),
+            db_session=db_session,
+        )
+        return
 
     if isinstance(sandbox_event, AgentMessageChunk):
         text = _extract_text_from_content(sandbox_event.content)
@@ -705,6 +729,17 @@ def finalize_persist(
     """End-of-stream persistence hook. Flushes any pending chunks."""
     _save_pending_chunks(db_session, session_id, state, routing_meta)
 
+    # One context-usage row per turn seeds the input-bar ring on reload.
+    if state.latest_context_usage is not None:
+        create_message(
+            session_id=session_id,
+            message_type=MessageType.ASSISTANT,
+            turn_index=state.turn_index,
+            message_metadata=state.latest_context_usage,
+            db_session=db_session,
+        )
+        state.latest_context_usage = None
+
 
 def stream_subagent_turn(
     db_session: DBSession,
@@ -790,6 +825,12 @@ def stream_subagent_turn(
             # Keepalives + terminators pass through untagged.
             if isinstance(sandbox_event, SSEKeepalive):
                 yield SSE_KEEPALIVE
+                continue
+
+            # Context usage / compaction belong to the main session's ring and
+            # transcript; a subagent turn's own values would otherwise persist
+            # against the parent session and mislabel it on reload.
+            if isinstance(sandbox_event, (ContextUsagePacket, CompactionPacket)):
                 continue
 
             # Tag tool + agent-message events with routing _meta BEFORE

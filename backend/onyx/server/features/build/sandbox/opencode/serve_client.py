@@ -34,6 +34,8 @@ from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
+from onyx.server.features.build.packets import CompactionPacket
+from onyx.server.features.build.packets import ContextUsagePacket
 from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
@@ -139,6 +141,8 @@ class _TurnState:
     # decision endpoint answers directly); reject an undecided request for a clean
     # decline. A late reject after the user answered is a harmless no-op.
     pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
+    # Set from BOTH message.updated and hydration — text deltas race ahead of message.updated.
+    summary_message_ids: set[str] = field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +336,8 @@ def _hydrate_message(
     )
     if role == "assistant":
         state.assistant_message_ids.add(msg_id)
+        if info.get("summary") is True:
+            state.summary_message_ids.add(msg_id)
     elif role == "user":
         state.user_message_ids.add(msg_id)
     else:
@@ -380,6 +386,8 @@ def _emit_text_delta(
     # Assistant-only filter. Deltas race ~300ms ahead of message.updated;
     # _is_assistant_message hydrates via REST when the role is unknown.
     if not _is_assistant_message(state, msg_id, fetch_message):
+        return
+    if isinstance(msg_id, str) and msg_id in state.summary_message_ids:
         return
     if field_name != "text":
         # Non-text fields (e.g. tool input streaming, future extensions)
@@ -449,6 +457,57 @@ def _state_for_session(state: _TurnState, session_id: str) -> _TurnState:
         child_state = _TurnState(session_id=session_id)
         state.child_states[session_id] = child_state
     return child_state
+
+
+def _is_summary_message(state: _TurnState, msg_id: Any) -> bool:
+    return isinstance(msg_id, str) and msg_id in state.summary_message_ids
+
+
+def _context_usage_from_info(info: dict[str, Any]) -> ContextUsagePacket | None:
+    if info.get("summary") is True:
+        return None
+    tokens = info.get("tokens")
+    if not isinstance(tokens, dict):
+        return None
+    cache = tokens.get("cache")
+    cache = cache if isinstance(cache, dict) else {}
+
+    def _n(value: Any) -> int:
+        return int(value) if isinstance(value, (int, float)) else 0
+
+    used = (
+        _n(tokens.get("input"))
+        + _n(tokens.get("output"))
+        + _n(tokens.get("reasoning"))
+        + _n(cache.get("read"))
+        + _n(cache.get("write"))
+    )
+    if used <= 0:
+        return None
+    cost = info.get("cost")
+    return ContextUsagePacket(
+        used_tokens=used,
+        cost=float(cost) if isinstance(cost, (int, float)) else None,
+    )
+
+
+def _fetch_summary_text(
+    state: _TurnState,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None,
+) -> str | None:
+    if fetch_message is None or not state.summary_message_ids:
+        return None
+    texts: list[str] = []
+    for msg_id in state.summary_message_ids:
+        body = fetch_message(msg_id)
+        if not isinstance(body, dict):
+            continue
+        for part in body.get("parts") or []:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text = part.get("text")
+                if isinstance(text, str) and text:
+                    texts.append(text)
+    return "\n\n".join(texts) or None
 
 
 def translate_opencode_event(
@@ -597,11 +656,15 @@ def translate_opencode_event(
         if part_type == "reasoning":
             if not _is_assistant_message(state, part.get("messageID"), fetch_message):
                 return
+            if _is_summary_message(state, part.get("messageID")):
+                return
             yield from _reconcile_reasoning_part(part, state)
             return
 
         if part_type == "text":
             if not _is_assistant_message(state, part.get("messageID"), fetch_message):
+                return
+            if _is_summary_message(state, part.get("messageID")):
                 return
             yield from _reconcile_text_part(part, state)
             return
@@ -649,9 +712,14 @@ def translate_opencode_event(
         msg_id = info.get("id")
         if isinstance(msg_id, str):
             state.assistant_message_ids.add(msg_id)
+            if info.get("summary") is True:
+                state.summary_message_ids.add(msg_id)
         finish = info.get("finish")
         if isinstance(finish, str):
             state.last_finish = finish
+        usage = _context_usage_from_info(info)
+        if usage is not None:
+            yield usage
         # A message error DOES kill the turn — surface it.
         err = info.get("error")
         if err and isinstance(err, dict):
@@ -676,6 +744,10 @@ def translate_opencode_event(
         err = props.get("error") or {}
         if isinstance(err, dict):
             yield from _emit_terminator(state, error=err)
+        return
+
+    if etype == "session.compacted":
+        yield CompactionPacket(summary=_fetch_summary_text(state, fetch_message))
         return
 
     # Everything else (server.heartbeat, session.created, session.diff,
