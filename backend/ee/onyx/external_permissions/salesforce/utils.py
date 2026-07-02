@@ -2,33 +2,32 @@ from simple_salesforce import Salesforce
 from simple_salesforce.format import format_soql
 from sqlalchemy.orm import Session
 
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import get_cc_pairs_for_document
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-_ANY_SALESFORCE_CLIENT: Salesforce | None = None
+# Salesforce client per tenant, built from the first cc_pair of the first censored
+# doc. Keyed by tenant_id so one tenant's org + credentials are never reused to
+# resolve another tenant's access.
+_TENANT_SALESFORCE_CLIENT: dict[str, Salesforce] = {}
 
 
 def get_any_salesforce_client_for_doc_id(
     db_session: Session, doc_id: str
 ) -> Salesforce:
     """
-    We create a salesforce client for the first cc_pair for the first doc_id where
-    salesforce censoring is enabled. After that we just cache and reuse the same
-    client for all queries.
+    Return a cached Salesforce client for the current tenant, building it from the
+    first cc_pair of the given doc on first use. Cached to avoid a Postgres lookup
+    and a fresh client per query.
 
-    We do this to reduce the number of postgres queries we make at query time.
-
-    This may be problematic if they are using multiple cc_pairs for salesforce.
-    E.g. there are 2 different credential sets for 2 different salesforce cc_pairs
-    but only one has the permissions to access the permissions needed for the query.
+    Still imperfect when a tenant has multiple Salesforce cc_pairs with different
+    credentials: we use the first, which may lack the permissions the query needs.
     """
-
-    # NOTE: this global seems very very bad
-    global _ANY_SALESFORCE_CLIENT
-    if _ANY_SALESFORCE_CLIENT is None:
+    tenant_id = get_current_tenant_id()
+    client = _TENANT_SALESFORCE_CLIENT.get(tenant_id)
+    if client is None:
         cc_pairs = get_cc_pairs_for_document(db_session, doc_id)
         first_cc_pair = cc_pairs[0]
         credential_json = (
@@ -36,12 +35,13 @@ def get_any_salesforce_client_for_doc_id(
             if first_cc_pair.credential.credential_json
             else {}
         )
-        _ANY_SALESFORCE_CLIENT = Salesforce(
+        client = Salesforce(
             username=credential_json["sf_username"],
             password=credential_json["sf_password"],
             security_token=credential_json["sf_security_token"],
         )
-    return _ANY_SALESFORCE_CLIENT
+        _TENANT_SALESFORCE_CLIENT[tenant_id] = client
+    return client
 
 
 def _query_salesforce_user_id(sf_client: Salesforce, user_email: str) -> str | None:
@@ -65,9 +65,10 @@ def _query_salesforce_user_id(sf_client: Salesforce, user_email: str) -> str | N
     return None
 
 
-# This contains only the user_ids that we have found in Salesforce.
-# If we don't know their user_id, we don't store anything in the cache.
-_CACHED_SF_EMAIL_TO_ID_MAP: dict[str, str] = {}
+# (tenant_id, user_email) -> Salesforce user_id. Keyed by tenant so a shared email
+# never resolves to another tenant's Salesforce user. Only real (non-None) ids are
+# stored; unknown emails are re-queried each call.
+_CACHED_SF_EMAIL_TO_ID_MAP: dict[tuple[str, str], str] = {}
 
 
 def get_salesforce_user_id_from_email(
@@ -75,41 +76,19 @@ def get_salesforce_user_id_from_email(
     user_email: str,
 ) -> str | None:
     """
-    We cache this so we don't have to query Salesforce for every query and salesforce
-    user IDs never change.
-    Memory usage is fine because we just store 2 small strings per user.
-
-    If the email is not in the cache, we check the local salesforce database for the info.
-    If the user is not found in the local salesforce database, we query Salesforce.
-    Whatever we get back from Salesforce is added to the database.
-    If no user_id is found, we add a NULL_ID_STRING to the database for that email so
-    we don't query Salesforce again (which is slow) but we still check the local salesforce
-    database every query until a user id is found. This is acceptable because the query time
-    is quite fast.
-    If a user_id is created in Salesforce, it will be added to the local salesforce database
-    next time the connector is run. Then that value will be found in this function and cached.
-
-    NOTE: First time this runs, it may be slow if it hasn't already been updated in the local
-    salesforce database. (Around 0.1-0.3 seconds)
-    If it's cached or stored in the local salesforce database, it's fast (<0.001 seconds).
+    Resolve a Salesforce user_id for an email, cached per tenant since Salesforce
+    user ids are stable. A miss queries Salesforce (~0.1-0.3s); a hit is ~instant.
     """
+    cache_key = (get_current_tenant_id(), user_email)
+    cached_user_id = _CACHED_SF_EMAIL_TO_ID_MAP.get(cache_key)
+    if cached_user_id is not None:
+        return cached_user_id
 
-    # NOTE: this global seems bad
-    global _CACHED_SF_EMAIL_TO_ID_MAP
-    if user_email in _CACHED_SF_EMAIL_TO_ID_MAP:
-        if _CACHED_SF_EMAIL_TO_ID_MAP[user_email] is not None:
-            return _CACHED_SF_EMAIL_TO_ID_MAP[user_email]
-
-    # some caching via sqlite existed here before ... check history if interested
-
-    # ...query Salesforce and store the result in the database
     user_id = _query_salesforce_user_id(sf_client, user_email)
-
     if user_id is None:
         return None
 
-    # If the found user_id is real, cache it
-    _CACHED_SF_EMAIL_TO_ID_MAP[user_email] = user_id
+    _CACHED_SF_EMAIL_TO_ID_MAP[cache_key] = user_id
     return user_id
 
 
@@ -145,45 +124,3 @@ def get_objects_access_for_user_id(
     )
     result = salesforce_client.query_all(access_query)
     return {record["RecordId"]: record["HasReadAccess"] for record in result["records"]}
-
-
-_CC_PAIR_ID_SALESFORCE_CLIENT_MAP: dict[int, Salesforce] = {}
-_DOC_ID_TO_CC_PAIR_ID_MAP: dict[str, int] = {}
-
-
-# NOTE: This is not used anywhere.
-def _get_salesforce_client_for_doc_id(db_session: Session, doc_id: str) -> Salesforce:
-    """
-    Uses a document id to get the cc_pair that indexed that document and uses the credentials
-    for that cc_pair to create a Salesforce client.
-    Problems:
-    - There may be multiple cc_pairs for a document, and we don't know which one to use.
-        - right now we just use the first one
-    - Building a new Salesforce client for each document is slow.
-    - Memory usage could be an issue as we build these dictionaries.
-    """
-    if doc_id not in _DOC_ID_TO_CC_PAIR_ID_MAP:
-        cc_pairs = get_cc_pairs_for_document(db_session, doc_id)
-        first_cc_pair = cc_pairs[0]
-        _DOC_ID_TO_CC_PAIR_ID_MAP[doc_id] = first_cc_pair.id
-
-    cc_pair_id = _DOC_ID_TO_CC_PAIR_ID_MAP[doc_id]
-    if cc_pair_id not in _CC_PAIR_ID_SALESFORCE_CLIENT_MAP:
-        cc_pair = get_connector_credential_pair_from_id(
-            db_session=db_session,
-            cc_pair_id=cc_pair_id,
-        )
-        if cc_pair is None:
-            raise ValueError(f"CC pair {cc_pair_id} not found")
-        credential_json = (
-            cc_pair.credential.credential_json.get_value(apply_mask=False)
-            if cc_pair.credential.credential_json
-            else {}
-        )
-        _CC_PAIR_ID_SALESFORCE_CLIENT_MAP[cc_pair_id] = Salesforce(
-            username=credential_json["sf_username"],
-            password=credential_json["sf_password"],
-            security_token=credential_json["sf_security_token"],
-        )
-
-    return _CC_PAIR_ID_SALESFORCE_CLIENT_MAP[cc_pair_id]

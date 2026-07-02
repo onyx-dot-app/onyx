@@ -17,7 +17,7 @@ from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.skills.bundle import read_bundle_file
 from onyx.skills.bundle import slug_from_filename
 from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.ingest import ingest_skill_bundle
+from onyx.skills.ingest import ingested_skill_bundle as ingest_bundle_with_cleanup
 from onyx.skills.ingest import IngestedBundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 
@@ -71,18 +71,10 @@ def ingested_skill_bundle(
     slug: str | None = None,
 ) -> Iterator[IngestedBundle]:
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle_file),
-        filename,
-        file_store,
-        slug=slug,
-    )
-
-    try:
+    with ingest_bundle_with_cleanup(
+        read_bundle_file(bundle_file), filename, file_store, slug=slug
+    ) as ingested:
         yield ingested
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
 
 def replace_custom_skill_bundle_contents(

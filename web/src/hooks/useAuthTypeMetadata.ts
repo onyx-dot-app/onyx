@@ -1,6 +1,7 @@
 import useSWR from "swr";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 
 interface AuthTypeAPIResponse {
   auth_type: string;
@@ -9,16 +10,6 @@ interface AuthTypeAPIResponse {
   password_min_length: number;
   has_users: boolean;
   oauth_enabled: boolean;
-}
-
-export interface AuthTypeMetadata {
-  authType: AuthType;
-  autoRedirect: boolean;
-  requiresVerification: boolean;
-  anonymousUserEnabled: boolean | null;
-  passwordMinLength: number;
-  hasUsers: boolean;
-  oauthEnabled: boolean;
 }
 
 const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {

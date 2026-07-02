@@ -25,6 +25,16 @@ def get_user_group_ids_for_user(db_session: Session, user_id: UUID) -> set[int]:
     )
 
 
+def get_curated_user_group_ids_for_user(db_session: Session, user_id: UUID) -> set[int]:
+    return set(
+        db_session.scalars(
+            select(User__UserGroup.user_group_id)
+            .where(User__UserGroup.user_id == user_id)
+            .where(User__UserGroup.is_curator.is_(True))
+        ).all()
+    )
+
+
 def persona_ownership_is_vacant(persona: Persona) -> bool:
     """True when no live owner holds the persona: both owner refs are NULL on
     a non-builtin persona, or the owning user is deactivated or gone. Vacant

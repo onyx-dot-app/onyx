@@ -3,7 +3,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
-import { updateUserPersonalization } from "@/lib/userSettings";
+import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";

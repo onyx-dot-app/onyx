@@ -155,4 +155,26 @@ describe("parsePacket", () => {
       reason: "to schedule events",
     });
   });
+
+  it("parses context_usage from persisted (snake_case) and live (camelCase) shapes", () => {
+    expect(parsePacket({ type: "context_usage", used_tokens: 15526 })).toEqual({
+      type: "context_usage",
+      usedTokens: 15526,
+    });
+
+    expect(parsePacket({ type: "context_usage", usedTokens: 42 })).toEqual({
+      type: "context_usage",
+      usedTokens: 42,
+    });
+  });
+
+  it("parses compaction packets, defaulting a missing summary to null", () => {
+    expect(
+      parsePacket({ type: "compaction", summary: "Recap of earlier work" })
+    ).toEqual({ type: "compaction", summary: "Recap of earlier work" });
+    expect(parsePacket({ type: "compaction" })).toEqual({
+      type: "compaction",
+      summary: null,
+    });
+  });
 });
