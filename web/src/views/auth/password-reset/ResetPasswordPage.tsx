@@ -2,10 +2,10 @@
 
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { redirect } from "next/navigation";
 import { resetPassword } from "@/lib/auth/svc";
 import { AuthLayouts, InputVertical } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
-import { markdown } from "@opal/utils";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
@@ -15,8 +15,8 @@ import {
   NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED,
   TENANT_ID_COOKIE_NAME,
 } from "@/lib/constants";
-import { useCurrentUser } from "@/lib/users/hooks";
-import { redirect } from "next/navigation";
+import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
+import type { Route } from "next";
 
 const initialValues = { password: "", confirmPassword: "" };
 
@@ -29,7 +29,6 @@ const validationSchema = Yup.object().shape({
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const { user } = useCurrentUser();
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
   const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
@@ -44,20 +43,17 @@ export default function ResetPasswordPage() {
         sameSite: "lax",
       });
     }
-  }, [tenantId, router]);
+  }, [tenantId]);
 
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) redirect("/auth/login");
+  if (!token) redirect("/auth/forgot-password" as Route);
 
   async function handleSubmit(values: typeof initialValues) {
-    if (!token) {
-      toast.error("Invalid or missing reset token.");
-      return;
-    }
     try {
-      await resetPassword(token, values.password);
+      await resetPassword(token!, values.password);
       toast.success("Password reset successfully. Redirecting to login...");
       setTimeout(() => {
-        router.replace("/auth/login");
+        router.replace("/auth/login" as Route);
       }, 1000);
     } catch (error) {
       toast.error(
@@ -71,10 +67,7 @@ export default function ResetPasswordPage() {
   return (
     <AuthLayouts.Card
       title="Reset Password"
-      description={markdown(`for account **${user?.email}**`)}
-      bottomPrompt={markdown(
-        "Back to [Sign In](/auth/login) or [Create an Account](/auth/signup)"
-      )}
+      bottomPrompt={backToLoginOrSignupCopy()}
       logoSrc={logoUrl}
     >
       <Formik

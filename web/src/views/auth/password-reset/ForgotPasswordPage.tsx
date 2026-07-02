@@ -1,76 +1,42 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { forgotPassword } from "@/lib/auth/svc";
-import { AuthLayouts, InputVertical } from "@opal/layouts";
+import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
+import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
 import { markdown } from "@opal/utils";
-import { Formik } from "formik";
-import * as Yup from "yup";
-import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { toast } from "@/hooks/useToast";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
-
-const initialValues = { email: "" };
-
-const validationSchema = Yup.object().shape({
-  email: Yup.string().email().required(),
-});
+import type { Route } from "next";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const email = searchParams?.get("email");
   const { logoUrl } = useSettings();
 
   useEffect(() => {
-    if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
-      router.replace("/auth/login");
+    if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED || !email) {
+      router.replace("/auth/login" as Route);
+      return;
     }
-  }, [router]);
+    forgotPassword(email).catch(() => {});
+  }, [email, router]);
 
-  if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) return null;
-
-  async function handleSubmit(values: typeof initialValues) {
-    try {
-      await forgotPassword(values.email);
-      toast.success("Password reset email sent. Please check your inbox.");
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "An error occurred. Please try again."
-      );
-    }
-  }
+  if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED || !email) return null;
 
   return (
     <AuthLayouts.Card
-      title="Forgot Password"
-      description="Enter your email address and we'll send you a reset link."
-      bottomPrompt={markdown("[Back to Login](/auth/login)")}
+      title="Check your inbox"
+      description={markdown(`We sent a password reset link to **${email}**.`)}
+      bottomPrompt={backToLoginOrSignupCopy()}
       logoSrc={logoUrl}
     >
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-      >
-        {({ isSubmitting }) => (
-          <AuthLayouts.FormBody>
-            <AuthLayouts.Fields>
-              <InputVertical title="Email" withLabel="email">
-                <InputTypeInField
-                  name="email"
-                  placeholder="email@yourcompany.com"
-                  autoComplete="email"
-                  type="email"
-                />
-              </InputVertical>
-            </AuthLayouts.Fields>
-            <AuthLayouts.Submit label="submit" isSubmitting={isSubmitting} />
-          </AuthLayouts.FormBody>
-        )}
-      </Formik>
+      <AuthLayouts.Message
+        title="Link sent."
+        description="If that address is registered, you'll receive an email shortly. Check your spam folder if it doesn't arrive within a few minutes."
+      />
     </AuthLayouts.Card>
   );
 }
