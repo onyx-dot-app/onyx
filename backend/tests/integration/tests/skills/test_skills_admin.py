@@ -22,6 +22,7 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import build_minimal_bundle
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
 # ---------------------------------------------------------------------------
@@ -147,6 +148,14 @@ def test_bundle_with_template_rejected(admin_user: DATestUser) -> None:
     assert exc_info.value.response.status_code == 400
 
 
+def test_group_shares_replace(admin_user: DATestUser) -> None:
+    skill = SkillManager.create_custom(
+        admin_user, slug=f"group-shares-test-{uuid4().hex[:6]}", is_public=False
+    )
+    updated = SkillManager.replace_group_shares(skill, [], admin_user)
+    assert updated.group_shares == []
+
+
 def test_metadata_from_bundle_frontmatter(admin_user: DATestUser) -> None:
     bundle = build_minimal_bundle(
         "from-frontmatter", name="From Bundle", description="From bundle desc"
@@ -186,16 +195,21 @@ def test_bad_filename_rejected(admin_user: DATestUser) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_create_skill_201_persists_row_and_bundle(
+def test_create_skill_201_persists_row_group_shares_bundle(
     admin_user: DATestUser,
 ) -> None:
-    """POST -> row persisted with bundle blob visible in DB."""
+    """POST -> row persisted with bundle blob and group shares visible in DB."""
+    group = UserGroupManager.create(admin_user, name="create-shares-group")
+
     slug = f"persist-{uuid4().hex[:8]}"
     skill = SkillManager.create_custom(
         admin_user,
         slug=slug,
         is_public=False,
+        group_ids=[group.id],
     )
+
+    assert [share.group_id for share in skill.group_shares] == [group.id]
 
     row = _fetch_skill_row(skill.id)
     assert row is not None, "skill row missing after create"
@@ -333,6 +347,35 @@ def test_create_skill_failure_cleans_up_orphan_blob(
         f"expected exactly one skill row with slug {slug}; got {len(rows)}"
     )
     assert rows[0].bundle_file_id == first_blob_id
+
+
+# ---------------------------------------------------------------------------
+# Sharing
+# ---------------------------------------------------------------------------
+
+
+def test_replace_group_shares_400_on_unknown_group_id(
+    admin_user: DATestUser,
+) -> None:
+    """Unknown group id → 400 with a message that names the failure mode.
+
+    Regression for SHA `c5e427ceab`: FK violations must surface as a 400
+    INVALID_INPUT, not a 500.
+    """
+    skill = SkillManager.create_custom(
+        admin_user, slug=f"unknown-grp-{uuid4().hex[:8]}", is_public=False
+    )
+
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        SkillManager.replace_group_shares(skill, [10_000_000], admin_user)
+
+    response = exc_info.value.response
+    assert response.status_code == 400
+    body = response.json()
+    detail = str(body.get("detail") or body)
+    assert "group" in detail.lower(), (
+        f"error detail must mention groups; got {detail!r}"
+    )
 
 
 # ---------------------------------------------------------------------------

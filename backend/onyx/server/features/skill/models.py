@@ -172,9 +172,16 @@ class SkillPreviewResponse(BaseModel):
         )
 
 
+class SkillEditableDetailResponse(SkillResponse):
+    instructions_markdown: str
+
+
 class SkillPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    name: str | None = None
+    description: str | None = None
+    instructions_markdown: str | None = None
     public_permission: SkillSharePermission | None = None
     enabled: bool | None = None
 
@@ -184,10 +191,56 @@ class SkillPatchRequest(BaseModel):
         """Omitting a field = 'leave unchanged'. Null ``enabled`` is invalid;
         null ``public_permission`` is valid and revokes org-wide access."""
         if isinstance(data, dict):
-            if "enabled" in data and data["enabled"] is None:
-                raise ValueError("enabled cannot be null")
+            for field in (
+                "name",
+                "description",
+                "instructions_markdown",
+                "enabled",
+            ):
+                if field in data and data[field] is None:
+                    raise ValueError(f"{field} cannot be null")
         return data
+
+    @model_validator(mode="after")
+    def _strip_values(self) -> "SkillPatchRequest":
+        for field in ("name", "description", "instructions_markdown"):
+            value = getattr(self, field)
+            if value is None:
+                continue
+            stripped = value.strip()
+            if not stripped:
+                raise ValueError(f"{field} cannot be empty")
+            setattr(self, field, stripped)
+        return self
+
+    @property
+    def has_details_update(self) -> bool:
+        return bool(
+            self.model_fields_set & {"name", "description", "instructions_markdown"}
+        )
 
     @property
     def has_db_field_update(self) -> bool:
         return bool(self.model_fields_set & {"public_permission", "enabled"})
+
+
+class SkillUserShareRequest(BaseModel):
+    user_id: UUID
+    permission: SkillSharePermission
+
+
+class SkillGroupShareRequest(BaseModel):
+    group_id: int
+    permission: SkillSharePermission
+
+
+class SkillShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_shares: list[SkillUserShareRequest] | None = None
+    group_shares: list[SkillGroupShareRequest] | None = None
+    public_permission: SkillSharePermission | None = None
+
+
+class TransferSkillOwnershipRequest(BaseModel):
+    new_owner_user_id: UUID
