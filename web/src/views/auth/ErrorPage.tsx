@@ -48,13 +48,13 @@ export default function ErrorPage() {
     >
       <AuthLayouts.Message
         messageType="warning"
-        title="We ran into an error verifying your login"
+        title="Something went wrong."
         description={markdown(
           ...(message ? [message] : GENERIC_ERROR_DESCRIPTION),
           "",
           NEXT_PUBLIC_CLOUD_ENABLED
-            ? "If you continue to experience problems, please reach out to the Onyx team at [support@onyx.app](mailto:support@onyx.app)"
-            : "If you continue to experience problems, please reach out to your system administrator for assistance."
+            ? "Try again later. [Contact support](mailto:support@onyx.app)."
+            : "Try again later. Please reach out to your system administrator or [contact support](mailto:support@onyx.app)."
         )}
       />
     </AuthLayouts.Card>
