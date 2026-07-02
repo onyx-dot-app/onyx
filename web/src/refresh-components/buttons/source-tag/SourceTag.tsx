@@ -458,13 +458,16 @@ const SourceTagInner = ({
       )}
       onClick={handleClick}
       onPointerDown={(e: React.PointerEvent) => {
-        // Eagerly trigger click handler on pointer down. 
-        // This solves the issue where rapid re-rendering during streaming destroys the DOM node 
-        // between mousedown and mouseup, causing the native onClick to never fire.
-        if (e.pointerType === "mouse" && e.button !== 0) {
+        // Keep eager activation for mouse only; touch/pen should activate on click (release)
+        // to avoid accidental opens when starting a scroll gesture.
+        if (e.pointerType !== "mouse") {
+          return;
+        }
+        if (e.button !== 0) {
           return; // Only react to left-clicks for mouse
         }
         handleClick(e);
+      }}
       }}
     >
       {/* Stacked icons container - only for tag variant */}
