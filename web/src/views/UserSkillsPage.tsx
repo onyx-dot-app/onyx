@@ -22,6 +22,7 @@ import {
   patchUserSkill,
   replaceUserSkillBundle,
 } from "@/lib/skills/api";
+import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { toast } from "@/hooks/useToast";
 
 // ---------------------------------------------------------------------------
@@ -86,7 +87,7 @@ export default function UserSkillsPage() {
   ) {
     setPendingId(item.id);
     try {
-      await patchUserSkill(item.id, enabled);
+      await patchUserSkill(item.id, { enabled });
       toast.success(`${enabled ? "Enabled" : "Disabled"} "${item.name}"`);
       refresh();
     } catch (err) {
@@ -117,24 +118,33 @@ export default function UserSkillsPage() {
 
   const items = useMemo<SkillCardItem[]>(() => {
     if (!data) return [];
-    const builtinItems: SkillCardItem[] = data.builtins.map((b) => ({
-      id: b.id,
-      name: b.name,
-      description: b.description,
-      source: "builtin",
-      is_available: b.is_available,
-      unavailable_reason: b.unavailable_reason,
-    }));
-    const customItems: SkillCardItem[] = data.customs.map((c) => ({
-      id: c.id,
-      name: c.name,
-      description: c.description,
-      source: "custom",
-      author_email: c.author_email,
-      is_personal:
-        c.is_personal && user !== null && c.author_user_id === user.id,
-      enabled: c.enabled,
-    }));
+    const builtinItems: SkillCardItem[] = data.builtins
+      .filter(
+        (b): b is BuiltinSkill =>
+          b.source === "builtin" && b.is_available !== null
+      )
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        description: b.description,
+        source: "builtin",
+        is_available: b.is_available,
+        unavailable_reason: b.unavailable_reason,
+      }));
+    const customItems: SkillCardItem[] = data.customs
+      .filter(
+        (c): c is CustomSkill => c.source === "custom" && c.enabled !== null
+      )
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        source: "custom",
+        author_email: c.author_email,
+        is_personal:
+          c.is_personal && user !== null && c.author_user_id === user.id,
+        enabled: c.enabled,
+      }));
     // Group order: built-in, then custom (org-wide), then personal; alphabetical within each group.
     const groupRank = (item: SkillCardItem): number => {
       switch (item.source) {

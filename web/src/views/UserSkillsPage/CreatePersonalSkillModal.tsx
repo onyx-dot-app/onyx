@@ -5,7 +5,7 @@ import { Button, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
-import { createUserSkill } from "@/lib/skills/api";
+import { createCustomSkill } from "@/lib/skills/api";
 import { toast } from "@/hooks/useToast";
 
 interface CreatePersonalSkillModalProps {
@@ -47,7 +47,7 @@ export default function CreatePersonalSkillModal({
     setSubmitting(true);
     setErrorMessage(null);
     try {
-      const created = await createUserSkill(file);
+      const created = await createCustomSkill(file);
       toast.success(`Created "${created.name}"`);
       reset();
       onCreated();

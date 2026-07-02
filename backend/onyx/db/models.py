@@ -37,14 +37,12 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine.interfaces import Dialect
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import validates
-from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from typing_extensions import TypedDict  # noreorder
@@ -4362,19 +4360,6 @@ class Skill(Base):
         nullable=True,
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-
-    @hybrid_property
-    def is_public(self) -> bool:
-        return self.public_permission is not None
-
-    @is_public.inplace.setter
-    def _is_public_setter(self, value: bool) -> None:
-        self.public_permission = SkillSharePermission.VIEWER if value else None
-
-    @is_public.inplace.expression
-    @classmethod
-    def _is_public_expression(cls) -> ColumnElement[bool]:
-        return cls.public_permission.isnot(None)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

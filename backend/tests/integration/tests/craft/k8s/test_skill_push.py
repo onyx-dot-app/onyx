@@ -10,7 +10,6 @@ from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
-import httpx
 import pytest
 from sqlalchemy.orm import Session
 
@@ -18,6 +17,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -29,16 +29,15 @@ from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.skills import built_in as built_in_module
+from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.server.features.skill.models import SkillResponse
+from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestSkill
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import DATestUserGroup
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
 from tests.integration.tests.craft.k8s.k8s_fixtures import WorkspaceProxy
 
@@ -84,13 +83,11 @@ def _create_skill(
     *,
     body: bytes | str,
     is_public: bool = False,
-    group_ids: list[int] | None = None,
-) -> DATestSkill:
+) -> SkillResponse:
     return SkillManager.create_custom(
         admin,
         slug=slug,
         is_public=is_public,
-        group_ids=group_ids or [],
         bundle_bytes=_bundle(slug, body),
         filename=f"{slug}.zip",
     )
@@ -98,10 +95,10 @@ def _create_skill(
 
 def _replace_bundle(
     admin: DATestUser,
-    skill: DATestSkill,
+    skill: SkillResponse,
     *,
     body: bytes | str,
-) -> DATestSkill:
+) -> SkillResponse:
     return SkillManager.replace_bundle(
         skill,
         _bundle(skill.slug, body),
@@ -112,32 +109,6 @@ def _replace_bundle(
 def _create_users(count: int) -> list[DATestUser]:
     prefix = f"craft-k8s-skill-{uuid4().hex[:8]}"
     return [UserManager.create(name=f"{prefix}-{idx}") for idx in range(count)]
-
-
-@pytest.fixture
-def user_group_factory(
-    k8s_admin_user: DATestUser,
-) -> Generator[Callable[[str, list[str]], DATestUserGroup], None, None]:
-    groups: list[DATestUserGroup] = []
-
-    def _create(name: str, user_ids: list[str]) -> DATestUserGroup:
-        group = UserGroupManager.create(
-            k8s_admin_user,
-            name=name,
-            user_ids=user_ids,
-        )
-        groups.append(group)
-        return group
-
-    try:
-        yield _create
-    finally:
-        for group in reversed(groups):
-            try:
-                UserGroupManager.delete(group, k8s_admin_user)
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code != 404:
-                    raise
 
 
 def _make_db_group(db_session: Session, name: str) -> UserGroup:
@@ -197,7 +168,7 @@ def _make_built_in_skill_row(db_session: Session, *, built_in_skill_id: str) -> 
         built_in_skill_id=built_in_skill_id,
         bundle_file_id=None,
         bundle_sha256=None,
-        is_public=True,
+        public_permission=SkillSharePermission.VIEWER,
         enabled=True,
     )
     db_session.add(skill)
@@ -242,7 +213,7 @@ def _seed_custom_skill(
         description=f"Seeded skill {slug}",
         bundle_file_id=bundle_file_id,
         bundle_sha256=hashlib.sha256(bundle_bytes).hexdigest(),
-        is_public=public,
+        public_permission=SkillSharePermission.VIEWER if public else None,
         enabled=True,
     )
     db_session.add(skill)
@@ -338,94 +309,29 @@ class TestSkillPush:
                 b"public skill body\n",
             )
 
-    def test_private_skill_only_lands_in_granted_users_sandboxes(
-        self,
-        k8s_admin_user: DATestUser,
-        running_sandbox: Callable[..., SandboxHandle],
-        user_group_factory: Callable[[str, list[str]], DATestUserGroup],
-    ) -> None:
-        handle = running_sandbox()
-        user_a, user_b, user_c = _create_users(3)
-        [ws_a, ws_b, ws_c] = handle.provision_api_users([user_a, user_b, user_c])
-        group = user_group_factory(
-            f"engineering-{uuid4().hex[:6]}",
-            [user_a.id],
-        )
-
-        slug = f"eng-only-{uuid4().hex[:6]}"
-        skill = _create_skill(
-            k8s_admin_user,
-            slug,
-            is_public=False,
-            group_ids=[group.id],
-            body="engineering only\n",
-        )
-
-        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"engineering only\n")
-        _skill_file_path(ws_b, skill.slug).wait_for_absent()
-        _skill_file_path(ws_c, skill.slug).wait_for_absent()
-
     def test_disable_skill_removes_files_from_affected_sandboxes(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
-        user_group_factory: Callable[[str, list[str]], DATestUserGroup],
     ) -> None:
         handle = running_sandbox()
         [user] = _create_users(1)
         [workspace] = handle.provision_api_users([user])
-        group = user_group_factory(
-            f"disable-grp-{uuid4().hex[:6]}",
-            [user.id],
-        )
 
         slug = f"disable-me-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
             slug,
-            is_public=False,
-            group_ids=[group.id],
+            is_public=True,
             body="to be disabled\n",
         )
         _skill_file_path(workspace, skill.slug).wait_for_bytes(b"to be disabled\n")
 
-        SkillManager.patch_custom(skill, k8s_admin_user, enabled=False)
+        SkillManager.patch_custom(
+            skill, k8s_admin_user, SkillPatchRequest(enabled=False)
+        )
 
         (_skills_dir(workspace) / skill.slug).wait_for_absent()
-
-    def test_grants_change_adds_to_newly_granted_and_removes_from_revoked(
-        self,
-        k8s_admin_user: DATestUser,
-        running_sandbox: Callable[..., SandboxHandle],
-        user_group_factory: Callable[[str, list[str]], DATestUserGroup],
-    ) -> None:
-        handle = running_sandbox()
-        user_a, user_b = _create_users(2)
-        [ws_a, ws_b] = handle.provision_api_users([user_a, user_b])
-        group_x = user_group_factory(
-            f"grp-x-{uuid4().hex[:6]}",
-            [user_a.id],
-        )
-        group_y = user_group_factory(
-            f"grp-y-{uuid4().hex[:6]}",
-            [user_b.id],
-        )
-
-        slug = f"grants-flip-{uuid4().hex[:6]}"
-        skill = _create_skill(
-            k8s_admin_user,
-            slug,
-            is_public=False,
-            group_ids=[group_x.id],
-            body="shifting grants\n",
-        )
-        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"shifting grants\n")
-        _skill_file_path(ws_b, skill.slug).wait_for_absent()
-
-        SkillManager.replace_grants(skill, [group_y.id], k8s_admin_user)
-
-        _skill_file_path(ws_a, skill.slug).wait_for_absent()
-        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"shifting grants\n")
 
     def test_replace_bundle_propagates_new_content(
         self,
@@ -472,39 +378,6 @@ class TestSkillPush:
 
         (_skills_dir(ws_a) / skill.slug).wait_for_absent()
         (_skills_dir(ws_b) / skill.slug).wait_for_absent()
-
-    def test_user_with_overlapping_grants_receives_skill_once(
-        self,
-        k8s_admin_user: DATestUser,
-        running_sandbox: Callable[..., SandboxHandle],
-        user_group_factory: Callable[[str, list[str]], DATestUserGroup],
-    ) -> None:
-        handle = running_sandbox()
-        [user] = _create_users(1)
-        [workspace] = handle.provision_api_users([user])
-        group_x = user_group_factory(
-            f"dup-x-{uuid4().hex[:6]}",
-            [user.id],
-        )
-        group_y = user_group_factory(
-            f"dup-y-{uuid4().hex[:6]}",
-            [user.id],
-        )
-
-        slug = f"dup-grants-{uuid4().hex[:6]}"
-        skill = _create_skill(
-            k8s_admin_user,
-            slug,
-            is_public=False,
-            group_ids=[group_x.id, group_y.id],
-            body="dedup\n",
-        )
-
-        _skill_file_path(workspace, skill.slug).wait_for_bytes(b"dedup\n")
-        skill_dir = _skills_dir(workspace) / skill.slug
-        skill_files = [p for p in skill_dir.rglob("*") if p.is_file()]
-        assert len(skill_files) == 1
-        assert skill_files[0].name == "SKILL.md"
 
 
 class TestSkillPushLowLevel:
@@ -626,9 +499,9 @@ class TestSkillPushLowLevel:
         pycache.mkdir()
         (pycache / "foo.pyc").write_bytes(b"\x00\x01")
 
-        monkeypatch.setattr(built_in_module, "BUILTIN_SKILLS_PATH", skills_root)
+        monkeypatch.setattr("onyx.skills.built_in.BUILTIN_SKILLS_PATH", skills_root)
         monkeypatch.setitem(
-            built_in_module.BUILT_IN_SKILLS,
+            BUILT_IN_SKILLS,
             slug,
             BuiltInSkillDefinition(built_in_skill_id=slug),
         )

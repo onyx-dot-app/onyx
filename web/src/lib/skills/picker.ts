@@ -120,7 +120,7 @@ export function filterPickerSections(
   };
 }
 
-// Skills first, then apps — must match the popover's visual render order so
+// Skills first, then apps; must match the popover's visual render order so
 // keyboard nav indices line up.
 export function flattenSections(sections: PickerSections): PickerEntry[] {
   return [...sections.skills, ...sections.apps];
