@@ -151,6 +151,7 @@ function GroupMembershipTabBody({ ccPairId }: { ccPairId: number }) {
 
   return (
     <ExternalGroupSyncAttemptsTable
+      ccPairId={ccPairId}
       attempts={result.currentPageData ?? []}
       currentPage={result.currentPage}
       totalPages={result.totalPages}

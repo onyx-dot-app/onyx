@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import Field
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy import update
@@ -29,6 +30,16 @@ class ExternalUserGroup(BaseModel):
     # When this is `True`, this `ExternalUserGroup` object doesn't really represent
     # an actual "group" in the source.
     gives_anyone_access: bool = False
+
+
+class ExternalGroupSyncFailure(BaseModel):
+    external_group_id: str | None = None
+    external_group_name: str | None = None
+    failure_message: str
+    full_exception_trace: str | None = None
+    exception: Exception | None = Field(default=None, exclude=True)
+
+    model_config = {"arbitrary_types_allowed": True}
 
 
 def delete_user__ext_group_for_user__no_commit(

@@ -20,6 +20,7 @@ from ee.onyx.background.celery.tasks.external_group_syncing.group_sync_utils imp
 )
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.connector_credential_pair import get_cc_pairs_by_source
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.db.external_perm import mark_old_external_groups_as_stale
 from ee.onyx.db.external_perm import remove_stale_external_groups
@@ -53,6 +54,7 @@ from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import complete_external_group_sync_attempt
 from onyx.db.permission_sync_attempt import create_external_group_sync_attempt
+from onyx.db.permission_sync_attempt import create_external_group_sync_error
 from onyx.db.permission_sync_attempt import mark_external_group_sync_attempt_failed
 from onyx.db.permission_sync_attempt import mark_external_group_sync_attempt_in_progress
 from onyx.db.sync_record import insert_sync_record
@@ -81,6 +83,8 @@ logger = setup_logger()
 
 
 _EXTERNAL_GROUP_BATCH_SIZE = 100
+_EXTERNAL_GROUP_FAILURE_THRESHOLD = 3
+_EXTERNAL_GROUP_FAILURE_RATIO_THRESHOLD = 0.1
 
 
 def _fail_external_group_sync_attempt(attempt_id: int, error_msg: str) -> None:
@@ -89,6 +93,34 @@ def _fail_external_group_sync_attempt(attempt_id: int, error_msg: str) -> None:
         mark_external_group_sync_attempt_failed(
             attempt_id, db_session, error_message=error_msg
         )
+
+
+def _external_group_failure_label(failure: ExternalGroupSyncFailure) -> str:
+    return (
+        failure.external_group_name
+        or failure.external_group_id
+        or "unknown external group"
+    )
+
+
+def _check_external_group_failure_threshold(
+    total_failures: int,
+    total_groups_seen: int,
+    last_failure: ExternalGroupSyncFailure,
+) -> None:
+    failure_ratio = total_failures / (total_groups_seen or 1)
+    if (
+        total_failures <= _EXTERNAL_GROUP_FAILURE_THRESHOLD
+        or failure_ratio <= _EXTERNAL_GROUP_FAILURE_RATIO_THRESHOLD
+    ):
+        return
+
+    raise RuntimeError(
+        "External group sync encountered too many group-level errors, aborting. "
+        f"failures={total_failures} groups_seen={total_groups_seen} "
+        f"last_failed_group={_external_group_failure_label(last_failure)!r} "
+        f"last_error={last_failure.failure_message}"
+    )
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -561,11 +593,12 @@ def _timed_perform_external_group_sync(
         seen_users: set[str] = set()  # Track unique users across all groups
         total_groups_processed = 0
         total_group_memberships_synced = 0
+        total_group_errors = 0
         cumulative_upsert_time = 0.0
         start_time = time.monotonic()
         try:
             external_user_group_generator = ext_group_sync_func(tenant_id, cc_pair)
-            for external_user_group in external_user_group_generator:
+            for external_group_sync_result in external_user_group_generator:
                 # Check if the task has exceeded its timeout
                 # NOTE: Celery's soft_time_limit does not work with thread pools,
                 # so we must enforce timeouts internally.
@@ -579,6 +612,30 @@ def _timed_perform_external_group_sync(
                         f"groups_processed={total_groups_processed}"
                     )
 
+                if isinstance(external_group_sync_result, ExternalGroupSyncFailure):
+                    total_group_errors += 1
+                    create_external_group_sync_error(
+                        external_group_sync_attempt_id=attempt_id,
+                        connector_credential_pair_id=cc_pair_id,
+                        db_session=db_session,
+                        external_group_id=external_group_sync_result.external_group_id,
+                        external_group_name=external_group_sync_result.external_group_name,
+                        failure_message=external_group_sync_result.failure_message,
+                        full_exception_trace=external_group_sync_result.full_exception_trace,
+                        error_type=(
+                            type(external_group_sync_result.exception).__name__
+                            if external_group_sync_result.exception
+                            else None
+                        ),
+                    )
+                    _check_external_group_failure_threshold(
+                        total_failures=total_group_errors,
+                        total_groups_seen=total_groups_processed + total_group_errors,
+                        last_failure=external_group_sync_result,
+                    )
+                    continue
+
+                external_user_group = external_group_sync_result
                 external_user_group_batch.append(external_user_group)
 
                 # Track progress
@@ -650,14 +707,15 @@ def _timed_perform_external_group_sync(
             total_users_processed=total_users_processed,
             total_groups_processed=total_groups_processed,
             total_group_memberships_synced=total_group_memberships_synced,
-            errors_encountered=0,
+            errors_encountered=total_group_errors,
         )
         logger.info(
-            "Completed external group sync attempt %s: %s groups, %s users, %s memberships",
+            "Completed external group sync attempt %s: %s groups, %s users, %s memberships, %s errors",
             attempt_id,
             total_groups_processed,
             total_users_processed,
             total_group_memberships_synced,
+            total_group_errors,
         )
 
         inc_group_sync_groups_processed(connector_type, total_groups_processed)

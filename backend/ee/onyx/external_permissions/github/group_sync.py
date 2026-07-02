@@ -1,7 +1,9 @@
+import traceback
 from collections.abc import Generator
 
 from github import Repository
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.github.utils import get_external_user_group
 from onyx.connectors.github.connector import GithubConnector
@@ -14,7 +16,7 @@ logger = setup_logger()
 def github_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
-) -> Generator[ExternalUserGroup, None, None]:
+) -> Generator[ExternalUserGroup | ExternalGroupSyncFailure, None, None]:
     github_connector: GithubConnector = GithubConnector(
         **cc_pair.connector.connector_specific_config
     )
@@ -48,6 +50,13 @@ def github_group_sync(
                 logger.info("External group: %s", external_group)
                 yield external_group
         except Exception as e:
-            logger.error(
+            logger.warning(
                 "Error processing repository %s (%s): %s", repo.id, repo.name, e
+            )
+            yield ExternalGroupSyncFailure(
+                external_group_id=str(repo.id),
+                external_group_name=repo.name,
+                failure_message=str(e),
+                full_exception_trace=traceback.format_exc(),
+                exception=e,
             )

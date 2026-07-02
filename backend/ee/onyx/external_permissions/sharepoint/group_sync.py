@@ -1,7 +1,9 @@
+import traceback
 from collections.abc import Generator
 
 from office365.sharepoint.client_context import ClientContext
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
@@ -18,7 +20,7 @@ logger = setup_logger()
 def sharepoint_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
-) -> Generator[ExternalUserGroup, None, None]:
+) -> Generator[ExternalUserGroup | ExternalGroupSyncFailure, None, None]:
     """Sync SharePoint groups and their members"""
 
     # Get site URLs from connector config
@@ -57,20 +59,41 @@ def sharepoint_group_sync(
     for site_descriptor in site_descriptors:
         logger.debug("Processing site: %s", site_descriptor.url)
 
-        ctx = ClientContext(site_descriptor.url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain, sp_domain_suffix)
-        )
+        try:
+            ctx = ClientContext(site_descriptor.url).with_access_token(
+                lambda: acquire_token_for_rest(
+                    msal_app, sp_tenant_domain, sp_domain_suffix
+                )
+            )
 
-        external_groups = get_sharepoint_external_groups(
-            ctx,
-            connector.graph_client,
-            graph_api_base=connector.graph_api_base,
-            get_access_token=connector._get_graph_access_token,
-            enumerate_all_ad_groups=enumerate_all,
-        )
+            external_groups = get_sharepoint_external_groups(
+                ctx,
+                connector.graph_client,
+                graph_api_base=connector.graph_api_base,
+                get_access_token=connector._get_graph_access_token,
+                enumerate_all_ad_groups=enumerate_all,
+            )
+        except Exception as e:
+            logger.warning(
+                "Skipping SharePoint site %s after group sync failure: %s",
+                site_descriptor.url,
+                e,
+            )
+            yield ExternalGroupSyncFailure(
+                external_group_id=site_descriptor.url,
+                external_group_name=site_descriptor.url,
+                failure_message=str(e),
+                full_exception_trace=traceback.format_exc(),
+                exception=e,
+            )
+            continue
 
         # Yield each group
         for group in external_groups:
+            if isinstance(group, ExternalGroupSyncFailure):
+                yield group
+                continue
+
             logger.debug(
                 "Found group: %s with %s members", group.id, len(group.user_emails)
             )

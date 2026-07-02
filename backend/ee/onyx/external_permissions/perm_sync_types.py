@@ -3,6 +3,7 @@ from collections.abc import Generator
 from typing import Optional
 from typing import Protocol
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure  # noqa
 from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
 from onyx.access.models import DocExternalAccess  # noqa
 from onyx.access.models import ElementExternalAccess  # noqa
@@ -63,7 +64,7 @@ GroupSyncFuncType = Callable[
         str,  # tenant_id
         ConnectorCredentialPair,  # cc_pair
     ],
-    Generator[ExternalUserGroup, None, None],
+    Generator[ExternalUserGroup | ExternalGroupSyncFailure, None, None],
 ]
 
 # list of chunks to be censored and the user email. returns censored chunks

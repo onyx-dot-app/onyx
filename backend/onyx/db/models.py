@@ -5389,6 +5389,12 @@ class ExternalGroupPermissionSyncAttempt(Base):
         "ConnectorCredentialPair"
     )
 
+    error_rows: Mapped[list["ExternalGroupSyncError"]] = relationship(
+        "ExternalGroupSyncError",
+        back_populates="external_group_sync_attempt",
+        cascade="all, delete-orphan",
+    )
+
     __table_args__ = (
         Index(
             "ix_group_sync_attempt_cc_pair_time",
@@ -5407,6 +5413,45 @@ class ExternalGroupPermissionSyncAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+class ExternalGroupSyncError(Base):
+    __tablename__ = "external_group_sync_errors"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    external_group_sync_attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("external_group_permission_sync_attempt.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    external_group_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    external_group_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    failure_message: Mapped[str] = mapped_column(Text)
+    full_exception_trace: Mapped[str | None] = mapped_column(Text, default=None)
+    error_type: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    external_group_sync_attempt: Mapped[ExternalGroupPermissionSyncAttempt] = (
+        relationship(
+            "ExternalGroupPermissionSyncAttempt",
+            back_populates="error_rows",
+        )
+    )
+    connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
+        "ConnectorCredentialPair"
+    )
 
 
 class License(Base):

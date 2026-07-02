@@ -27,6 +27,7 @@ from onyx.db.models import Credential
 from onyx.db.models import DocPermissionSyncAttempt
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import ExternalGroupPermissionSyncAttempt
+from onyx.db.models import ExternalGroupSyncError
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptStageMetric
 from onyx.db.models import IndexingStatus
@@ -388,6 +389,7 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
     total_users_processed: int
     total_groups_processed: int
     total_group_memberships_synced: int
+    error_count: int
     time_created: str
     time_started: str | None
     time_finished: str | None
@@ -404,6 +406,7 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
             total_users_processed=attempt.total_users_processed or 0,
             total_groups_processed=attempt.total_groups_processed or 0,
             total_group_memberships_synced=attempt.total_group_memberships_synced or 0,
+            error_count=len(attempt.error_rows),
             time_created=attempt.time_created.isoformat(),
             time_started=(
                 attempt.time_started.isoformat() if attempt.time_started else None
@@ -411,6 +414,34 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
             time_finished=(
                 attempt.time_finished.isoformat() if attempt.time_finished else None
             ),
+        )
+
+
+class ExternalGroupSyncErrorSnapshot(BaseModel):
+    id: int
+    external_group_sync_attempt_id: int
+    connector_credential_pair_id: int
+    external_group_id: str | None
+    external_group_name: str | None
+    failure_message: str
+    full_exception_trace: str | None
+    error_type: str | None
+    time_created: str
+
+    @classmethod
+    def from_external_group_sync_error_db_model(
+        cls, error: ExternalGroupSyncError
+    ) -> "ExternalGroupSyncErrorSnapshot":
+        return ExternalGroupSyncErrorSnapshot(
+            id=error.id,
+            external_group_sync_attempt_id=error.external_group_sync_attempt_id,
+            connector_credential_pair_id=error.connector_credential_pair_id,
+            external_group_id=error.external_group_id,
+            external_group_name=error.external_group_name,
+            failure_message=error.failure_message,
+            full_exception_trace=error.full_exception_trace,
+            error_type=error.error_type,
+            time_created=error.time_created.isoformat(),
         )
 
 

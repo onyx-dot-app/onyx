@@ -1,9 +1,11 @@
+import traceback
 from collections.abc import Generator
 from typing import Any
 
 from jira import JIRA
 from jira.exceptions import JIRAError
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.connectors.jira.utils import build_jira_client
 from onyx.db.models import ConnectorCredentialPair
@@ -13,10 +15,6 @@ logger = setup_logger()
 
 _ATLASSIAN_ACCOUNT_TYPE = "atlassian"
 _GROUP_MEMBER_PAGE_SIZE = 50
-
-# The GET /group/member endpoint was introduced in Jira 6.0.
-# Jira versions older than 6.0 do not have group management REST APIs at all.
-_MIN_JIRA_VERSION_FOR_GROUP_MEMBER = "6.0"
 
 
 def _fetch_group_member_page(
@@ -48,10 +46,9 @@ def _fetch_group_member_page(
     except JIRAError as e:
         if e.status_code == 404:
             raise RuntimeError(
-                f"GET /group/member returned 404 for group '{group_name}'. "
-                f"This endpoint requires Jira {_MIN_JIRA_VERSION_FOR_GROUP_MEMBER}+. "
-                f"If you are running a self-hosted Jira instance, please upgrade "
-                f"to at least Jira {_MIN_JIRA_VERSION_FOR_GROUP_MEMBER}."
+                f"Jira listed group '{group_name}', but GET /group/member could "
+                "not find it. The group may have been renamed, deleted, or "
+                "returned with a non-canonical name."
             ) from e
         raise
 
@@ -70,11 +67,7 @@ def _get_group_member_emails(
     start_at = 0
 
     while True:
-        try:
-            page = _fetch_group_member_page(jira_client, group_name, start_at)
-        except Exception as e:
-            logger.error("Error fetching members for group %s: %s", group_name, e)
-            raise
+        page = _fetch_group_member_page(jira_client, group_name, start_at)
 
         members: list[dict[str, Any]] = page.get("values", [])
         for member in members:
@@ -104,7 +97,7 @@ def _get_group_member_emails(
 def jira_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
-) -> Generator[ExternalUserGroup, None, None]:
+) -> Generator[ExternalUserGroup | ExternalGroupSyncFailure, None, None]:
     """Sync Jira groups and their members, yielding one group at a time.
 
     Streams group-by-group rather than accumulating all groups in memory.
@@ -138,10 +131,26 @@ def jira_group_sync(
         if not group_name:
             continue
 
-        member_emails = _get_group_member_emails(
-            jira_client=jira_client,
-            group_name=group_name,
-        )
+        try:
+            member_emails = _get_group_member_emails(
+                jira_client=jira_client,
+                group_name=group_name,
+            )
+        except Exception as e:
+            logger.warning(
+                "Skipping Jira group %s after member sync failure: %s",
+                group_name,
+                e,
+            )
+            yield ExternalGroupSyncFailure(
+                external_group_id=group_name,
+                external_group_name=group_name,
+                failure_message=str(e),
+                full_exception_trace=traceback.format_exc(),
+                exception=e,
+            )
+            continue
+
         if not member_emails:
             logger.debug("No members found for group %s", group_name)
             continue

@@ -53,6 +53,9 @@ from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import User
+from onyx.db.permission_sync_attempt import count_external_group_sync_errors_for_attempt
+from onyx.db.permission_sync_attempt import get_external_group_sync_attempt
+from onyx.db.permission_sync_attempt import get_external_group_sync_errors_for_attempt
 from onyx.db.permission_sync_attempt import (
     get_latest_doc_permission_sync_attempt_for_cc_pair,
 )
@@ -77,6 +80,7 @@ from onyx.server.documents.models import ConnectorCredentialPairMetadata
 from onyx.server.documents.models import DocPermissionSyncAttemptSnapshot
 from onyx.server.documents.models import DocumentSyncStatus
 from onyx.server.documents.models import ExternalGroupSyncAttemptSnapshot
+from onyx.server.documents.models import ExternalGroupSyncErrorSnapshot
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricsResponse
@@ -225,6 +229,34 @@ def _get_cc_pair_source_or_raise(
     return cc_pair.connector.source
 
 
+def _external_group_sync_attempt_is_relevant_to_cc_pair(
+    attempt_id: int,
+    cc_pair_id: int,
+    source: DocumentSource,
+    db_session: Session,
+) -> bool:
+    attempt = get_external_group_sync_attempt(
+        db_session=db_session,
+        attempt_id=attempt_id,
+        eager_load_connector=True,
+    )
+    if attempt is None or attempt.connector_credential_pair is None:
+        return False
+
+    if attempt.connector_credential_pair_id == cc_pair_id:
+        return True
+
+    source_group_sync_is_cc_pair_agnostic = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "source_group_sync_is_cc_pair_agnostic",
+        noop_return_value=False,
+    )
+    if not source_group_sync_is_cc_pair_agnostic(source):
+        return False
+
+    return attempt.connector_credential_pair.connector.source == source
+
+
 @router.get("/admin/cc-pair/{cc_pair_id}/permission-sync-attempts")
 def get_cc_pair_permission_sync_attempts(
     cc_pair_id: int,
@@ -321,6 +353,51 @@ def get_cc_pair_external_group_sync_attempts(
             for attempt in all_attempts[start_idx:end_idx]
         ],
         total_items=len(all_attempts),
+    )
+
+
+@router.get(
+    "/admin/cc-pair/{cc_pair_id}/external-group-sync-attempts/{attempt_id}/errors"
+)
+def get_cc_pair_external_group_sync_attempt_errors(
+    cc_pair_id: int,
+    attempt_id: int,
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=100),
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> PaginatedReturn[ExternalGroupSyncErrorSnapshot]:
+    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
+    if not _external_group_sync_attempt_is_relevant_to_cc_pair(
+        attempt_id=attempt_id,
+        cc_pair_id=cc_pair_id,
+        source=source,
+        db_session=db_session,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "External group sync attempt not found for current user permissions",
+        )
+
+    total_count = count_external_group_sync_errors_for_attempt(
+        external_group_sync_attempt_id=attempt_id,
+        db_session=db_session,
+    )
+    errors = get_external_group_sync_errors_for_attempt(
+        external_group_sync_attempt_id=attempt_id,
+        db_session=db_session,
+        page=page_num,
+        page_size=page_size,
+    )
+
+    return PaginatedReturn(
+        items=[
+            ExternalGroupSyncErrorSnapshot.from_external_group_sync_error_db_model(
+                error
+            )
+            for error in errors
+        ],
+        total_items=total_count,
     )
 
 

@@ -20,6 +20,7 @@ from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import DocPermissionSyncAttempt
 from onyx.db.models import ExternalGroupPermissionSyncAttempt
+from onyx.db.models import ExternalGroupSyncError
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -464,6 +465,67 @@ def mark_external_group_sync_attempt_failed(
     except Exception:
         db_session.rollback()
         raise
+
+
+def create_external_group_sync_error(
+    external_group_sync_attempt_id: int,
+    connector_credential_pair_id: int,
+    db_session: Session,
+    failure_message: str,
+    external_group_id: str | None = None,
+    external_group_name: str | None = None,
+    full_exception_trace: str | None = None,
+    error_type: str | None = None,
+) -> int:
+    error = ExternalGroupSyncError(
+        external_group_sync_attempt_id=external_group_sync_attempt_id,
+        connector_credential_pair_id=connector_credential_pair_id,
+        external_group_id=external_group_id,
+        external_group_name=external_group_name,
+        failure_message=failure_message,
+        full_exception_trace=full_exception_trace,
+        error_type=error_type,
+    )
+    db_session.add(error)
+    db_session.commit()
+
+    return error.id
+
+
+def count_external_group_sync_errors_for_attempt(
+    external_group_sync_attempt_id: int,
+    db_session: Session,
+) -> int:
+    result = db_session.scalar(
+        select(func.count())
+        .select_from(ExternalGroupSyncError)
+        .where(
+            ExternalGroupSyncError.external_group_sync_attempt_id
+            == external_group_sync_attempt_id
+        )
+    )
+    return 0 if result is None else result
+
+
+def get_external_group_sync_errors_for_attempt(
+    external_group_sync_attempt_id: int,
+    db_session: Session,
+    page: int | None = None,
+    page_size: int | None = None,
+) -> list[ExternalGroupSyncError]:
+    stmt = (
+        select(ExternalGroupSyncError)
+        .where(
+            ExternalGroupSyncError.external_group_sync_attempt_id
+            == external_group_sync_attempt_id
+        )
+        .order_by(ExternalGroupSyncError.time_created.desc())
+    )
+
+    if page is not None and page_size is not None:
+        stmt = stmt.offset(page * page_size).limit(page_size)
+
+    return list(db_session.scalars(stmt).all())
 
 
 def complete_external_group_sync_attempt(
