@@ -8,7 +8,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import { bottomPrompt, welcomeCardCopy } from "@/lib/auth/copies";
 
-export default function UnavailablePage() {
+export default function SignupUnavailablePage() {
   const router = useRouter();
   const signupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
   const { logoUrl, appName } = useSettings();

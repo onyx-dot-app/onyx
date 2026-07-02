@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import AccessRestrictedPage from "@/views/auth/errors/AccessRestrictedPage";
+import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
 
 // Paths accessible even when gated - allows users to manage billing updates and seat counts
 const ALLOWED_GATED_PATHS = ["/admin/billing", "/admin/users"];
