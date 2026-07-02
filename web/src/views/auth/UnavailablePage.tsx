@@ -7,6 +7,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
+import { createAccountCardCopy } from "@/views/auth/strings";
 
 export default function UnavailablePage() {
   const router = useRouter();
@@ -21,8 +22,7 @@ export default function UnavailablePage() {
 
   return (
     <AuthLayouts.Card
-      title="Create account"
-      description={`Get started with ${appName}`}
+      {...createAccountCardCopy(appName)}
       bottomPrompt={markdown(
         "Already have an account? [Sign In](/auth/login?autoRedirectToSignup=false)"
       )}

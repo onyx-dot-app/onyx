@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
+import { welcomeCardCopy } from "@/views/auth/strings";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
@@ -96,8 +97,7 @@ export default function LoginPage() {
 
   return (
     <AuthLayouts.Card
-      title={`Welcome to ${appName}`}
-      description="Your AI platform for work"
+      {...welcomeCardCopy(appName)}
       bottomPrompt={bottomPrompt}
       logoSrc={logoUrl}
     >
