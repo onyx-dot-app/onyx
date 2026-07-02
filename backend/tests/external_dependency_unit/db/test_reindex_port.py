@@ -40,7 +40,9 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.document import document_has_indexable_cc_pair
+from onyx.db.document import filter_existing_cc_pair_document_ids
 from onyx.db.document import get_document_ids_for_cc_pair_batch
+from onyx.db.document import get_max_document_id_for_cc_pair
 from onyx.db.document import mark_document_as_modified
 from onyx.db.document import mark_document_as_synced
 from onyx.db.document import mark_document_synced_secondary_pending
@@ -526,6 +528,103 @@ def test_get_document_ids_for_cc_pair_batch(
     )
 
 
+def test_get_document_ids_for_cc_pair_batch_up_to_doc_id(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """up_to_doc_id caps the scan at the start-of-run snapshot INCLUSIVELY, so the
+    exact boundary doc is kept and docs added after the snapshot are excluded. It
+    composes with the exclusive after_doc_id lower bound."""
+    doc_ids = _seed_cc_pair_documents(
+        db_session, cc_pair, 5, prefix="upto-", unique=True
+    )
+
+    # inclusive upper bound: the boundary id is included
+    assert (
+        get_document_ids_for_cc_pair_batch(
+            db_session, cc_pair.id, after_doc_id=None, limit=10, up_to_doc_id=doc_ids[2]
+        )
+        == doc_ids[:3]
+    )
+    # exclusive lower + inclusive upper together
+    assert (
+        get_document_ids_for_cc_pair_batch(
+            db_session,
+            cc_pair.id,
+            after_doc_id=doc_ids[0],
+            limit=10,
+            up_to_doc_id=doc_ids[2],
+        )
+        == doc_ids[1:3]
+    )
+
+
+def test_get_document_ids_for_cc_pair_batch_missing_cc_pair(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A missing cc_pair id is a caller bug, not an empty page -> raises ValueError."""
+    with pytest.raises(ValueError):
+        get_document_ids_for_cc_pair_batch(
+            db_session, cc_pair_id=999_999_999, after_doc_id=None, limit=2
+        )
+
+
+def test_get_max_document_id_for_cc_pair(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """Snapshots the lexicographic-max linked doc id (the port's start-of-run upper
+    bound); None when the cc_pair has no docs."""
+    assert get_max_document_id_for_cc_pair(db_session, cc_pair.id) is None
+
+    doc_ids = _seed_cc_pair_documents(
+        db_session, cc_pair, 4, prefix="maxid-", unique=True
+    )
+    assert get_max_document_id_for_cc_pair(db_session, cc_pair.id) == max(doc_ids)
+
+
+def test_get_max_document_id_for_cc_pair_missing(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A missing cc_pair yields None (unlike the batch scan, which raises)."""
+    assert get_max_document_id_for_cc_pair(db_session, 999_999_999) is None
+
+
+def test_filter_existing_cc_pair_document_ids(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """Keeps only ids still linked to the cc_pair, so a doc unlinked mid-batch (or a
+    bogus id) is dropped rather than resurrected into FUTURE. Empty input
+    short-circuits without a query."""
+    doc_ids = _seed_cc_pair_documents(
+        db_session, cc_pair, 3, prefix="filt-", unique=True
+    )
+
+    assert filter_existing_cc_pair_document_ids(db_session, cc_pair.id, []) == set()
+
+    # unlink the middle doc from this cc_pair
+    db_session.query(DocumentByConnectorCredentialPair).filter(
+        DocumentByConnectorCredentialPair.id == doc_ids[1],
+        DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+        DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+    ).delete(synchronize_session="fetch")
+    db_session.commit()
+
+    assert filter_existing_cc_pair_document_ids(
+        db_session, cc_pair.id, doc_ids + ["does-not-exist"]
+    ) == {doc_ids[0], doc_ids[2]}
+
+
+def test_filter_existing_cc_pair_document_ids_missing_cc_pair(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A missing cc_pair yields the empty set — nothing is 'still linked'."""
+    assert (
+        filter_existing_cc_pair_document_ids(db_session, 999_999_999, ["d0"]) == set()
+    )
+
+
 def test_copy_present_chunks_to_future_orchestration() -> None:
     """Per batch: each PIT-scan page is re-embedded and written to FUTURE
     create-only; returns (chunks written, aborted). Mocks the OpenSearch
@@ -690,9 +789,10 @@ def test_run_port_attempt_stops_when_canceled(
 def test_cancel_active_port_attempts_on_supersede(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """Superseding a FUTURE cancels its active (NOT_STARTED/IN_PROGRESS) port
-    attempts — the running task then stops at its next batch — while terminal
-    attempts are left untouched."""
+    """Superseding a FUTURE cancels its active port attempts via the two-phase
+    cancel: an IN_PROGRESS attempt is only FLAGGED (cancel_requested), not
+    terminalized here, so a concurrently-waiting deletion stays the last writer and
+    the running task acks after its final write. Terminal attempts are left alone."""
     cc_pair, future_id = cc_pair_and_future
 
     active = create_port_attempt(db_session, cc_pair.id, future_id)
@@ -713,8 +813,10 @@ def test_cancel_active_port_attempts_on_supersede(
     db_session.expire_all()
     active_row = db_session.get(PortAttempt, active.id)
     assert active_row is not None
-    assert active_row.status == PortAttemptStatus.CANCELED
-    assert active_row.time_completed is not None
+    # flagged, not terminalized: status stays IN_PROGRESS with no completion stamp
+    assert active_row.status == PortAttemptStatus.IN_PROGRESS
+    assert active_row.cancel_requested is True
+    assert active_row.time_completed is None
     # the terminal SUCCESS is preserved (first-terminal-write-wins)
     successes = (
         db_session.query(PortAttempt)
@@ -725,6 +827,30 @@ def test_cancel_active_port_attempts_on_supersede(
         .count()
     )
     assert successes == 1
+
+
+def test_cancel_active_port_attempts_terminalizes_not_started(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A NOT_STARTED attempt (nothing running yet) is safe to terminalize directly:
+    cancel flips it to CANCELED with a completion time + reason. A scope with no
+    active attempts left is a no-op returning 0 (guards the count coalescing)."""
+    cc_pair, future_id = cc_pair_and_future
+
+    not_started = create_port_attempt(db_session, cc_pair.id, future_id)
+    assert not_started.status == PortAttemptStatus.NOT_STARTED
+
+    assert cancel_active_port_attempts(db_session, search_settings_id=future_id) == 1
+
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, not_started.id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.CANCELED
+    assert row.time_completed is not None
+    assert row.error_msg is not None
+
+    # nothing active remains -> no-op, returns 0
+    assert cancel_active_port_attempts(db_session, search_settings_id=future_id) == 0
 
 
 def test_run_port_attempt_exits_when_cc_pair_deleting(
