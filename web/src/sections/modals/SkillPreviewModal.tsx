@@ -16,9 +16,8 @@ import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { SkillPreview } from "@/views/admin/SkillsPage/interfaces";
+import type { SkillPreview } from "@/lib/skills/types";
 
-type SkillPreviewMode = "admin" | "user";
 type InstructionsDisplayMode = "rendered" | "raw";
 
 const INSTRUCTIONS_DISPLAY_OPTIONS: {
@@ -32,7 +31,6 @@ const INSTRUCTIONS_DISPLAY_OPTIONS: {
 
 interface SkillPreviewModalProps {
   open: boolean;
-  mode: SkillPreviewMode;
   skillId: string | null;
   fallbackTitle?: string;
   onClose: () => void;
@@ -52,19 +50,13 @@ function metadataRows(
 
 export default function SkillPreviewModal({
   open,
-  mode,
   skillId,
   fallbackTitle = "Skill preview",
   onClose,
 }: SkillPreviewModalProps) {
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("rendered");
-  const swrKey =
-    open && skillId
-      ? mode === "admin"
-        ? SWR_KEYS.adminSkillPreview(skillId)
-        : SWR_KEYS.userSkillPreview(skillId)
-      : null;
+  const swrKey = open && skillId ? SWR_KEYS.userSkillPreview(skillId) : null;
   const {
     data: preview,
     error,

@@ -125,10 +125,7 @@ export const SWR_KEYS = {
   mcpServers: "/api/mcp/servers",
 
   // ── Skills ────────────────────────────────────────────────────────────────
-  adminSkills: "/api/admin/skills",
   userSkills: "/api/skills",
-  adminSkillPreview: (skillId: string) =>
-    `/api/admin/skills/${skillId}/preview`,
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────

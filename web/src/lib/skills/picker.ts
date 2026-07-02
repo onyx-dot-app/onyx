@@ -2,7 +2,7 @@ import type {
   ExternalAppType,
   ExternalAppUserResponse,
 } from "@/app/craft/v1/apps/registry";
-import type { SkillsList } from "@/views/admin/SkillsPage/interfaces";
+import type { SkillsList } from "@/lib/skills/types";
 
 export interface PickerSkill {
   kind: "skill";
