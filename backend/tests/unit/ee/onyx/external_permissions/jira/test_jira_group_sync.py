@@ -63,7 +63,8 @@ def test_jira_group_sync_yields_group_level_failure_for_member_fetch_error() -> 
     assert len(failures) == 1
     assert failures[0].external_group_id == "stale-group"
     assert failures[0].external_group_name == "stale-group"
-    assert "GET /group/member could not find it" in failures[0].failure_message
+    assert "GET /group/member returned 404" in failures[0].failure_message
+    assert "This endpoint requires Jira 6.0+" in failures[0].failure_message
     assert failures[0].full_exception_trace is not None
 
 

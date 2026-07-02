@@ -17,6 +17,10 @@ logger = setup_logger()
 _ATLASSIAN_ACCOUNT_TYPE = "atlassian"
 _GROUP_MEMBER_PAGE_SIZE = 50
 
+# The GET /group/member endpoint was introduced in Jira 6.0.
+# Jira versions older than 6.0 do not have group management REST APIs at all.
+_MIN_JIRA_VERSION_FOR_GROUP_MEMBER = "6.0"
+
 
 def _fetch_group_member_page(
     jira_client: JIRA,
@@ -47,9 +51,10 @@ def _fetch_group_member_page(
     except JIRAError as e:
         if e.status_code == 404:
             raise RuntimeError(
-                f"Jira listed group '{group_name}', but GET /group/member could "
-                "not find it. The group may have been renamed, deleted, or "
-                "returned with a non-canonical name."
+                f"GET /group/member returned 404 for group '{group_name}'. "
+                f"This endpoint requires Jira {_MIN_JIRA_VERSION_FOR_GROUP_MEMBER}+. "
+                "If you are running a self-hosted Jira instance, please upgrade "
+                f"to at least Jira {_MIN_JIRA_VERSION_FOR_GROUP_MEMBER}."
             ) from e
         raise
 
