@@ -98,10 +98,9 @@ def copy_present_chunks_to_future(
     attempt and heartbeats so a slow-but-live port isn't stall-failed. surviving_doc_ids
     drops chunks of docs deleted mid-batch (no resurrection)."""
     pages: Iterable[list[DocumentChunkWithoutVectors]]
-    # RAG-on AUGMENTATION: buffer to reassemble each doc (chunks span PIT pages), then
-    # re-embed one doc per page so its unheartbeated per-chunk LLM re-enrichment can't
-    # outlast the stall watchdog on a whole batch. Residual: a single huge doc can still
-    # exceed it (a doc is atomic for re-enrichment). Others stream PIT pages.
+    # Contextual RAG-on AUGMENTATION: buffer to reassemble each doc (chunks span PIT pages), then
+    # re-embed one doc per page so the unheartbeated per-chunk LLM re-enrichment is bounded
+    # to a single doc, not a whole batch (kept under the stall threshold). Others stream PIT pages.
     rag_on_augmentation = (
         strategy is ReembedStrategy.AUGMENTATION
         and augmentation_ctx is not None
