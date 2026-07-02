@@ -23,6 +23,7 @@ from onyx.db.llm import update_no_default_contextual_rag_provider
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import User
 from onyx.db.port_attempt import cancel_active_port_attempts
+from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import delete_search_settings
 from onyx.db.search_settings import get_current_search_settings
@@ -89,6 +90,21 @@ def set_new_search_settings(
     )
 
     search_settings = get_current_search_settings(db_session)
+
+    # An INSTANT backfill targets the PRESENT (not a secondary), so a new reindex would
+    # abandon it — live index left short its un-ported docs, PAST source stuck
+    # undeletable. Block until it drains (same condition _resolve_port_target_settings
+    # uses).
+    if (
+        search_settings.use_port_flow
+        and search_settings.port_backfill_source_id is not None
+        and port_backfill_has_pending_work(db_session, search_settings.id)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "An INSTANT reindex is still backfilling the live index; wait for it to "
+            "finish before starting another reindex.",
+        )
 
     if search_settings_new.index_name is None:
         # We define index name here.
