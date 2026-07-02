@@ -9,10 +9,10 @@ import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import SignInButton from "@/sections/auth/SignInButton";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
-import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
+import { AuthType } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { useAuthRedirect } from "@/lib/auth/hooks";
-import { Button, MessageCard } from "@opal/components";
+import { MessageCard } from "@opal/components";
 import { markdown } from "@opal/utils";
 
 function getAuthUrl(authType: AuthType, nextUrl: string | null): string | null {
@@ -102,9 +102,10 @@ export default function LoginPage() {
       logoSrc={logoUrl}
     >
       {verified && (
-        <MessageCard
-          variant="success"
-          title="Your email has been verified! Please sign in to continue."
+        <AuthLayouts.Message
+          messageType="success"
+          title="Verification successful."
+          description="Your email has been verified! Please sign in to continue."
         />
       )}
 
@@ -115,30 +116,22 @@ export default function LoginPage() {
         />
       )}
 
-      {isCloud && (
+      {isCloud && authUrl && (
         <>
-          {authUrl && (
-            <>
-              <SignInButton
-                authorizeUrl={authUrl}
-                authType={authTypeMetadata.authType}
-              />
-              <AuthLayouts.OrSeparator />
-            </>
-          )}
-          <EmailPasswordForm
-            label="submit"
-            shouldVerify
-            nextUrl={effectiveNextUrl}
+          <SignInButton
+            authorizeUrl={authUrl}
+            authType={authTypeMetadata.authType}
           />
-          {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
-            <Button href="/auth/forgot-password">Reset Password</Button>
-          )}
+          <AuthLayouts.OrSeparator />
         </>
       )}
 
-      {isBasic && (
-        <EmailPasswordForm label="submit" nextUrl={effectiveNextUrl} />
+      {(isCloud || isBasic) && (
+        <EmailPasswordForm
+          label="submit"
+          shouldVerify={isCloud}
+          nextUrl={effectiveNextUrl}
+        />
       )}
     </AuthLayouts.Card>
   );
