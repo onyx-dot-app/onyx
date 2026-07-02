@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
-import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
-import { welcomeCardCopy } from "@/lib/auth/copies";
+import { bottomPrompt, welcomeCardCopy } from "@/lib/auth/copies";
 
 export default function UnavailablePage() {
   const router = useRouter();
@@ -23,9 +22,7 @@ export default function UnavailablePage() {
   return (
     <AuthLayouts.Card
       {...welcomeCardCopy(appName)}
-      bottomPrompt={markdown(
-        "Back to [Sign In](/auth/login?autoRedirectToSignup=false)"
-      )}
+      bottomPrompt={bottomPrompt(true)}
       logoSrc={logoUrl}
     >
       <AuthLayouts.Message

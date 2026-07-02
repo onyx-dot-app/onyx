@@ -6,6 +6,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { bottomPrompt } from "@/lib/auth/copies";
 
 const ERROR_CODE_MESSAGES: Record<string, string> = {
   access_denied: "Access was denied by your identity provider.",
@@ -44,7 +45,7 @@ export default function ErrorPage() {
       title="Authentication Error"
       description="There was a problem with your login attempt."
       logoSrc={logoUrl}
-      bottomPrompt={markdown("Return to [Sign In](/auth/login)")}
+      bottomPrompt={bottomPrompt()}
     >
       <AuthLayouts.Message
         messageType="warning"
