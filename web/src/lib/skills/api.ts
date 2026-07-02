@@ -6,7 +6,7 @@
  * them to `toast.error` directly.
  */
 
-import type { CustomSkill } from "@/lib/skills/types";
+import type { CustomSkill, SkillSharePermission } from "@/lib/skills/types";
 
 async function readErrorDetail(res: Response): Promise<string> {
   try {
@@ -31,10 +31,10 @@ async function handle<T>(res: Response): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Personal (user-level) skill mutations
+// Mutations
 // ---------------------------------------------------------------------------
 
-export async function createUserSkill(bundle: File): Promise<CustomSkill> {
+export async function createCustomSkill(bundle: File): Promise<CustomSkill> {
   const form = new FormData();
   form.append("bundle", bundle);
 
@@ -43,6 +43,11 @@ export async function createUserSkill(bundle: File): Promise<CustomSkill> {
     body: form,
   });
   return handle<CustomSkill>(res);
+}
+
+export interface PatchCustomSkillInput {
+  public_permission?: SkillSharePermission | null;
+  enabled?: boolean;
 }
 
 export async function replaceUserSkillBundle(
@@ -60,12 +65,12 @@ export async function replaceUserSkillBundle(
 
 export async function patchUserSkill(
   skillId: string,
-  enabled: boolean
+  patch: PatchCustomSkillInput
 ): Promise<CustomSkill> {
   const res = await fetch(`/api/skills/custom/${skillId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify(patch),
   });
   return handle<CustomSkill>(res);
 }

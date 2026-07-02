@@ -111,7 +111,7 @@ const meta: Meta<typeof CraftInputBar> = {
 export default meta;
 type Story = StoryObj<typeof CraftInputBar>;
 
-/** Idle input — + button replaces old paperclip; typing /skill opens the picker. */
+/** Idle input: + button replaces old paperclip; typing /skill opens the picker. */
 export const Default: Story = {};
 
 /** While a response streams: Stop button appears, InterruptHint shows. */
