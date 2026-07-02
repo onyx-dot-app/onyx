@@ -11,12 +11,16 @@ Admin-route mutation auth is covered exhaustively in
 
 from __future__ import annotations
 
+import os
 from uuid import uuid4
+
+import pytest
 
 from onyx.server.features.skill.models import SkillPatchRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import SkillManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -67,6 +71,39 @@ def test_user_sees_public_skill(
 ) -> None:
     slug = f"public-{uuid4().hex[:6]}"
     SkillManager.create_custom(admin_user, slug=slug, is_public=True)
+
+    user_skills = SkillManager.list_for_user(basic_user)
+    custom_slugs = [skill.slug for skill in user_skills.customs]
+    assert slug in custom_slugs
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="User-group management requires EE features enabled.",
+)
+def test_user_sees_private_skill_with_group_share(
+    admin_user: DATestUser,
+    basic_user: DATestUser,
+) -> None:
+    """Adding ``basic_user`` to a shared group surfaces a private skill."""
+    group = UserGroupManager.create(
+        admin_user,
+        name=f"share-r-{uuid4().hex[:6]}",
+        user_ids=[admin_user.id],
+    )
+    UserGroupManager.wait_for_sync(
+        user_performing_action=admin_user,
+        user_groups_to_check=[group],
+    )
+    UserGroupManager.add_users(group, [basic_user.id], admin_user)
+
+    slug = f"private-shared-{uuid4().hex[:6]}"
+    SkillManager.create_custom(
+        admin_user,
+        slug=slug,
+        is_public=False,
+        group_ids=[group.id],
+    )
 
     user_skills = SkillManager.list_for_user(basic_user)
     custom_slugs = [skill.slug for skill in user_skills.customs]

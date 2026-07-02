@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
@@ -31,13 +32,16 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.server.features.skill.models import SkillResponse
+from onyx.server.features.skill.models import SkillUserShareRequest
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestUserGroup
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
 from tests.integration.tests.craft.k8s.k8s_fixtures import WorkspaceProxy
 
@@ -83,11 +87,13 @@ def _create_skill(
     *,
     body: bytes | str,
     is_public: bool = False,
+    group_ids: list[int] | None = None,
 ) -> SkillResponse:
     return SkillManager.create_custom(
         admin,
         slug=slug,
         is_public=is_public,
+        group_ids=group_ids or [],
         bundle_bytes=_bundle(slug, body),
         filename=f"{slug}.zip",
     )
@@ -109,6 +115,32 @@ def _replace_bundle(
 def _create_users(count: int) -> list[DATestUser]:
     prefix = f"craft-k8s-skill-{uuid4().hex[:8]}"
     return [UserManager.create(name=f"{prefix}-{idx}") for idx in range(count)]
+
+
+@pytest.fixture
+def user_group_factory(
+    k8s_admin_user: DATestUser,
+) -> Generator[Callable[[str, list[str]], DATestUserGroup], None, None]:
+    groups: list[DATestUserGroup] = []
+
+    def _create(name: str, user_ids: list[str]) -> DATestUserGroup:
+        group = UserGroupManager.create(
+            k8s_admin_user,
+            name=name,
+            user_ids=user_ids,
+        )
+        groups.append(group)
+        return group
+
+    try:
+        yield _create
+    finally:
+        for group in reversed(groups):
+            try:
+                UserGroupManager.delete(group, k8s_admin_user)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code != 404:
+                    raise
 
 
 def _make_db_group(db_session: Session, name: str) -> UserGroup:
@@ -309,20 +341,53 @@ class TestSkillPush:
                 b"public skill body\n",
             )
 
+    def test_private_skill_only_lands_in_shared_users_sandboxes(
+        self,
+        k8s_admin_user: DATestUser,
+        running_sandbox: Callable[..., SandboxHandle],
+        user_group_factory: Callable[[str, list[str]], DATestUserGroup],
+    ) -> None:
+        handle = running_sandbox()
+        user_a, user_b, user_c = _create_users(3)
+        [ws_a, ws_b, ws_c] = handle.provision_api_users([user_a, user_b, user_c])
+        group = user_group_factory(
+            f"engineering-{uuid4().hex[:6]}",
+            [user_a.id],
+        )
+
+        slug = f"eng-only-{uuid4().hex[:6]}"
+        skill = _create_skill(
+            k8s_admin_user,
+            slug,
+            is_public=False,
+            group_ids=[group.id],
+            body="engineering only\n",
+        )
+
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"engineering only\n")
+        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+        _skill_file_path(ws_c, skill.slug).wait_for_absent()
+
     def test_disable_skill_removes_files_from_affected_sandboxes(
         self,
         k8s_admin_user: DATestUser,
         running_sandbox: Callable[..., SandboxHandle],
+        user_group_factory: Callable[[str, list[str]], DATestUserGroup],
     ) -> None:
         handle = running_sandbox()
         [user] = _create_users(1)
         [workspace] = handle.provision_api_users([user])
+        group = user_group_factory(
+            f"disable-grp-{uuid4().hex[:6]}",
+            [user.id],
+        )
 
         slug = f"disable-me-{uuid4().hex[:6]}"
         skill = _create_skill(
             k8s_admin_user,
             slug,
-            is_public=True,
+            is_public=False,
+            group_ids=[group.id],
             body="to be disabled\n",
         )
         _skill_file_path(workspace, skill.slug).wait_for_bytes(b"to be disabled\n")
@@ -332,6 +397,88 @@ class TestSkillPush:
         )
 
         (_skills_dir(workspace) / skill.slug).wait_for_absent()
+
+    def test_share_change_adds_to_newly_shared_and_removes_from_revoked(
+        self,
+        k8s_admin_user: DATestUser,
+        running_sandbox: Callable[..., SandboxHandle],
+        user_group_factory: Callable[[str, list[str]], DATestUserGroup],
+    ) -> None:
+        handle = running_sandbox()
+        user_a, user_b = _create_users(2)
+        [ws_a, ws_b] = handle.provision_api_users([user_a, user_b])
+        group_x = user_group_factory(
+            f"grp-x-{uuid4().hex[:6]}",
+            [user_a.id],
+        )
+        group_y = user_group_factory(
+            f"grp-y-{uuid4().hex[:6]}",
+            [user_b.id],
+        )
+
+        slug = f"shares-flip-{uuid4().hex[:6]}"
+        skill = _create_skill(
+            k8s_admin_user,
+            slug,
+            is_public=False,
+            group_ids=[group_x.id],
+            body="shifting shares\n",
+        )
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"shifting shares\n")
+        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+
+        SkillManager.replace_group_shares(skill, [group_y.id], k8s_admin_user)
+
+        _skill_file_path(ws_a, skill.slug).wait_for_absent()
+        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"shifting shares\n")
+
+    def test_direct_user_share_change_adds_to_newly_shared_and_removes_from_revoked(
+        self,
+        k8s_admin_user: DATestUser,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        user_a, user_b = _create_users(2)
+        [ws_a, ws_b] = handle.provision_api_users([user_a, user_b])
+
+        slug = f"direct-shares-flip-{uuid4().hex[:6]}"
+        skill = _create_skill(
+            k8s_admin_user,
+            slug,
+            is_public=False,
+            body="direct shifting shares\n",
+        )
+        _skill_file_path(ws_a, skill.slug).wait_for_absent()
+        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+
+        skill = SkillManager.share(
+            skill,
+            k8s_admin_user,
+            user_shares=[
+                SkillUserShareRequest(
+                    user_id=UUID(user_a.id),
+                    permission=SkillSharePermission.VIEWER,
+                )
+            ],
+        )
+        assert [str(share.user.id) for share in skill.user_shares] == [user_a.id]
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"direct shifting shares\n")
+        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+
+        skill = SkillManager.share(
+            skill,
+            k8s_admin_user,
+            user_shares=[
+                SkillUserShareRequest(
+                    user_id=UUID(user_b.id),
+                    permission=SkillSharePermission.VIEWER,
+                )
+            ],
+        )
+        assert [str(share.user.id) for share in skill.user_shares] == [user_b.id]
+
+        _skill_file_path(ws_a, skill.slug).wait_for_absent()
+        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"direct shifting shares\n")
 
     def test_replace_bundle_propagates_new_content(
         self,
@@ -378,6 +525,39 @@ class TestSkillPush:
 
         (_skills_dir(ws_a) / skill.slug).wait_for_absent()
         (_skills_dir(ws_b) / skill.slug).wait_for_absent()
+
+    def test_user_with_overlapping_shares_receives_skill_once(
+        self,
+        k8s_admin_user: DATestUser,
+        running_sandbox: Callable[..., SandboxHandle],
+        user_group_factory: Callable[[str, list[str]], DATestUserGroup],
+    ) -> None:
+        handle = running_sandbox()
+        [user] = _create_users(1)
+        [workspace] = handle.provision_api_users([user])
+        group_x = user_group_factory(
+            f"dup-x-{uuid4().hex[:6]}",
+            [user.id],
+        )
+        group_y = user_group_factory(
+            f"dup-y-{uuid4().hex[:6]}",
+            [user.id],
+        )
+
+        slug = f"dup-shares-{uuid4().hex[:6]}"
+        skill = _create_skill(
+            k8s_admin_user,
+            slug,
+            is_public=False,
+            group_ids=[group_x.id, group_y.id],
+            body="dedup\n",
+        )
+
+        _skill_file_path(workspace, skill.slug).wait_for_bytes(b"dedup\n")
+        skill_dir = _skills_dir(workspace) / skill.slug
+        skill_files = [p for p in skill_dir.rglob("*") if p.is_file()]
+        assert len(skill_files) == 1
+        assert skill_files[0].name == "SKILL.md"
 
 
 class TestSkillPushLowLevel:
