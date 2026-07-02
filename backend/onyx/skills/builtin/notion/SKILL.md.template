@@ -13,8 +13,9 @@ Call the Notion REST API as the connected user via the bundled helper.
 
     python .opencode/skills/notion/notion_api.py <command> [args]
 
-Read commands auto-paginate and prune empty fields. `create-page`, `append`,
-and `comment` are the only writes. Use `--raw` to skip empty-field pruning;
+Read commands auto-paginate and prune empty fields. The writes are
+`create-page`, `append`, `comment`, `update-page`, `update-block`, and
+`delete-block`. Use `--raw` to skip empty-field pruning;
 `python notion_api.py <command> -h` shows its flags.
 
 ### The connected user
@@ -88,6 +89,32 @@ python notion_api.py append BLOCK_ID --text "A new paragraph"
 ```
 python notion_api.py comment PAGE_ID "Looking into this"
 ```
+
+### Update a page's title/icon, or archive it (write)
+
+```
+python notion_api.py update-page PAGE_ID [--title "New title"] [--icon 📌] [--archive | --restore]
+```
+
+At least one of `--title`, `--icon`, `--archive`, or `--restore` is required.
+`--archive` moves the page to trash; `--restore` brings it back.
+
+### Update or archive a block (write)
+
+```
+python notion_api.py update-block BLOCK_ID [--text "Replacement text"] [--archive | --restore]
+```
+
+`--text` replaces a paragraph block's content (the block must be a paragraph).
+At least one of `--text`, `--archive`, or `--restore` is required.
+
+### Delete a block (write)
+
+```
+python notion_api.py delete-block BLOCK_ID
+```
+
+Moves the block to trash. To archive/restore a whole page use `update-page`.
 
 ## Output
 

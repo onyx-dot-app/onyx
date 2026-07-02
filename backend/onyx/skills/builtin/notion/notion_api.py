@@ -121,6 +121,11 @@ def _paragraph_block(text: str) -> dict[str, Any]:
     }
 
 
+def _bad_request(message: str) -> dict[str, Any]:
+    """A client-side validation failure, in the same JSON shape as API errors."""
+    return {"ok": False, "status": None, "error": message}
+
+
 def _emit(result: dict[str, Any], raw: bool) -> int:
     print(json.dumps(result if raw else _prune(result)))
     return 0 if result.get("ok") else 1
@@ -178,6 +183,33 @@ def _build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("comment", help="add a comment to a page (write)")
     sp.add_argument("page_id")
     sp.add_argument("body")
+
+    sp = sub.add_parser(
+        "update-page", help="update a page's title/icon, or archive/restore it (write)"
+    )
+    sp.add_argument("page_id")
+    sp.add_argument("--title", help="new page title")
+    sp.add_argument("--icon", help="new page icon as a single emoji")
+    grp = sp.add_mutually_exclusive_group()
+    grp.add_argument("--archive", action="store_true", help="move the page to trash")
+    grp.add_argument(
+        "--restore", action="store_true", help="restore the page from trash"
+    )
+
+    sp = sub.add_parser(
+        "update-block",
+        help="update a paragraph block's text, or archive/restore it (write)",
+    )
+    sp.add_argument("block_id")
+    sp.add_argument("--text", help="new paragraph text (block must be a paragraph)")
+    grp = sp.add_mutually_exclusive_group()
+    grp.add_argument(
+        "--archive", action="store_true", help="archive (soft-delete) the block"
+    )
+    grp.add_argument("--restore", action="store_true", help="restore the block")
+
+    sp = sub.add_parser("delete-block", help="delete a block (move to trash) (write)")
+    sp.add_argument("block_id")
     return p
 
 
@@ -239,6 +271,43 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
             "rich_text": _rich_text(a.body),
         }
         return {"ok": True, "comment": _request("POST", "/v1/comments", payload)}
+
+    if a.cmd == "update-page":
+        payload = {}
+        if a.title:
+            payload["properties"] = {"title": {"title": _rich_text(a.title)}}
+        if a.icon:
+            payload["icon"] = {"type": "emoji", "emoji": a.icon}
+        if a.archive:
+            payload["archived"] = True
+        elif a.restore:
+            payload["archived"] = False
+        if not payload:
+            return _bad_request(
+                "update-page needs at least one of --title/--icon/--archive/--restore"
+            )
+        return {
+            "ok": True,
+            "page": _request("PATCH", f"/v1/pages/{a.page_id}", payload),
+        }
+
+    if a.cmd == "update-block":
+        payload = {}
+        if a.text is not None:
+            payload["paragraph"] = {"rich_text": _rich_text(a.text)}
+        if a.archive:
+            payload["archived"] = True
+        elif a.restore:
+            payload["archived"] = False
+        if not payload:
+            return _bad_request("update-block needs --text and/or --archive/--restore")
+        return {
+            "ok": True,
+            "block": _request("PATCH", f"/v1/blocks/{a.block_id}", payload),
+        }
+
+    if a.cmd == "delete-block":
+        return {"ok": True, "block": _request("DELETE", f"/v1/blocks/{a.block_id}")}
 
     raise AssertionError(f"unhandled command: {a.cmd!r}")
 
