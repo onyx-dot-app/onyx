@@ -6,6 +6,7 @@ import { InputBar } from "@/components/chat/InputBar";
 import { MessageList } from "@/components/chat/MessageList";
 import { WelcomeMessage } from "@/components/chat/WelcomeMessage";
 import { useChatController } from "@/hooks/useChatController";
+import { useChatSessionController } from "@/hooks/useChatSessionController";
 
 interface ChatConversationProps {
   sessionId: string | null;
@@ -14,6 +15,8 @@ interface ChatConversationProps {
 export function ChatConversation({ sessionId }: ChatConversationProps) {
   const { messages, chatState, input, setInput, submit, stop } =
     useChatController(sessionId);
+  // re-attaches to an in-flight run when opened cold
+  useChatSessionController(sessionId);
   const { sessions } = useChatSessions();
 
   const session = sessionId

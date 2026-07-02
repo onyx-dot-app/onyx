@@ -13,6 +13,8 @@ from uuid import uuid4
 import pytest
 
 from onyx.db.models import BuildSession
+from onyx.server.features.build.packets import CompactionPacket
+from onyx.server.features.build.packets import ContextUsagePacket
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.session import streaming
 from onyx.server.features.build.session.streaming import BuildStreamingState
@@ -380,3 +382,59 @@ def test_yield_sandbox_events_allows_non_empty_session_without_opencode_id() -> 
     assert len(events) == 1
     assert sandbox_manager.last_payload is not None
     assert sandbox_manager.last_payload["opencode_session_id"] is None
+
+
+def test_persist_context_usage_and_compaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Usage packets are captured (not persisted per-event) and never fragment
+    streaming text; compaction persists after a flush; finalize writes exactly
+    one usage row and doesn't double-write on a second finalize."""
+    persisted: list[dict[str, Any]] = []
+
+    def create_message_stub(**kwargs: Any) -> None:
+        persisted.append(cast(dict[str, Any], kwargs["message_metadata"]))
+
+    monkeypatch.setattr(streaming, "create_message", create_message_stub)
+    state = BuildStreamingState(turn_index=0)
+    session_id = uuid4()
+
+    def chunk(text: str) -> AgentMessageChunk:
+        return AgentMessageChunk.model_validate(
+            {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": text},
+            }
+        )
+
+    fake_db = cast(Any, object())
+    streaming.persist_sandbox_event(fake_db, session_id, state, chunk("hello "))
+    # Usage in the middle must NOT flush the pending chunks.
+    streaming.persist_sandbox_event(
+        fake_db,
+        session_id,
+        state,
+        ContextUsagePacket(used_tokens=100),
+    )
+    streaming.persist_sandbox_event(fake_db, session_id, state, chunk("world"))
+    # Compaction flushes the merged text first, then persists the marker.
+    streaming.persist_sandbox_event(
+        fake_db, session_id, state, CompactionPacket(summary="recap")
+    )
+    streaming.finalize_persist(fake_db, session_id, state)
+
+    types = [m.get("type") for m in persisted]
+    assert types == ["agent_message", "compaction", "context_usage"]
+    # Text wasn't fragmented by the interleaved usage packet.
+    assert persisted[0]["content"]["text"] == "hello world"
+    assert persisted[1]["summary"] == "recap"
+    assert persisted[2]["used_tokens"] == 100
+
+    # A second finalize (e.g. from the executor's except path) must not
+    # re-write the usage row.
+    streaming.finalize_persist(fake_db, session_id, state)
+    assert [m.get("type") for m in persisted] == [
+        "agent_message",
+        "compaction",
+        "context_usage",
+    ]
