@@ -11,6 +11,7 @@ import SignInButton from "@/sections/auth/SignInButton";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
+import { useAuthRedirect } from "@/lib/auth/hooks";
 import { Button, MessageCard } from "@opal/components";
 import { markdown } from "@opal/utils";
 
@@ -49,6 +50,7 @@ export default function LoginPage() {
   const { logoUrl, appName } = useSettings();
 
   useSendAuthRequiredMessage();
+  const isLoading = useAuthRedirect("login");
 
   const authUrl = getAuthUrl(authTypeMetadata.authType, nextUrl);
   const effectiveNextUrl =
@@ -62,7 +64,9 @@ export default function LoginPage() {
     authTypeMetadata.authType === AuthType.SAML;
 
   useEffect(() => {
-    if (user === undefined) return;
+    if (isLoading) return;
+    const isAuthenticated = !!user && user.is_active && !user.is_anonymous_user;
+    if (isAuthenticated) return;
 
     if (
       !authTypeMetadata.hasUsers &&
@@ -73,19 +77,11 @@ export default function LoginPage() {
       return;
     }
 
-    if (user && user.is_active && !user.is_anonymous_user) {
-      if (authTypeMetadata.requiresVerification && !user.is_verified) {
-        router.replace("/auth/email-verification" as Route);
-      } else {
-        router.replace("/app?from=login" as Route);
-      }
-      return;
-    }
-
     if (authTypeMetadata.autoRedirect && authUrl && !autoRedirectDisabled) {
       router.replace(authUrl as Route);
     }
   }, [
+    isLoading,
     user,
     authTypeMetadata,
     authUrl,

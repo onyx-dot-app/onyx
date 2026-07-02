@@ -1,7 +1,14 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import useSWR from "swr";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { AuthTypeMetadata } from "@/lib/auth/types";
+import { useCurrentUser } from "@/lib/users/hooks";
+import { getAuthRedirect, AuthPage } from "@/lib/auth/redirect";
 
 interface AuthTypeAPIResponse {
   auth_type: string;
@@ -61,4 +68,18 @@ export function useAuthTypeMetadata(): {
     isLoading,
     error,
   };
+}
+
+export function useAuthRedirect(currentPage: AuthPage): boolean {
+  const { user, isLoading } = useCurrentUser();
+  const { authTypeMetadata } = useAuthTypeMetadata();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+    const destination = getAuthRedirect(user, authTypeMetadata, currentPage);
+    if (destination) router.replace(destination as Route);
+  }, [isLoading, user, authTypeMetadata, currentPage, router]);
+
+  return isLoading;
 }

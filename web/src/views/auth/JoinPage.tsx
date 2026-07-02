@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
-import { useCurrentUser } from "@/lib/users/hooks";
-import { useAuthTypeMetadata } from "@/lib/auth/hooks";
+import { useSearchParams } from "next/navigation";
+import { useAuthTypeMetadata, useAuthRedirect } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { AuthType } from "@/lib/constants";
 import { AuthLayouts } from "@opal/layouts";
@@ -27,14 +25,14 @@ function getAuthUrl(authType: AuthType): string | null {
 }
 
 export default function JoinPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const nextUrl = searchParams.get("next");
   const defaultEmail = searchParams.get("email");
 
-  const { user } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
   const { logoUrl } = useSettings();
+
+  useAuthRedirect("join");
 
   useEffect(() => {
     const error = searchParams.get("error");
@@ -46,24 +44,6 @@ export default function JoinPage() {
       );
     }
   }, [searchParams]);
-
-  useEffect(() => {
-    if (user === undefined) return;
-
-    if (user && user.is_active && !user.is_anonymous_user) {
-      if (authTypeMetadata.requiresVerification && !user.is_verified) {
-        router.replace("/auth/email-verification" as Route);
-      } else {
-        router.replace("/app" as Route);
-      }
-      return;
-    }
-
-    const { authType } = authTypeMetadata;
-    if (authType !== AuthType.BASIC && authType !== AuthType.CLOUD) {
-      router.replace("/app" as Route);
-    }
-  }, [user, authTypeMetadata, router]);
 
   const isCloud = authTypeMetadata.authType === AuthType.CLOUD;
   const authUrl = getAuthUrl(authTypeMetadata.authType);

@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCurrentUser } from "@/lib/users/hooks";
-import { useAuthTypeMetadata } from "@/lib/auth/hooks";
+import { useSearchParams } from "next/navigation";
+import { useAuthTypeMetadata, useAuthRedirect } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { AuthType } from "@/lib/constants";
 import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
@@ -13,14 +11,14 @@ import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 
 export default function SignupPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const nextUrl = searchParams.get("next");
   const defaultEmail = searchParams.get("email");
-  const { user } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
   const { logoUrl, appName } = useSettings();
   const isSignupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
+
+  useAuthRedirect("signup");
 
   useEffect(() => {
     const error = searchParams.get("error");
@@ -32,23 +30,6 @@ export default function SignupPage() {
       );
     }
   }, [searchParams]);
-
-  useEffect(() => {
-    if (user === undefined) return;
-
-    if (user && user.is_active && !user.is_anonymous_user) {
-      if (!authTypeMetadata.requiresVerification || user.is_verified) {
-        router.replace("/app");
-      } else {
-        router.replace("/auth/email-verification");
-      }
-      return;
-    }
-
-    if (authTypeMetadata.authType !== AuthType.BASIC) {
-      router.replace("/app");
-    }
-  }, [user, authTypeMetadata, router]);
 
   const bottomPrompt = markdown(
     "Already have an account? [Sign In](/auth/login?autoRedirectToSignup=false)"
