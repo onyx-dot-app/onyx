@@ -138,7 +138,7 @@ export default function EmailPasswordForm({
       validationSchema={validationSchema}
       onSubmit={handleSubmit}
     >
-      {({ isSubmitting, isValid, dirty, values }) => {
+      {({ isSubmitting, isValid, dirty, values, errors }) => {
         return (
           <AuthLayouts.FormBody>
             <AuthLayouts.Fields>
@@ -160,7 +160,10 @@ export default function EmailPasswordForm({
                     : undefined
                 }
                 topRight={
-                  NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && !isSignup
+                  NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED &&
+                  !isSignup &&
+                  !errors.email &&
+                  !!values.email
                     ? markdown(
                         `[Forgot password?](/auth/forgot-password?email=${encodeURIComponent(values.email)})`
                       )
