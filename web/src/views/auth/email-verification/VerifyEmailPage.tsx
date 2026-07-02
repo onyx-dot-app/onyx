@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { verifyEmail } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -17,40 +17,37 @@ export default function VerifyEmailPage() {
   const { logoUrl } = useSettings();
 
   const token = searchParams.get("token");
-  const firstUser =
-    searchParams.get("first_user") === "true" && NEXT_PUBLIC_CLOUD_ENABLED;
-
   const verifyingRef = useRef(false);
+  const [verified, setVerified] = useState(false);
 
   // Token flow: wait for auth state to settle, then verify once.
   useEffect(() => {
     if (!token || isLoading || verifyingRef.current) return;
     verifyingRef.current = true;
     verifyEmail(token)
-      .then(() => {
-        if (user) {
-          router.replace("/app" as Route);
-        } else {
-          router.replace(
-            (firstUser
-              ? "/auth/login?verified=true&first_user=true"
-              : "/auth/login?verified=true") as Route
-          );
-        }
-      })
+      .then(() => setVerified(true))
       .catch((e) => {
         toast.error(
           `Failed to verify your email — ${e instanceof Error ? e.message : "unknown error"}.`
         );
-        if (user) {
-          router.replace("/app" as Route);
-        } else {
-          router.replace("/auth/login" as Route);
-        }
+        router.replace((user ? "/app" : "/auth/login") as Route);
       });
-  }, [token, isLoading, user, firstUser, router]);
+  }, [token, isLoading, user, router]);
 
   if (!token) redirect("/auth/send-email-verification");
+
+  if (verified) {
+    return (
+      <AuthLayouts.Card title="Verify Email" logoSrc={logoUrl}>
+        <AuthLayouts.Message
+          title="Verification successful."
+          description={markdown(
+            "Your email has been successfully verified. You can now close this tab, or [continue to the app](/app)."
+          )}
+        />
+      </AuthLayouts.Card>
+    );
+  }
 
   return (
     <AuthLayouts.Card title="Verify Email" logoSrc={logoUrl}>

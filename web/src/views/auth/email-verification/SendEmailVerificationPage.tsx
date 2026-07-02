@@ -16,9 +16,16 @@ import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
 export default function SendEmailVerificationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isLoading } = useCurrentUser();
+  const { user, isLoading, mutateUser } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
   const { logoUrl } = useSettings();
+
+  // Poll for verification status so the original tab auto-advances to /app
+  // once the user verifies in a different tab.
+  useEffect(() => {
+    const interval = setInterval(() => mutateUser(), 3000);
+    return () => clearInterval(interval);
+  }, [mutateUser]);
 
   // Resend flow: fire-and-forget, then strip the ?resend param.
   useEffect(() => {
