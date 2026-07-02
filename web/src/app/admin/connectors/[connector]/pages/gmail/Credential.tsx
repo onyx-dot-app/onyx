@@ -95,6 +95,7 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
         toast.error(
           "Service account keys are now uploaded in Step 2 when creating a credential"
         );
+        setFileName(undefined);
       }
       setIsUploading(false);
     };
