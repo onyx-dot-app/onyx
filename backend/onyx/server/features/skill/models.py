@@ -188,8 +188,8 @@ class SkillPatchRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _reject_explicit_nulls(cls, data: Any) -> Any:
-        """Omitting a field = 'leave unchanged'. Null ``enabled`` is invalid;
-        null ``public_permission`` is valid and revokes org-wide access."""
+        """Omitting a field = 'leave unchanged'. Null is invalid for these
+        fields; null ``public_permission`` is valid and revokes org access."""
         if isinstance(data, dict):
             for field in (
                 "name",

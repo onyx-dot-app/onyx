@@ -525,6 +525,15 @@ def update_skill_fields(
     return skill
 
 
+def _flush_shares(db_session: Session, fk_violation_detail: str) -> None:
+    try:
+        db_session.flush()
+    except IntegrityError as e:
+        if is_fk_violation(e):
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, fk_violation_detail) from e
+        raise
+
+
 def replace_skill_shares(
     *,
     skill: Skill,
@@ -538,6 +547,7 @@ def replace_skill_shares(
             db_session.add(
                 Skill__User(skill_id=skill.id, user_id=user_id, permission=permission)
             )
+        _flush_shares(db_session, "One or more user share targets do not exist.")
 
     if group_shares is not None:
         db_session.execute(
@@ -551,16 +561,7 @@ def replace_skill_shares(
                     permission=permission,
                 )
             )
-
-    try:
-        db_session.flush()
-    except IntegrityError as e:
-        if is_fk_violation(e):
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "One or more share targets do not exist.",
-            ) from e
-        raise
+        _flush_shares(db_session, "One or more group share targets do not exist.")
 
 
 def transfer_skill_ownership(
