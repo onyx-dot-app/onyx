@@ -13,8 +13,8 @@ export default function MaintenancePage() {
       logoSrc={logoUrl}
     >
       <AuthLayouts.Message
-        title="We'll be back soon."
-        description="Our team is performing scheduled maintenance. Please check back in a little while."
+        title="Maintenance in progress."
+        description="Onyx is currently under scheduled maintenance. Please check back later. Contact support"
       />
     </AuthLayouts.Card>
   );

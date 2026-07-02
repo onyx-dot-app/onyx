@@ -1,5 +1,6 @@
 "use client";
 
+import { redirect } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
@@ -34,7 +35,8 @@ function resolveMessage(raw: string | null): string | null {
 
 export default function ErrorPage() {
   const searchParams = useSearchParams();
-  const message = resolveMessage(searchParams?.get("error") ?? null);
+  if (!searchParams?.get("error")) redirect("/auth/login");
+  const message = resolveMessage(searchParams.get("error"));
   const { logoUrl } = useSettings();
 
   return (

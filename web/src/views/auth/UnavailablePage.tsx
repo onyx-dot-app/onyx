@@ -1,11 +1,23 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
+import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 
 export default function UnavailablePage() {
+  const router = useRouter();
+  const signupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
   const { logoUrl, appName } = useSettings();
+
+  useEffect(() => {
+    if (!signupDisabled) router.replace("/auth/login" as Route);
+  }, [signupDisabled, router]);
+
+  if (!signupDisabled) return null;
 
   return (
     <AuthLayouts.Card
