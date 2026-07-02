@@ -133,18 +133,19 @@ def copy_present_chunks_to_future(
         # Stop writing the instant the attempt is cancelled (e.g. by a deletion).
         if should_abort is not None and should_abort():
             return chunks_written, True
-        # Drop chunks of docs deleted mid-batch — create-only would otherwise
-        # re-add them to FUTURE (resurrection).
-        if surviving_doc_ids is not None:
-            surviving = surviving_doc_ids()
-            reembedded = [c for c in reembedded if c.document_id in surviving]
-            if not reembedded:
-                continue
         # Heartbeat before each sub-page write.
         for i in range(0, len(reembedded), _PORT_WRITE_PAGE_SIZE):
             if should_abort is not None and should_abort():
                 return chunks_written, True
             sub = reembedded[i : i + _PORT_WRITE_PAGE_SIZE]
+            # Drop chunks of docs deleted mid-batch, re-checked immediately before each
+            # write (not once per page): a doc's chunks can span several sub-pages, and a
+            # doc deleted between writes would otherwise be create-only resurrected.
+            if surviving_doc_ids is not None:
+                surviving = surviving_doc_ids()
+                sub = [c for c in sub if c.document_id in surviving]
+                if not sub:
+                    continue
             future_index.index_raw_chunks(sub, use_create_only=True)
             chunks_written += len(sub)
     return chunks_written, False
