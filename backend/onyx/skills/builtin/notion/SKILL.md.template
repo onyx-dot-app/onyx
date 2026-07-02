@@ -1,0 +1,99 @@
+---
+name: notion
+description: Search, read, and write Notion pages, databases, blocks, and comments on the connected user's behalf via a light REST wrapper.
+---
+
+# Notion
+
+Call the Notion REST API as the connected user via the bundled helper.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/notion/notion_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. `create-page`, `append`,
+and `comment` are the only writes. Use `--raw` to skip empty-field pruning;
+`python notion_api.py <command> -h` shows its flags.
+
+### The connected user
+
+```
+python notion_api.py me
+```
+
+### Users
+
+```
+python notion_api.py users [--limit N]
+```
+
+### Search pages and databases
+
+```
+python notion_api.py search "roadmap" [--filter page|database] [--limit N]
+```
+
+The query is optional — omit it to list everything the integration can access.
+
+### Read a page
+
+```
+python notion_api.py page PAGE_ID
+```
+
+### Read a page/block's child blocks (its content)
+
+```
+python notion_api.py blocks BLOCK_ID [--limit N]
+```
+
+### Read a database's schema
+
+```
+python notion_api.py database DATABASE_ID
+```
+
+### Query a database's rows
+
+```
+python notion_api.py query-database DATABASE_ID [--limit N]
+```
+
+### Create a page (write)
+
+```
+python notion_api.py create-page (--parent-page PAGE_ID | --parent-database DATABASE_ID) \
+  --title "Title" [--text "First paragraph"]
+```
+
+### Append content to a page/block (write)
+
+```
+python notion_api.py append BLOCK_ID --text "A new paragraph"
+```
+
+### Comment on a page (write)
+
+```
+python notion_api.py comment PAGE_ID "Looking into this"
+```
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "<key>": [...], "count": N,
+"truncated": bool}` (`truncated` means more results existed past `--limit`).
+Failures return `{"ok": false, "status": <code>, "error": "<message>"}` and exit
+non-zero — surface the error rather than retrying blindly.
+
+## Notes
+
+- IDs are Notion object ids (UUIDs), with or without dashes. Get them from
+  `search`, `blocks`, or `query-database` output.
+- The connected user's token is injected by the egress gateway — send no
+  credentials yourself.
+- The integration's capabilities (read / write / comment) are set by the admin
+  on the Notion integration. A 401 / 403 usually means the integration lacks the
+  needed capability or hasn't been shared with the page — tell the user rather
+  than retrying.
