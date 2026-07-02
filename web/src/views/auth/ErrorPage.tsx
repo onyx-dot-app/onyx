@@ -20,8 +20,12 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
     "Your identity provider is temporarily unavailable. Please try again later.",
 };
 
-const GENERIC_ERROR_DESCRIPTION =
-  "- Incorrect or expired login credentials\n- Temporary authentication system disruption\n- Account access restrictions or permissions";
+const GENERIC_ERROR_DESCRIPTION = [
+  "Some possible issues may include:",
+  "- Incorrect or expired login credentials",
+  "- Temporary authentication system disruption",
+  "- Account access restrictions or permissions",
+];
 
 function resolveMessage(raw: string | null): string | null {
   if (!raw) return null;
@@ -41,10 +45,11 @@ export default function ErrorPage() {
       bottomPrompt={markdown("Return to [Sign In](/auth/login)")}
     >
       <AuthLayouts.Message
-        messageType="error"
-        title={message ? "Error" : "Possible causes"}
+        messageType="warning"
+        title="We ran into an error verifying your login"
         description={markdown(
-          message ?? GENERIC_ERROR_DESCRIPTION,
+          ...(message ? [message] : GENERIC_ERROR_DESCRIPTION),
+          "",
           NEXT_PUBLIC_CLOUD_ENABLED
             ? "If you continue to experience problems, please reach out to the Onyx team at [support@onyx.app](mailto:support@onyx.app)"
             : "If you continue to experience problems, please reach out to your system administrator for assistance."
