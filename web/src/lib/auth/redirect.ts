@@ -22,7 +22,7 @@ export function getAuthRedirect(
   }
 
   if (currentPage === "signup" || currentPage === "join") {
-    if (signupDisabled) return "/auth/unavailable";
+    if (signupDisabled) return "/auth/signup-unavailable";
 
     const supportsEmailAuth =
       authTypeMetadata.authType === AuthType.BASIC ||
