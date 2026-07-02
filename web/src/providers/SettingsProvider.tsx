@@ -3,8 +3,8 @@
 import { JSX } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import CloudError from "@/components/errorPages/CloudErrorPage";
-import ErrorPage from "@/components/errorPages/ErrorPage";
+import CloudError from "@/views/auth/errors/CloudErrorPage";
+import ErrorPage from "@/views/auth/errors/ErrorPage";
 import { FetchError } from "@/lib/fetcher";
 
 /**

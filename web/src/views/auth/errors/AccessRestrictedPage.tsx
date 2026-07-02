@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
+import ErrorPageLayout from "@/views/auth/errors/ErrorPageLayout";
 import { Button } from "@opal/components";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { logout } from "@/lib/users/svc";
