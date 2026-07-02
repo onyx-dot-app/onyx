@@ -145,7 +145,7 @@ def test_replace_skill_shares_leaves_omitted_share_types_unchanged(
     }
 
 
-def test_replace_skill_shares_preserves_invalid_target_message(
+def test_replace_skill_shares_names_invalid_group_target(
     db_session: Session,
 ) -> None:
     skill = make_skill(db_session)
@@ -158,7 +158,23 @@ def test_replace_skill_shares_preserves_invalid_target_message(
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
-    assert exc_info.value.detail == "One or more share targets do not exist."
+    assert exc_info.value.detail == "One or more group share targets do not exist."
+
+
+def test_replace_skill_shares_names_invalid_user_target(
+    db_session: Session,
+) -> None:
+    skill = make_skill(db_session)
+
+    with pytest.raises(OnyxError) as exc_info:
+        replace_skill_shares(
+            skill=skill,
+            user_shares={uuid4(): SkillSharePermission.VIEWER},
+            db_session=db_session,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert exc_info.value.detail == "One or more user share targets do not exist."
 
 
 def test_transfer_skill_ownership_removes_new_owner_direct_share_and_upgrades_previous_owner(
