@@ -26,6 +26,7 @@ class SlackAction(ExternalAppAction):
     SEARCH_READ = "slack.search.read"
     MESSAGES_WRITE = "slack.messages.write"
     DM_OPEN = "slack.dm.open"
+    FILES_WRITE = "slack.files.write"
 
 
 # Slack Web API calls are POST to https://slack.com/api/<method>; the action is
@@ -85,6 +86,22 @@ _ENDPOINTS: list[EndpointSpec] = [
         description="Open (or resume) a direct message conversation with a user.",
         matches=(RestRoute(method="POST", path="/api/conversations.open"),),
     ),
+    EndpointSpec(
+        id=SlackAction.FILES_WRITE,
+        normalised_name="Upload files",
+        description=(
+            "Upload a file and share it to a channel, direct message, or "
+            "thread using Slack's external upload flow."
+        ),
+        matches=(
+            RestRoute(method="GET", path="/api/files.getUploadURLExternal"),
+            RestRoute(method="POST", path="/api/files.getUploadURLExternal"),
+            RestRoute(method="POST", path="/api/files.completeUploadExternal"),
+            # The raw bytes POST to a pre-signed /upload/v1/<token> URL on
+            # files.slack.com — route it to FILES_WRITE, not the domain fallback.
+            RestRoute(method="POST", path="/upload/v1/{token...}"),
+        ),
+    ),
 ]
 
 
@@ -100,6 +117,7 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                     "channels:history",
                     "channels:read",
                     "chat:write",
+                    "files:write",
                     "groups:history",
                     "groups:read",
                     "im:history",
@@ -115,7 +133,12 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             description=(
                 "Read your Slack messages and channels as context inside Onyx Craft."
             ),
-            upstream_url_patterns=["https://slack\\.com/api/.*"],
+            upstream_url_patterns=[
+                "https://slack\\.com/api/.*",
+                # files.getUploadURLExternal hands back a pre-signed upload URL
+                # on the files.slack.com host that the raw bytes are POSTed to.
+                "https://files\\.slack\\.com/upload/v1/.*",
+            ],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[
                 OrgCredentialField(
@@ -141,8 +164,9 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                 "Permissions, add this Onyx instance's callback URL "
                 "(/craft/v1/apps/oauth/callback) to Redirect URLs, and add the "
                 "User Token Scopes you want the agent to use (channels:history, "
-                "channels:read, chat:write, groups:history, groups:read, "
-                "im:history, im:read, im:write, search:read, users:read). No "
+                "channels:read, chat:write, files:write, groups:history, "
+                "groups:read, im:history, im:read, im:write, search:read, "
+                "users:read). No "
                 "bot user is required. Then paste the app's Client ID and "
                 "Client Secret below."
             ),
