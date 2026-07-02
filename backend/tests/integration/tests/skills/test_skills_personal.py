@@ -148,20 +148,19 @@ def test_personal_slug_collides_with_admin_skill_both_directions(
     assert exc_info.value.response.status_code == 409
 
 
-def test_admin_cannot_hard_delete_personal_skill(
+def test_admin_can_hard_delete_personal_skill(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
+    """Admins can hard-delete any custom skill, mirroring agents/personas."""
     slug = f"personal-admin-delete-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
 
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.delete_custom(skill, admin_user)
-    assert exc_info.value.response.status_code == 403
+    SkillManager.delete_custom(skill, admin_user)
 
-    assert slug in _user_custom_slugs(basic_user)
+    assert slug not in _user_custom_slugs(basic_user)
     admin_slugs = [skill.slug for skill in SkillManager.list_all(admin_user).customs]
-    assert slug in admin_slugs
+    assert slug not in admin_slugs
 
 
 def test_owner_can_share_org_wide_and_retain_edit_permissions(
