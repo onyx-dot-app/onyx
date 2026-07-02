@@ -62,6 +62,22 @@ export async function verifyEmail(token: string): Promise<void> {
   }
 }
 
+export async function verifyCaptchaForOAuth(token: string): Promise<void> {
+  const response = await fetch("/api/auth/captcha/oauth-verify", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      `Captcha verify rejected: status=${response.status} detail=${body.detail ?? "(none)"}`
+    );
+  }
+}
+
 export async function impersonateUser(
   email: string,
   apiKey: string

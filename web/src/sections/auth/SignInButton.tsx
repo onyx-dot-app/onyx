@@ -29,10 +29,11 @@
 import { useState } from "react";
 import { Button } from "@opal/components";
 import { AuthType } from "@/lib/constants";
-import { FcGoogle } from "react-icons/fc";
+import { SvgGoogle } from "@opal/logos";
 import type { IconProps } from "@opal/types";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
 import { toast } from "@/hooks/useToast";
+import { verifyCaptchaForOAuth } from "@/lib/auth/svc";
 
 interface SignInButtonProps {
   authorizeUrl: string;
@@ -51,7 +52,7 @@ export default function SignInButton({
 
   if (authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD) {
     button = "Continue with Google";
-    icon = FcGoogle;
+    icon = SvgGoogle;
   } else if (authType === AuthType.OIDC) {
     button = "Continue with OIDC SSO";
   } else if (authType === AuthType.SAML) {
@@ -73,37 +74,13 @@ export default function SignInButton({
     try {
       const token = await getCaptchaToken("oauth");
       if (!token) {
-        // eslint-disable-next-line no-console
-        console.error(
-          "Captcha: grecaptcha.execute returned no token. The widget may not have loaded yet."
-        );
         toast.error("grecaptcha.execute returned no token");
         return;
       }
-      const res = await fetch("/api/auth/captcha/oauth-verify", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        // eslint-disable-next-line no-console
-        console.error(
-          `Captcha verify rejected: status=${res.status} detail=${
-            body.detail ?? "(none)"
-          }`
-        );
-        toast.error(
-          "Captcha verification failed. Please refresh your browser and try again."
-        );
-        return;
-      }
+      await verifyCaptchaForOAuth(token);
       navigating = true;
       window.location.href = authorizeUrl;
     } catch (exc) {
-      // eslint-disable-next-line no-console
-      console.error("Captcha verify request failed", exc);
       toast.error(exc instanceof Error ? exc.message : String(exc));
     } finally {
       if (!navigating) setIsVerifying(false);
@@ -120,11 +97,7 @@ export default function SignInButton({
 
   return (
     <Button
-      prominence={
-        authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD
-          ? "secondary"
-          : "primary"
-      }
+      prominence="secondary"
       width="full"
       icon={icon}
       href={intercepted ? undefined : authorizeUrl}
