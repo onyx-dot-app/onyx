@@ -1,4 +1,5 @@
 import traceback
+from collections.abc import Callable
 from collections.abc import Generator
 
 from office365.sharepoint.client_context import ClientContext
@@ -20,7 +21,8 @@ logger = setup_logger()
 def sharepoint_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
-) -> Generator[ExternalUserGroup | ExternalGroupSyncFailure, None, None]:
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],
+) -> Generator[ExternalUserGroup, None, None]:
     """Sync SharePoint groups and their members"""
 
     # Get site URLs from connector config
@@ -70,6 +72,7 @@ def sharepoint_group_sync(
                 ctx,
                 connector.graph_client,
                 graph_api_base=connector.graph_api_base,
+                record_group_sync_failure=record_group_sync_failure,
                 get_access_token=connector._get_graph_access_token,
                 enumerate_all_ad_groups=enumerate_all,
             )
@@ -79,21 +82,19 @@ def sharepoint_group_sync(
                 site_descriptor.url,
                 e,
             )
-            yield ExternalGroupSyncFailure(
-                external_group_id=site_descriptor.url,
-                external_group_name=site_descriptor.url,
-                failure_message=str(e),
-                full_exception_trace=traceback.format_exc(),
-                exception=e,
+            record_group_sync_failure(
+                ExternalGroupSyncFailure(
+                    external_group_id=site_descriptor.url,
+                    external_group_name=site_descriptor.url,
+                    failure_message=str(e),
+                    full_exception_trace=traceback.format_exc(),
+                    exception=e,
+                )
             )
             continue
 
         # Yield each group
         for group in external_groups:
-            if isinstance(group, ExternalGroupSyncFailure):
-                yield group
-                continue
-
             logger.debug(
                 "Found group: %s with %s members", group.id, len(group.user_emails)
             )

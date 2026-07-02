@@ -50,22 +50,23 @@ def test_jira_group_sync_yields_group_level_failure_for_member_fetch_error() -> 
 
     jira_client._get_json.side_effect = get_json
 
+    failures: list[ExternalGroupSyncFailure] = []
     with patch(
         "ee.onyx.external_permissions.jira.group_sync.build_jira_client",
         return_value=jira_client,
     ):
-        results = list(jira_group_sync("tenant", _cc_pair()))
+        results = list(jira_group_sync("tenant", _cc_pair(), failures.append))
 
-    assert len(results) == 2
+    assert len(results) == 1
     assert isinstance(results[0], ExternalUserGroup)
     assert results[0].id == "jira-users"
     assert results[0].user_emails == ["user@example.com"]
 
-    assert isinstance(results[1], ExternalGroupSyncFailure)
-    assert results[1].external_group_id == "stale-group"
-    assert results[1].external_group_name == "stale-group"
-    assert "GET /group/member could not find it" in results[1].failure_message
-    assert results[1].full_exception_trace is not None
+    assert len(failures) == 1
+    assert failures[0].external_group_id == "stale-group"
+    assert failures[0].external_group_name == "stale-group"
+    assert "GET /group/member could not find it" in failures[0].failure_message
+    assert failures[0].full_exception_trace is not None
 
 
 def test_jira_group_sync_keeps_group_listing_failure_fatal() -> None:
@@ -77,4 +78,4 @@ def test_jira_group_sync_keeps_group_listing_failure_fatal() -> None:
         return_value=jira_client,
     ):
         with pytest.raises(RuntimeError, match="group listing failed"):
-            list(jira_group_sync("tenant", _cc_pair()))
+            list(jira_group_sync("tenant", _cc_pair(), lambda _failure: None))

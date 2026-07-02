@@ -166,7 +166,13 @@ def test_gdrive_perm_sync_with_real_data(
         "ee.onyx.external_permissions.google_drive.group_sync.GoogleDriveConnector",
         return_value=_build_connector(google_drive_service_acct_connector_factory),
     ):
-        external_user_group_generator = gdrive_group_sync("test_tenant", mock_cc_pair)
+        external_user_group_generator = gdrive_group_sync(
+            "test_tenant",
+            mock_cc_pair,
+            record_group_sync_failure=lambda failure: pytest.fail(
+                f"Unexpected group sync failure: {failure}"
+            ),
+        )
         external_user_groups = list(external_user_group_generator)
 
     # map group ids to emails

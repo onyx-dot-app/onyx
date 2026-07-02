@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from collections.abc import Generator
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
 from onyx.background.error_logging import emit_background_error
@@ -160,6 +162,7 @@ def _build_final_group_to_member_email_map(
 def confluence_group_sync(
     tenant_id: str,
     cc_pair: ConnectorCredentialPair,
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
 ) -> Generator[ExternalUserGroup, None, None]:
     provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)

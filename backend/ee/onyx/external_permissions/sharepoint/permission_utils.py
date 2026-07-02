@@ -694,7 +694,8 @@ def _enumerate_ad_groups_paginated(
     get_access_token: Callable[[], str],
     already_resolved: set[str],
     graph_api_base: str,
-) -> Generator[ExternalUserGroup | ExternalGroupSyncFailure, None, None]:
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],
+) -> Generator[ExternalUserGroup, None, None]:
     """Paginate through all Azure AD groups and yield ExternalUserGroup for each.
 
     Skips groups whose suffixed name is already in *already_resolved*.
@@ -743,12 +744,14 @@ def _enumerate_ad_groups_paginated(
                 name,
                 e,
             )
-            yield ExternalGroupSyncFailure(
-                external_group_id=group_id,
-                external_group_name=name,
-                failure_message=str(e),
-                full_exception_trace=traceback.format_exc(),
-                exception=e,
+            record_group_sync_failure(
+                ExternalGroupSyncFailure(
+                    external_group_id=group_id,
+                    external_group_name=name,
+                    failure_message=str(e),
+                    full_exception_trace=traceback.format_exc(),
+                    exception=e,
+                )
             )
             continue
 
@@ -761,9 +764,10 @@ def get_sharepoint_external_groups(
     client_context: ClientContext,
     graph_client: GraphClient,
     graph_api_base: str,
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],
     get_access_token: Callable[[], str] | None = None,
     enumerate_all_ad_groups: bool = False,
-) -> list[ExternalUserGroup | ExternalGroupSyncFailure]:
+) -> list[ExternalUserGroup]:
     groups: set[SharepointGroup] = set()
 
     def add_group_to_sets(role_assignments: RoleAssignmentCollection) -> None:
@@ -821,7 +825,7 @@ def get_sharepoint_external_groups(
         client_context, graph_client, groups, is_group_sync=True
     )
 
-    external_user_groups: list[ExternalUserGroup | ExternalGroupSyncFailure] = [
+    external_user_groups: list[ExternalUserGroup] = [
         ExternalUserGroup(id=group_name, user_emails=list(emails))
         for group_name, emails in groups_and_members.groups_to_emails.items()
     ]
@@ -834,7 +838,10 @@ def get_sharepoint_external_groups(
 
     already_resolved = set(groups_and_members.groups_to_emails.keys())
     for group in _enumerate_ad_groups_paginated(
-        get_access_token, already_resolved, graph_api_base
+        get_access_token,
+        already_resolved,
+        graph_api_base,
+        record_group_sync_failure,
     ):
         external_user_groups.append(group)
 

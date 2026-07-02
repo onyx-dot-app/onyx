@@ -144,6 +144,9 @@ def test_jira_group_sync(
         group_sync_iter = jira_group_sync(
             tenant_id=tenant_id,
             cc_pair=cc_pair,
+            record_group_sync_failure=lambda failure: pytest.fail(
+                f"Unexpected group sync failure: {failure}"
+            ),
         )
 
         expected_groups = {group.id: group for group in _EXPECTED_JIRA_GROUPS}

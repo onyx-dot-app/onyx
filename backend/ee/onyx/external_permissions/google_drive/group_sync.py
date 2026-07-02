@@ -1,4 +1,5 @@
 import traceback
+from collections.abc import Callable
 from collections.abc import Generator
 
 from googleapiclient.errors import HttpError
@@ -422,7 +423,8 @@ def _build_onyx_groups(
 def gdrive_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
-) -> Generator[ExternalUserGroup | ExternalGroupSyncFailure, None, None]:
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],
+) -> Generator[ExternalUserGroup, None, None]:
     # Initialize connector and build credential/service objects
     google_drive_connector = GoogleDriveConnector(
         **cc_pair.connector.connector_specific_config
@@ -456,12 +458,14 @@ def gdrive_group_sync(
                 group_email,
                 e,
             )
-            yield ExternalGroupSyncFailure(
-                external_group_id=group_email,
-                external_group_name=group_email,
-                failure_message=str(e),
-                full_exception_trace=traceback.format_exc(),
-                exception=e,
+            record_group_sync_failure(
+                ExternalGroupSyncFailure(
+                    external_group_id=group_email,
+                    external_group_name=group_email,
+                    failure_message=str(e),
+                    full_exception_trace=traceback.format_exc(),
+                    exception=e,
+                )
             )
             continue
 

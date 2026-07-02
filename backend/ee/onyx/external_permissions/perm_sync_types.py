@@ -59,12 +59,15 @@ DocSyncFuncType = Callable[
     Generator[ElementExternalAccess, None, None],
 ]
 
+ExternalGroupFailureCallback = Callable[[ExternalGroupSyncFailure], None]
+
 GroupSyncFuncType = Callable[
     [
         str,  # tenant_id
         ConnectorCredentialPair,  # cc_pair
+        ExternalGroupFailureCallback,  # record_group_sync_failure
     ],
-    Generator[ExternalUserGroup | ExternalGroupSyncFailure, None, None],
+    Generator[ExternalUserGroup, None, None],
 ]
 
 # list of chunks to be censored and the user email. returns censored chunks

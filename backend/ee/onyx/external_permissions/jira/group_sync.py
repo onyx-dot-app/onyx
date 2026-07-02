@@ -1,4 +1,5 @@
 import traceback
+from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
 
@@ -97,7 +98,8 @@ def _get_group_member_emails(
 def jira_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
-) -> Generator[ExternalUserGroup | ExternalGroupSyncFailure, None, None]:
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],
+) -> Generator[ExternalUserGroup, None, None]:
     """Sync Jira groups and their members, yielding one group at a time.
 
     Streams group-by-group rather than accumulating all groups in memory.
@@ -142,12 +144,14 @@ def jira_group_sync(
                 group_name,
                 e,
             )
-            yield ExternalGroupSyncFailure(
-                external_group_id=group_name,
-                external_group_name=group_name,
-                failure_message=str(e),
-                full_exception_trace=traceback.format_exc(),
-                exception=e,
+            record_group_sync_failure(
+                ExternalGroupSyncFailure(
+                    external_group_id=group_name,
+                    external_group_name=group_name,
+                    failure_message=str(e),
+                    full_exception_trace=traceback.format_exc(),
+                    exception=e,
+                )
             )
             continue
 

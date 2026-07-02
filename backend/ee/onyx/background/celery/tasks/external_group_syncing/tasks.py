@@ -598,7 +598,33 @@ def _timed_perform_external_group_sync(
         cumulative_upsert_time = 0.0
         start_time = time.monotonic()
         try:
-            external_user_group_generator = ext_group_sync_func(tenant_id, cc_pair)
+
+            def record_group_sync_failure(failure: ExternalGroupSyncFailure) -> None:
+                nonlocal total_group_errors
+                total_group_errors += 1
+                create_external_group_sync_error(
+                    external_group_sync_attempt_id=attempt_id,
+                    connector_credential_pair_id=cc_pair_id,
+                    db_session=db_session,
+                    external_group_id=failure.external_group_id,
+                    external_group_name=failure.external_group_name,
+                    failure_message=failure.failure_message,
+                    full_exception_trace=failure.full_exception_trace,
+                    error_type=(
+                        type(failure.exception).__name__ if failure.exception else None
+                    ),
+                )
+                _check_external_group_failure_threshold(
+                    total_failures=total_group_errors,
+                    total_groups_seen=total_groups_processed + total_group_errors,
+                    last_failure=failure,
+                )
+
+            external_user_group_generator = ext_group_sync_func(
+                tenant_id,
+                cc_pair,
+                record_group_sync_failure,
+            )
             for external_group_sync_result in external_user_group_generator:
                 # Check if the task has exceeded its timeout
                 # NOTE: Celery's soft_time_limit does not work with thread pools,
@@ -612,29 +638,6 @@ def _timed_perform_external_group_sync(
                         f"timeout={timeout_seconds}s "
                         f"groups_processed={total_groups_processed}"
                     )
-
-                if isinstance(external_group_sync_result, ExternalGroupSyncFailure):
-                    total_group_errors += 1
-                    create_external_group_sync_error(
-                        external_group_sync_attempt_id=attempt_id,
-                        connector_credential_pair_id=cc_pair_id,
-                        db_session=db_session,
-                        external_group_id=external_group_sync_result.external_group_id,
-                        external_group_name=external_group_sync_result.external_group_name,
-                        failure_message=external_group_sync_result.failure_message,
-                        full_exception_trace=external_group_sync_result.full_exception_trace,
-                        error_type=(
-                            type(external_group_sync_result.exception).__name__
-                            if external_group_sync_result.exception
-                            else None
-                        ),
-                    )
-                    _check_external_group_failure_threshold(
-                        total_failures=total_group_errors,
-                        total_groups_seen=total_groups_processed + total_group_errors,
-                        last_failure=external_group_sync_result,
-                    )
-                    continue
 
                 external_user_group = external_group_sync_result
                 external_user_group_batch.append(external_user_group)
