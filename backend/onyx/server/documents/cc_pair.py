@@ -358,6 +358,7 @@ def get_cc_pair_external_group_sync_attempts(
     start_idx = page_num * page_size
     end_idx = start_idx + page_size
     attempts = all_attempts[start_idx:end_idx]
+    # Count in SQL so listing attempts does not materialize every error row.
     error_counts = get_error_counts_for_external_group_sync_attempts(
         external_group_sync_attempt_ids=[attempt.id for attempt in attempts],
         db_session=db_session,
