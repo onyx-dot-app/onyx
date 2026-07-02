@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createChatSession,
   getChatSession,
+  renameChatSession,
   stopChatSession,
 } from "@/api/chat/sessions";
 import { streamChatMessage, type StreamEvent } from "@/api/chat/stream";
@@ -31,6 +32,7 @@ jest.mock("@/api/chat/stream", () => ({
 jest.mock("@/api/chat/sessions", () => ({
   createChatSession: jest.fn(),
   getChatSession: jest.fn(),
+  renameChatSession: jest.fn(),
   stopChatSession: jest.fn(),
 }));
 
@@ -44,6 +46,9 @@ const getSessionMock = getChatSession as unknown as Mock<
   (id: string) => Promise<unknown>
 >;
 const stopSessionMock = stopChatSession as unknown as Mock<
+  (id: string) => Promise<void>
+>;
+const renameSessionMock = renameChatSession as unknown as Mock<
   (id: string) => Promise<void>
 >;
 
@@ -95,6 +100,7 @@ function accumulated(packets: { obj: { type: string; content?: string } }[]) {
 describe("useChatController", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    renameSessionMock.mockResolvedValue();
     useChatSessionStore.setState({
       currentSessionId: null,
       sessions: new Map(),
@@ -152,6 +158,76 @@ describe("useChatController", () => {
         true,
       ),
     );
+    // Settle the fire-and-forget auto-name timer within the test.
+    await waitFor(() => expect(renameSessionMock).toHaveBeenCalled());
+  });
+
+  it("auto-names a new session once its first answer completes", async () => {
+    createSessionMock.mockResolvedValue("new-session");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController(null), { wrapper });
+    act(() => result.current.setInput("first message"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    await waitFor(() =>
+      expect(renameSessionMock).toHaveBeenCalledWith("new-session"),
+    );
+    expect(renameSessionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not auto-name a continued (existing) session", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    act(() => result.current.setInput("another message"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    // Give any stray naming timer a chance to fire before asserting it never did.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(renameSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-name when the first run is stopped", async () => {
+    createSessionMock.mockResolvedValue("new-session");
+    streamMock.mockImplementation((_body, signal) =>
+      (async function* () {
+        yield startPacket("Hello");
+        while (!signal.aborted) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          yield deltaPacket(".");
+        }
+      })(),
+    );
+
+    // The hook stays bound to null; after create+navigate the store owns the new session, so drive
+    // and inspect it there (mirrors stop() aborting once the screen has navigated to the new id).
+    const { result } = renderHook(() => useChatController(null), { wrapper });
+    act(() => result.current.setInput("first message"));
+    await act(async () => {
+      await result.current.submit();
+    });
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("new-session")?.chatState,
+      ).toBe("streaming"),
+    );
+
+    act(() => useChatSessionStore.getState().abortSession("new-session"));
+
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("new-session")?.chatState,
+      ).toBe("input"),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(renameSessionMock).not.toHaveBeenCalled();
   });
 
   it("stop aborts the stream and stops the backend run", async () => {

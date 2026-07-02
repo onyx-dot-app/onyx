@@ -38,6 +38,14 @@ export async function stopChatSession(sessionId: string): Promise<void> {
   });
 }
 
+// `name: null` makes the backend LLM-generate a title from the session's history.
+export async function renameChatSession(sessionId: string): Promise<void> {
+  await apiFetch<{ new_name: string | null }>("/chat/rename-chat-session", {
+    method: "PUT",
+    body: { chat_session_id: sessionId, name: null },
+  });
+}
+
 export type ChatSessionSharedStatus = "private" | "public";
 
 // Mirrors backend `ChatSessionDetails` (get-user-chat-sessions); `name` can be
@@ -85,9 +93,8 @@ export function useChatSessions() {
     getNextPageParam: (lastPage) => {
       if (!lastPage.has_more || lastPage.sessions.length === 0)
         return undefined;
-      // `before` is exclusive (backend: time_updated < before); a same-microsecond
-      // tie straddling a page boundary can drop a session. Matches web's cursor; a
-      // real fix needs a backend (time_updated, id) compound cursor — deferred to PR 4.
+      // `before` is exclusive, so a same-timestamp tie across a page boundary can drop a session.
+      // Matches web; the compound-cursor fix stays out of scope to keep the port backend-free.
       return lastPage.sessions[lastPage.sessions.length - 1]!.time_updated;
     },
   });
