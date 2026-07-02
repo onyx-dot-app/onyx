@@ -9,11 +9,14 @@ from sqlalchemy.orm import Session
 
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.llm import fetch_default_contextual_rag_model
 from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import upsert_llm_provider
+from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexModelStatus
+from onyx.db.models import SearchSettings
 from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import update_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
@@ -24,6 +27,8 @@ from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.search_settings import set_new_search_settings
 from onyx.server.manage.search_settings import update_saved_search_settings
 from shared_configs.configs import PRESERVED_SEARCH_FIELDS
+from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
+from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
 TEST_PROVIDER_NAME = "test-contextual-provider"
 TEST_MODEL_NAME = "test-contextual-model"
@@ -148,6 +153,60 @@ def baseline_search_settings(
         enable_contextual_rag=baseline.enable_contextual_rag,
         model_configuration_id=None,
     )
+
+
+@patch("onyx.server.manage.search_settings.get_all_document_indices")
+@patch("onyx.server.manage.search_settings.get_default_document_index")
+def test_port_seed_excludes_invalid_cc_pair(
+    mock_get_default_doc_index: MagicMock,  # noqa: ARG001
+    mock_get_all_doc_indices: MagicMock,
+    baseline_search_settings: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    """The port seed loop must seed only cc_pairs the port will actually copy. An
+    INVALID cc_pair (excluded by the port's indexable_statuses scope) must NOT get a
+    synthetic seed — otherwise its backlog is never ported while the seed cursor
+    claims "already done", so its docs vanish from the live index once it's fixed."""
+    mock_get_all_doc_indices.return_value = []
+
+    active_pair = make_cc_pair(db_session)
+    invalid_pair = make_cc_pair(db_session)
+    active_pair.status = ConnectorCredentialPairStatus.ACTIVE
+    invalid_pair.status = ConnectorCredentialPairStatus.INVALID
+    db_session.commit()
+
+    future_id: int | None = None
+    try:
+        future_id = set_new_search_settings(
+            search_settings_new=_make_creation_request(enable_contextual_rag=False),
+            _=MagicMock(),
+            db_session=db_session,
+        ).id
+
+        seeded_cc_ids = {
+            row.connector_credential_pair_id
+            for row in db_session.query(IndexAttempt).filter(
+                IndexAttempt.search_settings_id == future_id,
+                IndexAttempt.is_synthetic_seed.is_(True),
+            )
+        }
+        assert active_pair.id in seeded_cc_ids  # portable -> seeded
+        assert invalid_pair.id not in seeded_cc_ids  # not portable -> NOT seeded
+    finally:
+        db_session.rollback()
+        db_session.query(IndexAttempt).filter(
+            IndexAttempt.connector_credential_pair_id.in_(
+                [active_pair.id, invalid_pair.id]
+            )
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+        if future_id is not None:
+            db_session.query(SearchSettings).filter(
+                SearchSettings.id == future_id
+            ).delete(synchronize_session="fetch")
+            db_session.commit()
+        cleanup_cc_pair(db_session, active_pair)
+        cleanup_cc_pair(db_session, invalid_pair)
 
 
 # port-flow swap gate: no cc_pair requires porting in this test, so it swaps now
