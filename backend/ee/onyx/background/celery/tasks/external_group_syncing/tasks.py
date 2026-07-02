@@ -109,9 +109,10 @@ def _check_external_group_failure_threshold(
     last_failure: ExternalGroupSyncFailure,
 ) -> None:
     failure_ratio = total_failures / (total_groups_seen or 1)
+    # Continue only while both the absolute and relative failure limits are safe.
     if (
         total_failures <= _EXTERNAL_GROUP_FAILURE_THRESHOLD
-        or failure_ratio <= _EXTERNAL_GROUP_FAILURE_RATIO_THRESHOLD
+        and failure_ratio <= _EXTERNAL_GROUP_FAILURE_RATIO_THRESHOLD
     ):
         return
 
