@@ -16,6 +16,7 @@ import {
   TENANT_ID_COOKIE_NAME,
 } from "@/lib/constants";
 import { useCurrentUser } from "@/lib/users/hooks";
+import { redirect } from "next/navigation";
 
 const initialValues = { password: "", confirmPassword: "" };
 
@@ -35,10 +36,6 @@ export default function ResetPasswordPage() {
   const { logoUrl } = useSettings();
 
   useEffect(() => {
-    if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
-      router.replace("/auth/login");
-      return;
-    }
     if (tenantId) {
       Cookies.set(TENANT_ID_COOKIE_NAME, tenantId, {
         path: "/",
@@ -49,7 +46,7 @@ export default function ResetPasswordPage() {
     }
   }, [tenantId, router]);
 
-  if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) return null;
+  if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) redirect("/auth/login");
 
   async function handleSubmit(values: typeof initialValues) {
     if (!token) {

@@ -18,6 +18,7 @@ import {
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { markdown } from "@opal/utils";
+import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 
 interface FormValues {
   email: string;
@@ -161,9 +162,9 @@ export default function EmailPasswordForm({
                     : undefined
                 }
                 topRight={
-                  isSignup
-                    ? undefined
-                    : markdown("[Forgot Password?](/auth/reset-password)")
+                  NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && !isSignup
+                    ? markdown("[Forgot Password?](/auth/reset-password)")
+                    : undefined
                 }
               >
                 <PasswordInputTypeInField
