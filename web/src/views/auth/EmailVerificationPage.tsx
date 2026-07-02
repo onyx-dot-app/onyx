@@ -12,6 +12,7 @@ import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { requestEmailVerification, verifyEmail } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
 
 export default function EmailVerificationPage() {
   const router = useRouter();
@@ -93,9 +94,7 @@ export default function EmailVerificationPage() {
         title="Check your inbox"
         logoSrc={logoUrl}
         description="We've sent a verification link to your email address."
-        bottomPrompt={markdown(
-          "Back to [Sign In](/auth/login) or [Create an Account](/auth/signup)"
-        )}
+        bottomPrompt={backToLoginOrSignupCopy()}
       >
         <AuthLayouts.Message
           title={`Email sent to ${user.email}`}

@@ -8,14 +8,7 @@ export function welcomeCardCopy(appName: string) {
   } as const;
 }
 
-export function createAccountCardCopy(appName: string) {
-  return {
-    title: "Create account",
-    description: `Get started with ${appName}`,
-  } as const;
-}
-
-export function bottomPrompt(
+export function backToLoginOrSignupCopy(
   signupUnavailable: boolean = false
 ): string | RichStr {
   return signupUnavailable

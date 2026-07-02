@@ -6,7 +6,7 @@ import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
-import { bottomPrompt, welcomeCardCopy } from "@/lib/auth/copies";
+import { backToLoginOrSignupCopy, welcomeCardCopy } from "@/lib/auth/copies";
 
 export default function SignupUnavailablePage() {
   const router = useRouter();
@@ -22,7 +22,7 @@ export default function SignupUnavailablePage() {
   return (
     <AuthLayouts.Card
       {...welcomeCardCopy(appName)}
-      bottomPrompt={bottomPrompt(true)}
+      bottomPrompt={backToLoginOrSignupCopy(true)}
       logoSrc={logoUrl}
     >
       <AuthLayouts.Message

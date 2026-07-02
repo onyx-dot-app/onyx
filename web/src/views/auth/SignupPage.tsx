@@ -8,7 +8,6 @@ import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { markdown } from "@opal/utils";
-import { createAccountCardCopy } from "@/lib/auth/copies";
 
 export default function SignupPage() {
   const searchParams = useSearchParams();
@@ -32,7 +31,8 @@ export default function SignupPage() {
 
   return (
     <AuthLayouts.Card
-      {...createAccountCardCopy(appName)}
+      title="Create account"
+      description={`Get started with ${appName}`}
       bottomPrompt={markdown(
         "Already have an account? [Sign In](/auth/login?autoRedirectToSignup=false)"
       )}
