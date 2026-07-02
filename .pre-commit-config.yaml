@@ -166,6 +166,21 @@ repos:
 
   - repo: local
     hooks:
+      # Regenerate the baseline with `env_inventory.py --write-baseline`.
+      - id: env-drift-baseline
+        name: env drift baseline
+        description: "Fail on new undocumented operator-facing env vars (drift gate)"
+        language: system
+        entry: python3 backend/scripts/env_inventory.py --check-baseline
+        pass_filenames: false
+        stages: [pre-commit]
+        files: >-
+          (?x)^(
+            backend/(onyx|ee|shared_configs|model_server)/.*\.py
+            |backend/scripts/env_inventory(\.py|_baseline\.txt)
+            |deployment/docker_compose/env\.(template|prod\.template)
+            |deployment/helm/charts/onyx/(values\.yaml|templates/configmap\.yaml)
+          )$
       - id: bun-install
         name: bun install
         description: "Automatically run 'bun install' after a checkout, pull or rebase"
