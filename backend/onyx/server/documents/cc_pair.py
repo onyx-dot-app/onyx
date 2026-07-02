@@ -229,32 +229,42 @@ def _get_cc_pair_source_or_raise(
     return cc_pair.connector.source
 
 
-def _external_group_sync_attempt_is_relevant_to_cc_pair(
-    attempt_id: int,
+def _check_user_has_access_to_external_group_sync_attempt_errors(
+    user: User,
     cc_pair_id: int,
-    source: DocumentSource,
+    attempt_id: int,
     db_session: Session,
-) -> bool:
+) -> None:
+    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
     attempt = get_external_group_sync_attempt(
         db_session=db_session,
         attempt_id=attempt_id,
         eager_load_connector=True,
     )
     if attempt is None or attempt.connector_credential_pair is None:
-        return False
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "External group sync attempt not found for current user permissions",
+        )
 
     if attempt.connector_credential_pair_id == cc_pair_id:
-        return True
+        return
 
     source_group_sync_is_cc_pair_agnostic = fetch_ee_implementation_or_noop(
         "onyx.external_permissions.sync_params",
         "source_group_sync_is_cc_pair_agnostic",
         noop_return_value=False,
     )
-    if not source_group_sync_is_cc_pair_agnostic(source):
-        return False
+    if (
+        source_group_sync_is_cc_pair_agnostic(source)
+        and attempt.connector_credential_pair.connector.source == source
+    ):
+        return
 
-    return attempt.connector_credential_pair.connector.source == source
+    raise OnyxError(
+        OnyxErrorCode.NOT_FOUND,
+        "External group sync attempt not found for current user permissions",
+    )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/permission-sync-attempts")
@@ -367,17 +377,12 @@ def get_cc_pair_external_group_sync_attempt_errors(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[ExternalGroupSyncErrorSnapshot]:
-    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
-    if not _external_group_sync_attempt_is_relevant_to_cc_pair(
-        attempt_id=attempt_id,
+    _check_user_has_access_to_external_group_sync_attempt_errors(
+        user=user,
         cc_pair_id=cc_pair_id,
-        source=source,
+        attempt_id=attempt_id,
         db_session=db_session,
-    ):
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            "External group sync attempt not found for current user permissions",
-        )
+    )
 
     total_count = count_external_group_sync_errors_for_attempt(
         external_group_sync_attempt_id=attempt_id,
