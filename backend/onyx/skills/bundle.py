@@ -252,17 +252,12 @@ def rewrite_custom_bundle_skill_md(
     ):
         for info in source_zip.infolist():
             try:
-                normalized = _check_zip_entry_path(info.filename)
+                normalized = _validated_bundle_path(info)
             except OnyxError as exc:
                 raise OnyxError(
                     OnyxErrorCode.INTERNAL_ERROR,
-                    "Stored skill bundle contains an unsafe path.",
+                    "Stored skill bundle contains an unsafe path or symlink.",
                 ) from exc
-            if _is_symlink(info):
-                raise OnyxError(
-                    OnyxErrorCode.INTERNAL_ERROR,
-                    "Stored skill bundle contains a symlink.",
-                )
 
             if normalized == SKILL_MD_NAME:
                 if saw_skill_md:
@@ -295,26 +290,9 @@ def rewrite_custom_bundle_skill_md(
     return rewritten
 
 
-def _is_symlink(info: zipfile.ZipInfo) -> bool:
-    """True if the zip entry was archived as a Unix symlink.
-
-    We inspect the zip-entry metadata (``external_attr`` mode bits) rather
-    than ``Path.is_symlink()`` because at validation time nothing has been
-    extracted to disk yet — and the whole point of the check is to refuse
-    to extract.
-    """
-    if info.create_system != _ZIP_UNIX_CREATE_SYSTEM:
-        return False
-    unix_mode = (info.external_attr >> 16) & 0xFFFF
-    return stat.S_ISLNK(unix_mode)
-
-
-def _check_zip_entry_path(name: str) -> str:
-    """Reject path-traversal entries; return a clean relative posix path.
-
-    A zip-bomb-style entry like ``../../etc/passwd`` or ``/etc/passwd`` must
-    never reach disk. We refuse to even look at the file contents in that case.
-    """
+def _validated_bundle_path(info: zipfile.ZipInfo) -> str:
+    """Return the normalized bundle path, rejecting traversal and symlinks."""
+    name = info.filename
     trimmed = name.rstrip("/")
     if not trimmed:
         raise OnyxError(
@@ -331,6 +309,12 @@ def _check_zip_entry_path(name: str) -> str:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"bundle entry escapes root: '{name}'",
+        )
+    unix_mode = (info.external_attr >> 16) & 0xFFFF
+    if info.create_system == _ZIP_UNIX_CREATE_SYSTEM and stat.S_ISLNK(unix_mode):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"bundle contains a symlink: '{trimmed}'",
         )
     return trimmed
 
@@ -369,16 +353,10 @@ def validate_custom_bundle(
         saw_skill_md = False
 
         for info in zf.infolist():
+            normalized = _validated_bundle_path(info)
             if info.is_dir():
-                _check_zip_entry_path(info.filename)
                 continue
 
-            normalized = _check_zip_entry_path(info.filename)
-            if _is_symlink(info):
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    f"bundle contains a symlink: '{normalized}'",
-                )
             if normalized.endswith(TEMPLATE_SUFFIX):
                 raise OnyxError(
                     OnyxErrorCode.INVALID_INPUT,
@@ -454,12 +432,7 @@ def _safe_unzip(
         with zf:
             total = 0
             for info in zf.infolist():
-                if _is_symlink(info):
-                    raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
-                        f"bundle contains a symlink: '{info.filename}'",
-                    )
-                normalized = _check_zip_entry_path(info.filename)
+                normalized = _validated_bundle_path(info)
                 target = (dest / normalized).resolve()
                 try:
                     target.relative_to(dest_resolved)
