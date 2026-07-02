@@ -72,3 +72,7 @@ export interface SkillPreview {
   author_email: string | null;
   instructions_markdown: string;
 }
+
+export type SkillEditableDetail = CustomSkill & {
+  instructions_markdown: string;
+};

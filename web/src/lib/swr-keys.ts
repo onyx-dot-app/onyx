@@ -127,6 +127,7 @@ export const SWR_KEYS = {
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",

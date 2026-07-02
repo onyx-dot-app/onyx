@@ -46,8 +46,23 @@ export async function createCustomSkill(bundle: File): Promise<CustomSkill> {
 }
 
 export interface PatchCustomSkillInput {
+  name?: string;
+  description?: string;
+  instructions_markdown?: string;
   public_permission?: SkillSharePermission | null;
   enabled?: boolean;
+}
+
+export interface SkillShareUpdatePayload {
+  user_shares?: {
+    user_id: string;
+    permission: SkillSharePermission;
+  }[];
+  group_shares?: {
+    group_id: number;
+    permission: SkillSharePermission;
+  }[];
+  public_permission?: SkillSharePermission | null;
 }
 
 export async function replaceUserSkillBundle(
@@ -71,6 +86,30 @@ export async function patchUserSkill(
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
+  });
+  return handle<CustomSkill>(res);
+}
+
+export async function updateSkillShares(
+  skillId: string,
+  payload: SkillShareUpdatePayload
+): Promise<CustomSkill> {
+  const res = await fetch(`/api/skills/custom/${skillId}/share`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle<CustomSkill>(res);
+}
+
+export async function transferSkillOwnership(
+  skillId: string,
+  payload: { new_owner_user_id: string }
+): Promise<CustomSkill> {
+  const res = await fetch(`/api/skills/custom/${skillId}/transfer-ownership`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
   return handle<CustomSkill>(res);
 }
