@@ -1,8 +1,5 @@
 import copy
-import os
-import threading
 from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -55,14 +52,10 @@ from onyx.llm.well_known_providers.constants import (
 )
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
-from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.timing import log_generator_function_time
 
 logger = setup_logger()
-
-_env_lock = threading.Lock()
 
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper
@@ -753,22 +746,21 @@ class LitellmLLM(LLM):
             if tools and tool_choice is not None:
                 optional_kwargs["tool_choice"] = tool_choice
 
-            with temporary_env_and_lock(self._custom_config or {}):
-                response = litellm.completion(
-                    mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
-                    model=model,
-                    base_url=self._api_base or None,
-                    api_version=self._api_version or None,
-                    custom_llm_provider=self._custom_llm_provider or None,
-                    messages=messages,
-                    tools=tools,
-                    stream=stream,
-                    timeout=timeout_override or self._timeout,
-                    max_tokens=max_tokens,
-                    client=client,
-                    **optional_kwargs,
-                    **passthrough_kwargs,
-                )
+            response = litellm.completion(
+                mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
+                model=model,
+                base_url=self._api_base or None,
+                api_version=self._api_version or None,
+                custom_llm_provider=self._custom_llm_provider or None,
+                messages=messages,
+                tools=tools,
+                stream=stream,
+                timeout=timeout_override or self._timeout,
+                max_tokens=max_tokens,
+                client=client,
+                **optional_kwargs,
+                **passthrough_kwargs,
+            )
             return response
         except Exception as e:
             # for break pointing
@@ -849,11 +841,8 @@ class LitellmLLM(LLM):
             client = HTTPHandler(timeout=timeout_override or self._timeout)
 
         try:
-            # When custom_config is set, env vars are temporarily injected
-            # under a global lock. Using stream=True here means the lock is
-            # only held during connection setup (not the full inference).
-            # The chunks are then collected outside the lock and reassembled
-            # into a single ModelResponse via stream_chunk_builder.
+            # invoke() uses stream=True under the hood and reassembles the
+            # collected chunks into a single ModelResponse via stream_chunk_builder.
             from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
             from litellm import stream_chunk_builder
 
@@ -996,40 +985,3 @@ class LitellmLLM(LLM):
             finally:
                 if client is not None:
                     client.close()
-
-
-@contextmanager
-@log_generator_function_time()
-def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
-    """
-    Temporarily sets the environment variables to the given values.
-    _env_lock is held while the environment variables are set, so no concurrent
-    LLM call can observe them. Then cleans up the environment and releases the
-    lock.
-    """
-    if env_variables:
-        masked_env = {
-            key: mask_env_value_for_logging(key, value)
-            for key, value in env_variables.items()
-        }
-        logger.info(
-            "temporary_env_and_lock setting custom_config env var(s): %s",
-            masked_env,
-        )
-    with _env_lock:
-        logger.debug("Acquired lock in temporary_env_and_lock")
-        # Store original values (None if key didn't exist)
-        original_values: dict[str, str | None] = {
-            key: os.environ.get(key) for key in env_variables
-        }
-        try:
-            os.environ.update(env_variables)
-            yield
-        finally:
-            for key, original_value in original_values.items():
-                if original_value is None:
-                    os.environ.pop(key, None)  # Remove if it didn't exist before
-                else:
-                    os.environ[key] = original_value  # Restore original value
-
-    logger.debug("Released lock in temporary_env_and_lock")
