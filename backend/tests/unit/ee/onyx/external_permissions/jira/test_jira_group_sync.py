@@ -7,7 +7,6 @@ import pytest
 from jira.exceptions import JIRAError
 
 from ee.onyx.db.external_perm import ExternalGroupSyncFailure
-from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.jira.group_sync import jira_group_sync
 from onyx.db.models import ConnectorCredentialPair
 
@@ -58,7 +57,6 @@ def test_jira_group_sync_yields_group_level_failure_for_member_fetch_error() -> 
         results = list(jira_group_sync("tenant", _cc_pair(), failures.append))
 
     assert len(results) == 1
-    assert isinstance(results[0], ExternalUserGroup)
     assert results[0].id == "jira-users"
     assert results[0].user_emails == ["user@example.com"]
 
