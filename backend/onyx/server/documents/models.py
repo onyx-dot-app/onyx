@@ -396,7 +396,9 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
 
     @classmethod
     def from_external_group_sync_attempt_db_model(
-        cls, attempt: ExternalGroupPermissionSyncAttempt
+        cls,
+        attempt: ExternalGroupPermissionSyncAttempt,
+        error_count: int,
     ) -> "ExternalGroupSyncAttemptSnapshot":
         return ExternalGroupSyncAttemptSnapshot(
             id=attempt.id,
@@ -406,7 +408,7 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
             total_users_processed=attempt.total_users_processed or 0,
             total_groups_processed=attempt.total_groups_processed or 0,
             total_group_memberships_synced=attempt.total_group_memberships_synced or 0,
-            error_count=len(attempt.error_rows),
+            error_count=error_count,
             time_created=attempt.time_created.isoformat(),
             time_started=(
                 attempt.time_started.isoformat() if attempt.time_started else None

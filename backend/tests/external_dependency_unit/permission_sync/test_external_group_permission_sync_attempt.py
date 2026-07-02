@@ -25,6 +25,9 @@ from onyx.db.permission_sync_attempt import complete_external_group_sync_attempt
 from onyx.db.permission_sync_attempt import count_external_group_sync_errors_for_attempt
 from onyx.db.permission_sync_attempt import create_external_group_sync_attempt
 from onyx.db.permission_sync_attempt import create_external_group_sync_error
+from onyx.db.permission_sync_attempt import (
+    get_error_counts_for_external_group_sync_attempts,
+)
 from onyx.db.permission_sync_attempt import get_external_group_sync_attempt
 from onyx.db.permission_sync_attempt import get_external_group_sync_errors_for_attempt
 from onyx.db.permission_sync_attempt import (
@@ -243,6 +246,9 @@ class TestExternalGroupPermissionSyncAttempt:
         aggregate sync attempt so a run can complete with errors."""
         cc_pair = _create_test_connector_credential_pair(db_session)
         attempt_id = create_external_group_sync_attempt(cc_pair.id, db_session)
+        attempt_id_without_errors = create_external_group_sync_attempt(
+            cc_pair.id, db_session
+        )
 
         error_id = create_external_group_sync_error(
             external_group_sync_attempt_id=attempt_id,
@@ -263,6 +269,10 @@ class TestExternalGroupPermissionSyncAttempt:
             )
             == 1
         )
+        assert get_error_counts_for_external_group_sync_attempts(
+            external_group_sync_attempt_ids=[attempt_id, attempt_id_without_errors],
+            db_session=db_session,
+        ) == {attempt_id: 1}
 
         errors = get_external_group_sync_errors_for_attempt(
             external_group_sync_attempt_id=attempt_id,

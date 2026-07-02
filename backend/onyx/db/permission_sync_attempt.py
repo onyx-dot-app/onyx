@@ -507,6 +507,25 @@ def count_external_group_sync_errors_for_attempt(
     return 0 if result is None else result
 
 
+def get_error_counts_for_external_group_sync_attempts(
+    external_group_sync_attempt_ids: list[int],
+    db_session: Session,
+) -> dict[int, int]:
+    if not external_group_sync_attempt_ids:
+        return {}
+
+    stmt = (
+        select(ExternalGroupSyncError.external_group_sync_attempt_id, func.count())
+        .where(
+            ExternalGroupSyncError.external_group_sync_attempt_id.in_(
+                external_group_sync_attempt_ids
+            )
+        )
+        .group_by(ExternalGroupSyncError.external_group_sync_attempt_id)
+    )
+    return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}
+
+
 def get_external_group_sync_errors_for_attempt(
     external_group_sync_attempt_id: int,
     db_session: Session,

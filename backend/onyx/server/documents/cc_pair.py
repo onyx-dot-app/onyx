@@ -54,6 +54,9 @@ from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import User
 from onyx.db.permission_sync_attempt import count_external_group_sync_errors_for_attempt
+from onyx.db.permission_sync_attempt import (
+    get_error_counts_for_external_group_sync_attempts,
+)
 from onyx.db.permission_sync_attempt import get_external_group_sync_attempt
 from onyx.db.permission_sync_attempt import get_external_group_sync_errors_for_attempt
 from onyx.db.permission_sync_attempt import (
@@ -354,13 +357,19 @@ def get_cc_pair_external_group_sync_attempts(
     )
     start_idx = page_num * page_size
     end_idx = start_idx + page_size
+    attempts = all_attempts[start_idx:end_idx]
+    error_counts = get_error_counts_for_external_group_sync_attempts(
+        external_group_sync_attempt_ids=[attempt.id for attempt in attempts],
+        db_session=db_session,
+    )
     return CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot](
         applicable=True,
         items=[
             ExternalGroupSyncAttemptSnapshot.from_external_group_sync_attempt_db_model(
-                attempt
+                attempt,
+                error_count=error_counts.get(attempt.id, 0),
             )
-            for attempt in all_attempts[start_idx:end_idx]
+            for attempt in attempts
         ],
         total_items=len(all_attempts),
     )
