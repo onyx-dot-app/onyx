@@ -8,9 +8,6 @@ or `-Q` entry would silently break with every other test still green:
 
   beat schedules check_for_port  ->  docprocessing worker consumes the `port` queue
   ->  docprocessing worker has run_port_attempt registered to execute it.
-
-The port task runs on docprocessing (not light) so its long re-embed can't starve
-the light worker's security-sensitive vespa_metadata_sync (ACL revocation) queue.
 """
 
 import re

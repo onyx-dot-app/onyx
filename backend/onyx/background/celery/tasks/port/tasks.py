@@ -508,7 +508,7 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
                                 active.id,
                             )
                     continue
-                # At the concurrency cap: don't start new attempts this tick (the
+                # At the concurrency cap: don't start new attempts(the
                 # remaining cc_pairs still get recovery re-enqueues above next pass).
                 if active_attempts >= MAX_CONCURRENT_PORT_ATTEMPTS:
                     continue
