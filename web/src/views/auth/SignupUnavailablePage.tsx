@@ -7,7 +7,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
-import { createAccountCardCopy } from "@/lib/auth/copies";
+import { welcomeCardCopy } from "@/lib/auth/copies";
 
 export default function UnavailablePage() {
   const router = useRouter();
@@ -22,15 +22,15 @@ export default function UnavailablePage() {
 
   return (
     <AuthLayouts.Card
-      {...createAccountCardCopy(appName)}
+      {...welcomeCardCopy(appName)}
       bottomPrompt={markdown(
-        "Already have an account? [Sign In](/auth/login?autoRedirectToSignup=false)"
+        "Back to [Sign In](/auth/login?autoRedirectToSignup=false)"
       )}
       logoSrc={logoUrl}
     >
       <AuthLayouts.Message
         title="New account creation unavailable."
-        description="New account creation will be available again soon."
+        description="Existing accounts can still [sign in](/auth/login?autoRedirectToSignup=false). New account creation will be available again soon."
       />
     </AuthLayouts.Card>
   );
