@@ -1,49 +1,23 @@
-import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
-import Text from "@/refresh-components/texts/Text";
+import { AuthLayouts } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import { DOCS_BASE_URL } from "@/lib/constants";
-import { SvgAlertCircle } from "@opal/icons";
 
 export default function Error() {
   return (
-    <ErrorPageLayout>
-      <div className="flex flex-row items-center gap-2">
-        <Text as="p" headingH2>
-          We encountered an issue
-        </Text>
-        <SvgAlertCircle className="w-6 h-6 stroke-text-04" />
-      </div>
-
-      <Text as="p" text03>
-        It seems there was a problem loading your Onyx settings. This could be
-        due to a configuration issue or incomplete setup.
-      </Text>
-
-      <Text as="p" text03>
-        If you&apos;re an admin, please review our{" "}
-        <a
-          className="text-action-link-05"
-          href={`${DOCS_BASE_URL}?utm_source=app&utm_medium=error_page&utm_campaign=config_error`}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          documentation
-        </a>{" "}
-        for proper configuration steps. If you&apos;re a user, please contact
-        your admin for assistance.
-      </Text>
-
-      <Text as="p" text03>
-        Need help? Join our{" "}
-        <a
-          className="text-action-link-05"
-          href="https://discord.gg/4NA5SbzrWb"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Discord community
-        </a>{" "}
-        for support.
-      </Text>
-    </ErrorPageLayout>
+    <AuthLayouts.Root>
+      <AuthLayouts.Card
+        title="We encountered an issue"
+        description="There was a problem loading your Onyx settings. This could be due to a configuration issue or incomplete setup."
+      >
+        <AuthLayouts.Message
+          messageType="warning"
+          title="Unable to load settings"
+          description={markdown(
+            `If you're an admin, please review our [documentation](${DOCS_BASE_URL}?utm_source=app&utm_medium=error_page&utm_campaign=config_error) for proper configuration steps. If you're a user, please contact your admin for assistance.`,
+            "Need help? Join our [Discord community](https://discord.gg/4NA5SbzrWb) for support."
+          )}
+        />
+      </AuthLayouts.Card>
+    </AuthLayouts.Root>
   );
 }

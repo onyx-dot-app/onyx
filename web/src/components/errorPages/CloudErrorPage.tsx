@@ -1,22 +1,17 @@
-import Text from "@/refresh-components/texts/Text";
-import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
+import { AuthLayouts } from "@opal/layouts";
 
 export default function CloudError() {
   return (
-    <ErrorPageLayout>
-      <Text as="p" headingH2>
-        Maintenance in Progress
-      </Text>
-
-      <Text as="p" text03>
-        Onyx is currently in a maintenance window. Please check back in a couple
-        of minutes.
-      </Text>
-
-      <Text as="p" text03>
-        We apologize for any inconvenience this may cause and appreciate your
-        patience.
-      </Text>
-    </ErrorPageLayout>
+    <AuthLayouts.Root>
+      <AuthLayouts.Card
+        title="Maintenance in Progress"
+        description="Onyx is currently in a maintenance window."
+      >
+        <AuthLayouts.Message
+          title="We'll be back soon."
+          description="Please check back in a couple of minutes. We apologize for any inconvenience."
+        />
+      </AuthLayouts.Card>
+    </AuthLayouts.Root>
   );
 }
