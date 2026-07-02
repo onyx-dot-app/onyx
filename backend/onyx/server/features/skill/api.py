@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
-from onyx.auth.users import is_user_curator_or_admin
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import Skill
@@ -81,12 +80,7 @@ def fetch_skill_for_current_user(
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    return skill_response_for_user(
-        skill,
-        user,
-        db_session,
-        include_share_details=is_user_curator_or_admin(user),
-    )
+    return skill_response_for_user(skill, user, db_session)
 
 
 @user_router.get("/{skill_id}/preview")

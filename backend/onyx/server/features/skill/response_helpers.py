@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.auth.users import is_user_curator_or_admin
 from onyx.db.enums import SkillAccessLevel
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill
@@ -112,7 +111,6 @@ def skills_list_response_for_user(
 ) -> SkillsList:
     builtins: list[SkillResponse] = []
     customs: list[SkillResponse] = []
-    include_share_details = is_user_curator_or_admin(user)
     user_group_ids = get_user_group_ids_for_user(db_session, user.id)
     curated_user_group_ids = (
         get_curated_user_group_ids_for_user(db_session, user.id)
@@ -140,7 +138,6 @@ def skills_list_response_for_user(
                 db_session,
                 user_group_ids=user_group_ids,
                 curated_user_group_ids=curated_user_group_ids,
-                include_share_details=include_share_details,
             )
         )
 
