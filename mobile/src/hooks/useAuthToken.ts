@@ -4,8 +4,11 @@ import { getToken } from "@/api/auth/tokenStore";
 import { useSession } from "@/state/session";
 
 // Bearer token in state (async keychain read) for attaching to image request headers.
+// Re-reads on server switch and on auth-state change (login/logout) so a stale bearer isn't
+// kept after the session boundary moves.
 export function useAuthToken(): string | null {
   const serverUrl = useSession((state) => state.serverUrl);
+  const status = useSession((state) => state.status);
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,7 +23,7 @@ export function useAuthToken(): string | null {
     return () => {
       active = false;
     };
-  }, [serverUrl]);
+  }, [serverUrl, status]);
 
   return token;
 }

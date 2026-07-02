@@ -67,7 +67,13 @@ export function resolveLiveAgent({
 
   if (selectedAgentId != null) {
     const selected = agents.find((a) => a.id === selectedAgentId);
-    if (selected) return selected;
+    // Ignore an explicit default-agent (id 0) selection when the workspace disables it.
+    if (
+      selected &&
+      !(disableDefaultAssistant && selected.id === DEFAULT_AGENT_ID)
+    ) {
+      return selected;
+    }
   }
 
   if (disableDefaultAssistant) {

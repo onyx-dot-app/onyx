@@ -16,7 +16,7 @@ import SvgSearch from "@/icons/search";
 import SvgX from "@/icons/x";
 
 export default function AgentsScreen() {
-  const { agents } = useAgents();
+  const { agents, isLoading, isError } = useAgents();
   const selectAgent = useSelectAgent();
   const [search, setSearch] = useState("");
 
@@ -25,6 +25,15 @@ export default function AgentsScreen() {
     [agents, search],
   );
   const total = featured.length + all.length;
+
+  // Keep loading/error distinct from a genuinely empty result.
+  const statusMessage = isLoading
+    ? "Loading agents…"
+    : isError
+      ? "Couldn't load agents."
+      : total === 0
+        ? "No agents found"
+        : null;
 
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-background-neutral-00">
@@ -56,13 +65,13 @@ export default function AgentsScreen() {
         </SettingsLayout.Header>
 
         <SettingsLayout.Body>
-          {total === 0 ? (
+          {statusMessage ? (
             <Text
               font="secondary-body"
               color="text-03"
               className="py-24 text-center"
             >
-              No agents found
+              {statusMessage}
             </Text>
           ) : null}
           {featured.length > 0 ? (

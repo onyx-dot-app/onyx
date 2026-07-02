@@ -29,7 +29,7 @@ export function usePinnedAgents() {
   const serverUrl = useSession((state) => state.serverUrl);
   const queryClient = useQueryClient();
 
-  const pinnedIds = user?.preferences?.pinned_assistants;
+  const pinnedIds = user?.preferences.pinned_assistants;
 
   const pinnedAgents = useMemo<MinimalAgent[]>(
     () => resolvePinnedAgents(agents, pinnedIds),

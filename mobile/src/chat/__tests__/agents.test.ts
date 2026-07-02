@@ -129,6 +129,18 @@ describe("resolveLiveAgent", () => {
       })?.id,
     ).toBe(2);
   });
+
+  it("ignores an explicit default-agent (id 0) selection when the default is disabled", () => {
+    expect(
+      resolveLiveAgent({
+        agents,
+        pinnedAgents: [agent({ id: 2 })],
+        disableDefaultAssistant: true,
+        selectedAgentId: DEFAULT_AGENT_ID,
+        sessionPersonaId: null,
+      })?.id,
+    ).toBe(2);
+  });
 });
 
 describe("buildAgentRail", () => {

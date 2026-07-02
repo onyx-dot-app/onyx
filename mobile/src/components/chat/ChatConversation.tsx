@@ -27,13 +27,13 @@ export function ChatConversation({ sessionId }: ChatConversationProps) {
     : undefined;
 
   // Landing: agent from the route param. Existing session: its creation-time persona wins.
-  const selectedAgentId = agentIdParam != null ? Number(agentIdParam) : null;
-  const liveAgent = useLiveAgent(
-    Number.isNaN(selectedAgentId) ? null : selectedAgentId,
-    session?.persona_id ?? null,
-  );
-  const personaId = liveAgent?.id ?? DEFAULT_AGENT_ID;
-  const isDefaultAgent = liveAgent == null || liveAgent.id === DEFAULT_AGENT_ID;
+  const parsedAgentId = agentIdParam != null ? Number(agentIdParam) : NaN;
+  const selectedAgentId = Number.isNaN(parsedAgentId) ? null : parsedAgentId;
+  const liveAgent = useLiveAgent(selectedAgentId, session?.persona_id ?? null);
+  // Back-stop with the explicit route selection before agents resolve, so a fast send can't
+  // create the session with the default persona instead of the picked agent.
+  const personaId = liveAgent?.id ?? selectedAgentId ?? DEFAULT_AGENT_ID;
+  const isDefaultAgent = personaId === DEFAULT_AGENT_ID;
 
   const { messages, chatState, input, setInput, submit, stop } =
     useChatController(sessionId, personaId);

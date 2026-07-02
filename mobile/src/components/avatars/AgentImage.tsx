@@ -9,8 +9,9 @@ interface AgentImageProps {
   size: number;
 }
 
-// Uploaded avatar (auth'd GET /persona/{id}/avatar) as a circle; expo-image disk-caches it
-// (immutable headers). Neutral placeholder until the bearer resolves.
+// Uploaded avatar (auth'd GET /persona/{id}/avatar) as a circle. Memory-only cache — these
+// are private, so they must not persist to disk across logout/server switch. Neutral
+// placeholder until the bearer resolves.
 export function AgentImage({ agentId, size }: AgentImageProps) {
   const token = useAuthToken();
   const dimension = { width: size, height: size, borderRadius: size / 2 };
@@ -27,7 +28,7 @@ export function AgentImage({ agentId, size }: AgentImageProps) {
       }}
       style={dimension}
       contentFit="cover"
-      cachePolicy="memory-disk"
+      cachePolicy="memory"
     />
   );
 }

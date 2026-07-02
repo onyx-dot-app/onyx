@@ -19,7 +19,9 @@ export interface CurrentUser {
   email: string;
   role: UserRole;
   is_active: boolean;
-  preferences?: UserPreferences;
+  // `/me` always returns preferences; keep it required to surface a boundary mismatch rather
+  // than silently treating malformed data as "no pinned assistants".
+  preferences: UserPreferences;
 }
 
 // `cloud` = Google OAuth + basic email/password.
