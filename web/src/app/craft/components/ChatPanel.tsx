@@ -47,6 +47,7 @@ import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsR
 import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
+import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
@@ -656,6 +657,7 @@ export default function BuildChatPanel({
               changes grow leftward into empty space without shifting anything. */}
               <div className="flex flex-row items-center gap-2 shrink-0">
                 <SandboxStatusIndicator />
+                <SandboxAsleepNotice />
                 {/* Output panel toggle — same icon for open and close */}
                 {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <IconButton

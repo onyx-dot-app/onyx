@@ -33,6 +33,7 @@ from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
@@ -52,6 +53,7 @@ from onyx.server.features.build.session.models import DetailedSessionResponse
 from onyx.server.features.build.session.models import OpencodeHistorySnapshotResponse
 from onyx.server.features.build.session.models import PptxPreviewResponse
 from onyx.server.features.build.session.models import PreProvisionedCheckResponse
+from onyx.server.features.build.session.models import SandboxStatusResponse
 from onyx.server.features.build.session.models import SessionCreateRequest
 from onyx.server.features.build.session.models import SessionListResponse
 from onyx.server.features.build.session.models import SessionNameGenerateResponse
@@ -210,6 +212,28 @@ def get_session_details(
     base_response = SessionResponse.from_model(session, sandbox)
     return DetailedSessionResponse.from_session_response(
         base_response, session_loaded_in_sandbox=session_loaded
+    )
+
+
+@router.get("/{session_id}/sandbox-status")
+def get_sandbox_status(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SandboxStatusResponse:
+    """Lightweight DB-only read of the user's sandbox status for idle-timer confirmation."""
+    session = get_build_session(session_id, user.id, db_session)
+
+    if session is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
+
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+
+    return SandboxStatusResponse(
+        status=sandbox.status if sandbox else None,
+        created_at=sandbox.created_at if sandbox else None,
+        last_heartbeat=sandbox.last_heartbeat if sandbox else None,
+        idle_timeout_seconds=SANDBOX_IDLE_TIMEOUT_SECONDS,
     )
 
 

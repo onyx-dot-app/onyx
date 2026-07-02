@@ -11,6 +11,7 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
+from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 
 if TYPE_CHECKING:
     from onyx.db.models import BuildSession
@@ -53,6 +54,7 @@ class SandboxResponse(BaseModel):
     container_id: str | None
     created_at: datetime
     last_heartbeat: datetime | None
+    idle_timeout_seconds: int
 
     @classmethod
     def from_model(cls, sandbox: Any) -> "SandboxResponse":
@@ -63,7 +65,17 @@ class SandboxResponse(BaseModel):
             container_id=sandbox.container_id,
             created_at=sandbox.created_at,
             last_heartbeat=sandbox.last_heartbeat,
+            idle_timeout_seconds=SANDBOX_IDLE_TIMEOUT_SECONDS,
         )
+
+
+class SandboxStatusResponse(BaseModel):
+    """Lightweight sandbox status for client-side idle-timer confirmation."""
+
+    status: SandboxStatus | None
+    created_at: datetime | None
+    last_heartbeat: datetime | None
+    idle_timeout_seconds: int
 
 
 class ArtifactResponse(BaseModel):
