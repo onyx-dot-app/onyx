@@ -226,10 +226,7 @@ export const MemoizedLink = memo(
       <a
         href={url}
         target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e: React.MouseEvent) => {
-          // Normal onClick relies on browser defaults
-        }}
+        onClick={undefined}
         onPointerDown={(e: React.PointerEvent) => {
           if (e.pointerType === "mouse" && e.button !== 0) return;
           e.preventDefault();
