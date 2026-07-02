@@ -80,13 +80,21 @@ repos:
       - id: uv-run
         alias: ruff
         name: ruff
-        args: ["ruff", "check", "--fix"]
+        # Run ruff from an isolated overlay (`--no-project --with`) so the hook
+        # never syncs the dev `.venv` or pulls in the backend toolchain (torch,
+        # nvidia-*, etc.) — a full project sync on a cold CI runner installs
+        # 450+ packages just to lint. Same isolation goal as the zizmor hook
+        # below. ruff discovers `[tool.ruff]` from pyproject.toml independently
+        # of uv's project handling, so config still applies. Keep the pinned
+        # version in sync with `ruff` in the dev dependency group in
+        # pyproject.toml.
+        args: ["--no-project", "--with=ruff==0.12.0", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
         alias: ruff-format
         name: ruff format
-        args: ["ruff", "format"]
+        args: ["--no-project", "--with=ruff==0.12.0", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
