@@ -8,7 +8,6 @@ import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { markdown } from "@opal/utils";
-import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 
 export default function SignupPage() {
   const searchParams = useSearchParams();
@@ -16,7 +15,6 @@ export default function SignupPage() {
   const defaultEmail = searchParams.get("email");
   const { authTypeMetadata } = useAuthTypeMetadata();
   const { logoUrl, appName } = useSettings();
-  const isSignupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
 
   useAuthRedirect("signup");
 
@@ -31,31 +29,13 @@ export default function SignupPage() {
     }
   }, [searchParams]);
 
-  const bottomPrompt = markdown(
-    "Already have an account? [Sign In](/auth/login?autoRedirectToSignup=false)"
-  );
-
-  if (isSignupDisabled) {
-    return (
-      <AuthLayouts.Card
-        title="Create account"
-        description={`Get started with ${appName}`}
-        bottomPrompt={bottomPrompt}
-        logoSrc={logoUrl}
-      >
-        <AuthLayouts.Message
-          title="New account creation unavailable."
-          description="New account creation will be available again soon."
-        />
-      </AuthLayouts.Card>
-    );
-  }
-
   return (
     <AuthLayouts.Card
       title="Create account"
       description={`Get started with ${appName}`}
-      bottomPrompt={bottomPrompt}
+      bottomPrompt={markdown(
+        "Already have an account? [Sign In](/auth/login?autoRedirectToSignup=false)"
+      )}
       logoSrc={logoUrl}
     >
       <EmailPasswordForm

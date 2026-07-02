@@ -9,6 +9,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { getAuthRedirect, AuthPage } from "@/lib/auth/redirect";
+import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 
 interface AuthTypeAPIResponse {
   auth_type: string;
@@ -73,13 +74,19 @@ export function useAuthTypeMetadata(): {
 export function useAuthRedirect(currentPage: AuthPage): boolean {
   const { user, isLoading } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
+  const signupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
   const router = useRouter();
 
   useEffect(() => {
     if (isLoading) return;
-    const destination = getAuthRedirect(user, authTypeMetadata, currentPage);
+    const destination = getAuthRedirect(
+      user,
+      authTypeMetadata,
+      currentPage,
+      signupDisabled
+    );
     if (destination) router.replace(destination as Route);
-  }, [isLoading, user, authTypeMetadata, currentPage, router]);
+  }, [isLoading, user, authTypeMetadata, currentPage, signupDisabled, router]);
 
   return isLoading;
 }

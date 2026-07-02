@@ -7,7 +7,8 @@ export type AuthPage = "login" | "signup" | "join";
 export function getAuthRedirect(
   user: User | null | undefined,
   authTypeMetadata: AuthTypeMetadata,
-  currentPage: AuthPage
+  currentPage: AuthPage,
+  signupDisabled?: boolean
 ): string | null {
   if (user === undefined) return null;
 
@@ -20,8 +21,9 @@ export function getAuthRedirect(
     return "/app";
   }
 
-  // Signup and join are only valid for email-based auth types.
   if (currentPage === "signup" || currentPage === "join") {
+    if (signupDisabled) return "/auth/unavailable";
+
     const supportsEmailAuth =
       authTypeMetadata.authType === AuthType.BASIC ||
       authTypeMetadata.authType === AuthType.CLOUD;
