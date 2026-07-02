@@ -1,5 +1,6 @@
 from typing import Any
 
+import pytest
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.external_perm import ExternalGroupSyncFailure
@@ -112,7 +113,7 @@ _EXPECTED_CONFLUENCE_GROUPS = [
 
 
 def _fail_on_group_sync_failure(failure: ExternalGroupSyncFailure) -> None:
-    raise AssertionError(f"Unexpected group sync failure: {failure}")
+    pytest.fail(f"Unexpected group sync failure: {failure}")
 
 
 def test_confluence_group_sync(

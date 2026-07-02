@@ -40,7 +40,7 @@ def _fake_token() -> str:
 
 
 def _fail_on_group_sync_failure(failure: ExternalGroupSyncFailure) -> None:
-    raise AssertionError(f"Unexpected group sync failure: {failure}")
+    pytest.fail(f"Unexpected group sync failure: {failure}")
 
 
 def _make_graph_page(
