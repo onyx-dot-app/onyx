@@ -47,7 +47,7 @@ export default function ForgotPasswordPage() {
   return (
     <AuthLayouts.Card
       title="Check your inbox"
-      description={`We sent a password reset link to ${email}.`}
+      description="We’ve sent a password reset link to your email address."
       bottomPrompt={backToLoginOrSignupCopy()}
       logoSrc={logoUrl}
     >
