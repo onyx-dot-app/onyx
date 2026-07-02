@@ -87,6 +87,16 @@ _EXTERNAL_GROUP_FAILURE_THRESHOLD = 3
 _EXTERNAL_GROUP_FAILURE_RATIO_THRESHOLD = 0.1
 
 
+class ExternalGroupSyncFailureThresholdError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        full_exception_trace: str | None,
+    ) -> None:
+        super().__init__(message)
+        self.full_exception_trace = full_exception_trace
+
+
 def _fail_external_group_sync_attempt(attempt_id: int, error_msg: str) -> None:
     """Helper to mark an external group sync attempt as failed with an error message."""
     with get_session_with_current_tenant() as db_session:
@@ -116,12 +126,18 @@ def _check_external_group_failure_threshold(
     ):
         return
 
-    raise RuntimeError(
-        "External group sync encountered too many group-level errors, aborting. "
-        f"failures={total_failures} groups_seen={total_groups_seen} "
-        f"last_failed_group={_external_group_failure_label(last_failure)!r} "
-        f"last_error={last_failure.failure_message}"
+    error = ExternalGroupSyncFailureThresholdError(
+        (
+            "External group sync encountered too many group-level errors, aborting. "
+            f"failures={total_failures} groups_seen={total_groups_seen} "
+            f"last_failed_group={_external_group_failure_label(last_failure)!r} "
+            f"last_error={last_failure.failure_message}"
+        ),
+        full_exception_trace=last_failure.full_exception_trace,
     )
+    if last_failure.exception:
+        raise error from last_failure.exception
+    raise error
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -673,13 +689,19 @@ def _timed_perform_external_group_sync(
                 cumulative_upsert_time += time.monotonic() - upsert_start
         except Exception as e:
             format_error_for_logging(e)
+            full_exception_trace = (
+                e.full_exception_trace
+                if isinstance(e, ExternalGroupSyncFailureThresholdError)
+                and e.full_exception_trace
+                else traceback.format_exc()
+            )
 
             # Mark as failed (this also updates progress to show partial progress)
             mark_external_group_sync_attempt_failed(
                 attempt_id,
                 db_session,
                 error_message=str(e),
-                full_exception_trace=traceback.format_exc(),
+                full_exception_trace=full_exception_trace,
             )
 
             # TODO: add some notification to the admins here
