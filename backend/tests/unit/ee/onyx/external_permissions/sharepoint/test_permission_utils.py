@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     _enumerate_ad_groups_paginated,
 )
@@ -136,9 +137,13 @@ def test_enumerate_ad_groups_yields_groups(mock_get: MagicMock) -> None:
     )
 
     assert len(results) == 2
-    eng = next(r for r in results if r.id == "Engineering_g1")
+    assert all(isinstance(result, ExternalUserGroup) for result in results)
+    external_user_groups = [
+        result for result in results if isinstance(result, ExternalUserGroup)
+    ]
+    eng = next(r for r in external_user_groups if r.id == "Engineering_g1")
     assert eng.user_emails == ["alice@contoso.com"]
-    mkt = next(r for r in results if r.id == "Marketing_g2")
+    mkt = next(r for r in external_user_groups if r.id == "Marketing_g2")
     assert mkt.user_emails == ["bob@contoso.com"]
 
 
@@ -210,6 +215,7 @@ def test_default_skips_ad_enumeration(
     )
 
     assert len(results) == 1
+    assert isinstance(results[0], ExternalUserGroup)
     assert results[0].id == "SiteGroup_abc"
     assert results[0].user_emails == ["alice@contoso.com"]
 
@@ -241,7 +247,11 @@ def test_enumerate_all_includes_ad_groups(
     )
 
     assert len(results) == 2
-    ids = {r.id for r in results}
+    external_user_groups = [
+        result for result in results if isinstance(result, ExternalUserGroup)
+    ]
+    assert len(external_user_groups) == len(results)
+    ids = {r.id for r in external_user_groups}
     assert ids == {"SiteGroup_abc", "ADGroup_xyz"}
     mock_enum.assert_called_once()
 

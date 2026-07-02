@@ -3,6 +3,7 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.jira.group_sync import jira_group_sync
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
@@ -146,10 +147,12 @@ def test_jira_group_sync(
         )
 
         expected_groups = {group.id: group for group in _EXPECTED_JIRA_GROUPS}
-        actual_groups = {
-            group.id: ExternalUserGroupSet.from_model(external_user_group=group)
-            for group in group_sync_iter
-        }
+        actual_groups: dict[str, ExternalUserGroupSet] = {}
+        for group in group_sync_iter:
+            assert isinstance(group, ExternalUserGroup)
+            actual_groups[group.id] = ExternalUserGroupSet.from_model(
+                external_user_group=group
+            )
         assert expected_groups == actual_groups
     finally:
         db_session.rollback()
