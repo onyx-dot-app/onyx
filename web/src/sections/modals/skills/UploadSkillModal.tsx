@@ -8,12 +8,13 @@ import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import { createCustomSkill } from "@/lib/skills/api";
 import { toast } from "@/hooks/useToast";
+import type { CustomSkill } from "@/lib/skills/types";
 
 interface UploadSkillModalProps {
   open: boolean;
   onClose: () => void;
-  /** Invoked after a successful upload so callers can refresh their list. */
-  onUploaded: () => void;
+  /** Invoked with the created skill after a successful upload. */
+  onUploaded: (skill: CustomSkill) => void;
 }
 
 export default function UploadSkillModal({
@@ -47,7 +48,7 @@ export default function UploadSkillModal({
       const created = await createCustomSkill(file);
       toast.success(`Uploaded "${created.name}"`);
       reset();
-      onUploaded();
+      onUploaded(created);
       onClose();
     } catch (err) {
       console.error("Failed to upload skill bundle", err);

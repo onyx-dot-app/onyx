@@ -210,7 +210,10 @@ export default function SkillsPage() {
       <UploadSkillModal
         open={orgUploadOpen}
         onClose={() => setOrgUploadOpen(false)}
-        onUploaded={refresh}
+        onUploaded={(created) => {
+          refresh();
+          router.push(`/craft/v1/skills/edit/${created.id}` as Route);
+        }}
       />
 
       <SkillPreviewModal

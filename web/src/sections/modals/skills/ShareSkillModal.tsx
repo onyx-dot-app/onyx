@@ -86,9 +86,16 @@ export default function ShareSkillModal({
     useState<TransferOwnershipTarget>(null);
   const [view, setView] = useState<ShareModalView>("share");
   const [saving, setSaving] = useState(false);
+  const [hydratedSkillId, setHydratedSkillId] = useState<string | null>(null);
 
+  // Hydrate once per open session: a background SWR refresh of `skill` must
+  // not wipe in-progress staged edits.
   useEffect(() => {
-    if (!open || !skill) return;
+    if (!open) {
+      setHydratedSkillId(null);
+      return;
+    }
+    if (!skill || skill.id === hydratedSkillId) return;
     const nextState: SkillShareDraftState = {
       groupShares: skill.group_shares,
       isPublic: skill.public_permission !== null,
@@ -102,7 +109,8 @@ export default function ShareSkillModal({
     setStagedPermission("VIEWER");
     setTransferTarget(null);
     setView("share");
-  }, [open, skill]);
+    setHydratedSkillId(skill.id);
+  }, [open, skill, hydratedSkillId]);
 
   const effectiveState = useMemo(() => {
     if (!draftState) return null;
