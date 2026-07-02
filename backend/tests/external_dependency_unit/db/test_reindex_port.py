@@ -883,8 +883,9 @@ def test_run_port_attempt_exits_when_cc_pair_deleting(
 def test_run_port_attempt_soft_time_limit_yields(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """Hitting the self-enforced soft time limit yields (no copy, no terminal
-    mark) so the watchdog can reschedule from the cursor."""
+    """Hitting the self-enforced soft time limit yields (no copy) and marks the
+    attempt FAILED, so check_for_port resumes it from the cursor next tick rather
+    than leaving it IN_PROGRESS to idle out a full stall window."""
     cc_pair, future_id = cc_pair_and_future
     _seed_cc_pair_documents(db_session, cc_pair, 3)
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
@@ -900,7 +901,7 @@ def test_run_port_attempt_soft_time_limit_yields(
     db_session.expire_all()
     row = db_session.get(PortAttempt, attempt_id)
     assert row is not None
-    assert row.status == PortAttemptStatus.IN_PROGRESS  # not terminal; watchdog resumes
+    assert row.status == PortAttemptStatus.FAILED  # reschedulable; resumes from cursor
 
 
 def test_check_for_port_creates_and_enqueues(
