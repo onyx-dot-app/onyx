@@ -43,11 +43,19 @@ _PORT_WRITE_PAGE_SIZE = 1000
 def _build_augmentation_ctx(
     future_search_settings: SearchSettings,
 ) -> AugmentationReembedContext:
-    """Prepare the AUGMENTATION inputs while a DB session is available. For
-    FUTURE-RAG-off only the flag matters; for FUTURE-RAG-on we also resolve the
-    contextual LLM/tokenizer and the same token budgets the chunker uses."""
+    """Prepare the AUGMENTATION inputs while a DB session is available. The FUTURE
+    embedding tokenizer is always resolved (reproduces the chunker's metadata-tail skip);
+    for FUTURE-RAG-on we also resolve the contextual LLM/tokenizer and the same token
+    budgets the chunker uses."""
+    future_embedding_tokenizer = get_tokenizer(
+        model_name=future_search_settings.model_name,
+        provider_type=future_search_settings.provider_type,
+    )
     if not future_search_settings.enable_contextual_rag:
-        return AugmentationReembedContext(future_enable_contextual_rag=False)
+        return AugmentationReembedContext(
+            future_enable_contextual_rag=False,
+            future_embedding_tokenizer=future_embedding_tokenizer,
+        )
 
     llm = get_contextual_rag_llm_for_search_settings(future_search_settings)
     if llm is None:
@@ -61,6 +69,7 @@ def _build_augmentation_ctx(
     )
     return AugmentationReembedContext(
         future_enable_contextual_rag=True,
+        future_embedding_tokenizer=future_embedding_tokenizer,
         llm=llm,
         tokenizer=tokenizer,
         # The same *2 fudge factor over the chunk size that the indexing

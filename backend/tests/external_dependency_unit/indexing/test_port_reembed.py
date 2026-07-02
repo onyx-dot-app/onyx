@@ -337,7 +337,9 @@ def test_augmentation_strip_off_reembeds_bare() -> None:
     keyword = chunk.metadata_suffix or ""
     semantic = rebuild_semantic_tail(chunk)
 
-    ctx = AugmentationReembedContext(future_enable_contextual_rag=False)
+    ctx = AugmentationReembedContext(
+        future_enable_contextual_rag=False, future_embedding_tokenizer=_TOKENIZER
+    )
     [result] = re_embed_chunks(
         [chunk],
         ReembedStrategy.AUGMENTATION,
@@ -360,6 +362,46 @@ def test_augmentation_strip_off_reembeds_bare() -> None:
     # non-augmentation fields are preserved
     assert result.metadata_suffix == keyword
     assert result.title == chunk.title
+
+
+def test_augmentation_skips_oversized_metadata_tail() -> None:
+    """Metadata-heavy chunk: a fresh FUTURE index drops the semantic tail from the
+    embedding (chunker's MAX_METADATA_PERCENTAGE skip) while still storing the keyword
+    tail. The AUGMENTATION rebuild must reproduce that skip — embed without the tail —
+    not re-append it, or the vector drifts from index-time (the same bug
+    recover_embedding_input guards for MODEL_ONLY)."""
+    metadata_list = convert_metadata_dict_to_list_of_strings(
+        {"author": "Jane Doe", "team": "finance"}
+    )
+    semantic, keyword = get_metadata_suffix_for_document_index(
+        convert_metadata_list_of_strings_to_dict(metadata_list), include_separator=True
+    )
+    bare = "the body text"
+    # Tiny budget so the tail exceeds MAX_METADATA_PERCENTAGE (the skip condition).
+    chunk = _stored_chunk(
+        f"My Title{RETURN_SEPARATOR}{bare}{keyword}",
+        metadata_suffix=keyword,
+        metadata_list=metadata_list,
+        title="My Title",
+        max_chunk_size=8,
+    )
+
+    ctx = AugmentationReembedContext(
+        future_enable_contextual_rag=False, future_embedding_tokenizer=_TOKENIZER
+    )
+    [result] = re_embed_chunks(
+        [chunk],
+        ReembedStrategy.AUGMENTATION,
+        cast(IndexingEmbedder, _ContentVecEmbedder()),
+        augmentation_ctx=ctx,
+    )
+
+    # embedded WITHOUT the semantic tail (dropped, matching index-time behavior) ...
+    assert result.content_vector == _vec(f"My Title{RETURN_SEPARATOR}{bare}")
+    # ... not the naive re-append the pre-fix code produced
+    assert result.content_vector != _vec(f"My Title{RETURN_SEPARATOR}{bare}{semantic}")
+    # the keyword tail still rides along on the stored BM25 content
+    assert result.metadata_suffix == keyword
 
 
 def test_augmentation_enrich_on_generates_and_reembeds(
@@ -401,6 +443,7 @@ def test_augmentation_enrich_on_generates_and_reembeds(
 
     ctx = AugmentationReembedContext(
         future_enable_contextual_rag=True,
+        future_embedding_tokenizer=_TOKENIZER,
         llm=MagicMock(),
         tokenizer=MagicMock(),
         chunk_token_limit=128,
@@ -452,6 +495,7 @@ def test_augmentation_mixed_docs_enrich_per_document(
 
     ctx = AugmentationReembedContext(
         future_enable_contextual_rag=True,
+        future_embedding_tokenizer=_TOKENIZER,
         llm=MagicMock(),
         tokenizer=MagicMock(),
         chunk_token_limit=128,

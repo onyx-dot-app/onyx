@@ -72,10 +72,12 @@ class ReembedStrategy(enum.Enum):
 class AugmentationReembedContext:
     """Everything the AUGMENTATION path needs beyond the embedder. Built once by
     the port copier (which holds a DB session); `re_embed_chunks` itself stays
-    DB-free. For the FUTURE-RAG-off (strip) case only `future_enable_contextual_rag`
-    is needed; the LLM/tokenizer/budgets are required only when regenerating."""
+    DB-free. `future_embedding_tokenizer` (the FUTURE embedding model's) is always
+    needed to reproduce the chunker's metadata-tail skip; the LLM + `tokenizer` (the
+    contextual LLM's) + budgets are required only when regenerating (FUTURE RAG on)."""
 
     future_enable_contextual_rag: bool
+    future_embedding_tokenizer: "BaseTokenizer"
     llm: "LLM | None" = None
     tokenizer: "BaseTokenizer | None" = None
     chunk_token_limit: int = 0
@@ -122,18 +124,19 @@ def rebuild_semantic_tail(chunk: DocumentChunkWithoutVectors) -> str:
 
 
 def _semantic_tail_was_embedded(
-    semantic_tail: str, max_chunk_size: int, present_tokenizer: BaseTokenizer
+    semantic_tail: str, max_chunk_size: int, tokenizer: BaseTokenizer
 ) -> bool:
-    """Whether indexing embedded the semantic tail. The chunker drops it from the
+    """Whether an index embedded the semantic tail. The chunker drops it from the
     embedding when it exceeds MAX_METADATA_PERCENTAGE of the chunk budget, yet still
-    stores the keyword tail on `content` — so recovery must reproduce the skip or it
-    re-embeds metadata the vector never saw. Both inputs must be PRESENT-side to
-    match the index-time decision: `max_chunk_size` is the stored PRESENT budget and
-    `present_tokenizer` is the PRESENT model's — the FUTURE model's can count the
-    tail differently and flip the threshold."""
+    stores the keyword tail on `content` — so any rebuild must reproduce the skip or it
+    embeds metadata the vector never saw. Pass the tokenizer of the index whose behavior
+    is being reproduced: PRESENT for MODEL_ONLY (what indexing embedded), FUTURE for
+    AUGMENTATION (what a fresh FUTURE index would embed) — the two models can count the
+    tail differently and flip the threshold. `max_chunk_size` is the chunk budget (equal
+    for both: ported chunks are all DEFAULT_MAX_CHUNK_SIZE)."""
     if not semantic_tail:
         return False
-    metadata_tokens = len(present_tokenizer.encode(semantic_tail))
+    metadata_tokens = len(tokenizer.encode(semantic_tail))
     return metadata_tokens < max_chunk_size * MAX_METADATA_PERCENTAGE
 
 
@@ -348,6 +351,21 @@ def _reconstruct_source_document(
     )
 
 
+def _future_semantic_tail(
+    chunk: DocumentChunkWithoutVectors, future_embedding_tokenizer: BaseTokenizer
+) -> str:
+    """The semantic metadata tail to embed when rebuilding under FUTURE settings —
+    empty when a fresh FUTURE index would drop it as oversized (the chunker's
+    MAX_METADATA_PERCENTAGE skip; see _semantic_tail_was_embedded), so the re-embedded
+    vector matches index-time behavior."""
+    semantic_tail = rebuild_semantic_tail(chunk)
+    if not _semantic_tail_was_embedded(
+        semantic_tail, chunk.max_chunk_size, future_embedding_tokenizer
+    ):
+        return ""
+    return semantic_tail
+
+
 def _augmentation_reembed(
     stored_chunks: list[DocumentChunkWithoutVectors],
     embedder: IndexingEmbedder,
@@ -384,7 +402,9 @@ def _augmentation_reembed(
             section_continuation=False,
             source_document=source_documents[chunk.document_id],
             title_prefix=_title_prefix(chunk),
-            metadata_suffix_semantic=rebuild_semantic_tail(chunk),
+            metadata_suffix_semantic=_future_semantic_tail(
+                chunk, ctx.future_embedding_tokenizer
+            ),
             metadata_suffix_keyword=chunk.metadata_suffix or "",
             contextual_rag_reserved_tokens=reserved,
             doc_summary="",

@@ -762,10 +762,12 @@ def test_run_port_attempt_resumes_from_cursor(
 def test_run_port_attempt_stops_when_canceled(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """An external CANCEL (operator) marks the attempt terminal; the task stops at
-    the next batch boundary with its partial cursor preserved."""
+    """An external terminal mark (operator CANCEL / stall-FAIL) landing mid-batch stops
+    the task at the batch boundary: commit_port_cursor refuses to write the cursor onto
+    the now-terminal attempt (its guard) and signals the caller to stop, so no progress
+    is recorded on the dead row."""
     cc_pair, future_id = cc_pair_and_future
-    doc_ids = _seed_cc_pair_documents(db_session, cc_pair, INDEX_BATCH_SIZE + 4)
+    _seed_cc_pair_documents(db_session, cc_pair, INDEX_BATCH_SIZE + 4)
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
 
     def copy_then_cancel(ids: list[str], **_: object) -> tuple[int, bool]:
@@ -777,14 +779,15 @@ def test_run_port_attempt_stops_when_canceled(
     with patch.object(port_task, "PortCopier", return_value=mock_copier):
         run_port_attempt(attempt_id)
 
-    # first batch ran; the CANCELED status stops it at the next boundary
+    # first batch ran; commit_port_cursor saw the terminal status and stopped the task
     assert mock_copier.copy_doc_batch.call_count == 1
     db_session.expire_all()
     row = db_session.get(PortAttempt, attempt_id)
     assert row is not None
     assert row.status == PortAttemptStatus.CANCELED
-    assert row.last_processed_doc_id == doc_ids[INDEX_BATCH_SIZE - 1]
-    assert row.docs_ported == INDEX_BATCH_SIZE
+    # cursor/progress NOT advanced onto the terminal row (the commit_port_cursor guard)
+    assert row.last_processed_doc_id is None
+    assert row.docs_ported == 0
 
 
 def test_cancel_active_port_attempts_on_supersede(
