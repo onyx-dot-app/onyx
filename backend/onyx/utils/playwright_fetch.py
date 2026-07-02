@@ -23,6 +23,8 @@ from pydantic import BaseModel
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_ID
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
+from onyx.configs.app_configs import WEB_CONNECTOR_PLAYWRIGHT_BROWSER_TYPE
+from onyx.configs.app_configs import WEB_CONNECTOR_PLAYWRIGHT_EXECUTABLE_PATH
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException
 from onyx.utils.url import validate_outbound_http_url
@@ -83,14 +85,18 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
     """
     playwright = sync_playwright().start()
 
-    browser = playwright.chromium.launch(
-        headless=True,
-        args=[
+    engine = getattr(playwright, WEB_CONNECTOR_PLAYWRIGHT_BROWSER_TYPE)
+    launch_kwargs: dict = {"headless": True}
+    if WEB_CONNECTOR_PLAYWRIGHT_BROWSER_TYPE == "chromium":
+        launch_kwargs["args"] = [
             "--disable-blink-features=AutomationControlled",
             "--disable-features=IsolateOrigins,site-per-process",
             "--disable-site-isolation-trials",
-        ],
-    )
+        ]
+    if WEB_CONNECTOR_PLAYWRIGHT_EXECUTABLE_PATH:
+        launch_kwargs["executable_path"] = WEB_CONNECTOR_PLAYWRIGHT_EXECUTABLE_PATH
+
+    browser = engine.launch(**launch_kwargs)
 
     context = browser.new_context(
         user_agent=DEFAULT_USER_AGENT,
