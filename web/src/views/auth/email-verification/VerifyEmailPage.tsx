@@ -9,12 +9,13 @@ import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { verifyEmail } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
+import { welcomeCardCopy } from "@/lib/auth/copies";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading } = useCurrentUser();
-  const { logoUrl } = useSettings();
+  const { appName, logoUrl } = useSettings();
 
   const token = searchParams.get("token");
   const verifyingRef = useRef(false);
@@ -36,25 +37,22 @@ export default function VerifyEmailPage() {
 
   if (!token) redirect("/auth/send-email-verification");
 
-  if (verified) {
-    return (
-      <AuthLayouts.Card title="Verify Email" logoSrc={logoUrl}>
+  return (
+    <AuthLayouts.Card {...welcomeCardCopy(appName)} logoSrc={logoUrl}>
+      {verified ? (
         <AuthLayouts.Message
-          title="Verification successful."
+          messageType="success"
+          title="Verification successful"
           description={markdown(
             "Your email has been successfully verified. You can now close this tab, or [continue to the app](/app)."
           )}
         />
-      </AuthLayouts.Card>
-    );
-  }
-
-  return (
-    <AuthLayouts.Card title="Verify Email" logoSrc={logoUrl}>
-      <AuthLayouts.Message
-        title="Verifying your token..."
-        description="Give us a quick moment while we finish verifying your token."
-      />
+      ) : (
+        <AuthLayouts.Message
+          title="Verifying your token..."
+          description="Give us a quick moment while we finish verifying your token."
+        />
+      )}
     </AuthLayouts.Card>
   );
 }
