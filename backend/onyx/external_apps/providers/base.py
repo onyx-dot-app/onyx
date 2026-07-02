@@ -7,6 +7,7 @@ from typing import ClassVar
 import requests
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import model_validator
 
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
@@ -156,9 +157,16 @@ class TokenExchangeRequest(BaseModel):
     headers: dict[str, str]
     # Exactly one of `data` (form-encoded) / `json_body` (JSON) is set; the
     # other stays None so ``requests.post(..., data=data, json=json_body)``
-    # behaves identically to the pre-hook hardcoded form-encoded call.
+    # behaves identically to the pre-hook hardcoded form-encoded call. Setting
+    # both would let `requests` silently drop the form body in favour of JSON.
     data: dict[str, str] | None = None
     json_body: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_body(self) -> "TokenExchangeRequest":
+        if (self.data is None) == (self.json_body is None):
+            raise ValueError("Exactly one of 'data' or 'json_body' must be set.")
+        return self
 
 
 class ExternalAppProvider(ABC):

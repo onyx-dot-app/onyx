@@ -42,9 +42,9 @@ def _matching_actions(method: str, path: str, body: bytes | None = None) -> set[
             "/v1/users/1234abcd-1234-1234-1234-1234567890ab",
             {NotionAction.USERS_READ},
         ),
-        # Search + database query are reads even though POSTs.
+        # Search + data-source query are reads even though POSTs.
         ("POST", "/v1/search", {NotionAction.SEARCH}),
-        ("POST", "/v1/databases/db123/query", {NotionAction.DATABASES_QUERY}),
+        ("POST", "/v1/data_sources/ds123/query", {NotionAction.DATA_SOURCES_QUERY}),
         # Pages.
         ("GET", "/v1/pages/page123", {NotionAction.PAGES_READ}),
         (
@@ -55,8 +55,9 @@ def _matching_actions(method: str, path: str, body: bytes | None = None) -> set[
         # Blocks — a bare block vs its children are distinct actions.
         ("GET", "/v1/blocks/block123", {NotionAction.BLOCKS_READ}),
         ("GET", "/v1/blocks/block123/children", {NotionAction.BLOCKS_READ}),
-        # Databases + comments reads.
+        # Databases (containers) vs data sources (schemas) are distinct reads.
         ("GET", "/v1/databases/db123", {NotionAction.DATABASES_READ}),
+        ("GET", "/v1/data_sources/ds123", {NotionAction.DATA_SOURCES_READ}),
         ("GET", "/v1/comments", {NotionAction.COMMENTS_READ}),
         # Writes.
         ("POST", "/v1/pages", {NotionAction.PAGES_CREATE}),
@@ -70,6 +71,9 @@ def _matching_actions(method: str, path: str, body: bytes | None = None) -> set[
         ("DELETE", "/v1/blocks/block123", {NotionAction.BLOCKS_DELETE}),
         ("POST", "/v1/databases", {NotionAction.DATABASES_CREATE}),
         ("PATCH", "/v1/databases/db123", {NotionAction.DATABASES_UPDATE}),
+        # Creating a data source vs querying one must not collide.
+        ("POST", "/v1/data_sources", {NotionAction.DATA_SOURCES_CREATE}),
+        ("PATCH", "/v1/data_sources/ds123", {NotionAction.DATA_SOURCES_UPDATE}),
         ("POST", "/v1/comments", {NotionAction.COMMENTS_CREATE}),
     ],
 )
@@ -85,9 +89,7 @@ def test_page_update_and_block_children_do_not_collide() -> None:
     assert _matching_actions("PATCH", "/v1/blocks/b1/children") == {
         NotionAction.BLOCKS_APPEND
     }
-    assert _matching_actions("PATCH", "/v1/blocks/b1") == {
-        NotionAction.BLOCKS_UPDATE
-    }
+    assert _matching_actions("PATCH", "/v1/blocks/b1") == {NotionAction.BLOCKS_UPDATE}
 
 
 @pytest.mark.parametrize(
@@ -98,7 +100,8 @@ def test_page_update_and_block_children_do_not_collide() -> None:
         (NotionAction.PAGES_READ, EndpointPolicy.ALWAYS),
         (NotionAction.BLOCKS_READ, EndpointPolicy.ALWAYS),
         (NotionAction.DATABASES_READ, EndpointPolicy.ALWAYS),
-        (NotionAction.DATABASES_QUERY, EndpointPolicy.ALWAYS),
+        (NotionAction.DATA_SOURCES_READ, EndpointPolicy.ALWAYS),
+        (NotionAction.DATA_SOURCES_QUERY, EndpointPolicy.ALWAYS),
         (NotionAction.COMMENTS_READ, EndpointPolicy.ALWAYS),
         # Writes require approval out of the box.
         (NotionAction.PAGES_CREATE, EndpointPolicy.ASK),
@@ -108,6 +111,8 @@ def test_page_update_and_block_children_do_not_collide() -> None:
         (NotionAction.BLOCKS_DELETE, EndpointPolicy.ASK),
         (NotionAction.DATABASES_CREATE, EndpointPolicy.ASK),
         (NotionAction.DATABASES_UPDATE, EndpointPolicy.ASK),
+        (NotionAction.DATA_SOURCES_CREATE, EndpointPolicy.ASK),
+        (NotionAction.DATA_SOURCES_UPDATE, EndpointPolicy.ASK),
         (NotionAction.COMMENTS_CREATE, EndpointPolicy.ASK),
     ],
 )

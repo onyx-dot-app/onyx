@@ -16,8 +16,9 @@ from onyx.external_apps.providers.base import OrgCredentialField
 from onyx.external_apps.providers.base import TokenExchangeRequest
 
 # Pinned across the provider and the sandbox skill so request-shaping stays
-# consistent with what the OAuth exchange negotiated.
-_NOTION_VERSION = "2022-06-28"
+# consistent with what the OAuth exchange negotiated. 2025-09-03 is the current
+# API version, which models databases as containers of one or more data sources.
+_NOTION_VERSION = "2025-09-03"
 
 
 class NotionAction(ExternalAppAction):
@@ -28,7 +29,8 @@ class NotionAction(ExternalAppAction):
     PAGES_READ = "notion.pages.read"
     BLOCKS_READ = "notion.blocks.read"
     DATABASES_READ = "notion.databases.read"
-    DATABASES_QUERY = "notion.databases.query"
+    DATA_SOURCES_READ = "notion.data_sources.read"
+    DATA_SOURCES_QUERY = "notion.data_sources.query"
     COMMENTS_READ = "notion.comments.read"
     PAGES_CREATE = "notion.pages.create"
     PAGES_UPDATE = "notion.pages.update"
@@ -37,14 +39,17 @@ class NotionAction(ExternalAppAction):
     BLOCKS_DELETE = "notion.blocks.delete"
     DATABASES_CREATE = "notion.databases.create"
     DATABASES_UPDATE = "notion.databases.update"
+    DATA_SOURCES_CREATE = "notion.data_sources.create"
+    DATA_SOURCES_UPDATE = "notion.data_sources.update"
     COMMENTS_CREATE = "notion.comments.create"
 
 
 # Notion's REST API is a path-addressed JSON API rooted at
 # https://api.notion.com; the action is the HTTP method + path template
 # (including the `/v1` version prefix). A `{name}` segment matches one path
-# segment (a page / block / database id). Search and database-query are reads
-# even though they're POSTs — Notion models "query" as a POST body.
+# segment (a page / block / database / data-source id). Search and data-source
+# query are reads even though they're POSTs — Notion models "query" as a POST
+# body.
 _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=NotionAction.USERS_READ,
@@ -62,7 +67,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=NotionAction.SEARCH,
         normalised_name="Search",
-        description="Search all pages and databases the integration can access.",
+        description="Search all pages and data sources the integration can access.",
         matches=(RestRoute(method="POST", path="/v1/search"),),
         default_policy=EndpointPolicy.ALWAYS,
     ),
@@ -91,16 +96,23 @@ _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=NotionAction.DATABASES_READ,
         normalised_name="Read databases",
-        description="Fetch a database's schema and metadata.",
+        description="List a database's data sources (each with an id and name).",
         matches=(RestRoute(method="GET", path="/v1/databases/{database_id}"),),
         default_policy=EndpointPolicy.ALWAYS,
     ),
     EndpointSpec(
-        id=NotionAction.DATABASES_QUERY,
-        normalised_name="Query a database",
-        description="Query a database's rows with optional filters and sorts.",
+        id=NotionAction.DATA_SOURCES_READ,
+        normalised_name="Read data sources",
+        description="Fetch a data source's schema (its property definitions).",
+        matches=(RestRoute(method="GET", path="/v1/data_sources/{data_source_id}"),),
+        default_policy=EndpointPolicy.ALWAYS,
+    ),
+    EndpointSpec(
+        id=NotionAction.DATA_SOURCES_QUERY,
+        normalised_name="Query a data source",
+        description="Query a data source's rows with optional filters and sorts.",
         matches=(
-            RestRoute(method="POST", path="/v1/databases/{database_id}/query"),
+            RestRoute(method="POST", path="/v1/data_sources/{data_source_id}/query"),
         ),
         default_policy=EndpointPolicy.ALWAYS,
     ),
@@ -114,7 +126,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=NotionAction.PAGES_CREATE,
         normalised_name="Create a page",
-        description="Create a new page under a page or database parent.",
+        description="Create a new page under a page or data source parent.",
         matches=(RestRoute(method="POST", path="/v1/pages"),),
     ),
     EndpointSpec(
@@ -144,14 +156,26 @@ _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=NotionAction.DATABASES_CREATE,
         normalised_name="Create a database",
-        description="Create a new database under a page parent.",
+        description="Create a new database (with an initial data source) under a page parent.",
         matches=(RestRoute(method="POST", path="/v1/databases"),),
     ),
     EndpointSpec(
         id=NotionAction.DATABASES_UPDATE,
         normalised_name="Update a database",
-        description="Update a database's title, description, or schema.",
+        description="Update a database container's title or move its data sources.",
         matches=(RestRoute(method="PATCH", path="/v1/databases/{database_id}"),),
+    ),
+    EndpointSpec(
+        id=NotionAction.DATA_SOURCES_CREATE,
+        normalised_name="Create a data source",
+        description="Add a new data source to an existing database.",
+        matches=(RestRoute(method="POST", path="/v1/data_sources"),),
+    ),
+    EndpointSpec(
+        id=NotionAction.DATA_SOURCES_UPDATE,
+        normalised_name="Update a data source",
+        description="Update a data source's schema, title, or description.",
+        matches=(RestRoute(method="PATCH", path="/v1/data_sources/{data_source_id}"),),
     ),
     EndpointSpec(
         id=NotionAction.COMMENTS_CREATE,
@@ -225,9 +249,9 @@ class NotionProvider(OAuthExternalAppProvider):
         # Notion requires HTTP Basic client authentication and a JSON body for
         # the token exchange (client_id/client_secret are NOT accepted in the
         # form body), so override the default RFC-6749 form-encoded request.
-        basic = base64.b64encode(
-            f"{client_id}:{client_secret}".encode("utf-8")
-        ).decode("ascii")
+        basic = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode(
+            "ascii"
+        )
         return TokenExchangeRequest(
             headers={
                 "Authorization": f"Basic {basic}",

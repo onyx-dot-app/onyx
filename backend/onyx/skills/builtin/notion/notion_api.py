@@ -15,7 +15,7 @@ import urllib.request
 from typing import Any
 
 _BASE = "https://api.notion.com"
-_NOTION_VERSION = "2022-06-28"
+_NOTION_VERSION = "2025-09-03"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 100
 _HTTP_TIMEOUT_SECONDS = 180
@@ -74,7 +74,12 @@ def _paginate_get(path: str, list_key: str, limit: int) -> dict[str, Any]:
         parsed = _request("GET", url)
         results.extend(parsed.get("results") or [])
         if not parsed.get("has_more"):
-            return {"ok": True, list_key: results[:limit], "count": len(results[:limit]), "truncated": False}
+            return {
+                "ok": True,
+                list_key: results[:limit],
+                "count": len(results[:limit]),
+                "truncated": False,
+            }
         cursor = parsed.get("next_cursor")
     return {"ok": True, list_key: results[:limit], "count": limit, "truncated": True}
 
@@ -93,7 +98,12 @@ def _paginate_post(
         parsed = _request("POST", path, payload)
         results.extend(parsed.get("results") or [])
         if not parsed.get("has_more"):
-            return {"ok": True, list_key: results[:limit], "count": len(results[:limit]), "truncated": False}
+            return {
+                "ok": True,
+                list_key: results[:limit],
+                "count": len(results[:limit]),
+                "truncated": False,
+            }
         cursor = parsed.get("next_cursor")
     return {"ok": True, list_key: results[:limit], "count": limit, "truncated": True}
 
@@ -128,12 +138,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     with_limit(sub.add_parser("users", help="list the workspace's users"))
 
-    sp = sub.add_parser("search", help="search pages and databases")
+    sp = sub.add_parser("search", help="search pages and data sources")
     sp.add_argument("query", nargs="?", default="", help="search text (optional)")
     sp.add_argument(
         "--filter",
-        choices=["page", "database"],
-        help="restrict results to pages or databases",
+        choices=["page", "data_source"],
+        help="restrict results to pages or data sources",
     )
     with_limit(sp)
 
@@ -144,17 +154,20 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("block_id")
     with_limit(sp)
 
-    sp = sub.add_parser("database", help="fetch a database's schema")
+    sp = sub.add_parser("database", help="list a database's data sources")
     sp.add_argument("database_id")
 
-    sp = sub.add_parser("query-database", help="query a database's rows")
-    sp.add_argument("database_id")
+    sp = sub.add_parser("data-source", help="fetch a data source's schema")
+    sp.add_argument("data_source_id")
+
+    sp = sub.add_parser("query", help="query a data source's rows")
+    sp.add_argument("data_source_id")
     with_limit(sp)
 
     sp = sub.add_parser("create-page", help="create a page (write)")
     group = sp.add_mutually_exclusive_group(required=True)
     group.add_argument("--parent-page", help="parent page id")
-    group.add_argument("--parent-database", help="parent database id")
+    group.add_argument("--parent-data-source", help="parent data source id")
     sp.add_argument("--title", required=True, help="page title")
     sp.add_argument("--text", help="optional first paragraph of body text")
 
@@ -187,27 +200,27 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         return _one(f"/v1/pages/{a.page_id}", "page")
 
     if a.cmd == "blocks":
-        return _paginate_get(
-            f"/v1/blocks/{a.block_id}/children", "blocks", a.limit
-        )
+        return _paginate_get(f"/v1/blocks/{a.block_id}/children", "blocks", a.limit)
 
     if a.cmd == "database":
         return _one(f"/v1/databases/{a.database_id}", "database")
 
-    if a.cmd == "query-database":
+    if a.cmd == "data-source":
+        return _one(f"/v1/data_sources/{a.data_source_id}", "data_source")
+
+    if a.cmd == "query":
         return _paginate_post(
-            f"/v1/databases/{a.database_id}/query", {}, "results", a.limit
+            f"/v1/data_sources/{a.data_source_id}/query", {}, "results", a.limit
         )
 
     if a.cmd == "create-page":
-        if a.parent_database:
-            parent = {"database_id": a.parent_database}
-            # A database row's title lives under its title property; Notion
-            # accepts the well-known "title" key for the default schema.
-            properties = {"title": {"title": _rich_text(a.title)}}
+        if a.parent_data_source:
+            parent = {"data_source_id": a.parent_data_source}
         else:
             parent = {"page_id": a.parent_page}
-            properties = {"title": {"title": _rich_text(a.title)}}
+        # A row's title lives under its title property; the well-known "title"
+        # key works for the default schema of both page and data-source parents.
+        properties = {"title": {"title": _rich_text(a.title)}}
         payload: dict[str, Any] = {"parent": parent, "properties": properties}
         if a.text:
             payload["children"] = [_paragraph_block(a.text)]
@@ -217,17 +230,17 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         payload = {"children": [_paragraph_block(a.text)]}
         return {
             "ok": True,
-            "result": _request(
-                "PATCH", f"/v1/blocks/{a.block_id}/children", payload
-            ),
+            "result": _request("PATCH", f"/v1/blocks/{a.block_id}/children", payload),
         }
 
-    # comment
-    payload = {
-        "parent": {"page_id": a.page_id},
-        "rich_text": _rich_text(a.body),
-    }
-    return {"ok": True, "comment": _request("POST", "/v1/comments", payload)}
+    if a.cmd == "comment":
+        payload = {
+            "parent": {"page_id": a.page_id},
+            "rich_text": _rich_text(a.body),
+        }
+        return {"ok": True, "comment": _request("POST", "/v1/comments", payload)}
+
+    raise AssertionError(f"unhandled command: {a.cmd!r}")
 
 
 def main(argv: list[str]) -> int:
@@ -243,7 +256,17 @@ def main(argv: list[str]) -> int:
         print(json.dumps({"ok": False, "status": e.code, "error": message}))
         return 1
     except urllib.error.URLError as e:
-        print(f"network error calling Notion: {e.reason}", file=sys.stderr)
+        # DNS / connection / timeout failures carry no HTTP status, but still
+        # emit the documented JSON-on-stdout contract so agents parse one shape.
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "status": None,
+                    "error": f"network error calling Notion: {e.reason}",
+                }
+            )
+        )
         return 1
     return _emit(result, a.raw)
 

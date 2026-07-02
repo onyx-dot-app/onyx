@@ -29,10 +29,10 @@ python notion_api.py me
 python notion_api.py users [--limit N]
 ```
 
-### Search pages and databases
+### Search pages and data sources
 
 ```
-python notion_api.py search "roadmap" [--filter page|database] [--limit N]
+python notion_api.py search "roadmap" [--filter page|data_source] [--limit N]
 ```
 
 The query is optional — omit it to list everything the integration can access.
@@ -49,22 +49,31 @@ python notion_api.py page PAGE_ID
 python notion_api.py blocks BLOCK_ID [--limit N]
 ```
 
-### Read a database's schema
+### List a database's data sources
 
 ```
 python notion_api.py database DATABASE_ID
 ```
 
-### Query a database's rows
+A database contains one or more data sources; this returns each with its `id`
+and `name`. Use a data source id with `data-source` and `query` below.
+
+### Read a data source's schema
 
 ```
-python notion_api.py query-database DATABASE_ID [--limit N]
+python notion_api.py data-source DATA_SOURCE_ID
+```
+
+### Query a data source's rows
+
+```
+python notion_api.py query DATA_SOURCE_ID [--limit N]
 ```
 
 ### Create a page (write)
 
 ```
-python notion_api.py create-page (--parent-page PAGE_ID | --parent-database DATABASE_ID) \
+python notion_api.py create-page (--parent-page PAGE_ID | --parent-data-source DATA_SOURCE_ID) \
   --title "Title" [--text "First paragraph"]
 ```
 
@@ -90,7 +99,7 @@ non-zero — surface the error rather than retrying blindly.
 ## Notes
 
 - IDs are Notion object ids (UUIDs), with or without dashes. Get them from
-  `search`, `blocks`, or `query-database` output.
+  `search`, `blocks`, `database`, or `query` output.
 - The connected user's token is injected by the egress gateway — send no
   credentials yourself.
 - The integration's capabilities (read / write / comment) are set by the admin
