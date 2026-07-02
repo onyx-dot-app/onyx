@@ -44,6 +44,9 @@ def _matching_actions(method: str, path: str) -> set[str]:
         ("GET", "/api/files.getUploadURLExternal", {SlackAction.FILES_WRITE}),
         ("POST", "/api/files.getUploadURLExternal", {SlackAction.FILES_WRITE}),
         ("POST", "/api/files.completeUploadExternal", {SlackAction.FILES_WRITE}),
+        # The raw-bytes POST to the pre-signed files.slack.com upload URL must
+        # fall under FILES_WRITE, not the whole-domain "Perform action" fallback.
+        ("POST", "/upload/v1/CwABgAB123", {SlackAction.FILES_WRITE}),
     ],
 )
 def test_rest_route_resolves_to_exactly_one_action(
@@ -64,9 +67,7 @@ def test_rest_route_resolves_to_exactly_one_action(
         (SlackAction.FILES_WRITE, EndpointPolicy.ASK),
     ],
 )
-def test_default_policies(
-    action: SlackAction, expected_policy: EndpointPolicy
-) -> None:
+def test_default_policies(action: SlackAction, expected_policy: EndpointPolicy) -> None:
     by_id = {endpoint.id: endpoint for endpoint in _CATALOG}
     assert by_id[action].default_policy == expected_policy
 
@@ -75,5 +76,6 @@ def test_files_write_scope_and_upstream_pattern() -> None:
     spec = SlackProvider.spec
     assert "files:write" in spec.oauth.scope.split(",")
     assert (
-        "https://files\\.slack\\.com/.*" in spec.descriptor.upstream_url_patterns
+        "https://files\\.slack\\.com/upload/v1/.*"
+        in spec.descriptor.upstream_url_patterns
     )

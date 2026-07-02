@@ -97,6 +97,9 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path="/api/files.getUploadURLExternal"),
             RestRoute(method="POST", path="/api/files.getUploadURLExternal"),
             RestRoute(method="POST", path="/api/files.completeUploadExternal"),
+            # The raw bytes POST to a pre-signed /upload/v1/<token> URL on
+            # files.slack.com — route it to FILES_WRITE, not the domain fallback.
+            RestRoute(method="POST", path="/upload/v1/{token...}"),
         ),
     ),
 ]
@@ -134,7 +137,7 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                 "https://slack\\.com/api/.*",
                 # files.getUploadURLExternal hands back a pre-signed upload URL
                 # on the files.slack.com host that the raw bytes are POSTed to.
-                "https://files\\.slack\\.com/.*",
+                "https://files\\.slack\\.com/upload/v1/.*",
             ],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[

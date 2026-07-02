@@ -20,6 +20,7 @@ _METHOD_RE = re.compile(r"^[a-z][a-zA-Z0-9._]*$")
 _PAGE_SIZE = 200
 _DEFAULT_LIMIT = 200
 _HTTP_TIMEOUT_SECONDS = 180
+_MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # Slack's own upload limit
 
 
 def _prune(value: Any) -> Any:
@@ -180,6 +181,8 @@ def _upload_file(
         return {"ok": False, "error": "file_not_found"}
     filename = os.path.basename(file_path)
     length = os.path.getsize(file_path)
+    if length > _MAX_UPLOAD_BYTES:
+        return {"ok": False, "error": "file_too_large"}
     reserved = _call(
         "files.getUploadURLExternal", {"filename": filename, "length": length}
     )
@@ -189,6 +192,9 @@ def _upload_file(
     file_id = reserved.get("file_id")
     if not upload_url or not file_id:
         return {"ok": False, "error": "missing_upload_url"}
+    parsed_url = urllib.parse.urlparse(upload_url)
+    if parsed_url.scheme != "https" or parsed_url.hostname != "files.slack.com":
+        return {"ok": False, "error": "untrusted_upload_url"}
     with open(file_path, "rb") as fh:
         content = fh.read()
     put = urllib.request.Request(  # noqa: S310 — Slack-issued upload URL
@@ -245,9 +251,7 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         return _call("chat.postMessage", {"channel": a.channel, "text": a.text})
 
     if a.cmd == "upload":
-        return _upload_file(
-            a.channel, a.file_path, a.title, a.comment, a.thread_ts
-        )
+        return _upload_file(a.channel, a.file_path, a.title, a.comment, a.thread_ts)
 
     # `call` is the only remaining subcommand (subparser is required).
     return _raw_call(a.method, a.json_args, a.as_json)
