@@ -2,10 +2,7 @@ import type {
   ExternalAppType,
   ExternalAppUserResponse,
 } from "@/app/craft/v1/apps/registry";
-import type {
-  BuiltinSkill,
-  CustomSkill,
-} from "@/views/admin/SkillsPage/interfaces";
+import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 
 export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
   return {

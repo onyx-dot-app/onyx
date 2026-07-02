@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { Button, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { SvgBlocks, SvgPlus, SvgSettings, SvgSimpleLoader } from "@opal/icons";
+import { SvgBlocks, SvgPlus, SvgSimpleLoader } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
@@ -30,7 +30,7 @@ import { toast } from "@/hooks/useToast";
 
 export default function UserSkillsPage() {
   const { data, error, isLoading, refresh } = useUserSkills();
-  const { user, isAdmin } = useUser();
+  const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
@@ -168,20 +168,9 @@ export default function UserSkillsPage() {
         title="Skills"
         description="Capability bundles your Craft agent can reach for. This page shows what's currently available to you — skills granted by admins plus your own personal skills."
         rightChildren={
-          <div className="flex items-center gap-2">
-            {isAdmin && (
-              <Button
-                href="/craft/v1/skills/manage"
-                prominence="secondary"
-                icon={SvgSettings}
-              >
-                Manage skills
-              </Button>
-            )}
-            <Button icon={SvgPlus} onClick={() => setCreateOpen(true)}>
-              Create skill
-            </Button>
-          </div>
+          <Button icon={SvgPlus} onClick={() => setCreateOpen(true)}>
+            Create skill
+          </Button>
         }
       >
         <InputTypeIn
@@ -286,7 +275,6 @@ export default function UserSkillsPage() {
 
       <SkillPreviewModal
         open={previewTarget !== null}
-        mode="user"
         skillId={previewTarget?.id ?? null}
         fallbackTitle={previewTarget?.name}
         onClose={() => setPreviewTarget(null)}
