@@ -143,9 +143,15 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const canManageSkill =
     skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
 
+  // A bundle upload rewrites name/description/instructions from SKILL.md, so
+  // lock the detail fields while one is in flight: edits made mid-upload
+  // would be clobbered by the post-upload sync (or race it via Save).
+  const fieldsLocked = !canManageSkill || isReplacingFiles;
+
   const canSave =
     !!skill &&
     canManageSkill &&
+    !isReplacingFiles &&
     isDirty &&
     !!name.trim() &&
     !!description.trim() &&
@@ -256,7 +262,9 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     setIsDeleting(true);
     try {
       await deleteUserSkill(skill.id);
-      await refreshSkillList();
+      // The skill is gone — a transient list-refresh failure must not mask
+      // the successful delete or block navigation off the dead editor page.
+      void refreshSkillList();
       toast.success(`Deleted "${skill.name}"`);
       router.push("/craft/v1/skills" as Route);
     } catch (err) {
@@ -353,7 +361,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                     placeholder="Name your skill"
-                    variant={canManageSkill ? "primary" : "disabled"}
+                    variant={fieldsLocked ? "disabled" : "primary"}
                   />
                 </InputVertical>
 
@@ -371,7 +379,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                     placeholder="What does this skill help with?"
                     autoResize
                     maxRows={8}
-                    variant={canManageSkill ? "primary" : "disabled"}
+                    variant={fieldsLocked ? "disabled" : "primary"}
                   />
                 </InputVertical>
               </Section>
@@ -404,7 +412,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                       }
                       className="min-h-[34rem] border-0"
                       placeholder="Write the skill instructions."
-                      variant={canManageSkill ? "internal" : "disabled"}
+                      variant={fieldsLocked ? "disabled" : "internal"}
                     />
                   ) : (
                     <div className="min-h-[34rem] max-h-[70dvh] overflow-y-auto overflow-x-hidden rounded-08 bg-background-neutral-00 p-2">
