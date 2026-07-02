@@ -3,7 +3,7 @@
 import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
-import { welcomeCardCopy } from "@/views/auth/strings";
+import { welcomeCardCopy } from "@/lib/auth/copies";
 
 export default function MaintenancePage() {
   const { logoUrl, appName } = useSettings();

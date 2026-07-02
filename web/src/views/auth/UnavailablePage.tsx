@@ -7,7 +7,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
-import { createAccountCardCopy } from "@/views/auth/strings";
+import { createAccountCardCopy } from "@/lib/auth/copies";
 
 export default function UnavailablePage() {
   const router = useRouter();

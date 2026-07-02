@@ -8,7 +8,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { markdown } from "@opal/utils";
-import { createAccountCardCopy } from "@/views/auth/strings";
+import { createAccountCardCopy } from "@/lib/auth/copies";
 
 export default function SignupPage() {
   const searchParams = useSearchParams();

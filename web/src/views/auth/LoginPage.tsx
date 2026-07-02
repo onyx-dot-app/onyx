@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
-import { welcomeCardCopy } from "@/views/auth/strings";
+import { welcomeCardCopy } from "@/lib/auth/copies";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
