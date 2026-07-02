@@ -49,6 +49,7 @@ from onyx.indexing.port_reembed import select_reembed_strategy
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.pydantic_util import shallow_model_dump
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
+from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 
@@ -608,6 +609,10 @@ def test_re_embed_preserves_all_fields_swaps_only_vectors() -> None:
         assert getattr(result, field) == getattr(stored, field), field
 
 
+@pytest.mark.skipif(
+    MODEL_SERVER_HOST == "disabled",
+    reason="hits the real embedding model server, which is disabled in this env",
+)
 def test_model_only_reembed_vector_differs_from_naive_stored_content() -> None:
     """With a REAL embedder, the MODEL_ONLY path embeds the recovered input
     (semantic metadata tail) which yields a DIFFERENT vector than naively
