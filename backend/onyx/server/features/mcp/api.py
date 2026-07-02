@@ -2,21 +2,26 @@ import asyncio
 import base64
 import datetime
 import hashlib
+import ipaddress
 import json
+import time
 from enum import Enum
 from secrets import token_urlsafe
-from typing import cast
+from typing import Any
 from typing import Literal
 from urllib.parse import urlparse
 
+import requests
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth import TokenStorage
+from mcp.client.auth.oauth2 import OAuthContext
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
+from mcp.shared.auth import OAuthMetadata
 from mcp.shared.auth import OAuthToken
 from mcp.types import InitializeResult
 from mcp.types import Tool as MCPLibTool
@@ -24,6 +29,10 @@ from pydantic import AnyUrl
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.oauth_token_manager import build_oauth_authorization_url
+from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
+from onyx.auth.oauth_token_manager import OAuthFlowParams
+from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
@@ -32,6 +41,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.enums import Permission
@@ -40,7 +50,6 @@ from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
 from onyx.db.mcp import delete_connection_config
 from onyx.db.mcp import delete_mcp_server
-from onyx.db.mcp import delete_user_connection_configs_for_server
 from onyx.db.mcp import extract_connection_data
 from onyx.db.mcp import get_all_mcp_servers
 from onyx.db.mcp import get_connection_config_by_id
@@ -58,6 +67,8 @@ from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tools_by_mcp_server_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.mcp.models import apply_auto_substitutions
 from onyx.server.features.mcp.models import MCPApiKeyResponse
@@ -81,11 +92,86 @@ from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
+from onyx.tools.tool_implementations.mcp.mcp_ssrf import validate_mcp_outbound_url
 from onyx.utils.encryption import mask_string
 from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import BLOCKED_HOSTNAMES
+from onyx.utils.url import SSRFException
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# Refresh slightly before the real expiry to absorb network latency and clock
+# skew between us and the provider, avoiding edge-of-expiry 401s.
+TOKEN_EXPIRY_BUFFER_SECONDS = 30.0
+
+
+_SSRF_HINT_NEVER_ALLOWED = (
+    " localhost, unspecified, and link-local/cloud-metadata addresses are never "
+    "permitted; use a loopback or private-network address instead."
+)
+_SSRF_HINT_SET_ALLOW_PRIVATE = (
+    " To reach a private-network MCP server, set SSRF Protection to Allow Private "
+    "Network (or Disabled) in the admin Security settings (loopback and "
+    "cloud-metadata stay blocked at Allow Private Network)."
+)
+_SSRF_HINT_SET_DISABLED = (
+    " To reach a loopback MCP server, set SSRF Protection to Disabled in the admin "
+    "Security settings (cloud-metadata stays blocked)."
+)
+
+
+def _ssrf_error_hint(url: str, error: Exception) -> str:
+    """Suffix steering the operator to the remedy for a blocked host. A private
+    LAN target is reachable at Allow Private Network (or Disabled); loopback needs
+    Disabled (it hits the app host itself). Link-local/metadata, unspecified, and
+    BLOCKED_HOSTNAMES (e.g. localhost) are never reachable, so suggest a different
+    address; scheme errors get no hint. Only literal IPs are classified —
+    store-time validation doesn't resolve hostnames, so a bare name can't reach
+    the address-specific branches."""
+    if "scheme" in str(error).lower():
+        return ""
+    host = (urlparse(url).hostname or "").lower()
+    if host in BLOCKED_HOSTNAMES:
+        return _SSRF_HINT_NEVER_ALLOWED
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return ""
+    if ip.is_unspecified or ip.is_link_local:
+        return _SSRF_HINT_NEVER_ALLOWED
+    # Loopback reaches the app host itself, so it needs the Disabled level; other
+    # private/reserved targets open one notch lower, at Allow Private Network.
+    if ip.is_loopback:
+        return _SSRF_HINT_SET_DISABLED
+    if not ip.is_global:
+        return _SSRF_HINT_SET_ALLOW_PRIVATE
+    return ""
+
+
+def _validate_mcp_server_url(
+    url: str | None, field: str, *, require_https: bool
+) -> None:
+    """Store-time SSRF guard for a curator-supplied URL; raises ``OnyxError`` as
+    a field-level frontend error. ``require_https`` routes OAuth endpoints through
+    the same validator the token exchange uses, so a URL that saves can't be
+    rejected later. Structural-only (``resolve_dns=False``): rejects bad
+    scheme/credentials/blocked hosts and literal internal IPs but doesn't resolve
+    hostnames, so a transient/internal-DNS host doesn't block a save; fetch-time
+    guards resolve DNS and cover SDK redirects/rebinding."""
+    if not url:
+        return
+    validator = (
+        validate_oauth_endpoint_url if require_https else validate_mcp_outbound_url
+    )
+    try:
+        validator(url, resolve_dns=False)
+    except (SSRFException, ValueError) as e:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Invalid {field}: {e}{_ssrf_error_hint(url, e)}",
+        )
 
 
 def _truncate_description(description: str | None, max_length: int = 500) -> str:
@@ -136,6 +222,33 @@ def _resolve_oauth_credentials(
         reject_masked_credentials({"oauth_client_secret": resolved_secret})
 
     return resolved_id, resolved_secret
+
+
+def _resolve_admin_credentials(
+    *,
+    request_credentials: dict[str, str],
+    request_credentials_changed: dict[str, bool],
+    existing_user_credentials: dict[str, str] | None,
+) -> dict[str, str]:
+    """Per-key analogue of ``_resolve_oauth_credentials``: reuse the
+    stored value when the changed flag is False, otherwise take the
+    request value and reject masked placeholders defensively. Stored
+    values are sourced from the editing admin's own per-user
+    ``header_substitutions``."""
+    resolved: dict[str, str] = {}
+    for key, request_value in request_credentials.items():
+        changed = request_credentials_changed.get(key, False)
+        if (
+            not changed
+            and existing_user_credentials
+            and key in existing_user_credentials
+        ):
+            resolved[key] = existing_user_credentials[key]
+            continue
+        if request_value:
+            reject_masked_credentials({key: request_value})
+        resolved[key] = request_value
+    return resolved
 
 
 def _build_oauth_admin_config_data(
@@ -252,6 +365,47 @@ def key_client_info(user_id: str) -> str:
 REQUESTED_SCOPE: str | None = None
 
 
+def _token_dict_with_preserved_refresh(
+    tokens: OAuthToken, existing_tokens_raw: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Dump `tokens` for storage, carrying over a previously stored refresh
+    token when the new payload omits one (providers like Google only issue a
+    refresh token on the first authorization)."""
+    token_dict = tokens.model_dump(mode="json")
+    if token_dict.get("refresh_token") or not existing_tokens_raw:
+        return token_dict
+    existing_refresh = existing_tokens_raw.get("refresh_token")
+    if existing_refresh:
+        token_dict["refresh_token"] = existing_refresh
+    return token_dict
+
+
+def _absolute_token_expiry(tokens: OAuthToken) -> float | None:
+    """Resolve the relative `expires_in` to an absolute unix timestamp so it
+    survives a reload into a fresh OAuth provider (see TOKEN_EXPIRES_AT)."""
+    if tokens.expires_in is None:
+        return None
+    return time.time() + tokens.expires_in - TOKEN_EXPIRY_BUFFER_SECONDS
+
+
+def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | None:
+    """Expose a KNOWN_PROVIDER server's configured endpoints as SDK OAuth
+    metadata so refresh targets the real token endpoint, not the SDK's
+    `<server-origin>/token` fallback."""
+    if (
+        mcp_server.oauth_provider_mode != MCPOAuthProviderMode.KNOWN_PROVIDER
+        or not mcp_server.oauth_authorization_endpoint
+        or not mcp_server.oauth_token_endpoint
+    ):
+        return None
+    parsed = urlparse(mcp_server.oauth_authorization_endpoint)
+    return OAuthMetadata(
+        issuer=f"{parsed.scheme}://{parsed.netloc}",  # ty: ignore[invalid-argument-type]
+        authorization_endpoint=mcp_server.oauth_authorization_endpoint,  # ty: ignore[invalid-argument-type]
+        token_endpoint=mcp_server.oauth_token_endpoint,  # ty: ignore[invalid-argument-type]
+    )
+
+
 class OnyxTokenStorage(TokenStorage):
     """
     store auth info in a particular user's connection config in postgres
@@ -260,6 +414,12 @@ class OnyxTokenStorage(TokenStorage):
     def __init__(self, connection_config_id: int, alt_config_id: int | None = None):
         self.alt_config_id = alt_config_id
         self.connection_config_id = connection_config_id
+        # When bound, `get_tokens` hydrates its `token_expiry_time` from the
+        # config read it already does — no separate query for the expiry.
+        self._oauth_context: OAuthContext | None = None
+
+    def bind_oauth_context(self, context: OAuthContext) -> None:
+        self._oauth_context = context
 
     def _ensure_connection_config(self, db_session: Session) -> MCPConnectionConfig:
         config = get_connection_config_by_id(self.connection_config_id, db_session)
@@ -271,6 +431,22 @@ class OnyxTokenStorage(TokenStorage):
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
             config_data = extract_connection_data(config)
+            # The SDK never derives expiry from stored tokens; hydrate it here
+            # to drive its refresh decision (None = no known expiry).
+            if self._oauth_context is not None:
+                expires_at = config_data.get(MCPOAuthKeys.TOKEN_EXPIRES_AT.value)
+                self._oauth_context.token_expiry_time = (
+                    float(expires_at) if expires_at is not None else None
+                )
+                # Re-seed discovered metadata so refresh targets the real token
+                # endpoint, not the SDK's `<origin>/token` fallback. Don't
+                # clobber a known provider's metadata set in make_oauth_provider.
+                if self._oauth_context.oauth_metadata is None:
+                    metadata_raw = config_data.get(MCPOAuthKeys.METADATA.value)
+                    if metadata_raw:
+                        self._oauth_context.oauth_metadata = (
+                            OAuthMetadata.model_validate(metadata_raw)
+                        )
             tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
             if tokens_raw:
                 return OAuthToken.model_validate(tokens_raw)
@@ -280,18 +456,43 @@ class OnyxTokenStorage(TokenStorage):
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
             config_data = extract_connection_data(config)
-            config_data[MCPOAuthKeys.TOKENS.value] = tokens.model_dump(mode="json")
+            existing_tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
+            config_data[MCPOAuthKeys.TOKENS.value] = _token_dict_with_preserved_refresh(
+                tokens, existing_tokens_raw
+            )
+            expires_at = _absolute_token_expiry(tokens)
+            if expires_at is not None:
+                config_data[MCPOAuthKeys.TOKEN_EXPIRES_AT.value] = expires_at
+            else:
+                # No expires_in: drop any stale expiry so the next tool call
+                # doesn't see the just-refreshed token as expired.
+                config_data.pop(MCPOAuthKeys.TOKEN_EXPIRES_AT.value, None)
+            # Persist discovered metadata so the next per-call provider can
+            # refresh without repeating discovery.
+            if (
+                self._oauth_context is not None
+                and self._oauth_context.oauth_metadata is not None
+            ):
+                config_data[MCPOAuthKeys.METADATA.value] = (
+                    self._oauth_context.oauth_metadata.model_dump(mode="json")
+                )
             config_data["headers"] = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
             update_connection_config(config.id, db_session, config_data)
-            if self.alt_config_id:
-                update_connection_config(self.alt_config_id, db_session, config_data)
 
-                # signal the oauth callback that token exchange is complete
-                r = get_redis_client()
-                r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
-                r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
+        # The shared admin row is intentionally NOT written here: it
+        # serves as the OAuth `client_info` registry shared across all
+        # users of this MCP server (see `get_client_info`). Per-user
+        # state (access tokens and resolved `Authorization` headers)
+        # belongs only on the per-user row. The Redis push below is
+        # what `process_oauth_callback` blocks on to know token exchange
+        # has completed; the admin config id is the only stable
+        # identifier shared between the two contexts.
+        if self.alt_config_id:
+            r = get_redis_client()
+            r.rpush(key_tokens(str(self.alt_config_id)), tokens.model_dump_json())
+            r.expire(key_tokens(str(self.alt_config_id)), OAUTH_WAIT_SECONDS)
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         with get_session_with_current_tenant() as db_session:
@@ -319,13 +520,27 @@ class OnyxTokenStorage(TokenStorage):
     async def set_client_info(  # ty: ignore[invalid-method-override]
         self, info: OAuthClientInformationFull
     ) -> None:
+        info_payload = info.model_dump(mode="json")
         with get_session_with_current_tenant() as db_session:
             config = self._ensure_connection_config(db_session)
             config_data = extract_connection_data(config)
-            config_data[MCPOAuthKeys.CLIENT_INFO.value] = info.model_dump(mode="json")
+            config_data[MCPOAuthKeys.CLIENT_INFO.value] = info_payload
             update_connection_config(config.id, db_session, config_data)
+
+            # The shared admin row holds the OAuth `client_info` registry
+            # used by every user of this MCP server (see `get_client_info`).
+            # When DCR runs we want to cache the discovered client_info there
+            # so future users can re-use it — but ONLY the `client_info`
+            # field. The per-user `config_data` carries per-user state
+            # (`tokens`, resolved `Authorization` header) which belongs
+            # only on the per-user row.
             if self.alt_config_id:
-                update_connection_config(self.alt_config_id, db_session, config_data)
+                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
+                alt_config_data = extract_connection_data(alt_config)
+                alt_config_data[MCPOAuthKeys.CLIENT_INFO.value] = info_payload
+                update_connection_config(
+                    self.alt_config_id, db_session, alt_config_data
+                )
 
 
 def make_oauth_provider(
@@ -392,7 +607,8 @@ def make_oauth_provider(
         r.delete(key_auth_url(user_id), key_state(user_id))
         return code, state_obj.state
 
-    return OAuthClientProvider(
+    storage = OnyxTokenStorage(connection_config_id, admin_config_id)
+    provider = OAuthClientProvider(
         server_url=mcp_server.server_url,
         client_metadata=OAuthClientMetadata(
             client_name=f"Onyx - {mcp_server.name}",
@@ -401,10 +617,22 @@ def make_oauth_provider(
             response_types=["code"],
             scope=REQUESTED_SCOPE,  # TODO: do we need to pass this in? maybe make configurable
         ),
-        storage=OnyxTokenStorage(connection_config_id, admin_config_id),
+        storage=storage,
         redirect_handler=redirect_handler,
         callback_handler=callback_handler,
     )
+
+    # A fresh provider per tool call starts with an empty context, so the SDK
+    # can't silently refresh without two hydrated fields: an absolute token
+    # expiry (else `is_token_valid()` stays True and refresh never fires) and,
+    # for known providers, the real OAuth metadata (else refresh hits the wrong
+    # `<server-origin>/token`). Expiry is bound through storage so it rides the
+    # config read `get_tokens` already does.
+    storage.bind_oauth_context(provider.context)
+    known_metadata = _known_provider_oauth_metadata(mcp_server)
+    if known_metadata is not None:
+        provider.context.oauth_metadata = known_metadata
+    return provider
 
 
 def _build_headers_from_template(
@@ -461,11 +689,49 @@ def make_pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
+MCP_OAUTH_CALLBACK_PATH = "/mcp/oauth/callback"
+
+
+def _mcp_oauth_redirect_uri() -> str:
+    return f"{WEB_DOMAIN}{MCP_OAUTH_CALLBACK_PATH}"
+
+
+def _mcp_known_provider_flow_params(
+    mcp_server: DbMCPServer,
+    client_info: OAuthClientInformationFull,
+) -> OAuthFlowParams:
+    """Map a known-provider MCP server + its stored client credentials onto the
+    shared OAuth flow descriptor consumed by the OAuthTokenManager primitives."""
+    if (
+        not mcp_server.oauth_authorization_endpoint
+        or not mcp_server.oauth_token_endpoint
+    ):
+        raise OnyxError(
+            OnyxErrorCode.MISSING_REQUIRED_FIELD,
+            "Known-provider OAuth mode requires oauth_authorization_endpoint "
+            "and oauth_token_endpoint",
+        )
+    if not client_info.client_id:
+        raise OnyxError(
+            OnyxErrorCode.MISSING_REQUIRED_FIELD,
+            "Known-provider OAuth mode requires a non-empty client_id",
+        )
+    return OAuthFlowParams(
+        authorization_url=mcp_server.oauth_authorization_endpoint,
+        token_url=mcp_server.oauth_token_endpoint,
+        client_id=client_info.client_id,
+        client_secret=client_info.client_secret,
+        scopes=mcp_server.oauth_scopes_override,
+        additional_params=mcp_server.oauth_additional_auth_params,
+    )
+
+
 class MCPOauthState(BaseModel):
     server_id: int
     return_path: str
     is_admin: bool
     state: str
+    code_verifier: str | None = None
 
 
 @admin_router.post("/oauth/connect", response_model=MCPUserOAuthConnectResponse)
@@ -589,6 +855,60 @@ async def _connect_oauth(
     connection_config_dict = extract_connection_data(
         connection_config, apply_mask=False
     )
+
+    if mcp_server.oauth_provider_mode == MCPOAuthProviderMode.KNOWN_PROVIDER:
+        client_info_raw = connection_config_dict.get(MCPOAuthKeys.CLIENT_INFO.value)
+        if not client_info_raw:
+            raise OnyxError(
+                OnyxErrorCode.MISSING_REQUIRED_FIELD,
+                "Known-provider OAuth mode requires a configured OAuth client_id. "
+                "Please set client credentials in the auth modal.",
+            )
+
+        client_info = OAuthClientInformationFull.model_validate(client_info_raw)
+        if not client_info.client_id:
+            raise OnyxError(
+                OnyxErrorCode.MISSING_REQUIRED_FIELD,
+                "Known-provider OAuth mode requires a non-empty client_id",
+            )
+
+        state = token_urlsafe(32)
+        code_verifier, code_challenge = make_pkce_pair()
+        state_obj = MCPOauthState(
+            server_id=mcp_server.id,
+            return_path=request.return_path,
+            is_admin=is_admin,
+            state=state,
+            code_verifier=code_verifier,
+        )
+        redis_client = get_redis_client()
+        state_key = key_state(str(user.id))
+        logger.info(
+            "Known-provider OAuth connect: stored state for server_id=%s user_id=%s tenant=%s",
+            mcp_server.id,
+            user.id,
+            get_current_tenant_id(),
+        )
+        redis_client.set(
+            state_key,
+            state_obj.model_dump_json(),
+            ex=STATE_TTL_SECONDS,
+        )
+
+        oauth_url = build_oauth_authorization_url(
+            _mcp_known_provider_flow_params(mcp_server, client_info),
+            _mcp_oauth_redirect_uri(),
+            state,
+            code_challenge=code_challenge,
+            resource=(
+                mcp_server.server_url if request.include_resource_param else None
+            ),
+        )
+        return MCPUserOAuthConnectResponse(
+            server_id=int(request.server_id),
+            oauth_url=oauth_url,
+        )
+
     is_connected = (
         MCPOAuthKeys.CLIENT_INFO.value in connection_config_dict
         and connection_config_dict.get("headers")
@@ -736,7 +1056,15 @@ async def process_oauth_callback(
         raise HTTPException(status_code=400, detail="Missing state parameter")
     if not code:
         raise HTTPException(status_code=400, detail="Missing code parameter")
-    stored_data = cast(bytes, redis_client.get(key_state(user_id)))
+
+    state_key = key_state(user_id)
+    stored_data = redis_client.get(state_key)
+    logger.info(
+        "OAuth callback: state lookup for user_id=%s tenant=%s found=%s",
+        user_id,
+        get_current_tenant_id(),
+        stored_data is not None,
+    )
     if not stored_data:
         raise HTTPException(
             status_code=400, detail="Invalid or expired state parameter"
@@ -748,7 +1076,84 @@ async def process_oauth_callback(
     except Exception:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    user_id = str(user.id)
+    if state != state_data.state:
+        logger.warning(
+            "OAuth callback: state mismatch for user_id=%s server_id=%s",
+            user_id,
+            server_id,
+        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid OAuth state")
+
+    if mcp_server.oauth_provider_mode == MCPOAuthProviderMode.KNOWN_PROVIDER:
+        user_config = get_user_connection_config(mcp_server.id, user.email, db_session)
+        if not user_config:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "User connection config not found for known-provider callback",
+            )
+
+        user_config_data = extract_connection_data(user_config, apply_mask=False)
+        client_info_raw = user_config_data.get(MCPOAuthKeys.CLIENT_INFO.value)
+        if not client_info_raw:
+            raise OnyxError(
+                OnyxErrorCode.MISSING_REQUIRED_FIELD,
+                "Known-provider callback missing client info. "
+                "Reconfigure OAuth client credentials and retry.",
+            )
+
+        client_info = OAuthClientInformationFull.model_validate(client_info_raw)
+        try:
+            token_payload = exchange_oauth_code_for_token(
+                _mcp_known_provider_flow_params(mcp_server, client_info),
+                code,
+                _mcp_oauth_redirect_uri(),
+                code_verifier=state_data.code_verifier,
+            )
+        except (SSRFException, ValueError) as e:
+            # Fetch-time SSRF guard (e.g. DNS rebinding, or a pre-existing
+            # internal endpoint) — surface a clean 400, not an unhandled 500.
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Known-provider OAuth token endpoint is not allowed: {e}",
+            )
+        except requests.HTTPError as e:
+            detail = e.response.text if e.response is not None else str(e)
+            upstream_status = e.response.status_code if e.response is not None else None
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                f"Known-provider OAuth token exchange failed: {detail}",
+                status_code_override=upstream_status,
+            )
+        if not token_payload.get("access_token"):
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY, "Token response missing access_token"
+            )
+        oauth_token = OAuthToken.model_validate(token_payload)
+
+        user_config_data[MCPOAuthKeys.TOKENS.value] = oauth_token.model_dump(
+            mode="json"
+        )
+        # `OAuthToken` drops the absolute `expires_at` from the payload on
+        # validation; persist it so later tool calls know when to refresh.
+        expires_at = token_payload.get("expires_at") or _absolute_token_expiry(
+            oauth_token
+        )
+        if expires_at is not None:
+            user_config_data[MCPOAuthKeys.TOKEN_EXPIRES_AT.value] = float(expires_at)
+        user_config_data["headers"] = {
+            "Authorization": f"{oauth_token.token_type} {oauth_token.access_token}"
+        }
+        update_connection_config(user_config.id, db_session, user_config_data)
+        redis_client.delete(key_state(user_id))
+
+        db_session.commit()
+        return MCPOAuthCallbackResponse(
+            success=True,
+            server_id=mcp_server.id,
+            server_name=mcp_server.name,
+            message=f"OAuth authorization completed successfully for {mcp_server.name}",
+            redirect_url=state_data.return_path,
+        )
 
     r = get_redis_client()
 
@@ -833,20 +1238,24 @@ def save_user_credentials(
             headers={"Authorization": f"Bearer {request.credentials['api_key']}"},
         )
     else:
-        # Use template to create the full connection config
+        # Render via the shared helper so user + auto (`{user_email}`)
+        # substitutions go through one pipeline.
         try:
             # TODO: fix and/or type correctly w/base model
             auth_template_dict = extract_connection_data(
                 auth_template, apply_mask=False
             )
+            template = MCPAuthTemplate(headers=auth_template_dict.get("headers", {}))
             config_data = MCPConnectionData(
-                headers=auth_template_dict.get("headers", {}),
+                headers=_build_headers_from_template(
+                    template, request.credentials, email
+                ),
                 header_substitutions=request.credentials,
             )
             for oauth_field_key in MCPOAuthKeys:
-                field_key: Literal["client_info", "tokens", "metadata"] = (
-                    oauth_field_key.value
-                )
+                field_key: Literal[
+                    "client_info", "tokens", "metadata", "token_expires_at"
+                ] = oauth_field_key.value
                 if field_val := auth_template_dict.get(field_key):
                     config_data[field_key] = field_val
 
@@ -873,11 +1282,6 @@ def save_user_credentials(
                 mcp_server.admin_connection_config_id,
                 None,
             )
-
-        if HEADER_SUBSTITUTIONS in config_data:
-            for key, value in config_data[HEADER_SUBSTITUTIONS].items():
-                for k, v in config_data["headers"].items():
-                    config_data["headers"][k] = v.replace(f"{{{key}}}", value)
 
         server_url = mcp_server.server_url
         is_valid, test_message = test_mcp_server_credentials(
@@ -982,13 +1386,15 @@ def _db_mcp_server_to_api_mcp_server(
     user_authenticated: bool | None = None
     user_credentials = None
     admin_credentials = None
-    can_view_admin_credentials = bool(include_auth_config) and (
-        request_user is not None
-        and (
-            request_user.role == UserRole.ADMIN
-            or (request_user.email and request_user.email == db_server.owner)
-        )
+    is_owner_or_admin = request_user is not None and (
+        request_user.role == UserRole.ADMIN
+        or (request_user.email and request_user.email == db_server.owner)
     )
+    can_view_admin_credentials = bool(include_auth_config) and is_owner_or_admin
+    # The internal server_url and the owner email are sensitive: expose them only
+    # to the server's owner or an admin. Basic users attaching MCP actions to an
+    # assistant don't need either (the connect/OAuth flow is brokered server-side).
+    can_view_server_details = is_owner_or_admin
     if db_server.auth_type == MCPAuthenticationType.NONE:
         user_authenticated = True  # No auth required
     elif auth_performer == MCPAuthenticationPerformer.ADMIN:
@@ -1072,9 +1478,17 @@ def _db_mcp_server_to_api_mcp_server(
                 admin_credentials = {}
                 logger.warning("No client info found for server %s", db_server.name)
 
-    # Get auth template if this is a per-user auth server
+    # The header template is only meaningful for per-user API_TOKEN
+    # servers, where it surfaces placeholder strings (e.g.
+    # `Bearer {API_KEY}`) for the user-side credential prompt. OAuth
+    # per-user servers do not get an `auth_template`: OAuth uses the
+    # handshake URL (`/oauth/connect`) rather than a header template,
+    # so the frontend never consumes one for OAuth flows.
     auth_template = None
-    if auth_performer == MCPAuthenticationPerformer.PER_USER:
+    if (
+        auth_performer == MCPAuthenticationPerformer.PER_USER
+        and db_server.auth_type != MCPAuthenticationType.OAUTH
+    ):
         try:
             template_config = db_server.admin_connection_config
             if template_config:
@@ -1118,11 +1532,16 @@ def _db_mcp_server_to_api_mcp_server(
         id=db_server.id,
         name=db_server.name,
         description=db_server.description,
-        server_url=db_server.server_url,
-        owner=db_server.owner,
+        server_url=db_server.server_url if can_view_server_details else "",
+        owner=db_server.owner if can_view_server_details else "",
         transport=db_server.transport,
         auth_type=db_server.auth_type,
         auth_performer=auth_performer,
+        oauth_provider_mode=db_server.oauth_provider_mode,
+        oauth_authorization_endpoint=db_server.oauth_authorization_endpoint,
+        oauth_token_endpoint=db_server.oauth_token_endpoint,
+        oauth_scopes_override=db_server.oauth_scopes_override,
+        oauth_additional_auth_params=db_server.oauth_additional_auth_params,
         is_authenticated=is_authenticated,
         user_authenticated=user_authenticated,
         status=db_server.status,
@@ -1390,7 +1809,7 @@ def _list_mcp_tools_by_id(
 
     if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
         # TODO: just pass this in, but should work when auth is set already
-        assert connection_config  # for mypy
+        assert connection_config  # for type-checking
         auth = make_oauth_provider(
             mcp_server,
             user_id,
@@ -1487,6 +1906,16 @@ def _upsert_mcp_server(
     """
     Creates a new or edits an existing MCP server. Returns the DB model
     """
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+    _validate_mcp_server_url(
+        request.oauth_authorization_endpoint,
+        "oauth_authorization_endpoint",
+        require_https=True,
+    )
+    _validate_mcp_server_url(
+        request.oauth_token_endpoint, "oauth_token_endpoint", require_https=True
+    )
+
     mcp_server = None
     admin_config = None
 
@@ -1502,7 +1931,8 @@ def _upsert_mcp_server(
                 detail=f"MCP server with ID {request.existing_server_id} not found",
             )
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
-        client_info = None
+        client_info: OAuthClientInformationFull | None = None
+        existing_admin_config_dict: MCPConnectionData = MCPConnectionData(headers={})
         if mcp_server.admin_connection_config:
             existing_admin_config_dict = extract_connection_data(
                 mcp_server.admin_connection_config, apply_mask=False
@@ -1529,6 +1959,71 @@ def _upsert_mcp_server(
                 existing_client=client_info,
             )
 
+        # Same pattern for per-user API_TOKEN: resolve admin credentials
+        # against the admin's stored per-user row
+        existing_admin_per_user_creds: dict[str, str] = {}
+        existing_template_headers: dict[str, str] = {}
+        if mcp_server.admin_connection_config:
+            existing_template_headers = (
+                existing_admin_config_dict.get("headers", {}) or {}
+            )
+        if (
+            request.auth_type == MCPAuthenticationType.API_TOKEN
+            and request.auth_performer == MCPAuthenticationPerformer.PER_USER
+            and user.email
+        ):
+            existing_admin_per_user_config = get_user_connection_config(
+                mcp_server.id, user.email, db_session
+            )
+            if existing_admin_per_user_config:
+                existing_admin_per_user_dict = extract_connection_data(
+                    existing_admin_per_user_config, apply_mask=False
+                )
+                existing_admin_per_user_creds = (
+                    existing_admin_per_user_dict.get(HEADER_SUBSTITUTIONS) or {}
+                )
+            if request.admin_credentials is not None:
+                request.admin_credentials = _resolve_admin_credentials(
+                    request_credentials=request.admin_credentials,
+                    request_credentials_changed=request.admin_credentials_changed,
+                    existing_user_credentials=existing_admin_per_user_creds,
+                )
+
+        api_token_creds_changed = (
+            request.auth_type == MCPAuthenticationType.API_TOKEN
+            and request.auth_performer == MCPAuthenticationPerformer.PER_USER
+            and existing_admin_per_user_creds != (request.admin_credentials or {})
+        )
+        api_token_template_changed = (
+            request.auth_type == MCPAuthenticationType.API_TOKEN
+            and request.auth_performer == MCPAuthenticationPerformer.PER_USER
+            and request.auth_template is not None
+            and request.auth_template.headers != existing_template_headers
+        )
+        api_token_scheme_changed = (
+            request.auth_type == MCPAuthenticationType.API_TOKEN
+            and (
+                request.auth_type != mcp_server.auth_type
+                or request.auth_performer != mcp_server.auth_performer
+            )
+        )
+        # Known-provider OAuth settings (endpoints/mode/scopes/extra params)
+        # determine where and with what scope user tokens are minted. A change
+        # to any of them invalidates existing user tokens, so it must trigger
+        # the same re-handshake wipe as a client_id/secret change.
+        oauth_provider_config_changed = (
+            request.auth_type == MCPAuthenticationType.OAUTH
+            and (
+                request.oauth_provider_mode != mcp_server.oauth_provider_mode
+                or request.oauth_authorization_endpoint
+                != mcp_server.oauth_authorization_endpoint
+                or request.oauth_token_endpoint != mcp_server.oauth_token_endpoint
+                or request.oauth_scopes_override != mcp_server.oauth_scopes_override
+                or request.oauth_additional_auth_params
+                != mcp_server.oauth_additional_auth_params
+            )
+        )
+
         changing_connection_config = (
             not mcp_server.admin_connection_config
             or (
@@ -1537,15 +2032,23 @@ def _upsert_mcp_server(
                     client_info is None
                     or request.oauth_client_id != client_info.client_id
                     or request.oauth_client_secret != (client_info.client_secret or "")
+                    or oauth_provider_config_changed
                 )
             )
-            or (request.auth_type == MCPAuthenticationType.API_TOKEN)
+            or (
+                request.auth_type == MCPAuthenticationType.API_TOKEN
+                and (
+                    api_token_creds_changed
+                    or api_token_template_changed
+                    or api_token_scheme_changed
+                )
+            )
             or (request.transport != mcp_server.transport)
         )
 
-        # Cleanup: Delete existing connection configs
-        # If the auth type is OAUTH, delete all user connection configs
-        # If the auth type is API_TOKEN, delete the admin connection config and the admin user connection configs
+        # OAuth: wipe every user's tokens — re-handshake required.
+        # API_TOKEN: drop only the shared template; the admin's per-user
+        # row is upserted in place below.
         if (
             changing_connection_config
             and mcp_server.admin_connection_config_id
@@ -1560,10 +2063,6 @@ def _upsert_mcp_server(
             and request.auth_type == MCPAuthenticationType.API_TOKEN
         ):
             delete_connection_config(mcp_server.admin_connection_config_id, db_session)
-            if user.email:
-                delete_user_connection_configs_for_server(
-                    mcp_server.id, user.email, db_session
-                )
 
         # Update the server with new values
         mcp_server = update_mcp_server__no_commit(
@@ -1574,6 +2073,11 @@ def _upsert_mcp_server(
             server_url=request.server_url,
             auth_type=request.auth_type,
             auth_performer=request.auth_performer,
+            oauth_provider_mode=request.oauth_provider_mode,
+            oauth_authorization_endpoint=request.oauth_authorization_endpoint,
+            oauth_token_endpoint=request.oauth_token_endpoint,
+            oauth_scopes_override=request.oauth_scopes_override,
+            oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport,
         )
 
@@ -1601,6 +2105,11 @@ def _upsert_mcp_server(
             server_url=request.server_url,
             auth_type=request.auth_type,
             auth_performer=request.auth_performer,
+            oauth_provider_mode=request.oauth_provider_mode,
+            oauth_authorization_endpoint=request.oauth_authorization_endpoint,
+            oauth_token_endpoint=request.oauth_token_endpoint,
+            oauth_scopes_override=request.oauth_scopes_override,
+            oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport or MCPTransport.STREAMABLE_HTTP,
             db_session=db_session,
         )
@@ -1632,7 +2141,7 @@ def _upsert_mcp_server(
 
     elif request.auth_performer == MCPAuthenticationPerformer.PER_USER:
         if request.auth_type == MCPAuthenticationType.API_TOKEN:
-            # handled by model validation, this is just for mypy
+            # handled by model validation, this is just for type-checking
             assert request.auth_template and request.admin_credentials
 
             # Per-user server: create template and save creator's per-user config
@@ -1647,11 +2156,11 @@ def _upsert_mcp_server(
                 or MCPAuthTemplate.derive_required_fields(template_data.headers)
             )
 
-            # Create template config: faithful representation of what's in the admin panel
+            # Template config: placeholder headers + required fields only.
+            # Admin's credentials live on the admin's own per-user row.
             template_config = create_connection_config(
                 config_data=MCPConnectionData(
                     headers=template_data.headers,
-                    header_substitutions=request.admin_credentials,
                     required_fields=persisted_required_fields,
                 ),
                 mcp_server_id=mcp_server.id,
@@ -1659,19 +2168,18 @@ def _upsert_mcp_server(
                 db_session=db_session,
             )
 
-            # seed the user config for this admin user
-            user_config = create_connection_config(
+            # Seed (or refresh) the admin's own per-user row.
+            upsert_user_connection_config(
+                server_id=mcp_server.id,
+                user_email=user.email,
                 config_data=MCPConnectionData(
                     headers=_build_headers_from_template(
                         template_data, request.admin_credentials, user.email
                     ),
                     header_substitutions=request.admin_credentials,
                 ),
-                mcp_server_id=mcp_server.id,
-                user_email=user.email,
                 db_session=db_session,
             )
-            user_config.mcp_server_id = mcp_server.id
             admin_connection_config_id = template_config.id
         elif request.auth_type == MCPAuthenticationType.OAUTH:
             # Create initial admin config. If client credentials were provided,
@@ -1936,6 +2444,11 @@ def upsert_mcp_server(
             auth_performer=(
                 request.auth_performer.value if request.auth_performer else None
             ),
+            oauth_provider_mode=mcp_server.oauth_provider_mode,
+            oauth_authorization_endpoint=mcp_server.oauth_authorization_endpoint,
+            oauth_token_endpoint=mcp_server.oauth_token_endpoint,
+            oauth_scopes_override=mcp_server.oauth_scopes_override,
+            oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
             is_authenticated=(
                 mcp_server.auth_type == MCPAuthenticationType.NONE.value
                 or request.auth_performer == MCPAuthenticationPerformer.ADMIN
@@ -2012,6 +2525,8 @@ def create_mcp_server_simple(
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+
     mcp_server = create_mcp_server__no_commit(
         owner_email=user.email,
         name=request.name,
@@ -2034,6 +2549,11 @@ def create_mcp_server_simple(
         transport=mcp_server.transport,
         auth_type=mcp_server.auth_type,
         auth_performer=mcp_server.auth_performer,
+        oauth_provider_mode=mcp_server.oauth_provider_mode,
+        oauth_authorization_endpoint=mcp_server.oauth_authorization_endpoint,
+        oauth_token_endpoint=mcp_server.oauth_token_endpoint,
+        oauth_scopes_override=mcp_server.oauth_scopes_override,
+        oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
         is_authenticated=False,  # Not authenticated yet
         status=mcp_server.status,
         tool_count=0,  # New server, no tools yet
@@ -2057,6 +2577,8 @@ def update_mcp_server_simple(
         raise HTTPException(status_code=404, detail="MCP server not found")
 
     _ensure_mcp_server_owner_or_admin(mcp_server, user)
+
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
 
     # Update only provided fields
     updated_server = update_mcp_server__no_commit(

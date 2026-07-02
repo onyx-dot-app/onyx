@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-user-file-processing
+  name: {{ include "onyx.resourceName" (list . "celery-worker-user-file-processing") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.celery_worker_user_file_processing.deploymentLabels }}
@@ -61,11 +61,16 @@ spec:
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
             [
+              {{- with include "onyx.customCACerts.commandPrefix" . }}
+              {{- . | nindent 14 }}
+              {{- end }}
               "celery",
               "-A",
               "onyx.background.celery.versioned_apps.user_file_processing",
               "worker",
-              {{ printf "--loglevel=%s" .Values.celery_worker_user_file_processing.logLevel | quote }},
+              {{- with .Values.celery_worker_user_file_processing.logLevel }}
+              {{ printf "--loglevel=%s" . | quote }},
+              {{- end }}
               "--hostname=user-file-processing@%n",
               "-Q",
               "user_file_processing,user_file_project_sync,user_file_delete",
@@ -75,14 +80,20 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- with include "onyx.customCACerts.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with .Values.celery_worker_user_file_processing.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with .Values.celery_worker_user_file_processing.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.celery_worker_user_file_processing.volumeMounts) }}
+          {{- . | nindent 10 }}
           {{- end }}
           startupProbe:
             {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
@@ -106,8 +117,7 @@ spec:
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
                     --filename /tmp/onyx_k8s_userfileprocessing_liveness.txt
-      {{- with .Values.celery_worker_user_file_processing.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.celery_worker_user_file_processing.volumes) }}
+      {{- . | nindent 6 }}
       {{- end }}
 {{- end }}

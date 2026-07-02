@@ -20,15 +20,19 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       python: ${{ steps.filter.outputs.python || 'true' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
@@ -43,8 +47,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.python == 'true'
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=2cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
-    timeout-minutes: 45
+    runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
+    timeout-minutes: 10
 
 
     env:
@@ -56,10 +60,10 @@ jobs:
       LICENSE_ENFORCEMENT_ENABLED: "false"
 
     steps:
-    - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+    - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
     - name: Checkout code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
       with:
         persist-credentials: false
 
@@ -74,4 +78,4 @@ jobs:
 
     - name: Run Tests
       shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
-      run: py.test -o junit_family=xunit2 -xv --ff backend/tests/unit
+      run: py.test -o junit_family=xunit2 -v -n auto backend/tests/unit

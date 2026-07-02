@@ -9,11 +9,12 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Button, Divider as OpalDivider } from "@opal/components";
+import { Button, CopyButton, Divider as OpalDivider } from "@opal/components";
+import { Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { Checkbox } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
@@ -44,8 +45,20 @@ import {
   fetchHierarchyNodeDocuments,
 } from "@/lib/hierarchy/svc";
 import { AgentAttachedDocument } from "@/lib/agents/types";
-import { timeAgo } from "@/lib/time";
-import Spacer from "@/refresh-components/Spacer";
+import { timeAgo } from "@opal/time";
+import { Spacer } from "@opal/components";
+
+// Compact, human-readable form of a node/document link, used as a secondary
+// label so siblings that share a display name (common for orphaned nodes that
+// fall back to the source root) remain distinguishable.
+function formatLinkSubtitle(link: string | null): string | null {
+  if (!link) return null;
+  const stripped = link
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/\/+$/, "");
+  return stripped || null;
+}
 
 // ============================================================================
 // HIERARCHY BREADCRUMB - Navigation path for folder hierarchy
@@ -683,7 +696,7 @@ export default function SourceHierarchyBrowser({
       >
         <GeneralLayouts.Section height="auto" width="fit">
           <InputTypeIn
-            leftSearchIcon
+            searchIcon
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             placeholder="Search..."
@@ -849,6 +862,7 @@ export default function SourceHierarchyBrowser({
               const isSelected = isFolder
                 ? selectedFolderIds.includes(item.data.id as number)
                 : selectedDocumentIds.includes(item.data.id as string);
+              const subtitle = formatLinkSubtitle(item.data.link);
 
               return (
                 <TableLayouts.TableRow
@@ -860,29 +874,56 @@ export default function SourceHierarchyBrowser({
                     {getItemIcon(item, isSelected)}
                   </TableLayouts.CheckboxCell>
                   <TableLayouts.TableCell flex>
-                    <GeneralLayouts.Section
-                      flexDirection="row"
-                      justifyContent="start"
-                      alignItems="center"
-                      gap={0.25}
-                      height="auto"
-                      width="fit"
-                    >
-                      <Truncated>{item.data.title}</Truncated>
-                      {isFolder && (
-                        <Button
-                          icon={SvgChevronRight}
-                          prominence="tertiary"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleClickIntoFolder(
-                              item.data as HierarchyNodeSummary
-                            );
-                          }}
-                        />
-                      )}
-                    </GeneralLayouts.Section>
+                    <Hoverable.Root group="hierarchy-row" width="full">
+                      <GeneralLayouts.Section
+                        flexDirection="row"
+                        justifyContent="start"
+                        alignItems="center"
+                        gap={0.25}
+                        height="auto"
+                      >
+                        <GeneralLayouts.Section
+                          flexDirection="column"
+                          justifyContent="start"
+                          alignItems="start"
+                          gap={0}
+                          height="auto"
+                          className="min-w-0 grow"
+                        >
+                          <Truncated>{item.data.title}</Truncated>
+                          {subtitle && (
+                            <Truncated text03 secondaryBody>
+                              {subtitle}
+                            </Truncated>
+                          )}
+                        </GeneralLayouts.Section>
+                        {item.data.link && (
+                          <Hoverable.Item
+                            group="hierarchy-row"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <CopyButton
+                              size="sm"
+                              getCopyText={() => item.data.link ?? ""}
+                              tooltip="Copy link"
+                            />
+                          </Hoverable.Item>
+                        )}
+                        {isFolder && (
+                          <Button
+                            icon={SvgChevronRight}
+                            prominence="tertiary"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleClickIntoFolder(
+                                item.data as HierarchyNodeSummary
+                              );
+                            }}
+                          />
+                        )}
+                      </GeneralLayouts.Section>
+                    </Hoverable.Root>
                   </TableLayouts.TableCell>
                   <TableLayouts.TableCell width={8}>
                     <Text text03 secondaryBody>

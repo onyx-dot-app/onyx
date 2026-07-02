@@ -3,11 +3,12 @@
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 import {
   useInitialValues,
   buildValidationSchema,
@@ -15,10 +16,11 @@ import {
   mergeFetchedModelConfigurations,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   APIBaseField,
+  CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
@@ -27,8 +29,7 @@ import {
 import { fetchModels } from "@/lib/languageModels/svc";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
-
-const DEFAULT_API_BASE = "http://localhost:1234";
+import { useSettings } from "@/lib/settings/hooks";
 
 interface LMStudioModalValues extends BaseLLMModalValues {
   api_base: string;
@@ -47,6 +48,7 @@ function LMStudioModalInternals({
   isOnboarding,
 }: LMStudioModalInternalsProps) {
   const formikProps = useFormikContext<LMStudioModalValues>();
+  const settings = useSettings();
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -57,7 +59,7 @@ function LMStudioModalInternals({
       api_base: formikProps.values.api_base,
       custom_config: apiKey ? { LM_STUDIO_API_KEY: apiKey } : {},
       api_key_changed: apiKey !== initialApiKey,
-      name: existingLlmProvider?.name ?? undefined,
+      id: existingLlmProvider?.id ?? undefined,
     });
     if (data.error) {
       throw new Error(data.error);
@@ -74,7 +76,13 @@ function LMStudioModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription="The base URL for your LM Studio server."
+        subDescription={
+          settings.is_containerized
+            ? markdown(
+                `The base URL for your LM Studio server. ${CONTAINERIZED_HOST_NOTE}`
+              )
+            : "The base URL for your LM Studio server."
+        }
         placeholder="Your LM Studio API base URL"
       />
 
@@ -116,6 +124,10 @@ export default function LMStudioModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
+  const settings = useSettings();
+  const defaultApiBase = settings.is_containerized
+    ? "http://host.docker.internal:1234"
+    : "http://localhost:1234";
 
   const onClose = () => onOpenChange?.(false);
 
@@ -125,7 +137,7 @@ export default function LMStudioModal({
       LLMProviderName.LM_STUDIO,
       existingLlmProvider
     ),
-    api_base: existingLlmProvider?.api_base ?? DEFAULT_API_BASE,
+    api_base: existingLlmProvider?.api_base ?? defaultApiBase,
     custom_config: {
       LM_STUDIO_API_KEY: existingLlmProvider?.custom_config?.LM_STUDIO_API_KEY,
     },

@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Button } from "@opal/components";
+import { SvgArrowRight } from "@opal/icons";
 
 interface PasteTilePopoverProps {
   text: string;
   tileElement: HTMLElement;
   onDismiss: () => void;
   onTextChange: (newText: string) => void;
+  onExpand: () => void;
 }
 
 // Popover anchored to a paste tile that lets the user view/edit the full
@@ -19,6 +22,7 @@ function PasteTilePopover({
   tileElement,
   onDismiss,
   onTextChange,
+  onExpand,
 }: PasteTilePopoverProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [rect, setRect] = useState(() => tileElement.getBoundingClientRect());
@@ -76,7 +80,7 @@ function PasteTilePopover({
       <div
         role="dialog"
         aria-label="Edit pasted text"
-        className="fixed z-50 bg-background-neutral-00 border border-border-01 rounded-08 shadow-02 p-1 max-w-[400px]"
+        className="fixed z-50 bg-background-neutral-00 border border-border-01 rounded-08 shadow-box-02 p-1 max-w-[400px]"
         style={{
           left: Math.max(GAP, left),
           ...(fitsBelow
@@ -97,6 +101,18 @@ function PasteTilePopover({
             fieldSizing: "content",
           }}
         />
+        <div className="flex justify-end border-t border-border-01 px-1 pt-1">
+          <Button
+            variant="default"
+            prominence="tertiary"
+            size="xs"
+            rightIcon={SvgArrowRight}
+            onClick={onExpand}
+            tooltip="Replace this tile with its full text inline"
+          >
+            Expand into input bar
+          </Button>
+        </div>
       </div>
     </>,
     document.body

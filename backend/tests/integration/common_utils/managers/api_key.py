@@ -1,11 +1,10 @@
 from uuid import uuid4
 
-import requests
-
 from onyx.db.models import UserRole
 from onyx.server.api_key.models import APIKeyArgs
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -22,7 +21,7 @@ class APIKeyManager:
             name=name,
             role=api_key_role,
         )
-        api_key_response = requests.post(
+        api_key_response = client.post(
             f"{API_SERVER_URL}/admin/api-key",
             json=api_key_request.model_dump(),
             headers=user_performing_action.headers,
@@ -46,7 +45,7 @@ class APIKeyManager:
         api_key: DATestAPIKey,
         user_performing_action: DATestUser,
     ) -> None:
-        api_key_response = requests.delete(
+        api_key_response = client.delete(
             f"{API_SERVER_URL}/admin/api-key/{api_key.api_key_id}",
             headers=user_performing_action.headers,
         )
@@ -56,7 +55,7 @@ class APIKeyManager:
     def get_all(
         user_performing_action: DATestUser,
     ) -> list[DATestAPIKey]:
-        api_key_response = requests.get(
+        api_key_response = client.get(
             f"{API_SERVER_URL}/admin/api-key",
             headers=user_performing_action.headers,
         )

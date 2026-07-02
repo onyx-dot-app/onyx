@@ -11,14 +11,17 @@ rejects creation with no connectors.
 
 import json
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from uuid import UUID
 
+import httpx
 import pytest
-import requests
 
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
@@ -62,13 +65,15 @@ def _setup_search_infrastructure() -> tuple[DATestUser, DATestUser, int, int]:
     return admin_user, basic_user, cc_pair.id, search_tool_id
 
 
+@contextmanager
 def _send_message_with_document_set_filter(
     user: DATestUser,
     chat_session_id: UUID,
     document_set_names: list[str],
     forced_tool_id: int,
-) -> requests.Response:
-    return requests.post(
+) -> Iterator[httpx.Response]:
+    with client.stream(
+        "POST",
         f"{API_SERVER_URL}/chat/send-chat-message",
         json={
             "message": "hello",
@@ -79,12 +84,12 @@ def _send_message_with_document_set_filter(
             "mock_llm_response": _MOCK_SEARCH_TOOL_CALL,
         },
         headers=user.headers,
-        stream=True,
         cookies=user.cookies,
-    )
+    ) as response:
+        yield response
 
 
-def _stream_contains_error(response: requests.Response, needle: str) -> bool:
+def _stream_contains_error(response: httpx.Response, needle: str) -> bool:
     needle_lower = needle.lower()
     for raw_line in response.iter_lines():
         if not raw_line:
@@ -138,17 +143,16 @@ def test_document_set_filter_blocks_unauthorized_names(
         admin_user, basic_user, search_tool_id
     )
 
-    response = _send_message_with_document_set_filter(
+    with _send_message_with_document_set_filter(
         user=basic_user,
         chat_session_id=chat_session_id,
         document_set_names=[restricted_doc_set.name],
         forced_tool_id=search_tool_id,
-    )
-
-    assert _stream_contains_error(response, "document set"), (
-        "Expected an access-denied error in the stream when filtering with an "
-        "unauthorized document set name."
-    )
+    ) as response:
+        assert _stream_contains_error(response, "document set"), (
+            "Expected an access-denied error in the stream when filtering with an "
+            "unauthorized document set name."
+        )
 
 
 def test_document_set_filter_allows_authorized_names(
@@ -173,16 +177,15 @@ def test_document_set_filter_allows_authorized_names(
         admin_user, basic_user, search_tool_id
     )
 
-    response = _send_message_with_document_set_filter(
+    with _send_message_with_document_set_filter(
         user=basic_user,
         chat_session_id=chat_session_id,
         document_set_names=[allowed_doc_set.name],
         forced_tool_id=search_tool_id,
-    )
-
-    assert not _stream_contains_error(response, "document set"), (
-        "Did not expect an access-denied error for an authorized document set."
-    )
+    ) as response:
+        assert not _stream_contains_error(response, "document set"), (
+            "Did not expect an access-denied error for an authorized document set."
+        )
 
 
 def test_public_document_set_is_accessible_to_any_user(
@@ -201,14 +204,13 @@ def test_public_document_set_is_accessible_to_any_user(
         admin_user, basic_user, search_tool_id
     )
 
-    response = _send_message_with_document_set_filter(
+    with _send_message_with_document_set_filter(
         user=basic_user,
         chat_session_id=chat_session_id,
         document_set_names=[public_doc_set.name],
         forced_tool_id=search_tool_id,
-    )
-
-    assert not _stream_contains_error(response, "document set")
+    ) as response:
+        assert not _stream_contains_error(response, "document set")
 
 
 def test_nonexistent_document_set_name_is_blocked(
@@ -223,11 +225,10 @@ def test_nonexistent_document_set_name_is_blocked(
         admin_user, basic_user, search_tool_id
     )
 
-    response = _send_message_with_document_set_filter(
+    with _send_message_with_document_set_filter(
         user=basic_user,
         chat_session_id=chat_session_id,
         document_set_names=["this_document_set_does_not_exist"],
         forced_tool_id=search_tool_id,
-    )
-
-    assert _stream_contains_error(response, "document set")
+    ) as response:
+        assert _stream_contains_error(response, "document set")

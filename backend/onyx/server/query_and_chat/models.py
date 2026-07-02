@@ -31,6 +31,7 @@ class MessageOrigin(str, Enum):
     SLACKBOT = "slackbot"
     WIDGET = "widget"
     DISCORDBOT = "discordbot"
+    MOBILE = "mobile"
     UNKNOWN = "unknown"
     UNSET = "unset"
 
@@ -248,6 +249,12 @@ class SetPreferredResponseRequest(BaseModel):
     preferred_response_id: int
 
 
+class CurrentRunInfo(BaseModel):
+    """In-flight run whose stream buffer can be replayed/tailed."""
+
+    run_id: int
+
+
 class ChatSessionDetailResponse(BaseModel):
     chat_session_id: UUID
     description: str | None
@@ -262,6 +269,9 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
+    # Set while a run is in flight and resumable: cursor-0 replay+tail is
+    # available at /chat-session/{id}/resume-stream.
+    current_run: CurrentRunInfo | None = None
 
 
 class AdminSearchRequest(BaseModel):

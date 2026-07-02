@@ -174,7 +174,16 @@ async def create_checkout_session(
         body=body,
         error_message="Failed to create checkout session",
     )
-    return CreateCheckoutSessionResponse(stripe_checkout_url=data["url"])
+    # A success response always carries a url; a missing one is a contract
+    # violation we surface loudly rather than passing null to the client.
+    url = data.get("url")
+    if not url:
+        logger.error("Control plane returned no checkout URL")
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Control plane returned no checkout URL",
+        )
+    return CreateCheckoutSessionResponse(stripe_checkout_url=url)
 
 
 async def create_customer_portal_session(

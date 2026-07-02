@@ -21,15 +21,16 @@ const DEFAULT_ERROR_MSG = "An error occurred while fetching the data.";
 
 /**
  * SWR `onErrorRetry` callback that suppresses automatic retries for
- * authentication errors (401/403). Pass this to any SWR hook whose endpoint
- * requires auth so that unauthenticated pages don't spam the backend.
+ * auth or tier-gated errors (401/402/403). Pass this to any SWR hook whose
+ * endpoint requires auth or a specific tier so that unauthenticated /
+ * under-tier pages don't spam the backend with retries.
  */
 export const skipRetryOnAuthError: NonNullable<
   import("swr").SWRConfiguration["onErrorRetry"]
 > = (error, _key, _config, revalidate, { retryCount }) => {
   if (
     error instanceof FetchError &&
-    (error.status === 401 || error.status === 403)
+    (error.status === 401 || error.status === 402 || error.status === 403)
   )
     return;
   // For non-auth errors, retry with exponential backoff
@@ -39,7 +40,21 @@ export const skipRetryOnAuthError: NonNullable<
   )
     return;
   const delay = Math.min(2000 * 2 ** retryCount, 30000);
-  setTimeout(() => revalidate({ retryCount }), delay);
+  setTimeout(() => {
+    if (typeof document === "undefined" || !document.hidden) {
+      revalidate({ retryCount });
+      return;
+    }
+    // Hidden at retry time: defer until the tab is visible again, so hidden
+    // tabs stay quiet without permanently dropping the retry chain (which
+    // would strand consumers that disable revalidateOnFocus).
+    const retryOnVisible = () => {
+      if (document.hidden) return;
+      document.removeEventListener("visibilitychange", retryOnVisible);
+      revalidate({ retryCount });
+    };
+    document.addEventListener("visibilitychange", retryOnVisible);
+  }, delay);
 };
 
 export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {

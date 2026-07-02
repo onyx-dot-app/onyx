@@ -42,10 +42,10 @@ from onyx.db.models import Persona__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.persona import upsert_persona
-from onyx.document_index.interfaces import VespaDocumentUserFields
+from onyx.document_index.interfaces_new import MetadataUpdateRequest
 from onyx.redis.redis_pool import get_redis_client
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -157,7 +157,9 @@ class TestCheckSweepIncludesPersonaSync:
         mock_app = MagicMock()
 
         with _patch_task_app(check_for_user_file_project_sync, mock_app):
-            check_for_user_file_project_sync.run(tenant_id=TEST_TENANT_ID)
+            check_for_user_file_project_sync.run(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            )
 
         enqueued_ids = {
             call.kwargs["kwargs"]["user_file_id"]
@@ -177,7 +179,9 @@ class TestCheckSweepIncludesPersonaSync:
         mock_app = MagicMock()
 
         with _patch_task_app(check_for_user_file_project_sync, mock_app):
-            check_for_user_file_project_sync.run(tenant_id=TEST_TENANT_ID)
+            check_for_user_file_project_sync.run(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            )
 
         enqueued_ids = {
             call.kwargs["kwargs"]["user_file_id"]
@@ -199,7 +203,9 @@ class TestCheckSweepIncludesPersonaSync:
         mock_app = MagicMock()
 
         with _patch_task_app(check_for_user_file_project_sync, mock_app):
-            check_for_user_file_project_sync.run(tenant_id=TEST_TENANT_ID)
+            check_for_user_file_project_sync.run(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            )
 
         matching_calls = [
             call
@@ -246,7 +252,9 @@ class TestSyncTaskWritesPersonaIds:
         mock_search_settings.primary = MagicMock()
         mock_search_settings.secondary = None
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         lock_key = user_file_project_sync_lock_key(str(uf.id))
         redis_client.delete(lock_key)
 
@@ -257,15 +265,18 @@ class TestSyncTaskWritesPersonaIds:
             patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
         ):
             process_single_user_file_project_sync.run(
-                user_file_id=str(uf.id), tenant_id=TEST_TENANT_ID
+                user_file_id=str(uf.id),
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
 
-        mock_doc_index.update_single.assert_called_once()
-        call_args = mock_doc_index.update_single.call_args
-        user_fields: VespaDocumentUserFields = call_args.kwargs["user_fields"]
-        assert user_fields.personas is not None
-        assert persona.id in user_fields.personas
-        assert call_args.args[0] == str(uf.id)
+        mock_doc_index.update.assert_called_once()
+        call_args = mock_doc_index.update.call_args
+        update_requests: list[MetadataUpdateRequest] = call_args.args[0]
+        assert len(update_requests) == 1
+        update_request = update_requests[0]
+        assert update_request.document_ids == [str(uf.id)]
+        assert update_request.persona_ids is not None
+        assert persona.id in update_request.persona_ids
 
     def test_clears_persona_sync_flag(
         self,
@@ -276,13 +287,16 @@ class TestSyncTaskWritesPersonaIds:
         user = create_test_user(db_session, "sync_clear")
         uf = _create_completed_user_file(db_session, user, needs_persona_sync=True)
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         lock_key = user_file_project_sync_lock_key(str(uf.id))
         redis_client.delete(lock_key)
 
         with patch(_PATCH_DISABLE_VDB, True):
             process_single_user_file_project_sync.run(
-                user_file_id=str(uf.id), tenant_id=TEST_TENANT_ID
+                user_file_id=str(uf.id),
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
 
         db_session.refresh(uf)
@@ -318,7 +332,9 @@ class TestSyncTaskWritesPersonaIds:
         mock_search_settings.primary = MagicMock()
         mock_search_settings.secondary = None
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         lock_key = user_file_project_sync_lock_key(str(uf.id))
         redis_client.delete(lock_key)
 
@@ -329,15 +345,19 @@ class TestSyncTaskWritesPersonaIds:
             patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
         ):
             process_single_user_file_project_sync.run(
-                user_file_id=str(uf.id), tenant_id=TEST_TENANT_ID
+                user_file_id=str(uf.id),
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
 
-        call_kwargs = mock_doc_index.update_single.call_args.kwargs
-        user_fields: VespaDocumentUserFields = call_kwargs["user_fields"]
-        assert user_fields.personas is not None
-        assert user_fields.user_projects is not None
-        assert persona.id in user_fields.personas
-        assert project.id in user_fields.user_projects
+        update_requests: list[MetadataUpdateRequest] = (
+            mock_doc_index.update.call_args.args[0]
+        )
+        assert len(update_requests) == 1
+        update_request = update_requests[0]
+        assert update_request.persona_ids is not None
+        assert update_request.project_ids is not None
+        assert persona.id in update_request.persona_ids
+        assert project.id in update_request.project_ids
 
         # Both flags should be cleared
         db_session.refresh(uf)
@@ -363,7 +383,9 @@ class TestSyncTaskWritesPersonaIds:
         mock_search_settings.primary = MagicMock()
         mock_search_settings.secondary = None
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         lock_key = user_file_project_sync_lock_key(str(uf.id))
         redis_client.delete(lock_key)
 
@@ -374,13 +396,17 @@ class TestSyncTaskWritesPersonaIds:
             patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
         ):
             process_single_user_file_project_sync.run(
-                user_file_id=str(uf.id), tenant_id=TEST_TENANT_ID
+                user_file_id=str(uf.id),
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
 
-        call_kwargs = mock_doc_index.update_single.call_args.kwargs
-        user_fields: VespaDocumentUserFields = call_kwargs["user_fields"]
-        assert user_fields.personas is not None
-        assert persona.id not in user_fields.personas
+        update_requests: list[MetadataUpdateRequest] = (
+            mock_doc_index.update.call_args.args[0]
+        )
+        assert len(update_requests) == 1
+        update_request = update_requests[0]
+        assert update_request.persona_ids is not None
+        assert persona.id not in update_request.persona_ids
 
 
 # ---------------------------------------------------------------------------

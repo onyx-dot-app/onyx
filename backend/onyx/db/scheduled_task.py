@@ -24,16 +24,18 @@ from sqlalchemy import literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import ScheduledTaskErrorClass
 from onyx.db.enums import ScheduledTaskRunStatus
+from onyx.db.enums import ScheduledTaskSkipReason
 from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.models import ScheduledTask
+from onyx.db.models import ScheduledTaskPreApprovedApp
 from onyx.db.models import ScheduledTaskRun
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.scheduled_tasks.schedule import compute_next_run_at
 from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
-from onyx.server.features.build.scheduled_tasks.schedule import validate_timezone
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -51,38 +53,50 @@ def create_scheduled_task(
     name: str,
     prompt: str,
     cron_expression: str,
-    timezone_name: str,
     editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
+    pre_approved_app_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Insert a new ``ScheduledTask``.
 
-    Computes the initial ``next_run_at`` from ``cron_expression`` /
-    ``timezone_name`` if ``status`` is ACTIVE; PAUSED tasks store NULL.
+    Computes the initial ``next_run_at`` from ``cron_expression`` if
+    ``status`` is ACTIVE; PAUSED tasks store NULL.
 
     Raises:
-        OnyxError(INVALID_INPUT): if the cron or timezone is invalid.
+        OnyxError(INVALID_INPUT): if the cron is invalid.
     """
-    validate_timezone(timezone_name)
     now = now or datetime.now(tz=timezone.utc)
     next_run_at: datetime | None = None
     if status == ScheduledTaskStatus.ACTIVE:
-        next_run_at = compute_next_run_at(cron_expression, timezone_name, now)
+        next_run_at = compute_next_run_at(cron_expression, now)
 
     task = ScheduledTask(
         user_id=user_id,
         name=name,
         prompt=prompt,
         cron_expression=cron_expression,
-        timezone=timezone_name,
         editor_mode=editor_mode,
         status=status,
         next_run_at=next_run_at,
     )
+    set_pre_approved_apps(task, pre_approved_app_ids or [])
     db_session.add(task)
     db_session.flush()
     return task
+
+
+def set_pre_approved_apps(task: ScheduledTask, app_ids: list[int]) -> None:
+    """Replace a task's pre-approval grants with ``app_ids`` (deduped). Reuses
+    existing rows so re-submitting a granted app is a no-op — recreating it
+    would orphan+reinsert the same unique key in one flush, which Postgres
+    rejects. Removed grants drop via the ``delete-orphan`` cascade.
+    """
+    existing = {grant.external_app_id: grant for grant in task.pre_approved_apps}
+    task.pre_approved_apps = [
+        existing.get(app_id) or ScheduledTaskPreApprovedApp(external_app_id=app_id)
+        for app_id in dict.fromkeys(app_ids)
+    ]
 
 
 def get_scheduled_task(
@@ -135,23 +149,25 @@ def update_scheduled_task(
     name: str | None = None,
     prompt: str | None = None,
     cron_expression: str | None = None,
-    timezone_name: str | None = None,
     editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
+    pre_approved_app_ids: list[int] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Apply a partial update to a scheduled task.
 
     Recompute rules:
-      - If ``cron_expression`` or ``timezone_name`` changed and the task is
-        (or becomes) ACTIVE, ``next_run_at`` is recomputed from ``now``.
+      - If ``cron_expression`` changed and the task is (or becomes) ACTIVE,
+        ``next_run_at`` is recomputed from ``now``.
       - If ``status`` transitions to PAUSED, ``next_run_at`` is set to NULL.
       - If ``status`` transitions to ACTIVE, ``next_run_at`` is recomputed.
+      - ``pre_approved_app_ids`` follows normal patch semantics: supplied
+        replaces the set, omitted leaves it unchanged.
 
     Raises:
         OnyxError(NOT_FOUND): the task does not exist or is not owned by
             the caller.
-        OnyxError(INVALID_INPUT): the new cron/timezone is invalid.
+        OnyxError(INVALID_INPUT): the new cron is invalid.
     """
     task = get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user_id)
     now = now or datetime.now(tz=timezone.utc)
@@ -161,14 +177,12 @@ def update_scheduled_task(
         task.name = name
     if prompt is not None:
         task.prompt = prompt
+    if pre_approved_app_ids is not None:
+        set_pre_approved_apps(task, pre_approved_app_ids)
     if editor_mode is not None:
         task.editor_mode = editor_mode
     if cron_expression is not None and cron_expression != task.cron_expression:
         task.cron_expression = cron_expression
-        schedule_changed = True
-    if timezone_name is not None and timezone_name != task.timezone:
-        validate_timezone(timezone_name)
-        task.timezone = timezone_name
         schedule_changed = True
 
     if status is not None and status != task.status:
@@ -177,11 +191,9 @@ def update_scheduled_task(
             task.next_run_at = None
         else:
             # Becoming ACTIVE — recompute from now regardless of schedule change.
-            task.next_run_at = compute_next_run_at(
-                task.cron_expression, task.timezone, now
-            )
+            task.next_run_at = compute_next_run_at(task.cron_expression, now)
     elif schedule_changed and task.status == ScheduledTaskStatus.ACTIVE:
-        task.next_run_at = compute_next_run_at(task.cron_expression, task.timezone, now)
+        task.next_run_at = compute_next_run_at(task.cron_expression, now)
 
     db_session.flush()
     return task
@@ -278,7 +290,7 @@ def advance_next_run_at(
 
     Returns the new ``next_run_at`` (UTC).
     """
-    next_run_at = compute_next_run_at(task.cron_expression, task.timezone, now)
+    next_run_at = compute_next_run_at(task.cron_expression, now)
     task.next_run_at = next_run_at
     db_session.flush()
     return next_run_at
@@ -322,7 +334,7 @@ def insert_run(
     task_id: UUID,
     trigger_source: ScheduledTaskTriggerSource,
     status: ScheduledTaskRunStatus = ScheduledTaskRunStatus.QUEUED,
-    skip_reason: str | None = None,
+    skip_reason: ScheduledTaskSkipReason | None = None,
 ) -> ScheduledTaskRun:
     """Insert a new run row. Returns the persisted row (with id)."""
     started_at = datetime.now(tz=timezone.utc)
@@ -347,8 +359,8 @@ def mark_run_status(
     run_id: UUID,
     status: ScheduledTaskRunStatus,
     session_id: UUID | None = None,
-    skip_reason: str | None = None,
-    error_class: str | None = None,
+    skip_reason: ScheduledTaskSkipReason | None = None,
+    error_class: ScheduledTaskErrorClass | None = None,
     error_detail: str | None = None,
     summary: str | None = None,
 ) -> ScheduledTaskRun:
@@ -471,6 +483,45 @@ def find_stuck_runs(
 
 
 # ---------------------------------------------------------------------------
+# Egress-gate pre-approval lookup
+# ---------------------------------------------------------------------------
+
+# (run_id, granted external-app ids) for a RUNNING scheduled run, else None.
+ScheduledRunGrants = tuple[UUID, list[int]] | None
+
+
+def get_live_scheduled_run_grants(
+    *,
+    db_session: Session,
+    session_id: UUID,
+) -> ScheduledRunGrants:
+    """``(run_id, pre_approved_app_ids)`` when ``session_id`` is a currently
+    RUNNING scheduled run; ``None`` otherwise.
+
+    The ``scheduled_task_run`` lookup subsumes the session-origin check
+    (only SCHEDULED-origin sessions have run rows); the RUNNING filter means
+    interactive follow-ups on a finished scheduled session park as usual.
+    """
+    run = db_session.execute(
+        select(ScheduledTaskRun.id, ScheduledTaskRun.task_id).where(
+            ScheduledTaskRun.session_id == session_id,
+            ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
+        )
+    ).first()
+    if run is None:
+        return None
+    run_id, task_id = run
+    app_ids = list(
+        db_session.execute(
+            select(ScheduledTaskPreApprovedApp.external_app_id)
+            .where(ScheduledTaskPreApprovedApp.scheduled_task_id == task_id)
+            .order_by(ScheduledTaskPreApprovedApp.id)
+        ).scalars()
+    )
+    return run_id, app_ids
+
+
+# ---------------------------------------------------------------------------
 # Session-view banner helper
 # ---------------------------------------------------------------------------
 
@@ -485,7 +536,14 @@ def get_scheduled_run_context(
 
     Result shape::
 
-        {"task_id": UUID, "task_name": str, "started_at": datetime}
+        {
+            "run_id": UUID,
+            "task_id": UUID,
+            "task_name": str,
+            "status": ScheduledTaskRunStatus,
+            "started_at": datetime,
+            "finished_at": datetime | None,
+        }
 
     Returns ``None`` when the session was not produced by a scheduled run,
     or when the owning task is not accessible to ``user_id``.
@@ -503,7 +561,10 @@ def get_scheduled_run_context(
         return None
     run, task = row
     return {
+        "run_id": run.id,
         "task_id": task.id,
         "task_name": task.name,
+        "status": run.status,
         "started_at": run.started_at,
+        "finished_at": run.finished_at,
     }

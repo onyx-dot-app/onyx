@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import os
 
+import httpx
 import pytest
-import requests
 
 from onyx.db.enums import AccessType
+from onyx.db.enums import Permission
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
+from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -26,8 +29,8 @@ def _search(
     query: str,
     user: DATestUser,
     **kwargs: object,
-) -> requests.Response:
-    return requests.post(
+) -> httpx.Response:
+    return client.post(
         SEARCH_URL,
         json={"query": query, **kwargs},
         headers=user.headers,
@@ -35,7 +38,6 @@ def _search(
 
 
 def test_basic_search_returns_results(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -47,18 +49,17 @@ def test_basic_search_returns_results(
     resp = _search(doc_content, admin_user)
     assert resp.status_code == 200
 
-    # Exactly one doc was seeded with this phrase; ``reset`` wiped the rest,
-    # so the API must return exactly one result that contains it.
+    # ``reset`` only wipes Postgres; OpenSearch is shared across tests, so docs
+    # seeded by prior tests may still match. Find the seeded doc by content
+    # rather than asserting on result count.
     data = resp.json()
-    assert len(data["results"]) == 1
-    result = data["results"][0]
-    assert doc_content in result["content"]
-    assert result["citation_id"] is not None
-    assert result["source_type"]
+    matches = [r for r in data["results"] if doc_content in r["content"]]
+    assert len(matches) == 1
+    assert matches[0]["citation_id"] is not None
+    assert matches[0]["source_type"]
 
 
 def test_document_set_filtering(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -97,7 +98,6 @@ def test_document_set_filtering(
     reason="User group permissions are Enterprise-only",
 )
 def test_acl_enforcement(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -130,11 +130,14 @@ def test_acl_enforcement(
 
     blocked_resp = _search(doc_content, blocked_user)
     assert blocked_resp.status_code == 200
-    assert len(blocked_resp.json()["results"]) == 0
+    # OpenSearch is not reset between tests, so prior tests' PUBLIC docs may
+    # still satisfy the query and surface here. Assert on the specific private
+    # doc rather than total result count.
+    blocked_contents = [r["content"] for r in blocked_resp.json()["results"]]
+    assert not any(doc_content in c for c in blocked_contents)
 
 
 def test_persona_scoped_search(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -174,7 +177,6 @@ def test_persona_scoped_search(
 
 
 def test_invalid_persona_returns_404(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
@@ -182,11 +184,35 @@ def test_invalid_persona_returns_404(
     assert resp.status_code == 404
 
 
-def test_unauthenticated_returns_401(
-    reset: None,  # noqa: ARG001
-) -> None:
-    resp = requests.post(
+def test_unauthenticated_returns_401() -> None:
+    resp = client.post(
         SEARCH_URL,
         json={"query": "test"},
     )
     assert resp.status_code == 403
+
+
+def test_read_search_scoped_pat_can_search(
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    doc_content = "scoped pat search api unique document"
+    DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
+
+    raw_token = PATManager.create_scoped(
+        name="search-scoped-pat",
+        expiration_days=7,
+        user_performing_action=admin_user,
+        scopes=[Permission.READ_SEARCH],
+    )
+    resp = client.post(
+        SEARCH_URL,
+        json={"query": doc_content},
+        headers=PATManager.get_auth_headers(raw_token),
+    )
+    assert resp.status_code == 200
+
+    matches = [r for r in resp.json()["results"] if doc_content in r["content"]]
+    assert len(matches) == 1

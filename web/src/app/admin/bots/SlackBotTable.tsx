@@ -84,7 +84,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
               >
                 <TableCell>
                   <div className="flex items-center">
-                    <SvgEdit className="mr-4" />
+                    <SvgEdit size={16} className="mr-4" />
                     {slackBot.name}
                   </div>
                 </TableCell>
@@ -111,7 +111,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 colSpan={5}
                 className="text-center text-muted-foreground"
               >
-                Please add a New Slack Bot to begin chatting with Danswer!
+                Please add a New Slack Bot to begin chatting with Onyx!
               </TableCell>
             </TableRow>
           )}

@@ -21,12 +21,13 @@ const cherryPickPRLabel = "cherry-pick 🍒"
 
 // CherryPickOptions holds options for the cherry-pick command
 type CherryPickOptions struct {
-	Releases []string
+	Releases  []string
 	Assignees []string
-	DryRun   bool
-	Yes      bool
-	NoVerify bool
-	Continue bool
+	DryRun    bool
+	Yes       bool
+	NoVerify  bool
+	Continue  bool
+	Dispatch  bool
 }
 
 // NewCherryPickCommand creates a new cherry-pick command
@@ -56,13 +57,24 @@ The --release flag can be specified multiple times to cherry-pick to multiple re
 If a cherry-pick hits a merge conflict, resolve it manually, then run:
   $ ods cherry-pick --continue
 
+With --dispatch, the commit(s)/PR(s) are resolved locally and the
+post-merge-beta-cherry-pick GitHub workflow is triggered to perform the
+cherry-pick in CI instead of running locally. The workflow auto-detects the
+latest release unless --release is supplied. Requires the workflow (with its
+workflow_dispatch trigger) to already be on the default branch.
+
 Example usage:
 
 	$ ods cherry-pick foo123 bar456 --release 2.5 --release 2.6
 	$ ods cp foo123 --release 2.5
-	$ ods cp 1234 --release 2.5   # cherry-pick merge commit of PR #1234`,
+	$ ods cp 1234 --release 2.5   # cherry-pick merge commit of PR #1234
+	$ ods cp 1234 --dispatch      # trigger the cherry-pick workflow for PR #1234`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			cont, _ := cmd.Flags().GetBool("continue")
+			dispatch, _ := cmd.Flags().GetBool("dispatch")
+			if cont && dispatch {
+				return fmt.Errorf("--continue and --dispatch cannot be used together")
+			}
 			if cont {
 				if len(args) > 0 {
 					return fmt.Errorf("--continue does not accept positional arguments")
@@ -75,9 +87,12 @@ Example usage:
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			if opts.Continue {
+			switch {
+			case opts.Continue:
 				runCherryPickContinue()
-			} else {
+			case opts.Dispatch:
+				runCherryPickDispatch(args, opts)
+			default:
 				runCherryPick(cmd, args, opts)
 			}
 		},
@@ -89,6 +104,7 @@ Example usage:
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Perform all local operations but skip pushing to remote and creating PRs")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip confirmation prompts and automatically proceed")
 	cmd.Flags().BoolVar(&opts.NoVerify, "no-verify", false, "Skip pre-commit and commit-msg hooks for cherry-pick and push")
+	cmd.Flags().BoolVar(&opts.Dispatch, "dispatch", false, "Resolve the commit(s) locally, then trigger the post-merge-beta-cherry-pick GitHub workflow instead of cherry-picking locally")
 
 	return cmd
 }
@@ -318,6 +334,51 @@ func runCherryPickContinue() {
 	// "branch exists → skip applied commits → push → create PR"
 	stashResult := &git.StashResult{Stashed: state.Stashed}
 	finishCherryPick(state, stashResult)
+}
+
+// runCherryPickDispatch resolves the given commit(s)/PR(s) locally, then triggers
+// the post-merge-beta-cherry-pick GitHub workflow for each — instead of performing
+// the cherry-pick on the local machine. The workflow auto-detects the latest
+// release unless --release is supplied.
+func runCherryPickDispatch(args []string, opts *CherryPickOptions) {
+	git.CheckGitHubCLI()
+
+	if len(opts.Releases) > 1 {
+		log.Fatal("--dispatch supports at most one --release")
+	}
+	release := ""
+	if len(opts.Releases) == 1 {
+		release = opts.Releases[0]
+	}
+
+	if opts.DryRun {
+		log.Warning("=== DRY RUN MODE: No workflow will be dispatched ===")
+	}
+
+	// Resolve any PR numbers (e.g. "1234") to their merge commit SHAs
+	commitSHAs, labels := resolveArgs(args)
+
+	for i, sha := range commitSHAs {
+		// Prefer the PR number we already have from the argument; otherwise
+		// resolve it from the commit (best-effort, only used for Slack notifications).
+		prNumber := ""
+		if isPRNumber(args[i]) {
+			prNumber = args[i]
+		} else if resolved, err := git.ResolveCommitToPR(sha); err != nil {
+			log.Debugf("Could not resolve PR for %s: %v", sha, err)
+		} else {
+			prNumber = resolved
+		}
+
+		log.Infof("Dispatching cherry-pick workflow for %s (%s)", labels[i], sha)
+		if err := git.DispatchCherryPickWorkflow(sha, prNumber, release, opts.DryRun); err != nil {
+			log.Fatalf("Failed to dispatch cherry-pick workflow for %s: %v", labels[i], err)
+		}
+	}
+
+	if !opts.DryRun {
+		log.Infof("Dispatched %d cherry-pick workflow run(s). Track them with: gh run list --workflow post-merge-beta-cherry-pick.yml", len(commitSHAs))
+	}
 }
 
 // cherryPickToRelease cherry-picks one or more commits to a specific release branch

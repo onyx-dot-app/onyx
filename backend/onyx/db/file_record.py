@@ -36,6 +36,15 @@ def get_filerecord_by_file_id_optional(
     return db_session.query(FileRecord).filter_by(file_id=file_id).first()
 
 
+class FileRecordNotFoundError(RuntimeError):
+    """Raised when a file record does not exist (e.g. the file was deleted).
+
+    Subclasses RuntimeError so existing `except RuntimeError` call sites keep
+    working; callers that need to distinguish "file is gone" from transient
+    infrastructure failures can catch this type specifically.
+    """
+
+
 def get_filerecord_by_file_id(
     file_id: str,
     db_session: Session,
@@ -43,7 +52,9 @@ def get_filerecord_by_file_id(
     filestore = db_session.query(FileRecord).filter_by(file_id=file_id).first()
 
     if not filestore:
-        raise RuntimeError(f"File by id {file_id} does not exist or was deleted")
+        raise FileRecordNotFoundError(
+            f"File by id {file_id} does not exist or was deleted"
+        )
 
     return filestore
 

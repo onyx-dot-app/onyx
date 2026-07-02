@@ -100,7 +100,7 @@ async def get_or_provision_tenant(
         if tenant_id:
             # Run migrations to ensure the pre-provisioned tenant schema is current.
             # Pool tenants may have been created before a new migration was deployed.
-            # Capture as a non-optional local so mypy can type the lambda correctly.
+            # Capture as a non-optional local so type-checking can type the lambda correctly.
             _tenant_id: str = tenant_id
             loop = asyncio.get_running_loop()
             try:

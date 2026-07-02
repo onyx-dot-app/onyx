@@ -21,6 +21,7 @@ class LLMFlow(StrEnum):
     # Secondary LLM flows
     SEMANTIC_QUERY_REPHRASE = "semantic_query_rephrase"
     KEYWORD_QUERY_EXPANSION = "keyword_query_expansion"
+    SOURCE_FILTER_EXTRACTION = "source_filter_extraction"
     CLASSIFY_SECTION_RELEVANCE = "classify_section_relevance"
     SELECT_SECTIONS_FOR_EXPANSION = "select_sections_for_expansion"
     CHAT_SESSION_NAMING = "chat_session_naming"
@@ -28,7 +29,6 @@ class LLMFlow(StrEnum):
 
     # Build session (assistants)
     BUILD_SESSION_NAMING = "build_session_naming"
-    BUILD_FOLLOWUP_SUGGESTIONS = "build_followup_suggestions"
 
     # Federated search helpers
     SLACK_DATE_EXTRACTION = "slack_date_extraction"

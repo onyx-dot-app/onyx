@@ -1,19 +1,14 @@
-"""Shared utilities for generating AGENTS.md content.
+"""Shared utilities for generating AGENTS.md content."""
 
-This module provides functions for building dynamic agent instructions
-that are shared between local and kubernetes sandbox managers.
-"""
-
-import threading
+from collections.abc import Iterable
 from pathlib import Path
 
+from onyx.db.models import ExternalApp
+from onyx.db.models import Skill
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-# Cache for skills section (skills are static, cached indefinitely)
-_skills_cache: dict[str, str] = {}
-_skills_cache_lock = threading.Lock()
 
 # Provider display name mapping
 PROVIDER_DISPLAY_NAMES = {
@@ -39,38 +34,6 @@ def get_provider_display_name(provider: str | None) -> str | None:
         return None
 
     return PROVIDER_DISPLAY_NAMES.get(provider, provider.title())
-
-
-def build_user_context(user_name: str | None, user_role: str | None) -> str:
-    """Build the user context section for AGENTS.md.
-
-    Args:
-        user_name: User's name
-        user_role: User's role/title
-
-    Returns:
-        Formatted user context string
-    """
-    if not user_name:
-        return ""
-
-    if user_role:
-        return f"You are assisting **{user_name}**, {user_role}, with their work."
-    return f"You are assisting **{user_name}** with their work."
-
-
-# Content for the org_info section when user_work_area is provided
-ORG_INFO_SECTION_CONTENT = """## Organization Info
-
-The `org_info/` directory contains information about the organization and user context:
-
-- `AGENTS.md`: Description of available organizational information files
-- `user_identity_profile.txt`: Contains the current user's name, email, and organization
-  they work for. Use this information when personalizing outputs or when the user asks
-  about their identity.
-- `organization_structure.json`: Contains a JSON representation of the organization's
-  groups, managers, and their direct reports. Use this to understand reporting
-  relationships and team structures."""
 
 
 # Content for the attachments section when user has uploaded files
@@ -106,157 +69,60 @@ should be treated as high-priority context.
 contain exactly what you need to complete the task successfully."""
 
 
-def build_org_info_section(include_org_info: bool) -> str:
-    """Build the organization info section for AGENTS.md.
-
-    Included when user_work_area is provided and the org_info/
-    directory is set up in the session.
-    """
-    if include_org_info:
-        return ORG_INFO_SECTION_CONTENT
-    return ""
+_DESCRIPTION_MAX_LEN = 120
 
 
-def extract_skill_description(skill_md_path: Path) -> str:
-    """Extract a brief description from a SKILL.md file.
-
-    If the file has YAML frontmatter (delimited by ---), uses the
-    ``description`` field. Otherwise falls back to the first paragraph.
-
-    Args:
-        skill_md_path: Path to the SKILL.md file
-
-    Returns:
-        Brief description (truncated to ~120 chars)
-    """
-    try:
-        content = skill_md_path.read_text()
-        lines = content.strip().split("\n")
-
-        # Try YAML frontmatter first
-        if lines and lines[0].strip() == "---":
-            for line in lines[1:]:
-                if line.strip() == "---":
-                    break
-                if line.startswith("description:"):
-                    desc = line.split(":", 1)[1].strip().strip('"').strip("'")
-                    if desc:
-                        if len(desc) > 120:
-                            desc = desc[:117] + "..."
-                        return desc
-
-        # Fallback: first non-heading paragraph after frontmatter
-        in_frontmatter = lines[0].strip() == "---" if lines else False
-        description_lines: list[str] = []
-        for line in lines[1:] if in_frontmatter else lines:
-            stripped = line.strip()
-            # Skip until end of frontmatter
-            if in_frontmatter:
-                if stripped == "---":
-                    in_frontmatter = False
-                continue
-            if not stripped:
-                if description_lines:
-                    break
-                continue
-            if stripped.startswith("#"):
-                continue
-            description_lines.append(stripped)
-            if len(" ".join(description_lines)) > 100:
-                break
-
-        description = " ".join(description_lines)
-        if len(description) > 120:
-            description = description[:117] + "..."
-        return description or "No description available."
-    except Exception:
-        return "No description available."
+def _truncate(text: str) -> str:
+    text = text.strip()
+    if len(text) > _DESCRIPTION_MAX_LEN:
+        return text[: _DESCRIPTION_MAX_LEN - 3] + "..."
+    return text
 
 
-def _scan_skills_directory(skills_path: Path) -> str:
-    """Internal function to scan skills directory (not cached).
-
-    Args:
-        skills_path: Path to the skills directory
-
-    Returns:
-        Formatted skills section string
-    """
-    skills_list: list[str] = []
-    try:
-        for skill_dir in sorted(skills_path.iterdir()):
-            if not skill_dir.is_dir():
-                continue
-
-            skill_md = skill_dir / "SKILL.md"
-            if skill_md.exists():
-                description = extract_skill_description(skill_md)
-                skills_list.append(f"- **{skill_dir.name}**: {description}")
-    except Exception as e:
-        logger.warning("Error scanning skills directory: %s", e)
-        return "Error loading skills."
-
-    if not skills_list:
+def build_skills_section_from_data(skills: Iterable[Skill]) -> str:
+    """Render the AGENTS.md skills section from one unified list of
+    ``Skill`` rows. Built-ins and customs are indistinguishable here —
+    both show up as ``- **slug**: description`` bullets."""
+    entries = [(s.slug, _truncate(s.description)) for s in skills]
+    if not entries:
         return "No skills available."
 
-    return "\n".join(skills_list)
+    entries.sort(key=lambda e: e[0])
+    return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
 
 
-def build_skills_section(skills_path: Path) -> str:
-    """Build the available skills section by scanning the skills directory.
-
-    Skills are static, so results are cached indefinitely for performance.
-
-    Args:
-        skills_path: Path to the skills directory
-
-    Returns:
-        Formatted skills section string
-    """
-    if not skills_path.exists():
-        return "No skills available."
-
-    cache_key = str(skills_path)
-
-    # Check cache first (skills are static, no TTL needed)
-    with _skills_cache_lock:
-        cached = _skills_cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-    # Cache miss - scan the directory
-    result = _scan_skills_directory(skills_path)
-
-    # Update cache
-    with _skills_cache_lock:
-        _skills_cache[cache_key] = result
-
-    return result
+def build_connectable_apps_list(apps: Iterable[ExternalApp]) -> str:
+    """Render the connectable-apps bullet list — org apps the user hasn't set up
+    yet. The heading and explanatory prose live in AGENTS.template.md; this only
+    supplies the dynamic ``{{CONNECTABLE_APPS_LIST}}`` value. Mirrors
+    ``build_skills_section_from_data``: a fallback line when there's nothing."""
+    entries = sorted((app.skill.slug, _truncate(app.skill.description)) for app in apps)
+    if not entries:
+        return "No connectable apps available."
+    return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
 
 
 def generate_agent_instructions(
     template_path: Path,
-    skills_path: Path,
+    skills_section: str,
+    connectable_apps_section: str,
     provider: str | None = None,
     model_name: str | None = None,
     nextjs_port: int | None = None,
     disabled_tools: list[str] | None = None,
     user_name: str | None = None,
-    user_role: str | None = None,
-    include_org_info: bool = False,
 ) -> str:
     """Generate AGENTS.md content by populating the template with dynamic values.
 
     Args:
         template_path: Path to the AGENTS.template.md file
-        skills_path: Path to the skills directory
+        skills_section: Pre-rendered skills section
+        connectable_apps_section: Pre-rendered connectable-apps list (may be empty)
         provider: LLM provider type (e.g., "openai", "anthropic")
         model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
         nextjs_port: Port for Next.js development server
         disabled_tools: List of disabled tools
         user_name: User's name for personalization
-        user_role: User's role/title for personalization
-        include_org_info: Whether to include the org_info section
 
     Returns:
         Generated AGENTS.md content with placeholders replaced
@@ -267,7 +133,10 @@ def generate_agent_instructions(
 
     template_content = template_path.read_text()
 
-    user_context = build_user_context(user_name, user_role)
+    if not user_name:
+        user_context = ""
+    else:
+        user_context = f"You are assisting **{user_name}** with their work."
 
     # Build LLM configuration section
     provider_display = get_provider_display_name(provider)
@@ -277,11 +146,6 @@ def generate_agent_instructions(
     if disabled_tools:
         disabled_tools_section = f"\n**Disabled Tools**: {', '.join(disabled_tools)}\n"
 
-    # Build available skills section
-    available_skills_section = build_skills_section(skills_path)
-
-    org_info_section = build_org_info_section(include_org_info)
-
     # Replace placeholders
     content = template_content
     content = content.replace("{{USER_CONTEXT}}", user_context)
@@ -290,8 +154,16 @@ def generate_agent_instructions(
     content = content.replace(
         "{{NEXTJS_PORT}}", str(nextjs_port) if nextjs_port else "Unknown"
     )
+    content = content.replace(
+        "{{APPROVAL_WAIT_TIMEOUT_SECONDS}}",
+        str(SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS),
+    )
+    content = content.replace(
+        "{{APPROVAL_CLIENT_TIMEOUT_SECONDS}}",
+        str(SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 20),
+    )
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
-    content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", available_skills_section)
-    content = content.replace("{{ORG_INFO_SECTION}}", org_info_section)
+    content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", skills_section)
+    content = content.replace("{{CONNECTABLE_APPS_LIST}}", connectable_apps_section)
 
     return content

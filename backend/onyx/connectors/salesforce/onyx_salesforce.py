@@ -1,9 +1,12 @@
 import time
 from typing import Any
 
+from requests.adapters import HTTPAdapter
 from simple_salesforce import Salesforce
 from simple_salesforce import SFType
 from simple_salesforce.exceptions import SalesforceRefusedRequest
+from simple_salesforce.format import format_soql
+from urllib3.util.retry import Retry
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_OBJECTS
@@ -11,10 +14,21 @@ from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_PREFIXES
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_SUFFIXES
 from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
 from onyx.connectors.salesforce.utils import ID_FIELD
+from onyx.connectors.salesforce.utils import validate_sf_identifier
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
+
+# A Salesforce sync holds its connection pool idle for hours during the local
+# CSV->sqlite phase. Salesforce's edge / intermediary load balancers silently
+# close idle keep-alive sockets, so the next REST query or bulk-result fetch
+# reuses a dead pooled connection and fails with "Connection reset by peer".
+# Mounting a urllib3 Retry makes the shared session transparently reopen and
+# retry idempotent (GET) requests instead of failing the whole indexing attempt.
+_SF_RETRY_TOTAL = 5
+_SF_RETRY_BACKOFF_FACTOR = 1.0
+_SF_RETRY_STATUS_FORCELIST = (500, 502, 503, 504)
 
 
 def is_salesforce_rate_limit_error(exception: Exception) -> bool:
@@ -30,6 +44,8 @@ class OnyxSalesforce(Salesforce):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
+        self._mount_retry_adapter()
+
         self.parent_types: set[str] = set()
         self.child_types: set[str] = set()
         self.parent_to_child_types: dict[
@@ -43,6 +59,27 @@ class OnyxSalesforce(Salesforce):
         self.prefix_to_type: dict[
             str, str
         ] = {}  # infer the object type of an id immediately
+
+    def _mount_retry_adapter(self) -> None:
+        """Make the shared requests session resilient to stale keep-alive
+        sockets that Salesforce's edge closes during long idle gaps. The same
+        session is reused for bulk-result downloads (see salesforce_calls.py),
+        so this covers both REST queries and bulk fetches."""
+        retry = Retry(
+            total=_SF_RETRY_TOTAL,
+            connect=_SF_RETRY_TOTAL,
+            read=_SF_RETRY_TOTAL,
+            status=_SF_RETRY_TOTAL,
+            backoff_factor=_SF_RETRY_BACKOFF_FACTOR,
+            status_forcelist=_SF_RETRY_STATUS_FORCELIST,
+            # Only idempotent methods (the urllib3 default) are retried, so job
+            # creation (POST) is never double-submitted. raise_on_status=False
+            # lets simple_salesforce surface the final HTTP error normally.
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
     def initialize(self) -> bool:
         """Eventually cache all first run client state with this method"""
@@ -125,6 +162,9 @@ class OnyxSalesforce(Salesforce):
         # supposedly the real limit is 200? But we limit to 10 for practical reasons
         SUBQUERY_LIMIT = 10
 
+        # SOQL has no parameter binding for table/column identifiers; validate
+        # everything we interpolate. object_id still goes through format_soql.
+        validate_sf_identifier(sf_type)
         query = "SELECT "
         for child_relationship in child_relationships:
             # TODO(rkuo): what happens if there is a very large list of child records?
@@ -134,12 +174,15 @@ class OnyxSalesforce(Salesforce):
             # We can't use the following shortcuts:
             #   FIELDS(ALL) can include binary fields, so don't use that
             #   FIELDS(CUSTOM) can include aggregate queries, so don't use that
+            validate_sf_identifier(child_relationship)
             fields = relationships_to_fields[child_relationship]
-            fields_fragment = ",".join(fields)
-            query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT {SUBQUERY_LIMIT}), "
+            fields_fragment = ",".join(validate_sf_identifier(f) for f in fields)
+            query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT {SUBQUERY_LIMIT}), "  # noqa: S608
 
         query = query.rstrip(", ")
-        query += f" FROM {sf_type} WHERE Id = '{object_id}'"
+        query += format_soql(
+            f" FROM {sf_type} WHERE Id = {{object_id}}", object_id=object_id
+        )
         return query
 
     def query_object(

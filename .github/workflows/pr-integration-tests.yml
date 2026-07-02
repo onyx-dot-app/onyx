@@ -9,6 +9,11 @@ on:
     branches:
       - main
       - "release/**"
+    # NOTE: Intentionally no `paths:` filter. We always trigger and let the
+    # `changes` job below decide whether the real test matrix runs. This
+    # avoids the dual-workflow skip pattern where a `paths-ignore`'d skip
+    # workflow can race the real workflow's same-named status check under
+    # branch protection.
   push:
     tags:
       - "v*.*.*"
@@ -42,24 +47,63 @@ env:
   GITHUB_TEST_USER_2_EMAIL: ${{ secrets.ONYX_GITHUB_TEST_USER_2_EMAIL }}
 
 jobs:
+  changes:
+    # Decides whether the integration test matrix runs. On pull_request /
+    # merge_group we use paths-filter; on push (tags) we default to `true` so
+    # everything runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      integration: ${{ steps.filter.outputs.integration || 'true' }}
+    steps:
+      - name: Checkout code
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          filters: |
+            integration:
+              - 'backend/**'
+              - 'cli/**'
+              - 'deployment/docker_compose/**'
+              - '.devcontainer/**'
+              - 'docker-bake.hcl'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/pr-integration-tests.yml'
+              - '.github/actions/setup-test-license/**'
+              - '.github/actions/install-deps-and-generate-openapi-client/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
+
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    needs: changes
+    if: needs.changes.outputs.integration == 'true'
     runs-on: ubuntu-slim
-    timeout-minutes: 45
+    timeout-minutes: 5
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
       editions: ${{ steps.set-editions.outputs.editions }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Discover test directories
         id: set-matrix
         run: |
-          # Find all leaf-level directories in both test directories
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" -exec basename {} \; | sort)
+          # Find all leaf-level directories in both test directories.
+          # ``craft`` excluded: needs sandbox infra this lane doesn't set up;
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" -exec basename {} \; | sort)
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
           # Create JSON array with directory info
@@ -85,67 +129,9 @@ jobs:
             echo 'editions=["ee","mit"]' >> $GITHUB_OUTPUT
           fi
 
-  build-backend-image:
-    runs-on:
-      [
-        runs-on,
-        runner=1cpu-linux-arm64,
-        "run-id=${{ github.run_id }}-build-backend-image",
-        "extras=ecr-cache",
-      ]
-    timeout-minutes: 45
-    steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Format branch name for cache
-        id: format-branch
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ -n "${PR_NUMBER}" ]; then
-            CACHE_SUFFIX="${PR_NUMBER}"
-          else
-            # shellcheck disable=SC2001
-            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
-          fi
-          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
-
-      # needed for pulling Vespa, Redis, Postgres, and Minio images
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push Backend Docker image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-backend-test-${{ github.run_id }}
-          cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
-            type=registry,ref=onyxdotapp/onyx-backend:latest
-          cache-to: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache,mode=max
-          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
-
   build-model-server-image:
+    needs: changes
+    if: needs.changes.outputs.integration == 'true'
     runs-on:
       [
         runs-on,
@@ -153,11 +139,11 @@ jobs:
         "run-id=${{ github.run_id }}-build-model-server-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -176,61 +162,49 @@ jobs:
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
-      # needed for pulling Vespa, Redis, Postgres, and Minio images
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Build and push Model Server Docker image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           push: true
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
-            type=registry,ref=onyxdotapp/onyx-model-server:latest
+            type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-model-server:latest
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
 
-  build-integration-image:
+  build-devcontainer-image:
+    needs: changes
+    if: needs.changes.outputs.integration == 'true'
     runs-on:
       [
         runs-on,
         runner=2cpu-linux-arm64,
-        "run-id=${{ github.run_id }}-build-integration-image",
+        "run-id=${{ github.run_id }}-build-devcontainer-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
-
-      # needed for pulling openapitools/openapi-generator-cli
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Format branch name for cache
         id: format-branch
@@ -246,36 +220,40 @@ jobs:
           fi
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
-      - name: Build and push integration test image with Docker Bake
-        env:
-          INTEGRATION_REPOSITORY: ${{ env.RUNS_ON_ECR_CACHE }}
-          TAG: integration-test-${{ github.run_id }}
-          CACHE_SUFFIX: ${{ steps.format-branch.outputs.cache-suffix }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          docker buildx bake --push \
-            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA} \
-            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX} \
-            --set backend.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache \
-            --set backend.cache-from=type=registry,ref=onyxdotapp/onyx-backend:latest \
-            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${HEAD_SHA},mode=max \
-            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache-${CACHE_SUFFIX},mode=max \
-            --set backend.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:backend-cache,mode=max \
-            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${HEAD_SHA} \
-            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${CACHE_SUFFIX} \
-            --set integration.cache-from=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache \
-            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${HEAD_SHA},mode=max \
-            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache-${CACHE_SUFFIX},mode=max \
-            --set integration.cache-to=type=registry,ref=${RUNS_ON_ECR_CACHE}:integration-cache,mode=max \
-            integration
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Build and push Devcontainer Docker image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: .devcontainer
+          file: .devcontainer/Dockerfile
+          push: true
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          cache-from: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ github.event.pull_request.head.sha || github.sha }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }}
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache
+            type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-devcontainer:latest
+          cache-to: |
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache,mode=max
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   integration-tests:
     needs:
       [
         discover-test-dirs,
-        build-backend-image,
         build-model-server-image,
-        build-integration-image,
+        build-devcontainer-image,
       ]
     permissions:
       id-token: write # Required for OIDC-based AWS credential exchange
@@ -285,7 +263,7 @@ jobs:
       - runner=4cpu-linux-arm64
       - ${{ format('run-id={0}-integration-tests-{1}-job-{2}', github.run_id, matrix.edition, strategy['job-index']) }}
       - extras=ecr-cache
-    timeout-minutes: 45
+    timeout-minutes: 25
 
     strategy:
       fail-fast: false
@@ -294,9 +272,9 @@ jobs:
         edition: ${{ fromJson(needs.discover-test-dirs.outputs.editions) }}
 
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -305,14 +283,10 @@ jobs:
         with:
           aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
-      # needed for pulling Vespa, Redis, Postgres, and Minio images
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       # NOTE: don't need web server for integration tests
@@ -325,17 +299,30 @@ jobs:
           # Base config shared by both editions
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
-          OPENSEARCH_FOR_ONYX_ENABLED=false
           AUTH_TYPE=basic
           POSTGRES_POOL_PRE_PING=true
           POSTGRES_USE_NULL_POOL=true
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID}
           INTEGRATION_TESTS_MODE=true
           MCP_SERVER_ENABLED=true
+          # The MCP client tests register a mock MCP server on a private/loopback
+          # host (TEST_WEB_HOSTNAME); opt in so the SSRF guard allows it. Loopback
+          # needs its own gate on top of the private one; cloud-metadata stays
+          # blocked regardless.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
+          MCP_SERVER_ALLOW_LOOPBACK=true
           AUTO_LLM_UPDATE_INTERVAL_SECONDS=10
+          ENABLE_CRAFT=true
+          # Lowered upload/bundle caps so cap-enforcement tests can use
+          # small payloads instead of multi-MiB allocations.
+          BUILD_MAX_UPLOAD_FILE_SIZE_MB=2
+          BUILD_MAX_TOTAL_UPLOAD_SIZE_MB=4
+          BUILD_MAX_UPLOAD_FILES_PER_SESSION=5
+          MAX_EMBEDDED_IMAGES_PER_FILE=50
+          USER_LIBRARY_MAX_FILES_PER_UPLOAD=5
+          SKILL_BUNDLE_PER_FILE_MAX_BYTES=1048576
           EOF
 
           # EE-only config
@@ -349,59 +336,18 @@ jobs:
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
+            --wait --wait-timeout 300 \
             relational_db \
-            index \
+            opensearch \
             cache \
             minio \
-            api_server \
             inference_model_server \
-            indexing_model_server \
-            background \
-            -d
+            indexing_model_server
         id: start_docker
 
-      - name: Wait for services to be ready
-        run: |
-          echo "Starting wait-for-service script..."
-
-          wait_for_service() {
-            local url=$1
-            local label=$2
-            local timeout=${3:-300}  # default 5 minutes
-            local start_time
-            start_time=$(date +%s)
-
-            while true; do
-              local current_time
-              current_time=$(date +%s)
-              local elapsed_time=$((current_time - start_time))
-
-              if [ $elapsed_time -ge $timeout ]; then
-                echo "Timeout reached. ${label} did not become ready in $timeout seconds."
-                exit 1
-              fi
-
-              local response
-              response=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "curl_error")
-
-              if [ "$response" = "200" ]; then
-                echo "${label} is ready!"
-                break
-              elif [ "$response" = "curl_error" ]; then
-                echo "Curl encountered an error while checking ${label}. Retrying in 5 seconds..."
-              else
-                echo "${label} not ready yet (HTTP status $response). Retrying in 5 seconds..."
-              fi
-
-              sleep 5
-            done
-          }
-
-          wait_for_service "http://localhost:8080/health" "API server"
-          echo "Finished waiting for services."
-
       - name: Start Mock Services
+        if: matrix.test-dir.path == 'tests/indexing'
         run: |
           cd backend/tests/integration/mock_services
           docker compose -f docker-compose.mock-it-services.yml \
@@ -411,7 +357,7 @@ jobs:
         if: contains(matrix.test-dir.path, 'tests/cli')
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
         with:
-          go-version: "1.26"
+          go-version: "1.26.4"
           cache-dependency-path: "cli/go.sum"
 
       - name: Compile CLI binary
@@ -420,8 +366,13 @@ jobs:
           cd cli
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
 
+      - name: Install Python deps and generate OpenAPI client
+        uses: ./.github/actions/install-deps-and-generate-openapi-client
+        with:
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
           timeout_minutes: 20
           max_attempts: 3
@@ -438,7 +389,11 @@ jobs:
 
             docker run --rm --network onyx_default \
               --name test-runner \
+              --env-file deployment/docker_compose/.env \
+              -v ${{ github.workspace }}:/workspace \
+              -w /workspace/backend \
               $CLI_VOLUME \
+              -e INTEGRATION_TESTS_MODE=true \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=password \
@@ -447,10 +402,10 @@ jobs:
               -e DB_READONLY_PASSWORD=password \
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
-              -e VESPA_HOST=index \
-              -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
+              -e OPENSEARCH_HOST=opensearch \
               -e REDIS_HOST=cache \
-              -e API_SERVER_HOST=api_server \
+              -e MODEL_SERVER_HOST=inference_model_server \
+              -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
               -e S3_ENDPOINT_URL=http://minio:9000 \
               -e S3_AWS_ACCESS_KEY_ID=minioadmin \
               -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
@@ -480,18 +435,15 @@ jobs:
               -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
               -e MOCK_CONNECTOR_SERVER_PORT=8001 \
               -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${{ matrix.edition == 'ee' && 'true' || 'false' }} \
+              -e ENABLE_CRAFT=true \
               -e ONYX_DEV_LICENSE \
-              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
-              /app/tests/integration/${{ matrix.test-dir.path }}
+              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
+              uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}
 
       # ------------------------------------------------------------
-      # Always gather logs BEFORE "down":
-      - name: Dump API server logs
-        if: always()
-        run: |
-          cd deployment/docker_compose
-          docker compose logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
-
+      # Always gather logs BEFORE "down". The test-runner container's
+      # stdout (in-process api_server logs from pytest) is captured
+      # directly in the workflow log for the "Run Integration Tests" step.
       - name: Dump all-container logs (optional)
         if: always()
         run: |
@@ -507,7 +459,7 @@ jobs:
       # ------------------------------------------------------------
 
   onyx-lite-tests:
-    needs: [build-backend-image, build-integration-image]
+    needs: [build-devcontainer-image]
     permissions:
       id-token: write # Required for OIDC-based AWS credential exchange
       contents: read
@@ -518,12 +470,12 @@ jobs:
         "run-id=${{ github.run_id }}-onyx-lite-tests",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
 
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -532,16 +484,12 @@ jobs:
         with:
           aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Create .env file for Onyx Lite Docker Compose
-        env:
-          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
@@ -550,46 +498,27 @@ jobs:
           POSTGRES_USE_NULL_POOL=true
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID}
           INTEGRATION_TESTS_MODE=true
           EOF
 
-      # Start only the services needed for Onyx Lite (Postgres + API server)
+      # The api_server runs in-process inside pytest via FastAPI TestClient
+      # (see tests/integration/conftest.py); only Postgres is needed from
+      # compose for Onyx Lite.
       - name: Start Docker containers (onyx-lite)
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up \
-            relational_db \
-            api_server \
-            -d
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d \
+            --wait --wait-timeout 300 \
+            relational_db
         id: start_docker_onyx_lite
 
-      - name: Wait for services to be ready
-        run: |
-          echo "Starting wait-for-service script (onyx-lite)..."
-          start_time=$(date +%s)
-          timeout=300
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Service did not become ready in $timeout seconds."
-              exit 1
-            fi
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
-            if [ "$response" = "200" ]; then
-              echo "API server is ready!"
-              break
-            elif [ "$response" = "curl_error" ]; then
-              echo "Curl encountered an error; retrying..."
-            else
-              echo "Service not ready yet (HTTP $response). Retrying in 5 seconds..."
-            fi
-            sleep 5
-          done
+      - name: Install Python deps and generate OpenAPI client
+        uses: ./.github/actions/install-deps-and-generate-openapi-client
+        with:
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Onyx Lite Integration Tests
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
           timeout_minutes: 20
           max_attempts: 3
@@ -598,6 +527,9 @@ jobs:
             echo "Running onyx-lite integration tests..."
             docker run --rm --network onyx_default \
               --name test-runner \
+              -v ${{ github.workspace }}:/workspace \
+              -w /workspace/backend \
+              -e INTEGRATION_TESTS_MODE=true \
               -e POSTGRES_HOST=relational_db \
               -e POSTGRES_USER=postgres \
               -e POSTGRES_PASSWORD=password \
@@ -606,19 +538,15 @@ jobs:
               -e DB_READONLY_PASSWORD=password \
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
-              -e API_SERVER_HOST=api_server \
+              -e DISABLE_VECTOR_DB=true \
+              -e FILE_STORE_BACKEND=postgres \
+              -e CACHE_BACKEND=postgres \
+              -e AUTH_BACKEND=postgres \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
               -e TEST_WEB_HOSTNAME=test-runner \
               -e ONYX_DEV_LICENSE \
-              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-${{ github.run_id }} \
-              /app/tests/integration/tests/no_vectordb
-
-      - name: Dump API server logs (onyx-lite)
-        if: always()
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml \
-            logs --no-color api_server > $GITHUB_WORKSPACE/api_server_onyx_lite.log || true
+              ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
+              uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/no_vectordb
 
       - name: Dump all-container logs (onyx-lite)
         if: always()
@@ -641,8 +569,7 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml down -v
 
   multitenant-tests:
-    needs:
-      [build-backend-image, build-model-server-image, build-integration-image]
+    needs: [build-model-server-image, build-devcontainer-image]
     runs-on:
       [
         runs-on,
@@ -650,20 +577,19 @@ jobs:
         "run-id=${{ github.run_id }}-multitenant-tests",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 15
 
     steps:
-      - uses: runs-on/action@742bf56072eb4845a0f94b3394673e4903c90ff0
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Start Docker containers for multi-tenant tests
         env:
@@ -678,47 +604,22 @@ jobs:
           REQUIRE_EMAIL_VERIFICATION=false \
           DISABLE_TELEMETRY=true \
           OPENAI_DEFAULT_API_KEY=${OPENAI_API_KEY} \
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:integration-test-backend-test-${RUN_ID} \
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:integration-test-model-server-test-${RUN_ID} \
           DEV_MODE=true \
-          OPENSEARCH_FOR_ONYX_ENABLED=false \
-          docker compose -f docker-compose.multitenant-dev.yml up \
+          docker compose -f docker-compose.multitenant-dev.yml up -d \
+            --wait --wait-timeout 300 \
             relational_db \
-            index \
+            opensearch \
             cache \
             minio \
-            api_server \
             inference_model_server \
-            indexing_model_server \
-            background \
-            -d
+            indexing_model_server
         id: start_docker_multi_tenant
 
-      - name: Wait for service to be ready (multi-tenant)
-        run: |
-          echo "Starting wait-for-service script for multi-tenant..."
-          docker logs -f onyx-api_server-1 &
-          start_time=$(date +%s)
-          timeout=300
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Service did not become ready in 5 minutes."
-              exit 1
-            fi
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
-            if [ "$response" = "200" ]; then
-              echo "Service is ready!"
-              break
-            elif [ "$response" = "curl_error" ]; then
-              echo "Curl encountered an error; retrying..."
-            else
-              echo "Service not ready yet (HTTP $response). Retrying in 5 seconds..."
-            fi
-            sleep 5
-          done
-          echo "Finished waiting for service."
+      - name: Install Python deps and generate OpenAPI client
+        uses: ./.github/actions/install-deps-and-generate-openapi-client
+        with:
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Multi-Tenant Integration Tests
         env:
@@ -728,6 +629,9 @@ jobs:
           echo "Running multi-tenant integration tests..."
           docker run --rm --network onyx_default \
             --name test-runner \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace/backend \
+            -e INTEGRATION_TESTS_MODE=true \
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
@@ -735,11 +639,16 @@ jobs:
             -e DB_READONLY_PASSWORD=password \
             -e POSTGRES_DB=postgres \
             -e POSTGRES_USE_NULL_POOL=true \
-            -e VESPA_HOST=index \
-            -e ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=false \
+            -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
-            -e API_SERVER_HOST=api_server \
+            -e MODEL_SERVER_HOST=inference_model_server \
+            -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
+            -e S3_ENDPOINT_URL=http://minio:9000 \
+            -e S3_AWS_ACCESS_KEY_ID=minioadmin \
+            -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
+            -e S3_FILE_STORE_BUCKET_NAME=onyx-file-store-bucket \
             -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+            -e OPENAI_DEFAULT_API_KEY=${OPENAI_API_KEY} \
             -e EXA_API_KEY=${EXA_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
             -e SLACK_BOT_TOKEN_TEST_SPACE=${SLACK_BOT_TOKEN_TEST_SPACE} \
@@ -750,14 +659,10 @@ jobs:
             -e REQUIRE_EMAIL_VERIFICATION=false \
             -e DISABLE_TELEMETRY=true \
             -e DEV_MODE=true \
-            ${ECR_CACHE}:integration-test-${RUN_ID} \
-            /app/tests/integration/multitenant_tests
-
-      - name: Dump API server logs (multi-tenant)
-        if: always()
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.multitenant-dev.yml logs --no-color api_server > $GITHUB_WORKSPACE/api_server_multitenant.log || true
+            -e ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
+            -e LICENSE_ENFORCEMENT_ENABLED=false \
+            ${ECR_CACHE}:integration-test-devcontainer-${RUN_ID} \
+            uv run --no-sync pytest -v --tb=short -rs tests/integration/multitenant_tests
 
       - name: Dump all-container logs (multi-tenant)
         if: always()
@@ -780,11 +685,39 @@ jobs:
 
   required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    # This job is the single required status check for the integration suite. It
+    # always runs so branch protection has something to wait on, and it passes
+    # cleanly when `changes` reports no relevant paths changed (i.e. the test
+    # matrix was legitimately skipped).
     runs-on: ubuntu-slim
-    timeout-minutes: 45
-    needs: [integration-tests, onyx-lite-tests, multitenant-tests]
+    timeout-minutes: 5
+    needs: [changes, integration-tests, onyx-lite-tests, multitenant-tests]
     if: ${{ always() }}
     steps:
       - name: Check job status
-        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
-        run: exit 1
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_TESTS: ${{ needs.changes.outputs.integration }}
+          INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
+          LITE_RESULT: ${{ needs.onyx-lite-tests.result }}
+          MULTITENANT_RESULT: ${{ needs.multitenant-tests.result }}
+        run: |
+          # Fail closed if `changes` didn't succeed. Otherwise an empty
+          # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
+          # would be indistinguishable from "no relevant paths changed" and we
+          # would incorrectly pass the required check.
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
+          if [ "${RUN_TESTS}" != "true" ]; then
+            echo "No relevant paths changed — required check passes."
+            exit 0
+          fi
+          if [ "${INTEGRATION_RESULT}" != "success" ] \
+             || [ "${LITE_RESULT}" != "success" ] \
+             || [ "${MULTITENANT_RESULT}" != "success" ]; then
+            echo "Test results: integration-tests=${INTEGRATION_RESULT}, onyx-lite-tests=${LITE_RESULT}, multitenant-tests=${MULTITENANT_RESULT}"
+            exit 1
+          fi
+          echo "All tests passed."

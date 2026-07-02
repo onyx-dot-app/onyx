@@ -1,4 +1,5 @@
 from sqlalchemy import delete
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
@@ -308,6 +309,8 @@ def upsert_llm_provider(
         supported_flows = [LLMModelFlowType.CHAT]
         if model_config.supports_image_input:
             supported_flows.append(LLMModelFlowType.VISION)
+        if model_config.supports_reasoning:
+            supported_flows.append(LLMModelFlowType.REASONING)
 
         existing = existing_by_name.get(model_config.name)
         if existing:
@@ -318,6 +321,7 @@ def upsert_llm_provider(
                 is_visible=model_config.is_visible,
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
+                custom_display_name=model_config.custom_display_name,
             )
         else:
             insert_new_model_configuration__no_commit(
@@ -328,6 +332,7 @@ def upsert_llm_provider(
                 is_visible=model_config.is_visible,
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
+                custom_display_name=model_config.custom_display_name,
             )
 
     # Make sure the relationship table stays up to date
@@ -357,36 +362,41 @@ def upsert_llm_provider(
 
 def sync_model_configurations(
     db_session: Session,
-    provider_name: str,
+    provider_id: int,
     models: list[SyncModelEntry],
 ) -> int:
     """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama, etc.).
 
-    This inserts NEW models from the source API without overwriting existing ones.
-    User preferences (is_visible, max_input_tokens) are preserved for existing models.
+    Inserts NEW models and, for existing ones, adds any newly-reported capability
+    flag (VISION/REASONING). Flags are only added, never removed; is_visible and
+    max_input_tokens are preserved. Caveat: an admin-removed flow is re-added on
+    the next sync (ENG-4233).
 
     Args:
         db_session: Database session
-        provider_name: Name of the LLM provider
+        provider_id: Id of the LLM provider
         models: List of SyncModelEntry objects describing the fetched models
 
     Returns:
         Number of new models added
     """
-    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
+    provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
     if not provider:
-        raise ValueError(f"LLM Provider '{provider_name}' not found")
+        raise ValueError(f"LLM Provider with id={provider_id} not found")
 
-    # Get existing model names to count new additions
-    existing_names = {mc.name for mc in provider.model_configurations}
+    existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 
     new_count = 0
+    upgraded_flow_count = 0
     for model in models:
-        if model.name not in existing_names:
+        existing = existing_by_name.get(model.name)
+        if existing is None:
             # Insert new model with is_visible=False (user must explicitly enable)
             supported_flows = [LLMModelFlowType.CHAT]
             if model.supports_image_input:
                 supported_flows.append(LLMModelFlowType.VISION)
+            if model.supports_reasoning:
+                supported_flows.append(LLMModelFlowType.REASONING)
 
             insert_new_model_configuration__no_commit(
                 db_session=db_session,
@@ -398,8 +408,29 @@ def sync_model_configurations(
                 display_name=model.display_name,
             )
             new_count += 1
+            continue
 
-    if new_count > 0:
+        # Existing model: add newly-reported capability flags (additive only).
+        # TODO(ENG-4233): durable admin flow removals; avoid per-model lazy-load.
+        existing_flows = set(existing.llm_model_flow_types)
+        missing_flows: list[LLMModelFlowType] = []
+        if model.supports_image_input and LLMModelFlowType.VISION not in existing_flows:
+            missing_flows.append(LLMModelFlowType.VISION)
+        if (
+            model.supports_reasoning
+            and LLMModelFlowType.REASONING not in existing_flows
+        ):
+            missing_flows.append(LLMModelFlowType.REASONING)
+
+        for flow_type in missing_flows:
+            create_new_flow_mapping__no_commit(
+                db_session=db_session,
+                model_configuration_id=existing.id,
+                flow_type=flow_type,
+            )
+            upgraded_flow_count += 1
+
+    if new_count > 0 or upgraded_flow_count > 0:
         db_session.commit()
 
     return new_count
@@ -675,6 +706,29 @@ def remove_llm_provider(
     for persona in get_personas_using_provider(db_session, provider_id):
         persona.default_model_configuration_id = None
 
+    # Clear personal default models referencing this provider. They are stored
+    # as "<provider display name>__<provider type>__<model name>" strings, so
+    # they'd otherwise dangle forever and silently resolve to an arbitrary
+    # provider in the UI instead of the global default. Display names are not
+    # unique at the DB level, so include the provider type in the match.
+    # Nameless providers have been serialized with either an empty display
+    # name or the provider id depending on the frontend writer, so match both.
+    display_names = [provider.name] if provider.name else ["", str(provider.id)]
+    db_session.execute(
+        update(User)
+        .where(
+            or_(
+                *(
+                    User.default_model.startswith(
+                        f"{display_name}__{provider.provider}__", autoescape=True
+                    )
+                    for display_name in display_names
+                )
+            )
+        )
+        .values(default_model=None)
+    )
+
     db_session.execute(
         delete(LLMProvider__UserGroup).where(
             LLMProvider__UserGroup.llm_provider_id == provider_id
@@ -929,6 +983,7 @@ def insert_new_model_configuration__no_commit(
     is_visible: bool,
     max_input_tokens: int | None,
     display_name: str | None,
+    custom_display_name: str | None = None,
 ) -> int | None:
     result = db_session.execute(
         insert(ModelConfiguration)
@@ -938,6 +993,7 @@ def insert_new_model_configuration__no_commit(
             is_visible=is_visible,
             max_input_tokens=max_input_tokens,
             display_name=display_name,
+            custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
         )
         .on_conflict_do_nothing()
@@ -966,6 +1022,7 @@ def update_model_configuration__no_commit(
     is_visible: bool,
     max_input_tokens: int | None,
     display_name: str | None,
+    custom_display_name: str | None = None,
 ) -> None:
     result = db_session.execute(
         update(ModelConfiguration)
@@ -973,6 +1030,7 @@ def update_model_configuration__no_commit(
             is_visible=is_visible,
             max_input_tokens=max_input_tokens,
             display_name=display_name,
+            custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
         )
         .where(ModelConfiguration.id == model_configuration_id)

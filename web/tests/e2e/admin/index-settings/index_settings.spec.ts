@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
+import { IndexSettingsPage } from "./IndexSettingsPage";
 
 const INDEX_SETTINGS_URL = "/admin/configuration/index-settings";
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
@@ -352,4 +353,122 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
 
     await expect.poll(() => setNewSettingsCalled, { timeout: 5000 }).toBe(true);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Empty-registry cloud providers (LiteLLM / Azure)
+//
+// These providers ship no pre-registered models, so their connect modal
+// collects the model spec (name + dimension) itself. Regression coverage for
+// the bug where that spec was dropped after the provider row was saved: the
+// model was never staged (so no search-settings row was ever created), and
+// even when staged it was misresolved as self-hosted (provider_type=null),
+// bypassing the saved cloud credentials. Both must reach
+// set-new-search-settings with the typed model AND the correct provider_type.
+// ---------------------------------------------------------------------------
+
+interface EmptyRegistryProviderCase {
+  providerType: string;
+  displayName: string;
+  // Fills the credential fields unique to this provider via the page object
+  // (the shared model-spec fields are filled by the test body).
+  fillCredentials: (indexSettings: IndexSettingsPage) => Promise<void>;
+}
+
+const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
+  {
+    providerType: "litellm",
+    displayName: "LiteLLM",
+    fillCredentials: (indexSettings) =>
+      indexSettings.fillLiteLLMCredentials({
+        apiBaseUrl: "https://proxy.example.com",
+        apiKey: "sk-test-key",
+      }),
+  },
+  {
+    providerType: "azure",
+    displayName: "Azure",
+    fillCredentials: (indexSettings) =>
+      indexSettings.fillAzureCredentials({
+        targetUrl: "https://res.openai.azure.com/openai/v1/embeddings",
+        apiKey: "az-test-key",
+        apiVersion: "2023-05-15",
+        deploymentName: "my-deployment",
+      }),
+  },
+];
+
+test.describe("Index Settings — empty-registry providers @exclusive", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+  });
+
+  for (const {
+    providerType,
+    displayName,
+    fillCredentials,
+  } of EMPTY_REGISTRY_PROVIDERS) {
+    test(`connecting ${displayName} stages its model and applies with provider_type="${providerType}"`, async ({
+      page,
+    }) => {
+      // Stub the credential test + save so no real endpoint/key is needed.
+      await page.route(TEST_EMBEDDING_API, async (route) => {
+        await route.fulfill({ status: 200, body: JSON.stringify({}) });
+      });
+      await page.route(EMBEDDING_PROVIDER_API, async (route) => {
+        const method = route.request().method();
+        if (method === "PUT") {
+          await route.fulfill({
+            status: 200,
+            body: JSON.stringify({ provider_type: providerType }),
+          });
+        } else if (method === "GET") {
+          await route.fulfill({ status: 200, body: JSON.stringify([]) });
+        } else {
+          await route.continue();
+        }
+      });
+
+      // Capture the search-settings request body — this is what the bug broke.
+      const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+        void page.route(SET_NEW_SETTINGS_API, async (route) => {
+          resolve(
+            JSON.parse(route.request().postData() ?? "{}") as Record<
+              string,
+              unknown
+            >
+          );
+          await route.fulfill({ status: 200, body: JSON.stringify({}) });
+        });
+      });
+
+      const indexSettings = new IndexSettingsPage(page);
+      await indexSettings.goto();
+      await indexSettings.expandModelPicker();
+      await indexSettings.switchToCloudTab();
+
+      // Empty-registry providers render an "Add Configuration" card instead of
+      // model cards. Open it, fill the credentials + model spec, and connect.
+      await indexSettings.openProviderSetup(displayName);
+      await fillCredentials(indexSettings);
+      await indexSettings.fillModelSpec({
+        modelName: "my-embed-model",
+        modelDim: 1024,
+      });
+      await indexSettings.submitProviderSetup();
+
+      // The just-defined model must be staged — Apply & Re-index appears.
+      await indexSettings.expectModelStaged();
+      await indexSettings.applyReindex();
+
+      const body = await bodyPromise;
+      expect(body.model_name).toBe("my-embed-model");
+      expect(Number(body.model_dim)).toBe(1024);
+      // The core regression: the model is bound to its cloud provider, NOT
+      // sent as provider_type=null (which the backend treats as self-hosted
+      // and would ignore the credentials we just saved).
+      expect(body.provider_type).toBe(providerType);
+    });
+  }
 });

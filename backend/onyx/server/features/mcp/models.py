@@ -14,6 +14,7 @@ from pydantic import model_validator
 
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 
@@ -58,6 +59,9 @@ class MCPOAuthKeys(str, Enum):
     CLIENT_INFO = "client_info"
     TOKENS = "tokens"
     METADATA = "metadata"
+    # Absolute unix expiry for the stored token. `OAuthToken` only carries the
+    # relative `expires_in`, which is meaningless once reloaded from storage.
+    TOKEN_EXPIRES_AT = "token_expires_at"
 
 
 class MCPConnectionData(TypedDict):
@@ -79,6 +83,7 @@ class MCPConnectionData(TypedDict):
     client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
     tokens: NotRequired[dict[str, Any]]  # OAuthToken
     metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
+    token_expires_at: NotRequired[float]  # absolute unix expiry for `tokens`
 
     # the actual models are defined in mcp.shared.auth
     # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
@@ -128,6 +133,25 @@ class MCPToolCreateRequest(BaseModel):
     )
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
+    oauth_provider_mode: MCPOAuthProviderMode = Field(
+        default=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        description=(
+            "OAuth provider bootstrap mode. AUTO_DISCOVERY uses SDK challenge/"
+            "metadata discovery; KNOWN_PROVIDER uses admin-configured endpoints."
+        ),
+    )
+    oauth_authorization_endpoint: Optional[str] = Field(
+        None, description="Known-provider OAuth authorization endpoint URL"
+    )
+    oauth_token_endpoint: Optional[str] = Field(
+        None, description="Known-provider OAuth token endpoint URL"
+    )
+    oauth_scopes_override: Optional[list[str]] = Field(
+        None, description="Optional scope override for known-provider OAuth"
+    )
+    oauth_additional_auth_params: Optional[dict[str, str]] = Field(
+        None, description="Optional extra query parameters for the authorization URL"
+    )
     oauth_client_id_changed: bool = Field(
         default=False,
         description=(
@@ -154,6 +178,12 @@ class MCPToolCreateRequest(BaseModel):
     admin_credentials: Optional[dict[str, str]] = Field(
         None,
         description="Admin's credential key-value pairs for template substitution and storage",
+    )
+    admin_credentials_changed: dict[str, bool] = Field(
+        default_factory=dict,
+        description=(
+            "Per-field flags marking which `admin_credentials` were edited"
+        ),  # True = use value from request, False = use stored value
     )
     existing_server_id: Optional[int] = Field(
         None, description="ID of existing server to update (for editing)"
@@ -199,6 +229,29 @@ class MCPToolCreateRequest(BaseModel):
         # OAuth client ID/secret are optional. If provided, they will seed the
         # OAuth client info; otherwise, the MCP client will attempt dynamic
         # client registration.
+        if self.auth_type != MCPAuthenticationType.OAUTH:
+            self.oauth_provider_mode = MCPOAuthProviderMode.AUTO_DISCOVERY
+            self.oauth_authorization_endpoint = None
+            self.oauth_token_endpoint = None
+            self.oauth_scopes_override = None
+            self.oauth_additional_auth_params = None
+            return self
+
+        if self.oauth_provider_mode == MCPOAuthProviderMode.KNOWN_PROVIDER:
+            if not self.oauth_authorization_endpoint:
+                raise ValueError(
+                    "oauth_authorization_endpoint is required for known-provider OAuth mode"
+                )
+            if not self.oauth_token_endpoint:
+                raise ValueError(
+                    "oauth_token_endpoint is required for known-provider OAuth mode"
+                )
+        else:
+            # AUTO_DISCOVERY: clear fields that only apply to KNOWN_PROVIDER
+            self.oauth_authorization_endpoint = None
+            self.oauth_token_endpoint = None
+            self.oauth_scopes_override = None
+            self.oauth_additional_auth_params = None
 
         return self
 
@@ -380,6 +433,11 @@ class MCPServer(BaseModel):
     transport: Optional[MCPTransport] = None
     auth_type: Optional[MCPAuthenticationType] = None
     auth_performer: Optional[MCPAuthenticationPerformer] = None
+    oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    oauth_authorization_endpoint: Optional[str] = None
+    oauth_token_endpoint: Optional[str] = None
+    oauth_scopes_override: Optional[list[str]] = None
+    oauth_additional_auth_params: Optional[dict[str, str]] = None
     is_authenticated: bool
     user_authenticated: Optional[bool] = None
     status: MCPServerStatus
@@ -412,6 +470,11 @@ class MCPServerCreateResponse(BaseModel):
     server_url: str
     auth_type: str
     auth_performer: Optional[str]
+    oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    oauth_authorization_endpoint: Optional[str] = None
+    oauth_token_endpoint: Optional[str] = None
+    oauth_scopes_override: Optional[list[str]] = None
+    oauth_additional_auth_params: Optional[dict[str, str]] = None
     is_authenticated: bool
 
 

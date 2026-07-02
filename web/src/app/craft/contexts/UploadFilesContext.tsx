@@ -73,53 +73,11 @@ const MAX_TOTAL_SIZE_BYTES = 200 * 1024 * 1024;
 /** Maximum files per session - matches BUILD_MAX_UPLOAD_FILES_PER_SESSION */
 const MAX_FILES_PER_SESSION = 20;
 
-/** Blocked file extensions (executables/dangerous) - matches backend BLOCKED_EXTENSIONS */
-const BLOCKED_EXTENSIONS = new Set([
-  // Windows executables
-  ".exe",
-  ".dll",
-  ".msi",
-  ".scr",
-  ".com",
-  ".bat",
-  ".cmd",
-  ".ps1",
-  // macOS
-  ".app",
-  ".dmg",
-  ".pkg",
-  // Linux
-  ".deb",
-  ".rpm",
-  ".so",
-  // Cross-platform
-  ".jar",
-  ".war",
-  ".ear",
-  // Other potentially dangerous
-  ".vbs",
-  ".vbe",
-  ".wsf",
-  ".wsh",
-  ".hta",
-  ".cpl",
-  ".reg",
-  ".lnk",
-  ".pif",
-]);
-
 /** Format bytes to human-readable string */
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/** Get file extension (lowercase, including dot) */
-function getFileExtension(filename: string): string {
-  const lastDot = filename.lastIndexOf(".");
-  if (lastDot === -1) return "";
-  return filename.slice(lastDot).toLowerCase();
 }
 
 /** Validation result for a single file */
@@ -130,30 +88,14 @@ interface FileValidationResult {
 
 /** Validate a single file before upload */
 function validateFile(file: File): FileValidationResult {
-  // Check file size
+  // Check file size. Extension/type are intentionally not restricted - uploaded
+  // files only run inside the isolated sandbox, which is the security boundary.
   if (file.size > MAX_FILE_SIZE_BYTES) {
     return {
       valid: false,
       error: `File too large (${formatBytes(
         file.size
       )}). Maximum is ${formatBytes(MAX_FILE_SIZE_BYTES)}.`,
-    };
-  }
-
-  // Check blocked extensions
-  const ext = getFileExtension(file.name);
-  if (ext && BLOCKED_EXTENSIONS.has(ext)) {
-    return {
-      valid: false,
-      error: `File type '${ext}' is not allowed for security reasons.`,
-    };
-  }
-
-  // Check for missing extension
-  if (!ext) {
-    return {
-      valid: false,
-      error: "File must have an extension.",
     };
   }
 
@@ -633,7 +575,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
   /**
    * Upload files. Uses activeSessionId internally.
-   * Validates files before upload (size, extension, batch limits).
+   * Validates files before upload (size, batch limits).
    */
   const uploadFiles = useCallback(
     async (files: File[]): Promise<BuildFile[]> => {

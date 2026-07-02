@@ -1,4 +1,4 @@
-import { Settings } from "@/interfaces/settings";
+import { Settings } from "@/lib/settings/types";
 
 async function parseErrorDetail(
   res: Response,

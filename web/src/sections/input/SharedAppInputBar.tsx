@@ -14,7 +14,7 @@ import {
 export default function SharedAppInputBar() {
   return (
     <div className="relative w-full">
-      <div className="w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
+      <div className="w-full flex flex-col shadow-box-01 bg-background-neutral-00 rounded-16">
         {/* Textarea area */}
         <div className="flex flex-row items-center w-full">
           <Text text03 className="w-full px-3 pt-3 pb-2 select-none">

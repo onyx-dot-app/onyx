@@ -14,7 +14,11 @@ from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 PUBLIC_ENDPOINT_SPECS = [
-    # built-in documentation functions
+    # Built-in API docs / schema. These routes only exist when ENABLE_PUBLIC_DOCS
+    # is set (see get_application); they are gated off by default so the API
+    # surface is not exposed publicly. When the flag is off the routes are not
+    # registered, so these specs simply go unmatched. When on, they are served
+    # publicly with no session (the renderers never bypass per-route auth).
     ("/openapi.json", {"GET", "HEAD"}),
     ("/docs", {"GET", "HEAD"}),
     ("/docs/oauth2-redirect", {"GET", "HEAD"}),
@@ -43,6 +47,17 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/reset-password", {"POST"}),
     ("/auth/request-verify-token", {"POST"}),
     ("/auth/verify", {"POST"}),
+    # native mobile bearer-token auth — mirrors the basic-auth routes above,
+    # but the session token is delivered as a Bearer instead of a cookie.
+    # (refresh/logout still enforce the token via their own dependencies;
+    # listing them here only satisfies the startup public-route assertion.)
+    ("/auth/mobile/login", {"POST"}),
+    ("/auth/mobile/refresh", {"POST"}),
+    ("/auth/mobile/logout", {"POST"}),
+    # swaps a one-time SSO code (+ PKCE verifier) for the session token; it has
+    # no user dependency by design (the code IS the credential), so it must be
+    # declared public to satisfy the startup public-route assertion.
+    ("/auth/mobile/sso/exchange", {"POST"}),
     ("/users/me", {"GET"}),
     ("/users/me", {"PATCH"}),
     ("/users/{id}", {"GET"}),
@@ -51,6 +66,9 @@ PUBLIC_ENDPOINT_SPECS = [
     # oauth
     ("/auth/oauth/authorize", {"GET"}),
     ("/auth/oauth/callback", {"GET"}),
+    # dedicated mobile google oauth (callback routes to the api_server, not the web app)
+    ("/auth/mobile/oauth/authorize", {"GET"}),
+    ("/auth/mobile/oauth/callback", {"GET"}),
     # oidc
     ("/auth/oidc/authorize", {"GET"}),
     ("/auth/oidc/callback", {"GET"}),
@@ -98,6 +116,10 @@ def _is_require_permission_dependency(fn: object) -> bool:
     return bool(getattr(fn, "_is_require_permission", False))
 
 
+def _is_websocket_auth_dependency(fn: object) -> bool:
+    return bool(getattr(fn, "_is_websocket_auth_dependency", False))
+
+
 def check_router_auth(
     application: FastAPI,
     public_endpoint_specs: list[tuple[str, set[str]]] = PUBLIC_ENDPOINT_SPECS,
@@ -129,7 +151,7 @@ def check_router_auth(
         )
         if route_dependant_obj:
             for dependency in route_dependant_obj.dependencies:
-                depends_fn = dependency.cache_key[0]
+                depends_fn = dependency.call
                 if (
                     depends_fn == current_limited_user
                     or depends_fn == current_user
@@ -141,6 +163,7 @@ def check_router_auth(
                     or depends_fn == current_cloud_superuser
                     or depends_fn == verify_scim_token
                     or _is_require_permission_dependency(depends_fn)
+                    or _is_websocket_auth_dependency(depends_fn)
                 ):
                     found_auth = True
                     break

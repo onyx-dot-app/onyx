@@ -59,10 +59,6 @@ test.describe("Chat Scroll Behavior", () => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
     await page.goto("/app");
-    const nameInput = page.getByPlaceholder("Your name");
-    await nameInput.waitFor();
-    await nameInput.fill("Playwright Tester");
-    await page.getByText("Save").click();
     await Promise.all([
       // Wait for sidebar navigation to be visible to indicate page is loaded
       page.getByText("Agents").first().waitFor(),
@@ -152,10 +148,6 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
     await page.goto("/app");
-    const nameInput = page.getByPlaceholder("Your name");
-    await nameInput.waitFor();
-    await nameInput.fill("Playwright Tester");
-    await page.getByText("Save").click();
     await Promise.all([
       page.getByText("Agents").first().waitFor(),
       page.getByText("Projects").first().waitFor(),

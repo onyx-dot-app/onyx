@@ -234,7 +234,7 @@ export default function LineItem({
       aria-disabled={disabled || undefined}
       className={cn(
         "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
-        !!(children && description) ? "items-start" : "items-center",
+        children && description ? "items-start" : "items-center",
         buttonClassNames[variant][emphasisKey]
       )}
       data-selected={selected}

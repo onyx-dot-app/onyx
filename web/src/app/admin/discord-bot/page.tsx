@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import Card from "@/refresh-components/cards/Card";
 import { SvgKey, SvgPlusCircle } from "@opal/icons";
 import {
@@ -51,7 +51,7 @@ function DiscordBotContent() {
   };
 
   if (isLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (error || !guilds) {
@@ -88,7 +88,7 @@ function DiscordBotContent() {
                 <Text text03 secondaryMono>
                   !register {registrationKey}
                 </Text>
-                <CopyIconButton
+                <CopyButton
                   getCopyText={() => `!register ${registrationKey}`}
                 />
               </Section>

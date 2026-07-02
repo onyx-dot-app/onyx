@@ -23,15 +23,15 @@ import (
 // Client is the Onyx API client.
 //
 // Three http.Clients are kept so each call site can pick a timeout matched to
-// its expected work: 30s for quick JSON endpoints, 60s for /search (which
+// its expected work: 3min for quick JSON endpoints, 5min for /search (which
 // runs LLM query expansion + relevance selection), and 5min for streaming
 // chat responses and uploads.
 type Client struct {
 	baseURL             string
 	apiKey              string
-	httpClient          *http.Client // 30s
-	searchHTTPClient    *http.Client // 60s
-	streamingHTTPClient *http.Client // 5min
+	httpClient          *http.Client
+	searchHTTPClient    *http.Client
+	streamingHTTPClient *http.Client
 }
 
 // NewClient creates a new API client from config.
@@ -48,11 +48,11 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 		baseURL: config.APIURL(cfg.ServerURL),
 		apiKey:  cfg.APIKey,
 		httpClient: &http.Client{
-			Timeout:   30 * time.Second,
+			Timeout:   3 * time.Minute,
 			Transport: transport,
 		},
 		searchHTTPClient: &http.Client{
-			Timeout:   60 * time.Second,
+			Timeout:   5 * time.Minute,
 			Transport: transport,
 		},
 		streamingHTTPClient: &http.Client{
@@ -147,6 +147,17 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, r
 func (c *Client) Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error) {
 	var resp models.SearchResponse
 	if err := c.doJSONWith(ctx, c.searchHTTPClient, "POST", "/search", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// GenerateImage calls POST /image-generation/generate, which generates
+// image(s) using the workspace's default image-gen provider. Uses the 5min
+// client since high-res generation can be slow.
+func (c *Client) GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error) {
+	var resp models.ImageGenerationResponse
+	if err := c.doJSONWith(ctx, c.streamingHTTPClient, "POST", "/image-generation/generate", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -355,6 +366,7 @@ type ClientAPI interface {
 	StopChatSession(ctx context.Context, sessionID string)
 	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload) <-chan models.StreamEvent
 	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
+	GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error)
 }
 
 var _ ClientAPI = (*Client)(nil)

@@ -235,9 +235,15 @@ export const INDEX_ATTEMPT_STAGES = [
   "CHUNKING",
   "CONTEXTUAL_RAG",
   "EMBEDDING",
+  "DOC_LOCK_ACQUIRE_WAIT",
+  "ENRICHMENT_PREP",
   "VECTOR_DB_WRITE",
   "POST_INDEX_DB_UPDATE",
+  "COORD_LOCK_ACQUIRE_WAIT",
   "COORDINATION_UPDATE",
+  "FINALIZATION",
+  "GC_COLLECT",
+  "BATCH_UNACCOUNTED",
   "BATCH_TOTAL",
 ] as const;
 
@@ -594,6 +600,7 @@ export enum ValidSources {
   Imap = "imap",
   Bitbucket = "bitbucket",
   TestRail = "testrail",
+  Braintrust = "braintrust",
 
   // Craft-specific sources
   CraftFile = "craft_file",

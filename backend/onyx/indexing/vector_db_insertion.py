@@ -10,9 +10,9 @@ import sentry_sdk
 
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import DocumentFailure
-from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import DocumentInsertionRecord
-from onyx.document_index.interfaces import IndexBatchParams
+from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentInsertionRecord
+from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
 
@@ -32,7 +32,8 @@ def _log_insufficient_storage_error(e: Exception) -> None:
 def write_chunks_to_vector_db_with_backoff(
     document_index: DocumentIndex,
     make_chunks: Callable[[], Iterable[DocMetadataAwareIndexChunk]],
-    index_batch_params: IndexBatchParams,
+    indexing_metadata: IndexingMetadata,
+    tenant_id: str,
 ) -> tuple[list[DocumentInsertionRecord], list[ConnectorFailure]]:
     """Tries to insert all chunks in one large batch. If that batch fails for any reason,
     goes document by document to isolate the failure(s).
@@ -44,11 +45,9 @@ def write_chunks_to_vector_db_with_backoff(
     # first try to write the chunks to the vector db
     try:
         return (
-            list(
-                document_index.index(
-                    chunks=make_chunks(),
-                    index_batch_params=index_batch_params,
-                )
+            document_index.index(
+                chunks=make_chunks(),
+                indexing_metadata=indexing_metadata,
             ),
             [],
         )
@@ -96,14 +95,14 @@ def write_chunks_to_vector_db_with_backoff(
             insertion_records.extend(
                 document_index.index(
                     chunks=chunks_for_doc,
-                    index_batch_params=index_batch_params,
+                    indexing_metadata=indexing_metadata,
                 )
             )
         except Exception as e:
             with sentry_sdk.new_scope() as scope:
                 scope.set_tag("stage", "vector_db_write")
                 scope.set_tag("doc_id", doc_id)
-                scope.set_tag("tenant_id", index_batch_params.tenant_id)
+                scope.set_tag("tenant_id", tenant_id)
                 scope.fingerprint = ["vector-db-write-failure", type(e).__name__]
                 sentry_sdk.capture_exception(e)
             logger.exception(

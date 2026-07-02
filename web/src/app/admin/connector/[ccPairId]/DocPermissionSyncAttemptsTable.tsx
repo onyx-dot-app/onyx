@@ -9,7 +9,7 @@ import {
   Text,
 } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { localizeAndPrettify } from "@/lib/time";
+import { localizeAndPrettify } from "@opal/time";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
 import { PermissionSyncStatusBadge } from "./PermissionSyncStatusBadge";
 import type { DocPermissionSyncAttemptSnapshot } from "./types";

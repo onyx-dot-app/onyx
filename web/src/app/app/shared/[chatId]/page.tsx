@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/requireAuth";
 import SharedChatDisplay from "@/app/app/shared/[chatId]/SharedChatDisplay";
-import * as AppLayouts from "@/layouts/app-layouts";
 import { Agent } from "@/lib/agents/types";
 
 // This is used for rendering a persona in the shared chat display
@@ -18,6 +17,8 @@ export function constructMiniFiedPersona(name: string, id: number): Agent {
     document_sets: [],
     tools: [],
     owner: null,
+    owner_group: null,
+    user_permission: null,
     starter_messages: null,
     builtin_persona: false,
     is_featured: false,
@@ -62,9 +63,5 @@ export default async function Page(props: PageProps) {
     chatSession?.persona_id ?? 0
   );
 
-  return (
-    <AppLayouts.Root>
-      <SharedChatDisplay chatSession={chatSession} persona={persona} />
-    </AppLayouts.Root>
-  );
+  return <SharedChatDisplay chatSession={chatSession} persona={persona} />;
 }

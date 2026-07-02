@@ -3,7 +3,6 @@ from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
 from typing import cast
-from unittest.mock import call
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -298,7 +297,12 @@ def test_load_from_checkpoint_with_rate_limit(
             outputs = load_everything_from_checkpoint_connector(
                 zendesk_connector, 0, end_time
             )
-            mock_sleep.assert_has_calls([call(60), call(0.1)])
+            assert mock_sleep.call_count == 2
+            sleep_durations = [c.args[0] for c in mock_sleep.call_args_list]
+            # Explicit Retry-After sleep from the 429 handler
+            assert sleep_durations[0] == 60
+            # retry_builder (tenacity) wait: delay=0.1 plus random jitter in [0, 1)
+            assert 0.1 <= sleep_durations[1] < 1.1
 
         # Check that we got the document after rate limit was handled
         assert len(outputs) == 2

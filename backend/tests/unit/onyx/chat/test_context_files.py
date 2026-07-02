@@ -605,3 +605,41 @@ class TestSearchFilterDetermination:
             extracted_context_files=self._make_context(),
         )
         assert result.search_usage == SearchToolUsage.DISABLED
+
+    def test_persona_and_project_filters_are_mutually_exclusive(self) -> None:
+        """persona_id_filter and project_id_filter must never both be set.
+
+        The two are knowledge-scope triggers for different ownership models
+        (custom-persona files vs. project files); the precedence rule routes to
+        exactly one. This invariant guards against a future refactor of the
+        if/else in determine_search_params silently setting both — which would
+        OR a custom persona's files together with project files.
+        """
+        scenarios = [
+            # (persona_id, project_id, use_as_search_filter)
+            (42, 99, True),  # custom persona in a project, files overflow
+            (42, 99, False),  # custom persona in a project, files fit
+            (42, None, True),  # custom persona, no project, files overflow
+            (DEFAULT_PERSONA_ID, 99, True),  # default persona, project overflow
+            (DEFAULT_PERSONA_ID, 99, False),  # default persona, project fits
+            (DEFAULT_PERSONA_ID, None, True),  # default persona, no project
+        ]
+        for persona_id, project_id, overflow in scenarios:
+            result = determine_search_params(
+                persona_id=persona_id,
+                project_id=project_id,
+                extracted_context_files=self._make_context(
+                    use_as_search_filter=overflow,
+                    uncapped_token_count=7000 if overflow else 100,
+                ),
+            )
+            assert not (
+                result.persona_id_filter is not None
+                and result.project_id_filter is not None
+            ), (
+                "persona_id_filter and project_id_filter must never both be set "
+                f"(persona_id={persona_id}, project_id={project_id}, "
+                f"overflow={overflow}): got persona_id_filter="
+                f"{result.persona_id_filter}, project_id_filter="
+                f"{result.project_id_filter}"
+            )

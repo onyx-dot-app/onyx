@@ -97,7 +97,7 @@ def test_fetch_jira_issues_batch_small_ticket(
 
     assert len(docs) == 1
     doc = docs[0]
-    assert doc is not None  # Type assertion for mypy
+    assert doc is not None  # for type-checking
     assert doc.id.endswith("/SMALL-1")
     assert doc.sections[0].text is not None
     assert "Small description" in doc.sections[0].text
@@ -141,7 +141,7 @@ def test_fetch_jira_issues_batch_mixed_tickets(
 
     assert len(docs) == 1  # Only the small ticket should be included
     doc = docs[0]
-    assert doc is not None  # Type assertion for mypy
+    assert doc is not None  # for type-checking
     assert doc.id.endswith("/SMALL-1")
 
 

@@ -1,4 +1,4 @@
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 
 export function makeProvider(
   overrides: Partial<LLMProviderDescriptor>

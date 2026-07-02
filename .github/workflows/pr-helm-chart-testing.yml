@@ -22,7 +22,6 @@ jobs:
       [
         runs-on,
         runner=8cpu-linux-x64,
-        hdd=256,
         "run-id=${{ github.run_id }}-helm-chart-check",
       ]
     timeout-minutes: 45
@@ -30,7 +29,7 @@ jobs:
     # fetch-depth 0 is required for helm/chart-testing-action
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -43,7 +42,7 @@ jobs:
       - name: Set up chart-testing
         uses: helm/chart-testing-action@2e2940618cb426dce2999631d543b53cdcfc8527
         with:
-          uv_version: "0.9.9"
+          uv_version: "0.11.25"
 
       # even though we specify chart-dirs in ct.yaml, it isn't used by ct for the list-changed command...
       - name: Run chart-testing (list-changed)
@@ -131,7 +130,13 @@ jobs:
           echo "=== Validating chart dependencies ==="
           cd deployment/helm/charts/onyx
           helm dependency update
-          helm lint . --set auth.userauth.values.user_auth_secret=placeholder
+          # objectstorage ships no defaults (fail closed), so lint must set placeholders.
+          helm lint . \
+            --set auth.userauth.values.user_auth_secret=placeholder \
+            --set auth.objectstorage.values.s3_aws_access_key_id=placeholder \
+            --set auth.objectstorage.values.s3_aws_secret_access_key=placeholder \
+            --set auth.objectstorage.values.rootUser=placeholder \
+            --set auth.objectstorage.values.rootPassword=placeholder
 
       - name: Run chart-testing (install) with enhanced monitoring
         timeout-minutes: 25

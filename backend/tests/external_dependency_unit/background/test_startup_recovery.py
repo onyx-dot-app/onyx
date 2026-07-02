@@ -23,8 +23,8 @@ from sqlalchemy.orm import Session
 from onyx.background.periodic_poller import recover_stuck_user_files
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -119,7 +119,7 @@ class TestRecoverProcessingFiles:
 
         mock_impl = MagicMock()
         with patch(f"{_IMPL_MODULE}.process_user_file_impl", mock_impl):
-            recover_stuck_user_files(TEST_TENANT_ID)
+            recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
         assert str(uf.id) in called_ids, (
@@ -138,7 +138,7 @@ class TestRecoverProcessingFiles:
 
         mock_impl = MagicMock()
         with patch(f"{_IMPL_MODULE}.process_user_file_impl", mock_impl):
-            recover_stuck_user_files(TEST_TENANT_ID)
+            recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
         assert str(uf.id) not in called_ids, (
@@ -161,7 +161,7 @@ class TestRecoverDeletingFiles:
 
         mock_impl = MagicMock(side_effect=_fake_delete_impl)
         with patch(f"{_IMPL_MODULE}.delete_user_file_impl", mock_impl):
-            recover_stuck_user_files(TEST_TENANT_ID)
+            recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
         assert str(uf.id) in called_ids, (
@@ -189,7 +189,7 @@ class TestRecoverSyncFiles:
 
         mock_impl = MagicMock(side_effect=_fake_sync_impl)
         with patch(f"{_IMPL_MODULE}.project_sync_user_file_impl", mock_impl):
-            recover_stuck_user_files(TEST_TENANT_ID)
+            recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
         assert str(uf.id) in called_ids, (
@@ -213,7 +213,7 @@ class TestRecoverSyncFiles:
 
         mock_impl = MagicMock(side_effect=_fake_sync_impl)
         with patch(f"{_IMPL_MODULE}.project_sync_user_file_impl", mock_impl):
-            recover_stuck_user_files(TEST_TENANT_ID)
+            recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
         assert str(uf.id) in called_ids, (
@@ -241,7 +241,7 @@ class TestRecoveryMultipleFiles:
 
         mock_impl = MagicMock()
         with patch(f"{_IMPL_MODULE}.process_user_file_impl", mock_impl):
-            recover_stuck_user_files(TEST_TENANT_ID)
+            recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
         called_ids = {call.kwargs["user_file_id"] for call in mock_impl.call_args_list}
         expected_ids = {str(uf.id) for uf in files}
@@ -279,7 +279,7 @@ class TestTransientFailures:
 
         mock_impl = MagicMock(side_effect=side_effect)
         with patch(f"{_IMPL_MODULE}.process_user_file_impl", mock_impl):
-            recover_stuck_user_files(TEST_TENANT_ID)
+            recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
         assert fail_id in called_ids, "Failed file should have been attempted"
@@ -309,7 +309,7 @@ class TestTransientFailures:
 
         mock_impl = MagicMock(side_effect=side_effect)
         with patch(f"{_IMPL_MODULE}.delete_user_file_impl", mock_impl):
-            recover_stuck_user_files(TEST_TENANT_ID)
+            recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
         assert fail_id in called_ids, "Failed file should have been attempted"
@@ -349,7 +349,7 @@ class TestTransientFailures:
 
         mock_impl = MagicMock(side_effect=side_effect)
         with patch(f"{_IMPL_MODULE}.project_sync_user_file_impl", mock_impl):
-            recover_stuck_user_files(TEST_TENANT_ID)
+            recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
         called_ids = [call.kwargs["user_file_id"] for call in mock_impl.call_args_list]
         assert fail_id in called_ids, "Failed file should have been attempted"

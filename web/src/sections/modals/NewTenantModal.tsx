@@ -5,7 +5,7 @@ import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
-import { logout } from "@/lib/user";
+import { logout } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";

@@ -10,14 +10,14 @@ import {
 import Title from "@/components/ui/title";
 import { DeleteButton } from "@/components/DeleteButton";
 import { deleteTokenRateLimit, updateTokenRateLimit } from "./lib";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { TokenRateLimitDisplay } from "./types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { Checkbox } from "@opal/components";
 import { TableHeader } from "@/components/ui/table";
 import { Text } from "@opal/components";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 
 type TokenRateLimitTableArgs = {
   tokenRateLimits: TokenRateLimitDisplay[];
@@ -193,7 +193,7 @@ export const GenericTokenRateLimitTable = ({
   );
 
   if (isLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (!isLoading && error) {

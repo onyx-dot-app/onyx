@@ -11,10 +11,16 @@ from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_expected_docs_in_retrieved_docs,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_hierarchy_nodes_match_expected,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_resource_key_shortcut_target_in_retrieved_docs,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_URL
@@ -101,6 +107,7 @@ def test_include_all(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
@@ -119,6 +126,7 @@ def test_include_all(
             RESTRICTED_ACCESS_FOLDER_ID,
             TEST_USER_1_EXTRA_FOLDER_ID,
             FOLDER_3_ID,
+            *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
         )
     )
     assert_hierarchy_nodes_match_expected(
@@ -212,12 +220,14 @@ def test_include_my_drives_only(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     expected_nodes = _pick(
         FOLDER_3_ID,
         ADMIN_MY_DRIVE_ID,
         PILL_FOLDER_ID,
         TEST_USER_1_EXTRA_FOLDER_ID,
+        *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
     )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,

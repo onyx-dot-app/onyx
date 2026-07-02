@@ -3,11 +3,9 @@
 import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { SettingsLayouts } from "@opal/layouts";
+import { Button, Text } from "@opal/components";
 import { toast } from "@/hooks/useToast";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import {
   SvgClock,
@@ -15,6 +13,7 @@ import {
   SvgPauseCircle,
   SvgPlayCircle,
   SvgTrash,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import {
   deleteScheduledTask,
@@ -22,12 +21,14 @@ import {
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
 import RunHistoryTable from "@/app/craft/v1/tasks/components/RunHistoryTable";
+import PreApprovedAppsSummary from "@/app/craft/v1/tasks/components/PreApprovedAppsSummary";
 import { TaskStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import { TASKS_PATH, taskEditPath } from "@/app/craft/v1/tasks/constants";
 import type {
   ScheduledTaskDetail,
   ScheduledTaskStatus,
 } from "@/app/craft/v1/tasks/interfaces";
+import { humanReadableScheduleFromCron } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -46,6 +47,9 @@ export default function ScheduledTaskDetailPage() {
 
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const scheduleDescription = data
+    ? humanReadableScheduleFromCron(data.editor_mode, data.cron_expression)
+    : undefined;
 
   const handleBack = useCallback(() => {
     router.push(TASKS_PATH);
@@ -108,11 +112,10 @@ export default function ScheduledTaskDetailPage() {
         <SettingsLayouts.Header
           icon={SvgClock}
           title="Scheduled task"
-          backButton
-          onBack={handleBack}
+          backButton={handleBack}
         />
         <SettingsLayouts.Body>
-          <Text mainUiBody text03>
+          <Text font="main-ui-body" color="text-03">
             Missing task id.
           </Text>
         </SettingsLayouts.Body>
@@ -125,9 +128,8 @@ export default function ScheduledTaskDetailPage() {
       <SettingsLayouts.Header
         icon={SvgClock}
         title={data?.name ?? "Scheduled task"}
-        description={data?.human_readable_schedule}
-        backButton
-        onBack={handleBack}
+        description={scheduleDescription}
+        backButton={handleBack}
         rightChildren={
           data ? (
             <div className="flex items-center gap-2">
@@ -178,14 +180,19 @@ export default function ScheduledTaskDetailPage() {
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SimpleLoader className="h-6 w-6" />
+            <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error || !data ? (
-          <Text mainUiBody text03>
+          <Text font="main-ui-body" color="text-03">
             Failed to load scheduled task.
           </Text>
         ) : (
-          <RunHistoryTable taskId={data.id} />
+          <div className="flex flex-col gap-6">
+            {data.pre_approved_app_ids.length > 0 && (
+              <PreApprovedAppsSummary appIds={data.pre_approved_app_ids} />
+            )}
+            <RunHistoryTable taskId={data.id} />
+          </div>
         )}
       </SettingsLayouts.Body>
 

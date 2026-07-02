@@ -1,5 +1,6 @@
 """Tests for llm_loop.py, including history construction and empty-response paths."""
 
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -8,6 +9,7 @@ from onyx.chat.llm_loop import _build_empty_llm_response_error
 from onyx.chat.llm_loop import _try_fallback_tool_extraction
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_loop import EmptyLLMResponseError
+from onyx.chat.llm_loop import select_reminder_text
 from onyx.chat.models import ChatLoadedFile
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import ContextFileMetadata
@@ -19,6 +21,8 @@ from onyx.configs.constants import MessageType
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
+from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import ToolCallKickoff
 
@@ -278,54 +282,41 @@ class TestConstructMessageHistory:
         assert result[4] == user_msg2  # Last user message
         assert result[5] == assistant_with_tool  # After last user message
 
-    def test_project_images_attached_to_last_user_message(self) -> None:
-        """Test that project images are attached to the last user message."""
-        system_prompt = create_message("System", MessageType.SYSTEM, 10)
-        user_msg1 = create_message("First", MessageType.USER, 5)
-        user_msg2 = create_message("Second", MessageType.USER, 5)
-
-        simple_chat_history = [user_msg1, user_msg2]
-        context_files = create_context_files(num_files=0, num_images=2)
-
-        result = construct_message_history(
-            system_prompt=system_prompt,
-            custom_agent_prompt=None,
-            simple_chat_history=simple_chat_history,
-            reminder_message=None,
-            context_files=context_files,
-            available_tokens=1000,
-        )
-
-        # Last message should have the project images
-        last_message = result[-1]
-        assert last_message.message == "Second"
-        assert last_message.image_files is not None
-        assert len(last_message.image_files) == 2
-        assert last_message.image_files[0].file_id == "image_0"
-        assert last_message.image_files[1].file_id == "image_1"
-
-    def test_project_images_preserve_existing_images(self) -> None:
-        """Test that project images are appended to existing images on the user message."""
+    def test_construct_message_history_does_not_duplicate_project_images(
+        self,
+    ) -> None:
+        """Project images are attached upstream in convert_chat_history; this
+        function must not re-attach them. Simulates the realistic state where
+        the last user message in simple_chat_history already carries the
+        project images, and asserts they appear exactly once."""
         system_prompt = create_message("System", MessageType.SYSTEM, 10)
 
-        # Create a user message with existing images
-        existing_image = ChatLoadedFile(
-            file_id="existing_image",
+        project_image = ChatLoadedFile(
+            file_id="project_image",
             content=b"",
             file_type=ChatFileType.IMAGE,
-            filename="existing.png",
+            filename="project.png",
             content_text=None,
             token_count=50,
         )
+        # Simulate convert_chat_history's output: the last user message already
+        # has the project image attached.
         user_msg = ChatMessageSimple(
-            message="Message with image",
+            message="What is in this image?",
             token_count=5,
             message_type=MessageType.USER,
-            image_files=[existing_image],
+            image_files=[project_image],
         )
 
         simple_chat_history = [user_msg]
-        context_files = create_context_files(num_files=0, num_images=1)
+        context_files = ExtractedContextFiles(
+            file_texts=[],
+            image_files=[project_image],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=0,
+        )
 
         result = construct_message_history(
             system_prompt=system_prompt,
@@ -336,12 +327,11 @@ class TestConstructMessageHistory:
             available_tokens=1000,
         )
 
-        # Last message should have both existing and project images
         last_message = result[-1]
+        assert last_message.message == "What is in this image?"
         assert last_message.image_files is not None
-        assert len(last_message.image_files) == 2
-        assert last_message.image_files[0].file_id == "existing_image"
-        assert last_message.image_files[1].file_id == "image_0"
+        assert len(last_message.image_files) == 1
+        assert last_message.image_files[0].file_id == "project_image"
 
     def test_truncation_from_top(self) -> None:
         """Test that history is truncated from the top when token budget is exceeded."""
@@ -1312,3 +1302,44 @@ class TestEmptyLlmResponseClassification:
         assert err.error_code == "EMPTY_LLM_RESPONSE"
         assert err.is_retryable is True
         assert "quota" not in err.client_error_msg.lower()
+
+
+class TestSelectReminderText:
+    """The open_url nudge must be suppressed when the open_url tool is disabled,
+    otherwise the model is told to call a tool it doesn't have (confusing
+    "open_url is not available" replies)."""
+
+    def _select(self, **overrides: Any) -> str | None:
+        kwargs: dict[str, Any] = dict(
+            ran_image_gen=False,
+            just_ran_web_search=False,
+            has_open_url_tool=True,
+            out_of_cycles=False,
+            persona_task_prompt=None,
+            include_citation_reminder=False,
+            include_file_reminder=False,
+        )
+        kwargs.update(overrides)
+        return select_reminder_text(**kwargs)
+
+    def test_open_url_reminder_when_tool_available(self) -> None:
+        result = self._select(just_ran_web_search=True, has_open_url_tool=True)
+        assert result == OPEN_URL_REMINDER
+
+    def test_no_open_url_reminder_when_tool_disabled(self) -> None:
+        """Web search ran but open_url is disabled -> fall back, never nudge open_url."""
+        result = self._select(just_ran_web_search=True, has_open_url_tool=False)
+        assert result != OPEN_URL_REMINDER
+        assert result is None  # nothing else to remind about in this scenario
+
+    def test_open_url_reminder_suppressed_on_last_cycle(self) -> None:
+        result = self._select(
+            just_ran_web_search=True, has_open_url_tool=True, out_of_cycles=True
+        )
+        assert result != OPEN_URL_REMINDER
+
+    def test_image_gen_reminder_takes_precedence(self) -> None:
+        result = self._select(
+            ran_image_gen=True, just_ran_web_search=True, has_open_url_tool=True
+        )
+        assert result == IMAGE_GEN_REMINDER

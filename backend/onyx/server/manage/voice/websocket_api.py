@@ -18,6 +18,7 @@ from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider
 from onyx.db.voice import fetch_default_tts_provider
+from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
 from onyx.voice.interface import StreamingSynthesizerProtocol
@@ -33,6 +34,11 @@ router = APIRouter(prefix="/voice")
 MIN_CHUNK_BYTES = 1500
 VOICE_DISABLE_STREAMING_FALLBACK = (
     os.environ.get("VOICE_DISABLE_STREAMING_FALLBACK", "").lower() == "true"
+)
+# Force STT onto the chunked/REST path where a provider's native streaming SDK
+# transport is unavailable in the runtime (else it yields empty transcripts).
+VOICE_DISABLE_STREAMING_STT = (
+    os.environ.get("VOICE_DISABLE_STREAMING_STT", "").lower() == "true"
 )
 
 # WebSocket size limits to prevent memory exhaustion attacks
@@ -410,44 +416,36 @@ async def websocket_transcribe(
                 await websocket.send_json({"type": "error", "message": str(e)})
                 return
 
-        # Use native streaming if provider supports it
-        if provider.supports_streaming_stt():
-            logger.info("WebSocket transcribe: using native streaming STT")
+        # Prefer native streaming; use the chunked/REST path when the provider
+        # lacks it or it's disabled via VOICE_DISABLE_STREAMING_STT.
+        use_streaming = (
+            provider.supports_streaming_stt() and not VOICE_DISABLE_STREAMING_STT
+        )
+
+        if use_streaming:
             try:
                 streaming_transcriber = await provider.create_streaming_transcriber()
-                logger.info(
-                    "WebSocket transcribe: streaming transcriber created successfully"
-                )
+                logger.info("WebSocket transcribe: streaming transcriber created")
                 await handle_streaming_transcription(websocket, streaming_transcriber)
+                return
             except Exception as e:
-                logger.error(
-                    "WebSocket transcribe: failed to create streaming transcriber: %s",
-                    e,
-                )
+                logger.error("WebSocket transcribe: streaming STT failed: %s", e)
                 if VOICE_DISABLE_STREAMING_FALLBACK:
                     await websocket.send_json(
                         {"type": "error", "message": f"Streaming STT failed: {e}"}
                     )
                     return
                 logger.info("WebSocket transcribe: falling back to chunked STT")
-                # Browser stream provides raw PCM16 chunks over WebSocket.
-                chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
-                await handle_chunked_transcription(websocket, chunked_transcriber)
-        else:
-            # Fall back to chunked transcription
-            if VOICE_DISABLE_STREAMING_FALLBACK:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": "Provider doesn't support streaming STT",
-                    }
-                )
-                return
-            logger.info(
-                "WebSocket transcribe: using chunked STT (provider doesn't support streaming)"
+        elif VOICE_DISABLE_STREAMING_FALLBACK and not VOICE_DISABLE_STREAMING_STT:
+            # Provider can't stream and chunked fallback is disabled.
+            await websocket.send_json(
+                {"type": "error", "message": "Provider doesn't support streaming STT"}
             )
-            chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
-            await handle_chunked_transcription(websocket, chunked_transcriber)
+            return
+
+        # Chunked/REST path; browser sends raw PCM16 chunks.
+        chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
+        await handle_chunked_transcription(websocket, chunked_transcriber)
 
     except WebSocketDisconnect:
         logger.debug("WebSocket transcribe: client disconnected")
@@ -573,7 +571,7 @@ async def handle_streaming_synthesis(
                                 "Streaming synthesis: forwarding text chunk (%s chars)",
                                 len(text),
                             )
-                            await synthesizer.send_text(text)
+                            await synthesizer.send_text(strip_markdown_for_tts(text))
 
                     elif data.get("type") == "end":
                         logger.info("Streaming synthesis: end signal received")
@@ -707,7 +705,7 @@ async def handle_chunked_synthesis(
                     speed = float(data["speed"])
             elif msg_data_type == "end":
                 logger.info("Chunked synthesis: end signal received")
-                full_text = " ".join(text_buffer).strip()
+                full_text = strip_markdown_for_tts(" ".join(text_buffer))
                 if not full_text:
                     await websocket.send_json({"type": "audio_done"})
                     logger.info("Chunked synthesis: no text, sent audio_done")

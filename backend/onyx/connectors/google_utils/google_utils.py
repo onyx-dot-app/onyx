@@ -1,5 +1,6 @@
 import re
 import socket
+import ssl
 import time
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -12,6 +13,7 @@ from googleapiclient.errors import HttpError
 
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
@@ -75,9 +77,9 @@ def _execute_with_retry(request: Any) -> Any:
 
             if _is_rate_limit_error(error):
                 # Attempt to get 'Retry-After' from headers
-                retry_after = error.resp.get("Retry-After")
-                if retry_after:
-                    sleep_time = int(retry_after)
+                retry_after = parse_retry_after_seconds(error.resp.get("Retry-After"))
+                if retry_after is not None:
+                    sleep_time = retry_after
                 else:
                     # Extract 'Retry after' timestamp from error message
                     match = re.search(
@@ -172,9 +174,13 @@ def _execute_single_retrieval(
         else:
             logger.exception("Error executing request:")
             raise e
-    except (TimeoutError, socket.timeout) as error:
+    except (TimeoutError, socket.timeout, ConnectionError, ssl.SSLEOFError) as error:
+        # Connection-level drops (broken pipe, reset, TLS EOF) hit mid-crawl on
+        # long parallel Drive paginations. Retry the page instead of failing the
+        # whole attempt. Narrow SSL to SSLEOFError so permanent SSL errors
+        # (cert/version) still fail fast.
         logger.warning(
-            "Timed out executing Google API request; retrying with backoff. Details: %s",
+            "Transient network error executing Google API request; retrying with backoff. Details: %s",
             error,
         )
         results = add_retries(lambda: retrieval_function(**request_kwargs).execute())()

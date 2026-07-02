@@ -47,6 +47,12 @@
   color: var(--content-foreground);
 }
 
+[data-content-color="warning"] {
+  --content-foreground: var(--status-warning-05);
+  --content-foreground-icon: var(--status-warning-05);
+  color: var(--content-foreground);
+}
+
 [data-content-color="interactive"] {
   color: inherit;
   --content-foreground-icon: var(--interactive-foreground-icon);
@@ -246,6 +252,61 @@
 
 .opal-content-md {
   @apply flex flex-col items-start;
+}
+
+/* Responsive layout — active only when a `rightChildren` slot is passed.
+   Mobile-first: the title row, the slot (e.g. an input), and the description
+   stack full-width (see the onboarding name card in Figma). At the `sm`
+   breakpoint (724px) it reflows to the desktop layout — title + description on
+   the left, the slot on the right spanning both rows. */
+.opal-content-md[data-stacked] {
+  display: grid;
+  width: 100%;
+  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "title"
+    "aux"
+    "description";
+}
+
+.opal-content-md[data-stacked] > .opal-content-md-header {
+  grid-area: title;
+}
+
+.opal-content-md[data-stacked] > .opal-content-md-right-children {
+  grid-area: aux;
+}
+
+.opal-content-md[data-stacked] > .opal-content-md-description {
+  grid-area: description;
+}
+
+@media (min-width: 724px) {
+  .opal-content-md[data-stacked] {
+    /* Title and description sit flush on desktop, matching the non-responsive
+       layout; the 4px stacking gap only applies to the mobile column. */
+    row-gap: 0;
+    column-gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title       aux"
+      "description aux";
+  }
+
+  .opal-content-md[data-stacked] > .opal-content-md-right-children {
+    min-width: 12rem;
+  }
+
+  /* Keep the description aligned under the title (past the icon), matching the
+     non-responsive desktop layout. */
+  .opal-content-md[data-stacked] > .opal-content-md-description {
+    padding-left: var(--opal-content-md-desc-indent, 0);
+  }
+}
+
+.opal-content-md-right-children {
+  @apply w-full;
 }
 
 .opal-content-md-header {

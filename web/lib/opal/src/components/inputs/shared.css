@@ -1,0 +1,62 @@
+@reference "#reference.css";
+
+/* ==========================================================================
+   Opal inputs — shared wrapper styles.
+
+   Consumed by every input component (InputTypeIn, etc.) via @import.
+   Component-specific inner styles live in each component's own styles.css.
+
+   Visual states are driven by `data-variant` on the wrapper element:
+     "primary"  — standard bordered input (default)
+     "internal" — no border, transparent background (inside popovers/panels)
+     "error"    — red border, error state
+     "disabled" — muted background, not-allowed cursor
+     "readOnly" — transparent background, light border
+   ========================================================================== */
+
+.opal-input {
+  /* `--interactive-duration` (150ms) felt too laggy, so we're using 100ms instead. */
+  @apply flex flex-row items-center justify-between h-fit p-[5px] rounded-08 relative w-full transition-all duration-100 ease-(--interactive-easing);
+}
+
+.opal-input[data-variant="primary"] {
+  background-color: var(--background-neutral-00);
+  border: 1px solid var(--border-01);
+}
+
+.opal-input[data-variant="primary"]:hover {
+  border-color: var(--border-02);
+}
+
+.opal-input[data-variant="primary"]:active {
+  border-color: var(--border-05);
+}
+
+.opal-input[data-variant="primary"]:focus-within:not(:active) {
+  border-color: var(--border-05);
+  box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
+}
+
+.opal-input[data-variant="internal"] {
+  background-color: transparent;
+  border: 1px solid transparent;
+}
+
+.opal-input[data-variant="error"] {
+  background-color: var(--background-neutral-00);
+  border: 1px solid var(--status-error-05);
+}
+
+.opal-input[data-variant="error"]:focus-within:not(:active) {
+  box-shadow: inset 0px 0px 0px 2px var(--background-tint-04);
+}
+
+.opal-input[data-variant="disabled"] {
+  background-color: var(--background-neutral-03);
+  border: 1px solid transparent;
+  cursor: not-allowed;
+}
+
+.opal-input[data-variant="readOnly"] {
+  @apply bg-transparent border rounded-08;
+}

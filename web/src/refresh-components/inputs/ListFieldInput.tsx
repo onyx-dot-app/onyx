@@ -1,5 +1,5 @@
 import { useState, KeyboardEvent } from "react";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgX } from "@opal/icons";
 interface ListFieldInputProps {
@@ -29,7 +29,7 @@ export function ListFieldInput({
   const [inputValue, setInputValue] = useState("");
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && inputValue.trim()) {
+    if (e.key === "Enter" && !e.nativeEvent.isComposing && inputValue.trim()) {
       e.preventDefault();
       const trimmedValue = inputValue.trim();
 

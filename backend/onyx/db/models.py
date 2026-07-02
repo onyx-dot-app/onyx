@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from pydantic import ValidationError
 from sqlalchemy import BigInteger
 from sqlalchemy import Boolean
+from sqlalchemy import CheckConstraint
 from sqlalchemy import DateTime
 from sqlalchemy import desc
 from sqlalchemy import Enum
@@ -24,22 +25,26 @@ from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
+from sqlalchemy import Numeric
 from sqlalchemy import PrimaryKeyConstraint
 from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text
 from sqlalchemy import text
+from sqlalchemy import true
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine.interfaces import Dialect
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import validates
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from typing_extensions import TypedDict  # noreorder
@@ -58,12 +63,16 @@ from onyx.configs.constants import TokenRateLimitScope
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import AccountType
+from onyx.db.enums import ApprovalDecidedVia
+from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import ChatSessionSharedStatus
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import EmbeddingPrecision
+from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import GrantSource
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.enums import HookFailStrategy
@@ -74,6 +83,7 @@ from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.enums import OpenSearchDocumentMigrationStatus
@@ -81,6 +91,7 @@ from onyx.db.enums import OpenSearchTenantMigrationStatus
 from onyx.db.enums import PatType
 from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import PersonaSharePermission
 from onyx.db.enums import ProcessingMode
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import ScheduledTaskRunStatus
@@ -88,6 +99,7 @@ from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
+from onyx.db.enums import SkillSharePermission
 from onyx.db.enums import SwitchoverType
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
@@ -97,11 +109,13 @@ from onyx.db.enums import UserFileStatus
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType
 from onyx.db.pydantic_type import PydanticType
+from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes
 from onyx.kg.models import KGStage
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
+from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
@@ -330,6 +344,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         nullable=True,
         default=None,
     )
+    language: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        default="en",
+        server_default="en",
+    )
     chat_background: Mapped[str | None] = mapped_column(String, nullable=True)
     default_app_mode: Mapped[DefaultAppMode] = mapped_column(
         Enum(DefaultAppMode, native_enum=False),
@@ -536,6 +556,14 @@ class PersonalAccessToken(Base):
         server_default=PatType.USER.value,
     )
 
+    # Permission values this token may exercise; NULL = no restriction (full
+    # user access). An empty list grants nothing (fail-closed).
+    scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.JSONB(),
+        nullable=True,
+        default=None,
+    )
+
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
 
     # Indexes for performance
@@ -601,6 +629,38 @@ class Persona__User(Base):
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), primary_key=True, nullable=True
     )
+    permission: Mapped[PersonaSharePermission] = mapped_column(
+        Enum(PersonaSharePermission, native_enum=False),
+        nullable=False,
+        default=PersonaSharePermission.VIEWER,
+        server_default=PersonaSharePermission.VIEWER.value,
+    )
+
+    user: Mapped["User | None"] = relationship("User")
+
+
+class Skill__User(Base):
+    __tablename__ = "skill__user"
+
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+
+    user: Mapped["User"] = relationship("User")
+
+    __table_args__ = (Index("ix_skill__user_user_id", "user_id"),)
 
 
 class DocumentSet__User(Base):
@@ -976,6 +1036,11 @@ class Document(Base):
     # Only null for documents indexed prior to this change
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # MD5 hash of title + section text at last successful index.
+    # Used to skip re-indexing when content hasn't changed.
+    # Null for documents indexed before this column was added.
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # last time any vespa relevant row metadata or the doc changed.
     # does not include last_synced
     last_modified: Mapped[datetime.datetime | None] = mapped_column(
@@ -1189,9 +1254,7 @@ class KGEntityType(Base):
     __tablename__ = "kg_entity_type"
 
     # Primary identifier
-    id_name: Mapped[str] = mapped_column(
-        String, primary_key=True, nullable=False, index=True
-    )
+    id_name: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
 
     description: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
@@ -1260,23 +1323,20 @@ class KGRelationshipType(Base):
         NullFilteredString,
         primary_key=True,
         nullable=False,
-        index=True,
     )
 
-    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     source_entity_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     target_entity_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     definition: Mapped[bool] = mapped_column(
@@ -1294,7 +1354,7 @@ class KGRelationshipType(Base):
         comment="Clustering information for this relationship type",
     )
 
-    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -1331,23 +1391,20 @@ class KGRelationshipTypeExtractionStaging(Base):
         NullFilteredString,
         primary_key=True,
         nullable=False,
-        index=True,
     )
 
-    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     source_entity_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     target_entity_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     definition: Mapped[bool] = mapped_column(
@@ -1365,7 +1422,7 @@ class KGRelationshipTypeExtractionStaging(Base):
         comment="Clustering information for this relationship type",
     )
 
-    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -1399,18 +1456,12 @@ class KGEntity(Base):
     __tablename__ = "kg_entity"
 
     # Primary identifier
-    id_name: Mapped[str] = mapped_column(
-        NullFilteredString, primary_key=True, index=True
-    )
+    id_name: Mapped[str] = mapped_column(NullFilteredString, primary_key=True)
 
     # Basic entity information
-    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
-    entity_key: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
-    parent_key: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
+    entity_key: Mapped[str] = mapped_column(NullFilteredString, nullable=True)
+    parent_key: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
     name_trigrams: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String(3)),
@@ -1425,9 +1476,7 @@ class KGEntity(Base):
         comment="Attributes for this entity",
     )
 
-    document_id: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
+    document_id: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
     alternative_names: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list
@@ -1438,7 +1487,6 @@ class KGEntity(Base):
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Relationship to KGEntityType
@@ -1476,12 +1524,6 @@ class KGEntity(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    __table_args__ = (
-        # Fixed column names in indexes
-        Index("ix_entity_type_acl", entity_type_id_name, acl),
-        Index("ix_entity_name_search", name, entity_type_id_name),
-    )
-
 
 class KGEntityExtractionStaging(Base):
     __tablename__ = "kg_entity_extraction_staging"
@@ -1491,11 +1533,10 @@ class KGEntityExtractionStaging(Base):
         NullFilteredString,
         primary_key=True,
         nullable=False,
-        index=True,
     )
 
     # Basic entity information
-    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     attributes: Mapped[dict] = mapped_column(
         postgresql.JSONB,
@@ -1505,9 +1546,7 @@ class KGEntityExtractionStaging(Base):
         comment="Attributes for this entity",
     )
 
-    document_id: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
+    document_id: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
     alternative_names: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list
@@ -1518,7 +1557,6 @@ class KGEntityExtractionStaging(Base):
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Relationship to KGEntityType
@@ -1548,12 +1586,8 @@ class KGEntityExtractionStaging(Base):
     )
 
     # Parent Child Information
-    entity_key: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
-    parent_key: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
+    entity_key: Mapped[str] = mapped_column(NullFilteredString, nullable=True)
+    parent_key: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
 
     event_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -1566,12 +1600,6 @@ class KGEntityExtractionStaging(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    __table_args__ = (
-        # Fixed column names in indexes
-        Index("ix_entity_type_acl", entity_type_id_name, acl),
-        Index("ix_entity_name_search", name, entity_type_id_name),
-    )
-
 
 class KGRelationship(Base):
     __tablename__ = "kg_relationship"
@@ -1580,45 +1608,41 @@ class KGRelationship(Base):
     id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         nullable=False,
-        index=True,
     )
 
     source_document: Mapped[str | None] = mapped_column(
-        NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
+        NullFilteredString, ForeignKey("document.id"), nullable=True
     )
 
     # Source and target nodes (foreign keys to Entity table)
     source_node: Mapped[str] = mapped_column(
-        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
+        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False
     )
 
     target_node: Mapped[str] = mapped_column(
-        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
+        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False
     )
 
     source_node_type: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     target_node_type: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Relationship type
-    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     # Add new relationship type reference
     relationship_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_relationship_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Add the SQLAlchemy relationship property
@@ -1648,10 +1672,6 @@ class KGRelationship(Base):
     __table_args__ = (
         # Composite primary key
         PrimaryKeyConstraint("id_name", "source_document"),
-        # Index for querying relationships by type
-        Index("ix_kg_relationship_type", type),
-        # Composite index for source/target queries
-        Index("ix_kg_relationship_nodes", source_node, target_node),
         # Ensure unique relationships between nodes of a specific type
         UniqueConstraint(
             "source_node",
@@ -1669,11 +1689,10 @@ class KGRelationshipExtractionStaging(Base):
     id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         nullable=False,
-        index=True,
     )
 
     source_document: Mapped[str | None] = mapped_column(
-        NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
+        NullFilteredString, ForeignKey("document.id"), nullable=True
     )
 
     # Source and target nodes (foreign keys to Entity table)
@@ -1681,39 +1700,34 @@ class KGRelationshipExtractionStaging(Base):
         NullFilteredString,
         ForeignKey("kg_entity_extraction_staging.id_name"),
         nullable=False,
-        index=True,
     )
 
     target_node: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_extraction_staging.id_name"),
         nullable=False,
-        index=True,
     )
 
     source_node_type: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     target_node_type: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_entity_type.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Relationship type
-    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
 
     # Add new relationship type reference
     relationship_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
         ForeignKey("kg_relationship_type_extraction_staging.id_name"),
         nullable=False,
-        index=True,
     )
 
     # Add the SQLAlchemy relationship property
@@ -1748,10 +1762,6 @@ class KGRelationshipExtractionStaging(Base):
     __table_args__ = (
         # Composite primary key
         PrimaryKeyConstraint("id_name", "source_document"),
-        # Index for querying relationships by type
-        Index("ix_kg_relationship_type", type),
-        # Composite index for source/target queries
-        Index("ix_kg_relationship_nodes", source_node, target_node),
         # Ensure unique relationships between nodes of a specific type
         UniqueConstraint(
             "source_node",
@@ -1767,7 +1777,7 @@ class KGTerm(Base):
 
     # Make id_term the primary key
     id_term: Mapped[str] = mapped_column(
-        NullFilteredString, primary_key=True, nullable=False, index=True
+        NullFilteredString, primary_key=True, nullable=False
     )
 
     # List of entity types this term applies to
@@ -1785,13 +1795,6 @@ class KGTerm(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    __table_args__ = (
-        # Index for searching terms with specific entity types
-        Index("ix_search_term_entities", entity_types),
-        # Index for term lookups
-        Index("ix_search_term_term", id_term),
-    )
-
 
 class ChunkStats(Base):
     __tablename__ = "chunk_stats"
@@ -1805,7 +1808,6 @@ class ChunkStats(Base):
         default=lambda context: (
             f"{context.get_current_parameters()['document_id']}__{context.get_current_parameters()['chunk_in_doc_id']}"
         ),
-        index=True,
     )
 
     # Reference to parent document
@@ -3244,6 +3246,10 @@ class ModelConfiguration(Base):
     # For static providers (OpenAI, Anthropic), this may be null and will fall back to LiteLLM.
     display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Admin-specified override for the display name. When set, this takes precedence
+    # over both display_name and the LiteLLM-derived name everywhere in the UI.
+    custom_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
         back_populates="model_configurations",
@@ -3441,6 +3447,41 @@ class InternetContentProvider(Base):
 
     def __repr__(self) -> str:
         return f"<InternetContentProvider(name='{self.name}', provider_type='{self.provider_type}')>"
+
+
+class TracingProviderConfig(Base):
+    """Admin-configured tracing provider (Braintrust, Langfuse), one row each.
+
+    api_key holds the Braintrust API key / Langfuse secret key; non-secret settings
+    (Braintrust project; Langfuse public_key, host) live in config.
+    """
+
+    __tablename__ = "tracing_provider_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_type: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    config: Mapped[dict[str, str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<TracingProviderConfig(provider_type='{self.provider_type}', "
+            f"enabled={self.enabled})>"
+        )
 
 
 class DocumentSet(Base):
@@ -3670,8 +3711,17 @@ class Persona(Base):
     __tablename__ = "persona"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # Owner user. SET NULL (not CASCADE) so deleting a user orphans shared
+    # personas instead of destroying them; the delete flow soft-deletes the
+    # private ones first.
     user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    # Owner group (EE). Mutually exclusive with user_id — a persona is owned
+    # by exactly one user XOR one group; both NULL on a non-builtin persona
+    # means ownership rests with the admins (orphaned).
+    owner_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_group.id", ondelete="SET NULL"), nullable=True
     )
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
@@ -3737,19 +3787,45 @@ class Persona(Base):
         back_populates="personas",
     )
     # Owner
-    user: Mapped[User | None] = relationship("User", back_populates="personas")
+    user: Mapped[User | None] = relationship(
+        "User", back_populates="personas", foreign_keys=[user_id]
+    )
+    # Owner group (EE) — distinct from `groups` (share rows)
+    owner_group: Mapped["UserGroup | None"] = relationship(
+        "UserGroup", foreign_keys=[owner_group_id]
+    )
     # Other users with access
     users: Mapped[list[User]] = relationship(
         "User",
         secondary=Persona__User.__table__,
         viewonly=True,
+        overlaps="user_shares",
+    )
+    # Share rows with permission levels (association objects)
+    user_shares: Mapped[list[Persona__User]] = relationship(
+        "Persona__User",
+        viewonly=True,
+        overlaps="users",
+    )
+    group_shares: Mapped[list["Persona__UserGroup"]] = relationship(
+        "Persona__UserGroup",
+        viewonly=True,
+        overlaps="groups",
     )
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Level granted to the whole org when is_public is True
+    public_permission: Mapped[PersonaSharePermission] = mapped_column(
+        Enum(PersonaSharePermission, native_enum=False),
+        nullable=False,
+        default=PersonaSharePermission.VIEWER,
+        server_default=PersonaSharePermission.VIEWER.value,
+    )
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="persona__user_group",
         viewonly=True,
+        overlaps="group_shares",
     )
     allowed_by_llm_providers: Mapped[list["LLMProvider"]] = relationship(
         "LLMProvider",
@@ -3788,6 +3864,10 @@ class Persona(Base):
             "name",
             unique=True,
             postgresql_where=(builtin_persona == True),  # noqa: E712
+        ),
+        CheckConstraint(
+            "user_id IS NULL OR owner_group_id IS NULL",
+            name="ck_persona_single_owner",
         ),
     )
 
@@ -4133,6 +4213,74 @@ class KVStore(Base):
     )
 
 
+class SecuritySettings(Base):
+    """Per-tenant runtime overrides for env-derived security settings.
+
+    Singleton row (boolean PK pinned to ``true`` via CHECK). Every column is
+    an override — ``None`` == "fall back to env default".
+    """
+
+    __tablename__ = "security_settings"
+
+    id: Mapped[bool] = mapped_column(
+        Boolean, primary_key=True, default=True, server_default=true()
+    )
+
+    user_directory_admin_only: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    track_external_idp_expiry: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    # Stored as the SSRFProtectionLevel value (e.g. "validate_all"); None falls
+    # back to the level derived from the legacy SSRF env vars.
+    ssrf_protection_level: Mapped[SSRFProtectionLevel | None] = mapped_column(
+        Enum(
+            SSRFProtectionLevel,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
+    mask_credential_prefix: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    valid_email_domains: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True, default=None
+    )
+    password_min_length: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
+    password_max_length: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
+    password_require_uppercase: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    password_require_lowercase: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    password_require_digit: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    password_require_special_char: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+
+    __table_args__ = (
+        CheckConstraint("id = true", name="ck_security_settings_singleton"),
+        # Only catches min > max when both are explicitly overridden; the
+        # mixed-with-env case is enforced at the application layer.
+        CheckConstraint(
+            "password_min_length IS NULL "
+            "OR password_max_length IS NULL "
+            "OR password_min_length <= password_max_length",
+            name="ck_security_settings_pw_length_range",
+        ),
+    )
+
+
 class FileRecord(Base):
     __tablename__ = "file_record"
 
@@ -4192,17 +4340,41 @@ class Skill(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Bundle bytes (single, replaced on re-upload).
-    bundle_file_id: Mapped[str] = mapped_column(String, nullable=False)
-    bundle_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Discriminator: when set, definition (source files, has_template, etc.)
+    # comes from BUILT_IN_SKILLS in `onyx.skills.built_in`. When NULL, the
+    # row is a custom (admin-uploaded) skill and bundle_file_id is set.
+    # Exactly one of (built_in_skill_id, bundle_file_id) is non-null —
+    # enforced by `ck_skill_definition_source` below.
+    built_in_skill_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Bundle bytes for custom skills. NULL for built-ins (their source
+    # files live on disk under BUILTIN_SKILLS_PATH).
+    bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="SET NULL"),
         nullable=True,
     )
-    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    public_permission: Mapped[SkillSharePermission | None] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=True,
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    @hybrid_property
+    def is_public(self) -> bool:
+        return self.public_permission is not None
+
+    @is_public.inplace.setter
+    def _is_public_setter(self, value: bool) -> None:
+        self.public_permission = SkillSharePermission.VIEWER if value else None
+
+    @is_public.inplace.expression
+    @classmethod
+    def _is_public_expression(cls) -> ColumnElement[bool]:
+        return cls.public_permission.isnot(None)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -4214,13 +4386,41 @@ class Skill(Base):
         nullable=False,
     )
 
+    author: Mapped[User | None] = relationship(
+        "User",
+        foreign_keys=[author_user_id],
+    )
+
+    users: Mapped[list[User]] = relationship(
+        "User",
+        secondary=Skill__User.__table__,
+        viewonly=True,
+        overlaps="user_shares",
+    )
+    user_shares: Mapped[list[Skill__User]] = relationship(
+        "Skill__User",
+        viewonly=True,
+        overlaps="users",
+    )
+    group_shares: Mapped[list["Skill__UserGroup"]] = relationship(
+        "Skill__UserGroup",
+        viewonly=True,
+        overlaps="groups",
+    )
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="skill__user_group",
         viewonly=True,
+        overlaps="group_shares",
     )
 
-    __table_args__ = (UniqueConstraint("slug", name="uq_skill_slug"),)
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_skill_slug"),
+        CheckConstraint(
+            "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
+            name="ck_skill_definition_source",
+        ),
+    )
 
 
 """
@@ -4346,6 +4546,14 @@ class Persona__UserGroup(Base):
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
     )
+    permission: Mapped[PersonaSharePermission] = mapped_column(
+        Enum(PersonaSharePermission, native_enum=False),
+        nullable=False,
+        default=PersonaSharePermission.VIEWER,
+        server_default=PersonaSharePermission.VIEWER.value,
+    )
+
+    user_group: Mapped["UserGroup"] = relationship("UserGroup")
 
 
 class Skill__UserGroup(Base):
@@ -4361,6 +4569,14 @@ class Skill__UserGroup(Base):
         ForeignKey("user_group.id", ondelete="CASCADE"),
         primary_key=True,
     )
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+
+    user_group: Mapped["UserGroup"] = relationship("UserGroup")
 
 
 class LLMProvider__Persona(Base):
@@ -4488,13 +4704,25 @@ class TokenRateLimit(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    token_budget: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Null side skips its gate; at least one must be set (check constraint below).
+    token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # USD cents; Numeric(18,6) exact accumulation, 6dp for sub-cent per-token deltas.
+    cost_budget_cents: Mapped[float | None] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=True
+    )
     period_hours: Mapped[int] = mapped_column(Integer, nullable=False)
     scope: Mapped[TokenRateLimitScope] = mapped_column(
         Enum(TokenRateLimitScope, native_enum=False)
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "token_budget IS NOT NULL OR cost_budget_cents IS NOT NULL",
+            name="ck_token_rate_limit_budget_set",
+        ),
     )
 
 
@@ -4900,6 +5128,21 @@ class MCPServer(Base):
     auth_performer: Mapped[MCPAuthenticationPerformer | None] = mapped_column(
         Enum(MCPAuthenticationPerformer, native_enum=False), nullable=True
     )
+    oauth_provider_mode: Mapped[MCPOAuthProviderMode] = mapped_column(
+        Enum(MCPOAuthProviderMode, native_enum=False),
+        nullable=False,
+        server_default=MCPOAuthProviderMode.AUTO_DISCOVERY.value,
+    )
+    oauth_authorization_endpoint: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    oauth_token_endpoint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    oauth_scopes_override: Mapped[list[str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    oauth_additional_auth_params: Mapped[dict[str, str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     # Status tracking for configuration flow
     status: Mapped[MCPServerStatus] = mapped_column(
         Enum(MCPServerStatus, native_enum=False),
@@ -5227,6 +5470,122 @@ class TenantUsage(Base):
     )
 
 
+class UserUsage(Base):
+    """
+    Per-user LLM usage rollup within a time window — the source of truth for
+    per-user cost/token attribution and budget checks. Mirrors TenantUsage's
+    window-rollup model (one accumulating row per window+dims, not a per-call
+    ledger).
+
+    One row per (user, window, model, flow, provider), accumulated in place;
+    windows match the tenant-usage alignment so per-user and per-tenant totals
+    reconcile.
+    """
+
+    __tablename__ = "user_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # No index=True: uq_user_usage_dims (user_id-first) covers user-only lookups.
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+
+    window_start: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    flow: Mapped[str] = mapped_column(String, nullable=False)
+    # '' not NULL: unique index dedups pre-PG15 without NULLS NOT DISTINCT.
+    provider: Mapped[str] = mapped_column(
+        String, nullable=False, default="", server_default=""
+    )
+
+    input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    cache_read_tokens: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+    cost_cents: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False, default=0.0
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        # Upsert key: accumulate into one row per dimension tuple per window.
+        # provider is non-null ('' when absent), so a plain unique index dedups
+        # correctly on every Postgres version (no NULLS NOT DISTINCT needed).
+        Index(
+            "uq_user_usage_dims",
+            "user_id",
+            "window_start",
+            "model",
+            "flow",
+            "provider",
+            unique=True,
+        ),
+    )
+
+
+class ModelCostOverride(Base):
+    """Admin-set per-model rates that supersede litellm pricing.
+
+    Negotiated enterprise rates win over litellm's published numbers, so cost
+    computation consults this table before falling back to litellm.
+    """
+
+    __tablename__ = "model_cost_override"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # litellm-style model name (e.g. "gpt-4o").
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    # Empty string (not NULL) for a provider-agnostic override, so the unique key
+    # below works on every Postgres version without NULLS NOT DISTINCT (PG15+).
+    provider: Mapped[str] = mapped_column(
+        String, nullable=False, default="", server_default=""
+    )
+
+    # Rates in USD per million tokens.
+    input_cost_per_mtok: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
+    )
+    output_cost_per_mtok: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
+    )
+    # Cache-read rate; null bills cache reads at the input rate (litellm default).
+    cache_read_cost_per_mtok: Mapped[float | None] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=True
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        # provider+model so the same model can be priced per provider.
+        UniqueConstraint(
+            "provider", "model", name="uq_model_cost_override_provider_model"
+        ),
+    )
+
+
 """Tables related to Build Mode (CLI Agent Platform)"""
 
 
@@ -5272,6 +5631,12 @@ class BuildSession(Base):
         default=SessionOrigin.INTERACTIVE,
         server_default="INTERACTIVE",
     )
+    # opencode-serve session id (populated lazily on first message) +
+    # user's LLM choice (sent as the per-prompt model override on
+    # opencode's prompt_async).
+    opencode_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -5411,7 +5776,7 @@ class Snapshot(Base):
 class BuildMessage(Base):
     """Stores messages exchanged in build sessions.
 
-    All message data is stored in message_metadata as JSON (the raw ACP packet).
+    All message data is stored in message_metadata as JSON (the raw sandbox event packet).
     The turn_index groups all assistant responses under the user prompt they respond to.
 
     Packet types stored in message_metadata:
@@ -5453,6 +5818,50 @@ class BuildMessage(Base):
     )
 
 
+class ActionApproval(Base):
+    """One agent-initiated gated request and its decision.
+
+    ``actions`` is a non-empty JSONB list of :class:`MatchedAction`-shaped
+    dicts, sorted strictest-policy-first; ``actions[0]`` drove the gating
+    decision. ``decision IS NULL`` is pending (or a proxy-crash orphan).
+    """
+
+    __tablename__ = "action_approval"
+
+    approval_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actions: Mapped[list[dict[str, Any]]] = mapped_column(PGJSONB, nullable=False)
+    app_name: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decision: Mapped[ApprovalDecision | None] = mapped_column(
+        Enum(ApprovalDecision, native_enum=False, name="approvaldecision"),
+        nullable=True,
+    )
+    decided_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    decided_via: Mapped[ApprovalDecidedVia | None] = mapped_column(
+        Enum(ApprovalDecidedVia, native_enum=False, name="approvaldecidedvia"),
+        nullable=True,
+    )
+    # Lookups key off this id, not ``app_name``: the latter isn't unique
+    # across instances (self-hosted GitLab/Jira share an app_type).
+    external_app_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+
 class ScheduledTask(Base):
     """A user-defined recurring Craft prompt + schedule.
 
@@ -5478,8 +5887,6 @@ class ScheduledTask(Base):
     # Canonical 5-field cron expression. The three UI editor modes (interval,
     # daily/weekly, advanced) all compile to this string on save.
     cron_expression: Mapped[str] = mapped_column(String, nullable=False)
-    # IANA timezone name (e.g. "America/Los_Angeles"). ZoneInfo handles DST.
-    timezone: Mapped[str] = mapped_column(String, nullable=False)
     # UI hint for which editor mode produced this schedule; the cron string
     # is the source of truth for execution.
     editor_mode: Mapped[str] = mapped_column(String, nullable=False)
@@ -5491,7 +5898,7 @@ class ScheduledTask(Base):
         server_default="ACTIVE",
     )
     # The dispatcher's only read field. NULL when paused; recomputed on
-    # every fire and every schedule/timezone edit. Stored UTC.
+    # every fire and every schedule edit. Stored UTC.
     next_run_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -5516,6 +5923,18 @@ class ScheduledTask(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
+    pre_approved_apps: Mapped[list["ScheduledTaskPreApprovedApp"]] = relationship(
+        "ScheduledTaskPreApprovedApp",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="ScheduledTaskPreApprovedApp.id",
+    )
+
+    @property
+    def pre_approved_app_ids(self) -> list[int]:
+        """Granted external-app ids in grant order. Set via
+        ``onyx.db.scheduled_task.set_pre_approved_apps``."""
+        return [grant.external_app_id for grant in self.pre_approved_apps]
 
     __table_args__ = (
         # Dispatcher hot path: WHERE status='active' AND deleted=false
@@ -5574,7 +5993,7 @@ class ScheduledTaskRun(Base):
     # run was still in flight, or by the stuck-run sweeper for stuck rows.
     skip_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     # On `failed`: short classifier (e.g. "executor_crash", "budget",
-    # "acp_error", "stuck"). Full traceback / message lives in error_detail.
+    # "stuck"). Full traceback / message lives in error_detail.
     error_class: Mapped[str | None] = mapped_column(String, nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -5604,6 +6023,45 @@ class ScheduledTaskRun(Base):
         # Session-view banner lookup: get_scheduled_run_context filters by
         # session_id on every session open.
         Index("ix_scheduled_task_run_session", "session_id"),
+    )
+
+
+class ScheduledTaskPreApprovedApp(Base):
+    """One (task, app) pre-approval grant: the matched app's ASK-gated
+    actions skip the approval park for the task's RUNNING runs.
+
+    Deleting the task (CASCADE) or the app (CASCADE) drops the grant; a
+    stale grant on a removed app is meaningless. The unique constraint
+    keeps grants idempotent and its index serves the per-task lookup.
+    """
+
+    __tablename__ = "scheduled_task_pre_approved_app"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scheduled_task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    external_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    task: Mapped[ScheduledTask] = relationship(
+        "ScheduledTask", back_populates="pre_approved_apps"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "scheduled_task_id",
+            "external_app_id",
+            name="uq_scheduled_task_pre_approved_app",
+        ),
     )
 
 
@@ -5818,3 +6276,189 @@ class HookExecutionLog(Base):
     )
 
     hook: Mapped["Hook"] = relationship("Hook", back_populates="execution_logs")
+
+
+class ExternalApp(Base):
+    __tablename__ = "external_app"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Display name, description, and lifecycle (including enabled state
+    # via skill presence) live on the linked Skill row. ON DELETE
+    # CASCADE: removing the skill removes the external_app gateway.
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    # Discriminator for the OAuth-provider dispatch layer. Decoupled
+    # from the linked skill's name so renaming the skill doesn't
+    # silently break OAuth.
+    #
+    # `CUSTOM` covers admin-defined apps that don't go through any
+    # built-in OAuth flow. Built-in values match entries in
+    # `external_apps.providers.PROVIDERS`.
+    #
+    # NOT unique — providers like self-hosted GitLab/Jira can have
+    # multiple distinct instances within one Onyx (each with its own
+    # client_id + base URL) and would all share the same app_type.
+    # Duplicate detection for the typical "one Slack" case happens
+    # at the UI layer.
+    app_type: Mapped[ExternalAppType] = mapped_column(
+        Enum(ExternalAppType, native_enum=False),
+        nullable=False,
+        default=ExternalAppType.CUSTOM,
+        server_default=ExternalAppType.CUSTOM.value,
+    )
+    # CUSTOM apps store URL globs here (translated to regexes at match time).
+    upstream_url_patterns: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
+    )
+    auth_template: Mapped[dict[str, Any]] = mapped_column(
+        postgresql.JSONB(),
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+    organization_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    skill: Mapped["Skill"] = relationship("Skill")
+    user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
+        "ExternalAppUserCredential",
+        back_populates="external_app",
+        cascade="all, delete-orphan",
+    )
+    policies: Mapped[list["ExternalAppPolicy"]] = relationship(
+        "ExternalAppPolicy",
+        back_populates="external_app",
+        cascade="all, delete-orphan",
+    )
+
+    @property
+    def upstream_url_regexes(self) -> list[str]:
+        """``upstream_url_patterns`` as match-ready regexes: CUSTOM apps author
+        globs (translated here), built-in providers author regexes used as-is."""
+        if self.app_type == ExternalAppType.CUSTOM:
+            return [
+                UrlGlob(value=pattern).to_regex()
+                for pattern in self.upstream_url_patterns
+            ]
+        return list(self.upstream_url_patterns)
+
+
+class ExternalAppUserCredential(Base):
+    __tablename__ = "external_app_user_credential"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Encrypted at rest: the calling user's credential values for this app.
+    # Read via .get_value(apply_mask=False).
+    user_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(), nullable=False, default=dict
+    )
+    # OAuth scopes the user actually granted for this app. NULL means
+    # we have no authoritative record of the grant (provider doesn't report
+    # scopes, or the best-effort lookup failed); a non-null list is the exact
+    # set the user granted. Consumers must distinguish the two.
+    granted_scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    external_app: Mapped["ExternalApp"] = relationship(
+        "ExternalApp", back_populates="user_credentials"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "external_app_id",
+            "user_id",
+            name="uq_external_app_user_credential_app_user",
+        ),
+    )
+
+
+class ExternalAppPolicy(Base):
+    """Admin's per-action policy override for an external app.
+
+    Sparse: only actions the admin has set are stored; an action without a row
+    resolves to ``ASK`` (the default ask-approval behaviour).
+
+    ``action_id`` is a catalog id; display (name/description) comes from the code
+    catalog. Admin-authored custom-app rules will add their own action
+    name/description/match columns when that feature lands.
+    """
+
+    __tablename__ = "external_app_policy"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_app_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Hierarchical action id, e.g. "slack.messages.read".
+    action_id: Mapped[str] = mapped_column(Text, nullable=False)
+    policy: Mapped[EndpointPolicy] = mapped_column(
+        Enum(EndpointPolicy, native_enum=False),
+        nullable=False,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    external_app: Mapped["ExternalApp"] = relationship(
+        "ExternalApp", back_populates="policies"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "external_app_id",
+            "action_id",
+            name="uq_external_app_policy_app_action",
+        ),
+    )

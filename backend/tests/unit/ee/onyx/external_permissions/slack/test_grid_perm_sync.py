@@ -247,6 +247,89 @@ class TestFetchChannelPermissionsGrid:
             )
             assert "C1" not in result
 
+    def test_channel_filter_limits_private_member_fetches(self) -> None:
+        client = MagicMock()
+        included = _channel("C_INCLUDED", name="included", is_private=True)
+        excluded = _channel("C_EXCLUDED", name="excluded", is_private=True)
+        with (
+            patch(
+                "ee.onyx.external_permissions.slack.doc_sync.get_channels"
+            ) as mock_get,
+            patch(
+                "ee.onyx.external_permissions.slack.doc_sync.make_paginated_slack_api_call"
+            ) as mock_paginate,
+        ):
+            mock_get.side_effect = [[], [included, excluded]]  # public, private
+            mock_paginate.return_value = iter([{"members": ["U1"]}])
+            workspace_perm = _fetch_workspace_permissions({"U1": "u1@x.com"})
+            result = _fetch_channel_permissions(
+                slack_client=client,
+                workspace_permissions=workspace_perm,
+                user_id_to_email_map={"U1": "u1@x.com"},
+                channels_to_include=["included"],
+            )
+
+            assert set(result) == {"C_INCLUDED"}
+            assert result["C_INCLUDED"].external_user_emails == {"u1@x.com"}
+            mock_paginate.assert_called_once()
+            assert mock_paginate.call_args.kwargs["channel"] == "C_INCLUDED"
+
+    def test_channel_filter_skips_missing_included_channels(self) -> None:
+        client = MagicMock()
+        included = _channel("C_INCLUDED", name="included", is_private=True)
+        with (
+            patch(
+                "ee.onyx.external_permissions.slack.doc_sync.get_channels"
+            ) as mock_get,
+            patch(
+                "ee.onyx.external_permissions.slack.doc_sync.make_paginated_slack_api_call"
+            ) as mock_paginate,
+        ):
+            mock_get.side_effect = [[], [included]]  # public, private
+            mock_paginate.return_value = iter([{"members": ["U1"]}])
+            workspace_perm = _fetch_workspace_permissions({"U1": "u1@x.com"})
+            result = _fetch_channel_permissions(
+                slack_client=client,
+                workspace_permissions=workspace_perm,
+                user_id_to_email_map={"U1": "u1@x.com"},
+                channels_to_include=["included", "missing"],
+            )
+
+            assert set(result) == {"C_INCLUDED"}
+            assert result["C_INCLUDED"].external_user_emails == {"u1@x.com"}
+            mock_paginate.assert_called_once()
+            assert mock_paginate.call_args.kwargs["channel"] == "C_INCLUDED"
+
+    def test_grid_channel_filter_limits_private_member_fetches(self) -> None:
+        client = MagicMock()
+        included = _channel("C_INCLUDED", name="included", is_private=True, team="T1")
+        excluded = _channel("C_EXCLUDED", name="excluded", is_private=True, team="T1")
+        with (
+            patch(
+                "ee.onyx.external_permissions.slack.doc_sync.get_channels_across_teams"
+            ) as mock_get,
+            patch(
+                "ee.onyx.external_permissions.slack.doc_sync.make_paginated_slack_api_call"
+            ) as mock_paginate,
+        ):
+            mock_get.side_effect = [[], [included, excluded]]  # public, private
+            mock_paginate.return_value = iter([{"members": ["U1"]}])
+            workspace_perm = _fetch_workspace_permissions({"U1": "u1@x.com"})
+            result = _fetch_channel_permissions(
+                slack_client=client,
+                workspace_permissions=workspace_perm,
+                user_id_to_email_map={"U1": "u1@x.com"},
+                team_ids=["T1"],
+                team_id_to_user_emails={"T1": {"u1@x.com"}},
+                channels_to_include=["included"],
+            )
+
+            assert set(result) == {"C_INCLUDED"}
+            assert result["C_INCLUDED"].external_user_emails == {"u1@x.com"}
+            assert mock_get.call_count == 2
+            mock_paginate.assert_called_once()
+            assert mock_paginate.call_args.kwargs["channel"] == "C_INCLUDED"
+
 
 class TestEEGetChannelAccessGrid:
     def test_public_channel_non_grid_returns_is_public_true(self) -> None:

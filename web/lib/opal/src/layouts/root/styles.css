@@ -1,0 +1,35 @@
+@reference "#reference.css";
+
+/* Root — full-viewport flex row */
+.opal-root-layout {
+  @apply flex flex-row w-full h-full;
+}
+
+/* App — fills remaining flex space; flex-col so Header/Footer pin correctly */
+.opal-root-layout__app {
+  @apply flex-1 flex flex-col overflow-hidden h-full w-full;
+}
+
+/* Main content — scrollable slot inside App */
+.opal-root-layout__main {
+  @apply flex-1 overflow-auto;
+}
+
+/* Panel — permanent column (width determined by child content) */
+.opal-root-layout__panel {
+  @apply shrink-0 overflow-auto h-full;
+}
+
+/* Header — pinned top bar inside main content */
+.opal-root-layout__header {
+  @apply shrink-0;
+  height: var(--chrome-header-height);
+}
+
+/* Footer — pinned bottom bar inside main content */
+.opal-root-layout__footer {
+  @apply shrink-0;
+}
+.opal-root-layout__footer[data-extra-padding="true"] {
+  @apply pt-3.5;
+}

@@ -47,12 +47,14 @@ class OnyxError(Exception):
         detail: str | None = None,
         *,
         status_code_override: int | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         resolved_detail = detail or error_code.code
         super().__init__(resolved_detail)
         self.error_code = error_code
         self.detail = resolved_detail
         self._status_code_override = status_code_override
+        self.headers = headers
 
     @property
     def status_code(self) -> int:
@@ -72,6 +74,7 @@ def onyx_error_to_json_response(exc: OnyxError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content=exc.error_code.detail(exc.detail),
+        headers=exc.headers,
     )
 
 

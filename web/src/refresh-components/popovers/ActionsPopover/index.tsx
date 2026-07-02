@@ -30,18 +30,23 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useSettings } from "@/lib/settings/hooks";
+import { InputTypeIn } from "@opal/components";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionLineItem";
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { SvgActions, SvgChevronRight, SvgKey, SvgSliders } from "@opal/icons";
+import {
+  SvgActions,
+  SvgChevronRight,
+  SvgKey,
+  SvgSliders,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import { Button } from "@opal/components";
 
 function buildTooltipMessage(
@@ -265,7 +270,7 @@ export default function ActionsPopover({
   }, [selectedAgent.id, setForcedToolIds]);
 
   const { isAdmin, isCurator } = useUser();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = useSettings();
 
   const { tools: availableTools } = useAvailableTools();
   const { ccPairs } = useCCPairs(vectorDbEnabled);
@@ -716,7 +721,7 @@ export default function ActionsPopover({
   const mcpFooter = showActiveReauthRow ? (
     <LineItem
       onClick={handleFooterReauthClick}
-      icon={selectedMcpServerData?.isLoading ? SimpleLoader : SvgKey}
+      icon={selectedMcpServerData?.isLoading ? SvgSimpleLoader : SvgKey}
       rightChildren={
         <Button icon={SvgChevronRight} prominence="tertiary" size="sm" />
       }
@@ -828,7 +833,8 @@ export default function ActionsPopover({
       {[
         <InputTypeIn
           key="search"
-          placeholder="Search Actions"
+          placeholder="Search actions..."
+          searchIcon
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
           autoFocus

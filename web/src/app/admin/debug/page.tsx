@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { SettingsLayouts } from "@opal/layouts";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import {
   Table,
   TableBody,
@@ -14,7 +14,7 @@ import {
 import { Button, Text } from "@opal/components";
 import { Card } from "@/components/ui/card";
 import { markdown } from "@opal/utils";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { Spinner } from "@/components/Spinner";
 import { SvgDownloadCloud } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -69,7 +69,7 @@ function Main() {
   };
 
   if (isLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   return (

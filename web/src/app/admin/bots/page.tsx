@@ -1,11 +1,11 @@
 "use client";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Button } from "@opal/components";
 import { SvgPlusCircle } from "@opal/icons";
@@ -21,7 +21,7 @@ function Main() {
   } = useSlackBots();
 
   if (isSlackBotsLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (slackBotsError || !slackBots) {

@@ -3,8 +3,7 @@
 import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAgent } from "@/lib/agents/hooks";
-import AgentEditorPage from "@/refresh-pages/AgentEditorPage";
-import * as AppLayouts from "@/layouts/app-layouts";
+import AgentEditorPage from "@/views/AgentEditorPage";
 
 export interface PageProps {
   params: Promise<{ id: string }>;
@@ -37,9 +36,5 @@ export default function Page(props: PageProps) {
   // Show nothing while redirecting or loading
   if (isLoading || !agent) return null;
 
-  return (
-    <AppLayouts.Root>
-      <AgentEditorPage agent={agent} refreshAgent={refresh} />
-    </AppLayouts.Root>
-  );
+  return <AgentEditorPage agent={agent} refreshAgent={refresh} />;
 }

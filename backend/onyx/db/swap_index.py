@@ -114,12 +114,9 @@ def _perform_index_swap(
                     x + 1,
                     VESPA_NUM_ATTEMPTS_ON_STARTUP,
                 )
-                document_index.ensure_indices_exist(
-                    primary_embedding_dim=new_search_settings.final_embedding_dim,
-                    primary_embedding_precision=new_search_settings.embedding_precision,
-                    # just finished swap, no more secondary index
-                    secondary_index_embedding_dim=None,
-                    secondary_index_embedding_precision=None,
+                document_index.verify_and_create_index_if_necessary(
+                    embedding_dim=new_search_settings.final_embedding_dim,
+                    embedding_precision=new_search_settings.embedding_precision,
                 )
 
                 logger.notice("Document index swap complete.")

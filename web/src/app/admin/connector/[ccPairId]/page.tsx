@@ -2,7 +2,7 @@
 
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
 import { toast } from "@/hooks/useToast";
@@ -37,10 +37,10 @@ import {
   statusIsNotCurrentlyActive,
 } from "./types";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
-import EditPropertyModal from "@/components/modals/EditPropertyModal";
+import EditPropertyModal from "@/sections/modals/EditPropertyModal";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { deleteCCPair } from "@/lib/documentDeletion";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import * as Yup from "yup";
 import {
   AlertCircle,
@@ -61,7 +61,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import { Button } from "@opal/components";
@@ -246,8 +246,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
       setHasLoadedOnce(true);
     }
 
+    // Redirect only when the cc-pair is genuinely gone — a real 404 (deleted)
+    // or DELETING state — never on a transient poll error.
     if (
-      (hasLoadedOnce && (ccPairError || !ccPair)) ||
+      (hasLoadedOnce && ccPairError?.status === 404) ||
       (ccPair?.status === ConnectorCredentialPairStatus.DELETING &&
         !ccPair.connector)
     ) {
@@ -264,7 +266,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const handleUpdateName = async (newName: string) => {
     try {
       const response = await updateConnectorCredentialPairName(
-        ccPair?.id!,
+        ccPair!.id,
         newName
       );
       if (!response.ok) {
@@ -346,7 +348,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   };
 
   if (isLoadingCCPair || isLoadingIndexAttempts) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (!ccPair || (!hasLoadedOnce && ccPairError)) {

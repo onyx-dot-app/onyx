@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Button, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStageMetric } from "@/lib/types";
-import { formatDurationMs } from "@/lib/time";
+import { formatDurationMs } from "@opal/time";
 import { PIPELINE_ORDER, STAGE_LABELS } from "./constants";
 
 interface AttemptOverheadProps {

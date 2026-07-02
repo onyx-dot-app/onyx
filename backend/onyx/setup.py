@@ -34,11 +34,13 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import update_current_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.opensearch_document_index import set_cluster_state
-from onyx.document_index.vespa.index import VespaIndex
+from onyx.document_index.vespa.vespa_document_index import (
+    register_multitenant_vespa_indices,
+)
 from onyx.indexing.models import IndexingSetting
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -134,11 +136,6 @@ def setup_onyx(
         success = setup_document_indices(
             document_indices,
             IndexingSetting.from_db_model(search_settings),
-            (
-                IndexingSetting.from_db_model(secondary_search_settings)
-                if secondary_search_settings
-                else None
-            ),
         )
         if not success:
             raise RuntimeError(
@@ -187,7 +184,6 @@ def mark_reindex_flag(db_session: Session) -> None:
 def setup_document_indices(
     document_indices: list[DocumentIndex],
     index_setting: IndexingSetting,
-    secondary_index_setting: IndexingSetting | None,
     num_attempts: int = VESPA_NUM_ATTEMPTS_ON_STARTUP,
 ) -> bool:
     """Sets up all input document indices.
@@ -207,19 +203,9 @@ def setup_document_indices(
                     x + 1,
                     num_attempts,
                 )
-                document_index.ensure_indices_exist(
-                    primary_embedding_dim=index_setting.final_embedding_dim,
-                    primary_embedding_precision=index_setting.embedding_precision,
-                    secondary_index_embedding_dim=(
-                        secondary_index_setting.final_embedding_dim
-                        if secondary_index_setting
-                        else None
-                    ),
-                    secondary_index_embedding_precision=(
-                        secondary_index_setting.embedding_precision
-                        if secondary_index_setting
-                        else None
-                    ),
+                document_index.verify_and_create_index_if_necessary(
+                    embedding_dim=index_setting.final_embedding_dim,
+                    embedding_precision=index_setting.embedding_precision,
                 )
 
                 logger.notice(
@@ -350,7 +336,7 @@ def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) ->
     for x in range(VESPA_ATTEMPTS):
         try:
             logger.notice("Setting up Vespa (attempt %s/%s)...", x + 1, VESPA_ATTEMPTS)
-            VespaIndex.register_multitenant_indices(
+            register_multitenant_vespa_indices(
                 indices=[index.index_name for index in supported_indices]
                 + [
                     f"{index.index_name}{ALT_INDEX_SUFFIX}"

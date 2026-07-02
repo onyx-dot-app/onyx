@@ -7,10 +7,9 @@ nodes, attached documents, and user files.  These tests verify that the
 field is populated correctly.
 """
 
-import requests
-
 from onyx.configs.constants import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_file_utils import create_test_text_file
@@ -23,7 +22,7 @@ def _get_minimal_persona(
     user: DATestUser,
 ) -> dict:
     """Fetch personas from the list endpoint and find the one with the given id."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/persona",
         params={"persona_ids": persona_id},
         headers=user.headers,

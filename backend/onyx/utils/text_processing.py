@@ -221,6 +221,23 @@ def parse_llm_json_response(content: str) -> dict | None:
     return None
 
 
+def parse_bracketed_list(content: str | None) -> list[str] | None:
+    """Parse a bracketed comma-separated list from LLM output, e.g.
+    `[zendesk, asana]` or `["a", "b"]` -> `["zendesk", "asana"]`.
+
+    Tolerates stray text around the list and quoted or unquoted items, and uses
+    the last `[...]` when several are present. Returns the items (empty list for
+    `[]`), or None when no bracketed list is found.
+    """
+    if not content:
+        return None
+    matches = re.findall(r"\[([^\[\]]*)\]", content)
+    if not matches:
+        return None
+    items = (item.strip().strip("\"'") for item in matches[-1].split(","))
+    return [item for item in items if item]
+
+
 def clean_model_quote(quote: str, trim_length: int) -> str:
     quote_clean = quote.strip()
     if quote_clean[0] == '"':
@@ -282,7 +299,7 @@ def remove_invalid_unicode_chars(text: str) -> str:
 
     This handles:
     - Control characters (except tab, newline, carriage return)
-    - Unpaired UTF-16 surrogates (e.g. \udc00) that cause 'surrogates not allowed' errors
+    - Unpaired UTF-16 surrogates (e.g. U+DC00) that cause 'surrogates not allowed' errors
     - Unicode non-characters
     """
     return _INVALID_UNICODE_CHARS_RE.sub("", text)

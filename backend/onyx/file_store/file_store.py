@@ -15,7 +15,6 @@ import boto3
 import puremagic
 from botocore.config import Config
 from botocore.exceptions import ClientError
-from mypy_boto3_s3 import S3Client
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AWS_REGION_NAME
@@ -42,6 +41,8 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
+
     from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 logger = setup_logger()
@@ -187,7 +188,7 @@ class S3BackedFileStore(FileStore):
         s3_prefix: str | None = None,
         s3_verify_ssl: bool = True,
     ) -> None:
-        self._s3_client: S3Client | None = None
+        self._s3_client: "S3Client | None" = None
         self._bucket_name = bucket_name
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
@@ -196,7 +197,7 @@ class S3BackedFileStore(FileStore):
         self._s3_prefix = s3_prefix or "onyx-files"
         self._s3_verify_ssl = s3_verify_ssl
 
-    def _get_s3_client(self) -> S3Client:
+    def _get_s3_client(self) -> "S3Client":
         """Initialize S3 client if not already done"""
         if self._s3_client is None:
             try:
@@ -299,7 +300,7 @@ class S3BackedFileStore(FileStore):
             elif error_code == "403":
                 # Bucket exists but we don't have permission to access it
                 logger.warning(
-                    f"S3 bucket '{bucket_name}' exists but access is forbidden"
+                    "S3 bucket '%s' exists but access is forbidden", bucket_name
                 )
                 raise RuntimeError(
                     f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
@@ -515,54 +516,36 @@ class S3BackedFileStore(FileStore):
     def change_file_id(
         self, old_file_id: str, new_file_id: str, db_session: Session | None = None
     ) -> None:
+        """Rename a file by repointing its DB record at the existing object.
+
+        The object is not moved — only file_id changes — and reads resolve via
+        the stored object_key, so they still find it. The object keeps its
+        original key, so a file_id must not be reused for a new save_file after
+        it has been renamed (the new write would overwrite the renamed object).
+        """
+        if old_file_id == new_file_id:
+            return
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                # Get the existing file record
                 old_file_record = get_filerecord_by_file_id(
                     file_id=old_file_id, db_session=db_session
                 )
-
-                # Generate new S3 key for the new file ID
-                new_s3_key = self._get_s3_key(new_file_id)
-
-                # Copy S3 object to new key
-                s3_client = self._get_s3_client()
-                bucket_name = self._get_bucket_name()
-
-                copy_source = (
-                    f"{old_file_record.bucket_name}/{old_file_record.object_key}"
-                )
-
-                s3_client.copy_object(
-                    CopySource=copy_source,
-                    Bucket=bucket_name,
-                    Key=new_s3_key,
-                    MetadataDirective="COPY",
-                )
-
-                # Create new file record with new file_id
-                # Cast file_metadata to the expected type
                 file_metadata = cast(
                     dict[Any, Any] | None, old_file_record.file_metadata
                 )
 
+                # Reuse the old record's bucket/object_key — the object stays put.
                 upsert_filerecord(
                     file_id=new_file_id,
                     display_name=old_file_record.display_name,
                     file_origin=old_file_record.file_origin,
                     file_type=old_file_record.file_type,
-                    bucket_name=bucket_name,
-                    object_key=new_s3_key,
+                    bucket_name=old_file_record.bucket_name,
+                    object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
                 )
 
-                # Delete old S3 object
-                s3_client.delete_object(
-                    Bucket=old_file_record.bucket_name, Key=old_file_record.object_key
-                )
-
-                # Delete old file record
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
 
                 db_session.commit()

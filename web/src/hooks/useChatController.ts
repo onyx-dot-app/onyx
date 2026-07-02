@@ -6,7 +6,7 @@ import {
   nameChatSession,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
-import { getMaxSelectedDocumentTokens } from "@/app/app/projects/projectsService";
+import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/interfaces";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -59,7 +59,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/lib/agents/hooks";
@@ -70,12 +70,12 @@ import {
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
-import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
+import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
-import { projectFilesToFileDescriptors } from "@/app/app/services/fileUtils";
+import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -363,6 +363,8 @@ export default function useChatController({
     // The stream will close naturally when the backend sends the STOP packet
     setStreamingStartTime(currentSession, null);
     updateChatStateAction(currentSession, "input");
+    // On stop nothing else flips the queue gate, so release it here or queued follow-ups never auto-send.
+    setLatestMessageRenderComplete(currentSession, true);
   }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(
@@ -679,7 +681,7 @@ export default function useChatController({
           ? RetrievalType.SelectedDocs
           : RetrievalType.None;
       let documents: OnyxDocument[] = selectedDocuments;
-      let citations: CitationMap | null = null;
+      let citations: CitationMap = {};
       let aiMessageImages: FileDescriptor[] | null = null;
       let error: string | null = null;
       let stackTrace: string | null = null;
@@ -707,8 +709,8 @@ export default function useChatController({
       const documentsPerModel: OnyxDocument[][] = isMultiModel
         ? Array.from({ length: numModels }, () => [])
         : [];
-      const citationsPerModel: (CitationMap | null)[] = isMultiModel
-        ? Array(numModels).fill(null)
+      const citationsPerModel: CitationMap[] = isMultiModel
+        ? Array.from({ length: numModels }, () => ({}))
         : [];
       // Track which models have errored so the bottom-of-loop upsert skips them
       const erroredModelIndices = new Set<number>();
@@ -774,7 +776,7 @@ export default function useChatController({
         pendingFlush = false;
 
         parentMessage =
-          parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
+          parentMessage || currentMessageTreeLocal!.get(SYSTEM_NODE_ID)!;
 
         let messagesToUpsert: Message[];
 
@@ -1170,7 +1172,7 @@ export default function useChatController({
                       document_id: string;
                     };
                     citationsPerModel[modelIndex] = {
-                      ...(citationsPerModel[modelIndex] || {}),
+                      ...citationsPerModel[modelIndex],
                       [citationInfo.citation_number]: citationInfo.document_id,
                     };
                   } else if (packetObj.type === "message_start") {
@@ -1200,7 +1202,7 @@ export default function useChatController({
                     document_id: string;
                   };
                   citations = {
-                    ...(citations || {}),
+                    ...citations,
                     [citationInfo.citation_number]: citationInfo.document_id,
                   };
                 } else if (packetObj.type === "message_start") {

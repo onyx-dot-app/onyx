@@ -151,8 +151,8 @@ class EmbeddingModelDetail(BaseModel):
     id: int | None = None
     model_name: str
     normalize: bool
-    query_prefix: str | None
-    passage_prefix: str | None
+    query_prefix: str | None = ""
+    passage_prefix: str | None = ""
     api_url: str | None = None
     provider_type: EmbeddingProvider | None = None
     api_key: str | None = None

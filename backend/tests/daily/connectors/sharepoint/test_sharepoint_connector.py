@@ -9,7 +9,9 @@ from unittest.mock import patch
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
 from onyx.connectors.sharepoint.connector import SharepointAuthMethod
@@ -577,3 +579,177 @@ def test_resolve_tenant_domain_from_root_site(
 
     assert connector.sp_tenant_domain is not None
     assert len(connector.sp_tenant_domain) > 0
+
+
+# ---------------------------------------------------------------------------
+# Targeted reindex (Resolver.reindex)
+# ---------------------------------------------------------------------------
+
+
+def _failure_for(doc: Document) -> ConnectorFailure:
+    """Build the ConnectorFailure that targeted reindex would hand the connector.
+
+    Mirrors production: the failure's document_link is the item's web_url, which
+    is exactly what a crawled document's section link carries.
+    """
+    return ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=doc.id,
+            document_link=doc.sections[0].link,
+        ),
+        failure_message="targeted reindex test",
+    )
+
+
+def _crawl_site(
+    sharepoint_credentials: dict[str, str],
+    *,
+    include_site_pages: bool,
+    include_site_documents: bool,
+) -> list[Document]:
+    connector = SharepointConnector(
+        sites=[os.environ["SHAREPOINT_SITE"]],
+        include_site_pages=include_site_pages,
+        include_site_documents=include_site_documents,
+    )
+    connector.load_credentials(sharepoint_credentials)
+    return load_all_from_connector(
+        connector=connector,
+        start=0,
+        end=time.time(),
+    ).documents
+
+
+def test_sharepoint_connector_reindex_drive_items(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_store_image: MagicMock,
+    sharepoint_credentials: dict[str, str],
+) -> None:
+    """reindex re-fetches failed drive items across libraries from their links."""
+    with patch(
+        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        mock_store_image,
+    ):
+        found = _crawl_site(
+            sharepoint_credentials,
+            include_site_pages=False,
+            include_site_documents=True,
+        )
+        # test1.docx lives in "Shared Documents", other.docx in "Other Library",
+        # so this exercises probing across multiple drives in a site.
+        targets = [
+            find_document(found, "test1.docx"),
+            find_document(found, "other.docx"),
+        ]
+        failures = [_failure_for(doc) for doc in targets]
+
+        connector = SharepointConnector(sites=[os.environ["SHAREPOINT_SITE"]])
+        connector.load_credentials(sharepoint_credentials)
+        results = list(connector.reindex(errors=failures, include_permissions=False))
+
+        docs = [r for r in results if isinstance(r, Document)]
+        connector_failures = [r for r in results if isinstance(r, ConnectorFailure)]
+        assert not connector_failures, "resolvable targets should not fail"
+
+        returned_by_id = {d.id: d for d in docs}
+        for target in targets:
+            assert target.id in returned_by_id, (
+                f"reindex did not return target {target.semantic_identifier}"
+            )
+            assert returned_by_id[target.id].sections, "reindexed doc has no sections"
+
+
+def test_sharepoint_connector_reindex_site_page(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_store_image: MagicMock,
+    sharepoint_credentials: dict[str, str],
+) -> None:
+    """reindex round-trips a site-page target through the site-page path."""
+    with patch(
+        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        mock_store_image,
+    ):
+        found = _crawl_site(
+            sharepoint_credentials,
+            include_site_pages=True,
+            include_site_documents=False,
+        )
+        target = find_document(found, "Home")
+        failures = [_failure_for(target)]
+
+        connector = SharepointConnector(sites=[os.environ["SHAREPOINT_SITE"]])
+        connector.load_credentials(sharepoint_credentials)
+        results = list(connector.reindex(errors=failures, include_permissions=False))
+
+        docs = [r for r in results if isinstance(r, Document)]
+        assert len(docs) == 1, "should resolve exactly the one site-page target"
+        assert docs[0].id == target.id
+        assert docs[0].sections
+
+
+def test_sharepoint_connector_reindex_unresolvable_targets(
+    sharepoint_credentials: dict[str, str],
+) -> None:
+    """Targets with a bogus id or no link yield ConnectorFailure, not raises."""
+    connector = SharepointConnector(sites=[os.environ["SHAREPOINT_SITE"]])
+    connector.load_credentials(sharepoint_credentials)
+
+    bogus_link = os.environ["SHAREPOINT_SITE"] + "/Shared Documents/does-not-exist.docx"
+    failures = [
+        ConnectorFailure(
+            failed_document=DocumentFailure(
+                document_id="01BOGUSITEMIDDOESNOTEXIST0000000",
+                document_link=bogus_link,
+            ),
+            failure_message="bogus id",
+        ),
+        ConnectorFailure(
+            failed_document=DocumentFailure(
+                document_id="no-link-target",
+                document_link=None,
+            ),
+            failure_message="no link",
+        ),
+    ]
+    results = list(connector.reindex(errors=failures, include_permissions=False))
+
+    assert results and all(isinstance(r, ConnectorFailure) for r in results)
+    failed_ids = {
+        r.failed_document.document_id
+        for r in results
+        if isinstance(r, ConnectorFailure) and r.failed_document
+    }
+    assert failed_ids == {"01BOGUSITEMIDDOESNOTEXIST0000000", "no-link-target"}
+
+
+def test_sharepoint_connector_reindex_denylist_excluded(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    mock_store_image: MagicMock,
+    sharepoint_credentials: dict[str, str],
+) -> None:
+    """A target excluded by the path denylist yields an informative failure
+    rather than being silently dropped."""
+    with patch(
+        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        mock_store_image,
+    ):
+        found = _crawl_site(
+            sharepoint_credentials,
+            include_site_pages=False,
+            include_site_documents=True,
+        )
+        target = find_document(found, "test1.docx")
+        failures = [_failure_for(target)]
+
+        connector = SharepointConnector(
+            sites=[os.environ["SHAREPOINT_SITE"]],
+            excluded_paths=["*.docx"],
+        )
+        connector.load_credentials(sharepoint_credentials)
+        results = list(connector.reindex(errors=failures, include_permissions=False))
+
+        docs = [r for r in results if isinstance(r, Document)]
+        connector_failures = [r for r in results if isinstance(r, ConnectorFailure)]
+        assert not docs, "excluded target should not yield a Document"
+        assert len(connector_failures) == 1
+        assert "denylist" in connector_failures[0].failure_message

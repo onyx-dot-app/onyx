@@ -131,6 +131,11 @@ class MCPAuthenticationType(str, PyEnum):
     PT_OAUTH = "PT_OAUTH"  # Pass-Through OAuth
 
 
+class MCPOAuthProviderMode(str, PyEnum):
+    AUTO_DISCOVERY = "AUTO_DISCOVERY"
+    KNOWN_PROVIDER = "KNOWN_PROVIDER"
+
+
 class MCPTransport(str, PyEnum):
     """MCP transport types"""
 
@@ -234,6 +239,14 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class SupportedLanguage(str, PyEnum):
+    EN = "en"
+    ES = "es"
+    PT = "pt"
+    FR = "fr"
+    DE = "de"
+
+
 class DefaultAppMode(str, PyEnum):
     AUTO = "AUTO"
     CHAT = "CHAT"
@@ -284,7 +297,21 @@ class SessionOrigin(str, PyEnum):
 class SharingScope(str, PyEnum):
     PRIVATE = "private"
     PUBLIC_ORG = "public_org"
-    PUBLIC_GLOBAL = "public_global"
+
+
+class ApprovalDecision(str, PyEnum):
+    """Terminal decision on a gated action; `decision IS NULL` means pending."""
+
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+
+class ApprovalDecidedVia(str, PyEnum):
+    # NULL on legacy rows and proxy-written EXPIRED claims.
+    USER = "USER"
+    PRE_APPROVAL = "PRE_APPROVAL"
+    SESSION_GRANT = "SESSION_GRANT"
 
 
 class ScheduledTaskStatus(str, PyEnum):
@@ -314,10 +341,35 @@ class ScheduledTaskTriggerSource(str, PyEnum):
     MANUAL_RUN_NOW = "MANUAL_RUN_NOW"
 
 
+class ScheduledTaskErrorClass(str, PyEnum):
+    """Closed set of values for ``ScheduledTaskRun.error_class``.
+
+    Every code path that writes ``error_class`` must use a member of
+    this enum — the column is intentionally a closed set so dashboards
+    and triage queries can pivot on a known vocabulary. For unexpected
+    runtime failures inside the agent drive, use ``AGENT_EXCEPTION``
+    and put the actual exception class name + message in
+    ``error_detail``.
+    """
+
+    TASK_MISSING = "task_missing"
+    SANDBOX_WAKE_FAILED = "sandbox_wake_failed"
+    EXECUTOR_ERROR = "executor_error"
+    TIMEOUT = "timeout"
+    STUCK = "stuck"
+    AGENT_EXCEPTION = "agent_exception"
+
+
+class ScheduledTaskSkipReason(str, PyEnum):
+    """Well-known values for ``ScheduledTaskRun.skip_reason``."""
+
+    PRIOR_IN_FLIGHT = "prior_in_flight"
+
+
 class SandboxStatus(str, PyEnum):
     PROVISIONING = "provisioning"
     RUNNING = "running"
-    SLEEPING = "sleeping"  # Pod terminated, snapshots saved to S3
+    SLEEPING = "sleeping"  # Pod terminated, snapshots saved to FileStore
     TERMINATED = "terminated"
     FAILED = "failed"
 
@@ -332,6 +384,52 @@ class SandboxStatus(str, PyEnum):
     def is_sleeping(self) -> bool:
         """Check if sandbox is sleeping (pod terminated but can be restored)."""
         return self == SandboxStatus.SLEEPING
+
+
+class ExternalAppType(str, PyEnum):
+    """Discriminator for the External Apps OAuth dispatch layer.
+
+    Each built-in value names a provider with its own configured
+    authorize URL, token URL, scope, and response parser in
+    `external_apps.providers`. `CUSTOM` is for admin-defined apps
+    that don't go through any built-in OAuth flow (static-token
+    integrations, internal services, etc.).
+    """
+
+    GOOGLE_CALENDAR = "GOOGLE_CALENDAR"
+    GOOGLE_DRIVE = "GOOGLE_DRIVE"
+    GMAIL = "GMAIL"
+    SLACK = "SLACK"
+    LINEAR = "LINEAR"
+    GITHUB = "GITHUB"
+    HUBSPOT = "HUBSPOT"
+    CUSTOM = "CUSTOM"
+
+    @property
+    def is_built_in(self) -> bool:
+        """True for provider-backed built-ins (unique per type per tenant),
+        False for ``CUSTOM`` (admin-defined, can repeat). Use this to guard
+        paths that only make sense for a single, well-known app per type."""
+        return self is not ExternalAppType.CUSTOM
+
+
+class EndpointPolicy(str, PyEnum):
+    """What the egress layer does with an outbound request once it has been
+    matched to an action of a connected external app."""
+
+    ALWAYS = "ALWAYS"  # auto-approve: the call proceeds without prompting
+    ASK = "ASK"  # require approval: the user accepts or denies in-session
+    DENY = "DENY"  # block the call outright
+
+
+# Strictness ordering: higher = stricter. When one request matches several
+# actions, the strictest policy governs (sort/`max` with this key); readers
+# of a persisted `actions` list rely on `actions[0]` being the strictest.
+POLICY_SEVERITY: dict[EndpointPolicy, int] = {
+    EndpointPolicy.ALWAYS: 0,
+    EndpointPolicy.ASK: 1,
+    EndpointPolicy.DENY: 2,
+}
 
 
 class PatType(str, PyEnum):
@@ -356,6 +454,10 @@ class HierarchyNodeType(str, PyEnum):
 
     # Root-level type
     SOURCE = "source"  # Root node for a source (e.g., "Google Drive")
+
+    # Placeholder created when a child is indexed before its parent exists in the DB.
+    # Promoted to the real type when the parent page is later processed.
+    STUB = "stub"
 
     # Google Drive
     SHARED_DRIVE = "shared_drive"
@@ -384,6 +486,7 @@ class LLMModelFlowType(str, PyEnum):
     CHAT = "chat"
     VISION = "vision"
     CONTEXTUAL_RAG = "contextual_rag"
+    REASONING = "reasoning"
 
 
 class HookPoint(str, PyEnum):
@@ -399,9 +502,15 @@ class HookFailStrategy(str, PyEnum):
 
 class Permission(str, PyEnum):
     """
-    Permission tokens for group-based authorization.
-    19 tokens total. full_admin_panel_access is an override —
-    if present, any permission check passes.
+    Permission tokens for group-based authorization and PAT scoping.
+    full_admin_panel_access is an override — if present, any permission
+    check passes.
+
+    The read:*/write:* "API-surface scopes" are coarser than the capability
+    tokens: they name request surfaces (search, chat, admin-read) rather than
+    admin capabilities. They are implied by basic / admin (so they're never
+    granted directly to a group) and exist primarily to scope Personal Access
+    Tokens.
     """
 
     # Basic (auto-granted to every new group)
@@ -412,6 +521,13 @@ class Permission(str, PyEnum):
     READ_DOCUMENT_SETS = "read:document_sets"
     READ_AGENTS = "read:agents"
     READ_USERS = "read:users"
+
+    # API-surface scopes — coarse, implied by basic/admin, used to scope PATs.
+    READ_SEARCH = "read:search"
+    READ_CHAT = "read:chat"
+    WRITE_CHAT = "write:chat"
+    READ_ADMIN = "read:admin"
+    GENERATE_IMAGE = "generate:image"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -430,6 +546,10 @@ class Permission(str, PyEnum):
     CREATE_SERVICE_ACCOUNT_API_KEYS = "create:service_account_api_keys"
     CREATE_SLACK_DISCORD_BOTS = "create:slack_discord_bots"
 
+    # Role scopes — a bundle token implying the surfaces a given machine
+    # identity may use. PAT-only; never granted to a group/user.
+    CRAFT_SANDBOX = "craft_sandbox"
+
     # Override — any permission check passes
     FULL_ADMIN_PANEL_ACCESS = "admin"
 
@@ -444,5 +564,54 @@ Permission.IMPLIED = frozenset(
         Permission.READ_DOCUMENT_SETS,
         Permission.READ_AGENTS,
         Permission.READ_USERS,
+        Permission.READ_SEARCH,
+        Permission.READ_CHAT,
+        Permission.WRITE_CHAT,
+        Permission.READ_ADMIN,
+        Permission.GENERATE_IMAGE,
     }
 )
+
+
+class PersonaSharePermission(str, PyEnum):
+    """Level granted by a persona share row (user or group), or to the whole
+    org via `Persona.public_permission`."""
+
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class SkillSharePermission(str, PyEnum):
+    """Level granted by a skill share row (user or group), or to the whole org
+    via `Skill.public_permission`."""
+
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class SkillAccessLevel(str, PyEnum):
+    """Computed access the requesting user holds on a skill."""
+
+    OWNER = "OWNER"
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class PersonaAccessLevel(str, PyEnum):
+    """Computed access the requesting user holds on a persona.
+
+    OWNER outranks share rows; admins are reported as EDITOR unless owner."""
+
+    OWNER = "OWNER"
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class PersonaSharingStatus(str, PyEnum):
+    """Derived share state computed from a persona's columns by the sharing
+    helpers (no DB column of its own): group-owned or row-shared counts as
+    SHARED even with an empty share list; PUBLIC wins over both."""
+
+    PRIVATE = "PRIVATE"
+    SHARED = "SHARED"
+    PUBLIC = "PUBLIC"

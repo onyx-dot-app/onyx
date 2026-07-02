@@ -7,7 +7,7 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 import { fetchOpenRouterModels } from "@/lib/languageModels/svc";
 import {
   useInitialValues,
@@ -16,7 +16,7 @@ import {
   mergeFetchedModelConfigurations,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   APIBaseField,
@@ -53,7 +53,7 @@ function OpenRouterModalInternals({
     const { models: fetched, error } = await fetchOpenRouterModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key,
-      provider_name: existingLlmProvider?.name ?? undefined,
+      provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
       throw new Error(error);

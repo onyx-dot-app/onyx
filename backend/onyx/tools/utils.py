@@ -1,4 +1,6 @@
 import json
+from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -9,7 +11,6 @@ from onyx.db.models import LLMProvider
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
-from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.tools.interface import Tool
 
 
@@ -26,12 +27,23 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
     return bool(model_obj.get("supports_function_calling"))
 
 
-def compute_tool_tokens(tool: Tool, llm_tokenizer: BaseTokenizer) -> int:
-    return len(llm_tokenizer.encode(json.dumps(tool.tool_definition())))
+def compute_tool_tokens(tool: Tool, token_counter: Callable[[str], int]) -> int:
+    return token_counter(json.dumps(tool.tool_definition()))
 
 
-def compute_all_tool_tokens(tools: list[Tool], llm_tokenizer: BaseTokenizer) -> int:
-    return sum(compute_tool_tokens(tool, llm_tokenizer) for tool in tools)
+def compute_all_tool_tokens(
+    tools: list[Tool], token_counter: Callable[[str], int]
+) -> int:
+    return sum(compute_tool_tokens(tool, token_counter) for tool in tools)
+
+
+def compute_tool_definition_tokens(
+    tool_definitions: list[dict[str, Any]], token_counter: Callable[[str], int]
+) -> int:
+    return sum(
+        token_counter(json.dumps(tool_definition))
+        for tool_definition in tool_definitions
+    )
 
 
 def is_image_generation_available(db_session: Session) -> bool:

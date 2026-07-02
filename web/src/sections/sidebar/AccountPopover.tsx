@@ -9,7 +9,7 @@ import {
   getUserDisplayName,
   getUserEmail,
   logout,
-} from "@/lib/user";
+} from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { Popover, PopoverMenu } from "@opal/components";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -17,6 +17,7 @@ import { SidebarTab, LineItemButton } from "@opal/components";
 import NotificationsPopover from "@/sections/sidebar/NotificationsPopover";
 import {
   SvgBell,
+  SvgExternalLink,
   SvgHelpCircle,
   SvgLogOut,
   SvgSliders,
@@ -27,27 +28,26 @@ import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
-import {
-  useVectorDbEnabled,
-  useSettingsContext,
-} from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
-import useNotifications from "@/hooks/useNotifications";
+import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
 import { markdown } from "@opal/utils";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
   onOpenNotifications: () => void;
+  undismissedCount: number;
 }
 
 function SettingsPopover({
   onUserSettingsClick,
   onOpenNotifications,
+  undismissedCount,
 }: SettingsPopoverProps) {
   const { user } = useUser();
-  const { undismissedCount } = useNotifications();
-  const settings = useSettingsContext();
+  const settings = useSettings();
+  const enterpriseSettings = settings.enterprise;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -115,7 +115,7 @@ function SettingsPopover({
           title="Notifications"
           onClick={onOpenNotifications}
           rightChildren={
-            !!undismissedCount ? (
+            undismissedCount ? (
               <SvgNotificationBubble count={undismissedCount} />
             ) : undefined
           }
@@ -130,6 +130,21 @@ function SettingsPopover({
           href="https://docs.onyx.app"
           target="_blank"
         />,
+        enterpriseSettings?.custom_help_link_url && (
+          <LineItemButton
+            key="custom-help-link"
+            sizePreset="main-ui"
+            variant="section"
+            rounding="sm"
+            icon={SvgExternalLink}
+            title={
+              enterpriseSettings.custom_help_link_label ||
+              enterpriseSettings.custom_help_link_url
+            }
+            href={enterpriseSettings.custom_help_link_url}
+            target="_blank"
+          />
+        ),
         showLogin && (
           <LineItemButton
             key="log-in"
@@ -163,7 +178,7 @@ function SettingsPopover({
             icon={SvgOnyxLogo}
             title={markdown(
               `[Onyx ${
-                settings?.webVersion ?? "dev"
+                settings.version ?? "dev"
               }](https://docs.onyx.app/changelog)`
             )}
           />
@@ -187,8 +202,9 @@ export default function AccountPopover({
   >(undefined);
   const { user } = useUser();
   const appFocus = useAppFocus();
-  const vectorDbEnabled = useVectorDbEnabled();
-  const { undismissedCount } = useNotifications();
+  const { vectorDbEnabled } = useSettings();
+  const { undismissedCount, refresh: refreshNotificationSummary } =
+    useNotificationSummary();
   const userDisplayName = getUserDisplayName(user);
 
   const handlePopoverOpen = (state: boolean) => {
@@ -200,6 +216,7 @@ export default function AccountPopover({
         preload("/api/manage/connector-status", errorHandlingFetcher);
       }
       preload("/api/llm/provider", errorHandlingFetcher);
+      void refreshNotificationSummary();
       setPopupState("Settings");
     } else {
       setPopupState(undefined);
@@ -217,7 +234,7 @@ export default function AccountPopover({
               </div>
             )}
             rightChildren={
-              !!undismissedCount ? (
+              undismissedCount ? (
                 <Section padding={0.5}>
                   <SvgNotificationBubble count={undismissedCount} />
                 </Section>
@@ -243,6 +260,7 @@ export default function AccountPopover({
               setPopupState(undefined);
             }}
             onOpenNotifications={() => setPopupState("Notifications")}
+            undismissedCount={undismissedCount}
           />
         )}
         {popupState === "Notifications" && (

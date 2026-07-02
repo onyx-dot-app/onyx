@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -8,6 +9,8 @@ import pytest
 from pydantic import BaseModel
 
 import onyx.tools.tool_implementations.open_url.onyx_web_crawler as crawler_module
+from onyx.server.security.models import SSRFProtectionLevel
+from onyx.server.security.store import _build_env_defaults
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_CONNECT_TIMEOUT_SECONDS,
 )
@@ -228,6 +231,27 @@ def _make_mock_response(
     return resp
 
 
+def _respond_by_url(
+    responses: dict[str, MagicMock | Exception],
+) -> Callable[..., MagicMock]:
+    """Build a ``side_effect`` that maps each URL to its response, raising any
+    mapped exception — independent of call order.
+
+    ``OnyxWebCrawler.contents`` fetches concurrently via a ThreadPoolExecutor, so
+    a positional ``side_effect`` list binds responses to URLs nondeterministically
+    (whichever thread calls ``ssrf_safe_get`` first consumes the first element).
+    Keying on the URL keeps the failure-isolation assertions deterministic.
+    """
+
+    def _side_effect(url: str, *_args: object, **_kwargs: object) -> MagicMock:
+        result = responses[url]
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    return _side_effect
+
+
 class TestParallelExecution:
     """Verify that contents() fetches URLs in parallel."""
 
@@ -274,8 +298,15 @@ class TestFailureIsolation:
         good_resp = _make_mock_response()
         bad_resp = _make_mock_response(status_code=500)
 
-        # First and third URLs succeed, second fails
-        mock_get.side_effect = [good_resp, bad_resp, good_resp]
+        # First and third URLs succeed, second fails. Keyed by URL because the
+        # crawler fetches concurrently, so call order is nondeterministic.
+        mock_get.side_effect = _respond_by_url(
+            {
+                "http://a.com": good_resp,
+                "http://b.com": bad_resp,
+                "http://c.com": good_resp,
+            }
+        )
 
         crawler = OnyxWebCrawler()
         results = crawler.contents(["http://a.com", "http://b.com", "http://c.com"])
@@ -289,12 +320,14 @@ class TestFailureIsolation:
     def test_exception_doesnt_kill_batch(self, mock_get: MagicMock) -> None:
         good_resp = _make_mock_response()
 
-        # Second URL raises an exception
-        mock_get.side_effect = [
-            good_resp,
-            RuntimeError("connection reset"),
-            _make_mock_response(),
-        ]
+        # Second URL raises an exception. Keyed by URL (concurrent fetch).
+        mock_get.side_effect = _respond_by_url(
+            {
+                "http://a.com": good_resp,
+                "http://b.com": RuntimeError("connection reset"),
+                "http://c.com": _make_mock_response(),
+            }
+        )
 
         crawler = OnyxWebCrawler()
         results = crawler.contents(["http://a.com", "http://b.com", "http://c.com"])
@@ -309,11 +342,13 @@ class TestFailureIsolation:
         from onyx.utils.url import SSRFException
 
         good_resp = _make_mock_response()
-        mock_get.side_effect = [
-            good_resp,
-            SSRFException("blocked"),
-            _make_mock_response(),
-        ]
+        mock_get.side_effect = _respond_by_url(
+            {
+                "http://a.com": good_resp,
+                "http://internal.local": SSRFException("blocked"),
+                "http://c.com": _make_mock_response(),
+            }
+        )
 
         crawler = OnyxWebCrawler()
         results = crawler.contents(
@@ -351,3 +386,33 @@ class TestTupleTimeout:
 
         call_kwargs = mock_get.call_args
         assert call_kwargs.kwargs["timeout"] == (3, 30)
+
+
+def _pin_level(monkeypatch: pytest.MonkeyPatch, level: SSRFProtectionLevel) -> None:
+    settings = _build_env_defaults().model_copy(update={"ssrf_protection_level": level})
+    monkeypatch.setattr(crawler_module, "get_security_settings", lambda: settings)
+
+
+def test_should_validate_ssrf_resolves_per_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no explicit override the crawler reads the admin level on each call,
+    so an admin change takes effect on an already-constructed crawler."""
+    crawler = OnyxWebCrawler()  # validate_ssrf=None
+
+    _pin_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
+    assert crawler._should_validate_ssrf() is True
+
+    _pin_level(monkeypatch, SSRFProtectionLevel.DISABLED)
+    assert crawler._should_validate_ssrf() is False
+
+
+def test_should_validate_ssrf_override_pins(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit validate_ssrf wins regardless of the admin level."""
+    crawler = OnyxWebCrawler(validate_ssrf=True)
+    _pin_level(monkeypatch, SSRFProtectionLevel.DISABLED)
+    assert crawler._should_validate_ssrf() is True
+
+    crawler = OnyxWebCrawler(validate_ssrf=False)
+    _pin_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
+    assert crawler._should_validate_ssrf() is False

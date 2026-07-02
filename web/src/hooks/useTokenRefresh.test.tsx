@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { setDocumentVisibility } from "@tests/setup/test-utils";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
-import { AuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import { AuthType } from "@/lib/constants";
 import { User } from "@/lib/types";
 
@@ -108,5 +109,35 @@ describe("useTokenRefresh", () => {
     // The time-gate should suppress every follow-up attempt; the original
     // bug fired ~one extra call per re-render.
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("hidden tabs do not refresh; returning to visibility catches up", async () => {
+    jest.useFakeTimers();
+    try {
+      setDocumentVisibility(false);
+      renderHook(() =>
+        useTokenRefresh(
+          fakeUser,
+          baseAuthMetadata(AuthType.BASIC),
+          false,
+          jest.fn()
+        )
+      );
+
+      // No refresh on hidden mount, and none from interval ticks while hidden.
+      await act(async () => {
+        jest.advanceTimersByTime(31 * 60 * 1000);
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      await act(async () => {
+        setDocumentVisibility(true);
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+      setDocumentVisibility(true);
+    }
   });
 });

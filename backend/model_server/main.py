@@ -5,7 +5,6 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import sentry_sdk
 import torch
 import uvicorn
 from fastapi import FastAPI
@@ -16,6 +15,7 @@ from transformers import logging as transformer_logging
 
 from model_server.encoders import router as encoders_router
 from model_server.management_endpoints import router as management_router
+from model_server.utils import get_cgroup_cpu_limit
 from model_server.utils import get_gpu_type
 from onyx import __version__
 from onyx.utils.logger import setup_logger
@@ -86,8 +86,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
             e,
         )
 
-    torch.set_num_threads(max(MIN_THREADS_ML_MODELS, torch.get_num_threads()))
-    logger.notice("Torch Threads: %s", torch.get_num_threads())
+    # torch sizes its intra-op thread pool from the host core count, ignoring the
+    # container's cgroup CPU quota. On a large node this oversubscribes threads against
+    # a small quota, causing thread thrash and CFS throttling. Cap to the quota (while
+    # keeping the historical MIN_THREADS_ML_MODELS floor).
+    torch_default_threads = torch.get_num_threads()
+    cpu_limit = get_cgroup_cpu_limit()
+    num_threads = (
+        torch_default_threads
+        if cpu_limit is None
+        else min(torch_default_threads, cpu_limit)
+    )
+    torch.set_num_threads(max(MIN_THREADS_ML_MODELS, num_threads))
+    logger.notice(
+        "Torch Threads: %s (torch default: %s, cgroup cpu limit: %s)",
+        torch.get_num_threads(),
+        torch_default_threads,
+        cpu_limit,
+    )
 
     yield
 
@@ -97,16 +113,12 @@ def get_model_app() -> FastAPI:
         title="Onyx Model Server", version=__version__, lifespan=lifespan
     )
     if SENTRY_DSN:
-        from onyx.configs.sentry import _add_instance_tags
+        from onyx.configs.sentry import init_sentry
 
-        sentry_sdk.init(
-            dsn=SENTRY_DSN,
-            integrations=[StarletteIntegration(), FastApiIntegration()],
+        init_sentry(
             traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
-            release=__version__,
-            before_send=_add_instance_tags,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
         )
-        logger.info("Sentry initialized")
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 

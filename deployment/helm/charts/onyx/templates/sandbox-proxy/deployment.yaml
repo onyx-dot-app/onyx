@@ -1,0 +1,148 @@
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- $proxyPort := include "onyx.sandboxProxyPort" . }}
+{{- $healthzPort := "8081" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+spec:
+  replicas: {{ .Values.sandboxProxy.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.sandboxProxy.progressDeadlineSeconds }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sandbox-proxy
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/service-account: {{ toJson (.Values.sandboxProxy.serviceAccount | default dict) | sha256sum }}
+        {{- with .Values.sandboxProxy.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "onyx.labels" . | nindent 8 }}
+        app.kubernetes.io/component: sandbox-proxy
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx.fullname" . }}-sandbox-proxy
+      terminationGracePeriodSeconds: {{ .Values.sandboxProxy.terminationGracePeriodSeconds }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.sandboxProxy.runAsUser }}
+        fsGroup: {{ .Values.sandboxProxy.fsGroup }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if or .Values.sandboxProxy.affinity (gt (int .Values.sandboxProxy.replicaCount) 1) }}
+      affinity:
+        {{- if .Values.sandboxProxy.affinity }}
+        {{- toYaml .Values.sandboxProxy.affinity | nindent 8 }}
+        {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "onyx.selectorLabels" . | nindent 20 }}
+                    app.kubernetes.io/component: sandbox-proxy
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: sandbox-proxy
+          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command: ["python", "-m", "onyx.sandbox_proxy.server"]
+          ports:
+            - name: proxy
+              containerPort: {{ $proxyPort }}
+              protocol: TCP
+            - name: healthz
+              containerPort: {{ $healthzPort }}
+              protocol: TCP
+          env:
+            # Disable file logging for this pod: the root FS is read-only, so opening log
+            # files under /var/log/onyx would crash startup. Logs go to stdout (collected by
+            # the cluster); the per-pod files would be lost on restart anyway.
+            - name: LOG_TO_FILE
+              value: "false"
+            # Point Python's default temp dir at the confdir mount (the only writable mount)
+            # so any stray tempfile write doesn't crash on the read-only root.
+            - name: TMPDIR
+              value: /var/run/sandbox-proxy
+            - name: SANDBOX_PROXY_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SANDBOX_PROXY_LISTEN_PORT
+              value: {{ $proxyPort | quote }}
+            - name: SANDBOX_PROXY_HEALTHZ_PORT
+              value: {{ $healthzPort | quote }}
+            {{- include "onyx.envSecrets" . | nindent 12}}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.sandboxProxy.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          # Liveness threshold > readiness so a transient informer
+          # reconnect can flip readiness without restarting the pod.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 8
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: {{ .Values.sandboxProxy.runAsUser }}
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            # CA material (mitmproxy confdir) and the proxy's TMPDIR both live here — the
+            # one writable mount on an otherwise read-only root.
+            - name: confdir
+              mountPath: /var/run/sandbox-proxy
+      volumes:
+        - name: confdir
+          emptyDir:
+            sizeLimit: {{ .Values.sandboxProxy.confdirSizeLimit }}
+      {{- with .Values.sandboxProxy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sandboxProxy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

@@ -4,7 +4,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-primary-metrics
+  name: {{ include "onyx.resourceName" (list . "celery-worker-primary-metrics") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- if .Values.celery_worker_primary.deploymentLabels }}

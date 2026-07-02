@@ -31,11 +31,35 @@ type ContentActionProps = ContentProps & {
    * @default false
    */
   center?: boolean;
+
+  /**
+   * When true, `rightChildren` reflows responsively — forwarded into the
+   * `ContentMd` slot so it sits to the right of the title/description on desktop
+   * and stacks between them on narrow viewports. Requires a `main-*` size
+   * preset (the only ones with the slot); other presets fall back to the
+   * standard right-hand column. `center` is ignored in this mode.
+   *
+   * @default false
+   */
+  responsive?: boolean;
 };
 
 // ---------------------------------------------------------------------------
 // ContentAction
 // ---------------------------------------------------------------------------
+
+// Only the `main-*` presets route to ContentMd — the one layout with a
+// `rightChildren` slot — so `responsive` can only reflow for those.
+function routesToContentMd(props: {
+  sizePreset?: string;
+  variant?: string;
+}): boolean {
+  const isMdPreset =
+    props.sizePreset === "main-content" ||
+    props.sizePreset === "main-ui" ||
+    props.sizePreset === "secondary";
+  return isMdPreset && props.variant !== "body";
+}
 
 /**
  * A row layout that pairs a {@link Content} block with optional right-side
@@ -66,9 +90,23 @@ function ContentAction({
   rightChildren,
   padding = "lg",
   center = false,
+  responsive = false,
   ...contentProps
 }: ContentActionProps) {
   const { padding: paddingClass } = containerSizeVariants[padding];
+
+  // Responsive: forward rightChildren into the ContentMd slot, which reflows it
+  // to the right on desktop and between the title/description on narrow widths.
+  if (responsive && rightChildren && routesToContentMd(contentProps)) {
+    // Full width: in a flex-col `align-items: start` parent (e.g. InputHorizontal's
+    // Section) a wrapper without w-full shrinks to content width, so the input
+    // wouldn't fill the row.
+    return (
+      <div className={cn("w-full min-w-0", paddingClass)}>
+        <Content {...({ ...contentProps, rightChildren } as ContentProps)} />
+      </div>
+    );
+  }
 
   return (
     <div className="opal-content-action" data-centered={center || undefined}>

@@ -35,6 +35,8 @@ from onyx.db.entities import delete_from_kg_entities_extraction_staging__no_comm
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
+from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -51,7 +53,7 @@ from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import model_to_dict
 from onyx.db.utils import SortOrder
-from onyx.document_index.interfaces import DocumentMetadata
+from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -719,7 +721,7 @@ def upsert_documents(
         # Use COALESCE to preserve existing permissions when new values are NULL.
         # This prevents subsequent indexing runs (which don't fetch permissions)
         # from overwriting permissions set by permission sync jobs.
-        update_set.update(
+        update_set.update(  # ty: ignore[no-matching-overload]
             {
                 "external_user_emails": func.coalesce(
                     insert_stmt.excluded.external_user_emails,
@@ -828,6 +830,19 @@ def update_docs_chunk_count__no_commit(
     )
     for doc in documents_to_update:
         doc.chunk_count = doc_id_to_chunk_count[doc.id]
+
+
+def update_docs_content_hash__no_commit(
+    ids_to_new_hash: dict[str, str],
+    db_session: Session,
+) -> None:
+    documents_to_update = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.id.in_(ids_to_new_hash.keys()))
+        .all()
+    )
+    for doc in documents_to_update:
+        doc.content_hash = ids_to_new_hash[doc.id]
 
 
 def mark_document_as_modified(
@@ -1093,7 +1108,10 @@ _LOCK_RETRY_DELAY = 10
 
 @contextlib.contextmanager
 def prepare_to_modify_documents(
-    db_session: Session, document_ids: list[str], retry_delay: int = _LOCK_RETRY_DELAY
+    db_session: Session,
+    document_ids: list[str],
+    retry_delay: int = _LOCK_RETRY_DELAY,
+    index_attempt_id: int | None = None,
 ) -> Generator[TransactionalContext, None, None]:
     """Try and acquire locks for the documents to prevent other jobs from
     modifying them at the same time (e.g. avoid race conditions). This should be
@@ -1107,6 +1125,8 @@ def prepare_to_modify_documents(
 
     db_session.commit()  # ensure that we're not in a transaction
 
+    # Time only the lock acquisition (incl. retry sleeps), not the held body.
+    acquire_start = time.monotonic()
     lock_acquired = False
     for i in range(_NUM_LOCK_ATTEMPTS):
         yielded = False
@@ -1116,8 +1136,15 @@ def prepare_to_modify_documents(
                     db_session=db_session, document_ids=document_ids
                 )
                 if lock_acquired:
+                    # Capture now (excludes held body); record after release (below).
+                    acquire_ms = max(0, int((time.monotonic() - acquire_start) * 1000))
                     yielded = True
                     yield transaction
+                    safe_record_single_event_if_set(
+                        IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT,
+                        index_attempt_id,
+                        acquire_ms,
+                    )
                     return
         except Exception as e:
             if yielded:

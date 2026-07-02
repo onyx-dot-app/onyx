@@ -2,11 +2,10 @@
 
 ## Objective
 
-Implement the **Scheduled Tasks** product surface in
-[`docs/product/scheduled-tasks.md`](../../../product/scheduled-tasks.md): a user
-saves a prompt + schedule, and the system runs the prompt as Craft on a
-timer. Every fire creates a brand-new Craft session, executes the agent
-headlessly, and records what happened.
+Implement the **Scheduled Tasks** product surface: a user saves a prompt +
+schedule, and the system runs the prompt as Craft on a timer. Every fire
+creates a brand-new Craft session, executes the agent headlessly, and records
+what happened.
 
 V1 = schedule-only, single-user, no event triggers, no live-attach. The bar:
 a user creates a task in `/craft/v1/tasks`, sees it fire without their
@@ -38,9 +37,9 @@ browser open, and clicks any past run to open the completed session.
   The dispatcher and stuck-run sweeper are pure DB coordination work and
   run on the **primary** queue instead — routing them to the dedicated
   pool would let a saturated executor stall dispatch.
-- **Schedule storage:** `(cron_expression, IANA timezone, editor_mode)`.
-  All three editor modes compile to cron on save. `croniter` +
-  `ZoneInfo(timezone)` handles DST. `editor_mode` is a UI hint only.
+- **Schedule storage:** `(cron_expression, editor_mode)`.
+  All three editor modes compile to cron on save. Cron expressions are
+  evaluated in UTC. `editor_mode` is a UI hint only.
   `next_run_at` recomputed on every fire and every edit; pause sets it to
   NULL.
 - **Concurrency:** `SKIP_IF_RUNNING` for recurring fires (prior run still
@@ -90,7 +89,7 @@ dispatch_due_scheduled_tasks          run_scheduled_task(run_id)
      │     → insert skipped row         for event in _yield_acp_events(
      ├─ insert queued run                  session, task.prompt):
      ├─ next_run_at = croniter             _persist_acp_events([event])
-     │     .next(now, tz=task.tz)        if budget exceeded → failed
+     │     .next(now)                    if budget exceeded → failed
      └─ enqueue run_scheduled_task ───►   if approval required →
             (run_id, expires=900,             awaiting_approval
              queue=scheduled_tasks)       mark succeeded / failed
@@ -118,7 +117,7 @@ class ScheduledTask(Base):
     __tablename__ = "scheduled_task"
     id, user_id (FK user, CASCADE)
     name (str), prompt (text)
-    cron_expression (str), timezone (IANA str), editor_mode (str)
+    cron_expression (str), editor_mode (str)
     status (enum, default ACTIVE)
     next_run_at (DateTime tz, nullable)      # dispatcher's only read field
     deleted (bool, default False)
@@ -158,11 +157,11 @@ admin view in V1.
 - `GET    /scheduled-tasks` — list payload (id, name, human-readable
   schedule, status, next_run_at, last_run summary).
 - `POST   /scheduled-tasks` — create. Compiles editor input → cron,
-  validates timezone via `ZoneInfo`. Optional `run_immediately`.
+  optional `run_immediately`.
 - `GET    /scheduled-tasks/{id}` — task + next 3 fire times for UI preview.
 - `PATCH  /scheduled-tasks/{id}` — partial edit. Recomputes `next_run_at` on
-  schedule/timezone change. `paused` → NULL; resume → recompute. In-flight
-  runs untouched.
+  schedule change. `paused` → NULL; resume → recompute. In-flight runs
+  untouched.
 - `DELETE /scheduled-tasks/{id}` — soft-delete.
 - `POST   /scheduled-tasks/{id}/run-now` — inserts `manual_run_now` run,
   enqueues executor. Works when paused. Doesn't touch `next_run_at`.
@@ -176,17 +175,15 @@ No live-attach endpoint in V1.
 
 ## Schedule Semantics
 
-5-field cron + IANA timezone, stored canonical. Editor mode is a UI hint.
+5-field cron, stored canonical and evaluated in UTC. Editor mode is a UI hint.
 
 - *Interval (N min/hr/day):* `*/N * * * *` / `0 */N * * *` / `M H */N * *`
   (M:H is the editor's required time-of-day for day-cadence).
 - *Daily/weekly:* `M H * * <weekdays>` (e.g. `0 9 * * 1,3,5`).
 - *Advanced:* user-typed, validated via `croniter`.
 
-`compute_next_run_at` = `croniter(cron,
-after).get_next(datetime, tzinfo=ZoneInfo(tz))`. Stored UTC; compared UTC
-in dispatch. `ZoneInfo` handles DST — a 9 AM PT weekly fire stays 9 AM
-local across PST/PDT.
+`compute_next_run_at` = `croniter(cron, after).get_next(datetime)`.
+Stored UTC; compared UTC in dispatch.
 
 Pause mid-fire: in-flight run completes, `next_run_at`→NULL. Resume:
 recompute from resume time (no backfire). Past-due tasks fire once and

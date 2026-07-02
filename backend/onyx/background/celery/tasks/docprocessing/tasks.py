@@ -47,11 +47,13 @@ from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
 from onyx.background.indexing.index_attempt_utils import get_old_index_attempt_ids
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import MANAGED_VESPA
+from onyx.configs.app_configs import PERSISTENT_INDEXING
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import OnyxCeleryPriority
@@ -92,11 +94,12 @@ from onyx.db.indexing_coordination import CoordinationStatus
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
-from onyx.db.notification import create_notification
-from onyx.db.notification import get_notifications
+from onyx.db.notification import batch_create_notifications
+from onyx.db.notification import delete_notifications_by_additional_data
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.db.users import get_active_admin_users
 from onyx.document_index.factory import get_all_document_indices
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
@@ -108,6 +111,8 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 )
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
+from onyx.indexing.persistent_indexing import build_generic_connector_failure
+from onyx.indexing.persistent_indexing import record_generic_failure
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
@@ -618,19 +623,13 @@ def check_indexing_completion(
             if cc_pair.in_repeated_error_state:
                 cc_pair.in_repeated_error_state = False
 
-                # Delete any existing error notification for this CC pair so a
-                # fresh one is created if the connector fails again later.
-                for notif in get_notifications(
-                    user=None,
-                    db_session=db_session,
+                # Clear every admin's error notification for this connector so a
+                # fresh one is created if it fails again later.
+                delete_notifications_by_additional_data(
                     notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
-                    include_dismissed=True,
-                ):
-                    if (
-                        notif.additional_data
-                        and notif.additional_data.get("cc_pair_id") == cc_pair.id
-                    ):
-                        db_session.delete(notif)
+                    db_session=db_session,
+                    additional_data={"cc_pair_id": cc_pair.id},
+                )
 
                 db_session.commit()
                 on_connector_error_state_change(
@@ -998,8 +997,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     )
                     source = cc_pair.connector.source.value
                     connector_url = f"/admin/connector/{cc_pair.id}"
-                    create_notification(
-                        user_id=None,
+                    admin_ids = [
+                        admin.id for admin in get_active_admin_users(db_session)
+                    ]
+                    batch_create_notifications(
+                        user_ids=admin_ids,
                         notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
                         db_session=db_session,
                         title=f"Connector '{connector_name}' has entered repeated error state",
@@ -1392,6 +1394,10 @@ def _check_failure_threshold(
     1. We have more than 3 failures AND
     2. Failures account for more than 10% of processed documents
     """
+    # Persistent indexing: never abort on failure volume.
+    if PERSISTENT_INDEXING:
+        return
+
     failure_ratio = total_failures / (document_count or 1)
 
     FAILURE_THRESHOLD = 3
@@ -1507,6 +1513,105 @@ def _check_chunk_usage_limit(tenant_id: str) -> None:
         )
 
 
+def _record_docprocessing_failure_persistent(
+    *,
+    exc: BaseException,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    batch_num: int,
+    documents: list[Document] | None,
+    cross_batch_db_lock: RedisLock | None,
+) -> None:
+    """Catch-all recovery for `_docprocessing_task` under PERSISTENT_INDEXING.
+
+    Records per-doc `DocumentFailure`s (when `documents` was loaded) or a single
+    `EntityFailure` (when the batch never made it past load), then marks the
+    batch complete with zero counts so `check_indexing_completion` can resolve
+    the attempt as `COMPLETED_WITH_ERRORS`.
+
+    Every step is wrapped so a follow-on error here does not re-raise out of
+    the Celery task — we have already swallowed the original exception."""
+    task_logger.info(
+        "PERSISTENT_INDEXING enabled; recording docprocessing failure for "
+        "attempt=%s batch=%s",
+        index_attempt_id,
+        batch_num,
+    )
+
+    # Source lookup is best-effort; only used for Sentry tagging.
+    source: DocumentSource = DocumentSource.NOT_APPLICABLE
+    try:
+        with get_session_with_current_tenant() as db_session:
+            cc_pair = get_connector_credential_pair_from_id(
+                db_session, cc_pair_id, eager_load_connector=True
+            )
+            if cc_pair is not None:
+                source = cc_pair.connector.source
+    except Exception:
+        task_logger.exception(
+            "Failed to look up source for cc_pair %s during persistent indexing "
+            "recovery; falling back to NOT_APPLICABLE",
+            cc_pair_id,
+        )
+
+    if documents:
+        for doc in documents:
+            record_generic_failure(
+                index_attempt_id=index_attempt_id,
+                cc_pair_id=cc_pair_id,
+                source=source,
+                tenant_id=tenant_id,
+                failure=build_generic_connector_failure(exc=exc, document=doc),
+            )
+    else:
+        record_generic_failure(
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            source=source,
+            tenant_id=tenant_id,
+            failure=build_generic_connector_failure(
+                exc=exc,
+                entity_id=(
+                    f"docprocessing:attempt_{index_attempt_id}:batch_{batch_num}"
+                ),
+            ),
+        )
+
+    # Mark the batch complete with zero counts so check_indexing_completion
+    # doesn't wait forever for this batch. Best-effort: if the lock or DB
+    # write fails we still return cleanly.
+    try:
+        if cross_batch_db_lock is not None:
+            with (
+                get_session_with_current_tenant() as db_session,
+                cross_batch_db_lock,
+            ):
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=0,
+                    new_docs_indexed=0,
+                    total_chunks=0,
+                )
+        else:
+            with get_session_with_current_tenant() as db_session:
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=0,
+                    new_docs_indexed=0,
+                    total_chunks=0,
+                )
+    except Exception:
+        task_logger.exception(
+            "Failed to mark batch %s complete during persistent indexing "
+            "recovery for attempt %s",
+            batch_num,
+            index_attempt_id,
+        )
+
+
 def _docprocessing_task(
     index_attempt_id: int,
     cc_pair_id: int,
@@ -1578,6 +1683,12 @@ def _docprocessing_task(
 
     # dummy lock to satisfy linter
     per_batch_lock: RedisLock | None = None
+
+    # Hoisted so the except block can safely reference them under
+    # PERSISTENT_INDEXING when the failure happens mid-try.
+    documents: list[Document] | None = None
+    cross_batch_db_lock: RedisLock | None = None
+
     try:
         # FIX: Monitor memory before loading documents to track problematic batches
         emit_process_memory(
@@ -1684,6 +1795,7 @@ def _docprocessing_task(
                 index_attempt.connector_credential_pair.connector.source.value
             )
             search_settings_id: int = index_attempt.search_settings.id
+            from_beginning: bool = index_attempt.from_beginning
 
         # Session is now closed; no connection held during embedding.
 
@@ -1723,6 +1835,7 @@ def _docprocessing_task(
             document_batch=documents,
             request_id=index_attempt_metadata.request_id,
             adapter=adapter,
+            from_beginning=from_beginning,
         )
 
         # Track chunk indexing usage for cloud usage limits
@@ -1744,22 +1857,37 @@ def _docprocessing_task(
 
         # Update batch completion and document counts atomically using database coordination
 
-        with get_session_with_current_tenant() as db_session, cross_batch_db_lock:
-            with time_stage(IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id):
-                IndexingCoordination.update_batch_completion_and_docs(
-                    db_session=db_session,
-                    index_attempt_id=index_attempt_id,
-                    total_docs_indexed=index_pipeline_result.total_docs,
-                    new_docs_indexed=index_pipeline_result.new_docs,
-                    total_chunks=index_pipeline_result.total_chunks,
+        # Time the lock-acquire wait (the contention signal); record it after
+        # release (below) so the metric write doesn't extend this shared lock.
+        lock_acquire_start = time.monotonic()
+        cross_batch_db_lock.acquire()
+        lock_acquire_ms = max(0, int((time.monotonic() - lock_acquire_start) * 1000))
+        try:
+            with get_session_with_current_tenant() as db_session:
+                with time_stage(
+                    IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id
+                ):
+                    IndexingCoordination.update_batch_completion_and_docs(
+                        db_session=db_session,
+                        index_attempt_id=index_attempt_id,
+                        total_docs_indexed=index_pipeline_result.total_docs,
+                        new_docs_indexed=index_pipeline_result.new_docs,
+                        total_chunks=index_pipeline_result.total_chunks,
+                    )
+
+                _resolve_indexing_document_errors(
+                    cc_pair_id,
+                    index_pipeline_result.failures,
+                    documents,
                 )
+        finally:
+            cross_batch_db_lock.release()
+        safe_record_single_event(
+            IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT, index_attempt_id, lock_acquire_ms
+        )
 
-            _resolve_indexing_document_errors(
-                cc_pair_id,
-                index_pipeline_result.failures,
-                documents,
-            )
-
+        # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.
+        _finalization_start = time.monotonic()
         coordination_status = None
         # Record failures in the database
         if index_pipeline_result.failures:
@@ -1806,13 +1934,21 @@ def _docprocessing_task(
         )
         # Clean up this batch after successful processing
         storage.delete_batch_by_num(batch_num)
+        safe_record_single_event(
+            IndexAttemptStage.FINALIZATION,
+            index_attempt_id,
+            max(0, int((time.monotonic() - _finalization_start) * 1000)),
+        )
 
         # FIX: Explicitly clear document batch from memory and force garbage collection
         # This helps prevent memory accumulation across multiple batches
         # NOTE: Thread-local event loops in embedding threads are cleaned up automatically
         # via the _cleanup_thread_local decorator in search_nlp_models.py
-        del documents
-        gc.collect()
+        # NOTE: We assign None rather than `del` so the variable stays bound;
+        # the except block under PERSISTENT_INDEXING needs to safely inspect it.
+        documents = None
+        with time_stage(IndexAttemptStage.GC_COLLECT, index_attempt_id):
+            gc.collect()
 
         # FIX: Log final memory usage to track problematic tenants/CC pairs
         emit_process_memory(
@@ -1850,12 +1986,24 @@ def _docprocessing_task(
             f"elapsed={elapsed_time:.2f}s"
         )
 
-    except Exception:
+    except Exception as e:
         task_logger.exception(
             f"Document batch processing failed: batch_num={batch_num} attempt={index_attempt_id} "
         )
 
-        raise
+        if not PERSISTENT_INDEXING:
+            raise
+
+        _record_docprocessing_failure_persistent(
+            exc=e,
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            batch_num=batch_num,
+            documents=documents,
+            cross_batch_db_lock=cross_batch_db_lock,
+        )
+        return
     finally:
         if per_batch_lock and per_batch_lock.owned():
             per_batch_lock.release()

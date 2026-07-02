@@ -1,7 +1,6 @@
 "use client";
 
 import { adminSearch } from "./lib";
-import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useState, useEffect, useCallback } from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
@@ -18,8 +17,8 @@ import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { InputTypeIn } from "@opal/components";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 
 const DocumentDisplay = ({
   document,
@@ -207,7 +206,11 @@ export function Explorer({
           })}
         </div>
       )}
-      {isLoading && <ThreeDotsLoader />}
+      {isLoading && (
+        <div className="flex justify-center py-12">
+          <SvgSimpleLoader className="h-6 w-6" />
+        </div>
+      )}
     </div>
   );
 }

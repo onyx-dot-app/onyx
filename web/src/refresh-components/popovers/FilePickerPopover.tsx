@@ -4,12 +4,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Popover, PopoverMenu } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import UserFilesModal from "@/components/modals/UserFilesModal";
+import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import {
-  ProjectFile,
-  UserFileStatus,
-} from "@/app/app/projects/projectsService";
+import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { toast } from "@/hooks/useToast";
@@ -157,7 +154,11 @@ function FilePickerPopoverContents({
 
         // Rest of the files
         shouldShowMoreFilesButton && (
-          <LineItem icon={SvgMoreHorizontal} onClick={openRecentFilesModal}>
+          <LineItem
+            key="more-files"
+            icon={SvgMoreHorizontal}
+            onClick={openRecentFilesModal}
+          >
             All Recent Files
           </LineItem>
         ),
@@ -268,10 +269,10 @@ export default function FilePickerPopover({
           description="Upload files or pick from your recent files."
           recentFiles={recentFilesSnapshot}
           onPickRecent={(file) => {
-            onPickRecent && onPickRecent(file);
+            onPickRecent?.(file);
           }}
           onUnpickRecent={(file) => {
-            onUnpickRecent && onUnpickRecent(file);
+            onUnpickRecent?.(file);
           }}
           handleUploadChange={handleUploadChange}
           onView={onFileClick}
@@ -288,11 +289,11 @@ export default function FilePickerPopover({
           <FilePickerPopoverContents
             recentFiles={recentFilesSnapshot}
             onPickRecent={(file) => {
-              onPickRecent && onPickRecent(file);
+              onPickRecent?.(file);
               setOpen(false);
             }}
             onFileClick={(file) => {
-              onFileClick && onFileClick(file);
+              onFileClick?.(file);
               setOpen(false);
             }}
             triggerUploadPicker={() => {

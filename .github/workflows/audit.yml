@@ -1,0 +1,74 @@
+name: Dependency Audit
+
+concurrency:
+  group: audit-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "web/bun.lock"
+      - "web/package.json"
+      - "bun.lock"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/dependabot.yml"
+      - ".github/workflows/audit.yml"
+      - "tools/ods/**"
+  schedule:
+    # Nightly at 09:00 UTC.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read # checkout + read lockfiles
+      id-token: write # OIDC for fetching the S3 allowlist
+      security-events: write # SARIF upload (nightly) + read Dependabot alerts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        with:
+          version: "0.11.25"
+          enable-cache: false
+
+      - name: Configure AWS credentials
+        id: aws
+        continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # ratchet:aws-actions/configure-aws-credentials@v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      # PR runs gate on criticals; nightly/dispatch runs upload a SARIF report.
+      - name: Run audit (gate)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run --no-sync --with onyx-devtools ods audit --fail-on=critical
+
+      - name: Run audit (SARIF report)
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Don't fail the report job on findings; the SARIF upload surfaces them.
+        run: uv run --no-sync --with onyx-devtools ods audit --format=sarif > audit.sarif || true
+
+      - name: Upload SARIF file
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab # ratchet:github/codeql-action/upload-sarif@codeql-bundle-v2.23.5
+        with:
+          sarif_file: audit.sarif
+          category: ods-audit
