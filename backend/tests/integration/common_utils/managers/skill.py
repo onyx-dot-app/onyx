@@ -261,13 +261,17 @@ class SkillManager:
         elif is_public is True:
             org_public_permission = SkillSharePermission.VIEWER
 
-        share_req = SkillShareRequest(
-            user_shares=list(user_shares) if user_shares is not None else None,
-            group_shares=list(group_shares) if group_shares is not None else None,
-            public_permission=org_public_permission,
-        )
+        # Constructor kwargs land in model_fields_set even when None, so only
+        # pass fields the caller actually set — an explicit null
+        # public_permission would revoke org-wide access.
+        share_fields: dict[str, object] = {}
+        if user_shares is not None:
+            share_fields["user_shares"] = list(user_shares)
+        if group_shares is not None:
+            share_fields["group_shares"] = list(group_shares)
         if include_org_visibility:
-            share_req.model_fields_set.add("public_permission")
+            share_fields["public_permission"] = org_public_permission
+        share_req = SkillShareRequest.model_validate(share_fields)
 
         response = client.patch(
             f"{API_SERVER_URL}/skills/custom/{skill.id}/share",
