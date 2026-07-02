@@ -7,6 +7,7 @@ Slack signals failure with {"ok": false, "error": "..."} (still HTTP 200).
 
 import argparse
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -132,6 +133,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("channel")
     sp.add_argument("text")
 
+    sp = sub.add_parser("upload", help="upload a file and share it (write)")
+    sp.add_argument("channel")
+    sp.add_argument("file_path")
+    sp.add_argument("--title", help="file title shown in Slack")
+    sp.add_argument("--comment", help="message text posted with the file")
+    sp.add_argument("--thread-ts", dest="thread_ts", help="reply in this thread")
+
     sp = sub.add_parser("call", help="raw Slack method")
     sp.add_argument("method")
     sp.add_argument("json_args", nargs="?")
@@ -156,6 +164,50 @@ def _raw_call(method: str, json_args: str | None, as_json: bool) -> dict[str, An
             return {"ok": False, "error": "json_args_not_object"}
         args = parsed
     return _call(method, args, as_json=as_json)
+
+
+def _upload_file(
+    channel: str,
+    file_path: str,
+    title: str | None,
+    comment: str | None,
+    thread_ts: str | None,
+) -> dict[str, Any]:
+    """Share a local file using Slack's external upload flow:
+    files.getUploadURLExternal -> POST bytes to the returned URL ->
+    files.completeUploadExternal (which posts it to the channel/thread)."""
+    if not os.path.isfile(file_path):
+        return {"ok": False, "error": "file_not_found"}
+    filename = os.path.basename(file_path)
+    length = os.path.getsize(file_path)
+    reserved = _call(
+        "files.getUploadURLExternal", {"filename": filename, "length": length}
+    )
+    if not reserved.get("ok"):
+        return reserved
+    upload_url = reserved.get("upload_url")
+    file_id = reserved.get("file_id")
+    if not upload_url or not file_id:
+        return {"ok": False, "error": "missing_upload_url"}
+    with open(file_path, "rb") as fh:
+        content = fh.read()
+    put = urllib.request.Request(  # noqa: S310 — Slack-issued upload URL
+        upload_url,
+        data=content,
+        method="POST",
+        headers={"Content-Type": "application/octet-stream"},
+    )
+    with urllib.request.urlopen(put, timeout=_HTTP_TIMEOUT_SECONDS):  # noqa: S310
+        pass
+    file_entry: dict[str, Any] = {"id": file_id}
+    if title:
+        file_entry["title"] = title
+    complete: dict[str, Any] = {"files": [file_entry], "channel_id": channel}
+    if comment:
+        complete["initial_comment"] = comment
+    if thread_ts:
+        complete["thread_ts"] = thread_ts
+    return _call("files.completeUploadExternal", complete)
 
 
 def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
@@ -191,6 +243,11 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
 
     if a.cmd == "post":
         return _call("chat.postMessage", {"channel": a.channel, "text": a.text})
+
+    if a.cmd == "upload":
+        return _upload_file(
+            a.channel, a.file_path, a.title, a.comment, a.thread_ts
+        )
 
     # `call` is the only remaining subcommand (subparser is required).
     return _raw_call(a.method, a.json_args, a.as_json)
