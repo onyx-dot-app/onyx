@@ -2553,6 +2553,12 @@ class PortAttempt(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Non-terminal cancel request: the port stays active (waiter keeps blocking)
+    # until the task acks by going CANCELED itself, after its last write.
+    cancel_requested: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
     # only filled if status = FAILED (failure reason, including any traceback)
     error_msg: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 

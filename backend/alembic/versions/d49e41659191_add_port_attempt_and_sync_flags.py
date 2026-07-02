@@ -41,6 +41,12 @@ def upgrade() -> None:
         sa.Column("up_to_doc_id", sa.String(), nullable=True),
         sa.Column("docs_ported", sa.Integer(), server_default="0", nullable=False),
         sa.Column("last_progress_time", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "cancel_requested",
+            sa.Boolean(),
+            server_default=sa.false(),
+            nullable=False,
+        ),
         sa.Column("error_msg", sa.Text(), nullable=True),
         sa.Column("celery_task_id", sa.String(), nullable=True),
         sa.Column(

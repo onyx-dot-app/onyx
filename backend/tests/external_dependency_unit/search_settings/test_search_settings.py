@@ -150,10 +150,15 @@ def baseline_search_settings(
     )
 
 
+# port-flow swap gate: no cc_pair requires porting in this test, so it swaps now
+@patch(
+    "onyx.db.swap_index.fetch_indexable_standard_connector_credential_pair_ids",
+    new=lambda *_a, **_k: [],
+)
 @patch("onyx.db.swap_index.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
-@patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
+@patch("onyx.indexing.indexing_pipeline.get_contextual_rag_llm_for_search_settings")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
 def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     mock_index_handler: MagicMock,
@@ -165,8 +170,8 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     db_session: Session,
 ) -> None:
     """After creating FUTURE settings and swapping to PRESENT,
-    fetch_default_contextual_rag_model should match the PRESENT settings
-    and run_indexing_pipeline should call get_llm_for_contextual_rag."""
+    fetch_default_contextual_rag_model should match the PRESENT settings and
+    run_indexing_pipeline should resolve the LLM from those PRESENT settings."""
     mc_id = _create_llm_provider_and_model(
         db_session=db_session,
         provider_name=TEST_PROVIDER_NAME,
@@ -183,7 +188,9 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
     default_model = fetch_default_contextual_rag_model(db_session)
     assert default_model is None
 
-    # Swap FUTURE → PRESENT (with 0 cc-pairs, REINDEX swaps immediately)
+    # Swap FUTURE → PRESENT. New settings use the port flow, whose swap gate waits
+    # for each portable cc_pair's port; none require porting here (patched empty),
+    # so the swap proceeds immediately.
     mock_get_all_doc_indices.return_value = []
     old_settings = check_and_perform_index_swap(db_session)
     assert old_settings is not None, "Swap should have occurred"
@@ -195,13 +202,21 @@ def test_indexing_pipeline_uses_contextual_rag_settings_from_create(
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
-    mock_get_llm.assert_called_once_with(mc_id)
+    # now resolved from the SearchSettings object, not a bare model-config id
+    mock_get_llm.assert_called_once()
+    (called_settings,) = mock_get_llm.call_args.args
+    assert called_settings.contextual_rag_model_configuration_id == mc_id
 
 
+# port-flow swap gate: no cc_pair requires porting in this test, so it swaps now
+@patch(
+    "onyx.db.swap_index.fetch_indexable_standard_connector_credential_pair_ids",
+    new=lambda *_a, **_k: [],
+)
 @patch("onyx.db.swap_index.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
-@patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
+@patch("onyx.indexing.indexing_pipeline.get_contextual_rag_llm_for_search_settings")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
 def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     mock_index_handler: MagicMock,
@@ -237,7 +252,9 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
     default_model = fetch_default_contextual_rag_model(db_session)
     assert default_model is None
 
-    # Swap FUTURE → PRESENT (with 0 cc-pairs, REINDEX swaps immediately)
+    # Swap FUTURE → PRESENT. New settings use the port flow, whose swap gate waits
+    # for each portable cc_pair's port; none require porting here (patched empty),
+    # so the swap proceeds immediately.
     mock_get_all_doc_indices.return_value = []
     old_settings = check_and_perform_index_swap(db_session)
     assert old_settings is not None, "Swap should have occurred"
@@ -262,12 +279,15 @@ def test_indexing_pipeline_uses_updated_contextual_rag_settings(
 
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
-    mock_get_llm.assert_called_once_with(updated_mc_id)
+    # resolved from the updated PRESENT SearchSettings
+    mock_get_llm.assert_called_once()
+    (called_settings,) = mock_get_llm.call_args.args
+    assert called_settings.contextual_rag_model_configuration_id == updated_mc_id
 
 
 @patch("onyx.server.manage.search_settings.get_all_document_indices")
 @patch("onyx.server.manage.search_settings.get_default_document_index")
-@patch("onyx.indexing.indexing_pipeline.get_llm_for_contextual_rag")
+@patch("onyx.indexing.indexing_pipeline.get_contextual_rag_llm_for_search_settings")
 @patch("onyx.indexing.indexing_pipeline.index_doc_batch_with_handler")
 def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     mock_index_handler: MagicMock,
@@ -277,8 +297,8 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     baseline_search_settings: None,  # noqa: ARG001
     db_session: Session,
 ) -> None:
-    """When contextual RAG is disabled in search settings,
-    get_llm_for_contextual_rag should not be called."""
+    """When contextual RAG is disabled in search settings, the pipeline should not
+    resolve a contextual-RAG LLM at all."""
     mc_id = _create_llm_provider_and_model(
         db_session=db_session,
         provider_name=TEST_PROVIDER_NAME,

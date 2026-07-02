@@ -56,7 +56,10 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         self.index_attempt_metadata = index_attempt_metadata
 
     def prepare(
-        self, documents: list[Document], ignore_time_skip: bool
+        self,
+        documents: list[Document],
+        ignore_time_skip: bool,
+        index_to_secondary: bool,
     ) -> DocumentBatchPrepareContext | None:
         """Upsert docs, map CC pairs, return context or mark as indexed if no-op.
 
@@ -69,6 +72,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
                 index_attempt_metadata=self.index_attempt_metadata,
                 db_session=db_session,
                 ignore_time_skip=ignore_time_skip,
+                index_to_secondary=index_to_secondary,
             )
 
             if not context:
