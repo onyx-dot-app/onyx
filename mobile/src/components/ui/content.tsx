@@ -68,7 +68,7 @@ const MD_PRESETS = {
 
 interface ContentProps {
   icon?: IconFunctionComponent;
-  // Custom leading element (e.g. an AgentAvatar) for the icon slot; wins over `icon`.
+  // custom leading element (e.g. AgentAvatar); wins over `icon`
   leading?: ReactNode;
   title: string;
   description?: string;

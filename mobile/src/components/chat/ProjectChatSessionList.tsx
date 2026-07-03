@@ -49,7 +49,7 @@ export function ProjectChatSessionList({
       ) : (
         sorted.map((chat) => {
           const updated = timeAgo(chat.time_updated);
-          // Web: the agent avatar only for a non-featured custom agent; else a bubble.
+          // agent avatar only for a non-featured custom agent; else a bubble
           const personaId = chat.persona_id;
           const isFeatured =
             personaId != null ? personaIdToFeatured[personaId] : undefined;

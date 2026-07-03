@@ -15,9 +15,7 @@ interface LineItemButtonProps extends ContentActionProps {
   className?: string;
 }
 
-// RN port of Opal `LineItemButton`: a tappable, full-width rounded row wrapping a
-// `ContentAction`. Web's select-state foreground shift is approximated by a
-// background change (touch has no hover); the hover Tooltip is dropped.
+// RN port of Opal LineItemButton. No hover tooltip; select state shows as a background change.
 export function LineItemButton({
   onPress,
   href,

@@ -35,9 +35,8 @@ export interface Project {
   chat_sessions: ChatSessionSummary[];
 }
 
-// `GET /user/projects/{id}/details` — project + files inline. The featured map
-// tells a chat row whether to show its agent's avatar (non-featured custom) or a
-// generic bubble icon.
+// `GET /user/projects/{id}/details` — project + files inline; featured map drives
+// a chat row's avatar-vs-bubble choice.
 export interface ProjectDetails {
   project: Project;
   files: ProjectFile[] | null;
