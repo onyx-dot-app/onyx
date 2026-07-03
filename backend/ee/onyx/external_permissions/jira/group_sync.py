@@ -1,3 +1,4 @@
+import json
 from collections.abc import Generator
 from typing import Any
 
@@ -17,6 +18,37 @@ _GROUP_MEMBER_PAGE_SIZE = 50
 # The GET /group/member endpoint was introduced in Jira 6.0.
 # Jira versions older than 6.0 do not have group management REST APIs at all.
 _MIN_JIRA_VERSION_FOR_GROUP_MEMBER = "6.0"
+
+
+class _JiraGroupNotFoundError(RuntimeError):
+    pass
+
+
+def _get_jira_error_text(error: JIRAError) -> str:
+    raw_text = getattr(error, "text", "")
+    if not isinstance(raw_text, str):
+        return str(raw_text)
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return raw_text
+
+    if not isinstance(payload, dict):
+        return raw_text
+
+    error_messages = payload.get("errorMessages")
+    if isinstance(error_messages, list):
+        return "; ".join(str(message) for message in error_messages)
+    if error_messages:
+        return str(error_messages)
+
+    return raw_text
+
+
+def _is_group_not_found_error(error: JIRAError) -> bool:
+    error_text = _get_jira_error_text(error).lower()
+    return "the group named" in error_text and "does not exist" in error_text
 
 
 def _fetch_group_member_page(
@@ -47,6 +79,11 @@ def _fetch_group_member_page(
         )
     except JIRAError as e:
         if e.status_code == 404:
+            if _is_group_not_found_error(e):
+                raise _JiraGroupNotFoundError(
+                    f"Jira group '{group_name}' no longer exists"
+                ) from e
+
             raise RuntimeError(
                 f"GET /group/member returned 404 for group '{group_name}'. "
                 f"This endpoint requires Jira {_MIN_JIRA_VERSION_FOR_GROUP_MEMBER}+. "
@@ -72,6 +109,13 @@ def _get_group_member_emails(
     while True:
         try:
             page = _fetch_group_member_page(jira_client, group_name, start_at)
+        except _JiraGroupNotFoundError:
+            logger.warning(
+                "Jira returned group %s from groups() but /group/member says it no "
+                "longer exists. Skipping.",
+                group_name,
+            )
+            return set()
         except Exception as e:
             logger.error("Error fetching members for group %s: %s", group_name, e)
             raise
