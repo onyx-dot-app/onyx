@@ -35,6 +35,57 @@ def gitlab_connector(
     return connector
 
 
+@pytest.fixture
+def gitlab_connector_with_branch(
+    test_secrets: dict[TestSecret, str],
+) -> GitlabConnector:
+    """Same test project, but pinned to a non-default branch to verify the
+    `branch` config option is respected end-to-end."""
+    connector = GitlabConnector(
+        project_owner="onyx2895818",
+        project_name="onyx",
+        include_mrs=False,
+        include_issues=False,
+        include_code_files=True,
+        branch="test-branch",  # must exist in the test fixture repo
+    )
+    gitlab_url = os.environ.get("GITLAB_URL", "https://gitlab.com")
+    gitlab_token = test_secrets[TestSecret.GITLAB_ACCESS_TOKEN]
+
+    connector.load_credentials(
+        {
+            "gitlab_access_token": gitlab_token,
+            "gitlab_url": gitlab_url,
+        }
+    )
+    return connector
+
+
+def test_gitlab_connector_branch_override(
+    gitlab_connector_with_branch: GitlabConnector,
+) -> None:
+    doc_batches = gitlab_connector_with_branch.load_from_state()
+    docs = [
+        doc
+        for doc in itertools.chain(*doc_batches)
+        if not isinstance(doc, HierarchyNode)
+    ]
+
+    assert len(docs) > 0
+    for doc in docs:
+        assert doc.metadata["type"] == "CodeFile"
+        # Blob URLs should reference the configured branch, not the
+        # repository's default branch.
+        assert "/-/blob/test-branch/" in doc.sections[0].link
+
+
+def test_gitlab_connector_no_branch_uses_default(
+    gitlab_connector: GitlabConnector,
+) -> None:
+    """Regression check: omitting `branch` must keep using the default branch."""
+    assert gitlab_connector.branch is None
+
+
 def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
     doc_batches = gitlab_connector.load_from_state()
     docs = list(itertools.chain(*doc_batches))

@@ -10,6 +10,7 @@ from typing import TypeVar
 
 import gitlab
 import pytz
+from gitlab.exceptions import GitlabGetError
 from gitlab.v4.objects import Project
 
 from onyx.configs.app_configs import GITLAB_CONNECTOR_INCLUDE_CODE_FILES
@@ -94,24 +95,39 @@ def _convert_issue_to_document(issue: Any) -> Document:
 
 
 def _convert_code_to_document(
-    project: Project, file: Any, url: str, projectName: str, projectOwner: str
+    project: Project,
+    file: Any,
+    url: str,
+    projectName: str,
+    projectOwner: str,
+    branch: str | None = None,
 ) -> Document:
-    # Dynamically get the default branch from the project object
-    default_branch = project.default_branch
+    # Use the explicitly configured branch if provided, otherwise fall back
+    # to the project's default branch (preserves prior behavior).
+    target_branch = branch or project.default_branch
 
-    # Fetch the file content using the correct branch
-    file_content_obj = project.files.get(
-        file_path=file["path"],
-        ref=default_branch,  # Use the default branch
-    )
+    # Fetch the file content using the resolved branch
+    try:
+        file_content_obj = project.files.get(
+            file_path=file["path"],
+            ref=target_branch,
+        )
+    except GitlabGetError as e:
+        if e.response_code == 404:
+            raise ValueError(
+                f"Could not fetch '{file['path']}' from branch '{target_branch}' in "
+                f"project '{projectOwner}/{projectName}'. Check that the branch exists "
+                "and that the configured access token has permission to read it."
+            ) from e
+        raise
     try:
         file_content = file_content_obj.decode().decode("utf-8")
     except UnicodeDecodeError:
         file_content = file_content_obj.decode().decode("latin-1")
 
-    # Construct the file URL dynamically using the default branch
+    # Construct the file URL dynamically using the resolved branch
     file_url = (
-        f"{url}/{projectOwner}/{projectName}/-/blob/{default_branch}/{file['path']}"
+        f"{url}/{projectOwner}/{projectName}/-/blob/{target_branch}/{file['path']}"
     )
 
     # Create and return a Document object
@@ -142,6 +158,7 @@ class GitlabConnector(LoadConnector, PollConnector):
         include_mrs: bool = True,
         include_issues: bool = True,
         include_code_files: bool = GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
+        branch: str | None = None,
     ) -> None:
         self.project_owner = project_owner
         self.project_name = project_name
@@ -150,6 +167,9 @@ class GitlabConnector(LoadConnector, PollConnector):
         self.include_mrs = include_mrs
         self.include_issues = include_issues
         self.include_code_files = include_code_files
+        # Normalize "" (e.g. from an empty form field) to None so it falls
+        # back cleanly to the project's default branch.
+        self.branch = branch or None
         self.gitlab_client: gitlab.Gitlab | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -173,7 +193,19 @@ class GitlabConnector(LoadConnector, PollConnector):
             queue = deque([""])  # Start with the root directory
             while queue:
                 current_path = queue.popleft()
-                files = project.repository_tree(path=current_path, all=True)
+                try:
+                    files = project.repository_tree(
+                        path=current_path, ref=self.branch, all=True
+                    )
+                except GitlabGetError as e:
+                    if e.response_code == 404 and self.branch:
+                        raise ValueError(
+                            f"Could not list files from branch '{self.branch}' in "
+                            f"project '{self.project_owner}/{self.project_name}'. "
+                            "Check that the branch exists and that the configured "
+                            "access token has permission to read it."
+                        ) from e
+                    raise
                 for file_batch in _batch_gitlab_objects(files, self.batch_size):
                     code_doc_batch: list[Document | HierarchyNode] = []
                     for file in file_batch:
@@ -188,6 +220,7 @@ class GitlabConnector(LoadConnector, PollConnector):
                                     self.gitlab_client.url,
                                     self.project_name,
                                     self.project_owner,
+                                    self.branch,
                                 )
                             )
                         elif file["type"] == "tree":
@@ -264,6 +297,7 @@ if __name__ == "__main__":
         include_mrs=True,
         include_issues=True,
         include_code_files=GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
+        branch=os.environ.get("BRANCH"),  # optional, defaults to the default branch
     )
 
     connector.load_credentials(
