@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import * as Yup from "yup";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { adminDeleteCredential } from "@/lib/credential";
 import { setupGoogleDriveOAuth } from "@/lib/googleDrive";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { Form, Formik } from "formik";
@@ -12,58 +11,24 @@ import { Button, Text } from "@opal/components";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import {
-  Credential,
-  GoogleDriveCredentialJson,
-  GoogleDriveServiceAccountCredentialJson,
-} from "@/lib/connectors/credentials";
-import {
   parseOauthAppCredentialJson,
   refreshAllGoogleData,
 } from "@/lib/googleConnector";
 import { ValidSources } from "@/lib/types";
-import { FiCheck } from "react-icons/fi";
 import { markdown } from "@opal/utils";
 
 interface DriveCredentialSectionProps {
-  googleDrivePublicUploadedCredential?: Credential<GoogleDriveCredentialJson>;
-  googleDriveServiceAccountCredential?: Credential<GoogleDriveServiceAccountCredentialJson>;
-  appCredentialData?: { client_id: string };
   refreshCredentials: () => void;
-  connectorAssociated: boolean;
   user: User | null;
 }
 
-async function handleRevokeAccess(
-  connectorAssociated: boolean,
-  existingCredential:
-    | Credential<GoogleDriveCredentialJson>
-    | Credential<GoogleDriveServiceAccountCredentialJson>,
-  refreshCredentials: () => void
-) {
-  if (connectorAssociated) {
-    const message =
-      "Cannot revoke the Google Drive credential while any connector is still associated with the credential. " +
-      "Please delete all associated connectors, then try again.";
-    toast.error(message);
-    return;
-  }
-
-  await adminDeleteCredential(existingCredential.id);
-  toast.success("Successfully revoked the Google Drive credential!");
-
-  refreshCredentials();
-}
-
 export const DriveAuthSection = ({
-  googleDrivePublicUploadedCredential,
-  googleDriveServiceAccountCredential,
-  appCredentialData,
   refreshCredentials,
-  connectorAssociated,
   user,
 }: DriveCredentialSectionProps) => {
   const router = useRouter();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [justCreated, setJustCreated] = useState(false);
   const [serviceAccountKey, setServiceAccountKey] = useState<Record<
     string,
     unknown
@@ -72,56 +37,18 @@ export const DriveAuthSection = ({
     string,
     unknown
   > | null>(null);
-  const [
-    localGoogleDrivePublicCredential,
-    setLocalGoogleDrivePublicCredential,
-  ] = useState(googleDrivePublicUploadedCredential);
-  const [
-    localGoogleDriveServiceAccountCredential,
-    setLocalGoogleDriveServiceAccountCredential,
-  ] = useState(googleDriveServiceAccountCredential);
-
-  // Update local state when props change
-  useEffect(() => {
-    setLocalGoogleDrivePublicCredential(googleDrivePublicUploadedCredential);
-    setLocalGoogleDriveServiceAccountCredential(
-      googleDriveServiceAccountCredential
-    );
-  }, [
-    googleDrivePublicUploadedCredential,
-    googleDriveServiceAccountCredential,
-  ]);
-
-  const existingCredential =
-    localGoogleDrivePublicCredential ||
-    localGoogleDriveServiceAccountCredential;
-  if (existingCredential) {
+  // Confirm only a credential created in this session. A pre-existing one must
+  // not gate the form, or a second could never be created. Revoke is in the list.
+  if (justCreated) {
     return (
-      <div className="w-full">
-        <div className="mt-4">
-          <div className="py-3 px-4 bg-blue-50/30 dark:bg-blue-900/5 rounded-sm mb-4 flex items-start">
-            <FiCheck className="text-blue-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <span className="font-medium block">Authentication Complete</span>
-              <p className="text-sm mt-1 text-text-500 dark:text-text-400 wrap-break-word">
-                Your Google Drive credentials have been successfully uploaded
-                and authenticated.
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="danger"
-            onClick={async () => {
-              handleRevokeAccess(
-                connectorAssociated,
-                existingCredential,
-                refreshCredentials
-              );
-            }}
-          >
-            Revoke Access
-          </Button>
-        </div>
+      <div className="mt-4 w-full space-y-1 rounded-sm border border-border-02 bg-background-tint-02 px-4 py-3">
+        <Text as="p" font="main-ui-action">
+          Authentication Complete
+        </Text>
+        <Text as="p" font="secondary-body" color="text-03">
+          Your Google Drive credential was created. Manage or revoke it from the
+          credential list.
+        </Text>
       </div>
     );
   }
@@ -249,6 +176,7 @@ export const DriveAuthSection = ({
                 toast.success(
                   "Successfully created service account credential"
                 );
+                setJustCreated(true);
                 refreshCredentials();
               } else {
                 const errorMsg = await response.text();

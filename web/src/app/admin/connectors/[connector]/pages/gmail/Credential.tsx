@@ -6,7 +6,6 @@ import React, { useState, useEffect } from "react";
 import * as Yup from "yup";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { adminDeleteCredential } from "@/lib/credential";
 import { setupGmailOAuth } from "@/lib/gmail";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { CRAFT_OAUTH_COOKIE_NAME } from "@/app/craft/v1/constants";
@@ -14,67 +13,28 @@ import Cookies from "js-cookie";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
 import {
-  Credential,
-  GmailCredentialJson,
-  GmailServiceAccountCredentialJson,
-} from "@/lib/connectors/credentials";
-import {
   parseOauthAppCredentialJson,
   refreshAllGoogleData,
 } from "@/lib/googleConnector";
 import { ValidSources } from "@/lib/types";
-import { FiCheck } from "react-icons/fi";
 import { markdown } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
 
 interface GmailCredentialSectionProps {
-  gmailPublicCredential?: Credential<GmailCredentialJson>;
-  gmailServiceAccountCredential?: Credential<GmailServiceAccountCredentialJson>;
   refreshCredentials: () => void;
-  connectorExists: boolean;
   user: User | null;
   buildMode?: boolean;
   onOAuthRedirect?: () => void;
-  onCredentialCreated?: (
-    credential: Credential<
-      GmailCredentialJson | GmailServiceAccountCredentialJson
-    >
-  ) => void;
-}
-
-async function handleRevokeAccess(
-  connectorExists: boolean,
-  existingCredential:
-    | Credential<GmailCredentialJson>
-    | Credential<GmailServiceAccountCredentialJson>,
-  refreshCredentials: () => void
-) {
-  if (connectorExists) {
-    const message =
-      "Cannot revoke the Gmail credential while any connector is still associated with the credential. " +
-      "Please delete all associated connectors, then try again.";
-    toast.error(message);
-    return;
-  }
-
-  await adminDeleteCredential(existingCredential.id);
-  toast.success("Successfully revoked the Gmail credential!");
-
-  refreshCredentials();
 }
 
 export const GmailAuthSection = ({
-  gmailPublicCredential,
-  gmailServiceAccountCredential,
   refreshCredentials,
-  connectorExists,
   user,
   buildMode = false,
   onOAuthRedirect,
-  onCredentialCreated,
 }: GmailCredentialSectionProps) => {
   const router = useRouter();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [justCreated, setJustCreated] = useState(false);
   const [serviceAccountKey, setServiceAccountKey] = useState<Record<
     string,
     unknown
@@ -83,56 +43,18 @@ export const GmailAuthSection = ({
     string,
     unknown
   > | null>(null);
-  const [localGmailPublicCredential, setLocalGmailPublicCredential] = useState(
-    gmailPublicCredential
-  );
-  const [
-    localGmailServiceAccountCredential,
-    setLocalGmailServiceAccountCredential,
-  ] = useState(gmailServiceAccountCredential);
-
-  // Update local state when props change
-  useEffect(() => {
-    setLocalGmailPublicCredential(gmailPublicCredential);
-    setLocalGmailServiceAccountCredential(gmailServiceAccountCredential);
-  }, [gmailPublicCredential, gmailServiceAccountCredential]);
-
-  const existingCredential =
-    localGmailPublicCredential || localGmailServiceAccountCredential;
-  if (existingCredential) {
+  // Confirm only a credential created in this session. A pre-existing one must
+  // not gate the form, or a second could never be created. Revoke is in the list.
+  if (justCreated) {
     return (
-      <div className="w-full">
-        <div className="mt-4">
-          <div className="py-3 px-4 bg-blue-50/30 dark:bg-blue-900/5 rounded-sm mb-4 flex items-start">
-            <FiCheck className="text-blue-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <span className="font-medium block">Authentication Complete</span>
-              <p className="text-sm mt-1 text-text-500 dark:text-text-400 wrap-break-word">
-                Your Gmail credentials have been successfully uploaded and
-                authenticated.
-              </p>
-            </div>
-          </div>
-          <Section flexDirection="row" justifyContent="between" height="fit">
-            <Button
-              variant="danger"
-              onClick={async () => {
-                handleRevokeAccess(
-                  connectorExists,
-                  existingCredential,
-                  refreshCredentials
-                );
-              }}
-            >
-              Revoke Access
-            </Button>
-            {buildMode && onCredentialCreated && (
-              <Button onClick={() => onCredentialCreated(existingCredential)}>
-                Continue
-              </Button>
-            )}
-          </Section>
-        </div>
+      <div className="mt-4 w-full space-y-1 rounded-sm border border-border-02 bg-background-tint-02 px-4 py-3">
+        <Text as="p" font="main-ui-action">
+          Authentication Complete
+        </Text>
+        <Text as="p" font="secondary-body" color="text-03">
+          Your Gmail credential was created. Manage or revoke it from the
+          credential list.
+        </Text>
       </div>
     );
   }
@@ -261,6 +183,7 @@ export const GmailAuthSection = ({
                 toast.success(
                   "Successfully created service account credential"
                 );
+                setJustCreated(true);
                 refreshCredentials();
               } else {
                 const errorMsg = await response.text();
