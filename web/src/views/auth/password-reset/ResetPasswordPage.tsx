@@ -32,6 +32,7 @@ export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
   const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
+  const email = searchParams?.get("email");
   const { logoUrl } = useSettings();
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function ResetPasswordPage() {
 
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) redirect("/auth/login");
   if (!token) redirect("/auth/forgot-password" as Route);
+  if (!email) redirect("/auth/login" as Route);
 
   async function handleSubmit(values: typeof initialValues) {
     try {
@@ -67,6 +69,7 @@ export default function ResetPasswordPage() {
   return (
     <AuthLayouts.Card
       title="Reset Password"
+      description={`for account ${email}`}
       bottomPrompt={backToLoginOrSignupCopy()}
       logoSrc={logoUrl}
     >
@@ -81,16 +84,16 @@ export default function ResetPasswordPage() {
               <InputVertical title="New Password" withLabel="password">
                 <PasswordInputTypeInField
                   name="password"
-                  placeholder="Enter your new password"
+                  placeholder="Choose your password"
                 />
               </InputVertical>
               <InputVertical
-                title="Confirm New Password"
+                title="Confirm Password"
                 withLabel="confirmPassword"
               >
                 <PasswordInputTypeInField
                   name="confirmPassword"
-                  placeholder="Confirm your new password"
+                  placeholder="Repeat your password"
                 />
               </InputVertical>
             </AuthLayouts.Fields>
