@@ -1,4 +1,3 @@
-import traceback
 from collections.abc import Callable
 from collections.abc import Generator
 
@@ -61,37 +60,18 @@ def sharepoint_group_sync(
     for site_descriptor in site_descriptors:
         logger.debug("Processing site: %s", site_descriptor.url)
 
-        try:
-            ctx = ClientContext(site_descriptor.url).with_access_token(
-                lambda: acquire_token_for_rest(
-                    msal_app, sp_tenant_domain, sp_domain_suffix
-                )
-            )
+        ctx = ClientContext(site_descriptor.url).with_access_token(
+            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain, sp_domain_suffix)
+        )
 
-            external_groups = get_sharepoint_external_groups(
-                ctx,
-                connector.graph_client,
-                graph_api_base=connector.graph_api_base,
-                record_group_sync_failure=record_group_sync_failure,
-                get_access_token=connector._get_graph_access_token,
-                enumerate_all_ad_groups=enumerate_all,
-            )
-        except Exception as e:
-            logger.warning(
-                "Skipping SharePoint site %s after group sync failure: %s",
-                site_descriptor.url,
-                e,
-            )
-            record_group_sync_failure(
-                ExternalGroupSyncFailure(
-                    external_group_id=site_descriptor.url,
-                    external_group_name=site_descriptor.url,
-                    failure_message=str(e),
-                    full_exception_trace=traceback.format_exc(),
-                    exception=e,
-                )
-            )
-            continue
+        external_groups = get_sharepoint_external_groups(
+            ctx,
+            connector.graph_client,
+            graph_api_base=connector.graph_api_base,
+            record_group_sync_failure=record_group_sync_failure,
+            get_access_token=connector._get_graph_access_token,
+            enumerate_all_ad_groups=enumerate_all,
+        )
 
         # Yield each group
         for group in external_groups:

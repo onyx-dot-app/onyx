@@ -1,4 +1,3 @@
-import traceback
 from collections.abc import Callable
 from collections.abc import Generator
 
@@ -17,7 +16,7 @@ logger = setup_logger()
 def github_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
-    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
 ) -> Generator[ExternalUserGroup, None, None]:
     github_connector: GithubConnector = GithubConnector(
         **cc_pair.connector.connector_specific_config
@@ -45,22 +44,8 @@ def github_group_sync(
         repos = github_connector.get_all_repos(github_connector.github_client)
 
     for repo in repos:
-        try:
-            for external_group in get_external_user_group(
-                repo, github_connector.github_client
-            ):
-                logger.info("External group: %s", external_group)
-                yield external_group
-        except Exception as e:
-            logger.warning(
-                "Error processing repository %s (%s): %s", repo.id, repo.name, e
-            )
-            record_group_sync_failure(
-                ExternalGroupSyncFailure(
-                    external_group_id=str(repo.id),
-                    external_group_name=repo.name,
-                    failure_message=str(e),
-                    full_exception_trace=traceback.format_exc(),
-                    exception=e,
-                )
-            )
+        for external_group in get_external_user_group(
+            repo, github_connector.github_client
+        ):
+            logger.info("External group: %s", external_group)
+            yield external_group
