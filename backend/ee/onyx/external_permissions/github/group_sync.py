@@ -1,7 +1,9 @@
+from collections.abc import Callable
 from collections.abc import Generator
 
 from github import Repository
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.github.utils import get_external_user_group
 from onyx.connectors.github.connector import GithubConnector
@@ -14,6 +16,7 @@ logger = setup_logger()
 def github_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
 ) -> Generator[ExternalUserGroup, None, None]:
     github_connector: GithubConnector = GithubConnector(
         **cc_pair.connector.connector_specific_config
@@ -41,13 +44,8 @@ def github_group_sync(
         repos = github_connector.get_all_repos(github_connector.github_client)
 
     for repo in repos:
-        try:
-            for external_group in get_external_user_group(
-                repo, github_connector.github_client
-            ):
-                logger.info("External group: %s", external_group)
-                yield external_group
-        except Exception as e:
-            logger.error(
-                "Error processing repository %s (%s): %s", repo.id, repo.name, e
-            )
+        for external_group in get_external_user_group(
+            repo, github_connector.github_client
+        ):
+            logger.info("External group: %s", external_group)
+            yield external_group

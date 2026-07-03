@@ -1,8 +1,11 @@
+import traceback
+from collections.abc import Callable
 from collections.abc import Generator
 
 from googleapiclient.errors import HttpError
 from pydantic import BaseModel
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.google_drive.folder_retrieval import (
     get_folder_permissions_by_ids,
@@ -420,6 +423,7 @@ def _build_onyx_groups(
 def gdrive_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],
 ) -> Generator[ExternalUserGroup, None, None]:
     # Initialize connector and build credential/service objects
     google_drive_connector = GoogleDriveConnector(
@@ -446,7 +450,25 @@ def gdrive_group_sync(
     # Each google group is an Onyx group, yield those
     group_email_to_member_emails_map: dict[str, list[str]] = {}
     for group_email in all_group_emails:
-        onyx_group = _google_group_to_onyx_group(admin_service, group_email)
+        try:
+            onyx_group = _google_group_to_onyx_group(admin_service, group_email)
+        except Exception as e:
+            logger.warning(
+                "Skipping Google group %s after member sync failure: %s",
+                group_email,
+                e,
+            )
+            record_group_sync_failure(
+                ExternalGroupSyncFailure(
+                    external_group_id=group_email,
+                    external_group_name=group_email,
+                    failure_message=str(e),
+                    full_exception_trace=traceback.format_exc(),
+                    exception=e,
+                )
+            )
+            continue
+
         group_email_to_member_emails_map[group_email] = onyx_group.user_emails
         yield onyx_group
 

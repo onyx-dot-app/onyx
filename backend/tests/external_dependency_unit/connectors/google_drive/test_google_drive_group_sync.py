@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from collections.abc import Generator
 from unittest.mock import Mock
 from unittest.mock import patch
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.background.celery.tasks.external_group_syncing.tasks import (
     _perform_external_group_sync,
 )
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
@@ -130,6 +132,7 @@ class TestPerformExternalGroupSync:
         def mock_group_sync_func(
             tenant_id: str,  # noqa: ARG001
             cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+            record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
         ) -> Generator[ExternalUserGroup, None, None]:
             for group in mock_groups:
                 yield group
@@ -199,6 +202,7 @@ class TestPerformExternalGroupSync:
         def initial_group_sync_func(
             tenant_id: str,  # noqa: ARG001
             cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+            record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
         ) -> Generator[ExternalUserGroup, None, None]:
             yield ExternalUserGroup(id="group1", user_emails=[user1.email, user2.email])
             yield ExternalUserGroup(id="group2", user_emails=[user2.email])
@@ -233,6 +237,7 @@ class TestPerformExternalGroupSync:
             def updated_group_sync_func(
                 tenant_id: str,  # noqa: ARG001
                 cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+                record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
             ) -> Generator[ExternalUserGroup, None, None]:
                 # group1 now has user1 and user3 (user2 removed, user3 added)
                 yield ExternalUserGroup(
@@ -299,6 +304,7 @@ class TestPerformExternalGroupSync:
         def initial_group_sync_func(
             tenant_id: str,  # noqa: ARG001
             cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+            record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
         ) -> Generator[ExternalUserGroup, None, None]:
             yield ExternalUserGroup(id="group1", user_emails=[user1.email, user2.email])
             yield ExternalUserGroup(id="group2", user_emails=[user1.email])
@@ -338,6 +344,7 @@ class TestPerformExternalGroupSync:
             def updated_group_sync_func(
                 tenant_id: str,  # noqa: ARG001
                 cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+                record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
             ) -> Generator[ExternalUserGroup, None, None]:
                 # Only group1 remains, group2 and public_group are removed
                 yield ExternalUserGroup(
@@ -387,6 +394,7 @@ class TestPerformExternalGroupSync:
         def initial_group_sync_func(
             tenant_id: str,  # noqa: ARG001
             cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+            record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
         ) -> Generator[ExternalUserGroup, None, None]:
             yield ExternalUserGroup(id="group1", user_emails=[user1.email])
 
@@ -415,6 +423,7 @@ class TestPerformExternalGroupSync:
             def empty_group_sync_func(
                 tenant_id: str,  # noqa: ARG001
                 cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+                record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
             ) -> Generator[ExternalUserGroup, None, None]:
                 # No groups yielded
                 return
@@ -448,6 +457,7 @@ class TestPerformExternalGroupSync:
         def large_group_sync_func(
             tenant_id: str,  # noqa: ARG001
             cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+            record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
         ) -> Generator[ExternalUserGroup, None, None]:
             yield ExternalUserGroup(
                 id="large_group", user_emails=[user.email for user in users]
@@ -488,6 +498,7 @@ class TestPerformExternalGroupSync:
         def mixed_group_sync_func(
             tenant_id: str,  # noqa: ARG001
             cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+            record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],  # noqa: ARG001
         ) -> Generator[ExternalUserGroup, None, None]:
             yield ExternalUserGroup(
                 id="regular_group", user_emails=[user1.email, user2.email]

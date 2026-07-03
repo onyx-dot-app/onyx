@@ -1,7 +1,9 @@
+from collections.abc import Callable
 from collections.abc import Generator
 
 from office365.sharepoint.client_context import ClientContext
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
@@ -18,6 +20,7 @@ logger = setup_logger()
 def sharepoint_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],
 ) -> Generator[ExternalUserGroup, None, None]:
     """Sync SharePoint groups and their members"""
 
@@ -65,6 +68,7 @@ def sharepoint_group_sync(
             ctx,
             connector.graph_client,
             graph_api_base=connector.graph_api_base,
+            record_group_sync_failure=record_group_sync_failure,
             get_access_token=connector._get_graph_access_token,
             enumerate_all_ad_groups=enumerate_all,
         )

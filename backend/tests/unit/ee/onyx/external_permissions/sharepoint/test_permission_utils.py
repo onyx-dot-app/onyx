@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
+from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     _enumerate_ad_groups_paginated,
 )
@@ -35,6 +37,10 @@ GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
 
 def _fake_token() -> str:
     return "fake-token"
+
+
+def _fail_on_group_sync_failure(failure: ExternalGroupSyncFailure) -> None:
+    pytest.fail(f"Unexpected group sync failure: {failure}")
 
 
 def _make_graph_page(
@@ -131,7 +137,10 @@ def test_enumerate_ad_groups_yields_groups(mock_get: MagicMock) -> None:
 
     results = list(
         _enumerate_ad_groups_paginated(
-            _fake_token, already_resolved=set(), graph_api_base=GRAPH_API_BASE
+            _fake_token,
+            already_resolved=set(),
+            graph_api_base=GRAPH_API_BASE,
+            record_group_sync_failure=_fail_on_group_sync_failure,
         )
     )
 
@@ -152,6 +161,7 @@ def test_enumerate_ad_groups_skips_already_resolved(mock_get: MagicMock) -> None
             _fake_token,
             already_resolved={"Engineering_g1"},
             graph_api_base=GRAPH_API_BASE,
+            record_group_sync_failure=_fail_on_group_sync_failure,
         )
     )
     assert results == []
@@ -166,7 +176,10 @@ def test_enumerate_ad_groups_circuit_breaker(mock_get: MagicMock) -> None:
 
     results = list(
         _enumerate_ad_groups_paginated(
-            _fake_token, already_resolved=set(), graph_api_base=GRAPH_API_BASE
+            _fake_token,
+            already_resolved=set(),
+            graph_api_base=GRAPH_API_BASE,
+            record_group_sync_failure=_fail_on_group_sync_failure,
         )
     )
     assert len(results) <= AD_GROUP_ENUMERATION_THRESHOLD
@@ -207,6 +220,7 @@ def test_default_skips_ad_enumeration(
         client_context=MagicMock(),
         graph_client=MagicMock(),
         graph_api_base=GRAPH_API_BASE,
+        record_group_sync_failure=_fail_on_group_sync_failure,
     )
 
     assert len(results) == 1
@@ -222,8 +236,6 @@ def test_enumerate_all_includes_ad_groups(
     mock_recursive: MagicMock,
     mock_enum: MagicMock,
 ) -> None:
-    from ee.onyx.db.external_perm import ExternalUserGroup
-
     mock_recursive.return_value = GroupsResult(
         groups_to_emails={"SiteGroup_abc": {"alice@contoso.com"}},
         found_public_group=False,
@@ -238,6 +250,7 @@ def test_enumerate_all_includes_ad_groups(
         get_access_token=_fake_token,
         enumerate_all_ad_groups=True,
         graph_api_base=GRAPH_API_BASE,
+        record_group_sync_failure=_fail_on_group_sync_failure,
     )
 
     assert len(results) == 2
@@ -266,6 +279,7 @@ def test_enumerate_all_without_token_skips(
         get_access_token=None,
         enumerate_all_ad_groups=True,
         graph_api_base=GRAPH_API_BASE,
+        record_group_sync_failure=_fail_on_group_sync_failure,
     )
 
     assert results == []

@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import {
+  Button,
   createTableColumns,
   EmptyMessageCard,
   Pagination,
@@ -11,6 +12,7 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { localizeAndPrettify } from "@opal/time";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
+import ExternalGroupSyncErrorsModal from "./ExternalGroupSyncErrorsModal";
 import { PermissionSyncStatusBadge } from "./PermissionSyncStatusBadge";
 import type { ExternalGroupSyncAttemptSnapshot } from "./types";
 
@@ -55,7 +57,10 @@ const tc = createTableColumns<ExternalGroupSyncAttemptSnapshot>();
 //
 // `Time Started` is bumped to 26 so `localizeAndPrettify` (e.g.
 // "5/3/2026, 12:00:00 PM") stays on a single line.
-function buildColumns(onErrorClick: (errorMessage: string) => void) {
+function buildColumns(
+  onErrorClick: (errorMessage: string) => void,
+  onGroupErrorsClick: (attemptId: number) => void
+) {
   return [
     tc.column("time_started", {
       header: "Time Started",
@@ -108,9 +113,28 @@ function buildColumns(onErrorClick: (errorMessage: string) => void) {
         </Text>
       ),
     }),
+    tc.column("error_count", {
+      header: "Errors",
+      weight: 10,
+      enableSorting: false,
+      cell: (value, row) =>
+        value > 0 ? (
+          <Button
+            size="sm"
+            prominence="tertiary"
+            onClick={() => onGroupErrorsClick(row.id)}
+          >
+            {`View ${value}`}
+          </Button>
+        ) : (
+          <Text as="span" font="secondary-body" color="text-03">
+            -
+          </Text>
+        ),
+    }),
     tc.column("error_message", {
       header: "Error Message",
-      weight: 28,
+      weight: 22,
       enableSorting: false,
       cell: (value, row) => (
         <ErrorMessageCell
@@ -170,6 +194,7 @@ function ErrorMessageCell({
 }
 
 export interface ExternalGroupSyncAttemptsTableProps {
+  ccPairId: number;
   attempts: ExternalGroupSyncAttemptSnapshot[];
   /** 1-based page index, matching `IndexAttemptsTable`. */
   currentPage: number;
@@ -178,19 +203,27 @@ export interface ExternalGroupSyncAttemptsTableProps {
 }
 
 export function ExternalGroupSyncAttemptsTable({
+  ccPairId,
   attempts,
   currentPage,
   totalPages,
   onPageChange,
 }: ExternalGroupSyncAttemptsTableProps) {
   const [openErrorMessage, setOpenErrorMessage] = useState<string | null>(null);
+  const [openErrorsAttemptId, setOpenErrorsAttemptId] = useState<number | null>(
+    null
+  );
   const handleErrorClick = useCallback(
     (errorMessage: string) => setOpenErrorMessage(errorMessage),
     []
   );
+  const handleGroupErrorsClick = useCallback(
+    (attemptId: number) => setOpenErrorsAttemptId(attemptId),
+    []
+  );
   const columns = useMemo(
-    () => buildColumns(handleErrorClick),
-    [handleErrorClick]
+    () => buildColumns(handleErrorClick, handleGroupErrorsClick),
+    [handleErrorClick, handleGroupErrorsClick]
   );
 
   if (!attempts.length) {
@@ -210,6 +243,13 @@ export function ExternalGroupSyncAttemptsTable({
           onOutsideClick={() => setOpenErrorMessage(null)}
           exceptionTrace={openErrorMessage}
           title={ERROR_MODAL_TITLE}
+        />
+      )}
+      {openErrorsAttemptId !== null && (
+        <ExternalGroupSyncErrorsModal
+          ccPairId={ccPairId}
+          attemptId={openErrorsAttemptId}
+          onClose={() => setOpenErrorsAttemptId(null)}
         />
       )}
 

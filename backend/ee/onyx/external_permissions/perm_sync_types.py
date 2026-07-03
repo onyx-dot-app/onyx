@@ -3,6 +3,7 @@ from collections.abc import Generator
 from typing import Optional
 from typing import Protocol
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure  # noqa
 from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
 from onyx.access.models import DocExternalAccess  # noqa
 from onyx.access.models import ElementExternalAccess  # noqa
@@ -58,10 +59,13 @@ DocSyncFuncType = Callable[
     Generator[ElementExternalAccess, None, None],
 ]
 
+ExternalGroupFailureCallback = Callable[[ExternalGroupSyncFailure], None]
+
 GroupSyncFuncType = Callable[
     [
         str,  # tenant_id
         ConnectorCredentialPair,  # cc_pair
+        ExternalGroupFailureCallback,  # record_group_sync_failure
     ],
     Generator[ExternalUserGroup, None, None],
 ]

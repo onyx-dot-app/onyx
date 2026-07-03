@@ -1,5 +1,6 @@
 import re
 import time
+import traceback
 from collections import deque
 from collections.abc import Callable
 from collections.abc import Generator
@@ -16,6 +17,7 @@ from office365.sharepoint.permissions.securable_object import RoleAssignmentColl
 from office365.sharepoint.principal.users.collection import UserCollection
 from pydantic import BaseModel
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
@@ -692,6 +694,7 @@ def _enumerate_ad_groups_paginated(
     get_access_token: Callable[[], str],
     already_resolved: set[str],
     graph_api_base: str,
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],
 ) -> Generator[ExternalUserGroup, None, None]:
     """Paginate through all Azure AD groups and yield ExternalUserGroup for each.
 
@@ -728,12 +731,29 @@ def _enumerate_ad_groups_paginated(
             "$select": "userPrincipalName,mail",
             "$top": "999",
         }
-        for member_json in _iter_graph_collection(
-            members_url, get_access_token, members_params
-        ):
-            email = member_json.get("userPrincipalName") or member_json.get("mail")
-            if email:
-                member_emails.append(_normalize_email(email))
+        try:
+            for member_json in _iter_graph_collection(
+                members_url, get_access_token, members_params
+            ):
+                email = member_json.get("userPrincipalName") or member_json.get("mail")
+                if email:
+                    member_emails.append(_normalize_email(email))
+        except Exception as e:
+            logger.warning(
+                "Skipping Azure AD group %s after member sync failure: %s",
+                name,
+                e,
+            )
+            record_group_sync_failure(
+                ExternalGroupSyncFailure(
+                    external_group_id=group_id,
+                    external_group_name=name,
+                    failure_message=str(e),
+                    full_exception_trace=traceback.format_exc(),
+                    exception=e,
+                )
+            )
+            continue
 
         yield ExternalUserGroup(id=name, user_emails=member_emails)
 
@@ -744,6 +764,7 @@ def get_sharepoint_external_groups(
     client_context: ClientContext,
     graph_client: GraphClient,
     graph_api_base: str,
+    record_group_sync_failure: Callable[[ExternalGroupSyncFailure], None],
     get_access_token: Callable[[], str] | None = None,
     enumerate_all_ad_groups: bool = False,
 ) -> list[ExternalUserGroup]:
@@ -817,7 +838,10 @@ def get_sharepoint_external_groups(
 
     already_resolved = set(groups_and_members.groups_to_emails.keys())
     for group in _enumerate_ad_groups_paginated(
-        get_access_token, already_resolved, graph_api_base
+        get_access_token,
+        already_resolved,
+        graph_api_base,
+        record_group_sync_failure,
     ):
         external_user_groups.append(group)
 

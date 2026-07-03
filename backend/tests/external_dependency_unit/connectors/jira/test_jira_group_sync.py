@@ -143,13 +143,17 @@ def test_jira_group_sync(
         group_sync_iter = jira_group_sync(
             tenant_id=tenant_id,
             cc_pair=cc_pair,
+            record_group_sync_failure=lambda failure: pytest.fail(
+                f"Unexpected group sync failure: {failure}"
+            ),
         )
 
         expected_groups = {group.id: group for group in _EXPECTED_JIRA_GROUPS}
-        actual_groups = {
-            group.id: ExternalUserGroupSet.from_model(external_user_group=group)
-            for group in group_sync_iter
-        }
+        actual_groups: dict[str, ExternalUserGroupSet] = {}
+        for group in group_sync_iter:
+            actual_groups[group.id] = ExternalUserGroupSet.from_model(
+                external_user_group=group
+            )
         assert expected_groups == actual_groups
     finally:
         db_session.rollback()

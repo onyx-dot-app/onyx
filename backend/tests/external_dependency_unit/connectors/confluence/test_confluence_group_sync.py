@@ -1,7 +1,9 @@
 from typing import Any
 
+import pytest
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.external_perm import ExternalGroupSyncFailure
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
@@ -110,6 +112,10 @@ _EXPECTED_CONFLUENCE_GROUPS = [
 ]
 
 
+def _fail_on_group_sync_failure(failure: ExternalGroupSyncFailure) -> None:
+    pytest.fail(f"Unexpected group sync failure: {failure}")
+
+
 def test_confluence_group_sync(
     db_session: Session,
     confluence_connector_config: dict[str, Any],
@@ -152,6 +158,7 @@ def test_confluence_group_sync(
     group_sync_iter = confluence_group_sync(
         tenant_id=tenant_id,
         cc_pair=cc_pair,
+        record_group_sync_failure=_fail_on_group_sync_failure,
     )
 
     expected_groups = {group.id: group for group in _EXPECTED_CONFLUENCE_GROUPS}

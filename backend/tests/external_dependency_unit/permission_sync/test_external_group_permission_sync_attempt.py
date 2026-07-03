@@ -22,8 +22,14 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import ExternalGroupPermissionSyncAttempt
 from onyx.db.permission_sync_attempt import complete_external_group_sync_attempt
+from onyx.db.permission_sync_attempt import count_external_group_sync_errors_for_attempt
 from onyx.db.permission_sync_attempt import create_external_group_sync_attempt
+from onyx.db.permission_sync_attempt import create_external_group_sync_error
+from onyx.db.permission_sync_attempt import (
+    get_error_counts_for_external_group_sync_attempts,
+)
 from onyx.db.permission_sync_attempt import get_external_group_sync_attempt
+from onyx.db.permission_sync_attempt import get_external_group_sync_errors_for_attempt
 from onyx.db.permission_sync_attempt import (
     get_recent_external_group_sync_attempts_for_cc_pair,
 )
@@ -234,6 +240,72 @@ class TestExternalGroupPermissionSyncAttempt:
         assert attempt.status == PermissionSyncStatus.FAILED
         assert attempt.error_message == error_msg
         assert attempt.full_exception_trace == full_trace
+
+    def test_external_group_sync_error_crud(self, db_session: Session) -> None:
+        """Individual group failures are persisted separately from the
+        aggregate sync attempt so a run can complete with errors."""
+        cc_pair = _create_test_connector_credential_pair(db_session)
+        attempt_id = create_external_group_sync_attempt(cc_pair.id, db_session)
+        attempt_id_without_errors = create_external_group_sync_attempt(
+            cc_pair.id, db_session
+        )
+
+        error_id = create_external_group_sync_error(
+            external_group_sync_attempt_id=attempt_id,
+            connector_credential_pair_id=cc_pair.id,
+            db_session=db_session,
+            external_group_id="jira-group-id",
+            external_group_name="Jira Admins",
+            failure_message="Jira returned 404 for this group",
+            full_exception_trace="Traceback...",
+            error_type="JIRAError",
+        )
+
+        assert error_id is not None
+        assert (
+            count_external_group_sync_errors_for_attempt(
+                external_group_sync_attempt_id=attempt_id,
+                db_session=db_session,
+            )
+            == 1
+        )
+        assert get_error_counts_for_external_group_sync_attempts(
+            external_group_sync_attempt_ids=[attempt_id, attempt_id_without_errors],
+            db_session=db_session,
+        ) == {attempt_id: 1}
+
+        errors = get_external_group_sync_errors_for_attempt(
+            external_group_sync_attempt_id=attempt_id,
+            db_session=db_session,
+            page=0,
+            page_size=10,
+        )
+
+        assert len(errors) == 1
+        assert errors[0].id == error_id
+        assert errors[0].external_group_id == "jira-group-id"
+        assert errors[0].external_group_name == "Jira Admins"
+        assert errors[0].failure_message == "Jira returned 404 for this group"
+        assert errors[0].full_exception_trace == "Traceback..."
+        assert errors[0].error_type == "JIRAError"
+
+        global_attempt_id = create_external_group_sync_attempt(None, db_session)
+        global_error_id = create_external_group_sync_error(
+            external_group_sync_attempt_id=global_attempt_id,
+            connector_credential_pair_id=None,
+            db_session=db_session,
+            external_group_id="global-group-id",
+            external_group_name="Global Group",
+            failure_message="Global group sync failed",
+        )
+
+        global_errors = get_external_group_sync_errors_for_attempt(
+            external_group_sync_attempt_id=global_attempt_id,
+            db_session=db_session,
+        )
+        assert len(global_errors) == 1
+        assert global_errors[0].id == global_error_id
+        assert global_errors[0].connector_credential_pair_id is None
 
     def test_get_recent_external_group_sync_attempts_for_cc_pair(
         self, db_session: Session

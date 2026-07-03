@@ -115,9 +115,22 @@ export interface ExternalGroupSyncAttemptSnapshot {
   total_users_processed: number;
   total_groups_processed: number;
   total_group_memberships_synced: number;
+  error_count: number;
   time_created: string;
   time_started: string | null;
   time_finished: string | null;
+}
+
+export interface ExternalGroupSyncError {
+  id: number;
+  external_group_sync_attempt_id: number;
+  connector_credential_pair_id: number | null;
+  external_group_id: string | null;
+  external_group_name: string | null;
+  failure_message: string;
+  full_exception_trace: string | null;
+  error_type: string | null;
+  time_created: string;
 }
 
 /**
