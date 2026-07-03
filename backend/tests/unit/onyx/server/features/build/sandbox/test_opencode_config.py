@@ -45,14 +45,26 @@ def test_single_provider_renders_all_required_fields() -> None:
     ] == {"type": "adaptive", "display": "summarized"}
 
 
-def test_adaptive_anthropic_models_request_readable_thinking_summaries() -> None:
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "claude-opus-4-8",
+        "claude-sonnet-4-6",
+        "claude-sonnet-5",
+        "claude-fable-5",
+        "claude-mythos-5",
+    ],
+)
+def test_adaptive_anthropic_models_request_readable_thinking_summaries(
+    model_name: str,
+) -> None:
     config = build_multi_provider_opencode_config(
-        providers=[_cfg("anthropic", "claude-opus-4-8")],
+        providers=[_cfg("anthropic", model_name)],
         default_provider="anthropic",
-        default_model="claude-opus-4-8",
+        default_model=model_name,
     )
 
-    assert config["provider"]["anthropic"]["models"]["claude-opus-4-8"]["options"][
+    assert config["provider"]["anthropic"]["models"][model_name]["options"][
         "thinking"
     ] == {"type": "adaptive", "display": "summarized"}
 

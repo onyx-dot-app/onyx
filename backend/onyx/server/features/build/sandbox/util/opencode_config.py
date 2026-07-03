@@ -9,21 +9,16 @@ restart.
 
 from typing import Any
 
+from onyx.llm.anthropic_capabilities import anthropic_supports_adaptive_thinking
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
-
-# 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
-_ADAPTIVE_THINKING_MODELS = frozenset(
-    {"claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"}
-)
 
 
 def _model_options(provider: str, model_name: str) -> dict[str, Any]:
     if provider == "openai":
         return {"reasoningEffort": "high"}
     if provider in ("anthropic", "bedrock"):
-        if model_name in _ADAPTIVE_THINKING_MODELS or model_name.startswith(
-            tuple(f"{m}-" for m in _ADAPTIVE_THINKING_MODELS)
-        ):
+        # 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
+        if anthropic_supports_adaptive_thinking(model_name):
             return {"thinking": {"type": "adaptive", "display": "summarized"}}
         return {"thinking": {"type": "enabled", "budgetTokens": 16000}}
     if provider == "google":
