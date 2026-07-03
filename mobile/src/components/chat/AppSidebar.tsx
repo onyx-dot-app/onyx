@@ -6,6 +6,7 @@ import SvgOnyxLogo from "@/icons/onyx-logo";
 import SvgPlus from "@/icons/plus";
 import { useLogout } from "@/api/auth/useLogout";
 import { useChatSessions } from "@/api/chat/sessions";
+import { AgentSidebarSection } from "@/components/chat/AgentSidebarSection";
 import { ChatSessionList } from "@/components/chat/ChatSessionList";
 
 // Mobile analog of web's `AppSidebar`: New chat + flat "Recents" + footer.
@@ -50,6 +51,8 @@ export function AppSidebar() {
         >
           New chat
         </SidebarTab>
+
+        <AgentSidebarSection />
 
         <SidebarLayouts.Section title="Recents">
           <ChatSessionList

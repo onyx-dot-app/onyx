@@ -40,6 +40,11 @@ describe("dehydrateOptions PII exclusion", () => {
     expect(wouldPersist(["chat-history", url, "abc"])).toBe(false);
   });
 
+  it("never persists workspace-scoped config (agents, settings)", () => {
+    expect(wouldPersist(QUERY_KEYS.agents(url))).toBe(false);
+    expect(wouldPersist(QUERY_KEYS.workspaceSettings(url))).toBe(false);
+  });
+
   it("persists non-PII success queries", () => {
     expect(wouldPersist(QUERY_KEYS.authType(url))).toBe(true);
   });

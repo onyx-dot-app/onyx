@@ -49,6 +49,8 @@ interface SidebarTabProps {
   onPress?: () => void;
   href?: Href;
   icon?: IconFunctionComponent;
+  // Leading-slot node (e.g. an agent avatar), used instead of `icon`.
+  leading?: React.ReactNode;
   rightChildren?: React.ReactNode;
   tooltip?: string;
   children?: React.ReactNode;
@@ -63,6 +65,7 @@ function SidebarTab({
   onPress,
   href,
   icon,
+  leading,
   rightChildren,
   children,
 }: SidebarTabProps) {
@@ -85,9 +88,13 @@ function SidebarTab({
         disabled && "opacity-50",
       )}
     >
-      {/* Leading icon/spacer; explicit `mr-0.5` instead of `gap` (unreliable in RN/NativeWind). */}
+      {/* Leading icon/avatar/spacer; explicit `mr-0.5` instead of `gap` (unreliable in RN/NativeWind). */}
       {nested ? (
         <View className="mr-0.5 w-5" aria-hidden />
+      ) : leading ? (
+        <View className="mr-0.5 items-center justify-center p-0.5">
+          {leading}
+        </View>
       ) : icon ? (
         <View className="mr-0.5 items-center justify-center p-0.5">
           <Icon as={icon} size={16} className={colors.icon} />

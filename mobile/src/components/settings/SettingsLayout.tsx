@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, type ScrollViewProps } from "react-native";
 
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
@@ -14,13 +14,20 @@ import type { IconFunctionComponent } from "@/icons/types";
 interface SettingsRootProps {
   children: ReactNode;
   className?: string;
+  // Forwarded so a search field's keyboard doesn't swallow taps on the list below.
+  keyboardShouldPersistTaps?: ScrollViewProps["keyboardShouldPersistTaps"];
 }
 
-function SettingsRoot({ children, className }: SettingsRootProps) {
+function SettingsRoot({
+  children,
+  className,
+  keyboardShouldPersistTaps,
+}: SettingsRootProps) {
   return (
     <ScrollView
       className={cn("flex-1", className)}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
     >
       {children}
     </ScrollView>

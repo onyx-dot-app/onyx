@@ -6,6 +6,19 @@ NativeWind (not web Tailwind), expo-router, and RN primitives — so web rules a
 `useSWR`, Opal components, etc. do **not** apply here. Only the cross-platform design-token
 vocabulary is shared, via `@onyx-ai/shared`.
 
+## Building UI — reuse before you build
+
+Before hand-rolling any component or screen, **check for a matching component**:
+
+- **Mobile already has it?** Reuse it — scan `components/ui/*`, the shell layouts
+  (`components/{settings,sidebar,auth,chat}`), `@/icons/*`, and other `components/*` first.
+- **Only web has it?** Web (Opal `web/lib/opal/src/`, or `web/src/refresh-components/`) is the design
+  source of truth. **Don't hand-roll a divergent lookalike — STOP and ask** whether to port it
+  (pixel/behaviour-exact, via the `port-web-component-to-mobile` skill) or compose existing primitives.
+
+Mirror the web counterpart's layout/spacing/color/interaction as closely as the platform allows;
+document any deliberate divergence.
+
 ## Spacing: the class number is PIXELS (not web's Tailwind step scale)
 
 **The single biggest footgun when porting from web.** Mobile spacing classes resolve to
