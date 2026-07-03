@@ -2,10 +2,10 @@
 
 import { useSettings } from "@/lib/settings/hooks";
 import { AuthLayouts } from "@opal/layouts";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import MaintenanceCard from "@/sections/errorCards/MaintenanceCard";
-import ErrorCard from "@/sections/errorCards/ErrorCard";
+import { NEXT_PUBLIC_CLOUD_ENABLED, DOCS_BASE_URL } from "@/lib/constants";
 import { FetchError } from "@/lib/fetcher";
+import { welcomeCardCopy } from "@/lib/auth/copies";
+import { markdown } from "@opal/utils";
 
 interface SettingsProviderProps {
   children: React.ReactNode;
@@ -17,9 +17,9 @@ interface SettingsProviderProps {
  * silently ignored so unauthenticated users still see the app shell.
  */
 export default function SettingsProvider({ children }: SettingsProviderProps) {
-  const { error } = useSettings();
+  const { appName, logoUrl, error } = useSettings();
 
-  function isAuthError(err: Error | undefined) {
+  function isAuthError(err: Error) {
     return (
       err instanceof FetchError && (err.status === 401 || err.status === 403)
     );
@@ -28,7 +28,25 @@ export default function SettingsProvider({ children }: SettingsProviderProps) {
   if (error && !isAuthError(error)) {
     return (
       <AuthLayouts.Root>
-        {NEXT_PUBLIC_CLOUD_ENABLED ? <MaintenanceCard /> : <ErrorCard />}
+        <AuthLayouts.Card {...welcomeCardCopy(appName)} logoSrc={logoUrl}>
+          {NEXT_PUBLIC_CLOUD_ENABLED ? (
+            <AuthLayouts.Message
+              title="Maintenance in progress."
+              description={markdown(
+                "Onyx is currently under scheduled maintenance. Please check back later. [Contact support](mailto:support@onyx.app)"
+              )}
+            />
+          ) : (
+            <AuthLayouts.Message
+              messageType="warning"
+              title="Unable to load settings"
+              description={markdown(
+                `If you're an admin, please review our [documentation](${DOCS_BASE_URL}?utm_source=app&utm_medium=error_page&utm_campaign=config_error) for proper configuration steps. If you're a user, please contact your admin for assistance.`,
+                "Need help? Join our [Discord community](https://discord.gg/4NA5SbzrWb) for support."
+              )}
+            />
+          )}
+        </AuthLayouts.Card>
       </AuthLayouts.Root>
     );
   }
