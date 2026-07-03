@@ -5,7 +5,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
 import { welcomeCardCopy } from "@/lib/auth/copies";
 
-export default function MaintenancePage() {
+export default function MaintenanceCard() {
   const { logoUrl, appName } = useSettings();
 
   return (

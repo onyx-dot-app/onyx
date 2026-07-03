@@ -4,8 +4,8 @@ import { JSX } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import { AuthLayouts } from "@opal/layouts";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import MaintenanceCard from "@/sections/errorPages/MaintenanceCard";
-import ErrorPage from "@/sections/errorPages/ErrorPage";
+import MaintenanceCard from "@/sections/errorCards/MaintenanceCard";
+import ErrorCard from "@/sections/errorCards/ErrorCard";
 import { FetchError } from "@/lib/fetcher";
 
 /**
@@ -24,12 +24,10 @@ export function SettingsProvider({
     err instanceof FetchError && (err.status === 401 || err.status === 403);
 
   if (error && !isAuthError(error)) {
-    return NEXT_PUBLIC_CLOUD_ENABLED ? (
+    return (
       <AuthLayouts.Root>
-        <MaintenanceCard />
+        {NEXT_PUBLIC_CLOUD_ENABLED ? <MaintenanceCard /> : <ErrorCard />}
       </AuthLayouts.Root>
-    ) : (
-      <ErrorPage />
     );
   }
 
