@@ -31,6 +31,14 @@ describe("Content", () => {
     expect(screen.getByText("Chats can access these files.")).toBeTruthy();
   });
 
+  it("renders a custom leading element in place of the icon", () => {
+    render(
+      <Content leading={<Text>AV</Text>} icon={SvgFolder} title="Deploy" />,
+    );
+    expect(screen.getByText("AV")).toBeTruthy();
+    expect(screen.getByText("Deploy")).toBeTruthy();
+  });
+
   it("throws for a layout that is not ported (body → ContentSm)", () => {
     const spy = jest.spyOn(console, "error").mockImplementation(() => {});
     expect(() =>

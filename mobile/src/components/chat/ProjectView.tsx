@@ -6,6 +6,7 @@ import { InputBar } from "@/components/chat/InputBar";
 import { ProjectContextPanel } from "@/components/chat/ProjectContextPanel";
 import { ProjectChatSessionList } from "@/components/chat/ProjectChatSessionList";
 import { useProjectDetails } from "@/api/chat/projects";
+import { useAgents } from "@/api/chat/agents";
 import { useChatController } from "@/hooks/useChatController";
 
 interface ProjectViewProps {
@@ -16,6 +17,7 @@ interface ProjectViewProps {
 // bottom (web keeps it mid-page).
 export function ProjectView({ projectId }: ProjectViewProps) {
   const { data: details, isLoading } = useProjectDetails(projectId);
+  const { agents } = useAgents();
   const { input, setInput, submit, stop, chatState } = useChatController(
     null,
     undefined,
@@ -44,6 +46,10 @@ export function ProjectView({ projectId }: ProjectViewProps) {
           <ProjectContextPanel details={details} isLoading={isLoading} />
           <ProjectChatSessionList
             chats={chats}
+            agents={agents}
+            personaIdToFeatured={
+              details?.persona_id_to_is_featured ?? undefined
+            }
             isLoading={isLoading && !details}
             onSelect={(sessionId) =>
               router.navigate({

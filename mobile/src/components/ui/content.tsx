@@ -68,6 +68,8 @@ const MD_PRESETS = {
 
 interface ContentProps {
   icon?: IconFunctionComponent;
+  // Custom leading element (e.g. an AgentAvatar) for the icon slot; wins over `icon`.
+  leading?: ReactNode;
   title: string;
   description?: string;
   titleMaxLines?: number;
@@ -80,6 +82,7 @@ interface ContentProps {
 
 function Content({
   icon,
+  leading,
   title,
   description,
   titleMaxLines,
@@ -98,7 +101,13 @@ function Content({
     const preset = XL_PRESETS[sizePreset];
     return (
       <View className={cn("flex-col items-start", className)}>
-        {icon ? (
+        {leading ? (
+          <View className="flex-row items-center gap-4">
+            <View className="shrink-0 items-center justify-center">
+              {leading}
+            </View>
+          </View>
+        ) : icon ? (
           <View className="flex-row items-center gap-4">
             <View
               className={cn("items-center justify-center p-2", preset.iconMinH)}
@@ -143,7 +152,11 @@ function Content({
     return (
       <View className={cn("flex-col items-start", className)}>
         <View className="w-full flex-row items-center gap-2">
-          {icon ? (
+          {leading ? (
+            <View className="shrink-0 items-center justify-center">
+              {leading}
+            </View>
+          ) : icon ? (
             <View
               className={cn("items-center justify-center p-2", preset.iconMinH)}
             >
@@ -164,7 +177,7 @@ function Content({
             font="secondary-body"
             color="text-03"
             maxLines={descriptionMaxLines}
-            className={cn("w-full", icon && preset.descIndent)}
+            className={cn("w-full", (icon || leading) && preset.descIndent)}
           >
             {description}
           </Text>

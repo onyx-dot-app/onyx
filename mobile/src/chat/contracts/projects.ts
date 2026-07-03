@@ -35,8 +35,11 @@ export interface Project {
   chat_sessions: ChatSessionSummary[];
 }
 
-// `GET /user/projects/{id}/details` — project + files inline.
+// `GET /user/projects/{id}/details` — project + files inline. The featured map
+// tells a chat row whether to show its agent's avatar (non-featured custom) or a
+// generic bubble icon.
 export interface ProjectDetails {
   project: Project;
   files: ProjectFile[] | null;
+  persona_id_to_is_featured: Record<number, boolean> | null;
 }

@@ -1,15 +1,20 @@
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 
+import { AgentAvatar } from "@/components/avatars/AgentAvatar";
 import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
+import { LineItemButton } from "@/components/ui/line-item-button";
 import { Text } from "@/components/ui/text";
 import { UNNAMED_CHAT } from "@/components/chat/ChatSessionList";
 import { timeAgo } from "@/lib/time";
 import SvgBubbleText from "@/icons/bubble-text";
+import type { MinimalAgent } from "@/chat/agents";
 import type { ChatSessionSummary } from "@/api/chat/sessions";
 
 interface ProjectChatSessionListProps {
   chats: ChatSessionSummary[];
+  agents?: MinimalAgent[];
+  personaIdToFeatured?: Record<number, boolean>;
   isLoading?: boolean;
   onSelect: (sessionId: string) => void;
 }
@@ -17,6 +22,8 @@ interface ProjectChatSessionListProps {
 // The project's chats, newest first; read-only in PR 6 (no move/remove/delete).
 export function ProjectChatSessionList({
   chats,
+  agents = [],
+  personaIdToFeatured = {},
   isLoading = false,
   onSelect,
 }: ProjectChatSessionListProps) {
@@ -42,24 +49,30 @@ export function ProjectChatSessionList({
       ) : (
         sorted.map((chat) => {
           const updated = timeAgo(chat.time_updated);
+          // Web: the agent avatar only for a non-featured custom agent; else a bubble.
+          const personaId = chat.persona_id;
+          const isFeatured =
+            personaId != null ? personaIdToFeatured[personaId] : undefined;
+          const agent =
+            isFeatured === false && personaId != null
+              ? agents.find((a) => a.id === personaId)
+              : undefined;
           return (
-            <Pressable
+            <LineItemButton
               key={chat.id}
+              sizePreset="main-ui"
+              variant="section"
+              leading={
+                agent ? (
+                  <AgentAvatar agent={agent} size={18} />
+                ) : (
+                  <Icon as={SvgBubbleText} size={18} className="text-text-02" />
+                )
+              }
+              title={chat.name && chat.name.trim() ? chat.name : UNNAMED_CHAT}
+              description={updated ? `Last message ${updated}` : undefined}
               onPress={() => onSelect(chat.id)}
-              className="flex-row items-center gap-8 rounded-12 px-8 py-8 active:bg-background-tint-03"
-            >
-              <Icon as={SvgBubbleText} size={18} className="text-text-02" />
-              <View className="min-w-0 flex-1">
-                <Text font="main-ui-body" color="text-04" numberOfLines={1}>
-                  {chat.name && chat.name.trim() ? chat.name : UNNAMED_CHAT}
-                </Text>
-                {updated ? (
-                  <Text font="secondary-body" color="text-03" numberOfLines={1}>
-                    {`Last message ${updated}`}
-                  </Text>
-                ) : null}
-              </View>
-            </Pressable>
+            />
           );
         })
       )}

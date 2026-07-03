@@ -6,6 +6,17 @@ import type { ChatSessionSummary } from "@/api/chat/sessions";
 
 // Pulls in ChatSessionList (for UNNAMED_CHAT) → SidebarTab → expo-router.
 jest.mock("expo-router", () => ({ router: { navigate: jest.fn() } }));
+// AgentAvatar → AgentImage → @/api/config → @/state/storage (MMKV/nitro); break the chain.
+jest.mock("expo-image", () => ({ Image: () => null }));
+jest.mock("@/state/storage", () => ({
+  appStorage: { getString: () => null, set: () => {}, remove: () => {} },
+  queryStorage: {},
+  makeMmkvStorage: () => ({
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  }),
+}));
 
 function makeChat(
   id: string,
