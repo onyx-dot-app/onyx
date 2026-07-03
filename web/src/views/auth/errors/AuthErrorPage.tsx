@@ -31,7 +31,7 @@ const GENERIC_ERROR_DESCRIPTION = [
 
 function resolveMessage(raw: string | null): string | null {
   if (!raw) return null;
-  return ERROR_CODE_MESSAGES[raw] ?? raw;
+  return ERROR_CODE_MESSAGES[raw] ?? null;
 }
 
 export default function AuthErrorPage() {

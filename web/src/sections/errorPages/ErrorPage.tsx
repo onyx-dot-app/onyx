@@ -3,8 +3,8 @@ import { markdown } from "@opal/utils";
 import { DOCS_BASE_URL } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";
 
-export default function Error() {
-  const { appName, logoUrl } = useSettings();
+export default function ErrorPage() {
+  const { logoUrl } = useSettings();
 
   return (
     <AuthLayouts.Root>
