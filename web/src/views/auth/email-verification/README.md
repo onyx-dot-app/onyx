@@ -19,6 +19,7 @@ their email address.
   `true`, it redirects to `/app`.
 
 **Guards:**
+
 - Not logged in → `/auth/login`
 - Already verified, or verification not required → `/app`
 
@@ -33,18 +34,19 @@ once on mount.
   `/auth/login` (not logged in).
 
 **Guards:**
+
 - No `token` param → `/auth/send-email-verification`
 
 ---
 
 ## Navigating without going through the proper flow
 
-| Scenario | Outcome |
-|---|---|
-| Visit `/auth/send-email-verification` while already verified | Redirect to `/app` |
-| Visit `/auth/send-email-verification` while logged out | Redirect to `/auth/login` |
-| Visit `/auth/verify-email` without a `?token=` param | Redirect to `/auth/send-email-verification` |
-| Visit `/auth/verify-email` with an invalid or expired token | Toast error, redirect to `/app` or `/auth/login` |
+| Scenario                                                     | Outcome                                          |
+| ------------------------------------------------------------ | ------------------------------------------------ |
+| Visit `/auth/send-email-verification` while already verified | Redirect to `/app`                               |
+| Visit `/auth/send-email-verification` while logged out       | Redirect to `/auth/login`                        |
+| Visit `/auth/verify-email` without a `?token=` param         | Redirect to `/auth/send-email-verification`      |
+| Visit `/auth/verify-email` with an invalid or expired token  | Toast error, redirect to `/app` or `/auth/login` |
 
 ---
 
