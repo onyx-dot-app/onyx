@@ -1,5 +1,6 @@
 import { ActivityIndicator, Pressable, View } from "react-native";
 
+import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { UNNAMED_CHAT } from "@/components/chat/ChatSessionList";
@@ -33,11 +34,11 @@ export function ProjectChatSessionList({
       {isLoading && sorted.length === 0 ? (
         <ActivityIndicator size="small" />
       ) : sorted.length === 0 ? (
-        <View className="rounded-12 border border-dashed border-border-01 px-12 py-12">
+        <Card variant="tertiary">
           <Text font="secondary-body" color="text-02">
             No chats yet.
           </Text>
-        </View>
+        </Card>
       ) : (
         sorted.map((chat) => {
           const updated = timeAgo(chat.time_updated);
