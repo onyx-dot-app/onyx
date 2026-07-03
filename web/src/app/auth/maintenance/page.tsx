@@ -1,1 +1,1 @@
-export { default } from "@/views/auth/errors/MaintenancePage";
+export { default } from "@/sections/errorPages/MaintenancePage";
