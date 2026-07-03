@@ -43,8 +43,6 @@ class PgRedisKVStore(KeyValueStore):
             obj = db_session.query(KVStore).filter_by(key=key).first()
             if obj:
                 obj.value = val
-                # Clear any ciphertext written by the pre-flag-removal code path.
-                obj.encrypted_value = None
             else:
                 obj = KVStore(key=key, value=val)
                 db_session.query(KVStore).filter_by(key=key).delete()  # just in case
@@ -67,13 +65,7 @@ class PgRedisKVStore(KeyValueStore):
             if not obj:
                 raise KvKeyNotFoundError
 
-            if obj.value is not None:
-                value = obj.value
-            elif obj.encrypted_value is not None:
-                # Unwrap SensitiveValue - this is internal backend use
-                value = obj.encrypted_value.get_value(apply_mask=False)
-            else:
-                value = None
+            value = obj.value
 
             try:
                 self._get_cache().set(
