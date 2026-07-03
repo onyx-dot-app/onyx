@@ -30,7 +30,7 @@ jest.mock("@/lib/languageModels/hooks", () => ({
   }),
 }));
 
-jest.mock("@/lib/userSettings", () => ({
+jest.mock("@/lib/users/svc", () => ({
   updateUserPersonalization: jest.fn(),
 }));
 

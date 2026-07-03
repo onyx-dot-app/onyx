@@ -25,11 +25,14 @@ export const persister = createSyncStoragePersister({
   storage: makeMmkvStorage(queryStorage),
 });
 
-// Keys excluded from the unencrypted MMKV snapshot. Identity (`me`) and ALL chat
-// data are PII; excluded data lives in memory only and refetches on launch (the
+// Keys excluded from the unencrypted MMKV snapshot. Identity (`me`), ALL chat data, and
+// workspace-scoped config (agents, settings) live in memory only and refetch on launch, so
+// nothing personal or workspace-specific lingers after logout or an account switch (the
 // trailing serverUrl varies per instance, so only the leading entity segment matches).
 const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
   [QUERY_KEYS.me(null)[0]],
+  [QUERY_KEYS.agents(null)[0]],
+  [QUERY_KEYS.workspaceSettings(null)[0]],
 ];
 
 function isNonPersistedKey(queryKey: readonly unknown[]): boolean {

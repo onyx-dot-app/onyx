@@ -1,0 +1,76 @@
+/*
+  Desktop (Tauri) native title-bar reservation.
+
+  The Onyx desktop app is a Tauri wrapper that loads this web app remotely and
+  uses macOS `titleBarStyle: "Overlay"` — the traffic lights float over the web
+  content, so the app must keep the top strip clear. The desktop wrapper injects
+  a `titlebar.js` shim to do this, but that shim ships frozen inside installed
+  binaries: when the web layout changes, already-installed apps don't get the
+  update. These rules let the web app reserve the strip itself, so the fix
+  reaches every existing install via the remote bundle without a desktop release.
+
+  Activated by the `onyx-desktop` class added to <html> (see the inline detector
+  in app/layout.tsx). All rules are gated on `html.onyx-desktop`, so browser
+  users are completely unaffected. The selectors are deliberately more specific
+  than the shim's (`.onyx-desktop` + element/id), and this sheet is imported
+  unlayered, so it deterministically wins over every shim version — producing a
+  single inset (never a doubled 72px gap) regardless of which shim is present.
+
+  Window dragging is still provided by the shim's fixed drag strip, which sits on
+  top of the reserved zone.
+*/
+
+html.onyx-desktop {
+  /* Inherit the desktop shim's titlebar height when it is present, so the two
+     layers can't silently diverge. The 36px literal is the single fallback
+     source of truth for when no shim has set the variable. */
+  --onyx-titlebar-height: var(--onyx-desktop-titlebar-height, 36px);
+
+  box-sizing: border-box;
+  height: 100dvh !important;
+  /* Carve out the title-bar strip at the root so every normal-flow descendant
+     is pushed below it, no matter how the app structures <body>. */
+  padding-top: var(--onyx-titlebar-height) !important;
+  overflow: hidden !important;
+}
+
+html.onyx-desktop > body {
+  height: calc(100dvh - var(--onyx-titlebar-height)) !important;
+  min-height: 0 !important;
+  /* Cancel any title-bar padding a shim may have put on <body> so it doesn't
+     stack with the root padding above. */
+  padding-top: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+/*
+  Clamp full-viewport-height containers to the area below the title bar so their
+  bottom edge doesn't overflow past the window. Covers raw Tailwind utilities AND
+  the Opal layout classes that compile `height: 100vh` into a class name via
+  @apply (which utility-class overrides can't reach).
+*/
+html.onyx-desktop .h-screen,
+html.onyx-desktop .max-h-screen,
+html.onyx-desktop .opal-sidebar-root__column,
+html.onyx-desktop .opal-sidebar-root__overlay[data-variant="mobile"],
+html.onyx-desktop .opal-sidebar-root__overlay[data-variant="medium"] {
+  height: calc(100dvh - var(--onyx-titlebar-height)) !important;
+  max-height: calc(100dvh - var(--onyx-titlebar-height)) !important;
+}
+
+html.onyx-desktop .min-h-screen {
+  min-height: calc(100dvh - var(--onyx-titlebar-height)) !important;
+}
+
+/*
+  Fixed sidebar overlays / backdrops are positioned against the viewport, so
+  `inset-y-0` pins them to y=0 (under the traffic lights). Re-anchor them below
+  the title bar.
+*/
+html.onyx-desktop .opal-sidebar-root__overlay[data-variant="mobile"],
+html.onyx-desktop .opal-sidebar-root__overlay[data-variant="medium"],
+html.onyx-desktop .opal-sidebar-root__backdrop {
+  top: var(--onyx-titlebar-height) !important;
+  bottom: 0 !important;
+}

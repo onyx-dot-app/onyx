@@ -6,11 +6,15 @@ mislabels a secret).
 """
 
 import ast
+from pathlib import Path
 
 import pytest
 from scripts.env_inventory import classify_var
+from scripts.env_inventory import diff_baseline
 from scripts.env_inventory import EnvVisitor
+from scripts.env_inventory import format_baseline
 from scripts.env_inventory import is_sensitive
+from scripts.env_inventory import read_baseline
 
 
 @pytest.mark.parametrize(
@@ -134,3 +138,47 @@ def test_visitor_ignores_non_uppercase_and_non_literal_keys() -> None:
         "b = os.environ.get(some_variable)\n"
     )
     assert _names(src) == set()
+
+
+# --- drift baseline (CI gate) -------------------------------------------------
+
+
+def test_baseline_roundtrip_ignores_comments_and_blanks(tmp_path: Path) -> None:
+    names = ["ZULIP_KEY", "ALPHA_FLAG", "ALPHA_FLAG"]  # unsorted + duplicate
+    path = tmp_path / "baseline.txt"
+    path.write_text(format_baseline(names), encoding="utf-8")
+    body = path.read_text(encoding="utf-8")
+    # rendered header is comment-only; names are sorted + de-duplicated
+    assert body.startswith("#")
+    assert "\nALPHA_FLAG\nZULIP_KEY\n" in body
+    # read back drops the header comments and blank lines
+    assert read_baseline(path) == {"ALPHA_FLAG", "ZULIP_KEY"}
+
+
+def test_read_baseline_missing_file_is_empty(tmp_path: Path) -> None:
+    assert read_baseline(tmp_path / "nope.txt") == set()
+
+
+def test_diff_baseline_clean_when_equal() -> None:
+    current = {"A", "B", "C"}
+    assert diff_baseline(current, set(current)) == ([], [])
+
+
+def test_diff_baseline_flags_new_drift() -> None:
+    # code reads NEW that the baseline doesn't list -> gate should fail on it
+    new_drift, resolved = diff_baseline({"A", "B", "NEW"}, {"A", "B"})
+    assert new_drift == ["NEW"]
+    assert resolved == []
+
+
+def test_diff_baseline_flags_stale_entries() -> None:
+    # baseline lists GONE but code no longer leaves it undocumented -> stale
+    new_drift, resolved = diff_baseline({"A", "B"}, {"A", "B", "GONE"})
+    assert new_drift == []
+    assert resolved == ["GONE"]
+
+
+def test_diff_baseline_reports_both_directions_sorted() -> None:
+    new_drift, resolved = diff_baseline({"A", "Y", "X"}, {"A", "C", "B"})
+    assert new_drift == ["X", "Y"]
+    assert resolved == ["B", "C"]

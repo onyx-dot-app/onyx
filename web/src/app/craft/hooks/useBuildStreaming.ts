@@ -751,6 +751,24 @@ export function useBuildStreaming() {
             break;
           }
 
+          case "context_usage": {
+            updateSessionData(sessionId, {
+              contextUsage: {
+                usedTokens: parsed.usedTokens,
+              },
+            });
+            break;
+          }
+
+          case "compaction": {
+            appendStreamItem(sessionId, {
+              type: "compaction",
+              id: genId("compaction"),
+              summary: parsed.summary,
+            });
+            break;
+          }
+
           case "error": {
             // Safety net for an error arriving mid-interrupt: defer to reconcile rather than
             // marking failed, which strands the queued auto-send and stalls reconcile.

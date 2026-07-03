@@ -70,10 +70,6 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
 
-# Per-user cap on self-managed personal skills. Env-overridable so CI can lower
-# it without uploading the full quota of real bundles to exercise the limit.
-MAX_PERSONAL_SKILLS_PER_USER = _non_negative_int_env("MAX_PERSONAL_SKILLS_PER_USER", 50)
-
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
@@ -1496,6 +1492,8 @@ DISABLE_TELEMETRY = os.environ.get("DISABLE_TELEMETRY", "").lower() == "true"
 BRAINTRUST_PROJECT = os.environ.get("BRAINTRUST_PROJECT", "Onyx")
 # Braintrust API key - if provided, Braintrust tracing will be enabled
 BRAINTRUST_API_KEY = os.environ.get("BRAINTRUST_API_KEY") or ""
+# Optional custom Braintrust API URL (self-hosted / non-default deployments)
+BRAINTRUST_API_URL = os.environ.get("BRAINTRUST_API_URL") or ""
 # Maximum concurrency for Braintrust evaluations
 # None means unlimited concurrency, otherwise specify a number
 _braintrust_concurrency = os.environ.get("BRAINTRUST_MAX_CONCURRENCY")
@@ -1526,6 +1524,12 @@ SCHEDULED_EVAL_PROJECT = os.environ.get("SCHEDULED_EVAL_PROJECT", "st-dev")
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
 LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfuse
+
+# Per-process cache TTL for the resolved tracing config; bounds how quickly a UI
+# connect/disconnect takes effect (no restart needed).
+TRACING_CONFIG_CACHE_TTL_SECONDS = float(
+    os.environ.get("TRACING_CONFIG_CACHE_TTL_SECONDS") or "30"
+)
 
 # Defined custom query/answer conditions to validate the query and the LLM answer.
 # Format: list of strings

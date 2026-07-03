@@ -373,7 +373,11 @@ def get_chat_sessions_older_than(
     days_old: int, db_session: Session
 ) -> list[tuple[UUID | None, UUID]]:
     """
-    Retrieves chat sessions older than a specified number of days.
+    Retrieves chat sessions whose last activity is older than a specified number of days.
+
+    "Last activity" is the time of the most recent message in the session, so an
+    old session that is still being used is retained. Sessions without any messages
+    fall back to their creation time.
 
     Args:
         days_old: The number of days to consider as "old".
@@ -384,10 +388,14 @@ def get_chat_sessions_older_than(
     """
 
     cutoff_time = datetime.now(tz=timezone.utc) - timedelta(days=days_old)
+    last_activity = func.coalesce(
+        func.max(ChatMessage.time_sent), ChatSession.time_created
+    )
     old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
-        select(ChatSession.user_id, ChatSession.id).where(
-            ChatSession.time_created < cutoff_time
-        )
+        select(ChatSession.user_id, ChatSession.id)
+        .outerjoin(ChatMessage, ChatMessage.chat_session_id == ChatSession.id)
+        .group_by(ChatSession.id, ChatSession.user_id)
+        .having(last_activity < cutoff_time)
     ).fetchall()
 
     # convert old_sessions to a conventional list of tuples

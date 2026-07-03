@@ -1,24 +1,15 @@
-# Registry prefix for base images. Defaults to Docker Hub; CI overrides this to the ECR
-# pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
-# Hub rate limits.
+# Registry prefix for the bun binary source below. Defaults to Docker Hub; CI overrides it to
+# the ECR pull-through cache to dodge rate limits. Applies only to `bun_source` -- the DHI Node
+# bases come from dhi.io, a separate registry not served by the cache (see the FROM lines below).
 ARG BASE_IMAGE_REGISTRY=docker.io
-FROM ${BASE_IMAGE_REGISTRY}/library/node:24-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f AS base
 
-LABEL com.onyx.maintainer="founders@onyx.app"
-LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
-contains code for both the Community and Enterprise editions of Onyx. If you do not \
-have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
-Edition features outside of personal development or testing purposes. Please reach out to \
-founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+# bun binary source, in its own stage because buildx only expands the registry ARG in a FROM,
+# not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc DHI node images.
+FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
 
-# bun binary source. Pinned via the registry prefix in its own stage because buildx
-# rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
-FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS bun_source
-
-# Step 1. Install dependencies + rebuild the source code only when needed
-FROM base AS builder
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+# Build stage. The DHI "-dev" variant runs as root and ships a shell, apt, and npm/npx.
+# Refresh the digest with: docker buildx imagetools inspect dhi.io/node:24-debian13-dev
+FROM dhi.io/node:24-debian13-dev@sha256:25a83f18150669e9ce3c9437327add4d75ae4ea26cbdb5e8747b66d3b74a567a AS builder
 COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=bun_source /usr/local/bin/bunx /usr/local/bin/bunx
 WORKDIR /app
@@ -106,14 +97,19 @@ RUN --mount=type=secret,id=sentry_auth_token \
     fi && \
     NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
-# Step 2. Production image, copy all the files and run next
-FROM base AS runner
-WORKDIR /app
+# Runtime stage. The DHI runtime variant is near-distroless: no shell or package manager, runs
+# as the non-root `node` user (uid 1000) with WORKDIR /app pre-set.
+# Refresh the digest with: docker buildx imagetools inspect dhi.io/node:24-debian13
+FROM dhi.io/node:24-debian13@sha256:805278f24c1146c6d3c96577b6256f8f97c43196fff88315fe3291a1ce118ddd AS runner
 
-# Remove global node modules, since they are not needed by the actual app
-# (all dependencies are copied over into the `/app` dir itself). These
-# global modules may be outdated and trigger security scans.
-RUN rm -rf /usr/local/lib/node_modules
+LABEL com.onyx.maintainer="founders@onyx.app"
+LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
+contains code for both the Community and Enterprise editions of Onyx. If you do not \
+have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
+Edition features outside of personal development or testing purposes. Please reach out to \
+founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+
+WORKDIR /app
 
 # Not needed, set by compose
 # ENV NODE_ENV production
@@ -121,18 +117,13 @@ RUN rm -rf /usr/local/lib/node_modules
 # Disable automatic telemetry collection
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Don't run production as root
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-USER nextjs
-
-# Add back in if we add anything to `public`
-COPY --from=builder /app/public ./public
+# `/app` is root-owned, so re-own build artifacts to `node` on copy.
+COPY --from=builder --chown=node:node /app/public ./public
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
 # Environment variables must be redefined at run time
 # NOTE: if you add something here, make sure to add it to the builder as well
@@ -199,4 +190,5 @@ ENV ONYX_VERSION=${ONYX_VERSION}
 # name only — breaking loopback healthchecks. Force 0.0.0.0 instead.
 ENV HOSTNAME="0.0.0.0"
 
+# The DHI runtime image sets no default ENTRYPOINT, so invoke node explicitly.
 CMD ["node", "server.js"]
