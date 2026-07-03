@@ -31,6 +31,13 @@ export default function ForgotPasswordPage() {
     forgotPassword(email).catch(() => {});
   }, [email, router]);
 
+  // Redirect to login once the reset is completed in another tab.
+  useEffect(() => {
+    const channel = new BroadcastChannel("password-reset");
+    channel.onmessage = () => router.replace("/auth/login" as Route);
+    return () => channel.close();
+  }, [router]);
+
   // Resend — fires whenever ?reset=true is present, then strips the param.
   useEffect(() => {
     if (!isResend || !email) return;
