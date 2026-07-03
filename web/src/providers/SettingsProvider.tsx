@@ -5,7 +5,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { AuthLayouts } from "@opal/layouts";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import MaintenancePage from "@/sections/errorPages/MaintenancePage";
-import ErrorPage from "@/components/errorPages/ErrorPage";
+import ErrorPage from "@/sections/errorPages/ErrorPage";
 import { FetchError } from "@/lib/fetcher";
 
 /**

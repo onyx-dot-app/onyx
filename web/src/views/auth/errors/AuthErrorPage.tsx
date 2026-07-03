@@ -34,7 +34,7 @@ function resolveMessage(raw: string | null): string | null {
   return ERROR_CODE_MESSAGES[raw] ?? raw;
 }
 
-export default function ErrorPage() {
+export default function AuthErrorPage() {
   const searchParams = useSearchParams();
   if (!searchParams?.get("error")) redirect("/auth/login");
   const message = resolveMessage(searchParams.get("error"));

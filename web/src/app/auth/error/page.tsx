@@ -1,1 +1,1 @@
-export { default } from "@/views/auth/errors/ErrorPage";
+export { default } from "@/views/auth/errors/AuthErrorPage";

@@ -1,13 +1,17 @@
 import { AuthLayouts } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import { DOCS_BASE_URL } from "@/lib/constants";
+import { useSettings } from "@/lib/settings/hooks";
 
 export default function Error() {
+  const { appName, logoUrl } = useSettings();
+
   return (
     <AuthLayouts.Root>
       <AuthLayouts.Card
         title="We encountered an issue"
         description="There was a problem loading your Onyx settings. This could be due to a configuration issue or incomplete setup."
+        logoSrc={logoUrl}
       >
         <AuthLayouts.Message
           messageType="warning"
