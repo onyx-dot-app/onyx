@@ -1,1 +1,1 @@
-export { default } from "@/sections/errorPages/MaintenancePage";
+export { default } from "@/sections/errorPages/MaintenanceCard";

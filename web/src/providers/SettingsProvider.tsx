@@ -4,7 +4,7 @@ import { JSX } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import { AuthLayouts } from "@opal/layouts";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import MaintenancePage from "@/sections/errorPages/MaintenancePage";
+import MaintenanceCard from "@/sections/errorPages/MaintenanceCard";
 import ErrorPage from "@/sections/errorPages/ErrorPage";
 import { FetchError } from "@/lib/fetcher";
 
@@ -26,7 +26,7 @@ export function SettingsProvider({
   if (error && !isAuthError(error)) {
     return NEXT_PUBLIC_CLOUD_ENABLED ? (
       <AuthLayouts.Root>
-        <MaintenancePage />
+        <MaintenanceCard />
       </AuthLayouts.Root>
     ) : (
       <ErrorPage />
