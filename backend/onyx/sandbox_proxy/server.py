@@ -110,7 +110,9 @@ class _HealthzHTTPServer(HTTPServer):
     socket with V6ONLY off so the kubelet probe reaches it on the pod's IPv6
     address (and IPv4-mapped clients still work on dual-stack)."""
 
-    def __init__(self, host: str, port: int, handler: type) -> None:
+    def __init__(
+        self, host: str, port: int, handler: type[BaseHTTPRequestHandler]
+    ) -> None:
         if ":" in host:
             self.address_family = socket.AF_INET6
         super().__init__((host, port), handler)
