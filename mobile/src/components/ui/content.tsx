@@ -29,11 +29,21 @@ const CONTENT_COLORS: Record<ContentColor, { title: TextColor; icon: string }> =
 
 // min-height = web line-height
 const XL_PRESETS = {
-  headline: { titleFont: "heading-h2", iconSize: 32, iconMinH: "min-h-36" },
-  section: { titleFont: "heading-h3", iconSize: 24, iconMinH: "min-h-28" },
+  headline: {
+    titleFont: "heading-h2",
+    iconSize: 32,
+    iconMinH: "min-h-36",
+    iconRowMb: "",
+  },
+  section: {
+    titleFont: "heading-h3",
+    iconSize: 24,
+    iconMinH: "min-h-28",
+    iconRowMb: "mb-4",
+  },
 } as const satisfies Record<
   "headline" | "section",
-  { titleFont: TextFont; iconSize: number; iconMinH: string }
+  { titleFont: TextFont; iconSize: number; iconMinH: string; iconRowMb: string }
 >;
 
 // descIndent aligns the description under the title, past the icon
@@ -102,13 +112,13 @@ function Content({
     return (
       <View className={cn("flex-col items-start", className)}>
         {leading ? (
-          <View className="flex-row items-center gap-4">
+          <View className={cn("flex-row items-center gap-4", preset.iconRowMb)}>
             <View className="shrink-0 items-center justify-center">
               {leading}
             </View>
           </View>
         ) : icon ? (
-          <View className="flex-row items-center gap-4">
+          <View className={cn("flex-row items-center gap-4", preset.iconRowMb)}>
             <View
               className={cn("items-center justify-center p-2", preset.iconMinH)}
             >

@@ -31,7 +31,7 @@ function Card({
   children,
 }: CardProps) {
   const base = cn(
-    "w-full overflow-hidden rounded-16 p-16",
+    "w-full overflow-hidden rounded-12 p-16",
     VARIANT_CLASSES[variant],
     disabled && "opacity-50",
     className,

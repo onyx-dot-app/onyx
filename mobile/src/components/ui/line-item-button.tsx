@@ -34,7 +34,7 @@ export function LineItemButton({
       disabled={disabled}
       onPress={handlePress}
       className={cn(
-        "w-full rounded-08 p-8",
+        "w-full rounded-12 p-8",
         selected && "bg-background-tint-00",
         !disabled && "active:bg-background-tint-03",
         disabled && "opacity-50",
