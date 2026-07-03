@@ -27,7 +27,7 @@ import { useState } from "react";
 import Cookies from "js-cookie";
 import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
-import { SettingsProvider } from "@/providers/SettingsProvider";
+import SettingsProvider from "@/providers/SettingsProvider";
 import { ModalProvider } from "@/components/context/ModalContext";
 import { SidebarStateProvider } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
