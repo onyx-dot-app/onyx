@@ -38,6 +38,10 @@ export function useAuthTypeMetadata(): {
   return { authTypeMetadata: data, isLoading, error };
 }
 
+// setTimeout stores its delay as a 32-bit signed int; anything above this
+// overflows and fires immediately.
+const MAX_TIMEOUT_DELAY_MS = 2 ** 31 - 1;
+
 function computeSecondsUntilExpiration(user: User): number | null {
   if (!user.token_expires_at) return null;
   return getSecondsUntilExpiration(new Date(user.token_expires_at));
@@ -113,10 +117,18 @@ export function useSessionWatcher(): SessionWatcherResult {
     // a 200 with deep-equal data, which never re-runs this effect — the
     // one-shot timer disarms and the session dies unwatched. A 200 after the
     // wall means the session moved, and its new expiry re-arms us.
-    expiryTimeoutRef.current = setTimeout(
-      () => mutateUser(),
-      (seconds + 2) * 1000
-    );
+    // Sessions longer than ~24.8 days also exceed setTimeout's max delay, so
+    // chain intermediate timeouts until the remaining delay fits.
+    const scheduleExpiryCheck = (delayMs: number) => {
+      if (delayMs > MAX_TIMEOUT_DELAY_MS) {
+        expiryTimeoutRef.current = setTimeout(() => {
+          scheduleExpiryCheck(delayMs - MAX_TIMEOUT_DELAY_MS);
+        }, MAX_TIMEOUT_DELAY_MS);
+      } else {
+        expiryTimeoutRef.current = setTimeout(() => mutateUser(), delayMs);
+      }
+    };
+    scheduleExpiryCheck((seconds + 2) * 1000);
   }, [inAuthFlow, user, mutateUser]);
 
   useEffect(() => {
