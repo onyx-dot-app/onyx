@@ -703,14 +703,16 @@ class TestAutoModeTransitionsAndResync:
         provider_name: str,
     ) -> None:
         """When the default provider transitions from manual to auto mode,
-        the global default should be preserved (set to the recommended model).
+        the admin-chosen global default must be preserved as long as that
+        model is still present in the GitHub config — even when it differs
+        from the config's recommended default.
 
         Steps:
         1. Create a manual-mode provider with models, set it as global default.
         2. Transition to auto mode (model_configurations=[] triggers cascade
            delete of old ModelConfigurations and their LLMModelFlow rows).
-        3. Verify the provider is still the global default, now using the
-           recommended default model from the GitHub config.
+        3. Verify the provider is still the global default, still using the
+           admin-chosen model (not the config's recommended default).
         """
         initial_models = [
             ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
@@ -781,8 +783,9 @@ class TestAutoModeTransitionsAndResync:
             assert default_after.llm_provider_id == provider.id, (
                 "Default should still belong to the same provider after transition"
             )
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to the recommended model 'gpt-4o-mini', got '{default_after.name}'"
+            assert default_after.name == "gpt-4o", (
+                "Default should remain the admin-chosen 'gpt-4o' since it is "
+                f"still in the GitHub config, got '{default_after.name}'"
             )
 
         finally:
@@ -1149,21 +1152,22 @@ class TestAutoModeTransitionsAndResync:
             db_session.rollback()
             _cleanup_provider(db_session, provider_name)
 
-    def test_sync_updates_default_when_recommended_default_changes(
+    def test_sync_preserves_default_when_recommended_default_changes(
         self,
         db_session: Session,
         provider_name: str,
     ) -> None:
         """When the provider owns the CHAT default and a sync arrives with a
-        different recommended default model (both models still in config),
-        the global default should be updated to the new recommendation.
+        different recommended default model, the current default must be kept
+        as long as it is still in the config — the recommendation only applies
+        when the current default is removed.
 
         Steps:
         1. Create auto-mode provider with config v1: default=gpt-4o.
         2. Set gpt-4o as the global CHAT default.
         3. Re-sync with config v2: default=gpt-4o-mini (gpt-4o still present).
-        4. Verify the CHAT default switched to gpt-4o-mini and both models
-           remain visible.
+        4. Verify the CHAT default is still gpt-4o and both models remain
+           visible.
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
@@ -1219,7 +1223,10 @@ class TestAutoModeTransitionsAndResync:
                 provider=provider,
                 llm_recommendations=config_v2,
             )
-            assert changes > 0, "Sync should report changes when default switches"
+            assert changes == 0, (
+                "Sync should be a no-op when the current default is still in "
+                f"the config, got {changes} changes"
+            )
 
             # Both models should remain visible
             db_session.expire_all()
@@ -1233,11 +1240,11 @@ class TestAutoModeTransitionsAndResync:
             assert visibility["gpt-4o"] is True
             assert visibility["gpt-4o-mini"] is True
 
-            # The CHAT default should now be gpt-4o-mini
+            # The CHAT default should still be the admin-chosen gpt-4o
             default_after = fetch_default_llm_model(db_session)
             assert default_after is not None
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to 'gpt-4o-mini', got '{default_after.name}'"
+            assert default_after.name == "gpt-4o", (
+                f"Default should remain 'gpt-4o', got '{default_after.name}'"
             )
 
         finally:

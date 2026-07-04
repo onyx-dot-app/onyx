@@ -843,7 +843,10 @@ def sync_auto_mode_models(
 ) -> int:
     """Sync models from GitHub config to a provider in Auto mode.
 
-    In Auto mode, the model list and default are controlled by GitHub config.
+    In Auto mode, the model list and visibility are controlled by GitHub
+    config. The global default model is left alone unless the currently
+    selected default was removed from the config (and thus hidden), in which
+    case it is moved to the recommended default.
     The schema has:
     - default_model: The default model config (always visible)
     - additional_visible_models: List of additional visible models
@@ -915,7 +918,11 @@ def sync_auto_mode_models(
             )
             changes += 1
 
-    # Update the default if this provider currently holds the global CHAT default.
+    # If this provider holds the global CHAT default and the sync just hid that
+    # model (it dropped out of the GitHub config), move the default to the
+    # recommended one. An admin-chosen default that is still in the recommended
+    # visible list is preserved — Auto mode manages the model list, not the
+    # admin's default selection.
     # We flush (but don't commit) so that _update_default_model can see the new
     # model rows, then commit everything atomically to avoid a window where the
     # old default is invisible but still pointed-to.
@@ -929,6 +936,7 @@ def sync_auto_mode_models(
             current_default
             and current_default.llm_provider_id == provider.id
             and current_default.name != recommended_default.name
+            and current_default.name not in recommended_visible_model_names
         ):
             _update_default_model__no_commit(
                 db_session=db_session,
