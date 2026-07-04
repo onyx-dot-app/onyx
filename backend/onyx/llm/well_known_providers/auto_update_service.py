@@ -10,7 +10,10 @@ are managed centrally via a GitHub-hosted JSON file. In Auto mode:
 - Admin only needs to provide API credentials
 """
 
+import json
+import pathlib
 from datetime import datetime
+from datetime import timezone
 
 import httpx
 from sqlalchemy.orm import Session
@@ -76,6 +79,44 @@ def fetch_llm_recommendations_from_github(
         return None
 
 
+def load_bundled_recommendations() -> LLMRecommendations | None:
+    """Load the recommended-models.json copy shipped with this release."""
+    json_path = pathlib.Path(__file__).parent / "recommended-models.json"
+    try:
+        with open(json_path, "r") as f:
+            return LLMRecommendations.model_validate(json.load(f))
+    except Exception as e:
+        logger.error("Failed to load bundled LLM recommendations: %s", e)
+        return None
+
+
+def _as_utc(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+def fetch_llm_recommendations(
+    timeout: float = 30.0,
+) -> LLMRecommendations | None:
+    """Resolve the LLM recommendations config.
+
+    Uses whichever of the GitHub-hosted config and the bundled copy has the
+    newer `updated_at`: GitHub can push recommendations to running
+    deployments without a release, while a fresh release isn't held back by
+    a stale (or unreachable) remote file — e.g. air-gapped deployments still
+    get the recommendations shipped with their version.
+    """
+    remote = fetch_llm_recommendations_from_github(timeout=timeout)
+    bundled = load_bundled_recommendations()
+
+    if remote and bundled:
+        return (
+            remote
+            if _as_utc(remote.updated_at) >= _as_utc(bundled.updated_at)
+            else bundled
+        )
+    return remote or bundled
+
+
 def sync_llm_models_from_github(
     db_session: Session,
     force: bool = False,
@@ -104,10 +145,10 @@ def sync_llm_models_from_github(
         logger.debug("No providers in Auto mode found")
         return {}
 
-    # Fetch config from GitHub
-    config = fetch_llm_recommendations_from_github()
+    # Resolve config (GitHub-hosted or the newer bundled copy)
+    config = fetch_llm_recommendations()
     if not config:
-        logger.warning("Failed to fetch GitHub config")
+        logger.warning("Failed to resolve LLM recommendations config")
         return {}
 
     # Skip if we've already processed this version (unless forced)
