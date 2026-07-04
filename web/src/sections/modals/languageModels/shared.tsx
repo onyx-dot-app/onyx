@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
@@ -620,15 +620,19 @@ export function ModelSelectionField({
   // or originally visible (e.g. an admin-chosen default the config doesn't
   // carry). Hidden models outside that set stay out of the list — enabling
   // them would just be reverted by the next background sync.
-  const originallyVisibleNames = new Set(
-    originalModelsRef.current.filter((m) => m.is_visible).map((m) => m.name)
-  );
-  const autoOfferedModels = models.filter(
-    (m) =>
-      m.is_visible ||
-      autoModelNames?.has(m.name) ||
-      originallyVisibleNames.has(m.name)
-  );
+  // The ref snapshot only diverges from `models` after a user edit, which
+  // changes `models` identity, so it doesn't need to be a dependency itself.
+  const autoOfferedModels = useMemo(() => {
+    const originallyVisibleNames = new Set(
+      originalModelsRef.current.filter((m) => m.is_visible).map((m) => m.name)
+    );
+    return models.filter(
+      (m) =>
+        m.is_visible ||
+        autoModelNames?.has(m.name) ||
+        originallyVisibleNames.has(m.name)
+    );
+  }, [models, autoModelNames]);
 
   // "Select All" only operates on the models shown in the list, which in
   // auto mode is the offered subset rather than every known model.
