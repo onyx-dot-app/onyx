@@ -1051,21 +1051,115 @@ class TestAutoModeTransitionsAndResync:
             db_session.rollback()
             _cleanup_provider(db_session, provider_name)
 
-    def test_default_model_hidden_when_removed_from_config(
+    def test_transition_to_auto_mode_preserves_default_not_in_config(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """Enabling auto mode must preserve the admin-chosen default model
+        even when that model does not appear in the GitHub config at all
+        (e.g. the curated list lags behind newly released models).
+
+        Regression test: an Anthropic provider with claude-sonnet-5 as the
+        global default flipped to the config's recommended claude-opus-4-8 on
+        save, because the sync hid the default and reassigned it.
+        """
+        admin_default = "claude-sonnet-5"
+
+        # Config recommends opus and does NOT contain sonnet-5
+        mock_recommendations = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.ANTHROPIC,
+            default_model_name="claude-opus-4-8",
+            additional_models=["claude-haiku-4-5"],
+        )
+
+        try:
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    name=provider_name,
+                    provider=LlmProviderNames.ANTHROPIC,
+                    api_key="sk-test-key-00000000000000000000000000000000000",
+                    api_key_changed=True,
+                    is_auto_mode=False,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name=admin_default, is_visible=True
+                        ),
+                    ],
+                ),
+                is_creation=True,
+                user=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_provider(provider.id, admin_default, db_session)
+
+            # Enable auto mode via the API, like the admin modal does
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=mock_recommendations,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        id=provider.id,
+                        name=provider_name,
+                        provider=LlmProviderNames.ANTHROPIC,
+                        api_key=None,
+                        api_key_changed=False,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=False,
+                    user=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            default_after = fetch_default_llm_model(db_session)
+            assert default_after is not None
+            assert default_after.name == admin_default, (
+                f"Default must remain '{admin_default}' after enabling auto "
+                f"mode, got '{default_after.name}'"
+            )
+            assert default_after.is_visible is True, (
+                "The default model must stay visible even though it is not "
+                "in the GitHub config"
+            )
+
+            # Config models were still added and made visible
+            provider_after = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider_after is not None
+            visibility = {
+                mc.name: mc.is_visible for mc in provider_after.model_configurations
+            }
+            assert visibility.get("claude-opus-4-8") is True
+            assert visibility.get("claude-haiku-4-5") is True
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_default_model_kept_when_removed_from_config(
         self,
         db_session: Session,
         provider_name: str,
     ) -> None:
         """When the current default model is removed from the config, sync
-        should hide it. The default model flow row should still exist (it
-        points at the ModelConfiguration), but the model is no longer visible.
+        must keep it visible and keep it as the default — Auto mode curates
+        the model list but never pulls the admin-chosen default out from
+        under the org.
 
         Steps:
         1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
         2. Set gpt-4o as the global default.
         3. Re-sync with config: default=gpt-4o-mini (gpt-4o removed entirely).
-        4. Verify gpt-4o is hidden, gpt-4o-mini is visible, and
-           fetch_default_llm_model still returns a result (the flow row persists).
+        4. Verify gpt-4o stays visible and remains the global default.
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
@@ -1116,12 +1210,11 @@ class TestAutoModeTransitionsAndResync:
             )
             assert provider is not None
 
-            changes = sync_auto_mode_models(
+            sync_auto_mode_models(
                 db_session=db_session,
                 provider=provider,
                 llm_recommendations=config_v2,
             )
-            assert changes > 0
 
             # Step 4: Verify visibility
             db_session.expire_all()
@@ -1133,19 +1226,19 @@ class TestAutoModeTransitionsAndResync:
             visibility = {
                 mc.name: mc.is_visible for mc in provider.model_configurations
             }
-            assert visibility["gpt-4o"] is False, "Removed default should be hidden"
-            assert visibility["gpt-4o-mini"] is True, "New default should be visible"
+            assert visibility["gpt-4o"] is True, (
+                "The default model must stay visible even when removed from the config"
+            )
+            assert visibility["gpt-4o-mini"] is True, (
+                "Recommended default should be visible"
+            )
 
-            # The old default (gpt-4o) is now hidden. sync_auto_mode_models
-            # should update the global default to the new recommended default
-            # (gpt-4o-mini) so that it is not silently lost.
             db_session.expire_all()
             default_after = fetch_default_llm_model(db_session)
-            assert default_after is not None, (
-                "Default model should not be None — sync should set the new recommended default when the old one is hidden"
-            )
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to the new recommended model 'gpt-4o-mini', but got '{default_after.name}'"
+            assert default_after is not None
+            assert default_after.name == "gpt-4o", (
+                "The admin-chosen default must survive the sync even when "
+                f"removed from the config, got '{default_after.name}'"
             )
 
         finally:

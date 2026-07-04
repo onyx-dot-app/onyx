@@ -621,9 +621,10 @@ def put_llm_provider(
     # When transitioning to auto mode, preserve existing model configurations
     # so the upsert doesn't try to delete them (which would trip the default
     # model protection guard). sync_auto_mode_models will handle the model
-    # lifecycle afterward — adding new models, hiding removed ones, and
-    # updating the default. This is safe even if sync fails: the provider
-    # keeps its old models and default rather than losing them.
+    # lifecycle afterward — adding new models and hiding removed ones, while
+    # keeping default models visible and untouched. This is safe even if sync
+    # fails: the provider keeps its old models and default rather than losing
+    # them.
     if transitioning_to_auto_mode and existing_provider:
         llm_provider_upsert_request.model_configurations = [
             ModelConfigurationUpsertRequest.from_model(mc)
