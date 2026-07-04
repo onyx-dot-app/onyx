@@ -903,7 +903,14 @@ def sync_auto_mode_models(
     # Mark models that are no longer in GitHub config as not visible
     for model_name, model in existing_models.items():
         if model_name not in recommended_visible_model_names:
-            if model.is_visible and model.id not in default_flow_model_ids:
+            if model.is_visible and model.id in default_flow_model_ids:
+                logger.info(
+                    "Auto mode sync keeping default model '%s' visible on "
+                    "provider '%s' even though it is not in the config",
+                    model_name,
+                    provider.name or provider.provider,
+                )
+            elif model.is_visible:
                 model.is_visible = False
                 changes += 1
 

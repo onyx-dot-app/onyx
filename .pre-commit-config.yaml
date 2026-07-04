@@ -181,6 +181,14 @@ repos:
             |deployment/docker_compose/env\.(template|prod\.template)
             |deployment/helm/charts/onyx/(values\.yaml|templates/configmap\.yaml)
           )$
+      - id: recommended-models-updated-at
+        name: recommended-models updated_at bump
+        description: "Fail when recommended-models.json changes without a newer updated_at (the config resolver picks the newest copy by timestamp)"
+        language: system
+        entry: python3 backend/scripts/check_recommended_models_bump.py
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^backend/onyx/llm/well_known_providers/recommended-models\.json$
       - id: bun-install
         name: bun install
         description: "Automatically run 'bun install' after a checkout, pull or rebase"
