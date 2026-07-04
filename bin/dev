@@ -1,0 +1,11 @@
+#!/bin/bash
+set -euo pipefail
+
+this_dir="$(dirname "${BASH_SOURCE[0]}")"
+root_dir="$(realpath "$this_dir/..")"
+
+docker_compose_dir="$root_dir/deployment/docker_compose"
+compose_args=(-f "$docker_compose_dir/docker-compose.yml" -f "$docker_compose_dir/docker-compose.dev.yml")
+
+docker compose "${compose_args[@]}" up -d --wait
+exec docker compose "${compose_args[@]}" watch

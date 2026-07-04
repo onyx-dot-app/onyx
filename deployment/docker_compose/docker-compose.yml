@@ -39,7 +39,7 @@ name: onyx
 
 services:
   api_server:
-    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+    # image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -47,9 +47,9 @@ services:
       /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
-    # Check env.template and copy to .env for env vars
+    # Check env.template and copy to ../../.env for env vars
     env_file:
-      - path: .env
+      - path: ../../.env
         required: false
     depends_on:
       relational_db:
@@ -82,8 +82,8 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
-      # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
-      # Use --include-craft with install script, or manually set in .env file
+      # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in ../../.env to enable)
+      # Use --include-craft with install script, or manually set in ../../.env file
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
@@ -118,7 +118,7 @@ services:
       - file-system:/app/file-system
 
   background:
-    image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
+    # image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
     build:
       context: ../../backend
       dockerfile: Dockerfile
@@ -129,7 +129,7 @@ services:
       fi &&
       /app/scripts/supervisord_entrypoint.sh"
     env_file:
-      - path: .env
+      - path: ../../.env
         required: false
     depends_on:
       relational_db:
@@ -187,7 +187,7 @@ services:
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
 
   web_server:
-    image: ${ONYX_WEB_SERVER_IMAGE:-onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}}
+    # image: ${ONYX_WEB_SERVER_IMAGE:-onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}}
     build:
       context: ../../web
       dockerfile: Dockerfile
@@ -200,7 +200,7 @@ services:
         - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
         - NODE_OPTIONS=${NODE_OPTIONS:-"--max-old-space-size=4096"}
     env_file:
-      - path: .env
+      - path: ../../.env
         required: false
     depends_on:
       - api_server
@@ -234,7 +234,7 @@ services:
   #       exec python -m onyx.mcp_server_main;
   #     fi"
   #   env_file:
-  #     - path: .env
+  #     - path: ../../.env
   #       required: false
   #   depends_on:
   #     - relational_db
@@ -282,7 +282,7 @@ services:
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
     env_file:
-      - path: .env
+      - path: ../../.env
         required: false
     restart: unless-stopped
     volumes:
@@ -332,7 +332,7 @@ services:
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
     env_file:
-      - path: .env
+      - path: ../../.env
         required: false
     restart: unless-stopped
     environment:
@@ -367,7 +367,7 @@ services:
     shm_size: 1g
     command: -c 'max_connections=250'
     env_file:
-      - path: .env
+      - path: ../../.env
         required: false
     restart: unless-stopped
     # PRODUCTION: Override the defaults by passing in the environment variables
@@ -437,7 +437,7 @@ services:
       web_server:
         condition: service_healthy
     env_file:
-      - path: .env
+      - path: ../../.env
         required: false
     environment:
       - DOMAIN=localhost
@@ -498,7 +498,7 @@ services:
     # persistence. explicitly setting save and appendonly forces ephemeral behavior.
     command: redis-server --save "" --appendonly no
     env_file:
-      - path: .env
+      - path: ../../.env
         required: false
     # Use tmpfs to prevent creation of anonymous volumes for /data
     tmpfs:
@@ -515,7 +515,7 @@ services:
     #   - "9004:9000"
     #   - "9005:9001"
     env_file:
-      - path: .env
+      - path: ../../.env
         required: false
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
@@ -536,7 +536,7 @@ services:
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
     env_file:
-      - path: .env
+      - path: ../../.env
         required: false
 
     # Below is needed for the `docker-out-of-docker` execution mode

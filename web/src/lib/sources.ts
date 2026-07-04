@@ -39,6 +39,7 @@ import {
   SvgHubspot,
   SvgJira,
   SvgLinear,
+  SvgMonday, // FORK: monday
   SvgLoopio,
   SvgMediawiki,
   SvgNotion,
@@ -262,6 +263,13 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Linear",
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/linear`,
+  },
+  // FORK: monday
+  monday: {
+    icon: SvgMonday,
+    displayName: "Monday.com",
+    category: SourceCategory.TicketingAndTaskManagement,
+    docs: `${DOCS_ADMINS_PATH}/connectors/monday`,
   },
   freshdesk: {
     icon: SvgFreshdesk,

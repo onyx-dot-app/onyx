@@ -601,6 +601,7 @@ export enum ValidSources {
 
   // Federated Connectors
   FederatedSlack = "federated_slack",
+  Monday = "monday", // FORK: monday
 }
 
 export const federatedSourceToRegularSource = (

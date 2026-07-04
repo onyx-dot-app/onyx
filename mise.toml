@@ -1,0 +1,19 @@
+[tools]
+python = "3.13"
+
+
+[vars]
+DEPLOYMENT_DIR = "deployment/docker_compose"
+
+
+[tasks.build]
+description = "Build docker images"
+run = "docker compose -f {{vars.DEPLOYMENT_DIR}}/docker-compose.yml build"
+
+[tasks.dev]
+description = "Run dev with compose watch"
+run = "docker compose -f {{vars.DEPLOYMENT_DIR}}/docker-compose.yml -f {{vars.DEPLOYMENT_DIR}}/docker-compose.dev.yml up -d --wait && exec docker compose -f {{vars.DEPLOYMENT_DIR}}/docker-compose.yml -f {{vars.DEPLOYMENT_DIR}}/docker-compose.dev.yml watch"
+
+[tasks.down]
+description = "Stop dev containers"
+run = "docker compose -f {{vars.DEPLOYMENT_DIR}}/docker-compose.yml -f {{vars.DEPLOYMENT_DIR}}/docker-compose.dev.yml down"

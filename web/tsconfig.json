@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "es5",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -25,21 +21,11 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@tests/*": [
-        "./tests/*"
-      ],
-      "@public/*": [
-        "./public/*"
-      ],
-      "@opal/*": [
-        "./lib/opal/src/*"
-      ],
-      "@opal/types/*": [
-        "./lib/opal/src/types/*"
-      ]
+      "@/*": ["./src/*"],
+      "@tests/*": ["./tests/*"],
+      "@public/*": ["./public/*"],
+      "@opal/*": ["./lib/opal/src/*"],
+      "@opal/types/*": ["./lib/opal/src/types/*"]
     }
   },
   "include": [
@@ -49,9 +35,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "lib/opal",
-    "lib/shared"
-  ]
+  "exclude": ["node_modules", "lib/opal", "lib/shared", "playwright.config.ts"]
 }

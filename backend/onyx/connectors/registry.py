@@ -226,3 +226,9 @@ CONNECTOR_CLASS_MAP = {
         class_name="MockConnector",
     ),
 }
+
+# === FORK ===
+from onyx.connectors.fork_registry import FORK_CONNECTOR_CLASS_MAP  # noqa: E402
+
+CONNECTOR_CLASS_MAP.update(FORK_CONNECTOR_CLASS_MAP)
+# === FORK ===

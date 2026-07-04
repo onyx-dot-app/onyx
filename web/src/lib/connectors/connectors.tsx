@@ -1363,6 +1363,31 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     values: [],
     advanced_values: [],
   },
+  // FORK: monday
+  monday: {
+    description: "Configure Monday.com connector",
+    values: [
+      {
+        type: "list",
+        query: "Enter board IDs to index (optional):",
+        label: "Board IDs",
+        name: "board_ids",
+        optional: true,
+        description:
+          "Restrict indexing to specific boards. Leave empty to index all boards the API token can access. Board IDs appear in the monday.com URL (e.g. .../boards/1234567890).",
+      },
+      {
+        type: "list",
+        query: "Enter workspace IDs to index (optional):",
+        label: "Workspace IDs",
+        name: "workspace_ids",
+        optional: true,
+        description:
+          "Restrict indexing to boards in specific workspaces. Leave empty to index all accessible workspaces.",
+      },
+    ],
+    advanced_values: [],
+  },
   dropbox: {
     description: "Configure Dropbox connector",
     values: [],

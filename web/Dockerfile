@@ -13,7 +13,10 @@ founders@onyx.app for more information. Please visit https://github.com/onyx-dot
 
 # bun binary source. Pinned via the registry prefix in its own stage because buildx
 # rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
-FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS bun_source
+# Pin Bun 1.3.1: 1.3.14 intermittently fails `bun install --frozen-lockfile`
+# during workspace prepare hooks with "failed opening node_modules/package dir
+# for package tailwind-merge" when only package manifests + lib/* are copied.
+FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.1-alpine@sha256:514fe15804f8ad3772ba323c2298daf121bb4b42386e2522998de5e87f16a94c AS bun_source
 
 # Step 1. Install dependencies + rebuild the source code only when needed
 FROM base AS builder

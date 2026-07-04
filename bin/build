@@ -1,0 +1,11 @@
+#!/bin/bash
+set -euo pipefail
+
+this_dir="$(dirname "${BASH_SOURCE[0]}")"
+root_dir="$(realpath "$this_dir/..")"
+
+docker_compose_dir="$root_dir/deployment/docker_compose"
+docker_compose_file="$docker_compose_dir/docker-compose.yml"
+
+
+docker compose -f "$docker_compose_file" build

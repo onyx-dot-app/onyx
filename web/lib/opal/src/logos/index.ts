@@ -51,6 +51,7 @@ export { default as SvgLmStudio } from "@opal/logos/lm-studio";
 export { default as SvgLoopio } from "@opal/logos/loopio";
 export { default as SvgMediawiki } from "@opal/logos/mediawiki";
 export { default as SvgMicrosoft } from "@opal/logos/microsoft";
+export { default as SvgMonday } from "@opal/logos/monday"; // FORK: monday
 export { default as SvgMistral } from "@opal/logos/mistral";
 export { default as SvgMixedbread } from "@opal/logos/mixedbread";
 export { default as SvgNetflix } from "@opal/logos/netflix";

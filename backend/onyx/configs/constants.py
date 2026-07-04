@@ -270,6 +270,7 @@ class DocumentSource(str, Enum):
     # Raw files for Craft sandbox access (xlsx, pptx, docx, etc.)
     # Uses RAW_BINARY processing mode - no text extraction
     CRAFT_FILE = "craft_file"
+    MONDAY = "monday"  # FORK: monday
 
 
 class FederatedConnectorSource(str, Enum):
@@ -739,4 +740,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.IMAP: "Email messages and threads",
     DocumentSource.TESTRAIL: "Test cases and QA management",
     DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
+    DocumentSource.MONDAY: "Project management boards, items, and updates",  # FORK: monday
 }

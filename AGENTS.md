@@ -383,3 +383,19 @@ raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=e.respon
 In addition to the other content in this file, best practices for contributing
 to the codebase can be found in the "Engineering Best Practices" section of
 `CONTRIBUTING.md`. Understand its contents and follow them.
+
+## Learned User Preferences
+
+- Full SSO integration (Google Workspace OAuth, SAML, or OIDC) is required for the SuperPlay deployment, not optional.
+- Prefer Google OAuth over email/password for self-hosted authentication (`AUTH_TYPE=google_oauth`).
+- UI rebrand target is Claude-style conversational UX with SuperPlay branding (superplay.co palette, icons, typography).
+
+## Learned Workspace Facts
+
+- SuperPlay homelab fork of Onyx for an internal enterprise AI search platform; parent initiative is Jira AI-61.
+- Docker Compose deployment config lives at `deployment/docker_compose/.env`; env vars apply at container creation — run `docker compose up -d --force-recreate api_server web_server` after changes.
+- Primary Atlassian/Jira instance is `superplaystudio.atlassian.net`.
+- Custom connector priorities include Monday.com, Miro, and Mixpanel; Monday.com connector work tracks Jira AI-69 and follows the Linear connector pattern.
+- Google OAuth redirect URI must be `{WEB_DOMAIN}/auth/oauth/callback`, with `WEB_DOMAIN` matching the browser URL exactly (scheme, host, port).
+- Homelab EE feature testing uses `ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true` and `LICENSE_ENFORCEMENT_ENABLED=false` on api_server, celery workers, and web.
+- Onyx supports OpenSearch and Vespa as document-index backends; only one is active at runtime (this deployment uses OpenSearch).

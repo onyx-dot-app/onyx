@@ -3,29 +3,90 @@
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml watch
+#
+# Or use bin/dev / mise run dev to start services and attach watch automatically.
 #
 # Or set COMPOSE_FILE environment variable:
 #   export COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
 #   docker compose up -d --wait
+#   docker compose watch
+
+x-backend-sync-watch: &backend-sync-watch
+  - action: sync
+    path: ../../backend/onyx
+    target: /app/onyx
+    ignore:
+      - __pycache__/
+  - action: sync
+    path: ../../backend/ee
+    target: /app/ee
+    ignore:
+      - __pycache__/
+  - action: sync
+    path: ../../backend/shared_configs
+    target: /app/shared_configs
+  - action: rebuild
+    path: ../../backend/requirements
+
+x-backend-restart-watch: &backend-restart-watch
+  - action: sync+restart
+    path: ../../backend/onyx
+    target: /app/onyx
+    ignore:
+      - __pycache__/
+  - action: sync+restart
+    path: ../../backend/ee
+    target: /app/ee
+    ignore:
+      - __pycache__/
+  - action: sync+restart
+    path: ../../backend/shared_configs
+    target: /app/shared_configs
+  - action: rebuild
+    path: ../../backend/requirements
 
 services:
   api_server:
     ports:
       - "8080:8080"
+    command: >
+      /bin/sh -c "alembic upgrade head &&
+      echo \"Starting Onyx Api Server (dev reload)\" &&
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080 --reload
+      --reload-dir /app/onyx --reload-dir /app/ee"
+    develop:
+      watch: *backend-sync-watch
     deploy:
       resources:
         limits:
           cpus: "${API_SERVER_CPU_LIMIT:-0}"
           memory: "${API_SERVER_MEM_LIMIT:-0}"
 
+  background:
+    develop:
+      watch: *backend-restart-watch
+
+  web_server:
+    develop:
+      watch:
+        - action: rebuild
+          path: ../../web/package.json
+        - action: rebuild
+          path: ../../web/bun.lock
+        - action: rebuild
+          path: ../../web/src
+        - action: rebuild
+          path: ../../web/lib
+
   # Uncomment the block below to enable the MCP server for Onyx.
   # mcp_server:
   #   ports:
   #     - "8090:8090"
 
-  relational_db:
-    ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+  # relational_db:
+  #   ports:
+  #     - "${POSTGRES_HOST_PORT:-5432}:5432"
 
   opensearch:
     ports:

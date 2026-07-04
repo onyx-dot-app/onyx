@@ -67,3 +67,5 @@ plans/
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 !.claude/settings.json
+.understand-anything/
+graphify-out/

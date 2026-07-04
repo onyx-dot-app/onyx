@@ -83,6 +83,7 @@ class TestSecret(StrEnum):
     BITBUCKET_WORKSPACE = "bitbucket-workspace"
     BITBUCKET_API_TOKEN = "bitbucket-api-token"
     FIREFLIES_API_KEY = "fireflies-api-key"
+    MONDAY_API_TOKEN = "monday-api-token"  # FORK: monday
 
     @classmethod
     def aws_prefix(cls) -> str:
