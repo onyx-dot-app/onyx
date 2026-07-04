@@ -843,12 +843,14 @@ def sync_auto_mode_models(
 ) -> int:
     """Sync models from GitHub config to a provider in Auto mode.
 
-    In Auto mode, the model list and visibility are controlled by GitHub
-    config, with one exception: a model that is currently a default for some
-    flow (global chat default, vision default, ...) is never hidden and the
-    default is never reassigned, even when that model is not in the config.
-    Auto mode curates the available list — it must not change what the org's
-    chats actually run on.
+    In Auto mode, the GitHub config decides which models are *offered*:
+    newly recommended models are added (visible), and models dropped from
+    the config are hidden. Admin choices win within that list:
+    - A model the admin deselected (hid) stays hidden even though the config
+      lists it.
+    - A model that is currently a default for some flow (global chat default,
+      vision default, ...) is never hidden and the default is never
+      reassigned, even when that model is not in the config.
     The schema has:
     - default_model: The default model config (always visible)
     - additional_visible_models: List of additional visible models
@@ -908,18 +910,12 @@ def sync_auto_mode_models(
     # Add or update models from GitHub config
     for model_config in recommended_visible_models:
         if model_config.name in existing_models:
-            # Update existing model
+            # Update existing model. Visibility is deliberately left alone:
+            # a model the admin deselected stays hidden even though the
+            # config lists it.
             existing = existing_models[model_config.name]
-            # Check each field for changes
-            updated = False
             if existing.display_name != model_config.display_name:
                 existing.display_name = model_config.display_name
-                updated = True
-            # All models in the config are visible
-            if not existing.is_visible:
-                existing.is_visible = True
-                updated = True
-            if updated:
                 changes += 1
         else:
             # Add new model - all models from GitHub config are visible
@@ -953,6 +949,17 @@ def sync_auto_mode_models(
             and current_default.name != recommended_default.name
             and not current_default.is_visible
         ):
+            # The recommended default may itself have been deselected by the
+            # admin — it must be visible to serve as the default.
+            recommended_row = db_session.scalar(
+                select(ModelConfiguration).where(
+                    ModelConfiguration.llm_provider_id == provider.id,
+                    ModelConfiguration.name == recommended_default.name,
+                )
+            )
+            if recommended_row and not recommended_row.is_visible:
+                recommended_row.is_visible = True
+                changes += 1
             _update_default_model__no_commit(
                 db_session=db_session,
                 provider_id=provider.id,

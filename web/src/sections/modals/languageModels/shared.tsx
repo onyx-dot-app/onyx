@@ -9,6 +9,7 @@ import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useAgents } from "@/lib/agents/hooks";
+import { useAutoModeConfig } from "@/lib/languageModels/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import type {
   LLMProviderView,
@@ -492,7 +493,6 @@ function modelRightChildren(model: ModelConfiguration): React.ReactNode {
 
 interface ModelRowProps {
   model: ModelConfiguration;
-  isAutoMode: boolean;
   onToggleVisibility: (visible: boolean) => void;
   onRename: (value: string | undefined) => void;
 }
@@ -510,20 +510,11 @@ interface ModelRowProps {
  * ContentAction) but with a typeless `Interactive.Container`, which renders a
  * `<div>` instead of a `<button>`.
  */
-function ModelRow({
-  model,
-  isAutoMode,
-  onToggleVisibility,
-  onRename,
-}: ModelRowProps) {
+function ModelRow({ model, onToggleVisibility, onRename }: ModelRowProps) {
   const displayName =
     model.custom_display_name || model.display_name || model.name;
-  // In auto mode every model is shown, so the row is always "selected" and the
-  // visibility toggle is disabled.
-  const isSelected = isAutoMode || model.is_visible;
-  const toggleVisibility = isAutoMode
-    ? undefined
-    : () => onToggleVisibility(!model.is_visible);
+  const isSelected = model.is_visible;
+  const toggleVisibility = () => onToggleVisibility(!model.is_visible);
 
   return (
     <div data-model-name={model.name}>
@@ -531,18 +522,14 @@ function ModelRow({
         variant="select-heavy"
         state={isSelected ? "selected" : "empty"}
         onClick={toggleVisibility}
-        role={toggleVisibility ? "button" : undefined}
-        tabIndex={toggleVisibility ? 0 : undefined}
-        onKeyDown={
-          toggleVisibility
-            ? (e: React.KeyboardEvent) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  toggleVisibility();
-                }
-              }
-            : undefined
-        }
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleVisibility();
+          }
+        }}
       >
         <Interactive.Container width="full" size="fit" rounding="md">
           <div className="w-full p-2">
@@ -585,8 +572,14 @@ export function ModelSelectionField({
     shouldShowAutoUpdateToggle && formikProps.values.is_auto_mode;
   const models = formikProps.values.model_configurations;
 
-  // Snapshot the original model visibility so we can restore it when
-  // toggling auto mode back on.
+  // The auto-update config decides which models auto mode *offers*; the admin
+  // still chooses which offered models are enabled.
+  const { autoModelNames } = useAutoModeConfig(
+    shouldShowAutoUpdateToggle ? formikProps.values.provider : null
+  );
+
+  // Snapshot the models first present in the form, so rows deselected while
+  // auto mode is on don't vanish from the list (they must stay re-selectable).
   const originalModelsRef = useRef(models);
   useEffect(() => {
     if (originalModelsRef.current.length === 0 && models.length > 0) {
@@ -621,26 +614,36 @@ export function ModelSelectionField({
 
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
-    if (nextIsAutoMode) {
-      formikProps.setFieldValue(
-        "model_configurations",
-        originalModelsRef.current
-      );
-    }
   }
 
-  const allSelected = models.length > 0 && models.every((m) => m.is_visible);
+  // In auto mode, list the models the config offers plus anything currently
+  // or originally visible (e.g. an admin-chosen default the config doesn't
+  // carry). Hidden models outside that set stay out of the list — enabling
+  // them would just be reverted by the next background sync.
+  const originallyVisibleNames = new Set(
+    originalModelsRef.current.filter((m) => m.is_visible).map((m) => m.name)
+  );
+  const autoOfferedModels = models.filter(
+    (m) =>
+      m.is_visible ||
+      autoModelNames?.has(m.name) ||
+      originallyVisibleNames.has(m.name)
+  );
+
+  // "Select All" only operates on the models shown in the list, which in
+  // auto mode is the offered subset rather than every known model.
+  const selectionScope = isAutoMode ? autoOfferedModels : models;
+  const allSelected =
+    selectionScope.length > 0 && selectionScope.every((m) => m.is_visible);
 
   function handleToggleSelectAll() {
     const nextVisible = !allSelected;
-    const updated = models.map((m) => ({
-      ...m,
-      is_visible: nextVisible,
-    }));
+    const scopeNames = new Set(selectionScope.map((m) => m.name));
+    const updated = models.map((m) =>
+      scopeNames.has(m.name) ? { ...m, is_visible: nextVisible } : m
+    );
     formikProps.setFieldValue("model_configurations", updated);
   }
-
-  const visibleModels = models.filter((m) => m.is_visible);
 
   return (
     <Card background="light" border="none" padding="sm">
@@ -652,7 +655,7 @@ export function ModelSelectionField({
         >
           <Section flexDirection="row" gap={0}>
             <Button
-              disabled={isAutoMode || models.length === 0}
+              disabled={selectionScope.length === 0}
               prominence="tertiary"
               size="md"
               onClick={handleToggleSelectAll}
@@ -668,7 +671,7 @@ export function ModelSelectionField({
         ) : (
           <Section gap={0.25} alignItems="stretch">
             {(() => {
-              const baseModels = isAutoMode ? visibleModels : models;
+              const baseModels = isAutoMode ? autoOfferedModels : models;
               // Sort alphabetically by id for providers that ship rich model
               // metadata (Nebius TokenFactory) so the order is stable across
               // refetches; otherwise keep the given order.
@@ -687,7 +690,6 @@ export function ModelSelectionField({
                     <ModelRow
                       key={model.name}
                       model={model}
-                      isAutoMode={isAutoMode}
                       onToggleVisibility={(visible) =>
                         setVisibility(model.name, visible)
                       }
@@ -768,7 +770,7 @@ export function ModelSelectionField({
         {shouldShowAutoUpdateToggle && (
           <InputHorizontal
             title="Auto Update"
-            description="Update the available models when new models are released."
+            description="Add newly released models automatically. You still choose which models are enabled."
             withLabel
           >
             <Switch

@@ -2,9 +2,10 @@
 
 This service manages Auto mode LLM providers, where models and configuration
 are managed centrally via a GitHub-hosted JSON file. In Auto mode:
-- Model list is controlled by GitHub config
-- Model visibility is controlled by GitHub config, except that models
-  currently set as a default (chat, vision, ...) always stay visible
+- The GitHub config decides which models are offered: new recommendations
+  are added visible, models dropped from the config are hidden
+- Admin choices win within that list: deselected models stay hidden, and
+  models currently set as a default (chat, vision, ...) always stay visible
 - The admin-chosen default model is never changed by a sync
 - Admin only needs to provide API credentials
 """
@@ -81,11 +82,11 @@ def sync_llm_models_from_github(
 ) -> dict[str, int]:
     """Sync models from GitHub config to database for all Auto mode providers.
 
-    In Auto mode, GitHub config controls:
-    - Model list
-    - Model visibility (is_visible), except models currently set as a
-      default for some flow — those always stay visible and the admin-chosen
-      default model is never changed
+    In Auto mode, GitHub config controls which models are offered (new
+    recommendations added visible, dropped models hidden), while admin
+    choices win within that list: deselected models stay hidden, models set
+    as a default for some flow always stay visible, and the admin-chosen
+    default model is never changed.
 
     Args:
         db_session: Database session
