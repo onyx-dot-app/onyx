@@ -261,9 +261,9 @@ def test_legacy_path_does_not_consult_port_helpers(
     future_ss.switchover_type = SwitchoverType.REINDEX  # non-INSTANT legacy path
     db_session.commit()
 
-    # _perform_index_swap is patched only to keep a swap off the real DB/index;
-    # the legacy swap decision itself is covered in test_index_swap_workflow.py.
-    # This test asserts one thing: the legacy path never consults the port helper.
+    # Asserts one thing: the legacy path never consults the port helper. The swap
+    # decision itself is covered in test_index_swap_workflow.py; _perform_index_swap
+    # is patched only to keep a swap off the real DB/index.
     with (
         patch.object(
             swap_index,
