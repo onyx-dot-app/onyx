@@ -319,10 +319,13 @@ def update_saved_search_settings(
             detail="Contextual RAG disabled in Onyx Cloud",
         )
 
+    # enable_contextual_rag is a PRESERVED field here (this endpoint never writes it),
+    # so validate only the model id — passing the incoming flag would 400 a change
+    # that update_current_search_settings discards anyway. Toggling the flag goes
+    # through set-new-search-settings (a reindex), which validates it there.
     validate_contextual_rag_model(
         model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         db_session=db_session,
-        enable_contextual_rag=search_settings.enable_contextual_rag,
     )
 
     update_current_search_settings(
