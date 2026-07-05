@@ -31,11 +31,10 @@ from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
 from onyx.configs.app_configs import OPENSEARCH_USE_SSL
 from onyx.configs.app_configs import OPENSEARCH_VERIFY_CERTS
-from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.configs.app_configs import PIT_KEEP_ALIVE
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
+from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_VECTOR_FIELD_NAME
