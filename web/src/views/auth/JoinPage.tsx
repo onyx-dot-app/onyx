@@ -42,6 +42,11 @@ export default function JoinPage() {
           ? "Your team does not have anonymous access enabled."
           : "An error occurred."
       );
+      // Strip ?error from the URL so the toast doesn't re-fire on refresh.
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("error");
+      const qs = params.size > 0 ? `?${params.toString()}` : "";
+      window.history.replaceState(null, "", `${window.location.pathname}${qs}`);
     }
   }, [searchParams]);
 

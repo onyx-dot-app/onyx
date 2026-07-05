@@ -30,7 +30,8 @@ export default function AnonymousPage({
         throw new Error("Failed to login as anonymous user");
       }
       window.location.href = "/app";
-    } catch {
+    } catch (error) {
+      console.error("Error logging in as anonymous user:", error);
       toast.error("Your team does not have anonymous access enabled.");
       router.replace("/auth/signup");
     }

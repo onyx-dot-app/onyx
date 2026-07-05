@@ -28,7 +28,9 @@ export default function ForgotPasswordPage() {
     }
     if (firedRef.current) return;
     firedRef.current = true;
-    forgotPassword(email).catch(() => {});
+    forgotPassword(email).catch((e) =>
+      console.error("Failed to send password reset email:", e)
+    );
   }, [email, router]);
 
   // Redirect to login once the reset is completed in another tab.
@@ -46,7 +48,7 @@ export default function ForgotPasswordPage() {
     );
     forgotPassword(email)
       .then(() => toast.success("Email resent!"))
-      .catch(() => {});
+      .catch((e) => console.error("Failed to resend password reset email:", e));
   }, [isResend, email, router]);
 
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED || !email) return null;

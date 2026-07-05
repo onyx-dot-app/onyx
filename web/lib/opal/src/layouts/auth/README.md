@@ -35,7 +35,7 @@ No props.
 
 ### FormFields
 
-Flex-column container for form inputs with a consistent `1rem` gap between fields.
+Flex-column container for form inputs with a consistent `0.75rem` gap between fields.
 
 | Prop | Type | Default | Description |
 |---|---|---|---|

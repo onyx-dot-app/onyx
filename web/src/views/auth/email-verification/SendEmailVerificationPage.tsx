@@ -31,17 +31,22 @@ export default function SendEmailVerificationPage() {
   useEffect(() => {
     if (!searchParams.get("resend") || !user) return;
     router.replace("/auth/send-email-verification" as Route);
-    requestEmailVerification(user.email).then((response) => {
-      if (response.ok) {
-        toast.success("Verification email resent!");
-      } else {
-        response
-          .json()
-          .then((body) =>
-            toast.error(`Failed to resend verification email — ${body.detail}`)
-          );
-      }
-    });
+    requestEmailVerification(user.email)
+      .then((response) => {
+        if (response.ok) {
+          toast.success("Verification email resent!");
+        } else {
+          response
+            .json()
+            .then((body) =>
+              toast.error(
+                `Failed to resend verification email — ${body.detail}`
+              )
+            )
+            .catch(() => toast.error("Failed to resend verification email."));
+        }
+      })
+      .catch(() => toast.error("Failed to resend verification email."));
   }, [searchParams, user, router]);
 
   if (isLoading) return <PageLoader />;

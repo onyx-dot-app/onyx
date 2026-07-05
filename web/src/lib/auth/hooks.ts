@@ -73,12 +73,14 @@ export function useAuthTypeMetadata(): {
 
 export function useAuthRedirect(currentPage: AuthPage): boolean {
   const { user, isLoading } = useCurrentUser();
-  const { authTypeMetadata } = useAuthTypeMetadata();
+  const { authTypeMetadata, isLoading: isAuthTypeLoading } =
+    useAuthTypeMetadata();
   const signupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
   const router = useRouter();
+  const isAuthStateLoading = isLoading || isAuthTypeLoading;
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isAuthStateLoading) return;
     const destination = getAuthRedirect(
       user,
       authTypeMetadata,
@@ -86,7 +88,14 @@ export function useAuthRedirect(currentPage: AuthPage): boolean {
       signupDisabled
     );
     if (destination) router.replace(destination as Route);
-  }, [isLoading, user, authTypeMetadata, currentPage, signupDisabled, router]);
+  }, [
+    isAuthStateLoading,
+    user,
+    authTypeMetadata,
+    currentPage,
+    signupDisabled,
+    router,
+  ]);
 
-  return isLoading;
+  return isAuthStateLoading;
 }

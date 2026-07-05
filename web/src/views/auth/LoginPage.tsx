@@ -68,6 +68,16 @@ export default function LoginPage() {
 
     if (authTypeMetadata.autoRedirect && authUrl && !autoRedirectDisabled) {
       router.replace(authUrl as Route);
+      return;
+    }
+
+    // No users yet — send first-time visitors to signup, preserving nextUrl.
+    if (
+      !authTypeMetadata.hasUsers &&
+      authTypeMetadata.authType === AuthType.BASIC
+    ) {
+      const params = nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : "";
+      router.replace(`/auth/signup${params}` as Route);
     }
   }, [
     isLoading,
@@ -75,12 +85,16 @@ export default function LoginPage() {
     authTypeMetadata,
     authUrl,
     autoRedirectDisabled,
+    nextUrl,
     router,
   ]);
 
+  const signupUrl = nextUrl
+    ? `/auth/signup?next=${encodeURIComponent(nextUrl)}`
+    : "/auth/signup";
   const bottomPrompt = isSso
     ? "Need access? Reach out to your IT admin to get access."
-    : markdown(`New to ${appName}? [Create an Account](/auth/signup)`);
+    : markdown(`New to ${appName}? [Create an Account](${signupUrl})`);
 
   return (
     <AuthLayouts.Card
