@@ -317,8 +317,14 @@ class DynamicCitationProcessor:
                 if len(parts) > 1 and len(parts[1]) > 0:
                     piece_that_comes_after = parts[1][0]
                     if piece_that_comes_after == "\n" and in_code_block(self.llm_out):
-                        self.curr_segment = self.curr_segment.replace(
-                            "```", "```plaintext"
+                        # Only label the specific bare fence we just detected (the
+                        # first ``` in the segment). Using replace() here rewrote
+                        # *every* ``` in the buffer, so any other fence in the same
+                        # segment was corrupted -- e.g. a following ```bash became
+                        # ```plaintextbash, and a closing ``` became ```plaintext
+                        # (which starts a spurious code block).
+                        self.curr_segment = (
+                            parts[0] + "```plaintext" + "```".join(parts[1:])
                         )
 
         # Look for citations in current segment
