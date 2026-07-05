@@ -16,8 +16,12 @@ from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from onyx.db.connector_credential_pair import (
+    fetch_indexable_standard_connector_credential_pair_ids,
+)
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import PortAttemptStatus
+from onyx.db.enums import SwitchoverType
 from onyx.db.models import PortAttempt
 from onyx.db.models import SearchSettings
 from onyx.utils.logger import setup_logger
@@ -25,6 +29,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _ACTIVE_STATUSES = [PortAttemptStatus.NOT_STARTED, PortAttemptStatus.IN_PROGRESS]
+
+# States check_for_port won't create a further attempt for; anything else
+# (none / active / FAILED) is still pending work.
+_SETTLED_STATUSES = frozenset({PortAttemptStatus.SUCCESS, PortAttemptStatus.CANCELED})
 
 # Reads enough recent attempts to reach the streak where retry backoff caps (9 at
 # the current 30s base / 1h cap); 10 = small margin. Raise if that cap is raised.
@@ -112,30 +120,44 @@ def count_active_port_attempts(db_session: Session, search_settings_id: int) -> 
 def port_backfill_has_pending_work(
     db_session: Session, search_settings_id: int
 ) -> bool:
-    """True while a post-swap (INSTANT) backfill still has work for this settings:
-    no attempts yet (just promoted) or at least one not yet SUCCESS/CANCELED. Lets
-    check_for_port stop targeting a promoted PRESENT once every cc_pair is ported."""
-    any_attempt = db_session.execute(
-        select(exists().where(PortAttempt.search_settings_id == search_settings_id))
-    ).scalar()
-    if not any_attempt:
-        return True
-    return bool(
-        db_session.execute(
-            select(
-                exists().where(
-                    PortAttempt.search_settings_id == search_settings_id,
-                    PortAttempt.status.in_(
-                        [
-                            PortAttemptStatus.NOT_STARTED,
-                            PortAttemptStatus.IN_PROGRESS,
-                            PortAttemptStatus.FAILED,
-                        ]
-                    ),
-                )
-            )
-        ).scalar()
+    """True while some in-scope cc_pair lacks a settled port attempt, so check_for_port
+    keeps targeting a promoted (INSTANT) PRESENT until every cc_pair is ported.
+
+    Cc_pair-aware, not existing-row-aware: MAX_CONCURRENT_PORT_ATTEMPTS defers cc_pairs to
+    later ticks, so all-terminal *existing* rows != done — un-attempted cc_pairs still
+    need one. Checking only existing rows let the first fast batch's SUCCESS strand the
+    rest, leaving the live index incomplete. Scope + _SETTLED_STATUSES match check_for_port
+    so this never reports pending for a cc_pair it won't act on.
+    """
+    settings = db_session.get(SearchSettings, search_settings_id)
+    active_only = (
+        settings is not None and settings.switchover_type == SwitchoverType.ACTIVE_ONLY
     )
+    in_scope_cc_pair_ids = fetch_indexable_standard_connector_credential_pair_ids(
+        db_session, active_cc_pairs_only=active_only
+    )
+    if not in_scope_cc_pair_ids:
+        return False
+    # Latest attempt per cc_pair in one DISTINCT ON pass (avoids an N+1 over cc_pairs).
+    settled_cc_pairs = {
+        cc_pair_id
+        for cc_pair_id, status in db_session.execute(
+            select(PortAttempt.cc_pair_id, PortAttempt.status)
+            .where(
+                PortAttempt.search_settings_id == search_settings_id,
+                PortAttempt.cc_pair_id.in_(in_scope_cc_pair_ids),
+            )
+            .distinct(PortAttempt.cc_pair_id)
+            .order_by(
+                PortAttempt.cc_pair_id,
+                PortAttempt.time_created.desc(),
+                PortAttempt.id.desc(),
+            )
+        )
+        if status in _SETTLED_STATUSES
+    }
+    # Pending if any in-scope cc_pair has no settled latest attempt (incl. none at all).
+    return bool(set(in_scope_cc_pair_ids) - settled_cc_pairs)
 
 
 def is_active_port_backfill_source(

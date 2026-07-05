@@ -427,12 +427,13 @@ def _resolve_port_target_settings(db_session: Session) -> SearchSettings | None:
     if future is not None and future.use_port_flow:
         return future
     present = get_current_search_settings(db_session)
-    if (
-        present.use_port_flow
-        and present.port_backfill_source_id is not None
-        and port_backfill_has_pending_work(db_session, present.id)
-    ):
-        return present
+    if present.use_port_flow and present.port_backfill_source_id is not None:
+        if port_backfill_has_pending_work(db_session, present.id):
+            return present
+        # Backfill drained: unpin the source so we stop re-checking a done job, the
+        # source index can be reclaimed, and the reindex/vespa guards read "not backfilling".
+        present.port_backfill_source_id = None
+        db_session.commit()
     return None
 
 
