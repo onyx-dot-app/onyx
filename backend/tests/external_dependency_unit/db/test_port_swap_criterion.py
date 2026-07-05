@@ -261,20 +261,20 @@ def test_legacy_path_does_not_consult_port_helpers(
     future_ss.switchover_type = SwitchoverType.REINDEX  # non-INSTANT legacy path
     db_session.commit()
 
+    # _perform_index_swap is patched only to keep a swap off the real DB/index;
+    # the legacy swap decision itself is covered in test_index_swap_workflow.py.
+    # This test asserts one thing: the legacy path never consults the port helper.
     with (
         patch.object(
             swap_index,
             "_port_swap_ready",
             side_effect=AssertionError("legacy must not use the port path"),
         ) as mock_ready,
-        patch.object(swap_index, "_perform_index_swap") as mock_swap,
+        patch.object(swap_index, "_perform_index_swap"),
     ):
-        result = check_and_perform_index_swap(db_session)
+        check_and_perform_index_swap(db_session)
 
     mock_ready.assert_not_called()
-    # legacy REINDEX holds (cc_pairs without successful FUTURE indexings) -> no swap
-    assert result is None
-    mock_swap.assert_not_called()
 
 
 # --- two-phase cancel: the port_attempt contract that keeps deletion the last writer
