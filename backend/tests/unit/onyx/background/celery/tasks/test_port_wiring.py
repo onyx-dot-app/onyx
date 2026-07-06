@@ -6,8 +6,8 @@ nothing there proves a beat-enqueued port task actually reaches a worker. These
 unit tests guard exactly that transport seam — the part a dropped autodiscover line
 or `-Q` entry would silently break with every other test still green:
 
-  beat schedules check_for_port  ->  light worker consumes the `port` queue
-  ->  light worker has run_port_attempt registered to execute it.
+  beat schedules check_for_port  ->  docprocessing worker consumes the `port` queue
+  ->  docprocessing worker has run_port_attempt registered to execute it.
 """
 
 import re
@@ -58,19 +58,18 @@ def test_check_for_port_scheduled_in_beat() -> None:
         assert OnyxCeleryTask.CHECK_FOR_PORT in scheduled
 
 
-def test_light_worker_consumes_port_queue() -> None:
-    # run_port_attempt is enqueued to the PORT queue; the light worker is its only
-    # consumer. Dropping `port` from this `-Q` list strands every port task.
-    assert OnyxCeleryQueues.PORT in _worker_queues("celery_worker_light")
+def test_docprocessing_worker_consumes_port_queue() -> None:
+    # run_port_attempt is enqueued to the PORT queue; the docprocessing worker is its
+    # only consumer. Dropping `port` from this `-Q` list strands every port task.
+    assert OnyxCeleryQueues.PORT in _worker_queues("celery_worker_docprocessing")
 
 
-def test_light_worker_registers_port_tasks() -> None:
+def test_docprocessing_worker_registers_port_tasks() -> None:
     # Consuming the queue is moot if autodiscovery doesn't register the task body:
-    # the worker would reject it as unknown. Importing + loading the light app
-    # mirrors worker bootstrap, so both port tasks must resolve by name.
-    from onyx.background.celery.apps.light import celery_app
+    # the worker would reject it as unknown. Importing + loading the docprocessing app
+    # mirrors worker bootstrap, so run_port_attempt must resolve by name.
+    from onyx.background.celery.apps.docprocessing import celery_app
 
     celery_app.loader.import_default_modules()
     registered = set(celery_app.tasks.keys())
     assert OnyxCeleryTask.RUN_PORT_ATTEMPT in registered
-    assert OnyxCeleryTask.CHECK_FOR_PORT in registered

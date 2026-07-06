@@ -41,7 +41,7 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=light@%n",
         "-Q",
-        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration,port",
+        "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup,opensearch_migration",
     ]
 
     cmd_worker_docprocessing = [
@@ -54,7 +54,7 @@ def run_jobs() -> None:
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
-        "--queues=docprocessing",
+        "--queues=docprocessing,port",
     ]
 
     cmd_worker_docfetching = [

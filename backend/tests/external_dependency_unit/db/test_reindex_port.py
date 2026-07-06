@@ -35,9 +35,11 @@ from onyx.background.celery.tasks.port import tasks as port_task
 from onyx.background.celery.tasks.port.tasks import run_check_for_port
 from onyx.background.celery.tasks.port.tasks import run_port_attempt
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import MAX_CONCURRENT_PORT_ATTEMPTS
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.context.search.models import SavedSearchSettings
+from onyx.db import port_attempt as port_attempt_db
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.document import document_has_indexable_cc_pair
 from onyx.db.document import filter_existing_cc_pair_document_ids
@@ -74,6 +76,7 @@ from onyx.db.port_attempt import mark_port_canceled
 from onyx.db.port_attempt import mark_port_failed
 from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
+from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.port_attempt import request_port_cancel
 from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import get_current_search_settings
@@ -936,6 +939,207 @@ def test_check_for_port_creates_and_enqueues(
     }
     assert call.kwargs["queue"] == OnyxCeleryQueues.PORT
     assert call.kwargs["expires"] == BEAT_EXPIRES_DEFAULT
+
+
+def test_check_for_port_caps_concurrent_attempts(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """More in-scope cc_pairs than MAX_CONCURRENT_PORT_ATTEMPTS -> only the cap's worth
+    of attempts are created/enqueued per tick, so the port can't fill every
+    docprocessing slot and starve live indexing."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    future_ss.use_port_flow = True
+    db_session.commit()
+
+    # cap + 2 in-scope cc_pairs so the cap genuinely bites this tick.
+    extra_pairs = [
+        make_cc_pair(db_session) for _ in range(MAX_CONCURRENT_PORT_ATTEMPTS + 1)
+    ]
+    all_ids = [cc_pair.id] + [p.id for p in extra_pairs]
+    celery_app = MagicMock()
+    try:
+        with (
+            patch.object(
+                port_task,
+                "get_secondary_search_settings",
+                lambda db, *_, **__: db.get(SearchSettings, future_id),
+            ),
+            patch.object(
+                port_task,
+                "fetch_indexable_standard_connector_credential_pair_ids",
+                lambda *_, **__: all_ids,
+            ),
+        ):
+            result = run_check_for_port(get_current_tenant_id(), celery_app)
+
+        assert result == MAX_CONCURRENT_PORT_ATTEMPTS
+        assert celery_app.send_task.call_count == MAX_CONCURRENT_PORT_ATTEMPTS
+        db_session.expire_all()
+        created = (
+            db_session.query(PortAttempt)
+            .filter(
+                PortAttempt.search_settings_id == future_id,
+                PortAttempt.cc_pair_id.in_(all_ids),
+            )
+            .count()
+        )
+        assert created == MAX_CONCURRENT_PORT_ATTEMPTS
+    finally:
+        db_session.rollback()
+        for p in extra_pairs:
+            db_session.query(PortAttempt).filter(PortAttempt.cc_pair_id == p.id).delete(
+                synchronize_session="fetch"
+            )
+            db_session.commit()
+            cleanup_cc_pair(db_session, p)
+
+
+def test_port_backfill_pending_work_is_cc_pair_aware(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Regression: a promoted-PRESENT backfill stays pending until EVERY in-scope cc_pair
+    is ported, not just until the attempts created so far are terminal. The concurrency
+    cap defers cc_pairs across ticks, so all-SUCCESS existing rows with un-attempted
+    cc_pairs remaining must still read pending (else the live index is left incomplete)."""
+    ss = get_current_search_settings(db_session)
+    pairs = [make_cc_pair(db_session) for _ in range(3)]
+    ids = [p.id for p in pairs]
+
+    def _succeed(cc_pair_id: int) -> None:
+        db_session.add(
+            PortAttempt(
+                cc_pair_id=cc_pair_id,
+                search_settings_id=ss.id,
+                status=PortAttemptStatus.SUCCESS,
+            )
+        )
+        db_session.commit()
+
+    try:
+        with patch.object(
+            port_attempt_db,
+            "fetch_indexable_standard_connector_credential_pair_ids",
+            lambda *_, **__: ids,
+        ):
+            _succeed(pairs[0].id)
+            # old code returned False here (all existing rows terminal); fixed -> pending
+            assert port_backfill_has_pending_work(db_session, ss.id) is True
+
+            _succeed(pairs[1].id)
+            assert port_backfill_has_pending_work(db_session, ss.id) is True
+
+            _succeed(pairs[2].id)
+            assert port_backfill_has_pending_work(db_session, ss.id) is False
+    finally:
+        db_session.rollback()
+        for p in pairs:
+            db_session.query(PortAttempt).filter(PortAttempt.cc_pair_id == p.id).delete(
+                synchronize_session="fetch"
+            )
+            db_session.commit()
+            cleanup_cc_pair(db_session, p)
+
+
+def test_port_backfill_pending_work_settled_statuses(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Per-cc_pair 'settled' mirrors check_for_port's no-retry set: SUCCESS and CANCELED
+    are done; no-attempt or FAILED is still pending (check_for_port (re)creates/retries
+    it). CANCELED must NOT read pending -- else the guard deadlocks on a cc_pair the
+    scheduler refuses to retry."""
+    ss = get_current_search_settings(db_session)
+
+    def _pending_for(status: PortAttemptStatus | None) -> bool:
+        pair = make_cc_pair(db_session)
+        try:
+            with patch.object(
+                port_attempt_db,
+                "fetch_indexable_standard_connector_credential_pair_ids",
+                lambda *_, **__: [pair.id],
+            ):
+                if status is not None:
+                    db_session.add(
+                        PortAttempt(
+                            cc_pair_id=pair.id,
+                            search_settings_id=ss.id,
+                            status=status,
+                        )
+                    )
+                    db_session.commit()
+                return port_backfill_has_pending_work(db_session, ss.id)
+        finally:
+            db_session.rollback()
+            db_session.query(PortAttempt).filter(
+                PortAttempt.cc_pair_id == pair.id
+            ).delete(synchronize_session="fetch")
+            db_session.commit()
+            cleanup_cc_pair(db_session, pair)
+
+    assert _pending_for(None) is True  # just promoted, no attempt yet
+    assert _pending_for(PortAttemptStatus.FAILED) is True  # retryable
+    assert _pending_for(PortAttemptStatus.SUCCESS) is False
+    assert _pending_for(PortAttemptStatus.CANCELED) is False  # settled -> no deadlock
+
+
+def test_resolve_clears_backfill_source_when_drained(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Once every in-scope cc_pair of a promoted-PRESENT (INSTANT) backfill is ported,
+    _resolve unpins port_backfill_source_id so the done job stops being re-checked and
+    the source index becomes reclaimable (set at swap, otherwise never cleared)."""
+    cc_pair, present_id = cc_pair_and_future
+    present = db_session.get(SearchSettings, present_id)
+    assert present is not None
+    source = (
+        db_session.query(SearchSettings.id)
+        .filter(SearchSettings.id != present_id)
+        .first()
+    )
+    assert source is not None
+    present.use_port_flow = True
+    present.port_backfill_source_id = source[0]
+    db_session.add(
+        PortAttempt(
+            cc_pair_id=cc_pair.id,
+            search_settings_id=present_id,
+            status=PortAttemptStatus.SUCCESS,
+        )
+    )
+    db_session.commit()
+
+    try:
+        with (
+            patch.object(
+                port_task, "get_secondary_search_settings", lambda *_, **__: None
+            ),
+            patch.object(
+                port_task,
+                "get_current_search_settings",
+                lambda *_, **__: db_session.get(SearchSettings, present_id),
+            ),
+            patch.object(
+                port_attempt_db,
+                "fetch_indexable_standard_connector_credential_pair_ids",
+                lambda *_, **__: [cc_pair.id],
+            ),
+        ):
+            target = port_task._resolve_port_target_settings(db_session)
+
+        assert target is None  # drained -> not a target
+        db_session.expire_all()
+        refreshed = db_session.get(SearchSettings, present_id)
+        assert refreshed is not None
+        assert refreshed.port_backfill_source_id is None
+    finally:
+        db_session.rollback()
+        db_session.query(PortAttempt).filter(
+            PortAttempt.cc_pair_id == cc_pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
 
 
 def test_check_for_port_gated_off_when_not_port_flow(
