@@ -161,16 +161,10 @@ export interface ApiSandboxResponse {
   created_at: string;
   last_heartbeat: string | null;
   nextjs_port: number | null;
-  idle_timeout_seconds: number;
-  idle_cleanup_interval_seconds: number;
 }
 
 export interface ApiSandboxStatusResponse {
   status: Exclude<ApiSandboxResponse["status"], "restoring"> | null;
-  last_heartbeat: string | null;
-  created_at: string | null;
-  idle_timeout_seconds: number;
-  idle_cleanup_interval_seconds: number;
 }
 
 export interface ApiSessionResponse {

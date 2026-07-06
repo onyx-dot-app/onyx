@@ -18,8 +18,6 @@ function sandbox(
     created_at: "2026-07-01T00:00:00.000Z",
     last_heartbeat: "2026-07-01T00:00:00.000Z",
     nextjs_port: null,
-    idle_timeout_seconds: 0,
-    idle_cleanup_interval_seconds: 0,
     ...overrides,
   };
 }

@@ -33,8 +33,6 @@ from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
-from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
@@ -222,7 +220,7 @@ def get_sandbox_status(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SandboxStatusResponse:
-    """Lightweight DB-only read of the user's sandbox status for idle-timer confirmation."""
+    """Lightweight DB-only read of the user's sandbox status for the frontend sleep poll."""
     session = get_build_session(session_id, user.id, db_session)
 
     if session is None:
@@ -230,13 +228,7 @@ def get_sandbox_status(
 
     sandbox = get_sandbox_by_user_id(db_session, user.id)
 
-    return SandboxStatusResponse(
-        status=sandbox.status if sandbox else None,
-        created_at=sandbox.created_at if sandbox else None,
-        last_heartbeat=sandbox.last_heartbeat if sandbox else None,
-        idle_timeout_seconds=SANDBOX_IDLE_TIMEOUT_SECONDS,
-        idle_cleanup_interval_seconds=SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
-    )
+    return SandboxStatusResponse(status=sandbox.status if sandbox else None)
 
 
 @router.get(

@@ -9,13 +9,6 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useSandboxSleepWatcher } from "@/app/craft/hooks/useSandboxSleepWatcher";
 
-function formatIdleDuration(seconds: number | null | undefined): string {
-  if (!seconds || seconds <= 0) return "a while";
-  if (seconds === 3600) return "an hour";
-  if (seconds % 3600 === 0) return `${seconds / 3600} hours`;
-  return `${Math.max(1, Math.round(seconds / 60))} minutes`;
-}
-
 // Waking is always user-initiated — never automatic — so we don't keep pods
 // alive forever and defeat idle reaping.
 export default function SandboxAsleepNotice() {
@@ -26,9 +19,6 @@ export default function SandboxAsleepNotice() {
   const loadSession = useBuildSessionStore((state) => state.loadSession);
   const status = session?.sandbox?.status ?? null;
   const isAsleep = status === "sleeping" || status === "terminated";
-  const idleDuration = formatIdleDuration(
-    session?.sandbox?.idle_timeout_seconds
-  );
 
   const [dismissed, setDismissed] = useState(false);
 
@@ -64,7 +54,8 @@ export default function SandboxAsleepNotice() {
 
           <div className="flex justify-center text-center">
             <Text font="main-ui-body" color="text-04">
-              {`It went to sleep after ${idleDuration} of inactivity — your work is saved. Wake it to keep going.`}
+              It went to sleep after a period of inactivity — your work is
+              saved. Wake it to keep going.
             </Text>
           </div>
 
