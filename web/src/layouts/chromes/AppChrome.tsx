@@ -25,6 +25,11 @@ import {
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { deleteChatSession } from "@/app/app/services/lib";
+import {
+  exportChatSession,
+  ChatExportFormat,
+} from "@/lib/chat/exportChatSession";
+import { UNNAMED_CHAT } from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -43,9 +48,11 @@ import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
+  SvgFileText,
   SvgFitWidth,
   SvgFolderIn,
   SvgFullWidth,
+  SvgHash,
   SvgMoreHorizontal,
   SvgSearchMenu,
   SvgShare,
@@ -194,6 +201,24 @@ function Header() {
     }
   }, []);
 
+  const handleExport = useCallback(
+    async (format: ChatExportFormat) => {
+      if (!currentChatSession) return;
+      setPopoverOpen(false);
+      try {
+        await exportChatSession(
+          currentChatSession.id,
+          currentChatSession.name || UNNAMED_CHAT,
+          format
+        );
+      } catch (error) {
+        console.error("Failed to export chat:", error);
+        showErrorNotification("Failed to export chat. Please try again.");
+      }
+    },
+    [currentChatSession]
+  );
+
   useEffect(() => {
     const items = showMoveOptions
       ? [
@@ -222,6 +247,24 @@ function Header() {
             title="Move to Project"
             onClick={noProp(() => setShowMoveOptions(true))}
           />,
+          null,
+          <LineItemButton
+            key="export-text"
+            sizePreset="main-ui"
+            rounding="sm"
+            icon={SvgFileText}
+            title="Export as Text"
+            onClick={noProp(() => handleExport("text"))}
+          />,
+          <LineItemButton
+            key="export-markdown"
+            sizePreset="main-ui"
+            rounding="sm"
+            icon={SvgHash}
+            title="Export as Markdown"
+            onClick={noProp(() => handleExport("markdown"))}
+          />,
+          null,
           <LineItemButton
             key="delete"
             sizePreset="main-ui"
@@ -240,6 +283,7 @@ function Header() {
     currentChatSession,
     setDeleteConfirmationModalOpen,
     handleMoveClick,
+    handleExport,
   ]);
 
   return (

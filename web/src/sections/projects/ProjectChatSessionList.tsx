@@ -23,10 +23,8 @@ import { Hoverable } from "@opal/core";
 import { DEFAULT_AGENT_ID, UNNAMED_CHAT } from "@/lib/constants";
 import {
   SvgBubbleText,
-  SvgFileText,
   SvgFolder,
   SvgFolderIn,
-  SvgHash,
   SvgMoreHorizontal,
   SvgSimpleLoader,
   SvgTrash,
@@ -34,14 +32,9 @@ import {
 import { timeAgo } from "@opal/time";
 import type { IconFunctionComponent } from "@opal/types";
 import { noProp } from "@/lib/utils";
-import { showErrorNotification } from "@/lib/sidebar/utils";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
-import {
-  exportChatSession,
-  ChatExportFormat,
-} from "@/lib/chat/exportChatSession";
 
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
 
@@ -133,19 +126,6 @@ function ProjectChatItem({
     setPopoverOpen(false);
   }, [chat.id, fetchProjects, refreshChatSessions, afterRefresh]);
 
-  const handleExport = useCallback(
-    async (format: ChatExportFormat) => {
-      setPopoverOpen(false);
-      try {
-        await exportChatSession(chat.id, chat.name || UNNAMED_CHAT, format);
-      } catch (error) {
-        console.error("Failed to export chat:", error);
-        showErrorNotification("Failed to export chat. Please try again.");
-      }
-    },
-    [chat.id, chat.name]
-  );
-
   const popoverItems = useMemo(() => {
     if (!showMoveOptions) {
       return [
@@ -164,23 +144,6 @@ function ProjectChatItem({
           icon={SvgFolder}
           title={`Remove from ${projects.find((p) => p.id === projectId)?.name ?? "Project"}`}
           onClick={noProp(handleRemoveFromProject)}
-        />,
-        null,
-        <LineItemButton
-          key="export-text"
-          sizePreset="main-ui"
-          rounding="sm"
-          icon={SvgFileText}
-          title="Export as Text"
-          onClick={noProp(() => handleExport("text"))}
-        />,
-        <LineItemButton
-          key="export-markdown"
-          sizePreset="main-ui"
-          rounding="sm"
-          icon={SvgHash}
-          title="Export as Markdown"
-          onClick={noProp(() => handleExport("markdown"))}
         />,
         null,
         <LineItemButton
@@ -222,7 +185,6 @@ function ProjectChatItem({
     filteredProjects,
     handleMoveChatSession,
     handleRemoveFromProject,
-    handleExport,
   ]);
 
   return (
