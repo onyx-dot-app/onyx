@@ -133,15 +133,14 @@ def update_sandbox_status__no_commit(
     return sandbox
 
 
-def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
-    """Update sandbox last_heartbeat to now."""
+def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> None:
+    """Update sandbox last_heartbeat to now. No-op if the sandbox row is gone."""
     sandbox = get_sandbox_by_id(db_session, sandbox_id)
-    if not sandbox:
-        raise ValueError(f"Sandbox {sandbox_id} not found")
+    if sandbox is None:
+        return
 
     sandbox.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
     db_session.commit()
-    return sandbox
 
 
 def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
