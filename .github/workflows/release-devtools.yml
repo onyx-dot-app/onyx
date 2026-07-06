@@ -17,15 +17,6 @@ jobs:
       contents: read # needed to checkout the repo on private repos (no-op on public)
       id-token: write
     timeout-minutes: 10
-    strategy:
-      matrix:
-        os-arch:
-          - { goos: "linux", goarch: "amd64" }
-          - { goos: "linux", goarch: "arm64" }
-          - { goos: "windows", goarch: "amd64" }
-          - { goos: "windows", goarch: "arm64" }
-          - { goos: "darwin", goarch: "amd64" }
-          - { goos: "darwin", goarch: "arm64" }
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
@@ -34,11 +25,26 @@ jobs:
         with:
           enable-cache: false
           version: "0.11.25"
+      # Build every platform wheel first, then publish once. Publishing per
+      # platform would leave a partial release on PyPI if a later platform
+      # failed; building all up front keeps the release atomic. Remove the
+      # cached Go binary before each build so the build hook recompiles for the
+      # target platform instead of reusing the previous platform's binary.
       - run: |
-          GOOS="${{ matrix.os-arch.goos }}" \
-          GOARCH="${{ matrix.os-arch.goarch }}" \
-          uv build --wheel
+          for goos in linux windows darwin; do
+            for goarch in amd64 arm64; do
+              rm -f ods
+              GOOS="$goos" GOARCH="$goarch" uv build --wheel
+            done
+          done
         working-directory: tools/ods
+      - name: Upload built wheels
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: onyx-devtools-wheels
+          path: tools/ods/dist/*.whl
+          if-no-files-found: error
+          retention-days: 7
       - run: uv publish
         working-directory: tools/ods
 
