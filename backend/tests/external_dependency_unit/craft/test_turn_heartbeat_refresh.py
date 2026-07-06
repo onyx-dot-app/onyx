@@ -1,13 +1,5 @@
-"""Turn-drive heartbeat refresh (``yield_sandbox_events``).
-
-The idle-sandbox reaper's only activity signal is ``sandbox.last_heartbeat``.
-The shared turn-drive generator ``yield_sandbox_events`` is the single seam
-crossed by both interactive turns (``interactive_turns/executor.py``) and
-headless scheduled turns (``scheduled_tasks/executor.py``), so it must refresh
-the heartbeat at turn start and periodically while events flow — otherwise a
-turn that runs longer than the idle timeout gets its pod reaped mid-turn
-(ENG-4269).
-"""
+"""``yield_sandbox_events`` must refresh ``sandbox.last_heartbeat`` — the idle
+reaper's only activity signal — at turn start and periodically while events flow."""
 
 from __future__ import annotations
 
@@ -46,7 +38,6 @@ def test_turn_start_refreshes_heartbeat(
     test_user: User,  # noqa: ARG001
     stub_sandbox_manager: StubSandboxManager,
 ) -> None:
-    """Turn-start refresh is unconditional, even with the default interval."""
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
     db_session.execute(
@@ -91,7 +82,6 @@ def test_heartbeat_refreshed_per_event_when_interval_elapsed(
     stub_sandbox_manager: StubSandboxManager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With the throttle interval at 0, every event triggers a refresh call."""
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
 
@@ -135,7 +125,6 @@ def test_heartbeat_not_refreshed_per_event_within_default_interval(
     stub_sandbox_manager: StubSandboxManager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With the default (60s) interval, a fast-running turn only refreshes once."""
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
 

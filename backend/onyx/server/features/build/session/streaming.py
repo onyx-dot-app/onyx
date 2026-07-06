@@ -33,6 +33,9 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
+from onyx.server.features.build.configs import (
+    SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
+)
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import update_session_activity
@@ -459,11 +462,7 @@ def load_turn_session(
     return build_session
 
 
-SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS = 60.0
-
-
 def _refresh_sandbox_heartbeat_best_effort(sandbox_id: UUID) -> None:
-    # Best-effort: a heartbeat write must never kill the turn refreshing it.
     try:
         with get_session_with_current_tenant() as hb_session:
             update_sandbox_heartbeat(hb_session, sandbox_id)
@@ -505,9 +504,7 @@ def yield_sandbox_events(
         # opencode session (dropping conversation history).
         _persist_opencode_session_id(db_session, session_id, new_id)
 
-    # The idle reaper's only activity signal is sandbox.last_heartbeat, and a
-    # turn can outlast SANDBOX_IDLE_TIMEOUT_SECONDS — refresh it at turn start
-    # and throttled while events flow (ENG-4269).
+    # The idle reaper keys off last_heartbeat; a turn can outlast the idle timeout.
     _refresh_sandbox_heartbeat_best_effort(sandbox_id)
     last_heartbeat_refresh = time.monotonic()
     event_stream = sandbox_manager.send_message(
@@ -530,9 +527,8 @@ def yield_sandbox_events(
                 last_heartbeat_refresh = time.monotonic()
             yield sandbox_event
     finally:
-        # `yield from` forwarded close() to the transport generator (whose
-        # GeneratorExit handler aborts the opencode turn); keep that
-        # deterministic rather than relying on GC.
+        # close() must reach the transport generator deterministically — its
+        # GeneratorExit handler aborts the opencode turn.
         event_stream.close()
 
 

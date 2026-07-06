@@ -605,10 +605,7 @@ def test_heartbeat_refresh_mid_sweep_aborts_reap(
     short_idle_threshold: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """TOCTOU guard: a heartbeat refreshed after the sweep's idle partition
-    (e.g. user resumes while the reaper is snapshotting) must abort the reap —
-    the sandbox stays RUNNING and terminate() is never called.
-    """
+    """A heartbeat refreshed mid-sweep (e.g. user resume) must abort the reap."""
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
     session_row = BuildSession(
@@ -630,7 +627,6 @@ def test_heartbeat_refresh_mid_sweep_aborts_reap(
     def _resume_then_snapshot(
         _sandbox_id: object, _session_id: object, _tenant_id: object
     ) -> SnapshotResult:
-        # Simulate a user resuming the session while the reaper is mid-snapshot.
         db_session.execute(
             update(Sandbox)
             .where(Sandbox.id == sandbox.id)
