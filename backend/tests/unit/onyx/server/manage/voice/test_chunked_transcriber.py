@@ -151,6 +151,24 @@ async def test_flush_recovers_quiet_speech_below_absolute_threshold() -> None:
 
 
 @pytest.mark.asyncio
+async def test_flush_recovers_quiet_speech_over_steady_noise_floor() -> None:
+    """Quiet speech over a constant noise floor: speech peaks stand ~3x above
+    the floor, which must count as speech-like dynamics."""
+    transcriber = _make_transcriber()
+
+    floor = _tone(2.0, amplitude=45)  # RMS ~32 noise floor
+    speech = _tone(1.0, amplitude=130)  # RMS ~92, still below the 150 threshold
+    assert pcm16_rms(speech) < SILENCE_RMS_THRESHOLD
+
+    for chunk in _chunks(floor + speech + floor):
+        await transcriber.add_chunk(chunk)
+    transcriber.provider.transcribe.assert_not_awaited()
+
+    assert await transcriber.flush() == "hello world"
+    transcriber.provider.transcribe.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_flush_of_uniform_low_noise_returns_empty() -> None:
     """Steady low-level noise has no speech-like dynamics and must not be
     transcribed even though it is above the low-gain speech floor."""

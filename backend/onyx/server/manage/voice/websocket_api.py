@@ -53,9 +53,11 @@ SILENCE_RMS_THRESHOLD = 150.0
 MIN_SPEECH_RMS = 30.0
 
 # Low-gain fallback: quiet audio counts as speech only when its loudest
-# frames stand at least this far above the recording's own noise floor.
-# Speech has strong dynamics (pauses between words); steady mic noise doesn't.
-SPEECH_DYNAMICS_RATIO = 4.0
+# frames stand at least this far (~8dB) above the recording's own noise
+# floor. Speech has strong dynamics (pauses between words); steady mic noise
+# stays near 1x. Below this, an empty transcript (visible, recoverable) is
+# deliberately preferred over risking hallucinated text.
+SPEECH_DYNAMICS_RATIO = 2.5
 
 # Audio kept around detected speech when trimming silence off a full recording
 SILENCE_TRIM_PADDING_SECONDS = 0.5
