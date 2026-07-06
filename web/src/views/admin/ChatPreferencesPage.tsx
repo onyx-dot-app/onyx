@@ -579,7 +579,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
               disabled ? "disabled" : customInvalid ? "error" : undefined
             }
             rightChildren={
-              <div className="flex flex-row items-center gap-0.5">
+              <Section flexDirection="row" gap={0.125} width="fit" height="fit">
                 <Button
                   icon={SvgRevert}
                   tooltip="Restore Default"
@@ -592,7 +592,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
                   onClick={handleReopenPresets}
                   {...iconButtonProps}
                 />
-              </div>
+              </Section>
             }
           />
           {customInvalid && (
