@@ -45,12 +45,10 @@ function chatSessionToMarkdown(
 // across operating systems.
 function sanitizeFilename(name: string): string {
   const trimmed = name.trim() || UNNAMED_CHAT;
-  return (
-    trimmed
-      .replace(/[^a-z0-9-_ ]/gi, "_")
-      .replace(/\s+/g, "_")
-      .slice(0, 100) || UNNAMED_CHAT
-  );
+  return trimmed
+    .replace(/[^a-z0-9-_ ]/gi, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 100);
 }
 
 /**

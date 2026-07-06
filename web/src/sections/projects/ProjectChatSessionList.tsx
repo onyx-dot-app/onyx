@@ -34,6 +34,7 @@ import {
 import { timeAgo } from "@opal/time";
 import type { IconFunctionComponent } from "@opal/types";
 import { noProp } from "@/lib/utils";
+import { showErrorNotification } from "@/lib/sidebar/utils";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
@@ -135,7 +136,12 @@ function ProjectChatItem({
   const handleExport = useCallback(
     async (format: ChatExportFormat) => {
       setPopoverOpen(false);
-      await exportChatSession(chat.id, chat.name || UNNAMED_CHAT, format);
+      try {
+        await exportChatSession(chat.id, chat.name || UNNAMED_CHAT, format);
+      } catch (error) {
+        console.error("Failed to export chat:", error);
+        showErrorNotification("Failed to export chat. Please try again.");
+      }
     },
     [chat.id, chat.name]
   );
