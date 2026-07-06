@@ -71,6 +71,10 @@ logger = setup_logger(__name__)
 VERIFY_INDEX_LOCK_TTL_S = 60
 VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 
+# Batch size for the orphan sweep's delete-by-query terms filter — well under the
+# OpenSearch terms cap (65536) so a large mid-port purge can't build an oversized query.
+_PORT_ORPHAN_DELETE_BATCH_SIZE = 1000
+
 
 # Per-process cache of indices we've already verified/created/applied the
 # mapping for. Used for the multi-tenant cloud codepath, which attempts to
@@ -532,6 +536,27 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         return self._client.delete_by_query(query_body)
+
+    def delete_port_written_chunks(self, document_ids: list[str]) -> int:
+        """Delete only port-written chunks (written_by_port=true) for the given docs.
+
+        Used by the orphan sweep to remove a doc a create-only port copy resurrected,
+        without touching a legitimately re-added doc (whose forward-written chunks are
+        unmarked). Dedups and batches the ids under the OpenSearch terms cap so a large
+        mid-port purge can't build an oversized terms query. Returns chunks deleted.
+        """
+        unique_ids = list(dict.fromkeys(document_ids))
+        if not unique_ids:
+            return 0
+        deleted = 0
+        for i in range(0, len(unique_ids), _PORT_ORPHAN_DELETE_BATCH_SIZE):
+            batch = unique_ids[i : i + _PORT_ORPHAN_DELETE_BATCH_SIZE]
+            query_body = DocumentQuery.delete_port_written_chunks_query(
+                document_ids=batch,
+                tenant_state=self._tenant_state,
+            )
+            deleted += self._client.delete_by_query(query_body)
+        return deleted
 
     def update(
         self,

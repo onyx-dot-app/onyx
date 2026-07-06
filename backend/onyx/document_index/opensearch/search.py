@@ -49,6 +49,7 @@ from onyx.document_index.opensearch.schema import TENANT_ID_FIELD_NAME
 from onyx.document_index.opensearch.schema import TITLE_FIELD_NAME
 from onyx.document_index.opensearch.schema import TITLE_VECTOR_FIELD_NAME
 from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
+from onyx.document_index.opensearch.schema import WRITTEN_BY_PORT_FIELD_NAME
 
 # See https://docs.opensearch.org/latest/query-dsl/term/terms/.
 MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY = 65_536
@@ -304,6 +305,34 @@ class DocumentQuery:
             max_chunk_size=None,
             document_id=document_id,
         )
+        final_delete_query: dict[str, Any] = {
+            "query": {"bool": {"filter": filter_clauses}},
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+        }
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_delete_query["profile"] = True
+
+        return final_delete_query
+
+    @staticmethod
+    def delete_port_written_chunks_query(
+        document_ids: list[str],
+        tenant_state: TenantState,
+    ) -> dict[str, Any]:
+        """Delete-by-query matching only PORT-written chunks (written_by_port=true) of the
+        given documents in this tenant. The orphan sweep uses it to remove a resurrected
+        doc while leaving a legitimately re-added one (its forward-written chunks are
+        unmarked) untouched — so no Postgres re-check is needed."""
+        filter_clauses: list[dict[str, Any]] = [
+            {"terms": {DOCUMENT_ID_FIELD_NAME: list(document_ids)}},
+            {"term": {WRITTEN_BY_PORT_FIELD_NAME: {"value": True}}},
+        ]
+        # Single-tenant indices have no tenant_id field (added only in multitenant mode);
+        # a term on the unmapped field would match zero docs. Mirror _get_search_filters.
+        if tenant_state.multitenant:
+            filter_clauses.append(
+                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
+            )
         final_delete_query: dict[str, Any] = {
             "query": {"bool": {"filter": filter_clauses}},
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",

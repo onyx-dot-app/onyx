@@ -130,6 +130,13 @@ def copy_present_chunks_to_future(
         )
         if not reembedded:
             continue
+        # Mark these as port writes so the orphan sweep can delete a resurrected doc
+        # (create-only re-add after a concurrent delete) without touching a legitimately
+        # re-added one, whose forward-written chunks are unmarked. DocumentChunk is
+        # frozen, so rebuild via model_copy rather than mutating.
+        reembedded = [
+            chunk.model_copy(update={"written_by_port": True}) for chunk in reembedded
+        ]
         # Stop writing the instant the attempt is cancelled (e.g. by a deletion).
         if should_abort is not None and should_abort():
             return chunks_written, True
@@ -182,6 +189,12 @@ class PortCopier:
         self._augmentation_ctx: AugmentationReembedContext | None = None
         if self._strategy is ReembedStrategy.AUGMENTATION:
             self._augmentation_ctx = _build_augmentation_ctx(future_search_settings)
+
+    def delete_port_written(self, document_ids: list[str]) -> int:
+        """Delete only the port-written chunks of these docs from the target index —
+        used by the orphan sweep to remove a resurrected doc while leaving a
+        legitimately re-added one (unmarked chunks) intact. Returns chunks deleted."""
+        return self._future_index.delete_port_written_chunks(document_ids)
 
     def copy_doc_batch(
         self,

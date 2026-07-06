@@ -42,6 +42,7 @@ LAST_UPDATED_FIELD_NAME = "last_updated"
 PUBLIC_FIELD_NAME = "public"
 ACCESS_CONTROL_LIST_FIELD_NAME = "access_control_list"
 HIDDEN_FIELD_NAME = "hidden"
+WRITTEN_BY_PORT_FIELD_NAME = "written_by_port"
 GLOBAL_BOOST_FIELD_NAME = "global_boost"
 SEMANTIC_IDENTIFIER_FIELD_NAME = "semantic_identifier"
 IMAGE_FILE_ID_FIELD_NAME = "image_file_id"
@@ -176,6 +177,10 @@ class DocumentChunkWithoutVectors(BaseModel):
     access_control_list: list[str]
     # Defaults to False, currently gets written during update not index.
     hidden: bool = False
+    # None on all normal writes (omitted via exclude_none, so old indices whose mapping
+    # lacks the field are never sent it). Only the reindex port sets it True, and only on
+    # the freshly-created target index; the orphan sweep deletes by it.
+    written_by_port: bool | None = None
 
     global_boost: int
 
@@ -484,6 +489,8 @@ class DocumentSchema:
                 # PUBLIC_FIELD_NAME and ACCESS_CONTROL_LIST_FIELD_NAME; up to
                 # search implementations to guarantee this.
                 HIDDEN_FIELD_NAME: {"type": "boolean"},
+                # Marks port-written chunks; filtered by the orphan sweep's delete-by-query.
+                WRITTEN_BY_PORT_FIELD_NAME: {"type": "boolean"},
                 GLOBAL_BOOST_FIELD_NAME: {"type": "integer"},
                 # This field is only used for displaying a useful name for the
                 # doc in the UI and is not used for searching. Disabling these

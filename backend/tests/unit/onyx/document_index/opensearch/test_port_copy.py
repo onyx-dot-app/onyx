@@ -8,14 +8,21 @@ being read/embedded is not resurrected into the FUTURE index.
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+from pydantic import BaseModel
+
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
 
 
-def _chunk(doc_id: str) -> MagicMock:
-    chunk = MagicMock()
-    chunk.document_id = doc_id
-    return chunk
+class _Chunk(BaseModel):
+    # Frozen like the real DocumentChunk, so the copier must mark via model_copy.
+    model_config = {"frozen": True}
+    document_id: str
+    written_by_port: bool | None = None
+
+
+def _chunk(doc_id: str) -> _Chunk:
+    return _Chunk(document_id=doc_id)
 
 
 def _passthrough_reembed(page: list, *_: object, **__: object) -> list:

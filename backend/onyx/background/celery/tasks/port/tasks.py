@@ -61,6 +61,9 @@ from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
 from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.port_attempt import touch_port_progress
+from onyx.db.port_orphan_candidate import cleanup_stale_port_orphan_candidates
+from onyx.db.port_orphan_candidate import clear_port_orphan_candidates
+from onyx.db.port_orphan_candidate import get_port_orphan_candidate_doc_ids
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_search_settings_by_id
 from onyx.db.search_settings import get_secondary_search_settings
@@ -144,6 +147,40 @@ def _copy_batch_with_retry(
                 time.sleep(_PORT_BATCH_RETRY_SLEEP_S)
     assert last_error is not None
     raise last_error
+
+
+def _sweep_port_orphan_candidates(
+    port_attempt_id: int,
+    search_settings_id: int,
+    cc_pair_id: int,
+    copier: PortCopier,
+    log: logging.LoggerAdapter,
+) -> None:
+    """Remove docs a create-only copy resurrected into the target during the port.
+
+    create-only can't tell a just-deleted chunk from a never-written one, so a copy
+    landing after a delete re-adds the doc. Deletes only the PORT-written chunks
+    (written_by_port=true) of the recorded candidates in one delete-by-query — a
+    legitimately re-added doc's forward-written chunks are unmarked and left intact, so
+    no Postgres re-check is needed. Raises on a delete failure so the caller FAILs the
+    attempt; check_for_port then resumes it (an empty re-copy) and re-sweeps.
+    """
+    with get_session_with_current_tenant() as db_session:
+        candidate_ids = get_port_orphan_candidate_doc_ids(
+            db_session, search_settings_id, cc_pair_id
+        )
+    if not candidate_ids:
+        return
+
+    deleted = copier.delete_port_written(candidate_ids)
+    with get_session_with_current_tenant() as db_session:
+        touch_port_progress(db_session, port_attempt_id)
+        clear_port_orphan_candidates(
+            db_session, search_settings_id, cc_pair_id, candidate_ids
+        )
+        db_session.commit()
+    if deleted:
+        log.info("Swept %d resurrected orphan chunk(s) from the port target", deleted)
 
 
 def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) -> None:
@@ -325,6 +362,23 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 log.info("PortAttempt terminalized mid-batch, stopping")
                 return
 
+    # Copy loop done and the cursor is committed at the final doc, so a FAILED resume
+    # re-copies nothing. Before declaring success, sweep any doc deleted mid-port that a
+    # create-only copy resurrected into the target.
+    try:
+        _sweep_port_orphan_candidates(
+            port_attempt_id=port_attempt_id,
+            search_settings_id=future_search_settings.id,
+            cc_pair_id=cc_pair_id,
+            copier=copier,
+            log=log,
+        )
+    except Exception as e:
+        log.exception("Port orphan sweep failed; marking FAILED")
+        with get_session_with_current_tenant() as db_session:
+            mark_port_failed(db_session, port_attempt_id, error_msg=str(e))
+        return
+
     with get_session_with_current_tenant() as db_session:
         mark_port_succeeded(db_session, port_attempt_id)
     log.info("Port complete: %d docs, %d chunks", docs_ported, chunks_ported)
@@ -431,7 +485,8 @@ def _resolve_port_target_settings(db_session: Session) -> SearchSettings | None:
         if port_backfill_has_pending_work(db_session, present.id):
             return present
         # Backfill drained: unpin the source so we stop re-checking a done job, the
-        # source index can be reclaimed, and the reindex/vespa guards read "not backfilling".
+        # source index can be reclaimed, and the reindex/vespa guards read "not
+        # backfilling". Orphans were already swept per-attempt inside run_port_attempt.
         present.port_backfill_source_id = None
         db_session.commit()
     return None
@@ -459,6 +514,11 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
             _fail_stalled_port_attempts(db_session, lock_beat)
 
             port_settings = _resolve_port_target_settings(db_session)
+            # Garbage-collect orphan candidates left by a superseded / permanently-FAILED
+            # port (one that never reached the backstop). None target -> clears all.
+            cleanup_stale_port_orphan_candidates(
+                db_session, port_settings.id if port_settings else None
+            )
             if port_settings is None:
                 return None
             search_settings_id = port_settings.id

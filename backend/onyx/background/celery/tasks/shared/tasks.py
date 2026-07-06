@@ -22,6 +22,7 @@ from onyx.db.document import mark_document_as_modified
 from onyx.db.document import mark_document_as_synced
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.port_orphan_candidate import record_port_orphan_candidates_for_document
 from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_all_document_indices
@@ -119,6 +120,18 @@ def document_by_cc_pair_cleanup_task(
             if count == 1:
                 action = DocumentCleanupAction.DELETE
                 chunk_count = fetch_chunk_count_for_document(document_id, db_session)
+
+                # If a port is filling a target index, record this delete so the
+                # cc_pair's port attempt sweeps the doc back out if a racing
+                # create-only copy resurrects it. Commit before the index delete
+                # below so the candidate is durable before any resurrection.
+                if record_port_orphan_candidates_for_document(
+                    db_session,
+                    document_id,
+                    primary_search_settings,
+                    secondary_search_settings,
+                ):
+                    db_session.commit()
             elif count > 1:
                 doc = get_document(document_id, db_session)
                 if not doc:

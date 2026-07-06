@@ -26,6 +26,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -65,6 +66,7 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import PortAttempt
+from onyx.db.models import PortOrphanCandidate
 from onyx.db.models import SearchSettings
 from onyx.db.port_attempt import cancel_active_port_attempts
 from onyx.db.port_attempt import commit_port_cursor
@@ -78,6 +80,11 @@ from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
 from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.port_attempt import request_port_cancel
+from onyx.db.port_orphan_candidate import cleanup_stale_port_orphan_candidates
+from onyx.db.port_orphan_candidate import clear_port_orphan_candidates
+from onyx.db.port_orphan_candidate import get_port_orphan_candidate_doc_ids
+from onyx.db.port_orphan_candidate import port_target_settings_id
+from onyx.db.port_orphan_candidate import record_port_orphan_candidates
 from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.swap_index import _port_swap_ready
@@ -640,11 +647,17 @@ def test_copy_present_chunks_to_future_orchestration() -> None:
     # two pages out of the PIT scan
     present_client.iter_chunks_for_doc_ids.return_value = iter([["c1", "c2"], ["c3"]])
 
+    # frozen like DocumentChunk, so the port must mark via model_copy (not mutation)
+    class _FrozenChunk(BaseModel):
+        model_config = {"frozen": True}
+        name: str
+        written_by_port: bool | None = None
+
     with patch.object(
         port_copy,
         "re_embed_chunks",
         side_effect=lambda chunks, _strategy, _embedder, **_kwargs: [
-            f"re:{c}" for c in chunks
+            _FrozenChunk(name=f"re:{c}") for c in chunks
         ],
     ) as mock_reembed:
         written, aborted = copy_present_chunks_to_future(
@@ -665,7 +678,8 @@ def test_copy_present_chunks_to_future_orchestration() -> None:
     # FUTURE write once per page, always create-only (the port never overwrites)
     assert future_index.index_raw_chunks.call_count == 2
     first_write = future_index.index_raw_chunks.call_args_list[0]
-    assert first_write.args[0] == ["re:c1", "re:c2"]
+    assert [c.name for c in first_write.args[0]] == ["re:c1", "re:c2"]
+    assert all(c.written_by_port is True for c in first_write.args[0])
     assert first_write.kwargs == {"use_create_only": True}
 
 
@@ -1583,3 +1597,206 @@ def test_document_has_indexable_cc_pair(
         assert document_has_indexable_cc_pair(db_session, "no-such-doc") is False
     finally:
         _cleanup_pairs(db_session, pair_active, pair_invalid)
+
+
+# ---- Port orphan-candidate sweep (deleted-doc resurrection fix) ----
+
+
+def test_port_target_settings_id() -> None:
+    """None when no port; secondary.id for a reindex FUTURE; primary.id for INSTANT."""
+    primary = MagicMock()
+    primary.id = 1
+    primary.use_port_flow = False
+    primary.port_backfill_source_id = None
+
+    assert port_target_settings_id(primary, None) is None
+
+    secondary = MagicMock()
+    secondary.id = 2
+    secondary.use_port_flow = True
+    assert port_target_settings_id(primary, secondary) == 2
+
+    primary.use_port_flow = True
+    primary.port_backfill_source_id = 99
+    assert port_target_settings_id(primary, None) == 1
+
+
+def test_delete_port_written_chunks_query() -> None:
+    """Filters written_by_port + doc-ids; adds the tenant term only in multitenant mode
+    (single-tenant has no tenant_id field, so it would match zero docs)."""
+    from onyx.document_index.interfaces_new import TenantState
+    from onyx.document_index.opensearch.schema import DOCUMENT_ID_FIELD_NAME
+    from onyx.document_index.opensearch.schema import TENANT_ID_FIELD_NAME
+    from onyx.document_index.opensearch.schema import WRITTEN_BY_PORT_FIELD_NAME
+    from onyx.document_index.opensearch.search import DocumentQuery
+
+    mt = TenantState(tenant_id="tenant-1", multitenant=True)
+    filters = DocumentQuery.delete_port_written_chunks_query(["a", "b"], mt)["query"][
+        "bool"
+    ]["filter"]
+    assert {"term": {WRITTEN_BY_PORT_FIELD_NAME: {"value": True}}} in filters
+    assert {"terms": {DOCUMENT_ID_FIELD_NAME: ["a", "b"]}} in filters
+    assert {"term": {TENANT_ID_FIELD_NAME: {"value": "tenant-1"}}} in filters
+
+    st = TenantState(tenant_id="public", multitenant=False)
+    single = DocumentQuery.delete_port_written_chunks_query(["a"], st)["query"]["bool"][
+        "filter"
+    ]
+    assert {"term": {WRITTEN_BY_PORT_FIELD_NAME: {"value": True}}} in single
+    assert not [f for f in single if TENANT_ID_FIELD_NAME in f.get("term", {})]
+
+
+def test_port_orphan_candidate_crud(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """record is idempotent; get is scoped to (settings, cc_pair); clear removes only given ids."""
+    ss = get_current_search_settings(db_session)
+    try:
+        record_port_orphan_candidates(db_session, ss.id, cc_pair.id, ["d1", "d2"])
+        record_port_orphan_candidates(db_session, ss.id, cc_pair.id, ["d2", "d3"])
+        db_session.commit()
+
+        assert set(
+            get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id)
+        ) == {
+            "d1",
+            "d2",
+            "d3",
+        }
+
+        clear_port_orphan_candidates(db_session, ss.id, cc_pair.id, ["d1", "d2"])
+        db_session.commit()
+        assert get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id) == [
+            "d3"
+        ]
+    finally:
+        db_session.query(PortOrphanCandidate).filter(
+            PortOrphanCandidate.cc_pair_id == cc_pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+
+
+def test_sweep_port_orphan_candidates_marker_delete_and_clears(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """Sweep issues one batched marker-delete for all candidates and clears the rows."""
+    ss = get_current_search_settings(db_session)
+    attempt = create_port_attempt(db_session, cc_pair.id, ss.id)
+    record_port_orphan_candidates(db_session, ss.id, cc_pair.id, ["d1", "d2"])
+    db_session.commit()
+
+    copier = MagicMock()
+    copier.delete_port_written.return_value = 5
+
+    try:
+        port_task._sweep_port_orphan_candidates(
+            port_attempt_id=attempt.id,
+            search_settings_id=ss.id,
+            cc_pair_id=cc_pair.id,
+            copier=copier,
+            log=MagicMock(),
+        )
+        copier.delete_port_written.assert_called_once()
+        assert sorted(copier.delete_port_written.call_args.args[0]) == ["d1", "d2"]
+        db_session.expire_all()
+        assert get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id) == []
+    finally:
+        db_session.query(PortOrphanCandidate).filter(
+            PortOrphanCandidate.cc_pair_id == cc_pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+
+
+def test_cleanup_stale_port_orphan_candidates(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """GC keeps rows for the active target, drops all others (and everything when None)."""
+    ss = get_current_search_settings(db_session)
+    try:
+        record_port_orphan_candidates(db_session, ss.id, cc_pair.id, ["c1", "c2"])
+        db_session.commit()
+
+        cleanup_stale_port_orphan_candidates(db_session, ss.id)
+        assert set(
+            get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id)
+        ) == {
+            "c1",
+            "c2",
+        }
+
+        cleanup_stale_port_orphan_candidates(db_session, None)
+        assert get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id) == []
+    finally:
+        db_session.query(PortOrphanCandidate).filter(
+            PortOrphanCandidate.cc_pair_id == cc_pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+
+
+def test_run_port_attempt_sweeps_orphan_candidates(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """run_port_attempt copies the batch, then sweeps + clears the candidates and SUCCEEDs."""
+    cc_pair, future_id = cc_pair_and_future
+    _seed_cc_pair_documents(db_session, cc_pair, 3, unique=True)
+    record_port_orphan_candidates(
+        db_session, future_id, cc_pair.id, ["orphan-1", "orphan-2"]
+    )
+    db_session.commit()
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+
+    mock_copier = MagicMock()
+    mock_copier.copy_doc_batch.side_effect = lambda ids, **_: (len(ids), False)
+    mock_copier.delete_port_written.return_value = 4
+    try:
+        with patch.object(port_task, "PortCopier", return_value=mock_copier):
+            run_port_attempt(attempt_id)
+
+        assert mock_copier.copy_doc_batch.call_count == 1
+        mock_copier.delete_port_written.assert_called_once()
+        assert sorted(mock_copier.delete_port_written.call_args.args[0]) == [
+            "orphan-1",
+            "orphan-2",
+        ]
+
+        db_session.expire_all()
+        row = db_session.get(PortAttempt, attempt_id)
+        assert row is not None
+        assert row.status == PortAttemptStatus.SUCCESS
+        assert (
+            get_port_orphan_candidate_doc_ids(db_session, future_id, cc_pair.id) == []
+        )
+    finally:
+        db_session.query(PortOrphanCandidate).filter(
+            PortOrphanCandidate.cc_pair_id == cc_pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+
+
+def test_run_port_attempt_failed_sweep_marks_failed(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A failing sweep FAILs the attempt with the cursor at the final doc, so a resume re-copies nothing."""
+    cc_pair, future_id = cc_pair_and_future
+    doc_ids = _seed_cc_pair_documents(db_session, cc_pair, 3, unique=True)
+    record_port_orphan_candidates(db_session, future_id, cc_pair.id, ["port-orphan-x"])
+    db_session.commit()
+    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
+
+    mock_copier = MagicMock()
+    mock_copier.copy_doc_batch.side_effect = lambda ids, **_: (len(ids), False)
+    mock_copier.delete_port_written.side_effect = RuntimeError("opensearch down")
+    try:
+        with patch.object(port_task, "PortCopier", return_value=mock_copier):
+            run_port_attempt(attempt_id)
+
+        db_session.expire_all()
+        row = db_session.get(PortAttempt, attempt_id)
+        assert row is not None
+        assert row.status == PortAttemptStatus.FAILED
+        assert row.last_processed_doc_id == doc_ids[-1]
+    finally:
+        db_session.query(PortOrphanCandidate).filter(
+            PortOrphanCandidate.cc_pair_id == cc_pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()

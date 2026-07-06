@@ -2597,6 +2597,44 @@ class PortAttempt(Base):
         return self.status.is_terminal()
 
 
+class PortOrphanCandidate(Base):
+    """A doc deleted while a port was filling a target index, possibly resurrected there
+    by a racing create-only copy. The sweep deletes only the chunks the port itself wrote
+    (written_by_port) for these docs — removing a resurrection but leaving a legitimately
+    re-added doc (unmarked chunks) intact."""
+
+    __tablename__ = "port_orphan_candidate"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # the port target: FUTURE for a reindex, the promoted live PRESENT for INSTANT
+    search_settings_id: Mapped[int] = mapped_column(
+        ForeignKey("search_settings.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_id: Mapped[str] = mapped_column(String, nullable=False)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        # idempotent inserts + the (settings, cc_pair) sweep lookup
+        UniqueConstraint(
+            "search_settings_id",
+            "cc_pair_id",
+            "document_id",
+            name="uq_port_orphan_candidate_settings_ccpair_doc",
+        ),
+    )
+
+
 class HierarchyFetchAttempt(Base):
     """Tracks attempts to fetch hierarchy nodes from a source"""
 
