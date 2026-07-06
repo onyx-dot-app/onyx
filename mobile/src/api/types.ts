@@ -9,11 +9,19 @@ export type UserRole =
   | "slack_user"
   | "ext_perm_user";
 
+// pinned_assistants drives the sidebar rail (null → featured fallback).
+export interface UserPreferences {
+  pinned_assistants?: number[] | null;
+}
+
 export interface CurrentUser {
   id: string;
   email: string;
   role: UserRole;
   is_active: boolean;
+  // `/me` always returns preferences; keep it required to surface a boundary mismatch rather
+  // than silently treating malformed data as "no pinned assistants".
+  preferences: UserPreferences;
 }
 
 // `cloud` = Google OAuth + basic email/password.

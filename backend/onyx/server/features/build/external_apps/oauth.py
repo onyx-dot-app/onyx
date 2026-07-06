@@ -236,11 +236,16 @@ def handle_external_app_oauth_callback(
         provider.extract_credentials(response_data), datetime.now(timezone.utc)
     )
 
+    # The grant is authoritative and captured only here (a refresh can't change
+    # it); None when the provider gives no signal.
+    granted_scopes = provider.extract_granted_scopes(response_data)
+
     upsert_external_app_user_credential(
         db_session,
         external_app_id=app.id,
         user_id=user.id,
         user_credentials=stored_credentials,
+        granted_scopes=granted_scopes,
     )
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes so
