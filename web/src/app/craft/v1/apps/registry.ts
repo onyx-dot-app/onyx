@@ -6,6 +6,7 @@ import {
   SvgGoogleCalendar,
   SvgGoogleDrive,
   SvgHubspot,
+  SvgNotion,
 } from "@opal/logos";
 import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
@@ -19,6 +20,7 @@ export type ExternalAppType =
   | "LINEAR"
   | "GITHUB"
   | "HUBSPOT"
+  | "NOTION"
   | "CUSTOM";
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
@@ -30,6 +32,7 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
     LINEAR: SvgLinear,
     GITHUB: SvgGithub,
     HUBSPOT: SvgHubspot,
+    NOTION: SvgNotion,
   };
 
 /** Logo for a known `app_type`, with a generic fallback for CUSTOM /

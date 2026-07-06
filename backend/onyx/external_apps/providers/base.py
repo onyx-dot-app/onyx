@@ -143,6 +143,25 @@ class OAuthProviderSpec(ProviderSpec):
     oauth: OAuthFlowSpec
 
 
+class TokenExchangeRequest(BaseModel):
+    """The authorization-code token-exchange POST, built by the provider so a
+    divergent provider can override how client credentials and the grant ride
+    on the request. The default is RFC-6749 form-encoded creds in the body;
+    Notion, for example, needs HTTP Basic client auth plus a JSON body. The
+    OAuth callback route consumes this without knowing any provider specifics.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    headers: dict[str, str]
+    body: dict[str, str]
+    # How ``body`` is encoded on the wire: JSON (``requests.post(json=...)``)
+    # when True, RFC-6749 form-encoded (``data=...``) when False. The callback
+    # route maps this to exactly one of `data`/`json` so `requests` never sees
+    # both (which would silently drop the form body in favour of JSON).
+    json_encoded: bool = False
+
+
 class ExternalAppProvider(ABC):
     """Base contract for a built-in external-app provider.
 
@@ -269,6 +288,29 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         that nest it (Slack) or require a separate lookup (HubSpot).
         """
         return parse_granted_scopes(response_data.get("scope"))
+
+    # --- Initial-grant token exchange (override for divergent client auth) ---
+
+    def build_token_exchange_request(
+        self, code: str, client_id: str, client_secret: str, redirect_uri: str
+    ) -> TokenExchangeRequest:
+        """Build the authorization-code → token exchange POST. The default sends
+        RFC-6749 form-encoded client credentials in the body. Override for a
+        provider that requires HTTP Basic client auth and/or a JSON body (e.g.
+        Notion)."""
+        return TokenExchangeRequest(
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+            },
+            body={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+        )
 
     # --- Refresh template method (override a hook below, not this) ---
 

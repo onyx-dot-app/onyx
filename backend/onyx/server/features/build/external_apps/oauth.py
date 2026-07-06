@@ -174,20 +174,15 @@ def handle_external_app_oauth_callback(
     # Re-read in case the admin rotated creds between /start and /callback.
     client_id, client_secret = _oauth_client_credentials(app)
 
+    token_request = provider.build_token_exchange_request(
+        request.code, client_id, client_secret, _frontend_callback_url()
+    )
     try:
         response = requests.post(
             oauth.token_url,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-            },
-            data={
-                "grant_type": "authorization_code",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": request.code,
-                "redirect_uri": _frontend_callback_url(),
-            },
+            headers=token_request.headers,
+            data=None if token_request.json_encoded else token_request.body,
+            json=token_request.body if token_request.json_encoded else None,
             timeout=30,
         )
     except requests.RequestException as exc:
