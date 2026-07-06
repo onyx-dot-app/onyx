@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.8
+version: 0.6.9
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,18 +16,33 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: security
-      description: Add an egress NetworkPolicy on the Craft sandbox pods restricting their egress to
-        the sandbox proxy (:8080) and kube-dns (:53) only. CNI-layer backstop to the in-pod iptables
-        in firewall-init.sh, so a sandbox that bypasses that iptables still cannot reach anything but
-        the proxy. DNS is allowed because sandbox-init resolves the proxy FQDN before its iptables
-        closes DNS.
+    - kind: fixed
+      description: Support clusters running their own cluster-managed CloudNativePG operator.
+        New postgresqlOperator.enabled toggle (mirrors redisOperator.enabled) skips the bundled
+        CNPG operator and its CRDs while keeping the Cluster CR for the external operator to
+        reconcile; the CRDs move byte-for-byte into a condition-gated CRDs-only subchart
+        (onyx-cnpg-crds) with postgresql.installCRDs as an independent override. Default
+        behavior is unchanged; CRDs also no longer install when postgresql.enabled is false.
 dependencies:
+  # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
+  # is unset by default, so this falls through to `postgresql.enabled`. Set it
+  # false to skip the bundled CNPG operator (and, via the fallback below, its
+  # CRDs) and reuse an existing cluster-managed one (see values.yaml). Mirrors
+  # the redis-operator toggle.
   - name: cloudnative-pg
     version: 0.26.0
     repository: https://cloudnative-pg.github.io/charts
-    condition: postgresql.enabled
+    condition: postgresqlOperator.enabled,postgresql.enabled
     alias: postgresql
+  # CRDs-only subchart: Helm pre-installs a subchart's crds/ before building the
+  # main manifest (so the CNPG Cluster CR validates on fresh installs), and prunes
+  # it entirely when the condition is false. Follows the operator toggle by
+  # default — an external operator owns its own CRDs — but
+  # `postgresql.installCRDs` can override independently.
+  - name: onyx-cnpg-crds
+    version: 0.1.0
+    repository: file://../onyx-cnpg-crds
+    condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
   - name: opensearch
     version: 3.6.0
     repository: https://opensearch-project.github.io/helm-charts

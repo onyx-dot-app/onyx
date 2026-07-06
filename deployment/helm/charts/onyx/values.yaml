@@ -30,15 +30,30 @@ customCACerts:
   secretName: ""
   configMapName: ""
 
+# Uncomment to skip the bundled CNPG operator and its CRDs, and let an existing
+# cluster-managed CloudNativePG operator reconcile the Cluster CR below (keep
+# postgresql.enabled: true). Two operators/CRD copies on one cluster drift in
+# version and fight over ownership of the cluster-scoped postgresql.cnpg.io
+# CRDs and webhook configurations — see
+# https://github.com/onyx-dot-app/onyx/issues/12490. Unset = follow
+# postgresql.enabled. Mirrors redisOperator below.
+# postgresqlOperator:
+#   enabled: false
+
 postgresql:
   enabled: true
   # IMPORTANT: This nameOverride is required for the CloudNativePG operator to find itself.
   # The operator looks for a deployment with label app.kubernetes.io/name=cloudnative-pg,
   # but since the subchart is aliased as "postgresql", Helm defaults to that name.
   nameOverride: cloudnative-pg
-  # CRDs are shipped in our chart's crds/ directory (pre-installed before
-  # templates). Disable the subchart's own CRD template to avoid ownership
-  # conflicts between the two copies.
+  # Uncomment to override, independently of postgresqlOperator.enabled below,
+  # whether the bundled CNPG CRDs (onyx-cnpg-crds subchart) are installed.
+  # Unset = follow postgresqlOperator.enabled, then postgresql.enabled.
+  # installCRDs: false
+
+  # Disable the CNPG subchart's own templated CRD copy — the onyx-cnpg-crds
+  # subchart is the single source of the CRDs (its crds/ dir gets Helm's
+  # pre-install treatment, which templated CRDs don't).
   crds:
     create: false
   cluster:
