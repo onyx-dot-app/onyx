@@ -13,38 +13,57 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/tui"
 )
 
-// AuditEditOptions holds options for the `ods audit edit` command.
-type AuditEditOptions struct {
+// AuditIgnoreOptions holds options shared by the `ods audit ignore` commands.
+type AuditIgnoreOptions struct {
 	IgnoreURL string
 }
 
-// newAuditEditCommand creates the `ods audit edit` subcommand.
-func newAuditEditCommand() *cobra.Command {
-	opts := &AuditEditOptions{}
+// newAuditIgnoreCommand creates the `ods audit ignore` command group. Running it
+// bare opens the allowlist editor, the same as `ods audit ignore edit`.
+func newAuditIgnoreCommand() *cobra.Command {
+	opts := &AuditIgnoreOptions{}
 
 	cmd := &cobra.Command{
+		Use:   "ignore",
+		Short: "Manage the audit advisory allowlist",
+		Long: `Manage the audit advisory allowlist (the suppressions applied by "ods audit").
+
+Run bare to open the interactive editor, or use a subcommand. The allowlist is
+fetched from S3 by default; pass a local file path to --ignore-url to edit a file
+on disk instead.`,
+		Args: cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			runAuditEdit(opts.IgnoreURL)
+		},
+	}
+
+	// A persistent flag so both the bare command and its subcommands share it.
+	cmd.PersistentFlags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL or local path of the advisory allowlist")
+
+	cmd.AddCommand(newAuditIgnoreEditCommand(opts))
+
+	return cmd
+}
+
+// newAuditIgnoreEditCommand creates the `ods audit ignore edit` subcommand. It
+// shares the parent's --ignore-url via the passed options.
+func newAuditIgnoreEditCommand(opts *AuditIgnoreOptions) *cobra.Command {
+	return &cobra.Command{
 		Use:   "edit",
 		Short: "Edit the audit advisory allowlist in a TUI",
 		Long: `Edit the audit advisory allowlist.
 
 Fetches the allowlist (from S3 by default), opens a terminal table where you can
 add, edit, and delete suppressions, then uploads the result back after a
-confirmation prompt. Pass a local file path to --ignore-url to edit a file on
-disk instead of S3.`,
+confirmation prompt.`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			runAuditEdit(opts)
+			runAuditEdit(opts.IgnoreURL)
 		},
 	}
-
-	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL or local path of the advisory allowlist")
-
-	return cmd
 }
 
-func runAuditEdit(opts *AuditEditOptions) {
-	url := opts.IgnoreURL
-
+func runAuditEdit(url string) {
 	orig, err := audit.FetchIgnores(url)
 	if err != nil {
 		log.Fatalf("Failed to fetch allowlist from %s: %v", url, err)

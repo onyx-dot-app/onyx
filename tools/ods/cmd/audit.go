@@ -49,7 +49,7 @@ how it gates deploys.`,
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
 
 	cmd.AddCommand(newAuditImageCommand())
-	cmd.AddCommand(newAuditEditCommand())
+	cmd.AddCommand(newAuditIgnoreCommand())
 
 	return cmd
 }
