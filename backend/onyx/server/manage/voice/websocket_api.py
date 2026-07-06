@@ -7,6 +7,7 @@ import os
 from collections.abc import MutableMapping
 from typing import Any
 
+import numpy as np
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import WebSocket
@@ -30,8 +31,105 @@ logger = setup_logger()
 router = APIRouter(prefix="/voice")
 
 
-# Transcribe every ~0.5 seconds of audio (webm/opus is ~2-4KB/s, so ~1-2KB per 0.5s)
+# Byte threshold for non-PCM formats, where the audio can't be analyzed server-side
 MIN_CHUNK_BYTES = 1500
+
+# The browser recorder sends raw PCM16 mono at 24kHz
+PCM_SAMPLE_RATE = 24000
+PCM_BYTES_PER_SECOND = PCM_SAMPLE_RATE * 2
+
+# Whisper-style models pad short inputs to a 30s window and hallucinate
+# training-data boilerplate (e.g. broadcast sign-offs) on silence/padding, so
+# PCM audio is transcribed in multi-second windows and windows without speech
+# are dropped without calling the provider.
+PCM_TRANSCRIBE_WINDOW_BYTES = PCM_BYTES_PER_SECOND * 3
+
+# int16 RMS below this (~-46 dBFS) is treated as silence. Speech is typically
+# an order of magnitude above; quiet-room mic noise well below.
+SILENCE_RMS_THRESHOLD = 150.0
+
+# Absolute floor (~-61 dBFS) for the low-gain fallback in
+# _speech_rms_threshold — audio quieter than this everywhere is silence.
+MIN_SPEECH_RMS = 30.0
+
+# Low-gain fallback: quiet audio counts as speech only when its loudest
+# frames stand at least this far (~8dB) above the recording's own noise
+# floor. Speech has strong dynamics (pauses between words); steady mic noise
+# stays near 1x. Below this, an empty transcript (visible, recoverable) is
+# deliberately preferred over risking hallucinated text.
+SPEECH_DYNAMICS_RATIO = 2.5
+
+# Audio kept around detected speech when trimming silence off a full recording
+SILENCE_TRIM_PADDING_SECONDS = 0.5
+
+
+def pcm16_rms(audio: bytes) -> float:
+    """RMS amplitude of raw little-endian PCM16 audio (0.0 for empty input)."""
+    usable = len(audio) - (len(audio) % 2)
+    if usable == 0:
+        return 0.0
+    samples = np.frombuffer(audio[:usable], dtype=np.int16).astype(np.float64)
+    return float(np.sqrt(np.mean(samples * samples)))
+
+
+def _speech_rms_threshold(frame_rms_values: list[float]) -> float | None:
+    """RMS threshold separating speech frames from silence for a recording.
+
+    Uses SILENCE_RMS_THRESHOLD when the recording reaches it. Otherwise falls
+    back to a relative test so quiet input from a low-gain microphone still
+    counts as speech when it stands well out of the recording's own noise
+    floor. Returns None when the recording contains no speech-like content.
+    """
+    if not frame_rms_values:
+        return None
+    peak = max(frame_rms_values)
+    if peak >= SILENCE_RMS_THRESHOLD:
+        return SILENCE_RMS_THRESHOLD
+    if peak < MIN_SPEECH_RMS:
+        return None
+    noise_floor = max(
+        sorted(frame_rms_values)[len(frame_rms_values) // 10], 1.0
+    )  # 10th percentile
+    if peak >= SPEECH_DYNAMICS_RATIO * noise_floor:
+        return max(MIN_SPEECH_RMS, peak / SPEECH_DYNAMICS_RATIO)
+    return None
+
+
+def trim_pcm16_silence(audio: bytes) -> bytes:
+    """Trim leading/trailing silence from raw PCM16 audio.
+
+    Analyzes the audio in 100ms frames and keeps everything from the first to
+    the last speech frame (per _speech_rms_threshold), plus padding. Returns
+    b"" if no frame contains speech.
+    """
+    frame_bytes = PCM_BYTES_PER_SECOND // 10
+    if frame_bytes == 0 or not audio:
+        return audio
+
+    frame_offsets = range(0, len(audio), frame_bytes)
+    frame_rms_values = [
+        pcm16_rms(audio[idx : idx + frame_bytes]) for idx in frame_offsets
+    ]
+    threshold = _speech_rms_threshold(frame_rms_values)
+    if threshold is None:
+        return b""
+
+    speech_frame_indices = [
+        idx
+        for idx, frame_rms in zip(frame_offsets, frame_rms_values)
+        if frame_rms >= threshold
+    ]
+    if not speech_frame_indices:
+        return b""
+
+    padding_bytes = int(PCM_BYTES_PER_SECOND * SILENCE_TRIM_PADDING_SECONDS)
+    start = max(0, speech_frame_indices[0] - padding_bytes)
+    end = min(len(audio), speech_frame_indices[-1] + frame_bytes + padding_bytes)
+    # Keep sample alignment
+    start -= start % 2
+    return audio[start:end]
+
+
 VOICE_DISABLE_STREAMING_FALLBACK = (
     os.environ.get("VOICE_DISABLE_STREAMING_FALLBACK", "").lower() == "true"
 )
@@ -49,14 +147,24 @@ WS_MAX_TTS_TEXT_LENGTH = 4096  # Max text length per synthesize call (matches RE
 
 
 class ChunkedTranscriber:
-    """Fallback transcriber for providers without streaming support."""
+    """Fallback transcriber for providers without streaming support.
+
+    For raw PCM16 input, audio is transcribed in multi-second windows and
+    silence is never sent to the provider — STT models hallucinate on
+    silent/near-silent audio instead of returning an empty transcript.
+    """
 
     def __init__(self, provider: Any, audio_format: str = "webm"):
         self.provider = provider
         self.audio_format = audio_format
+        self.is_pcm = audio_format == "pcm16"
+        self.window_bytes = (
+            PCM_TRANSCRIBE_WINDOW_BYTES if self.is_pcm else MIN_CHUNK_BYTES
+        )
         self.chunk_buffer = io.BytesIO()
         self.full_audio = io.BytesIO()
         self.chunk_bytes = 0
+        self.window_has_speech = False
         self.transcripts: list[str] = []
 
     async def add_chunk(self, chunk: bytes) -> str | None:
@@ -65,9 +173,28 @@ class ChunkedTranscriber:
         self.full_audio.write(chunk)
         self.chunk_bytes += len(chunk)
 
-        if self.chunk_bytes >= MIN_CHUNK_BYTES:
+        if (
+            self.is_pcm
+            and not self.window_has_speech
+            and pcm16_rms(chunk) >= SILENCE_RMS_THRESHOLD
+        ):
+            self.window_has_speech = True
+
+        if self.chunk_bytes >= self.window_bytes:
+            if self.is_pcm and not self.window_has_speech:
+                logger.debug(
+                    "Chunked transcription: dropping silent window (%s bytes)",
+                    self.chunk_bytes,
+                )
+                self._reset_window()
+                return None
             return await self._transcribe_chunk()
         return None
+
+    def _reset_window(self) -> None:
+        self.chunk_buffer = io.BytesIO()
+        self.chunk_bytes = 0
+        self.window_has_speech = False
 
     async def _transcribe_chunk(self) -> str | None:
         """Transcribe current chunk and append to running transcript."""
@@ -77,8 +204,7 @@ class ChunkedTranscriber:
 
         try:
             transcript = await self.provider.transcribe(audio_data, self.audio_format)
-            self.chunk_buffer = io.BytesIO()
-            self.chunk_bytes = 0
+            self._reset_window()
 
             if transcript and transcript.strip():
                 self.transcripts.append(transcript.strip())
@@ -86,13 +212,18 @@ class ChunkedTranscriber:
             return None
         except Exception as e:
             logger.error("Transcription error: %s", e)
-            self.chunk_buffer = io.BytesIO()
-            self.chunk_bytes = 0
+            self._reset_window()
             return None
 
     async def flush(self) -> str:
         """Get final transcript from full audio for best accuracy."""
         full_audio_data = self.full_audio.getvalue()
+        if self.is_pcm:
+            full_audio_data = trim_pcm16_silence(full_audio_data)
+            if not full_audio_data:
+                # No speech detected in the recording; empty unless earlier
+                # windows produced transcripts
+                return " ".join(self.transcripts)
         if full_audio_data:
             try:
                 transcript = await self.provider.transcribe(
