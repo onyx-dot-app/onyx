@@ -50,6 +50,13 @@ ARG ENABLE_SKILLS=true
 ARG ENABLE_BROWSER=true
 ARG OPENCODE_VERSION=1.15.7
 ARG AGENT_BROWSER_VERSION=0.31.1
+# trixie-security's chromium 150.0.7871.46-1~deb13u1 SIGTRAPs at launch
+# (https://bugs.debian.org/chromium — also broke grafana-image-renderer and
+# linuxserver/docker-chromium), which kills the Craft `browser` command and the
+# craft-k8s browser CI lane. Pin the last known-good build (from
+# trixie-proposed-updates) until a fixed security build lands, then drop the
+# pin and the proposed-updates apt source below.
+ARG CHROMIUM_VERSION=149.0.7827.196-1~deb13u1
 
 # firewall-init.sh needs: iptables (egress lockdown), ca-certificates (trust
 # store), gosu (legacy, not currently invoked). setpriv ships with util-linux in
@@ -96,9 +103,13 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
 # Chromium's NSS db). Its own layer: big and rarely-changing, so an
 # AGENT_BROWSER_VERSION bump below re-pulls only the small CLI layer, not this.
 RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
+    echo "deb http://deb.debian.org/debian trixie-proposed-updates main" \
+    > /etc/apt/sources.list.d/trixie-proposed-updates.list && \
     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    chromium \
+    chromium="${CHROMIUM_VERSION}" \
+    chromium-common="${CHROMIUM_VERSION}" \
     libnss3-tools \
+    && rm /etc/apt/sources.list.d/trixie-proposed-updates.list \
     && rm -rf /var/lib/apt/lists/*; \
     fi
 
