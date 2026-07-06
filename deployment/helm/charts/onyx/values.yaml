@@ -297,7 +297,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "5"
+      onyx.app/nginx-config-version: "6"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -305,6 +305,11 @@ nginx:
         value: localhost
 
     config:
+      # Hide the nginx version in Server headers/error pages. Set via the
+      # controller's supported knob — do NOT put `server_tokens` in the
+      # http-snippet files: ingress-nginx already emits the directive in the
+      # http{} block, and a duplicate fails `nginx -t` (config reload/startup).
+      server-tokens: "false"
       # Expose DOMAIN to the nginx config and pull in our custom snippets
       main-snippet: |
         env DOMAIN;
@@ -1591,6 +1596,12 @@ sandboxPod:
 
 # -- Sandbox egress proxy.
 sandboxProxy:
+  # Allow IPv6 (::/0 minus link-local/IMDS) egress from the proxy. OFF by default: the AWS
+  # VPC CNI network-policy agent intermittently fails to program IPv6 ipBlocks into the
+  # egress eBPF map (EINVAL), leaving it empty and fail-closed (proxy pods crash-loop), and
+  # single-stack IPv4 clusters have no IPv6 egress to gate. Enable ONLY on dual-stack
+  # clusters, where an Egress policy without an IPv6 allow silently drops all IPv6 egress.
+  egressAllowIPv6: false
   replicaCount: 2
   terminationGracePeriodSeconds: 200
   progressDeadlineSeconds: 300
