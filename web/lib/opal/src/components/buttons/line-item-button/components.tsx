@@ -64,6 +64,21 @@ function handleRowKeyUp(e: React.KeyboardEvent<HTMLDivElement>) {
   }
 }
 
+// Ignore clicks originating from nested interactive children (e.g.
+// `rightChildren` action buttons) so they don't also activate the row.
+function guardNestedInteractiveClick(
+  onClick: React.MouseEventHandler<HTMLElement> | undefined
+): React.MouseEventHandler<HTMLElement> | undefined {
+  if (!onClick) return undefined;
+  return (e) => {
+    const nested = (e.target as HTMLElement).closest(
+      'button, a, [role="button"]'
+    );
+    if (nested && nested !== e.currentTarget) return;
+    onClick(e);
+  };
+}
+
 function LineItemButton({
   // Interactive surface
   selectVariant = "select-light",
@@ -101,7 +116,7 @@ function LineItemButton({
       variant={selectVariant}
       state={state}
       interaction={interaction}
-      onClick={onClick}
+      onClick={guardNestedInteractiveClick(onClick)}
       href={href}
       target={target}
       group={group}
