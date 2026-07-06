@@ -203,18 +203,6 @@ func TestUniqueActionNames(t *testing.T) {
 	}
 }
 
-func TestNormalizeVersionAndSemverish(t *testing.T) {
-	if got := normalizeVersion("v6.0.2"); got != "6.0.2" {
-		t.Errorf("normalizeVersion = %q", got)
-	}
-	if !isSemverish("v45.0.7") || !isSemverish("41") {
-		t.Error("v45.0.7 and 41 should be semverish")
-	}
-	if isSemverish("main") || isSemverish("") {
-		t.Error("branch names and empty strings are not semverish")
-	}
-}
-
 func TestCompositeSteps(t *testing.T) {
 	composite := []byte(`
 name: x

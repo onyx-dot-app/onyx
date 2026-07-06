@@ -37,11 +37,11 @@ import (
 	"github.com/google/osv-scalibr/extractor/filesystem"
 	"github.com/google/osv-scalibr/extractor/filesystem/misc/githubactions"
 	"github.com/google/osv-scalibr/purl"
-	"github.com/google/osv-scalibr/semantic"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/version"
 )
 
 const (
@@ -321,8 +321,8 @@ func uniqueActionNames(refs []actionRef) []string {
 // The bool is false when no comparable version could be determined.
 func actionVersion(ref actionRef, cache map[string][]ghTag) (string, bool) {
 	if !ref.IsSHA {
-		if isSemverish(ref.Ref) {
-			return normalizeVersion(ref.Ref), true
+		if version.IsSemverish(ref.Ref) {
+			return version.Normalize(ref.Ref), true
 		}
 		return "", false
 	}
@@ -463,11 +463,11 @@ func versionForSHA(tags []ghTag, sha string) (string, bool) {
 		if !strings.EqualFold(t.Commit.SHA, sha) {
 			continue
 		}
-		v := normalizeVersion(t.Name)
-		if !isSemverish(v) {
+		v := version.Normalize(t.Name)
+		if !version.IsSemverish(v) {
 			continue
 		}
-		if best == "" || semverCompare(v, best) > 0 {
+		if best == "" || version.Compare(v, best) > 0 {
 			best = v
 		}
 	}
@@ -478,13 +478,13 @@ func versionForSHA(tags []ghTag, sha string) (string, bool) {
 
 // affectedByAdvisory reports whether a resolved version falls within any of the
 // advisory's GitHub Actions affected ranges.
-func affectedByAdvisory(version string, v osvVuln) bool {
+func affectedByAdvisory(ver string, v osvVuln) bool {
 	for _, aff := range v.Affected {
 		if !strings.EqualFold(aff.Package.Ecosystem, actionsEcosystem) {
 			continue
 		}
-		for _, ev := range aff.Versions {
-			if normalizeVersion(ev) == version {
+		for _, e := range aff.Versions {
+			if version.Normalize(e) == ver {
 				return true
 			}
 		}
@@ -494,7 +494,7 @@ func affectedByAdvisory(version string, v osvVuln) bool {
 			if r.Type != "ECOSYSTEM" && r.Type != "SEMVER" {
 				continue
 			}
-			if inRange(version, r.Events) {
+			if inRange(ver, r.Events) {
 				return true
 			}
 		}
@@ -510,9 +510,9 @@ type rangeEvent struct {
 
 // inRange applies OSV range semantics: walking events in ascending version order,
 // an "introduced" opens the affected interval and a "fixed"/"last_affected" closes
-// it. version is affected if the interval is open once all events at or below it
+// it. target is affected if the interval is open once all events at or below it
 // have been applied.
-func inRange(version string, events []map[string]string) bool {
+func inRange(target string, events []map[string]string) bool {
 	var evs []rangeEvent
 	for _, e := range events {
 		for kind, ver := range e {
@@ -530,22 +530,22 @@ func inRange(version string, events []map[string]string) bool {
 		if evs[j].ver == "0" {
 			return false
 		}
-		return semverCompare(evs[i].ver, evs[j].ver) < 0
+		return version.Compare(evs[i].ver, evs[j].ver) < 0
 	})
 
 	affected := false
 	for _, e := range evs {
 		switch e.kind {
 		case "introduced":
-			if e.ver == "0" || semverCompare(version, e.ver) >= 0 {
+			if e.ver == "0" || version.Compare(target, e.ver) >= 0 {
 				affected = true
 			}
 		case "fixed":
-			if semverCompare(version, e.ver) >= 0 {
+			if version.Compare(target, e.ver) >= 0 {
 				affected = false
 			}
 		case "last_affected":
-			if semverCompare(version, e.ver) > 0 {
+			if version.Compare(target, e.ver) > 0 {
 				affected = false
 			}
 		}
@@ -564,7 +564,7 @@ func firstFixed(v osvVuln) string {
 		for _, r := range aff.Ranges {
 			for _, e := range r.Events {
 				if f, ok := e["fixed"]; ok && f != "" {
-					if fixed == "" || semverCompare(f, fixed) < 0 {
+					if fixed == "" || version.Compare(f, fixed) < 0 {
 						fixed = f
 					}
 				}
@@ -623,30 +623,4 @@ func actionTitle(v osvVuln) string {
 		return strings.TrimSpace(line)
 	}
 	return details
-}
-
-// --- version helpers ---
-
-// normalizeVersion strips a leading "v" so tag names (v6.0.2) and advisory bounds
-// (6.0.2) compare on equal footing.
-func normalizeVersion(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > 1 && (s[0] == 'v' || s[0] == 'V') {
-		s = s[1:]
-	}
-	return s
-}
-
-// isSemverish reports whether s looks like a numeric version once normalized,
-// filtering out branch names and floating tags we can't order.
-func isSemverish(s string) bool {
-	s = normalizeVersion(s)
-	return s != "" && s[0] >= '0' && s[0] <= '9'
-}
-
-// semverCompare orders two semver-ish strings via osv-scalibr's comparator (the
-// same one used for npm/Go/crates OSV matching). Inputs are normalized first.
-func semverCompare(a, b string) int {
-	c, _ := semantic.ParseSemverVersion(normalizeVersion(a)).CompareStr(normalizeVersion(b))
-	return c
 }
