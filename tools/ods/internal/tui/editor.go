@@ -102,9 +102,9 @@ func (ed *rowEditor) run() bool {
 			case tcell.KeyEnd:
 				ed.cursor = ed.lastIndex()
 			case tcell.KeyPgUp:
-				ed.moveCursor(-(h - tableHeaderLines - tableFooterLines))
+				ed.moveCursor(-visibleRows(h))
 			case tcell.KeyPgDn:
-				ed.moveCursor(h - tableHeaderLines - tableFooterLines)
+				ed.moveCursor(visibleRows(h))
 			case tcell.KeyEnter:
 				ed.doEdit()
 			case tcell.KeyRune:
@@ -131,10 +131,7 @@ func (ed *rowEditor) run() bool {
 			}
 		}
 
-		listHeight := h - tableHeaderLines - tableFooterLines
-		if listHeight < 1 {
-			listHeight = 1
-		}
+		listHeight := visibleRows(h)
 		if ed.cursor < offset {
 			offset = ed.cursor
 		}
@@ -162,6 +159,15 @@ func (ed *rowEditor) moveCursor(delta int) {
 	if ed.cursor > ed.lastIndex() {
 		ed.cursor = ed.lastIndex()
 	}
+}
+
+// visibleRows is the number of table rows that fit on a screen of height h,
+// always at least 1 so paging stays directionally correct on tiny terminals.
+func visibleRows(h int) int {
+	if n := h - tableHeaderLines - tableFooterLines; n > 1 {
+		return n
+	}
+	return 1
 }
 
 func (ed *rowEditor) doAdd() {
@@ -348,10 +354,7 @@ func (ed *rowEditor) drawTable(offset int) {
 	drawLine(s, 0, 2, w, "  "+renderCells(widths, headerCells), styleTableHeader)
 
 	listTop := tableHeaderLines
-	listHeight := h - tableHeaderLines - tableFooterLines
-	if listHeight < 1 {
-		listHeight = 1
-	}
+	listHeight := visibleRows(h)
 
 	if len(ed.rows) == 0 {
 		drawLine(s, 0, listTop, w, "  (no entries — press 'a' to add)", styleHint)

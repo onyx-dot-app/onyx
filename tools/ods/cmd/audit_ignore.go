@@ -64,7 +64,7 @@ confirmation prompt.`,
 }
 
 func runAuditEdit(url string) {
-	orig, err := audit.FetchIgnores(url)
+	orig, err := audit.LoadIgnoresForEdit(url)
 	if err != nil {
 		log.Fatalf("Failed to fetch allowlist from %s: %v", url, err)
 	}
@@ -99,6 +99,12 @@ func runAuditEdit(url string) {
 		edited[i] = e
 	}
 	audit.SortIgnores(edited)
+
+	if dups := audit.DuplicateKeys(edited); len(dups) > 0 {
+		log.Errorf("Duplicate entries (id + ecosystem): %s", strings.Join(dups, ", "))
+		fmt.Println("Nothing uploaded; remove the duplicates and try again.")
+		return
+	}
 
 	added, removed, changed := audit.DiffIgnores(orig, edited)
 	if len(added) == 0 && len(removed) == 0 && len(changed) == 0 {

@@ -2,6 +2,7 @@ package audit
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -14,6 +15,45 @@ import (
 // MarshalIgnores serializes entries as the on-disk allowlist JSON document.
 func MarshalIgnores(entries []IgnoreEntry) ([]byte, error) {
 	return json.MarshalIndent(ignoreFile{Ignores: entries}, "", "  ")
+}
+
+// LoadIgnoresForEdit fetches the allowlist for interactive editing. Unlike
+// FetchIgnores, a missing local file yields an empty list so the editor can
+// bootstrap a fresh allowlist. A missing S3 object is still an error, so the
+// editor never overwrites the real list after a transient fetch failure.
+func LoadIgnoresForEdit(url string) ([]IgnoreEntry, error) {
+	entries, err := FetchIgnores(url)
+	if err != nil && !strings.HasPrefix(url, "s3://") && errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	return entries, err
+}
+
+// DuplicateKeys returns the id+ecosystem keys that appear more than once,
+// formatted for display. Two entries with the same id and ecosystem are
+// redundant suppressions and would collapse in DiffIgnores.
+func DuplicateKeys(entries []IgnoreEntry) []string {
+	counts := make(map[string]int, len(entries))
+	order := make([]string, 0, len(entries))
+	for _, e := range entries {
+		k := ignoreKey(e)
+		if counts[k] == 0 {
+			order = append(order, k)
+		}
+		counts[k]++
+	}
+	var dups []string
+	for _, k := range order {
+		if counts[k] > 1 {
+			id, eco, _ := strings.Cut(k, "\x00")
+			label := id
+			if eco != "" {
+				label += " (" + eco + ")"
+			}
+			dups = append(dups, label)
+		}
+	}
+	return dups
 }
 
 // ValidateEntry checks a single allowlist entry: id is required and expires,
@@ -89,6 +129,9 @@ func SaveIgnores(url string, entries []IgnoreEntry) error {
 		if err := ValidateEntry(e); err != nil {
 			return fmt.Errorf("invalid allowlist entry %q: %w", e.ID, err)
 		}
+	}
+	if dups := DuplicateKeys(entries); len(dups) > 0 {
+		return fmt.Errorf("duplicate allowlist entries (id + ecosystem): %s", strings.Join(dups, ", "))
 	}
 	SortIgnores(entries)
 

@@ -2,6 +2,8 @@ package audit
 
 import (
 	"encoding/json"
+	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -148,11 +150,43 @@ func TestSaveIgnoresRejectsInvalid(t *testing.T) {
 	}
 }
 
-func TestFetchIgnoresMissingLocalFile(t *testing.T) {
+func TestSaveIgnoresRejectsDuplicates(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ignores.json")
+	err := SaveIgnores(path, []IgnoreEntry{
+		{ID: "GHSA-x", Ecosystem: "npm"},
+		{ID: "ghsa-x", Ecosystem: "NPM", Reason: "dup, case-insensitive"},
+	})
+	if err == nil {
+		t.Fatal("expected SaveIgnores to reject duplicate id+ecosystem entries")
+	}
+}
+
+func TestDuplicateKeys(t *testing.T) {
+	dups := DuplicateKeys([]IgnoreEntry{
+		{ID: "GHSA-a", Ecosystem: "npm"},
+		{ID: "GHSA-a", Ecosystem: "pypi"}, // distinct ecosystem, not a dup
+		{ID: "GHSA-a", Ecosystem: "npm"},  // dup of the first
+		{ID: "GHSA-b"},
+	})
+	if len(dups) != 1 {
+		t.Fatalf("expected 1 duplicate key, got %v", dups)
+	}
+}
+
+func TestFetchIgnoresMissingLocalFileErrors(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "does-not-exist.json")
-	got, err := FetchIgnores(path)
+	if _, err := FetchIgnores(path); err == nil {
+		t.Fatal("expected FetchIgnores to error on a missing local file")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected os.ErrNotExist, got %v", err)
+	}
+}
+
+func TestLoadIgnoresForEditMissingLocalFileBootstraps(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "does-not-exist.json")
+	got, err := LoadIgnoresForEdit(path)
 	if err != nil {
-		t.Fatalf("FetchIgnores on missing file should not error, got %v", err)
+		t.Fatalf("LoadIgnoresForEdit on missing local file should not error, got %v", err)
 	}
 	if got != nil {
 		t.Fatalf("expected nil entries for missing file, got %#v", got)

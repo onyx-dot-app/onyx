@@ -36,8 +36,9 @@ type ignoreFile struct {
 }
 
 // FetchIgnores downloads and parses the allowlist from an s3:// URL. A plain
-// local path (no s3:// prefix) is read directly from disk. An empty URL yields
-// an empty list.
+// local path (no s3:// prefix) is read directly from disk; a missing file is an
+// error, so a typo'd --ignore-url surfaces rather than silently yielding no
+// suppressions. An empty URL yields an empty list.
 func FetchIgnores(url string) ([]IgnoreEntry, error) {
 	if url == "" {
 		return nil, nil
@@ -62,13 +63,11 @@ func FetchIgnores(url string) ([]IgnoreEntry, error) {
 }
 
 // readIgnoresFile reads and parses an allowlist from a local file. A missing
-// file yields an empty list so a first edit can start from scratch.
+// file returns an os.ErrNotExist error; callers that want to bootstrap an empty
+// allowlist (e.g. the editor) should use LoadIgnoresForEdit.
 func readIgnoresFile(path string) ([]IgnoreEntry, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
 	var f ignoreFile
