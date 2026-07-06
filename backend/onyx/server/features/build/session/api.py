@@ -33,6 +33,7 @@ from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
@@ -234,6 +235,7 @@ def get_sandbox_status(
         created_at=sandbox.created_at if sandbox else None,
         last_heartbeat=sandbox.last_heartbeat if sandbox else None,
         idle_timeout_seconds=SANDBOX_IDLE_TIMEOUT_SECONDS,
+        idle_cleanup_interval_seconds=SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
     )
 
 

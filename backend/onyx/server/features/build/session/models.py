@@ -11,6 +11,7 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
+from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 
 if TYPE_CHECKING:
@@ -55,6 +56,7 @@ class SandboxResponse(BaseModel):
     created_at: datetime
     last_heartbeat: datetime | None
     idle_timeout_seconds: int
+    idle_cleanup_interval_seconds: int
 
     @classmethod
     def from_model(cls, sandbox: Any) -> "SandboxResponse":
@@ -66,6 +68,7 @@ class SandboxResponse(BaseModel):
             created_at=sandbox.created_at,
             last_heartbeat=sandbox.last_heartbeat,
             idle_timeout_seconds=SANDBOX_IDLE_TIMEOUT_SECONDS,
+            idle_cleanup_interval_seconds=SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
         )
 
 
@@ -76,6 +79,7 @@ class SandboxStatusResponse(BaseModel):
     created_at: datetime | None
     last_heartbeat: datetime | None
     idle_timeout_seconds: int
+    idle_cleanup_interval_seconds: int
 
 
 class ArtifactResponse(BaseModel):

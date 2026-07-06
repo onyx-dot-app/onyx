@@ -135,6 +135,8 @@ def test_get_sandbox_status_returns_status_fields(
     assert "last_heartbeat" in payload
     assert isinstance(payload["idle_timeout_seconds"], int)
     assert payload["idle_timeout_seconds"] > 0
+    assert isinstance(payload["idle_cleanup_interval_seconds"], int)
+    assert payload["idle_cleanup_interval_seconds"] > 0
 
 
 def test_get_sandbox_status_404_for_other_users_session(

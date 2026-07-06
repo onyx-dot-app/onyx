@@ -162,6 +162,7 @@ export interface ApiSandboxResponse {
   last_heartbeat: string | null;
   nextjs_port: number | null;
   idle_timeout_seconds: number;
+  idle_cleanup_interval_seconds: number;
 }
 
 export interface ApiSandboxStatusResponse {
@@ -169,6 +170,7 @@ export interface ApiSandboxStatusResponse {
   last_heartbeat: string | null;
   created_at: string | null;
   idle_timeout_seconds: number;
+  idle_cleanup_interval_seconds: number;
 }
 
 export interface ApiSessionResponse {

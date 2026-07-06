@@ -7,20 +7,32 @@ import {
 import { fetchSandboxStatus } from "@/app/craft/services/apiServices";
 import { ApiSandboxStatusResponse } from "@/app/craft/types/streamingTypes";
 
-// Reaper sweeps every 60s; give it room to run before we call the sandbox asleep.
-export const SLEEP_CHECK_SLACK_MS = 90_000;
+// Fallback when cached sandbox data predates idle_cleanup_interval_seconds.
+export const DEFAULT_CLEANUP_INTERVAL_SECONDS = 60;
+// Margin past one full reaper sweep so an in-progress sweep can finish.
+export const SLEEP_SLACK_BUFFER_MS = 30_000;
 export const RETRY_DELAY_MS = 60_000;
 const RECHECK_THROTTLE_MS = 30_000;
+
+function sweepMs(cleanupIntervalSeconds: number | null | undefined): number {
+  return (cleanupIntervalSeconds ?? DEFAULT_CLEANUP_INTERVAL_SECONDS) * 1000;
+}
 
 export function computeSleepDeadlineMs(
   lastHeartbeat: string | null,
   createdAt: string | null,
   idleTimeoutSeconds: number,
+  cleanupIntervalSeconds: number | null,
   nowMs: number
 ): number {
   const idleSince = lastHeartbeat ?? createdAt;
   const heartbeatMs = idleSince ? Date.parse(idleSince) : nowMs;
-  return heartbeatMs + idleTimeoutSeconds * 1000 + SLEEP_CHECK_SLACK_MS;
+  return (
+    heartbeatMs +
+    idleTimeoutSeconds * 1000 +
+    sweepMs(cleanupIntervalSeconds) +
+    SLEEP_SLACK_BUFFER_MS
+  );
 }
 
 export function useSandboxSleepWatcher(): void {
@@ -63,6 +75,7 @@ export function useSandboxSleepWatcher(): void {
             ...currentSandbox,
             last_heartbeat: result.last_heartbeat,
             idle_timeout_seconds: result.idle_timeout_seconds,
+            idle_cleanup_interval_seconds: result.idle_cleanup_interval_seconds,
           },
         });
       }
@@ -83,11 +96,16 @@ export function useSandboxSleepWatcher(): void {
             result.last_heartbeat,
             result.created_at,
             result.idle_timeout_seconds,
+            result.idle_cleanup_interval_seconds,
             Date.now()
+          );
+          const overdueDelay = Math.max(
+            sweepMs(result.idle_cleanup_interval_seconds),
+            RETRY_DELAY_MS
           );
           timeoutId = setTimeout(
             check,
-            deadline > Date.now() ? deadline - Date.now() : RETRY_DELAY_MS
+            deadline > Date.now() ? deadline - Date.now() : overdueDelay
           );
         }
       } catch (err) {
@@ -102,6 +120,8 @@ export function useSandboxSleepWatcher(): void {
 
     const arm = async () => {
       let idleTimeoutSeconds = sandbox?.idle_timeout_seconds;
+      let cleanupIntervalSeconds =
+        sandbox?.idle_cleanup_interval_seconds ?? null;
       let heartbeat = lastHeartbeat;
 
       if (idleTimeoutSeconds == null) {
@@ -110,6 +130,7 @@ export function useSandboxSleepWatcher(): void {
           if (cancelled) return;
           applyResult(result);
           idleTimeoutSeconds = result.idle_timeout_seconds;
+          cleanupIntervalSeconds = result.idle_cleanup_interval_seconds;
           heartbeat = result.last_heartbeat;
           if (result.status !== "running") return;
         } catch (err) {
@@ -123,6 +144,7 @@ export function useSandboxSleepWatcher(): void {
         heartbeat,
         createdAt,
         idleTimeoutSeconds,
+        cleanupIntervalSeconds,
         Date.now()
       );
       timeoutId = setTimeout(check, Math.max(deadline - Date.now(), 0));

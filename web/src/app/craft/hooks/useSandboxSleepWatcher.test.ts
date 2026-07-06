@@ -4,8 +4,9 @@
 import { act, renderHook } from "@testing-library/react";
 import {
   computeSleepDeadlineMs,
+  DEFAULT_CLEANUP_INTERVAL_SECONDS,
   RETRY_DELAY_MS,
-  SLEEP_CHECK_SLACK_MS,
+  SLEEP_SLACK_BUFFER_MS,
   useSandboxSleepWatcher,
 } from "@/app/craft/hooks/useSandboxSleepWatcher";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -18,11 +19,14 @@ const mockedApi = api as jest.Mocked<typeof api>;
 
 const SESSION_ID = "11111111-1111-1111-1111-111111111111";
 
+const DEFAULT_SLACK_MS =
+  DEFAULT_CLEANUP_INTERVAL_SECONDS * 1000 + SLEEP_SLACK_BUFFER_MS;
+
 describe("computeSleepDeadlineMs", () => {
   it("falls back to now when both last_heartbeat and created_at are null", () => {
     const now = 1_000_000;
-    expect(computeSleepDeadlineMs(null, null, 3600, now)).toBe(
-      now + 3600 * 1000 + SLEEP_CHECK_SLACK_MS
+    expect(computeSleepDeadlineMs(null, null, 3600, null, now)).toBe(
+      now + 3600 * 1000 + DEFAULT_SLACK_MS
     );
   });
 
@@ -30,23 +34,42 @@ describe("computeSleepDeadlineMs", () => {
     const heartbeat = "2026-07-01T00:00:00.000Z";
     const heartbeatMs = Date.parse(heartbeat);
     expect(
-      computeSleepDeadlineMs(heartbeat, null, 3600, heartbeatMs + 1000)
-    ).toBe(heartbeatMs + 3600 * 1000 + SLEEP_CHECK_SLACK_MS);
+      computeSleepDeadlineMs(heartbeat, null, 3600, null, heartbeatMs + 1000)
+    ).toBe(heartbeatMs + 3600 * 1000 + DEFAULT_SLACK_MS);
   });
 
   it("includes the reaper-sweep slack in the deadline", () => {
     const heartbeat = "2026-07-01T00:00:00.000Z";
     const heartbeatMs = Date.parse(heartbeat);
-    const deadline = computeSleepDeadlineMs(heartbeat, null, 0, heartbeatMs);
-    expect(deadline - heartbeatMs).toBe(SLEEP_CHECK_SLACK_MS);
+    const deadline = computeSleepDeadlineMs(
+      heartbeat,
+      null,
+      0,
+      null,
+      heartbeatMs
+    );
+    expect(deadline - heartbeatMs).toBe(DEFAULT_SLACK_MS);
   });
 
   it("falls back to created_at when last_heartbeat is null", () => {
     const createdAt = "2026-07-01T00:00:00.000Z";
     const createdAtMs = Date.parse(createdAt);
     expect(
-      computeSleepDeadlineMs(null, createdAt, 3600, createdAtMs + 1000)
-    ).toBe(createdAtMs + 3600 * 1000 + SLEEP_CHECK_SLACK_MS);
+      computeSleepDeadlineMs(null, createdAt, 3600, null, createdAtMs + 1000)
+    ).toBe(createdAtMs + 3600 * 1000 + DEFAULT_SLACK_MS);
+  });
+
+  it("uses the server-provided cleanup interval for the slack", () => {
+    const heartbeat = "2026-07-01T00:00:00.000Z";
+    const heartbeatMs = Date.parse(heartbeat);
+    const deadline = computeSleepDeadlineMs(
+      heartbeat,
+      null,
+      0,
+      600,
+      heartbeatMs
+    );
+    expect(deadline - heartbeatMs).toBe(600 * 1000 + SLEEP_SLACK_BUFFER_MS);
   });
 });
 
@@ -61,6 +84,7 @@ function runningSandbox(
     last_heartbeat: "2026-07-01T00:00:00.000Z",
     nextjs_port: null,
     idle_timeout_seconds: 0,
+    idle_cleanup_interval_seconds: 0,
     ...overrides,
   };
 }
@@ -97,12 +121,13 @@ describe("useSandboxSleepWatcher", () => {
       last_heartbeat: "2026-07-01T00:00:00.000Z",
       created_at: "2026-07-01T00:00:00.000Z",
       idle_timeout_seconds: 0,
+      idle_cleanup_interval_seconds: 0,
     } as never);
 
     renderHook(() => useSandboxSleepWatcher());
 
     await act(async () => {
-      jest.advanceTimersByTime(SLEEP_CHECK_SLACK_MS);
+      jest.advanceTimersByTime(DEFAULT_SLACK_MS);
     });
 
     const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
@@ -118,7 +143,7 @@ describe("useSandboxSleepWatcher", () => {
     renderHook(() => useSandboxSleepWatcher());
 
     await act(async () => {
-      jest.advanceTimersByTime(SLEEP_CHECK_SLACK_MS);
+      jest.advanceTimersByTime(DEFAULT_SLACK_MS);
     });
     expect(mockedApi.fetchSandboxStatus).toHaveBeenCalledTimes(1);
 
@@ -139,7 +164,7 @@ describe("useSandboxSleepWatcher", () => {
     renderHook(() => useSandboxSleepWatcher());
 
     await act(async () => {
-      jest.advanceTimersByTime(SLEEP_CHECK_SLACK_MS + RETRY_DELAY_MS * 5);
+      jest.advanceTimersByTime(DEFAULT_SLACK_MS + RETRY_DELAY_MS * 5);
     });
 
     expect(mockedApi.fetchSandboxStatus).not.toHaveBeenCalled();
