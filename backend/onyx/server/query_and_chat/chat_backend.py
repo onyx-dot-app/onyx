@@ -80,6 +80,7 @@ from onyx.llm.factory import get_llm_token_counter
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
+from onyx.server.query_and_chat.context_usage import compute_context_usage
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -367,6 +368,25 @@ def get_chat_session(
             )
             # msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
 
+    # Context-window usage for the gauge — only once a turn has reported a real
+    # prompt size (no gauge on a fresh chat). The LLM is resolved lazily so an
+    # empty chat does no extra work; a provider-resolution failure must not break
+    # session load.
+    context_usage = None
+    if chat_session.persona:
+        persona = chat_session.persona
+        try:
+            context_usage = compute_context_usage(
+                chat_message_details,
+                lambda: get_llm_for_persona(
+                    persona=persona, user=user
+                ).config.max_input_tokens,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to compute context usage for session %s", session_id
+            )
+
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
         description=chat_session.description,
@@ -383,6 +403,7 @@ def get_chat_session(
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
         current_run=current_run,
+        context_usage=context_usage,
     )
 
 

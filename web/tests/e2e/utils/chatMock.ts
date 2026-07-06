@@ -63,6 +63,51 @@ export function buildMockStream(content: string): string {
   return serializePackets(packets);
 }
 
+/** Like buildMockStream but emits a context_usage packet before stop, so the
+ *  context-window gauge has a value to render. */
+export function buildMockStreamWithContextUsage(
+  content: string,
+  usedTokens: number,
+  maxInputTokens: number
+): string {
+  const { userMessageId, agentMessageId } = nextMessageIds();
+
+  const packets = [
+    {
+      user_message_id: userMessageId,
+      reserved_assistant_message_id: agentMessageId,
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: "message_start",
+        id: `mock-${agentMessageId}`,
+        content,
+        final_documents: null,
+      },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: "context_usage",
+        used_tokens: usedTokens,
+        max_input_tokens: maxInputTokens,
+      },
+    },
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "stop", stop_reason: "finished" },
+    },
+    {
+      message_id: agentMessageId,
+      citations: {},
+      files: [],
+    },
+  ];
+
+  return serializePackets(packets);
+}
+
 export interface ImageGenStreamOptions {
   fileId: string;
   revisedPrompt: string;

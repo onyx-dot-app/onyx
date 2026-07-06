@@ -42,7 +42,9 @@ import {
   useChatSessionStore,
   useCurrentMessageHistory,
   useCurrentMessageTree,
+  useCurrentSessionContextUsage,
 } from "@/app/app/stores/useChatSessionStore";
+import { getContextUsage } from "@/app/app/services/packetUtils";
 import {
   useCurrentChatState,
   useIsReady,
@@ -359,6 +361,27 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   );
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
+
+  // Context-window gauge: prefer the live value from the most recent assistant
+  // turn that reported usage, else the value loaded from session-detail.
+  const sessionContextUsage = useCurrentSessionContextUsage();
+  const liveContextUsage = useMemo(() => {
+    // Backtrack past assistant turns that reported no usage (matching the backend).
+    for (let i = messageHistory.length - 1; i >= 0; i--) {
+      const message = messageHistory[i];
+      if (message?.type !== "assistant") continue;
+      // The in-flight turn emits its usage packet only at turn end; skip its
+      // still-growing packet list each delta (avoids an O(n^2) rescan) — the
+      // prior turn's gauge stays shown until this turn completes.
+      if (i === messageHistory.length - 1 && currentChatState === "streaming") {
+        continue;
+      }
+      const usage = getContextUsage(message.packets);
+      if (usage) return usage;
+    }
+    return null;
+  }, [messageHistory, currentChatState]);
+  const contextUsage = liveContextUsage ?? sessionContextUsage ?? null;
 
   // Block input when the last turn is multi-model and the user hasn't
   // selected a preferred response yet. Without a selection, it's ambiguous
@@ -1009,6 +1032,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             : projectContextTokenCount
                         }
                         availableContextTokens={availableContextTokens}
+                        contextUsage={contextUsage}
                         selectedAgent={selectedAgent || liveAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}

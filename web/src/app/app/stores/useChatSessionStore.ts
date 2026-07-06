@@ -8,6 +8,7 @@ import {
   FeedbackType,
   QueuedMessage,
 } from "../interfaces";
+import { ContextUsage } from "@/sections/chat/interfaces";
 import {
   getLatestMessageChain,
   getMessageByMessageId,
@@ -41,6 +42,10 @@ interface ChatSessionData {
   isLoaded: boolean;
   description?: string;
   personaId?: number;
+
+  // Session-level context-window usage baseline from the session-detail API.
+  // Gauge fallback when the current turn has no live context_usage packet yet.
+  contextUsage?: ContextUsage | null;
 
   // Streaming duration tracking
   streamingStartTime?: number;
@@ -613,6 +618,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       isLoaded: true,
       description: backendSession?.description,
       personaId: backendSession?.persona_id,
+      contextUsage: backendSession?.context_usage ?? null,
     };
 
     const existingSession = get().sessions.get(sessionId);
@@ -741,6 +747,15 @@ export const useStreamingStartTime = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.streamingStartTime;
+  });
+
+export const useCurrentSessionContextUsage = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.contextUsage ?? null;
   });
 
 const EMPTY_QUEUED_MESSAGES: QueuedMessage[] = [];

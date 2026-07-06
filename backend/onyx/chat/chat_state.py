@@ -49,6 +49,8 @@ class ChatStateContainer:
         self.reasoning_tokens: str | None = None
         # This is accumulated during the streaming of the answer
         self.answer_tokens: str | None = None
+        # Provider-reported prompt_tokens for this turn (real context-window usage)
+        self.prompt_tokens: int | None = None
         # Store citation mapping for building citation_docs_info during partial saves
         self.citation_to_doc: CitationMapping = {}
         # True if this turn is a clarification question (deep research flow)
@@ -75,6 +77,11 @@ class ChatStateContainer:
         """Set the answer tokens from the final answer generation."""
         with self._lock:
             self.answer_tokens = answer
+
+    def set_prompt_tokens(self, prompt_tokens: int) -> None:
+        """Set the provider-reported prompt_tokens for this turn."""
+        with self._lock:
+            self.prompt_tokens = prompt_tokens
 
     def set_citation_mapping(self, citation_to_doc: CitationMapping) -> None:
         """Set the citation mapping from citation processor."""
@@ -110,6 +117,11 @@ class ChatStateContainer:
         """Thread-safe getter for is_clarification."""
         with self._lock:
             return self.is_clarification
+
+    def get_prompt_tokens(self) -> int | None:
+        """Thread-safe getter for the provider-reported prompt_tokens."""
+        with self._lock:
+            return self.prompt_tokens
 
     def set_pre_answer_processing_time(self, duration: float | None) -> None:
         """Set the pre-answer processing time (time before answer starts)."""

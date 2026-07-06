@@ -231,6 +231,8 @@ class ChatMessageDetail(BaseModel):
     processing_duration_seconds: float | None = None
     preferred_response_id: int | None = None
     model_display_name: str | None = None
+    prompt_tokens: int | None = None
+    max_input_tokens: int | None = None
 
     def model_dump(  # ty: ignore[invalid-method-override]
         self, *args: list, **kwargs: dict[str, Any]
@@ -255,6 +257,11 @@ class CurrentRunInfo(BaseModel):
     run_id: int
 
 
+class ContextUsage(BaseModel):
+    used_tokens: int  # provider prompt_tokens of the most recent reporting turn
+    max_input_tokens: int  # the producing model's context window
+
+
 class ChatSessionDetailResponse(BaseModel):
     chat_session_id: UUID
     description: str | None
@@ -272,6 +279,7 @@ class ChatSessionDetailResponse(BaseModel):
     # Set while a run is in flight and resumable: cursor-0 replay+tail is
     # available at /chat-session/{id}/resume-stream.
     current_run: CurrentRunInfo | None = None
+    context_usage: ContextUsage | None = None
 
 
 class AdminSearchRequest(BaseModel):
