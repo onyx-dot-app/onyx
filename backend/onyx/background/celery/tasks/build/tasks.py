@@ -220,6 +220,17 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                             f"its workspace, won't pin it RUNNING forever)"
                         )
 
+                    # Snapshotting above can take minutes; re-check idleness
+                    # right before the kill.
+                    db_session.refresh(sandbox)
+                    if sandbox.status != SandboxStatus.RUNNING or not is_sandbox_idle(
+                        sandbox, datetime.datetime.now(datetime.timezone.utc)
+                    ):
+                        task_logger.info(
+                            f"Sandbox {sandbox_id} went active mid-sweep; skipping reap"
+                        )
+                        continue
+
                     # Terminate the pod (but keep sandbox record)
                     sandbox_manager.terminate(sandbox_id)
 
