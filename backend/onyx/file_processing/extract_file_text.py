@@ -27,6 +27,7 @@ from PIL import Image
 
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_XLSX_CELLS_PER_SHEET
+from onyx.configs.app_configs import PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS
 from onyx.configs.app_configs import XLSX_STREAM_SHEET_BYTES
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
@@ -38,6 +39,8 @@ from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.utils.logger import setup_logger
+from onyx.utils.process_isolation import IsolatedProcessError
+from onyx.utils.process_isolation import run_in_isolated_process
 
 if TYPE_CHECKING:
     from markitdown import MarkItDown
@@ -352,12 +355,16 @@ def read_pdf_file(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        # GIL-releasing extraction so a large PDF can't pin the worker — see helper.
+        # PDFium can hard-abort or hang on a malformed PDF (uncatchable in-process),
+        # so run it isolated; a crash, timeout, or PdfiumError falls back to pypdf.
         try:
-            text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
-        except PdfiumError as pdfium_err:
-            # PDFium rejects some malformed PDFs that pypdf can still read; fall
-            # back so those docs aren't dropped. Only failing files take this path.
+            text = run_in_isolated_process(
+                _extract_pdf_text_pdfium,
+                file_bytes,
+                decrypt_password,
+                timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
+            )
+        except (PdfiumError, IsolatedProcessError) as pdfium_err:
             logger.warning(
                 "PDFium text extraction failed (%s); falling back to pypdf",
                 pdfium_err,

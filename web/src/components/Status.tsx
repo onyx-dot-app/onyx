@@ -171,7 +171,9 @@ export function CCPairStatus({
         Paused
       </Badge>
     );
-  } else if (inRepeatedErrorState) {
+  } else if (inRepeatedErrorState && lastIndexAttemptStatus !== "in_progress") {
+    // A live attempt reads as "Indexing". The sticky error state only shows
+    // once that attempt is no longer running.
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
         Error
