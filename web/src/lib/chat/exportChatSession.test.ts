@@ -78,7 +78,11 @@ function lastDownload(): {
   mimeType?: string;
 } {
   expect(mockedDownloadFile).toHaveBeenCalledTimes(1);
-  const [filename, opts] = mockedDownloadFile.mock.calls[0];
+  const call = mockedDownloadFile.mock.calls[0];
+  if (!call) {
+    throw new Error("downloadFile was not called");
+  }
+  const [filename, opts] = call;
   if (!("content" in opts)) {
     throw new Error("expected content-based download");
   }
