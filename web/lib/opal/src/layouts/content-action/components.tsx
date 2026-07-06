@@ -125,7 +125,10 @@ function ContentAction({
         <Content {...contentProps} />
       </div>
       {rightChildren && (
-        <div className="opal-content-action-right" data-fill={fillRight || undefined}>
+        <div
+          className="opal-content-action-right"
+          data-fill={fillRight || undefined}
+        >
           {rightChildren}
         </div>
       )}
