@@ -170,7 +170,7 @@ func Run(opts Options) (*Result, error) {
 		}
 	}
 
-	ignores, err := fetchIgnores(opts.IgnoreURL)
+	ignores, err := FetchIgnores(opts.IgnoreURL)
 	if err != nil {
 		// Err toward blocking: proceed with an empty allowlist so unignored
 		// criticals still fail the gate rather than slipping through.

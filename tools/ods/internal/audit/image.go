@@ -31,7 +31,7 @@ func RunImage(opts ImageOptions) (*Result, error) {
 		return nil, fmt.Errorf("image scan failed: %w", err)
 	}
 
-	ignores, err := fetchIgnores(opts.IgnoreURL)
+	ignores, err := FetchIgnores(opts.IgnoreURL)
 	if err != nil {
 		// Err toward blocking: proceed with an empty allowlist so unignored
 		// criticals still fail the gate rather than slipping through.
