@@ -844,6 +844,8 @@ def stream_subagent_turn(
         state = BuildStreamingState(turn_index=0)
 
         # Subagent runs on the parent session's model, not the child's default.
+        # Turn-start heartbeat is written by the send-message endpoint; only
+        # the periodic refresh lives here.
         last_heartbeat_refresh = time.monotonic()
         for sandbox_event in sandbox_manager.send_subagent_message(
             sandbox_id,
