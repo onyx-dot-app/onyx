@@ -382,10 +382,11 @@ interface RetentionPreset {
   label: string;
 }
 const RETENTION_PRESETS: RetentionPreset[] = [
-  { days: 365, label: "1 year" },
+  { days: 7, label: "7 days" },
   { days: 30, label: "30 days" },
   { days: 60, label: "60 days" },
   { days: 90, label: "90 days" },
+  { days: 365, label: "1 year" },
 ];
 // FE-only guard: the backend imposes no upper bound, so cap absurd input.
 const MAX_RETENTION_DAYS = 36500; // ~100 years

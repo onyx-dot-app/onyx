@@ -118,20 +118,17 @@ test.describe("Chat retention control @exclusive", () => {
 
     for (const label of [
       "Forever",
-      "1 year",
+      "7 days",
       "30 days",
       "60 days",
       "90 days",
+      "1 year",
       "Custom Retention",
     ]) {
       await expect(
         page.getByRole("option", { name: label, exact: true })
       ).toBeVisible();
     }
-    // The legacy "7 days" preset was intentionally removed.
-    await expect(
-      page.getByRole("option", { name: "7 days", exact: true })
-    ).toHaveCount(0);
 
     await page.keyboard.press("Escape");
   });
