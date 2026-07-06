@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import MessageType
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
@@ -458,6 +459,20 @@ def load_turn_session(
     return build_session
 
 
+SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS = 60.0
+
+
+def _refresh_sandbox_heartbeat_best_effort(sandbox_id: UUID) -> None:
+    # Best-effort: a heartbeat write must never kill the turn refreshing it.
+    try:
+        with get_session_with_current_tenant() as hb_session:
+            update_sandbox_heartbeat(hb_session, sandbox_id)
+    except Exception:
+        logger.warning(
+            "Failed to refresh heartbeat for sandbox %s", sandbox_id, exc_info=True
+        )
+
+
 def yield_sandbox_events(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
@@ -490,7 +505,12 @@ def yield_sandbox_events(
         # opencode session (dropping conversation history).
         _persist_opencode_session_id(db_session, session_id, new_id)
 
-    yield from sandbox_manager.send_message(
+    # The idle reaper's only activity signal is sandbox.last_heartbeat, and a
+    # turn can outlast SANDBOX_IDLE_TIMEOUT_SECONDS — refresh it at turn start
+    # and throttled while events flow (ENG-4269).
+    _refresh_sandbox_heartbeat_best_effort(sandbox_id)
+    last_heartbeat_refresh = time.monotonic()
+    event_stream = sandbox_manager.send_message(
         sandbox_id,
         session_id,
         user_message_content,
@@ -500,6 +520,20 @@ def yield_sandbox_events(
         on_opencode_session_resolved=_persist_resolved_id,
         should_interrupt=should_interrupt,
     )
+    try:
+        for sandbox_event in event_stream:
+            if (
+                time.monotonic() - last_heartbeat_refresh
+                >= SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS
+            ):
+                _refresh_sandbox_heartbeat_best_effort(sandbox_id)
+                last_heartbeat_refresh = time.monotonic()
+            yield sandbox_event
+    finally:
+        # `yield from` forwarded close() to the transport generator (whose
+        # GeneratorExit handler aborts the opencode turn); keep that
+        # deterministic rather than relying on GC.
+        event_stream.close()
 
 
 def _ensure_opencode_session_id(
@@ -814,6 +848,7 @@ def stream_subagent_turn(
         state = BuildStreamingState(turn_index=0)
 
         # Subagent runs on the parent session's model, not the child's default.
+        last_heartbeat_refresh = time.monotonic()
         for sandbox_event in sandbox_manager.send_subagent_message(
             sandbox_id,
             session_id,
@@ -822,6 +857,13 @@ def stream_subagent_turn(
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
         ):
+            if (
+                time.monotonic() - last_heartbeat_refresh
+                >= SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS
+            ):
+                _refresh_sandbox_heartbeat_best_effort(sandbox_id)
+                last_heartbeat_refresh = time.monotonic()
+
             # Keepalives + terminators pass through untagged.
             if isinstance(sandbox_event, SSEKeepalive):
                 yield SSE_KEEPALIVE
