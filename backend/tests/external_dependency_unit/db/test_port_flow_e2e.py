@@ -49,6 +49,9 @@ from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.opensearch_document_index import (
     generate_opensearch_filtered_access_control_list,
 )
+from onyx.document_index.opensearch.opensearch_document_index import (
+    OpenSearchDocumentIndex,
+)
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
@@ -376,3 +379,51 @@ def test_port_flow_end_to_end(
                     pass
                 finally:
                     client.close()
+
+
+def _count_doc_chunks(client: OpenSearchIndexClient, document_id: str) -> int:
+    return sum(len(page) for page in client.iter_chunks_for_doc_ids([document_id]))
+
+
+def test_delete_port_written_chunks_only_marked(
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Real OpenSearch (single-tenant): delete_port_written_chunks removes only
+    written_by_port=true chunks (a resurrection), leaving unmarked ones (a re-add)."""
+    tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+    index_name = f"test_marker_sweep_{uuid4().hex[:8]}"
+    client: OpenSearchIndexClient | None = None
+    try:
+        client = _create_os_index(index_name)
+        ts = datetime.now(timezone.utc).replace(microsecond=0)
+
+        marked_doc, unmarked_doc = "marked-resurrection", "unmarked-readd"
+        marked = _make_chunk(
+            marked_doc, 0, _CHUNK_SENTENCES[0], tenant_state, ts
+        ).model_copy(update={"written_by_port": True})
+        unmarked = _make_chunk(unmarked_doc, 0, _CHUNK_SENTENCES[1], tenant_state, ts)
+        client.bulk_index_documents(
+            documents=[marked, unmarked], tenant_state=tenant_state
+        )
+        client.refresh_index()
+        assert _count_doc_chunks(client, marked_doc) == 1
+        assert _count_doc_chunks(client, unmarked_doc) == 1
+
+        index = OpenSearchDocumentIndex(
+            tenant_state=tenant_state,
+            index_name=index_name,
+            embedding_dim=_VECTOR_DIM,
+            embedding_precision=EmbeddingPrecision.FLOAT,
+        )
+        deleted = index.delete_port_written_chunks([marked_doc, unmarked_doc])
+        client.refresh_index()
+
+        assert deleted == 1
+        assert _count_doc_chunks(client, marked_doc) == 0  # resurrection removed
+        assert _count_doc_chunks(client, unmarked_doc) == 1  # re-add untouched
+    finally:
+        if client is not None:
+            try:
+                client.delete_index()
+            finally:
+                client.close()
