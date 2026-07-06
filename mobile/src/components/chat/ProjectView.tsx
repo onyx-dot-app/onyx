@@ -24,12 +24,10 @@ interface ProjectViewProps {
 
 const TRANSITION_MS = 150;
 
-// A project's detail + chat surface (mirrors web's AppPage project layout): the
-// context panel + a mid-page input + the project's chats. Sending the first
-// message transitions IN PLACE to the chat — the input slides to the bottom while
-// the panel/list fade out — instead of navigating, so the motion stays smooth.
+// Project detail + chat (mirrors web's AppPage). The first send transitions in
+// place — input slides down, panel/list fade — instead of navigating, so it's smooth.
 export function ProjectView({ projectId }: ProjectViewProps) {
-  // Set once the first message creates a session; drives the project→chat swap.
+  // set on first send; drives the project→chat swap
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const started = activeSessionId != null;
 

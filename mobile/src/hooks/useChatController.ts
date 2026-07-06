@@ -162,8 +162,7 @@ export function useChatController(
   sessionId: string | null,
   personaId: number = DEFAULT_AGENT_ID,
   projectId: number | null = null,
-  // When set, a newly-created session is reported here instead of navigating to
-  // /chat/[id] — lets a host (e.g. ProjectView) transition to the chat in place.
+  // report a new session here instead of navigating, so a host can transition in place
   onSessionCreated?: (sessionId: string) => void,
 ): ChatController {
   const [input, setInput] = useState("");
