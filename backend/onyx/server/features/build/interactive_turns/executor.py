@@ -11,6 +11,7 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.features.build.db.build_session import update_session_activity
+from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.interactive_turns.state import claim_turn_for_runner
 from onyx.server.features.build.interactive_turns.state import finish_turn
 from onyx.server.features.build.interactive_turns.state import get_active_turn
@@ -176,6 +177,7 @@ def _drive_interactive_turn(
 
         try:
             update_session_activity(session_id, db_session)
+            update_sandbox_heartbeat(db_session, sandbox.id)
 
             if interrupt_requested():
                 session_manager.finalize_persist(session_id, state)

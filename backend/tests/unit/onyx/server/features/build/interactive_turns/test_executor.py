@@ -75,6 +75,7 @@ def _run_turn_with_events(
     prompt_slot = _FakePromptSlot()
     persisted: list[object] = []
     finalized: list[UUID] = []
+    heartbeat_calls: list[UUID] = []
 
     turn = create_interactive_turn(
         cache=cache,
@@ -145,6 +146,11 @@ def _run_turn_with_events(
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
     monkeypatch.setattr(executor, "update_session_activity", lambda *_: None)
+    monkeypatch.setattr(
+        executor,
+        "update_sandbox_heartbeat",
+        lambda _db, sandbox_id_arg: heartbeat_calls.append(sandbox_id_arg),
+    )
     monkeypatch.setattr(executor, "is_interrupt_requested", lambda *_: False)
     monkeypatch.setattr(executor, "clear_interrupt", lambda *_: None)
 
@@ -156,8 +162,10 @@ def _run_turn_with_events(
         cache=cache,
         db_session=db_session,
         finalized=finalized,
+        heartbeat_calls=heartbeat_calls,
         persisted=persisted,
         prompt_slot=prompt_slot,
+        sandbox_id=sandbox_id,
         session_id=session_id,
         turn=turn,
         user_id=user_id,
@@ -182,6 +190,7 @@ def test_runner_succeeds_on_prompt_response(monkeypatch: pytest.MonkeyPatch) -> 
     )
     assert result.persisted == [prompt_response]
     assert result.finalized == [result.session_id]
+    assert result.heartbeat_calls == [result.sandbox_id]
     assert result.prompt_slot.exited
     assert result.db_session.rollbacks == 0
 
@@ -399,6 +408,7 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
     )
     monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
     monkeypatch.setattr(executor, "update_session_activity", lambda *_: None)
+    monkeypatch.setattr(executor, "update_sandbox_heartbeat", lambda *_: None)
     monkeypatch.setattr(executor, "is_interrupt_requested", lambda *_: False)
     monkeypatch.setattr(
         executor,
