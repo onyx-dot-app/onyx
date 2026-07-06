@@ -17,11 +17,9 @@ export function ChatScreen({ title, children, input, below }: ChatScreenProps) {
   return (
     <SafeAreaView edges={["top"]} className="flex-1 bg-background-neutral-00">
       <ChatHeader title={title} />
-      <View className="flex-1">
-        {children}
-        {input ? <KeyboardStickyView>{input}</KeyboardStickyView> : null}
-        {below}
-      </View>
+      {children}
+      {input ? <KeyboardStickyView>{input}</KeyboardStickyView> : null}
+      {below}
     </SafeAreaView>
   );
 }

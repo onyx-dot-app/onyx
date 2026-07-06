@@ -57,7 +57,12 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
 
   // Landing: agent from the route param. Existing session: its creation-time persona wins.
   const parsedAgentId = agentIdParam != null ? Number(agentIdParam) : NaN;
-  const selectedAgentId = Number.isNaN(parsedAgentId) ? null : parsedAgentId;
+  // Only a real agent id (non-negative integer) is honored; a bogus deep-link param
+  // (Infinity, float, negative) falls back to the default persona.
+  const selectedAgentId =
+    Number.isInteger(parsedAgentId) && parsedAgentId >= 0
+      ? parsedAgentId
+      : null;
   const liveAgent = useLiveAgent(selectedAgentId, session?.persona_id ?? null);
   // Project chats create with the default agent; new/chat honors the picked one.
   const personaId = isProject
