@@ -121,4 +121,11 @@ describe("uploadProjectFile", () => {
 
     await expect(uploadProjectFile(asset, 5, "tmp-1")).rejects.toThrow();
   });
+
+  it("throws when a 2xx body is valid JSON but the wrong shape", async () => {
+    getTokenMock.mockResolvedValue("tok");
+    mockUpload({ status: 200, body: JSON.stringify({}), headers: {} });
+
+    await expect(uploadProjectFile(asset, 5, "tmp-1")).rejects.toThrow();
+  });
 });
