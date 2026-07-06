@@ -35,11 +35,16 @@ type ignoreFile struct {
 	Ignores []IgnoreEntry `json:"ignores"`
 }
 
-// fetchIgnores downloads and parses the allowlist from an s3:// URL. An empty
-// URL yields an empty list.
-func fetchIgnores(url string) ([]IgnoreEntry, error) {
+// FetchIgnores downloads and parses the allowlist from an s3:// URL. A plain
+// local path (no s3:// prefix) is read directly from disk. An empty URL yields
+// an empty list.
+func FetchIgnores(url string) ([]IgnoreEntry, error) {
 	if url == "" {
 		return nil, nil
+	}
+
+	if !strings.HasPrefix(url, "s3://") {
+		return readIgnoresFile(url)
 	}
 
 	tmp, err := os.CreateTemp("", "ods-audit-ignores-*.json")
@@ -53,15 +58,22 @@ func fetchIgnores(url string) ([]IgnoreEntry, error) {
 	if err := s3.FetchToFile(url, tmpPath); err != nil {
 		return nil, err
 	}
+	return readIgnoresFile(tmpPath)
+}
 
-	data, err := os.ReadFile(tmpPath)
+// readIgnoresFile reads and parses an allowlist from a local file. A missing
+// file yields an empty list so a first edit can start from scratch.
+func readIgnoresFile(path string) ([]IgnoreEntry, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
-
 	var f ignoreFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("failed to parse allowlist %s: %w", url, err)
+		return nil, fmt.Errorf("failed to parse allowlist %s: %w", path, err)
 	}
 	return f.Ignores, nil
 }
