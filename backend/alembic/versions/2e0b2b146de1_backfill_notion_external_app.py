@@ -5,7 +5,7 @@ Seeds Notion (disabled) per tenant schema with credentials from the
 of ``onyx/external_apps/providers/notion.py``, no-op when not multi-tenant.
 
 Revision ID: 2e0b2b146de1
-Revises: 7f2a3b9c1d4e
+Revises: d49e41659191
 Create Date: 2026-07-02 16:32:58.801196
 
 """
@@ -22,7 +22,7 @@ from onyx.utils.encryption import encrypt_string_to_bytes
 
 # revision identifiers, used by Alembic.
 revision = "2e0b2b146de1"
-down_revision = "7f2a3b9c1d4e"
+down_revision = "d49e41659191"
 branch_labels = None
 depends_on = None
 
