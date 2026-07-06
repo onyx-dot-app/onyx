@@ -142,6 +142,7 @@ export interface ChatSession {
   project_id: number | null;
   current_alternate_model: string;
   current_temperature_override: number | null;
+  retention_exempt: boolean;
 }
 
 export interface SearchSession {
@@ -204,6 +205,7 @@ export interface BackendChatSession {
   shared_status: ChatSessionSharedStatus;
   current_temperature_override: number | null;
   current_alternate_model?: string;
+  retention_exempt: boolean;
 
   owner_name: string | null;
   packets: Packet[][];
@@ -222,6 +224,7 @@ export function toChatSession(backend: BackendChatSession): ChatSession {
     project_id: null,
     current_alternate_model: backend.current_alternate_model ?? "",
     current_temperature_override: backend.current_temperature_override,
+    retention_exempt: backend.retention_exempt,
   };
 }
 

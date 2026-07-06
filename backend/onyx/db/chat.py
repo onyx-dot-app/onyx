@@ -293,6 +293,7 @@ def update_chat_session(
     chat_session_id: UUID,
     description: str | None = None,
     sharing_status: ChatSessionSharedStatus | None = None,
+    retention_exempt: bool | None = None,
 ) -> ChatSession:
     chat_session = get_chat_session_by_id(
         chat_session_id=chat_session_id, user_id=user_id, db_session=db_session
@@ -305,6 +306,8 @@ def update_chat_session(
         chat_session.description = description
     if sharing_status is not None:
         chat_session.shared_status = sharing_status
+    if retention_exempt is not None:
+        chat_session.retention_exempt = retention_exempt
 
     db_session.commit()
 
@@ -379,6 +382,9 @@ def get_chat_sessions_older_than(
     old session that is still being used is retained. Sessions without any messages
     fall back to their creation time.
 
+    Sessions the user marked as retention-exempt ("Keep Chat") are never returned,
+    so the retention/TTL job leaves them untouched.
+
     Args:
         days_old: The number of days to consider as "old".
         db_session: The database session.
@@ -394,6 +400,7 @@ def get_chat_sessions_older_than(
     old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
         select(ChatSession.user_id, ChatSession.id)
         .outerjoin(ChatMessage, ChatMessage.chat_session_id == ChatSession.id)
+        .where(ChatSession.retention_exempt.is_(False))
         .group_by(ChatSession.id, ChatSession.user_id)
         .having(last_activity < cutoff_time)
     ).fetchall()

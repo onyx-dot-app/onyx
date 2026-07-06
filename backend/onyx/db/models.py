@@ -2891,6 +2891,11 @@ class ChatSession(Base):
     onyxbot_flow: Mapped[bool] = mapped_column(Boolean, default=False)
     # Only ever set to True if system is set to not hard-delete chats
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    # When True, this session is exempt from the org's chat retention policy
+    # (the EE TTL job will never auto-delete it). Set per-chat by the user.
+    retention_exempt: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     # controls whether or not this conversation is viewable by others
     shared_status: Mapped[ChatSessionSharedStatus] = mapped_column(
         Enum(ChatSessionSharedStatus, native_enum=False),

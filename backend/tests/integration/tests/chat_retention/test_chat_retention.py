@@ -123,6 +123,69 @@ def test_chat_retention(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Chat retention tests are enterprise only",
 )
+def test_chat_retention_respects_keep_chat(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+) -> None:
+    """A session the user marked "Keep Chat" (retention_exempt) is never deleted
+    by the TTL job, while an equally-old non-exempt session still is."""
+
+    retention_days = 30
+    settings = DATestSettings(maximum_chat_retention_days=retention_days)
+    SettingsManager.update_settings(settings, user_performing_action=admin_user)
+
+    # Old + inactive, but marked "Keep Chat" -> should be RETAINED
+    kept_session = ChatSessionManager.create(
+        persona_id=0,
+        description="Old session the user chose to keep",
+        user_performing_action=admin_user,
+    )
+    kept_response = ChatSessionManager.send_message(
+        chat_session_id=kept_session.id,
+        message="This session is kept",
+        user_performing_action=admin_user,
+    )
+    assert kept_response.error is None, (
+        f"Chat response should not have an error: {kept_response.error}"
+    )
+    _backdate_session(kept_session.id, created_days_ago=60, last_message_days_ago=60)
+    assert ChatSessionManager.set_retention_exempt(
+        chat_session=kept_session,
+        retention_exempt=True,
+        user_performing_action=admin_user,
+    ), "Failed to mark chat session as retention-exempt"
+
+    # Old + inactive, not kept -> should be DELETED
+    stale_session = ChatSessionManager.create(
+        persona_id=0,
+        description="Old session, not kept",
+        user_performing_action=admin_user,
+    )
+    stale_response = ChatSessionManager.send_message(
+        chat_session_id=stale_session.id,
+        message="This session is not kept",
+        user_performing_action=admin_user,
+    )
+    assert stale_response.error is None, (
+        f"Chat response should not have an error: {stale_response.error}"
+    )
+    _backdate_session(stale_session.id, created_days_ago=60, last_message_days_ago=60)
+
+    _run_ttl_cleanup(retention_days)
+
+    assert not _is_session_deleted(kept_session, admin_user), (
+        "A retention-exempt (Keep Chat) session should never be auto-deleted"
+    )
+    assert _is_session_deleted(stale_session, admin_user), (
+        "A non-exempt stale session should be deleted"
+    )
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Chat retention tests are enterprise only",
+)
 def test_chat_retention_uses_last_message_time(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,

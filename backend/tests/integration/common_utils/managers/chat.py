@@ -392,6 +392,23 @@ class ChatSessionManager:
         response.raise_for_status()
 
     @staticmethod
+    def set_retention_exempt(
+        chat_session: DATestChatSession,
+        retention_exempt: bool,
+        user_performing_action: DATestUser,
+    ) -> bool:
+        """
+        Mark (or unmark) a chat session as exempt from the org's retention policy
+        ("Keep Chat"). Returns True if the update succeeded, False otherwise.
+        """
+        response = client.patch(
+            f"{API_SERVER_URL}/chat/chat-session/{chat_session.id}",
+            json={"retention_exempt": retention_exempt},
+            headers=user_performing_action.headers,
+        )
+        return not response.is_error
+
+    @staticmethod
     def delete(
         chat_session: DATestChatSession,
         user_performing_action: DATestUser,

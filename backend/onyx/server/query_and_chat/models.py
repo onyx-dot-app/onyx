@@ -173,7 +173,10 @@ class ChatRenameRequest(BaseModel):
 
 
 class ChatSessionUpdateRequest(BaseModel):
-    sharing_status: ChatSessionSharedStatus
+    sharing_status: ChatSessionSharedStatus | None = None
+    # When set, marks/unmarks this chat as exempt from the org's retention
+    # policy ("Keep Chat"). None leaves the current value unchanged.
+    retention_exempt: bool | None = None
 
 
 class DeleteAllSessionsRequest(BaseModel):
@@ -193,6 +196,7 @@ class ChatSessionDetails(BaseModel):
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None = None
     current_temperature_override: float | None = None
+    retention_exempt: bool = False
 
     @classmethod
     def from_model(cls, model: ChatSession) -> "ChatSessionDetails":
@@ -205,6 +209,7 @@ class ChatSessionDetails(BaseModel):
             shared_status=model.shared_status,
             current_alternate_model=model.current_alternate_model,
             current_temperature_override=model.temperature_override,
+            retention_exempt=model.retention_exempt,
         )
 
 
@@ -267,6 +272,7 @@ class ChatSessionDetailResponse(BaseModel):
     current_alternate_model: str | None
     current_temperature_override: float | None
     deleted: bool = False
+    retention_exempt: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
     # Set while a run is in flight and resumable: cursor-0 replay+tail is

@@ -10,6 +10,7 @@ export { default as SvgActivitySmall } from "@opal/icons/activity-small";
 export { default as SvgAddLines } from "@opal/icons/add-lines";
 export { default as SvgAlertCircle } from "@opal/icons/alert-circle";
 export { default as SvgAlertTriangle } from "@opal/icons/alert-triangle";
+export { default as SvgArchive } from "@opal/icons/archive";
 export { default as SvgArrowDownDot } from "@opal/icons/arrow-down-dot";
 export { default as SvgArrowExchange } from "@opal/icons/arrow-exchange";
 export { default as SvgArrowLeft } from "@opal/icons/arrow-left";

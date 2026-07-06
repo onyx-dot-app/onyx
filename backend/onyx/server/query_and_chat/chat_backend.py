@@ -207,6 +207,7 @@ def get_user_chat_sessions(
                 shared_status=chat.shared_status,
                 current_alternate_model=chat.current_alternate_model,
                 current_temperature_override=chat.temperature_override,
+                retention_exempt=chat.retention_exempt,
             )
             for chat in chat_sessions
         ],
@@ -379,6 +380,7 @@ def get_chat_session(
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
         deleted=chat_session.deleted,
+        retention_exempt=chat_session.retention_exempt,
         owner_name=chat_session.user.personal_name if chat_session.user else None,
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
@@ -498,6 +500,7 @@ def patch_chat_session(
         user_id=user_id,
         chat_session_id=session_id,
         sharing_status=chat_session_update_req.sharing_status,
+        retention_exempt=chat_session_update_req.retention_exempt,
     )
     return None
 

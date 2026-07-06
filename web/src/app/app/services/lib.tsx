@@ -329,6 +329,22 @@ export async function renameChatSession(
   return response;
 }
 
+export async function setChatSessionRetentionExempt(
+  chatSessionId: string,
+  retentionExempt: boolean
+) {
+  const response = await fetch(`/api/chat/chat-session/${chatSessionId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      retention_exempt: retentionExempt,
+    }),
+  });
+  return response;
+}
+
 export async function deleteChatSession(chatSessionId: string) {
   const response = await fetch(
     `/api/chat/delete-chat-session/${chatSessionId}`,

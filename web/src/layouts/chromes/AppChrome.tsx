@@ -24,7 +24,10 @@ import {
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
-import { deleteChatSession } from "@/app/app/services/lib";
+import {
+  deleteChatSession,
+  setChatSessionRetentionExempt,
+} from "@/app/app/services/lib";
 import {
   exportChatSession,
   ChatExportFormat,
@@ -47,6 +50,7 @@ import SimplePopover from "@/refresh-components/SimplePopover";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
+  SvgArchive,
   SvgBubbleText,
   SvgChevronLeft,
   SvgDownload,
@@ -77,6 +81,7 @@ import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 function Header() {
   const appFocus = useAppFocus();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
   const { state, setAppMode } = useQueryController();
   const isSearchModeAvailable = useIsSearchModeAvailable();
   const settings = useSettings();
@@ -221,6 +226,31 @@ function Header() {
     [currentChatSession]
   );
 
+  const handleToggleKeepChat = useCallback(async () => {
+    if (!currentChatSession) return;
+    const nextValue = !currentChatSession.retention_exempt;
+    try {
+      const response = await setChatSessionRetentionExempt(
+        currentChatSession.id,
+        nextValue
+      );
+      if (!response.ok) {
+        throw new Error("Failed to update chat retention setting");
+      }
+      await refreshChatSessions();
+      setPopoverOpen(false);
+    } catch (error) {
+      console.error("Failed to update keep-chat setting:", error);
+      showErrorNotification("Failed to update chat. Please try again.");
+    }
+  }, [currentChatSession, refreshChatSessions]);
+
+  // "Keep Chat" only makes sense when the org enforces a finite retention
+  // policy (a value, not "forever"), and it is an Enterprise-only feature.
+  const retentionDays = settings.maximum_chat_retention_days;
+  const canKeepChat =
+    enterpriseTier && retentionDays != null && retentionDays > 0;
+
   useEffect(() => {
     let items: ReactNode[];
     if (showMoveOptions) {
@@ -288,6 +318,20 @@ function Header() {
           title="Export As…"
           onClick={noProp(() => setShowExportOptions(true))}
         />,
+        canKeepChat && (
+          <LineItemButton
+            key="keep-chat"
+            sizePreset="main-ui"
+            rounding="sm"
+            icon={SvgArchive}
+            title="Keep Chat"
+            description="Exempt from Auto-Deletion"
+            state={
+              currentChatSession?.retention_exempt ? "selected" : undefined
+            }
+            onClick={noProp(handleToggleKeepChat)}
+          />
+        ),
         null,
         <LineItemButton
           key="delete"
@@ -307,6 +351,8 @@ function Header() {
     showExportOptions,
     filteredProjects,
     currentChatSession,
+    canKeepChat,
+    handleToggleKeepChat,
     setDeleteConfirmationModalOpen,
     handleMoveClick,
     handleExport,
