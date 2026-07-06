@@ -130,3 +130,49 @@ def test_trim_pcm16_silence() -> None:
     assert len(tone) <= len(trimmed) <= len(tone) + PCM_BYTES_PER_SECOND
     # Trimmed audio still contains the speech energy
     assert pcm16_rms(trimmed) >= SILENCE_RMS_THRESHOLD
+
+
+@pytest.mark.asyncio
+async def test_flush_recovers_quiet_speech_below_absolute_threshold() -> None:
+    """Low-gain mic: speech never crosses the absolute RMS threshold, but it
+    stands well out of the noise floor, so flush must still transcribe it."""
+    transcriber = _make_transcriber()
+
+    quiet_tone = _tone(1.0, amplitude=100)  # RMS ~71, below the 150 threshold
+    assert pcm16_rms(quiet_tone) < SILENCE_RMS_THRESHOLD
+
+    for chunk in _chunks(_silence(2.0) + quiet_tone + _silence(2.0)):
+        await transcriber.add_chunk(chunk)
+    # Live windows are gated by the conservative absolute threshold
+    transcriber.provider.transcribe.assert_not_awaited()
+
+    assert await transcriber.flush() == "hello world"
+    transcriber.provider.transcribe.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_flush_of_uniform_low_noise_returns_empty() -> None:
+    """Steady low-level noise has no speech-like dynamics and must not be
+    transcribed even though it is above the low-gain speech floor."""
+    transcriber = _make_transcriber()
+
+    noise = _tone(6.0, amplitude=50)  # RMS ~35, uniform across the recording
+    for chunk in _chunks(noise):
+        await transcriber.add_chunk(chunk)
+
+    assert await transcriber.flush() == ""
+    transcriber.provider.transcribe.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_flush_falls_back_to_window_transcripts() -> None:
+    """If silence trimming leaves nothing, earlier window transcripts must
+    not be discarded."""
+    transcriber = _make_transcriber()
+    transcriber.transcripts = ["hello", "world"]
+
+    for chunk in _chunks(_silence(1.0)):
+        await transcriber.add_chunk(chunk)
+
+    assert await transcriber.flush() == "hello world"
+    transcriber.provider.transcribe.assert_not_awaited()

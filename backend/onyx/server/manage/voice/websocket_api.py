@@ -48,6 +48,15 @@ PCM_TRANSCRIBE_WINDOW_BYTES = PCM_BYTES_PER_SECOND * 3
 # an order of magnitude above; quiet-room mic noise well below.
 SILENCE_RMS_THRESHOLD = 150.0
 
+# Absolute floor (~-61 dBFS) for the low-gain fallback in
+# _speech_rms_threshold — audio quieter than this everywhere is silence.
+MIN_SPEECH_RMS = 30.0
+
+# Low-gain fallback: quiet audio counts as speech only when its loudest
+# frames stand at least this far above the recording's own noise floor.
+# Speech has strong dynamics (pauses between words); steady mic noise doesn't.
+SPEECH_DYNAMICS_RATIO = 4.0
+
 # Audio kept around detected speech when trimming silence off a full recording
 SILENCE_TRIM_PADDING_SECONDS = 0.5
 
@@ -61,21 +70,52 @@ def pcm16_rms(audio: bytes) -> float:
     return float(np.sqrt(np.mean(samples * samples)))
 
 
+def _speech_rms_threshold(frame_rms_values: list[float]) -> float | None:
+    """RMS threshold separating speech frames from silence for a recording.
+
+    Uses SILENCE_RMS_THRESHOLD when the recording reaches it. Otherwise falls
+    back to a relative test so quiet input from a low-gain microphone still
+    counts as speech when it stands well out of the recording's own noise
+    floor. Returns None when the recording contains no speech-like content.
+    """
+    if not frame_rms_values:
+        return None
+    peak = max(frame_rms_values)
+    if peak >= SILENCE_RMS_THRESHOLD:
+        return SILENCE_RMS_THRESHOLD
+    if peak < MIN_SPEECH_RMS:
+        return None
+    noise_floor = max(
+        sorted(frame_rms_values)[len(frame_rms_values) // 10], 1.0
+    )  # 10th percentile
+    if peak >= SPEECH_DYNAMICS_RATIO * noise_floor:
+        return max(MIN_SPEECH_RMS, peak / SPEECH_DYNAMICS_RATIO)
+    return None
+
+
 def trim_pcm16_silence(audio: bytes) -> bytes:
     """Trim leading/trailing silence from raw PCM16 audio.
 
     Analyzes the audio in 100ms frames and keeps everything from the first to
-    the last frame whose RMS reaches SILENCE_RMS_THRESHOLD, plus padding.
-    Returns b"" if no frame contains speech.
+    the last speech frame (per _speech_rms_threshold), plus padding. Returns
+    b"" if no frame contains speech.
     """
     frame_bytes = PCM_BYTES_PER_SECOND // 10
     if frame_bytes == 0 or not audio:
         return audio
 
+    frame_offsets = range(0, len(audio), frame_bytes)
+    frame_rms_values = [
+        pcm16_rms(audio[idx : idx + frame_bytes]) for idx in frame_offsets
+    ]
+    threshold = _speech_rms_threshold(frame_rms_values)
+    if threshold is None:
+        return b""
+
     speech_frame_indices = [
         idx
-        for idx in range(0, len(audio), frame_bytes)
-        if pcm16_rms(audio[idx : idx + frame_bytes]) >= SILENCE_RMS_THRESHOLD
+        for idx, frame_rms in zip(frame_offsets, frame_rms_values)
+        if frame_rms >= threshold
     ]
     if not speech_frame_indices:
         return b""
@@ -179,8 +219,9 @@ class ChunkedTranscriber:
         if self.is_pcm:
             full_audio_data = trim_pcm16_silence(full_audio_data)
             if not full_audio_data:
-                # Nothing but silence was recorded
-                return ""
+                # No speech detected in the recording; empty unless earlier
+                # windows produced transcripts
+                return " ".join(self.transcripts)
         if full_audio_data:
             try:
                 transcript = await self.provider.transcribe(
