@@ -54,7 +54,7 @@ def run_jobs() -> None:
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
-        "--queues=docprocessing",
+        "--queues=docprocessing,port",
     ]
 
     cmd_worker_docfetching = [

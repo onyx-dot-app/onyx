@@ -513,6 +513,9 @@ VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
 OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
     os.environ.get("OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE") or 500
 )
+# Lifetime of a point-in-time used to scan an index consistently (reindex port).
+# Each search extends the lease; an idle PIT self-expires after this.
+PIT_KEEP_ALIVE: str = os.environ.get("PIT_KEEP_ALIVE") or "5m"
 # If set, will override the default number of shards and replicas for the index.
 OPENSEARCH_INDEX_NUM_SHARDS: int | None = (
     int(os.environ["OPENSEARCH_INDEX_NUM_SHARDS"])
@@ -935,6 +938,13 @@ except ValueError:
     CELERY_WORKER_DOCPROCESSING_CONCURRENCY = (
         _CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT
     )
+
+# Reindex-port runs on the docprocessing worker; cap concurrent port attempts well
+# below its concurrency so a large reindex leaves slots for live indexing.
+# Floor at 1: 0 (or negative) would gate off every new port attempt.
+MAX_CONCURRENT_PORT_ATTEMPTS = max(
+    1, _non_negative_int_env("MAX_CONCURRENT_PORT_ATTEMPTS", 2)
+)
 
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:

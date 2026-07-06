@@ -133,6 +133,8 @@ PRESERVED_SEARCH_FIELDS = [
     "normalize",
     "passage_prefix",
     "query_prefix",
+    # Immutable per settings id; server-controlled, never set via update.
+    "use_port_flow",
 ]
 
 

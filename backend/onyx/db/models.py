@@ -90,6 +90,7 @@ from onyx.db.enums import PatType
 from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import PersonaSharePermission
+from onyx.db.enums import PortAttemptStatus
 from onyx.db.enums import ProcessingMode
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import ScheduledTaskRunStatus
@@ -1049,6 +1050,12 @@ class Document(Base):
     last_synced: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+
+    # True when a metadata sync hit PRESENT but the doc wasn't in FUTURE yet
+    # (reindex port). Cleared once a later sync reaches FUTURE; the swap waits on these.
+    secondary_only_sync_pending: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     # The following are not attached to User because the account/email may not be known
     # within Onyx
     # Something like the document creator
@@ -1129,6 +1136,12 @@ class Document(Base):
             "ix_document_needs_sync",
             "id",
             postgresql_where=text("last_modified > last_synced OR last_synced IS NULL"),
+        ),
+        # for the reindex-port swap criterion sweep
+        Index(
+            "ix_document_secondary_only_sync_pending",
+            "id",
+            postgresql_where=text("secondary_only_sync_pending IS TRUE"),
         ),
     )
 
@@ -2083,6 +2096,18 @@ class SearchSettings(Base):
         Enum(SwitchoverType, native_enum=False), default=SwitchoverType.REINDEX
     )
 
+    # Reindex "port" flow gate. When True, this FUTURE is filled by porting
+    # chunks from PRESENT (re-embedded) instead of re-running every connector.
+    use_port_flow: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
+    # Set by an INSTANT port-flow swap to the now-PAST index the port keeps
+    # backfilling from after promotion; cleared once the backfill completes.
+    port_backfill_source_id: Mapped[int | None] = mapped_column(
+        ForeignKey("search_settings.id", ondelete="SET NULL"), nullable=True
+    )
+
     # allows for quantization -> less memory usage for a small performance hit.
     # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
     # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
@@ -2339,6 +2364,11 @@ class IndexAttempt(Base):
         back_populates="index_attempts",
         primaryjoin="IndexAttempt.targeted_reindex_job_id == TargetedReindexJob.id",
     )
+    # Marks the synthetic seed attempt for the reindex port's FUTURE poll cursor
+    # (not a connector run).
+    is_synthetic_seed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False, index=True)
     )
@@ -2478,6 +2508,91 @@ class IndexAttempt(Base):
             self.total_batches is not None
             and self.completed_batches >= self.total_batches
         )
+
+
+class PortAttempt(Base):
+    """One attempt to port a cc_pair's chunks from PRESENT into the FUTURE index,
+    re-embedding under FUTURE settings. Doc-id cursor, distinct from IndexAttempt."""
+
+    __tablename__ = "port_attempt"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    search_settings_id: Mapped[int] = mapped_column(  # the FUTURE settings
+        ForeignKey("search_settings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    status: Mapped[PortAttemptStatus] = mapped_column(
+        Enum(PortAttemptStatus, native_enum=False, name="portattemptstatus"),
+        nullable=False,
+        default=PortAttemptStatus.NOT_STARTED,
+        index=True,
+    )
+
+    # Resume cursor: last Document.id ported, committed per batch.
+    last_processed_doc_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Upper bound (max Document.id for the cc_pair at attempt creation) so the port
+    # covers the backlog as of start and never chases docs added during the run —
+    # those are the FUTURE poll's job. Null = unbounded (legacy attempts).
+    up_to_doc_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    docs_ported: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+    # Bumped after every batch commit; the stall watchdog fails stale attempts.
+    last_progress_time: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Non-terminal cancel request: the port stays active (waiter keeps blocking)
+    # until the task acks by going CANCELED itself, after its last write.
+    cancel_requested: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
+    # only filled if status = FAILED (failure reason, including any traceback)
+    error_msg: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+
+    celery_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    time_started: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    time_completed: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    connector_credential_pair: Mapped["ConnectorCredentialPair"] = relationship(
+        "ConnectorCredentialPair"
+    )
+    search_settings: Mapped["SearchSettings"] = relationship("SearchSettings")
+
+    # at most one active attempt per (cc_pair, FUTURE)
+    __table_args__ = (
+        Index(
+            "ix_port_attempt_active_unique",
+            "cc_pair_id",
+            "search_settings_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
+        ),
+    )
+
+    def is_finished(self) -> bool:
+        return self.status.is_terminal()
 
 
 class HierarchyFetchAttempt(Base):

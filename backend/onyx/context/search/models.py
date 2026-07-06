@@ -36,6 +36,8 @@ class SearchSettingsCreationRequest(IndexingSetting):
 class SavedSearchSettings(IndexingSetting):
     # Previously this contained also Inference time settings. Keeping this wrapper class around
     # as there may again be inference time settings that may get added.
+    use_port_flow: bool | None = None
+
     @classmethod
     def from_db_model(cls, search_settings: SearchSettings) -> "SavedSearchSettings":
         return cls(
@@ -51,6 +53,7 @@ class SavedSearchSettings(IndexingSetting):
             embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
             switchover_type=search_settings.switchover_type,
+            use_port_flow=search_settings.use_port_flow,
             enable_contextual_rag=search_settings.enable_contextual_rag,
             contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         )
