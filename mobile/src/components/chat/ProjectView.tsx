@@ -1,8 +1,17 @@
+import { useState } from "react";
 import { ScrollView, View } from "react-native";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+} from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { router } from "expo-router";
 
-import { ChatScreen } from "@/components/chat/ChatScreen";
+import { ChatHeader } from "@/components/chat/ChatHeader";
 import { InputBar } from "@/components/chat/InputBar";
+import { MessageList } from "@/components/chat/MessageList";
 import { ProjectContextPanel } from "@/components/chat/ProjectContextPanel";
 import { ProjectChatSessionList } from "@/components/chat/ProjectChatSessionList";
 import { useProjectDetails } from "@/api/chat/projects";
@@ -13,53 +22,97 @@ interface ProjectViewProps {
   projectId: number | null;
 }
 
-// Context panel + chats, with a project-scoped input bar. Input sticks to the
-// bottom (web keeps it mid-page).
+const TRANSITION_MS = 150;
+
+// A project's detail + chat surface (mirrors web's AppPage project layout): the
+// context panel + a mid-page input + the project's chats. Sending the first
+// message transitions IN PLACE to the chat — the input slides to the bottom while
+// the panel/list fade out — instead of navigating, so the motion stays smooth.
 export function ProjectView({ projectId }: ProjectViewProps) {
+  // Set once the first message creates a session; drives the project→chat swap.
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const started = activeSessionId != null;
+
   const { data: details, isLoading } = useProjectDetails(projectId);
   const { agents } = useAgents();
-  const { input, setInput, submit, stop, chatState } = useChatController(
-    null,
-    undefined,
-    projectId,
-  );
+  const { messages, input, setInput, submit, stop, chatState } =
+    useChatController(
+      activeSessionId,
+      undefined,
+      projectId,
+      setActiveSessionId,
+    );
 
   const chats = details?.project?.chat_sessions ?? [];
 
   return (
-    <ChatScreen
-      title={details?.project?.name}
-      input={
-        <InputBar
-          value={input}
-          onChangeText={setInput}
-          onSend={() => {
-            void submit();
-          }}
-          onStop={stop}
-          chatState={chatState}
-        />
-      }
-    >
-      <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
-        <View className="gap-24 px-24 pb-24 pt-8">
-          <ProjectContextPanel details={details} isLoading={isLoading} />
-          <ProjectChatSessionList
-            chats={chats}
-            agents={agents}
-            personaIdToFeatured={
-              details?.persona_id_to_is_featured ?? undefined
-            }
-            isLoading={isLoading && !details}
-            onSelect={(sessionId) =>
-              router.navigate({
-                pathname: "/chat/[id]",
-                params: { id: sessionId },
-              })
-            }
-          />
-        </View>
-      </ScrollView>
-    </ChatScreen>
+    <SafeAreaView edges={["top"]} className="flex-1 bg-background-neutral-00">
+      <ChatHeader title={details?.project?.name} />
+
+      <View className="flex-1">
+        {started ? (
+          <Animated.View
+            key="messages"
+            entering={FadeIn.duration(TRANSITION_MS)}
+            className="flex-1"
+          >
+            <MessageList messages={messages} />
+          </Animated.View>
+        ) : (
+          <Animated.View
+            key="context"
+            exiting={FadeOut.duration(TRANSITION_MS)}
+            className="max-h-[50%]"
+          >
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <View className="gap-24 px-24 pb-8 pt-8">
+                <ProjectContextPanel details={details} isLoading={isLoading} />
+              </View>
+            </ScrollView>
+          </Animated.View>
+        )}
+
+        <KeyboardStickyView>
+          <Animated.View layout={LinearTransition.duration(TRANSITION_MS)}>
+            <InputBar
+              value={input}
+              onChangeText={setInput}
+              onSend={() => {
+                void submit();
+              }}
+              onStop={stop}
+              chatState={chatState}
+            />
+          </Animated.View>
+        </KeyboardStickyView>
+
+        {!started ? (
+          <Animated.View
+            key="chats"
+            exiting={FadeOut.duration(TRANSITION_MS)}
+            className="flex-1"
+          >
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <View className="px-24 pb-24 pt-8">
+                <ProjectChatSessionList
+                  chats={chats}
+                  agents={agents}
+                  personaIdToFeatured={
+                    details?.persona_id_to_is_featured ?? undefined
+                  }
+                  isLoading={isLoading && !details}
+                  onSelect={(sessionId) =>
+                    router.navigate({
+                      pathname: "/chat/[id]",
+                      params: { id: sessionId },
+                    })
+                  }
+                />
+              </View>
+            </ScrollView>
+          </Animated.View>
+        ) : null}
+      </View>
+    </SafeAreaView>
   );
 }

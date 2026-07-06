@@ -18,7 +18,9 @@ export function AppSidebar() {
 
   // `id` is the param for BOTH /chat/[id] and /projects/[id] — the active
   // segment tells them apart.
-  const segments = useSegments();
+  // Widen to string[] — expo-router's typed-routes union makes `.includes()` narrow
+  // its arg to `never`.
+  const segments: readonly string[] = useSegments();
   const params = useGlobalSearchParams<{ id?: string }>();
   const rawId = typeof params.id === "string" ? params.id : null;
   const inChat = segments.includes("chat");

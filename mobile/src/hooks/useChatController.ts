@@ -162,6 +162,9 @@ export function useChatController(
   sessionId: string | null,
   personaId: number = DEFAULT_AGENT_ID,
   projectId: number | null = null,
+  // When set, a newly-created session is reported here instead of navigating to
+  // /chat/[id] — lets a host (e.g. ProjectView) transition to the chat in place.
+  onSessionCreated?: (sessionId: string) => void,
 ): ChatController {
   const [input, setInput] = useState("");
   // Re-entry guard. The composer path is guarded by clearing input, but the starter override
@@ -270,14 +273,18 @@ export function useChatController(
         };
 
         if (sessionId == null) {
-          const dest = {
-            pathname: "/chat/[id]" as const,
-            params: { id: activeId },
-          };
-          // push from a project so Back returns to it; replace from the landing so
-          // Back skips the now-empty landing
-          if (projectId != null) router.navigate(dest);
-          else router.replace(dest);
+          if (onSessionCreated) {
+            onSessionCreated(activeId);
+          } else {
+            const dest = {
+              pathname: "/chat/[id]" as const,
+              params: { id: activeId },
+            };
+            // push from a project so Back returns to it; replace from the landing
+            // so Back skips the now-empty landing
+            if (projectId != null) router.navigate(dest);
+            else router.replace(dest);
+          }
         }
 
         void runChatStream(
@@ -292,7 +299,15 @@ export function useChatController(
         submittingRef.current = false;
       }
     },
-    [input, sessionId, personaId, projectId, serverUrl, queryClient],
+    [
+      input,
+      sessionId,
+      personaId,
+      projectId,
+      onSessionCreated,
+      serverUrl,
+      queryClient,
+    ],
   );
 
   const stop = useCallback(() => {

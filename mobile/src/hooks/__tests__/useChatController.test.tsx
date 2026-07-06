@@ -318,6 +318,25 @@ describe("useChatController", () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
+  it("reports a new session via onSessionCreated instead of navigating", async () => {
+    createSessionMock.mockResolvedValue("inline-session");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+    const onCreated = jest.fn();
+
+    const { result } = renderHook(
+      () => useChatController(null, undefined, 7, onCreated),
+      { wrapper },
+    );
+    act(() => result.current.setInput("scoped message"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(onCreated).toHaveBeenCalledWith("inline-session");
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
   it("stop aborts the stream and stops the backend run", async () => {
     useChatSessionStore.getState().ensureSession("s1");
     stopSessionMock.mockResolvedValue();
