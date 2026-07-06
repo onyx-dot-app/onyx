@@ -35,6 +35,11 @@ describe("dehydrateOptions PII exclusion", () => {
     expect(wouldPersist(QUERY_KEYS.me(url))).toBe(false);
   });
 
+  it("never persists project queries (their chats' titles are PII)", () => {
+    expect(wouldPersist(QUERY_KEYS.userProjects(url))).toBe(false);
+    expect(wouldPersist(QUERY_KEYS.userProject(url, 5))).toBe(false);
+  });
+
   it("excludes future chat-* keys by default (default-deny)", () => {
     expect(wouldPersist(["chat-messages", url])).toBe(false);
     expect(wouldPersist(["chat-history", url, "abc"])).toBe(false);

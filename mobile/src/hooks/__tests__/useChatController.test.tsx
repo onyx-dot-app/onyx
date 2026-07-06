@@ -3,6 +3,7 @@ import type { Mock } from "jest-mock";
 import * as React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { router } from "expo-router";
 
 import {
   createChatSession,
@@ -16,7 +17,9 @@ import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 
 // `jest.mock` is hoisted above the imports by babel-jest, so the imports above receive the mocks.
-jest.mock("expo-router", () => ({ router: { replace: jest.fn() } }));
+jest.mock("expo-router", () => ({
+  router: { replace: jest.fn(), navigate: jest.fn() },
+}));
 jest.mock("@/state/session", () => ({
   useSession: (selector: (s: { serverUrl: string | null }) => unknown) =>
     selector({ serverUrl: "https://example.test" }),
@@ -40,7 +43,7 @@ const streamMock = streamChatMessage as unknown as Mock<
   (body: { origin: string }, signal: AbortSignal) => AsyncGenerator<StreamEvent>
 >;
 const createSessionMock = createChatSession as unknown as Mock<
-  (personaId?: number) => Promise<string>
+  (personaId?: number, projectId?: number | null) => Promise<string>
 >;
 const getSessionMock = getChatSession as unknown as Mock<
   (id: string) => Promise<unknown>
@@ -242,7 +245,7 @@ describe("useChatController", () => {
       await result.current.submit();
     });
 
-    expect(createSessionMock).toHaveBeenCalledWith(42);
+    expect(createSessionMock).toHaveBeenCalledWith(42, null);
   });
 
   it("sends a starter-prompt override without using the composer input", async () => {
@@ -257,7 +260,7 @@ describe("useChatController", () => {
       await result.current.submit("Summarize my day");
     });
 
-    expect(createSessionMock).toHaveBeenCalledWith(7);
+    expect(createSessionMock).toHaveBeenCalledWith(7, null);
     await waitFor(() =>
       expect(useChatSessionStore.getState().sessions.has("s-starter")).toBe(
         true,
@@ -292,6 +295,46 @@ describe("useChatController", () => {
     });
 
     expect(createSessionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("scopes a new chat to a project and pushes (Back returns to the project)", async () => {
+    createSessionMock.mockResolvedValue("proj-session");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const { result } = renderHook(() => useChatController(null, undefined, 7), {
+      wrapper,
+    });
+    act(() => result.current.setInput("scoped message"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(createSessionMock).toHaveBeenCalledWith(0, 7);
+    // From a project we navigate (push), not replace, so Back returns to it.
+    expect(router.navigate).toHaveBeenCalledWith({
+      pathname: "/chat/[id]",
+      params: { id: "proj-session" },
+    });
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("reports a new session via onSessionCreated instead of navigating", async () => {
+    createSessionMock.mockResolvedValue("inline-session");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+    const onCreated = jest.fn();
+
+    const { result } = renderHook(
+      () => useChatController(null, undefined, 7, onCreated),
+      { wrapper },
+    );
+    act(() => result.current.setInput("scoped message"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(onCreated).toHaveBeenCalledWith("inline-session");
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it("stop aborts the stream and stops the backend run", async () => {

@@ -156,10 +156,14 @@ export interface ChatController {
 }
 
 // `personaId` is the agent to bind when this send creates a new session (ignored for an
-// existing session, whose persona is fixed at creation).
+// existing session, whose persona is fixed at creation). `projectId` scopes a new chat to
+// a project.
 export function useChatController(
   sessionId: string | null,
   personaId: number = DEFAULT_AGENT_ID,
+  projectId: number | null = null,
+  // report a new session here instead of navigating, so a host can transition in place
+  onSessionCreated?: (sessionId: string) => void,
 ): ChatController {
   const [input, setInput] = useState("");
   // Re-entry guard. The composer path is guarded by clearing input, but the starter override
@@ -217,7 +221,16 @@ export function useChatController(
           const current = useChatSessionStore.getState().sessions.get(activeId);
           if (current && current.chatState !== "input") return; // a run is already active
         } else {
-          activeId = await createChatSession(personaId);
+          activeId = await createChatSession(personaId, projectId);
+          // refresh the project (we've navigated away) so the new chat shows on reopen
+          if (projectId != null) {
+            void queryClient.invalidateQueries({
+              queryKey: QUERY_KEYS.userProject(serverUrl, projectId),
+            });
+            void queryClient.invalidateQueries({
+              queryKey: QUERY_KEYS.userProjects(serverUrl),
+            });
+          }
         }
 
         const store = useChatSessionStore.getState();
@@ -258,9 +271,19 @@ export function useChatController(
           origin: "mobile",
         };
 
-        // replace so Back doesn't return to the empty landing
         if (sessionId == null) {
-          router.replace({ pathname: "/chat/[id]", params: { id: activeId } });
+          if (onSessionCreated) {
+            onSessionCreated(activeId);
+          } else {
+            const dest = {
+              pathname: "/chat/[id]" as const,
+              params: { id: activeId },
+            };
+            // push from a project so Back returns to it; replace from the landing
+            // so Back skips the now-empty landing
+            if (projectId != null) router.navigate(dest);
+            else router.replace(dest);
+          }
         }
 
         void runChatStream(
@@ -275,7 +298,15 @@ export function useChatController(
         submittingRef.current = false;
       }
     },
-    [input, sessionId, personaId, serverUrl, queryClient],
+    [
+      input,
+      sessionId,
+      personaId,
+      projectId,
+      onSessionCreated,
+      serverUrl,
+      queryClient,
+    ],
   );
 
   const stop = useCallback(() => {
