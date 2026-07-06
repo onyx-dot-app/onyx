@@ -18,6 +18,65 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: latest
+    created: "2026-07-06T19:54:37.196419912Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.3
+    description: Onyx application and Craft sandbox deployment chart
+    digest: b4e6604de095abdcf8ebe6916107d22dbecdf9d8928a837a5d7c1f3c426dc675
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://onyx-dot-app.github.io/onyx/onyx-0.6.8.tgz
+    version: 0.6.8
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: security
+          description: Add an egress NetworkPolicy on the Craft sandbox pods restricting their egress to
+            the sandbox proxy (:8080) and kube-dns (:53) only. CNI-layer backstop to the in-pod iptables
+            in firewall-init.sh, so a sandbox that bypasses that iptables still cannot reach anything but
+            the proxy. DNS is allowed because sandbox-init resolves the proxy FQDN before its iptables
+            closes DNS.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+    apiVersion: v2
+    appVersion: latest
     created: "2026-07-06T19:28:25.058131319Z"
     dependencies:
     - alias: postgresql
@@ -5365,4 +5424,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-07-06T19:28:25.029491677Z"
+generated: "2026-07-06T19:54:37.166674502Z"
