@@ -619,6 +619,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
                 {preset.label}
               </InputSelect.Item>
             ))}
+            <InputSelect.Separator />
             <InputSelect.Item value={CUSTOM_RETENTION_VALUE}>
               Custom Retention
             </InputSelect.Item>
