@@ -14,7 +14,10 @@ on:
       - "pyproject.toml"
       - "uv.lock"
       - ".github/dependabot.yml"
-      - ".github/workflows/audit.yml"
+      # Any workflow or composite-action change can bump a pinned action to a
+      # vulnerable version, so gate the PR that makes the change (not just nightly).
+      - ".github/workflows/**"
+      - ".github/actions/**"
       - "tools/ods/**"
   schedule:
     # Nightly at 09:00 UTC.

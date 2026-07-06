@@ -14,6 +14,7 @@ type AuditOptions struct {
 	Web        bool
 	Python     bool
 	Dependabot bool
+	Actions    bool
 	Format     string
 	FailOn     string
 	IgnoreURL  string
@@ -28,10 +29,11 @@ func NewAuditCommand() *cobra.Command {
 		Short: "Audit dependencies for known vulnerabilities",
 		Long: `Audit dependencies for known vulnerabilities.
 
-Scans the JavaScript (bun.lock) and Python (uv.lock) lockfiles via osv-scanner
-and open GitHub Dependabot security alerts. With no selector flags, all sources
-are audited. Accepted advisories are suppressed via an allowlist fetched from S3
-at runtime, so releases can be unblocked without a code change.
+Scans the JavaScript (bun.lock) and Python (uv.lock) lockfiles via osv-scanner,
+open GitHub Dependabot security alerts, and the GitHub Actions pinned in
+.github/workflows and .github/actions against OSV.dev. With no selector flags,
+all sources are audited. Accepted advisories are suppressed via an allowlist
+fetched from S3 at runtime, so releases can be unblocked without a code change.
 
 Exits non-zero when an unignored finding at or above --fail-on remains, which is
 how it gates deploys.`,
@@ -44,6 +46,7 @@ how it gates deploys.`,
 	cmd.Flags().BoolVar(&opts.Web, "web", false, "Audit web/JS dependencies (bun.lock)")
 	cmd.Flags().BoolVar(&opts.Python, "python", false, "Audit Python dependencies (uv.lock)")
 	cmd.Flags().BoolVar(&opts.Dependabot, "dependabot", false, "Audit open Dependabot security alerts")
+	cmd.Flags().BoolVar(&opts.Actions, "actions", false, "Audit GitHub Actions in .github/workflows and .github/actions")
 	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format: text, json, or sarif")
 	cmd.Flags().StringVar(&opts.FailOn, "fail-on", "critical", "Minimum severity that fails the audit: critical, high, moderate, or low")
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
@@ -64,6 +67,7 @@ func runAudit(opts *AuditOptions) {
 		Web:        opts.Web,
 		Python:     opts.Python,
 		Dependabot: opts.Dependabot,
+		Actions:    opts.Actions,
 		Format:     opts.Format,
 		FailOn:     failOn,
 		IgnoreURL:  opts.IgnoreURL,
