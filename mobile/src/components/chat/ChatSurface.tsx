@@ -143,7 +143,11 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
         >
           <ScrollView keyboardShouldPersistTaps="handled">
             <View className="gap-24 px-24 pb-8 pt-8">
-              <ProjectContextPanel details={details} isLoading={isLoading} />
+              <ProjectContextPanel
+                projectId={projectId}
+                details={details}
+                isLoading={isLoading}
+              />
             </View>
           </ScrollView>
         </Animated.View>

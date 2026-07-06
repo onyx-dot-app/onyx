@@ -98,7 +98,16 @@
         }
       ],
       "react-native-enriched-markdown",
-      "expo-image"
+      "expo-image",
+      "expo-document-picker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Onyx to access your photos so you can add them to a project.",
+          "microphonePermission": false,
+          "cameraPermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
