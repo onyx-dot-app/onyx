@@ -63,5 +63,18 @@ export async function uploadProjectFile(
     });
   }
 
-  return JSON.parse(result.body) as CategorizedFiles;
+  const parsed: unknown = JSON.parse(result.body);
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    !Array.isArray((parsed as CategorizedFiles).user_files) ||
+    !Array.isArray((parsed as CategorizedFiles).rejected_files)
+  ) {
+    throw new ApiError({
+      status: result.status,
+      detail: "Unexpected upload response.",
+      body: result.body,
+    });
+  }
+  return parsed as CategorizedFiles;
 }

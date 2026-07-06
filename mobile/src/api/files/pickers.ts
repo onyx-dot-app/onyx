@@ -27,7 +27,12 @@ export async function pickDocuments(): Promise<NormalizedAsset[]> {
 // quality:1 avoids re-encoding, so the reported size stays stable for the file key.
 export async function pickImages(): Promise<NormalizedAsset[]> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) return [];
+  // Distinct from cancel (which returns []) so the caller can surface it.
+  if (!permission.granted) {
+    throw new Error(
+      "Photo library access was denied. Enable it in Settings to add photos.",
+    );
+  }
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images"],
     allowsMultipleSelection: true,

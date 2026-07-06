@@ -75,7 +75,7 @@ export function ProjectContextPanel({
               prominence="secondary"
               size="sm"
               accessibilityLabel="Add files"
-              disabled={projectId == null}
+              disabled={projectId == null || loadingDetails}
               onPress={() => setPickerOpen(true)}
             />
           }

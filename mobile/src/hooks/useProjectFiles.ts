@@ -142,15 +142,17 @@ export function useProjectFiles(
               result.rejected_files.forEach((file) =>
                 rejected.push(`${file.file_name}: ${file.reason}`),
               );
-            } catch {
+            } catch (error) {
+              console.warn(`upload failed for ${asset.name}`, error);
               rejected.push(`${asset.name} could not be uploaded`);
             }
           }),
         );
         // Refetch first (picks up the created files), then drop optimistic entries.
         await invalidateProject();
-      } catch {
+      } catch (error) {
         // Uploads landed server-side but the refetch failed; focus-refetch recovers.
+        console.warn("project refetch after upload failed", error);
         rejected.push("Uploaded, but the file list didn't refresh.");
       } finally {
         items.forEach(({ tempId }) => finish(projectId, tempId));
@@ -170,25 +172,39 @@ export function useProjectFiles(
     ],
   );
 
-  const addDocuments = useCallback(async () => {
-    await runUpload(await pickDocuments());
-  }, [runUpload]);
+  // Wraps the picker so a permission denial / native error surfaces inline
+  // instead of vanishing (the sheet is already closed by the time this runs).
+  const runPicked = useCallback(
+    async (pick: () => Promise<NormalizedAsset[]>) => {
+      try {
+        await runUpload(await pick());
+      } catch (error) {
+        console.warn("file picker failed", error);
+        if (projectId != null) {
+          setErrors(projectId, [
+            getErrorMessage(error, "Couldn't open the file picker."),
+          ]);
+        }
+      }
+    },
+    [runUpload, projectId, setErrors],
+  );
 
-  const addImages = useCallback(async () => {
-    await runUpload(await pickImages());
-  }, [runUpload]);
+  const addDocuments = useCallback(() => runPicked(pickDocuments), [runPicked]);
+  const addImages = useCallback(() => runPicked(pickImages), [runPicked]);
 
   const linkRecent = useCallback(
     async (fileId: string) => {
       if (projectId == null) return;
       try {
         await linkFileToProject(projectId, fileId);
+        await invalidateProject();
       } catch (error) {
+        console.warn("link file to project failed", error);
         setErrors(projectId, [
           getErrorMessage(error, "Couldn't add that file."),
         ]);
       }
-      await invalidateProject();
     },
     [projectId, invalidateProject, setErrors],
   );
@@ -198,12 +214,13 @@ export function useProjectFiles(
       if (projectId == null) return;
       try {
         await unlinkFileFromProject(projectId, fileId);
+        await invalidateProject();
       } catch (error) {
+        console.warn("unlink file from project failed", error);
         setErrors(projectId, [
           getErrorMessage(error, "Couldn't remove that file."),
         ]);
       }
-      await invalidateProject();
     },
     [projectId, invalidateProject, setErrors],
   );
@@ -248,8 +265,9 @@ export function useProjectFiles(
               };
             },
           );
-        } catch {
+        } catch (error) {
           // transient poll failure — retry next tick
+          console.warn("file status poll failed", error);
         }
       })();
     }, POLL_INTERVAL_MS);

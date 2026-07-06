@@ -265,15 +265,30 @@ describe("useProjectFiles", () => {
     ).toBe(0);
   });
 
-  it("surfaces an error when linking a recent file fails", async () => {
+  it("surfaces an error and skips the refetch when linking fails", async () => {
     linkMock.mockRejectedValueOnce(new Error("boom"));
-    const { result } = setup([]);
+    const { result, invalidateSpy } = setup([]);
 
     await act(async () => {
       await result.current.linkRecent("r1");
     });
 
     expect(result.current.errors.length).toBeGreaterThan(0);
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an error when the photo permission is denied", async () => {
+    pickImagesMock.mockRejectedValue(
+      new Error("Photo library access was denied."),
+    );
+    const { result } = setup([]);
+
+    await act(async () => {
+      await result.current.addImages();
+    });
+
+    expect(uploadMock).not.toHaveBeenCalled();
+    expect(result.current.errors.some((e) => e.includes("denied"))).toBe(true);
   });
 
   describe("status polling", () => {
