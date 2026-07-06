@@ -14,9 +14,6 @@ metadata:
   name: onyx-nginx-conf
 data:
   upstreams.conf: |
-    # Don't expose the nginx version in the Server header or on error pages
-    server_tokens off;
-
     upstream api_server {
         server {{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort }} fail_timeout=0;
     }
