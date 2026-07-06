@@ -48,6 +48,8 @@ import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
+  SvgChevronLeft,
+  SvgDownload,
   SvgFileText,
   SvgFitWidth,
   SvgFolderIn,
@@ -89,6 +91,7 @@ function Header() {
     number | null
   >(null);
   const [showMoveOptions, setShowMoveOptions] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
@@ -204,7 +207,6 @@ function Header() {
   const handleExport = useCallback(
     async (format: ChatExportFormat) => {
       if (!currentChatSession) return;
-      setPopoverOpen(false);
       try {
         await exportChatSession(
           currentChatSession.id,
@@ -220,65 +222,89 @@ function Header() {
   );
 
   useEffect(() => {
-    const items = showMoveOptions
-      ? [
-          <PopoverSearchInput
-            key="search"
-            setShowMoveOptions={setShowMoveOptions}
-            onSearch={setSearchTerm}
-          />,
-          ...filteredProjects.map((project) => (
-            <LineItemButton
-              key={project.id}
-              sizePreset="main-ui"
-              rounding="sm"
-              icon={SvgFolderIn}
-              title={project.name}
-              onClick={noProp(() => handleMoveClick(project.id))}
-            />
-          )),
-        ]
-      : [
+    let items: ReactNode[];
+    if (showMoveOptions) {
+      items = [
+        <PopoverSearchInput
+          key="search"
+          setShowMoveOptions={setShowMoveOptions}
+          onSearch={setSearchTerm}
+        />,
+        ...filteredProjects.map((project) => (
           <LineItemButton
-            key="move"
+            key={project.id}
             sizePreset="main-ui"
             rounding="sm"
             icon={SvgFolderIn}
-            title="Move to Project"
-            onClick={noProp(() => setShowMoveOptions(true))}
-          />,
-          null,
+            title={project.name}
+            onClick={noProp(() => handleMoveClick(project.id))}
+          />
+        )),
+      ];
+    } else if (showExportOptions) {
+      items = [
+        <LineItemButton
+          key="export-back"
+          sizePreset="main-ui"
+          rounding="sm"
+          icon={SvgChevronLeft}
+          title="Export As…"
+          onClick={noProp(() => setShowExportOptions(false))}
+        />,
+        <Popover.Close asChild key="export-plaintext">
           <LineItemButton
-            key="export-text"
             sizePreset="main-ui"
             rounding="sm"
             icon={SvgFileText}
-            title="Export as Text"
+            title="Plaintext"
             onClick={noProp(() => handleExport("text"))}
-          />,
+          />
+        </Popover.Close>,
+        <Popover.Close asChild key="export-markdown">
           <LineItemButton
-            key="export-markdown"
             sizePreset="main-ui"
             rounding="sm"
             icon={SvgHash}
-            title="Export as Markdown"
+            title="Markdown"
             onClick={noProp(() => handleExport("markdown"))}
-          />,
-          null,
-          <LineItemButton
-            key="delete"
-            sizePreset="main-ui"
-            rounding="sm"
-            color="danger"
-            icon={SvgTrash}
-            title="Delete"
-            onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-          />,
-        ];
+          />
+        </Popover.Close>,
+      ];
+    } else {
+      items = [
+        <LineItemButton
+          key="move"
+          sizePreset="main-ui"
+          rounding="sm"
+          icon={SvgFolderIn}
+          title="Move to Project"
+          onClick={noProp(() => setShowMoveOptions(true))}
+        />,
+        <LineItemButton
+          key="export"
+          sizePreset="main-ui"
+          rounding="sm"
+          icon={SvgDownload}
+          title="Export As…"
+          onClick={noProp(() => setShowExportOptions(true))}
+        />,
+        null,
+        <LineItemButton
+          key="delete"
+          sizePreset="main-ui"
+          rounding="sm"
+          color="danger"
+          icon={SvgTrash}
+          title="Delete"
+          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+        />,
+      ];
+    }
 
     setPopoverItems(items);
   }, [
     showMoveOptions,
+    showExportOptions,
     filteredProjects,
     currentChatSession,
     setDeleteConfirmationModalOpen,
@@ -463,6 +489,7 @@ function Header() {
                         setPopoverOpen(state);
                         if (!state) {
                           setShowMoveOptions(false);
+                          setShowExportOptions(false);
                           setSearchTerm("");
                         }
                       }}
