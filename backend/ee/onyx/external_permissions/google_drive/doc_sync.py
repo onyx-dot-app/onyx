@@ -28,6 +28,34 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def _domain_group_for_permission(
+    permission: GoogleDrivePermission,
+    own_domain: str | None,
+    entity_desc: str,
+) -> str | None:
+    """Map an "everyone at <domain>" permission to its derived domain group, or
+    None when the share grants searchable access to no one. Link-only shares
+    (allow_file_discovery=False) grant nothing: Google exposes them only to
+    domain users who already hold the link, not to domain-wide search. The
+    matching user-side token is derived from the user's own email domain in ee
+    _get_acl_for_user."""
+    if not permission.domain:
+        logger.warning(
+            "Domain permission without a domain for %s\n %s", entity_desc, permission
+        )
+        return None
+    if permission.domain != own_domain:
+        # Cross-workspace share (e.g. shared to a partner company's whole domain).
+        logger.debug(
+            "Domain permission for %s scoped to external domain %s",
+            entity_desc,
+            permission.domain,
+        )
+    if permission.allow_file_discovery is False:
+        return None
+    return build_domain_group_id(permission.domain)
+
+
 def _get_slim_doc_generator(
     cc_pair: ConnectorCredentialPair,
     google_drive_connector: GoogleDriveConnector,
@@ -190,29 +218,11 @@ def get_external_access_for_raw_gdrive_file(
                     permission,
                 )
         elif permission.type == PermissionType.DOMAIN:
-            # "Everyone at <domain>" grants a derived domain group scoped to that
-            # domain's users, never instance-public. The matching user-side token
-            # is derived from the user's own email domain in ee _get_acl_for_user.
-            # Link-only shares (allowFileDiscovery=False) grant nothing: Google
-            # exposes them only to domain users who already hold the link, not
-            # to domain-wide search.
-            if permission.domain:
-                if permission.allow_file_discovery is not False:
-                    domain_groups.add(build_domain_group_id(permission.domain))
-                if permission.domain != company_domain:
-                    # Cross-workspace domain share (e.g. a doc shared to a
-                    # partner company's whole domain).
-                    logger.debug(
-                        "Domain permission for %s scoped to external domain %s",
-                        doc_id,
-                        permission.domain,
-                    )
-            else:
-                logger.warning(
-                    "Permission is type `domain` but no domain is provided for document %s\n %s",
-                    doc_id,
-                    permission,
-                )
+            domain_group = _domain_group_for_permission(
+                permission, company_domain, f"document {doc_id}"
+            )
+            if domain_group:
+                domain_groups.add(domain_group)
         elif permission.type == PermissionType.ANYONE:
             public = True
 
@@ -305,25 +315,11 @@ def get_external_access_for_folder(
                     "Group permission without email for folder %s", folder_id
                 )
         elif permission.type == PermissionType.DOMAIN:
-            # "Everyone at <domain>" grants a derived domain group scoped to that
-            # domain's users, never instance-public. The matching user-side token
-            # is derived from the user's own email domain in ee _get_acl_for_user.
-            # Link-only shares (allowFileDiscovery=False) grant nothing: Google
-            # exposes them only to domain users who already hold the link, not
-            # to domain-wide search.
-            if permission.domain:
-                if permission.allow_file_discovery is not False:
-                    domain_groups.add(build_domain_group_id(permission.domain))
-                if permission.domain != google_domain:
-                    logger.debug(
-                        "Domain permission scoped to external domain %s for folder %s",
-                        permission.domain,
-                        folder_id,
-                    )
-            else:
-                logger.warning(
-                    "Domain permission without domain for folder %s", folder_id
-                )
+            domain_group = _domain_group_for_permission(
+                permission, google_domain, f"folder {folder_id}"
+            )
+            if domain_group:
+                domain_groups.add(domain_group)
         elif permission.type == PermissionType.ANYONE:
             # Only public if discoverable (allowFileDiscovery is not False)
             # If allowFileDiscovery is False, it's "link only" access
