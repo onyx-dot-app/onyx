@@ -1684,7 +1684,6 @@ def google_drive_callback(
         )
     credential_id = int(credential_id_cookie)
     verify_csrf(credential_id, callback.state)
-
     credentials: Credentials | None = update_credential_access_tokens(
         callback.code,
         credential_id,
