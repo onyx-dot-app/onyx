@@ -46,13 +46,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        user_table.update()
-        .where(
-            user_table.c.account_type == "SERVICE_ACCOUNT",
-            user_table.c.role == "LIMITED",
-            user_table.c.effective_permissions
-            == sa.cast(WRITE_CHAT_PERMS, postgresql.JSONB),
-        )
-        .values(effective_permissions=[])
-    )
+    # No-op: backfilled rows are indistinguishable from keys the API-key
+    # code granted write:chat after this migration, and clearing those
+    # would break them. Leaving the grant in place is harmless.
+    pass
