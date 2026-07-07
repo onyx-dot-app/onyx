@@ -219,6 +219,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         metadata_list=filtered_metadata_list,
         metadata_suffix=filtered_metadata_suffix,
         last_updated=chunk.source_document.doc_updated_at,
+        created_at=chunk.source_document.doc_created_at,
         public=chunk.access.is_public,
         access_control_list=generate_opensearch_filtered_access_control_list(
             chunk.access
