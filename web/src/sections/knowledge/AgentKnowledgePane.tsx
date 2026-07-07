@@ -14,6 +14,7 @@ import * as TableLayouts from "@/layouts/table-layouts";
 import { Card } from "@/refresh-components/cards";
 import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
+import Truncated from "@/refresh-components/texts/Truncated";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Switch } from "@opal/components";
 import { Checkbox } from "@opal/components";
@@ -23,6 +24,12 @@ import {
   SvgArrowUpRight,
   SvgFiles,
   SvgFolder,
+  SvgArrowLeft,
+  SvgSearch,
+  SvgXCircle,
+  SvgChevronRight,
+  SvgFileText,
+  SvgFilter,
 } from "@opal/icons";
 import type { CCPairSummary } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
@@ -35,6 +42,10 @@ import { timeAgo } from "@opal/time";
 import { Spacer } from "@opal/components";
 import { Disabled } from "@opal/core";
 import SourceHierarchyBrowser from "./SourceHierarchyBrowser";
+import { searchDocuments } from "@/ee/lib/search/svc";
+import { fetchHierarchyNodeSearch } from "@/lib/hierarchy/svc";
+import type { SearchDocWithContent } from "@/lib/search/interfaces";
+import type { HierarchyNodeSearchSummary } from "@/lib/hierarchy/interfaces";
 
 // Knowledge pane view states
 type KnowledgeView = "main" | "add" | "document-sets" | "sources" | "recent";
@@ -150,6 +161,432 @@ function KnowledgeSidebar({
 }
 
 // ============================================================================
+// KNOWLEDGE SEARCH BAR - Top row shown in any expanded view
+// ============================================================================
+
+interface KnowledgeSearchBarProps {
+  query: string;
+  onQueryChange: (q: string) => void;
+  onSubmit: () => void;
+  onClear: () => void;
+  onBack: () => void;
+  onFocus: () => void;
+  isSearchMode: boolean;
+}
+
+function KnowledgeSearchBar({
+  query,
+  onQueryChange,
+  onSubmit,
+  onClear,
+  onBack,
+  onFocus,
+  isSearchMode,
+}: KnowledgeSearchBarProps) {
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") onSubmit();
+    if (e.key === "Escape" && isSearchMode) onBack();
+  }
+
+  return (
+    <GeneralLayouts.Section
+      flexDirection="row"
+      alignItems="center"
+      gap={0.25}
+      height="auto"
+    >
+      {isSearchMode ? (
+        <Button
+          icon={SvgArrowLeft}
+          prominence="tertiary"
+          onClick={onBack}
+          aria-label="exit-search"
+        />
+      ) : null}
+      <GeneralLayouts.Section height="auto">
+        <InputTypeIn
+          searchIcon={!isSearchMode}
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={onFocus}
+          placeholder="Search documents..."
+          variant="internal"
+        />
+      </GeneralLayouts.Section>
+      {isSearchMode && query ? (
+        <Button
+          icon={SvgXCircle}
+          prominence="tertiary"
+          size="sm"
+          onClick={onClear}
+          aria-label="clear-search"
+        />
+      ) : null}
+      {isSearchMode ? (
+        <Button
+          icon={SvgSearch}
+          prominence="tertiary"
+          size="sm"
+          onClick={onSubmit}
+          aria-label="submit-search"
+        />
+      ) : null}
+    </GeneralLayouts.Section>
+  );
+}
+
+// ============================================================================
+// KNOWLEDGE SEARCH SIDEBAR - Source filter list shown during search mode
+// ============================================================================
+
+interface KnowledgeSearchSidebarProps {
+  connectedSources: ConnectedSource[];
+  activeSourceFilter: ValidSources | null;
+  onSourceFilterClick: (source: ValidSources | null) => void;
+  resultCountBySource: Map<ValidSources, number>;
+  vectorDbEnabled: boolean;
+}
+
+function KnowledgeSearchSidebar({
+  connectedSources,
+  activeSourceFilter,
+  onSourceFilterClick,
+  resultCountBySource,
+  vectorDbEnabled,
+}: KnowledgeSearchSidebarProps) {
+  const totalCount = Array.from(resultCountBySource.values()).reduce(
+    (a, b) => a + b,
+    0
+  );
+
+  return (
+    <TableLayouts.SidebarLayout aria-label="knowledge-search-sidebar">
+      <LineItem
+        icon={SvgFiles}
+        selected={activeSourceFilter === null}
+        onClick={() => onSourceFilterClick(null)}
+        rightChildren={
+          totalCount > 0 ? (
+            <Text mainUiAction className="text-action-link-05">
+              {totalCount}
+            </Text>
+          ) : undefined
+        }
+      >
+        All
+      </LineItem>
+
+      {vectorDbEnabled &&
+        connectedSources.map((cs) => {
+          const sourceMetadata = getSourceMetadata(cs.source);
+          const count = resultCountBySource.get(cs.source) ?? 0;
+          return (
+            <LineItem
+              key={cs.source}
+              icon={sourceMetadata.icon}
+              strokeIcon={false}
+              selected={activeSourceFilter === cs.source}
+              onClick={() => onSourceFilterClick(cs.source)}
+              rightChildren={
+                count > 0 ? (
+                  <Text mainUiAction className="text-action-link-05">
+                    {count}
+                  </Text>
+                ) : undefined
+              }
+            >
+              {sourceMetadata.displayName}
+            </LineItem>
+          );
+        })}
+    </TableLayouts.SidebarLayout>
+  );
+}
+
+// ============================================================================
+// KNOWLEDGE SEARCH RESULTS PANEL - Right panel shown during search mode
+// ============================================================================
+
+interface KnowledgeSearchResultsPanelProps {
+  committedQuery: string;
+  searchQuery: string;
+  isSearching: boolean;
+  searchError: boolean;
+  results: {
+    docs: SearchDocWithContent[];
+    nodes: HierarchyNodeSearchSummary[];
+  } | null;
+  activeSourceFilter: ValidSources | null;
+  selectedDocumentIds: string[];
+  selectedFolderIds: number[];
+  onToggleDocument: (id: string) => void;
+  onToggleFolder: (id: number) => void;
+  onNavigateToNode: (node: HierarchyNodeSearchSummary) => void;
+}
+
+function KnowledgeSearchResultsPanel({
+  committedQuery,
+  searchQuery,
+  isSearching,
+  searchError,
+  results,
+  activeSourceFilter,
+  selectedDocumentIds,
+  selectedFolderIds,
+  onToggleDocument,
+  onToggleFolder,
+  onNavigateToNode,
+}: KnowledgeSearchResultsPanelProps) {
+  // Empty state — nothing searched yet
+  if (!committedQuery) {
+    return (
+      <GeneralLayouts.Section
+        alignItems="center"
+        justifyContent="center"
+        gap={0.5}
+        aria-label="search-empty-state"
+      >
+        <SvgSearch size={32} className="stroke-text-04" />
+        <Text secondaryBody text03>
+          Input a search term and hit enter.
+        </Text>
+      </GeneralLayouts.Section>
+    );
+  }
+
+  // Loading
+  if (isSearching) {
+    return (
+      <GeneralLayouts.Section
+        alignItems="center"
+        justifyContent="center"
+        aria-label="search-loading"
+      >
+        <Text secondaryBody text03>
+          Searching...
+        </Text>
+      </GeneralLayouts.Section>
+    );
+  }
+
+  // Error — request failed, distinct from a legitimately empty result set
+  if (searchError && committedQuery === searchQuery) {
+    return (
+      <GeneralLayouts.Section
+        alignItems="center"
+        justifyContent="center"
+        gap={0.5}
+        aria-label="search-error"
+      >
+        <Text secondaryBody text03>
+          Search failed, please try again.
+        </Text>
+      </GeneralLayouts.Section>
+    );
+  }
+
+  const allResults: Array<
+    | { kind: "node"; item: HierarchyNodeSearchSummary }
+    | { kind: "doc"; item: SearchDocWithContent }
+  > = [
+    ...(results?.nodes ?? []).map((n) => ({ kind: "node" as const, item: n })),
+    ...(results?.docs ?? []).map((d) => ({ kind: "doc" as const, item: d })),
+  ];
+
+  const isStale = committedQuery !== searchQuery;
+
+  const listContent =
+    allResults.length === 0 ? (
+      <GeneralLayouts.Section
+        alignItems="center"
+        justifyContent="center"
+        gap={0.5}
+        aria-label="search-no-results"
+      >
+        <Text secondaryBody text03>
+          No results found
+          {activeSourceFilter
+            ? ` in ${getSourceMetadata(activeSourceFilter).displayName}`
+            : ""}
+          .
+        </Text>
+      </GeneralLayouts.Section>
+    ) : (
+      <GeneralLayouts.Section gap={0} alignItems="stretch" height="auto">
+        {/* Table header */}
+        <TableLayouts.TableRow>
+          <TableLayouts.CheckboxCell />
+          <TableLayouts.TableCell flex>
+            <Text secondaryBody text03>
+              Name
+            </Text>
+          </TableLayouts.TableCell>
+          <TableLayouts.TableCell width={8}>
+            <Text secondaryBody text03>
+              Sources
+            </Text>
+          </TableLayouts.TableCell>
+        </TableLayouts.TableRow>
+
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+        {/* Plain div required: GeneralLayouts.Section (display:flex) breaks overflow-y scrolling */}
+        <div className="overflow-y-auto max-h-80">
+          {allResults.map((entry) => {
+            if (entry.kind === "node") {
+              const node = entry.item;
+              const isSelected = selectedFolderIds.includes(node.id);
+              const sourceMeta = getSourceMetadata(node.source);
+
+              return (
+                <TableLayouts.TableRow
+                  key={`node-${node.id}`}
+                  selected={isSelected}
+                  onClick={() => onToggleFolder(node.id)}
+                  aria-label={`search-node-${node.id}`}
+                >
+                  <TableLayouts.CheckboxCell>
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={() => onToggleFolder(node.id)}
+                    />
+                  </TableLayouts.CheckboxCell>
+                  <TableLayouts.TableCell flex>
+                    <GeneralLayouts.Section
+                      flexDirection="row"
+                      justifyContent="start"
+                      alignItems="center"
+                      gap={0.25}
+                      height="auto"
+                    >
+                      <SvgFolder size={16} />
+                      <GeneralLayouts.Section
+                        flexDirection="column"
+                        justifyContent="start"
+                        alignItems="start"
+                        gap={0}
+                        height="auto"
+                        className="min-w-0 grow"
+                      >
+                        <Truncated>{node.title}</Truncated>
+                        {node.link && (
+                          <Truncated text03 secondaryBody>
+                            {node.link
+                              .replace(/^https?:\/\//i, "")
+                              .replace(/^www\./i, "")
+                              .replace(/\/+$/, "")}
+                          </Truncated>
+                        )}
+                      </GeneralLayouts.Section>
+                      <Button
+                        icon={SvgChevronRight}
+                        prominence="tertiary"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNavigateToNode(node);
+                        }}
+                        aria-label={`navigate-to-node-${node.id}`}
+                      />
+                    </GeneralLayouts.Section>
+                  </TableLayouts.TableCell>
+                  <TableLayouts.TableCell width={8}>
+                    <TableLayouts.SourceIconsRow>
+                      <sourceMeta.icon size={16} />
+                    </TableLayouts.SourceIconsRow>
+                  </TableLayouts.TableCell>
+                </TableLayouts.TableRow>
+              );
+            }
+
+            // doc entry
+            const doc = entry.item;
+            const isSelected = selectedDocumentIds.includes(doc.document_id);
+            const sourceMeta = getSourceMetadata(doc.source_type);
+
+            return (
+              <TableLayouts.TableRow
+                key={`doc-${doc.document_id}-${doc.chunk_ind}`}
+                selected={isSelected}
+                onClick={() => onToggleDocument(doc.document_id)}
+                aria-label={`search-doc-${doc.document_id}`}
+              >
+                <TableLayouts.CheckboxCell>
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => onToggleDocument(doc.document_id)}
+                  />
+                </TableLayouts.CheckboxCell>
+                <TableLayouts.TableCell flex>
+                  <GeneralLayouts.Section
+                    flexDirection="row"
+                    justifyContent="start"
+                    alignItems="center"
+                    gap={0.25}
+                    height="auto"
+                  >
+                    <SvgFileText size={16} />
+                    <GeneralLayouts.Section
+                      flexDirection="column"
+                      justifyContent="start"
+                      alignItems="start"
+                      gap={0}
+                      height="auto"
+                      className="min-w-0 grow"
+                    >
+                      <Truncated>{doc.semantic_identifier}</Truncated>
+                      {doc.blurb && (
+                        <Truncated text03 secondaryBody>
+                          {doc.blurb}
+                        </Truncated>
+                      )}
+                    </GeneralLayouts.Section>
+                  </GeneralLayouts.Section>
+                </TableLayouts.TableCell>
+                <TableLayouts.TableCell width={8}>
+                  <TableLayouts.SourceIconsRow>
+                    <sourceMeta.icon size={16} />
+                  </TableLayouts.SourceIconsRow>
+                </TableLayouts.TableCell>
+              </TableLayouts.TableRow>
+            );
+          })}
+        </div>
+      </GeneralLayouts.Section>
+    );
+
+  if (isStale) {
+    return (
+      <GeneralLayouts.Section
+        alignItems="stretch"
+        justifyContent="start"
+        className="relative"
+      >
+        <GeneralLayouts.Section
+          alignItems="stretch"
+          justifyContent="start"
+          className="opacity-40 pointer-events-none"
+        >
+          {listContent}
+        </GeneralLayouts.Section>
+        <GeneralLayouts.Section
+          alignItems="center"
+          justifyContent="center"
+          className="absolute inset-0 z-10"
+        >
+          <Text secondaryBody text03>
+            Press Enter for new results.
+          </Text>
+        </GeneralLayouts.Section>
+      </GeneralLayouts.Section>
+    );
+  }
+
+  return listContent;
+}
+
+// ============================================================================
 // KNOWLEDGE TABLE - Generic table component for knowledge items
 // ============================================================================
 
@@ -182,7 +619,7 @@ function KnowledgeTable<T>({
   onToggleItem,
   searchValue,
   onSearchChange,
-  searchPlaceholder = "Search...",
+  searchPlaceholder = "Filter...",
   headerActions,
   emptyMessage = "No items available.",
   ariaLabelPrefix,
@@ -200,11 +637,13 @@ function KnowledgeTable<T>({
         {onSearchChange !== undefined && (
           <GeneralLayouts.Section height="auto">
             <InputTypeIn
-              searchIcon
               value={searchValue ?? ""}
               onChange={(e) => onSearchChange?.(e.target.value)}
               placeholder={searchPlaceholder}
               variant="internal"
+              rightChildren={
+                <SvgFilter className="w-4 h-4 stroke-text-02 shrink-0" />
+              }
             />
           </GeneralLayouts.Section>
         )}
@@ -353,7 +792,7 @@ function DocumentSetsTableContent({
       onToggleItem={(id) => onDocumentSetToggle(id as number)}
       searchValue={searchValue}
       onSearchChange={setSearchValue}
-      searchPlaceholder="Search document sets..."
+      searchPlaceholder="Filter document sets..."
       emptyMessage="No document sets available."
       ariaLabelPrefix="document-set-row"
     />
@@ -372,6 +811,7 @@ interface SourcesTableContentProps {
   onDeselectAllFolders: () => void;
   initialAttachedDocuments?: AgentAttachedDocument[];
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
+  initialNodeId?: number;
 }
 
 function SourcesTableContent({
@@ -386,6 +826,7 @@ function SourcesTableContent({
   onDeselectAllFolders,
   initialAttachedDocuments,
   onSelectionCountChange,
+  initialNodeId,
 }: SourcesTableContentProps) {
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch">
@@ -402,6 +843,7 @@ function SourcesTableContent({
         onDeselectAllDocuments={onDeselectAllDocuments}
         onDeselectAllFolders={onDeselectAllFolders}
         onSelectionCountChange={onSelectionCountChange}
+        initialNodeId={initialNodeId}
       />
     </GeneralLayouts.Section>
   );
@@ -480,7 +922,7 @@ function RecentFilesTableContent({
         onToggleItem={(id) => onToggleFile(id as string)}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        searchPlaceholder="Search files..."
+        searchPlaceholder="Filter files..."
         ariaLabelPrefix="user-file-row"
         headerActions={
           <Button
@@ -540,6 +982,26 @@ interface KnowledgeTwoColumnViewProps {
   initialAttachedDocuments?: AgentAttachedDocument[];
   onSelectionCountChange: (source: ValidSources, count: number) => void;
   vectorDbEnabled: boolean;
+  // Search props
+  isSearchMode: boolean;
+  searchQuery: string;
+  committedQuery: string;
+  activeSourceFilter: ValidSources | null;
+  searchResults: {
+    docs: SearchDocWithContent[];
+    nodes: HierarchyNodeSearchSummary[];
+  } | null;
+  isSearching: boolean;
+  searchError: boolean;
+  resultCountBySource: Map<ValidSources, number>;
+  onSearchQueryChange: (q: string) => void;
+  onSearchSubmit: () => void;
+  onSearchClear: () => void;
+  onEnterSearchMode: () => void;
+  onExitSearchMode: () => void;
+  onSourceFilterClick: (source: ValidSources | null) => void;
+  onNavigateToSearchNode: (node: HierarchyNodeSearchSummary) => void;
+  searchNavigateNodeId?: number;
 }
 
 const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
@@ -571,57 +1033,116 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   initialAttachedDocuments,
   onSelectionCountChange,
   vectorDbEnabled,
+  isSearchMode,
+  searchQuery,
+  committedQuery,
+  activeSourceFilter,
+  searchResults,
+  isSearching,
+  searchError,
+  resultCountBySource,
+  onSearchQueryChange,
+  onSearchSubmit,
+  onSearchClear,
+  onEnterSearchMode,
+  onExitSearchMode,
+  onSourceFilterClick,
+  onNavigateToSearchNode,
+  searchNavigateNodeId,
 }: KnowledgeTwoColumnViewProps) {
   return (
-    <TableLayouts.TwoColumnLayout minHeight={18.75}>
-      <KnowledgeSidebar
-        activeView={activeView}
-        activeSource={activeSource}
-        connectedSources={connectedSources}
-        selectedSources={selectedSources}
-        selectedDocumentSetIds={selectedDocumentSetIds}
-        selectedFileIds={selectedFileIds}
-        sourceSelectionCounts={sourceSelectionCounts}
-        onNavigateToRecent={onNavigateToRecent}
-        onNavigateToDocumentSets={onNavigateToDocumentSets}
-        onNavigateToSource={onNavigateToSource}
-        vectorDbEnabled={vectorDbEnabled}
-      />
+    <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
+      {/* Search bar row — visible in expanded mode; requires a vector DB */}
+      {vectorDbEnabled && (
+        <KnowledgeSearchBar
+          query={searchQuery}
+          onQueryChange={onSearchQueryChange}
+          onSubmit={onSearchSubmit}
+          onClear={onSearchClear}
+          onBack={onExitSearchMode}
+          onFocus={onEnterSearchMode}
+          isSearchMode={isSearchMode}
+        />
+      )}
 
-      <TableLayouts.ContentColumn>
-        {activeView === "document-sets" && (
-          <DocumentSetsTableContent
-            documentSets={documentSets}
+      {isSearchMode ? (
+        <TableLayouts.TwoColumnLayout minHeight={18.75}>
+          <KnowledgeSearchSidebar
+            connectedSources={connectedSources}
+            activeSourceFilter={activeSourceFilter}
+            onSourceFilterClick={onSourceFilterClick}
+            resultCountBySource={resultCountBySource}
+            vectorDbEnabled={vectorDbEnabled}
+          />
+          <TableLayouts.ContentColumn>
+            <KnowledgeSearchResultsPanel
+              committedQuery={committedQuery}
+              searchQuery={searchQuery}
+              isSearching={isSearching}
+              searchError={searchError}
+              results={searchResults}
+              activeSourceFilter={activeSourceFilter}
+              selectedDocumentIds={selectedDocumentIds}
+              selectedFolderIds={selectedFolderIds}
+              onToggleDocument={onToggleDocument}
+              onToggleFolder={onToggleFolder}
+              onNavigateToNode={onNavigateToSearchNode}
+            />
+          </TableLayouts.ContentColumn>
+        </TableLayouts.TwoColumnLayout>
+      ) : (
+        <TableLayouts.TwoColumnLayout minHeight={18.75}>
+          <KnowledgeSidebar
+            activeView={activeView}
+            activeSource={activeSource}
+            connectedSources={connectedSources}
+            selectedSources={selectedSources}
             selectedDocumentSetIds={selectedDocumentSetIds}
-            onDocumentSetToggle={onDocumentSetToggle}
-          />
-        )}
-        {activeView === "sources" && activeSource && (
-          <SourcesTableContent
-            source={activeSource}
-            selectedDocumentIds={selectedDocumentIds}
-            onToggleDocument={onToggleDocument}
-            onSetDocumentIds={onSetDocumentIds}
-            selectedFolderIds={selectedFolderIds}
-            onToggleFolder={onToggleFolder}
-            onSetFolderIds={onSetFolderIds}
-            onDeselectAllDocuments={onDeselectAllDocuments}
-            onDeselectAllFolders={onDeselectAllFolders}
-            initialAttachedDocuments={initialAttachedDocuments}
-            onSelectionCountChange={onSelectionCountChange}
-          />
-        )}
-        {activeView === "recent" && (
-          <RecentFilesTableContent
-            allRecentFiles={allRecentFiles}
             selectedFileIds={selectedFileIds}
-            onToggleFile={onFileToggle}
-            onUploadChange={onUploadChange}
-            hasProcessingFiles={hasProcessingFiles}
+            sourceSelectionCounts={sourceSelectionCounts}
+            onNavigateToRecent={onNavigateToRecent}
+            onNavigateToDocumentSets={onNavigateToDocumentSets}
+            onNavigateToSource={onNavigateToSource}
+            vectorDbEnabled={vectorDbEnabled}
           />
-        )}
-      </TableLayouts.ContentColumn>
-    </TableLayouts.TwoColumnLayout>
+
+          <TableLayouts.ContentColumn>
+            {activeView === "document-sets" && (
+              <DocumentSetsTableContent
+                documentSets={documentSets}
+                selectedDocumentSetIds={selectedDocumentSetIds}
+                onDocumentSetToggle={onDocumentSetToggle}
+              />
+            )}
+            {activeView === "sources" && activeSource && (
+              <SourcesTableContent
+                source={activeSource}
+                selectedDocumentIds={selectedDocumentIds}
+                onToggleDocument={onToggleDocument}
+                onSetDocumentIds={onSetDocumentIds}
+                selectedFolderIds={selectedFolderIds}
+                onToggleFolder={onToggleFolder}
+                onSetFolderIds={onSetFolderIds}
+                onDeselectAllDocuments={onDeselectAllDocuments}
+                onDeselectAllFolders={onDeselectAllFolders}
+                initialAttachedDocuments={initialAttachedDocuments}
+                onSelectionCountChange={onSelectionCountChange}
+                initialNodeId={searchNavigateNodeId}
+              />
+            )}
+            {activeView === "recent" && (
+              <RecentFilesTableContent
+                allRecentFiles={allRecentFiles}
+                selectedFileIds={selectedFileIds}
+                onToggleFile={onFileToggle}
+                onUploadChange={onUploadChange}
+                hasProcessingFiles={hasProcessingFiles}
+              />
+            )}
+          </TableLayouts.ContentColumn>
+        </TableLayouts.TwoColumnLayout>
+      )}
+    </GeneralLayouts.Section>
   );
 });
 
@@ -764,12 +1285,8 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
   selectedFolderIds,
   selectedFileIds,
   selectedSources,
-  documentSets,
-  allRecentFiles,
-  connectedSources,
   onAddKnowledge,
   onViewEdit,
-  onFileClick,
 }: KnowledgeMainContentProps) {
   if (!hasAnyKnowledge) {
     return (
@@ -880,12 +1397,43 @@ export default function AgentKnowledgePane({
   const [view, setView] = useState<KnowledgeView>("main");
   const [activeSource, setActiveSource] = useState<ValidSources | undefined>();
 
+  // Search state
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [committedQuery, setCommittedQuery] = useState("");
+  const [activeSourceFilter, setActiveSourceFilter] =
+    useState<ValidSources | null>(null);
+  const [searchResults, setSearchResults] = useState<{
+    docs: SearchDocWithContent[];
+    nodes: HierarchyNodeSearchSummary[];
+  } | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  // Guards against a stale, slower search request overwriting a newer one
+  const searchRequestIdRef = useRef(0);
+  // Node ID to navigate to after exiting search mode into a source
+  const [searchNavigateNodeId, setSearchNavigateNodeId] = useState<
+    number | undefined
+  >();
+  // Snapshot nav state when entering search mode so ← can restore it
+  const navStateRef = useRef<{
+    view: KnowledgeView;
+    activeSource: ValidSources | undefined;
+  }>({ view: "add", activeSource: undefined });
+
   // Reset view to main when knowledge is disabled
   useEffect(() => {
     if (!enableKnowledge) {
       setView("main");
+      if (isSearchMode) {
+        setIsSearchMode(false);
+        setSearchQuery("");
+        setCommittedQuery("");
+        setSearchResults(null);
+        setActiveSourceFilter(null);
+      }
     }
-  }, [enableKnowledge]);
+  }, [enableKnowledge, isSearchMode]);
 
   // Get connected sources from CC pairs
   const { ccPairs } = useCCPairs(vectorDbEnabled);
@@ -943,6 +1491,19 @@ export default function AgentKnowledgePane({
     []
   );
 
+  // Per-source result counts from search results
+  const resultCountBySource = useMemo(() => {
+    const counts = new Map<ValidSources, number>();
+    if (!searchResults) return counts;
+    for (const doc of searchResults.docs) {
+      counts.set(doc.source_type, (counts.get(doc.source_type) ?? 0) + 1);
+    }
+    for (const node of searchResults.nodes) {
+      counts.set(node.source, (counts.get(node.source) ?? 0) + 1);
+    }
+    return counts;
+  }, [searchResults]);
+
   // Check if any knowledge is selected
   const hasAnyKnowledge =
     selectedDocumentSetIds.length > 0 ||
@@ -963,6 +1524,108 @@ export default function AgentKnowledgePane({
     setActiveSource(source);
     setView("sources");
   }, []);
+
+  // Search handlers
+  const handleEnterSearchMode = useCallback(() => {
+    // Search hits vector-backed endpoints (send-search-message, hierarchy
+    // node search), which require a vector DB — same gate as document
+    // sets/connected sources.
+    if (!vectorDbEnabled) return;
+    if (!isSearchMode) {
+      navStateRef.current = { view, activeSource };
+      setIsSearchMode(true);
+      // Make sure the pane is expanded
+      if (view === "main" || view === "add") {
+        setView("add");
+      }
+    }
+  }, [vectorDbEnabled, isSearchMode, view, activeSource]);
+
+  const handleExitSearchMode = useCallback(() => {
+    searchRequestIdRef.current++;
+    setIsSearchMode(false);
+    setSearchQuery("");
+    setCommittedQuery("");
+    setSearchResults(null);
+    setSearchError(false);
+    setActiveSourceFilter(null);
+    setView(navStateRef.current.view);
+    setActiveSource(navStateRef.current.activeSource);
+  }, []);
+
+  const runSearch = useCallback(
+    async (query: string, sourceFilter: ValidSources | null) => {
+      if (!query.trim() || !vectorDbEnabled) return;
+      const requestId = ++searchRequestIdRef.current;
+      setIsSearching(true);
+      setSearchError(false);
+      try {
+        const [docResponse, nodeResponse] = await Promise.all([
+          searchDocuments(query, {
+            filters: sourceFilter ? { source_type: [sourceFilter] } : undefined,
+            numHits: 30,
+          }),
+          fetchHierarchyNodeSearch(query, {
+            sources: sourceFilter ? [sourceFilter] : undefined,
+          }),
+        ]);
+        if (requestId !== searchRequestIdRef.current) return;
+        setSearchResults({
+          docs: docResponse.search_docs,
+          nodes: nodeResponse.nodes,
+        });
+      } catch (err) {
+        if (requestId !== searchRequestIdRef.current) return;
+        console.error("Knowledge search failed:", err);
+        setSearchResults({ docs: [], nodes: [] });
+        setSearchError(true);
+      } finally {
+        if (requestId === searchRequestIdRef.current) {
+          setIsSearching(false);
+        }
+      }
+    },
+    [vectorDbEnabled]
+  );
+
+  const handleSearchSubmit = useCallback(() => {
+    if (!searchQuery.trim()) return;
+    setCommittedQuery(searchQuery);
+    runSearch(searchQuery, activeSourceFilter);
+  }, [searchQuery, activeSourceFilter, runSearch]);
+
+  const handleSearchClear = useCallback(() => {
+    searchRequestIdRef.current++;
+    setSearchQuery("");
+    setCommittedQuery("");
+    setSearchResults(null);
+    setSearchError(false);
+    setActiveSourceFilter(null);
+  }, []);
+
+  const handleSourceFilterClick = useCallback(
+    (source: ValidSources | null) => {
+      setActiveSourceFilter(source);
+      if (committedQuery) {
+        runSearch(committedQuery, source);
+      }
+    },
+    [committedQuery, runSearch]
+  );
+
+  const handleNavigateToSearchNode = useCallback(
+    (node: HierarchyNodeSearchSummary) => {
+      setIsSearchMode(false);
+      setSearchQuery("");
+      setCommittedQuery("");
+      setSearchResults(null);
+      setActiveSourceFilter(null);
+      setActiveSource(node.source);
+      setView("sources");
+      setSearchNavigateNodeId(node.id);
+    },
+    []
+  );
 
   // Toggle handlers - memoized to prevent unnecessary re-renders
   const handleDocumentSetToggle = useCallback(
@@ -1046,17 +1709,57 @@ export default function AgentKnowledgePane({
 
       case "add":
         return (
-          <KnowledgeAddView
-            connectedSources={connectedSources}
-            onNavigateToDocumentSets={handleNavigateToDocumentSets}
-            onNavigateToRecent={handleNavigateToRecent}
-            onNavigateToSource={handleNavigateToSource}
-            selectedDocumentSetIds={selectedDocumentSetIds}
-            selectedFileIds={selectedFileIds}
-            selectedSources={selectedSources}
-            sourceSelectionCounts={sourceSelectionCounts}
-            vectorDbEnabled={vectorDbEnabled}
-          />
+          <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
+            {vectorDbEnabled && (
+              <KnowledgeSearchBar
+                query={searchQuery}
+                onQueryChange={setSearchQuery}
+                onSubmit={handleSearchSubmit}
+                onClear={handleSearchClear}
+                onBack={handleExitSearchMode}
+                onFocus={handleEnterSearchMode}
+                isSearchMode={isSearchMode}
+              />
+            )}
+            {isSearchMode ? (
+              <TableLayouts.TwoColumnLayout minHeight={18.75}>
+                <KnowledgeSearchSidebar
+                  connectedSources={connectedSources}
+                  activeSourceFilter={activeSourceFilter}
+                  onSourceFilterClick={handleSourceFilterClick}
+                  resultCountBySource={resultCountBySource}
+                  vectorDbEnabled={vectorDbEnabled}
+                />
+                <TableLayouts.ContentColumn>
+                  <KnowledgeSearchResultsPanel
+                    committedQuery={committedQuery}
+                    searchQuery={searchQuery}
+                    isSearching={isSearching}
+                    searchError={searchError}
+                    results={searchResults}
+                    activeSourceFilter={activeSourceFilter}
+                    selectedDocumentIds={selectedDocumentIds}
+                    selectedFolderIds={selectedFolderIds}
+                    onToggleDocument={handleDocumentToggle}
+                    onToggleFolder={handleFolderToggle}
+                    onNavigateToNode={handleNavigateToSearchNode}
+                  />
+                </TableLayouts.ContentColumn>
+              </TableLayouts.TwoColumnLayout>
+            ) : (
+              <KnowledgeAddView
+                connectedSources={connectedSources}
+                onNavigateToDocumentSets={handleNavigateToDocumentSets}
+                onNavigateToRecent={handleNavigateToRecent}
+                onNavigateToSource={handleNavigateToSource}
+                selectedDocumentSetIds={selectedDocumentSetIds}
+                selectedFileIds={selectedFileIds}
+                selectedSources={selectedSources}
+                sourceSelectionCounts={sourceSelectionCounts}
+                vectorDbEnabled={vectorDbEnabled}
+              />
+            )}
+          </GeneralLayouts.Section>
         );
 
       case "document-sets":
@@ -1092,6 +1795,22 @@ export default function AgentKnowledgePane({
             initialAttachedDocuments={initialAttachedDocuments}
             onSelectionCountChange={handleSelectionCountChange}
             vectorDbEnabled={vectorDbEnabled}
+            isSearchMode={isSearchMode}
+            searchQuery={searchQuery}
+            committedQuery={committedQuery}
+            activeSourceFilter={activeSourceFilter}
+            searchResults={searchResults}
+            isSearching={isSearching}
+            searchError={searchError}
+            resultCountBySource={resultCountBySource}
+            onSearchQueryChange={setSearchQuery}
+            onSearchSubmit={handleSearchSubmit}
+            onSearchClear={handleSearchClear}
+            onEnterSearchMode={handleEnterSearchMode}
+            onExitSearchMode={handleExitSearchMode}
+            onSourceFilterClick={handleSourceFilterClick}
+            onNavigateToSearchNode={handleNavigateToSearchNode}
+            searchNavigateNodeId={searchNavigateNodeId}
           />
         );
 
@@ -1118,6 +1837,15 @@ export default function AgentKnowledgePane({
     onUploadChange,
     onDocumentIdsChange,
     onFolderIdsChange,
+    isSearchMode,
+    searchQuery,
+    committedQuery,
+    activeSourceFilter,
+    searchResults,
+    isSearching,
+    searchError,
+    resultCountBySource,
+    searchNavigateNodeId,
     handleNavigateToAdd,
     handleNavigateToDocumentSets,
     handleNavigateToRecent,
@@ -1130,6 +1858,12 @@ export default function AgentKnowledgePane({
     handleDeselectAllDocuments,
     handleDeselectAllFolders,
     handleSelectionCountChange,
+    handleEnterSearchMode,
+    handleExitSearchMode,
+    handleSearchSubmit,
+    handleSearchClear,
+    handleSourceFilterClick,
+    handleNavigateToSearchNode,
   ]);
 
   return (
