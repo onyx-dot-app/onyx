@@ -14,6 +14,8 @@ from onyx.configs.chat_configs import LLM_FIRST_CHUNK_MAX_RETRIES
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from onyx.llm.anthropic_capabilities import anthropic_omits_sampling_params
+from onyx.llm.anthropic_capabilities import anthropic_requires_adaptive_thinking
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.cost import calculate_llm_cost_cents
 from onyx.llm.interfaces import LanguageModelInput
@@ -77,38 +79,6 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
     "claude-opus-4-6",
     "claude-opus-4-7",
     "claude-opus-4-8",
-)
-
-# Anthropic models that require the adaptive thinking API (thinking.type.adaptive
-# + output_config.effort) instead of the legacy thinking.type.enabled + budget_tokens.
-_ANTHROPIC_ADAPTIVE_THINKING_MODELS = (
-    "claude-opus-4-7",
-    "claude-opus-4-8",
-    "claude-fable-5",
-    "claude-5-fable",
-    "claude-mythos-5",
-    "claude-5-mythos",
-)
-
-# Anthropic models that reject any non-default sampling parameter (temperature,
-# top_p, top_k). For these models we must omit these params entirely from the
-# request payload — passing them returns a 400 invalid_request_error. LiteLLM's
-# drop_params is unreliable here because AnthropicConfig still lists temperature
-# as supported. Match on substring to cover proxy/Vertex naming variants (e.g.
-# "claude-4.7-opus" via litellm_proxy).
-_ANTHROPIC_NO_SAMPLING_PARAMS_MODELS = (
-    "claude-opus-4-7",
-    "claude-opus-4.7",
-    "claude-4-7-opus",
-    "claude-4.7-opus",
-    "claude-opus-4-8",
-    "claude-opus-4.8",
-    "claude-4-8-opus",
-    "claude-4.8-opus",
-    "claude-fable-5",
-    "claude-5-fable",
-    "claude-mythos-5",
-    "claude-5-mythos",
 )
 
 
@@ -269,22 +239,6 @@ def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
     return any(
         blocked_model in normalized_model_name
         for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG
-    )
-
-
-def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
-    normalized_model_name = model_name.lower()
-    return any(
-        adaptive_model in normalized_model_name
-        for adaptive_model in _ANTHROPIC_ADAPTIVE_THINKING_MODELS
-    )
-
-
-def _anthropic_omits_sampling_params(model_name: str) -> bool:
-    normalized_model_name = model_name.lower()
-    return any(
-        no_sampling_model in normalized_model_name
-        for no_sampling_model in _ANTHROPIC_NO_SAMPLING_PARAMS_MODELS
     )
 
 
@@ -570,7 +524,7 @@ class LitellmLLM(LLM):
         # https://github.com/BerriAI/litellm/issues/26444
         # TODO(litellm): Consider removing this once the above is resolved,
         # although this assumes users have upgraded their litellm if relevant.
-        omits_sampling_params = _anthropic_omits_sampling_params(self.config.model_name)
+        omits_sampling_params = anthropic_omits_sampling_params(self.config.model_name)
         if not omits_sampling_params:
             optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
 
@@ -605,7 +559,7 @@ class LitellmLLM(LLM):
                 # (notably Bedrock).
                 has_tool_call_history = _prompt_contains_tool_call_history(prompt)
 
-                if _anthropic_uses_adaptive_thinking(self.config.model_name):
+                if anthropic_requires_adaptive_thinking(self.config.model_name):
                     # Newer Anthropic models (Claude Opus 4.7+) reject
                     # thinking.type.enabled — they require the adaptive
                     # thinking config with output_config.effort.
