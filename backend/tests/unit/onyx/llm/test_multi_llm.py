@@ -437,6 +437,8 @@ ANTHROPIC_MODELS_OMITTING_SAMPLING_PARAMS = [
     "claude-opus-4.8",
     "claude-4-8-opus",
     "claude-4.8-opus",
+    "claude-sonnet-5",
+    "claude-5-sonnet",
     "claude-fable-5",
     "claude-fable-5@20260101",
     "claude-5-fable",
@@ -473,6 +475,8 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
     [
         "claude-opus-4-7",
         "claude-opus-4-8",
+        "claude-sonnet-5",
+        "claude-5-sonnet",
         "claude-fable-5",
         "claude-5-fable",
         "claude-mythos-5",
