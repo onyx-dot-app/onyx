@@ -72,6 +72,13 @@ def test_domain_is_lowercased() -> None:
     assert f"domain:{COMPANY_DOMAIN}" in access.external_user_group_ids
 
 
+def test_link_only_domain_share_grants_nothing() -> None:
+    perm = {**_domain_permission(COMPANY_DOMAIN), "allowFileDiscovery": False}
+    access = _file_access([perm])
+    assert access.is_public is False
+    assert not access.external_user_group_ids
+
+
 def test_domain_permission_without_domain_grants_nothing() -> None:
     access = _file_access([{"id": "p1", "type": "domain"}])
     assert access.is_public is False
@@ -137,12 +144,12 @@ def test_folder_domain_share_is_domain_group_not_public() -> None:
     assert f"domain:{COMPANY_DOMAIN}" in access.external_user_group_ids
 
 
-def test_folder_link_only_domain_share_still_grants_domain_group() -> None:
+def test_folder_link_only_domain_share_grants_nothing() -> None:
     access = _folder_access(
         [_folder_domain_permission(COMPANY_DOMAIN, allow_file_discovery=False)]
     )
     assert access.is_public is False
-    assert f"domain:{COMPANY_DOMAIN}" in access.external_user_group_ids
+    assert not access.external_user_group_ids
 
 
 def test_folder_anyone_link_only_stays_non_public() -> None:

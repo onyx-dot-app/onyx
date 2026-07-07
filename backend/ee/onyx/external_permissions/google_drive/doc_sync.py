@@ -193,8 +193,12 @@ def get_external_access_for_raw_gdrive_file(
             # "Everyone at <domain>" grants a derived domain group scoped to that
             # domain's users, never instance-public. The matching user-side token
             # is derived from the user's own email domain in ee _get_acl_for_user.
+            # Link-only shares (allowFileDiscovery=False) grant nothing: Google
+            # exposes them only to domain users who already hold the link, not
+            # to domain-wide search.
             if permission.domain:
-                domain_groups.add(build_domain_group_id(permission.domain))
+                if permission.allow_file_discovery is not False:
+                    domain_groups.add(build_domain_group_id(permission.domain))
                 if permission.domain != company_domain:
                     # Cross-workspace domain share (e.g. a doc shared to a
                     # partner company's whole domain).
@@ -304,8 +308,12 @@ def get_external_access_for_folder(
             # "Everyone at <domain>" grants a derived domain group scoped to that
             # domain's users, never instance-public. The matching user-side token
             # is derived from the user's own email domain in ee _get_acl_for_user.
+            # Link-only shares (allowFileDiscovery=False) grant nothing: Google
+            # exposes them only to domain users who already hold the link, not
+            # to domain-wide search.
             if permission.domain:
-                domain_groups.add(build_domain_group_id(permission.domain))
+                if permission.allow_file_discovery is not False:
+                    domain_groups.add(build_domain_group_id(permission.domain))
                 if permission.domain != google_domain:
                     logger.debug(
                         "Domain permission scoped to external domain %s for folder %s",
