@@ -127,6 +127,10 @@ async def test_vertex_embed_keeps_task_type_for_existing_models(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    "model_name",
+    ["gemini-embedding-2", "gemini-embedding-2-preview"],
+)
+@pytest.mark.parametrize(
     ("embedding_type", "expected_text"),
     [
         ("RETRIEVAL_QUERY", "task: search result | query: hello world"),
@@ -134,6 +138,7 @@ async def test_vertex_embed_keeps_task_type_for_existing_models(
     ],
 )
 async def test_vertex_embed_uses_instruction_prefix_for_gemini_embedding_2(
+    model_name: str,
     embedding_type: str,
     expected_text: str,
     sample_embeddings: list[list[float]],
@@ -159,7 +164,7 @@ async def test_vertex_embed_uses_instruction_prefix_for_gemini_embedding_2(
             try:
                 result = await embedding._embed_vertex(
                     ["hello world"],
-                    "gemini-embedding-2-preview",
+                    model_name,
                     embedding_type,
                     None,
                 )
