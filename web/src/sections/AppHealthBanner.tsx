@@ -14,6 +14,7 @@ import { SvgAlertTriangle, SvgLogOut } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
+import { isAuthPath } from "@/lib/auth/paths";
 
 export default function AppHealthBanner() {
   const router = useRouter();
@@ -36,7 +37,7 @@ export default function AppHealthBanner() {
     hasSeenAuthenticatedUserRef.current = true;
   }
 
-  const isAuthPage = pathname?.startsWith("/auth") ?? false;
+  const isAuthPage = isAuthPath(pathname);
   const sessionEnded =
     userError?.status === 403 || error instanceof RedirectError || expired;
   const showLoggedOutModal =
