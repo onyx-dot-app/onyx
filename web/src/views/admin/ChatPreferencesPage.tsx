@@ -22,6 +22,8 @@ import {
   SvgExternalLink,
   SvgOrganization,
   SvgRefreshCw,
+  SvgRevert,
+  SvgChevronDown,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
@@ -55,6 +57,7 @@ import {
   Tooltip,
 } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
+import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { Switch } from "@opal/components";
 import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -370,10 +373,21 @@ function FileSizeLimitFields({
   );
 }
 
-// Retention presets offered directly in the dropdown. Any other (positive)
-// value is surfaced via the "Custom…" option. The backend stores
-// maximum_chat_retention_days as a free-form number, so these are purely UI.
-const RETENTION_PRESETS: number[] = [7, 30, 60, 90, 365];
+// Retention presets offered directly in the dropdown, matching the Figma
+// design. Any other (positive) value is surfaced via "Custom Retention". The
+// backend stores maximum_chat_retention_days as a free-form number of days, so
+// these are purely UI ("1 year" is just a label for 365).
+interface RetentionPreset {
+  days: number;
+  label: string;
+}
+const RETENTION_PRESETS: RetentionPreset[] = [
+  { days: 7, label: "7 days" },
+  { days: 30, label: "30 days" },
+  { days: 60, label: "60 days" },
+  { days: 90, label: "90 days" },
+  { days: 365, label: "1 year" },
+];
 // FE-only guard: the backend imposes no upper bound, so cap absurd input.
 const MAX_RETENTION_DAYS = 36500; // ~100 years
 const CUSTOM_RETENTION_VALUE = "custom";
@@ -382,7 +396,7 @@ const FOREVER_RETENTION_VALUE = "forever";
 // Pure predicate — lives at module scope so it can be referenced inside
 // useEffect without an exhaustive-deps suppression.
 const valueIsCustomRetention = (v: number | null): v is number =>
-  v !== null && !RETENTION_PRESETS.includes(v);
+  v !== null && !RETENTION_PRESETS.some((preset) => preset.days === v);
 
 // True only when the string is one or more digits within the allowed range.
 // parseInt alone would silently accept "1.5" → 1 or "7abc" → 7, so guard with
@@ -392,21 +406,48 @@ const isValidCustomRetention = (raw: string): boolean =>
   parseInt(raw, 10) > 0 &&
   parseInt(raw, 10) <= MAX_RETENTION_DAYS;
 
+// A "reduction" shortens the retention window, making more chats eligible for
+// permanent deletion — so it warrants a confirmation. null = Forever (∞).
+const isRetentionReduction = (
+  current: number | null,
+  next: number | null
+): boolean => {
+  if (next === null) return false; // Forever is never a reduction
+  if (current === null) return true; // Forever → finite shortens retention
+  return next < current;
+};
+
 interface RetentionFieldProps {
   value: number | null;
   disabled: boolean;
   onSave: (value: number | null) => void;
 }
 
-// Chat-retention control: a preset dropdown plus a "Custom…" option that
-// reveals a numeric "days" input. Drop-in replacement for the bare
-// <InputSelect>; the persisted shape (number | null) is unchanged, so any
+// Chat-retention control: a preset dropdown where "Custom Retention" converts
+// the dropdown in place into a numeric "days" input (with revert + reopen
+// affordances). The persisted shape (number | null) is unchanged, so any
 // existing value — preset or not — round-trips correctly.
 function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   const [showCustom, setShowCustom] = useState(valueIsCustomRetention(value));
   const [customDays, setCustomDays] = useState(
     valueIsCustomRetention(value) ? String(value) : ""
   );
+  // Controlled so the "More" chevron can reopen the presets from custom mode.
+  const [selectOpen, setSelectOpen] = useState(false);
+  // A pending reduction awaiting confirmation (always a positive number; null
+  // means nothing is pending).
+  const [pendingValue, setPendingValue] = useState<number | null>(null);
+
+  const customInputRef = useRef<HTMLInputElement>(null);
+  const focusCustomOnShowRef = useRef(false);
+  // Set when a preset is chosen from the dropdown, so closing the dropdown
+  // doesn't bounce a still-custom value back into the input (see onOpenChange).
+  const pickedPresetRef = useRef(false);
+
+  const syncToValue = (v: number | null) => {
+    setShowCustom(valueIsCustomRetention(v));
+    setCustomDays(valueIsCustomRetention(v) ? String(v) : "");
+  };
 
   // Re-sync when the stored value changes externally (e.g. another admin),
   // but only when our local state matches the last value we persisted.
@@ -414,78 +455,124 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   useEffect(() => {
     if (value === lastSavedRef.current) return;
     lastSavedRef.current = value;
-    setShowCustom(valueIsCustomRetention(value));
-    setCustomDays(valueIsCustomRetention(value) ? String(value) : "");
+    syncToValue(value);
   }, [value]);
 
-  const selectValue = showCustom
-    ? CUSTOM_RETENTION_VALUE
-    : value === null
-      ? FOREVER_RETENTION_VALUE
-      : String(value);
+  // Focus the custom input only when the user explicitly picks "Custom
+  // Retention" (never on initial mount for an already-custom value).
+  useEffect(() => {
+    if (showCustom && focusCustomOnShowRef.current) {
+      customInputRef.current?.focus();
+      focusCustomOnShowRef.current = false;
+    }
+  }, [showCustom]);
+
+  // Only read while in select mode. A stored custom value (transiently visible
+  // here after "More") maps to no item, so the trigger shows the placeholder
+  // until the user picks — at which point onValueChange fires reliably.
+  const selectValue = value === null ? FOREVER_RETENTION_VALUE : String(value);
 
   const persist = (next: number | null) => {
     lastSavedRef.current = next;
     onSave(next);
   };
 
+  // Route every save through here so reductions (preset or custom) are
+  // confirmed before touching the persisted value.
+  const requestPersist = (next: number | null) => {
+    if (next === value) return;
+    if (isRetentionReduction(value, next)) {
+      setPendingValue(next);
+      return;
+    }
+    persist(next);
+  };
+
   const handleSelectChange = (next: string) => {
     if (next === CUSTOM_RETENTION_VALUE) {
-      // Reveal the input; don't persist until a valid number is entered.
+      focusCustomOnShowRef.current = true;
       setShowCustom(true);
       return;
     }
+    pickedPresetRef.current = true;
     setShowCustom(false);
-    setCustomDays("");
-    persist(next === FOREVER_RETENTION_VALUE ? null : parseInt(next, 10));
+    requestPersist(
+      next === FOREVER_RETENTION_VALUE ? null : parseInt(next, 10)
+    );
+  };
+
+  // Closing the reopened dropdown without picking a preset returns to the
+  // custom input (the stored value is still custom).
+  const handleOpenChange = (open: boolean) => {
+    setSelectOpen(open);
+    if (open) return;
+    if (!pickedPresetRef.current && valueIsCustomRetention(value)) {
+      setShowCustom(true);
+    }
+    pickedPresetRef.current = false;
   };
 
   const handleCustomBlur = () => {
-    // Empty/invalid input reverts to the last persisted selection.
+    // Empty input reverts the field to Forever.
+    if (customDays.trim() === "") {
+      setShowCustom(false);
+      requestPersist(null);
+      return;
+    }
+    // Invalid input reverts to the last persisted selection.
     if (!isValidCustomRetention(customDays)) {
-      setShowCustom(valueIsCustomRetention(value));
-      setCustomDays(valueIsCustomRetention(value) ? String(value) : "");
+      syncToValue(value);
       return;
     }
 
     const parsed = parseInt(customDays, 10);
     const normalized = String(parsed);
     if (normalized !== customDays) setCustomDays(normalized);
-    if (parsed !== value) persist(parsed);
+    requestPersist(parsed);
+  };
+
+  // Restore Default → back to Forever.
+  const handleRestoreDefault = () => {
+    setShowCustom(false);
+    requestPersist(null);
+  };
+
+  // More → leave custom mode and reopen the preset dropdown.
+  const handleReopenPresets = () => {
+    setShowCustom(false);
+    setSelectOpen(true);
+  };
+
+  const handleConfirmReduction = () => {
+    if (pendingValue !== null) persist(pendingValue);
+    setPendingValue(null);
+  };
+
+  const handleCancelReduction = () => {
+    // Discard the pending change and restore the UI to the persisted value.
+    setPendingValue(null);
+    syncToValue(value);
   };
 
   const customInvalid =
     customDays !== "" && !isValidCustomRetention(customDays);
 
+  const iconButtonProps = {
+    prominence: "tertiary",
+    size: "xs",
+    type: "button",
+    disabled,
+  } as const;
+
   return (
     <div className="flex flex-col gap-2 w-full">
-      <InputSelect
-        value={selectValue}
-        onValueChange={handleSelectChange}
-        disabled={disabled}
-      >
-        <InputSelect.Trigger />
-        <InputSelect.Content>
-          <InputSelect.Item value={FOREVER_RETENTION_VALUE}>
-            Forever
-          </InputSelect.Item>
-          {RETENTION_PRESETS.map((d) => (
-            <InputSelect.Item key={d} value={String(d)}>
-              {d} days
-            </InputSelect.Item>
-          ))}
-          <InputSelect.Item value={CUSTOM_RETENTION_VALUE}>
-            Custom…
-          </InputSelect.Item>
-        </InputSelect.Content>
-      </InputSelect>
-
-      {showCustom && (
+      {showCustom ? (
         <div className="flex flex-col gap-1 w-full">
           <InputTypeIn
+            ref={customInputRef}
             inputMode="numeric"
             pattern="[0-9]*"
-            placeholder="Enter number of days"
+            placeholder="In days"
             value={customDays}
             onChange={(e) => setCustomDays(e.target.value)}
             onBlur={handleCustomBlur}
@@ -493,9 +580,20 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
               disabled ? "disabled" : customInvalid ? "error" : undefined
             }
             rightChildren={
-              <Text font="secondary-body" color="text-03">
-                days
-              </Text>
+              <Section flexDirection="row" gap={0.125} width="fit" height="fit">
+                <Button
+                  icon={SvgRevert}
+                  tooltip="Restore Default"
+                  onClick={handleRestoreDefault}
+                  {...iconButtonProps}
+                />
+                <Button
+                  icon={SvgChevronDown}
+                  tooltip="More"
+                  onClick={handleReopenPresets}
+                  {...iconButtonProps}
+                />
+              </Section>
             }
           />
           {customInvalid && (
@@ -504,6 +602,42 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
             </Text>
           )}
         </div>
+      ) : (
+        <InputSelect
+          value={selectValue}
+          onValueChange={handleSelectChange}
+          open={selectOpen}
+          onOpenChange={handleOpenChange}
+          disabled={disabled}
+        >
+          <InputSelect.Trigger />
+          <InputSelect.Content>
+            <InputSelect.Item value={FOREVER_RETENTION_VALUE}>
+              Forever
+            </InputSelect.Item>
+            {RETENTION_PRESETS.map((preset) => (
+              <InputSelect.Item key={preset.days} value={String(preset.days)}>
+                {preset.label}
+              </InputSelect.Item>
+            ))}
+            <InputSelect.Separator />
+            <InputSelect.Item value={CUSTOM_RETENTION_VALUE}>
+              Custom Retention
+            </InputSelect.Item>
+          </InputSelect.Content>
+        </InputSelect>
+      )}
+
+      {pendingValue !== null && (
+        <GenericConfirmModal
+          title="Reduce chat retention?"
+          message={`Chats with no activity for longer than ${pendingValue} ${
+            pendingValue === 1 ? "day" : "days"
+          } will be permanently deleted. This cannot be undone.`}
+          confirmText="Reduce retention"
+          onClose={handleCancelReduction}
+          onConfirm={handleConfirmReduction}
+        />
       )}
     </div>
   );
