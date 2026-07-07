@@ -1,7 +1,7 @@
 """add sso_provider table and seed from env
 
 Revision ID: 1fc2904131a3
-Revises: 2e0b2b146de1
+Revises: 20f09b642ed0
 Create Date: 2026-07-06 21:34:08.516250
 
 """
@@ -18,7 +18,7 @@ from onyx.utils.encryption import encrypt_string_to_bytes
 
 # revision identifiers, used by Alembic.
 revision = "1fc2904131a3"
-down_revision = "2e0b2b146de1"
+down_revision = "20f09b642ed0"
 branch_labels = None
 depends_on = None
 
