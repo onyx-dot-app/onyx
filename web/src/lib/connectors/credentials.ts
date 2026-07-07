@@ -95,6 +95,11 @@ export interface SlackCredentialJson {
   slack_bot_token: string;
 }
 
+export interface MattermostCredentialJson {
+  mattermost_base_url: string;
+  mattermost_access_token: string;
+}
+
 export interface GmailCredentialJson {
   google_tokens: string;
   google_primary_admin: string;
@@ -297,6 +302,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     bitbucket_api_token: "",
   } as BitbucketCredentialJson,
   slack: { slack_bot_token: "" } as SlackCredentialJson,
+  mattermost: {
+    mattermost_base_url: "",
+    mattermost_access_token: "",
+  } as MattermostCredentialJson,
   bookstack: {
     bookstack_base_url: "",
     bookstack_api_token_id: "",
@@ -530,6 +539,8 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Slack
   slack_bot_token: "Slack Bot Token",
+  mattermost_base_url: "Mattermost Server URL",
+  mattermost_access_token: "Access Token (personal or bot)",
 
   // Discord
   discord_bot_token: "Discord Bot Token",

@@ -94,6 +94,14 @@ const slackMetadata = {
   baseSourceType: "slack",
 };
 
+const mattermostMetadata = {
+  icon: SvgSlack, // TODO: replace with a real SvgMattermost once added to @opal/logos
+  displayName: "Mattermost",
+  category: SourceCategory.Messaging,
+  docs: `${DOCS_ADMINS_PATH}/connectors/official/mattermost`,
+  baseSourceType: "mattermost",
+};
+
 export const SOURCE_METADATA_MAP: SourceMap = {
   // Knowledge Base & Wikis
   confluence: {
@@ -296,6 +304,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   // Messaging
   slack: slackMetadata,
   federated_slack: slackMetadata,
+  mattermost: mattermostMetadata,
   teams: {
     icon: SvgTeams,
     displayName: "Teams",

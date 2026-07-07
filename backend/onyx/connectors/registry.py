@@ -24,6 +24,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.slack.connector",
         class_name="SlackConnector",
     ),
+    DocumentSource.MATTERMOST: ConnectorMapping(
+        module_path="onyx.connectors.mattermost.connector",
+        class_name="MattermostConnector",
+    ),
     DocumentSource.GITHUB: ConnectorMapping(
         module_path="onyx.connectors.github.connector",
         class_name="GithubConnector",
