@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { RedirectError } from "@/lib/fetcher";
-import AppHealthBanner from "./AppHealthBanner";
+import AppHealthBanner from "./HealthBanner";
 
 const mockLogout = jest.fn();
 const mockUseSWR = jest.fn();
