@@ -92,6 +92,26 @@ describe("useSandboxSleepWatcher", () => {
     expect(mockedApi.fetchSandboxStatus).not.toHaveBeenCalled();
   });
 
+  it("stops polling once the sandbox is asleep", async () => {
+    seedSession(runningSandbox());
+    mockedApi.fetchSandboxStatus.mockResolvedValue({
+      status: "sleeping",
+    });
+
+    renderHook(() => useSandboxSleepWatcher(), { wrapper });
+
+    await waitFor(() => {
+      const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+      expect(session?.sandbox?.status).toBe("sleeping");
+    });
+
+    expect(mockedApi.fetchSandboxStatus).toHaveBeenCalledTimes(1);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockedApi.fetchSandboxStatus).toHaveBeenCalledTimes(1);
+  });
+
   it("leaves the sandbox running when the poll reports running", async () => {
     seedSession(runningSandbox());
     mockedApi.fetchSandboxStatus.mockResolvedValue({
