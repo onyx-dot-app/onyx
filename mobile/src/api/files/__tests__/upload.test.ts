@@ -128,4 +128,14 @@ describe("uploadProjectFile", () => {
 
     await expect(uploadProjectFile(asset, 5, "tmp-1")).rejects.toThrow();
   });
+
+  it("throws an ApiError (not a raw SyntaxError) when a 2xx body isn't JSON", async () => {
+    getTokenMock.mockResolvedValue("tok");
+    mockUpload({ status: 200, body: "<html>nope</html>", headers: {} });
+
+    await expect(uploadProjectFile(asset, 5, "tmp-1")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 200,
+    });
+  });
 });

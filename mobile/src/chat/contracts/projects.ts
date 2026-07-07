@@ -23,7 +23,8 @@ export interface ProjectFile {
   chat_file_type: ChatFileType;
   token_count: number | null;
   created_at: string;
-  // echoed back by the upload endpoint for optimistic reconciliation
+  // client marker for an optimistic upload; the upload endpoint echoes it, but
+  // the client reconciles via refetch, so the echo isn't read back.
   temp_id?: string | null;
 }
 

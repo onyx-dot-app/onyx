@@ -230,21 +230,21 @@ export function useProjectFiles(
   }, [projectId, clearErrors]);
 
   // Poll still-working files, patching the cached details. `trackedKey` is a stable
-  // string so the effect doesn't reset the timer each render (committed is a fresh array).
-  const trackedKey = useMemo(
+  // string (change-detection only, never decoded) so the effect doesn't reset the
+  // timer each render (committed is a fresh array).
+  const trackedIds = useMemo(
     () =>
       committed
         .filter((file) => isProcessingStatus(file.status))
         .map((file) => file.id)
-        .sort()
-        .join(","),
+        .sort(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [committedFiles],
   );
+  const trackedKey = trackedIds.join(",");
 
   useEffect(() => {
-    if (projectId == null || trackedKey === "") return;
-    const trackedIds = trackedKey.split(",");
+    if (projectId == null || trackedIds.length === 0) return;
     let cancelled = false;
 
     const interval = setInterval(() => {
@@ -276,6 +276,8 @@ export function useProjectFiles(
       cancelled = true;
       clearInterval(interval);
     };
+    // trackedIds is re-read via trackedKey (stable when its contents are unchanged)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, serverUrl, trackedKey, queryClient]);
 
   return {

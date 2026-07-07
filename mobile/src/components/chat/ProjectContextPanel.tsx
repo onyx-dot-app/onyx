@@ -34,6 +34,7 @@ export function ProjectContextPanel({
     files,
     progressById,
     errors,
+    isBusy,
     addDocuments,
     addImages,
     linkRecent,
@@ -75,7 +76,7 @@ export function ProjectContextPanel({
               prominence="secondary"
               size="sm"
               accessibilityLabel="Add files"
-              disabled={projectId == null || loadingDetails}
+              disabled={projectId == null || loadingDetails || isBusy}
               onPress={() => setPickerOpen(true)}
             />
           }

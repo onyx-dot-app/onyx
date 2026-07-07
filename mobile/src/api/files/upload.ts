@@ -63,7 +63,16 @@ export async function uploadProjectFile(
     });
   }
 
-  const parsed: unknown = JSON.parse(result.body);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.body);
+  } catch {
+    throw new ApiError({
+      status: result.status,
+      detail: "Upload succeeded but the response wasn't JSON.",
+      body: result.body,
+    });
+  }
   if (
     typeof parsed !== "object" ||
     parsed === null ||
