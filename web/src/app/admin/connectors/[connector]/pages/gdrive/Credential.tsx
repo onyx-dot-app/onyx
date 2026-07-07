@@ -403,7 +403,7 @@ export const DriveAuthSection = ({
     localGoogleDriveServiceAccountCredential;
   if (existingCredential) {
     return (
-      <div>
+      <div className="w-full">
         <div className="mt-4">
           <div className="py-3 px-4 bg-blue-50/30 dark:bg-blue-900/5 rounded-sm mb-4 flex items-start">
             <FiCheck className="text-blue-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
@@ -434,7 +434,7 @@ export const DriveAuthSection = ({
 
   if (localAppCredentialData?.client_id) {
     return (
-      <div>
+      <div className="w-full">
         <div className="bg-background-50/30 dark:bg-background-900/20 rounded-sm mb-4">
           <p className="text-sm">
             Next, you need to authenticate with Google Drive via OAuth. This
@@ -475,7 +475,7 @@ export const DriveAuthSection = ({
   }
 
   return (
-    <div>
+    <div className="w-full">
       <Text as="h3" font="heading-h2">
         Google Drive Authentication
       </Text>
@@ -562,7 +562,7 @@ export const DriveAuthSection = ({
         >
           {({ isSubmitting }) => (
             <Form>
-              <div className="space-y-1">
+              <div className="w-full space-y-1">
                 <Text font="main-ui-body" color="text-03">
                   Primary Admin Email
                 </Text>
@@ -575,7 +575,7 @@ export const DriveAuthSection = ({
                   Organization that owns the Google Drive(s) you want to index.
                 </Text>
               </div>
-              <div className="flex">
+              <div className="flex w-full justify-end pt-2">
                 <Button disabled={isSubmitting} type="submit">
                   {isSubmitting ? "Creating..." : "Create Credential"}
                 </Button>
