@@ -47,8 +47,7 @@ async function setAutoScroll(page: Page, enabled: boolean) {
  * Helper to get the scroll container element
  */
 function getScrollContainer(page: Page) {
-  // The scroll container is the div with overflow-y-auto inside ChatUI
-  return page.locator(".overflow-y-auto").first();
+  return page.getByTestId("chat-scroll-container");
 }
 
 test.describe("Chat Scroll Behavior", () => {
@@ -124,13 +123,19 @@ test.describe("Chat Scroll Behavior", () => {
     // Send another message to create some content
     await sendMessage(page, "Another message to test scrolling behavior");
 
-    // The scroll container should be scrolled to bottom
+    // The scroll container should settle at the bottom. Poll because the
+    // DynamicBottomSpacer's ~600ms smooth scroll and streaming-driven spacer
+    // resizes are still in flight when sendMessage resolves.
     const scrollContainer = getScrollContainer(page);
-    const isAtBottom = await scrollContainer.evaluate((el: HTMLElement) => {
-      return Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) < 10;
-    });
-
-    expect(isAtBottom).toBe(true);
+    await expect
+      .poll(
+        () =>
+          scrollContainer.evaluate((el: HTMLElement) =>
+            Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight)
+          ),
+        { timeout: 10_000 }
+      )
+      .toBeLessThan(10);
   });
 });
 
@@ -264,13 +269,18 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
     // Send a message
     await sendMessage(page, "Please respond with a short message");
 
-    // After AI response completes, verify we're still at the bottom
+    // After AI response completes, verify we settle at the bottom (poll: the
+    // smooth scroll / spacer resize may still be in flight when sendMessage
+    // resolves). Allow a small tolerance (10px) for rounding.
     const scrollContainer = getScrollContainer(page);
-    const isAtBottom = await scrollContainer.evaluate((el: HTMLElement) => {
-      // Allow a small tolerance (10px) for rounding
-      return Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) < 10;
-    });
-
-    expect(isAtBottom).toBe(true);
+    await expect
+      .poll(
+        () =>
+          scrollContainer.evaluate((el: HTMLElement) =>
+            Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight)
+          ),
+        { timeout: 10_000 }
+      )
+      .toBeLessThan(10);
   });
 });
