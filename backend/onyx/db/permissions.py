@@ -79,7 +79,9 @@ def recompute_user_permissions__no_commit(
         .scalars()
         .all()
     }
-    uid_list = [uid for uid in uid_list if str(uid) not in limited_service_account_ids]
+    uid_list = [
+        uid for uid in uid_list if str(uid).lower() not in limited_service_account_ids
+    ]
 
     if not uid_list:
         return
