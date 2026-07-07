@@ -7,6 +7,7 @@ import type { ChatSessionSummary } from "@/api/chat/sessions";
 export enum UserFileStatus {
   UPLOADING = "UPLOADING",
   PROCESSING = "PROCESSING",
+  INDEXING = "INDEXING",
   COMPLETED = "COMPLETED",
   SKIPPED = "SKIPPED",
   FAILED = "FAILED",
@@ -22,6 +23,31 @@ export interface ProjectFile {
   chat_file_type: ChatFileType;
   token_count: number | null;
   created_at: string;
+  // client marker for an optimistic upload; the upload endpoint echoes it, but
+  // the client reconciles via refetch, so the echo isn't read back.
+  temp_id?: string | null;
+}
+
+// reason is a human string shown to the user
+export interface RejectedFile {
+  file_name: string;
+  reason: string;
+}
+
+// Partial success is normal: rejected files land in rejected_files, not user_files.
+export interface CategorizedFiles {
+  user_files: ProjectFile[];
+  rejected_files: RejectedFile[];
+}
+
+// Case-insensitive: payload casing isn't guaranteed.
+export function isProcessingStatus(status: UserFileStatus | string): boolean {
+  const upper = String(status).toUpperCase();
+  return (
+    upper === UserFileStatus.UPLOADING ||
+    upper === UserFileStatus.PROCESSING ||
+    upper === UserFileStatus.INDEXING
+  );
 }
 
 // `chat_sessions` is embedded by the list/detail endpoints — a project's chats

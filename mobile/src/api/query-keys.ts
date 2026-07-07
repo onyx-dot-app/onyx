@@ -13,4 +13,6 @@ export const QUERY_KEYS = {
   userProjects: (serverUrl: string | null) => ["projects", serverUrl] as const,
   userProject: (serverUrl: string | null, projectId: number | null) =>
     ["project", serverUrl, projectId] as const,
+  userRecentFiles: (serverUrl: string | null) =>
+    ["recent-files", serverUrl] as const,
 };
