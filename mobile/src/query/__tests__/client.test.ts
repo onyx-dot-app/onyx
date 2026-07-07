@@ -40,6 +40,10 @@ describe("dehydrateOptions PII exclusion", () => {
     expect(wouldPersist(QUERY_KEYS.userProject(url, 5))).toBe(false);
   });
 
+  it("never persists recent-files queries (file names are PII)", () => {
+    expect(wouldPersist(QUERY_KEYS.userRecentFiles(url))).toBe(false);
+  });
+
   it("excludes future chat-* keys by default (default-deny)", () => {
     expect(wouldPersist(["chat-messages", url])).toBe(false);
     expect(wouldPersist(["chat-history", url, "abc"])).toBe(false);

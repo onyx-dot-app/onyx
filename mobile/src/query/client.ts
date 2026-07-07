@@ -36,6 +36,7 @@ const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
   [QUERY_KEYS.workspaceSettings(null)[0]],
   [QUERY_KEYS.userProjects(null)[0]], // "projects"
   [QUERY_KEYS.userProject(null, null)[0]], // "project"
+  [QUERY_KEYS.userRecentFiles(null)[0]], // "recent-files" (file names are PII)
 ];
 
 function isNonPersistedKey(queryKey: readonly unknown[]): boolean {
