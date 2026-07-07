@@ -1,4 +1,5 @@
 import useSWR, { mutate } from "swr";
+import { toast } from "@/hooks/useToast";
 import { FetchError, errorHandlingFetcher } from "@/lib/fetcher";
 import { Credential } from "@/lib/connectors/credentials";
 import { ConnectorSnapshot } from "@/lib/connectors/connectors";
@@ -12,15 +13,28 @@ export const GOOGLE_SERVICES = {
   GOOGLE_DRIVE: "google-drive",
 } as const;
 
-export const useGoogleAppCredential = (service: "gmail" | "google_drive") => {
-  const endpoint = `/api/manage/admin/connector/${
-    service === "gmail" ? GOOGLE_SERVICES.GMAIL : GOOGLE_SERVICES.GOOGLE_DRIVE
-  }/app-credential`;
-
-  return useSWR<{ client_id: string }, FetchError>(
-    endpoint,
-    errorHandlingFetcher
-  );
+// Parse an uploaded OAuth app JSON; toasts and returns null when invalid.
+export const parseOauthAppCredentialJson = (
+  value: string
+): Record<string, unknown> | null => {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const web = parsed.web as Record<string, unknown> | undefined;
+    if (
+      !web ||
+      typeof web.client_id !== "string" ||
+      typeof web.client_secret !== "string"
+    ) {
+      toast.error(
+        "Invalid file provided - expected an OAuth app JSON key with web.client_id and web.client_secret"
+      );
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    toast.error(`Invalid file provided - ${error}`);
+    return null;
+  }
 };
 
 export const useGoogleCredentials = (
@@ -43,19 +57,6 @@ export const useConnectorsByCredentialId = (credential_id: number | null) => {
   return {
     ...swrResponse,
     refreshConnectorsByCredentialId: () => mutate(url),
-  };
-};
-
-export const checkCredentialsFetched = (
-  appCredentialData: any,
-  appCredentialError: FetchError | undefined
-) => {
-  const appCredentialSuccessfullyFetched =
-    appCredentialData ||
-    (appCredentialError && appCredentialError.status === 404);
-
-  return {
-    appCredentialSuccessfullyFetched,
   };
 };
 
@@ -91,10 +92,4 @@ export const refreshAllGoogleData = (
   source: ValidSources.Gmail | ValidSources.GoogleDrive
 ) => {
   mutate(buildSimilarCredentialInfoURL(source));
-
-  const service =
-    source === ValidSources.Gmail
-      ? GOOGLE_SERVICES.GMAIL
-      : GOOGLE_SERVICES.GOOGLE_DRIVE;
-  mutate(SWR_KEYS.googleConnectorAppCredential(service));
 };

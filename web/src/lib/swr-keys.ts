@@ -58,8 +58,6 @@ export const SWR_KEYS = {
   federatedConnectors: "/api/federated",
 
   // ── Google Connectors ─────────────────────────────────────────────────────
-  googleConnectorAppCredential: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/app-credential`,
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
     `/api/manage/admin/connector/${service}/credentials`,
   googleConnectorPublicCredential: (service: "gmail" | "google-drive") =>

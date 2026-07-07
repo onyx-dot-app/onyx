@@ -5,8 +5,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
 import { ValidSources } from "@/lib/types";
 import { usePublicCredentials } from "@/lib/hooks";
-import Title from "@/components/ui/title";
-import { DriveJsonUploadSection, DriveAuthSection } from "./Credential";
+import { DriveAuthSection } from "./Credential";
 import {
   Credential,
   GoogleDriveCredentialJson,
@@ -14,10 +13,8 @@ import {
 } from "@/lib/connectors/credentials";
 import { useUser } from "@/providers/UserProvider";
 import {
-  useGoogleAppCredential,
   useGoogleCredentials,
   useConnectorsByCredentialId,
-  checkCredentialsFetched,
   filterUploadedCredentials,
   checkConnectorsExist,
   refreshAllGoogleData,
@@ -25,13 +22,6 @@ import {
 
 const GDriveMain = () => {
   const { isAdmin, user } = useUser();
-
-  // Get app credential
-  const {
-    data: appCredentialData,
-    isLoading: isAppCredentialLoading,
-    error: isAppCredentialError,
-  } = useGoogleAppCredential("google_drive");
 
   // Get all public credentials
   const {
@@ -59,12 +49,6 @@ const GDriveMain = () => {
     refreshConnectorsByCredentialId,
   } = useConnectorsByCredentialId(credential_id);
 
-  // Check if credentials were successfully fetched
-  const { appCredentialSuccessfullyFetched } = checkCredentialsFetched(
-    appCredentialData,
-    isAppCredentialError
-  );
-
   // Handle refresh of all data
   const handleRefresh = () => {
     refreshCredentials();
@@ -74,7 +58,6 @@ const GDriveMain = () => {
 
   // Loading state
   if (
-    (!appCredentialSuccessfullyFetched && isAppCredentialLoading) ||
     (!credentialsData && isCredentialsLoading) ||
     (!googleDriveCredentials && isGoogleDriveCredentialsLoading) ||
     (!googleDriveConnectors && isGoogleDriveConnectorsLoading)
@@ -94,12 +77,6 @@ const GDriveMain = () => {
   if (googleDriveCredentialsError || !googleDriveCredentials) {
     return (
       <ErrorCallout errorTitle="Failed to load Google Drive credentials." />
-    );
-  }
-
-  if (!appCredentialSuccessfullyFetched) {
-    return (
-      <ErrorCallout errorTitle="Error loading Google Drive app credentials. Contact an administrator." />
     );
   }
 
@@ -134,20 +111,8 @@ const GDriveMain = () => {
 
   return (
     <>
-      <Title className="mb-2 mt-6">Step 1: Provide your Credentials</Title>
-      <DriveJsonUploadSection
-        appCredentialData={appCredentialData}
-        isAdmin={isAdmin}
-        onSuccess={handleRefresh}
-        existingAuthCredential={Boolean(
-          googleDrivePublicUploadedCredential ||
-          googleDriveServiceAccountCredential
-        )}
-      />
-
       {isAdmin && (
         <>
-          <Title className="mb-2 mt-6">Step 2: Authenticate with Onyx</Title>
           <DriveAuthSection
             refreshCredentials={handleRefresh}
             googleDrivePublicUploadedCredential={
@@ -156,7 +121,6 @@ const GDriveMain = () => {
             googleDriveServiceAccountCredential={
               googleDriveServiceAccountCredential
             }
-            appCredentialData={appCredentialData}
             connectorAssociated={connectorAssociated}
             user={user}
           />

@@ -41,11 +41,8 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import build_service_account_creds
-from onyx.connectors.google_utils.google_kv import delete_google_app_cred
 from onyx.connectors.google_utils.google_kv import get_auth_url
-from onyx.connectors.google_utils.google_kv import get_google_app_cred
 from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
-from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
 from onyx.connectors.google_utils.google_kv import verify_csrf
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
@@ -70,8 +67,6 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user_parallel,
 )
 from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
-from onyx.db.credentials import cleanup_gmail_credentials
-from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
@@ -95,7 +90,6 @@ from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
-from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import AuthStatus
@@ -117,7 +111,6 @@ from onyx.server.documents.models import FailedConnectorIndexingStatus
 from onyx.server.documents.models import FileUploadResponse
 from onyx.server.documents.models import GDriveCallback
 from onyx.server.documents.models import GmailCallback
-from onyx.server.documents.models import GoogleAppCredentials
 from onyx.server.documents.models import GoogleServiceAccountCredentialRequest
 from onyx.server.documents.models import IndexedSourcesResponse
 from onyx.server.documents.models import IndexingStatusRequest
@@ -152,90 +145,6 @@ router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 
 """Admin only API endpoints"""
-
-
-@router.get("/admin/connector/gmail/app-credential")
-def check_google_app_gmail_credentials_exist(
-    _: User = Depends(current_curator_or_admin_user),
-) -> dict[str, str]:
-    try:
-        return {"client_id": get_google_app_cred(DocumentSource.GMAIL).web.client_id}
-    except KvKeyNotFoundError:
-        raise HTTPException(status_code=404, detail="Google App Credentials not found")
-
-
-@router.put("/admin/connector/gmail/app-credential")
-def upsert_google_app_gmail_credentials(
-    app_credentials: GoogleAppCredentials,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> StatusResponse:
-    try:
-        upsert_google_app_cred(app_credentials, DocumentSource.GMAIL)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully saved Google App Credentials"
-    )
-
-
-@router.delete("/admin/connector/gmail/app-credential")
-def delete_google_app_gmail_credentials(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> StatusResponse:
-    try:
-        delete_google_app_cred(DocumentSource.GMAIL)
-        cleanup_gmail_credentials(db_session=db_session)
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully deleted Google App Credentials"
-    )
-
-
-@router.get("/admin/connector/google-drive/app-credential")
-def check_google_app_credentials_exist(
-    _: User = Depends(current_curator_or_admin_user),
-) -> dict[str, str]:
-    try:
-        return {
-            "client_id": get_google_app_cred(DocumentSource.GOOGLE_DRIVE).web.client_id
-        }
-    except KvKeyNotFoundError:
-        raise HTTPException(status_code=404, detail="Google App Credentials not found")
-
-
-@router.put("/admin/connector/google-drive/app-credential")
-def upsert_google_app_credentials(
-    app_credentials: GoogleAppCredentials,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> StatusResponse:
-    try:
-        upsert_google_app_cred(app_credentials, DocumentSource.GOOGLE_DRIVE)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully saved Google App Credentials"
-    )
-
-
-@router.delete("/admin/connector/google-drive/app-credential")
-def delete_google_app_credentials(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> StatusResponse:
-    try:
-        delete_google_app_cred(DocumentSource.GOOGLE_DRIVE)
-        cleanup_google_drive_credentials(db_session=db_session)
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully deleted Google App Credentials"
-    )
 
 
 @router.put("/admin/connector/google-drive/service-account-credential")
@@ -1693,7 +1602,8 @@ def connector_run_once(
 def gmail_auth(
     response: Response,
     credential_id: str,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> AuthUrl:
     # set a cookie that we can read in the callback (used for `verify_csrf`)
     response.set_cookie(
@@ -1702,14 +1612,19 @@ def gmail_auth(
         httponly=True,
         max_age=600,
     )
-    return AuthUrl(auth_url=get_auth_url(int(credential_id), DocumentSource.GMAIL))
+    return AuthUrl(
+        auth_url=get_auth_url(
+            int(credential_id), DocumentSource.GMAIL, user, db_session
+        )
+    )
 
 
 @router.get("/connector/google-drive/authorize/{credential_id}")
 def google_drive_auth(
     response: Response,
     credential_id: str,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> AuthUrl:
     # set a cookie that we can read in the callback (used for `verify_csrf`)
     response.set_cookie(
@@ -1719,7 +1634,9 @@ def google_drive_auth(
         max_age=600,
     )
     return AuthUrl(
-        auth_url=get_auth_url(int(credential_id), DocumentSource.GOOGLE_DRIVE)
+        auth_url=get_auth_url(
+            int(credential_id), DocumentSource.GOOGLE_DRIVE, user, db_session
+        )
     )
 
 
