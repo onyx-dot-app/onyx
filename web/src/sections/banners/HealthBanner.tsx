@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
-  useCurrentUser,
   useCustomTokenRefresh,
   useSessionWatcher,
   useTokenExpiry,
-} from "@/lib/users/hooks";
+} from "@/lib/auth/hooks";
+import { useCurrentUser } from "@/lib/users/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 import { MessageCard } from "@opal/components";
 import LoggedOutModal from "@/sections/modals/LoggedOutModal";

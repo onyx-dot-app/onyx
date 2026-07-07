@@ -21,6 +21,9 @@ jest.mock("next/navigation", () => ({
 
 jest.mock("@/lib/users/hooks", () => ({
   useCurrentUser: () => mockUseCurrentUser(),
+}));
+
+jest.mock("@/lib/auth/hooks", () => ({
   useTokenExpiry: (...args: unknown[]) => mockUseTokenExpiry(...args),
   useCustomTokenRefresh: (...args: unknown[]) =>
     mockUseCustomTokenRefresh(...args),
