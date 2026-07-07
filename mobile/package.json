@@ -22,6 +22,7 @@
     "expo-crypto": "~56.0.4",
     "expo-dev-client": "~56.0.19",
     "expo-font": "~56.0.5",
+    "expo-image": "~56.0.11",
     "expo-linking": "~56.0.13",
     "expo-router": "~56.2.9",
     "expo-secure-store": "~56.0.4",

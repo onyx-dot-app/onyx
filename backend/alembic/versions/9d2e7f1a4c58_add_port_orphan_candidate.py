@@ -1,7 +1,7 @@
 """add port_orphan_candidate
 
 Revision ID: 9d2e7f1a4c58
-Revises: d49e41659191
+Revises: 2e0b2b146de1
 Create Date: 2026-07-06 00:00:00.000000
 
 Tracks documents deleted while a reindex port is running so the port attempt can
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "9d2e7f1a4c58"
-down_revision = "d49e41659191"
+down_revision = "2e0b2b146de1"
 branch_labels = None
 depends_on = None
 

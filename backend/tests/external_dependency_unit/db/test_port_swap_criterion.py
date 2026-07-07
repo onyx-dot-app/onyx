@@ -33,6 +33,7 @@ from onyx.db.enums import PortAttemptStatus
 from onyx.db.enums import SwitchoverType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document as DbDocument
+from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import PortAttempt
 from onyx.db.models import SearchSettings
 from onyx.db.port_attempt import cancel_active_port_attempts
@@ -120,10 +121,21 @@ def test_port_swap_blocks_on_pending_sync_backlog(
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
     _make_success_port(db_session, cc_pair.id, future_id)
-    # a deferred-sync doc remains -> the backlog gate fails (tenant-global count)
+    # A deferred-sync doc owned by the ported cc_pair remains -> the scoped backlog
+    # gate fails. The count JOINs through DocumentByConnectorCredentialPair, so the
+    # doc must be linked to the cc_pair or it's invisible to the query.
     doc_id = f"{_PENDING_DOC_PREFIX}pending"
     db_session.add(
         DbDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
+    )
+    db_session.flush()
+    db_session.add(
+        DocumentByConnectorCredentialPair(
+            id=doc_id,
+            connector_id=cc_pair.connector_id,
+            credential_id=cc_pair.credential_id,
+            has_been_indexed=True,
+        )
     )
     db_session.commit()
     mark_document_synced_secondary_pending(doc_id, db_session)
@@ -249,20 +261,20 @@ def test_legacy_path_does_not_consult_port_helpers(
     future_ss.switchover_type = SwitchoverType.REINDEX  # non-INSTANT legacy path
     db_session.commit()
 
+    # Asserts one thing: the legacy path never consults the port helper. The swap
+    # decision itself is covered in test_index_swap_workflow.py; _perform_index_swap
+    # is patched only to keep a swap off the real DB/index.
     with (
         patch.object(
             swap_index,
             "_port_swap_ready",
             side_effect=AssertionError("legacy must not use the port path"),
         ) as mock_ready,
-        patch.object(swap_index, "_perform_index_swap") as mock_swap,
+        patch.object(swap_index, "_perform_index_swap"),
     ):
-        result = check_and_perform_index_swap(db_session)
+        check_and_perform_index_swap(db_session)
 
     mock_ready.assert_not_called()
-    # legacy REINDEX holds (cc_pairs without successful FUTURE indexings) -> no swap
-    assert result is None
-    mock_swap.assert_not_called()
 
 
 # --- two-phase cancel: the port_attempt contract that keeps deletion the last writer

@@ -282,12 +282,6 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             return False
 
     while True:
-        if time.monotonic() - start_monotonic > _PORT_SOFT_TIME_LIMIT:
-            # Thread-pool tasks ignore celery's soft_time_limit, so enforce it
-            # here; check_for_port reschedules from the committed cursor.
-            log.info("Port soft time limit reached, yielding")
-            return
-
         # Fresh session per batch: frees the connection across the scan/embed/write,
         # and re-reads the row so a CANCEL or stall-FAIL committed elsewhere is seen.
         with get_session_with_current_tenant() as db_session:
@@ -310,6 +304,19 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                 # write) so it proceeds next tick instead of waiting out the watchdog.
                 mark_port_canceled(db_session, port_attempt_id)
                 log.info("cc_pair gone/deleting, stopping port")
+                return
+            # Thread-pool tasks ignore celery's soft_time_limit, so enforce it here.
+            # FAIL (not bare-return) so check_for_port resumes it promptly: a return
+            # leaves the row IN_PROGRESS, which the scheduler treats as live until the
+            # stall watchdog fails it a full window later. After the cancel/deleting
+            # acks so those still win.
+            if time.monotonic() - start_monotonic > _PORT_SOFT_TIME_LIMIT:
+                mark_port_failed(
+                    db_session,
+                    port_attempt_id,
+                    error_msg="soft time limit reached; yielding for reschedule",
+                )
+                log.info("Port soft time limit reached; failing for prompt resume")
                 return
             doc_ids = get_document_ids_for_cc_pair_batch(
                 db_session,

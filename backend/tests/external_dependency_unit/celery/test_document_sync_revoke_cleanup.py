@@ -22,7 +22,9 @@ from onyx.background.celery.tasks.vespa.document_sync import set_document_sync_f
 from onyx.background.celery.tasks.vespa.tasks import monitor_document_sync_taskset
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import (
+    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE as TEST_TENANT_ID,
+)
 
 
 def _revoke_request(task_id: str, tenant_id: str = TEST_TENANT_ID) -> SimpleNamespace:

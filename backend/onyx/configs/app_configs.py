@@ -70,10 +70,6 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
 
-# Per-user cap on self-managed personal skills. Env-overridable so CI can lower
-# it without uploading the full quota of real bundles to exercise the limit.
-MAX_PERSONAL_SKILLS_PER_USER = _non_negative_int_env("MAX_PERSONAL_SKILLS_PER_USER", 50)
-
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
@@ -519,7 +515,7 @@ OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
 )
 # Lifetime of a point-in-time used to scan an index consistently (reindex port).
 # Each search extends the lease; an idle PIT self-expires after this.
-PIT_KEEP_ALIVE = os.environ.get("PIT_KEEP_ALIVE") or "5m"
+PIT_KEEP_ALIVE: str = os.environ.get("PIT_KEEP_ALIVE") or "5m"
 # If set, will override the default number of shards and replicas for the index.
 OPENSEARCH_INDEX_NUM_SHARDS: int | None = (
     int(os.environ["OPENSEARCH_INDEX_NUM_SHARDS"])
@@ -1899,6 +1895,8 @@ EXT_APP_GITHUB_CLIENT_ID = os.environ.get("EXT_APP_GITHUB_CLIENT_ID", "")
 EXT_APP_GITHUB_CLIENT_SECRET = os.environ.get("EXT_APP_GITHUB_CLIENT_SECRET", "")
 EXT_APP_HUBSPOT_CLIENT_ID = os.environ.get("EXT_APP_HUBSPOT_CLIENT_ID", "")
 EXT_APP_HUBSPOT_CLIENT_SECRET = os.environ.get("EXT_APP_HUBSPOT_CLIENT_SECRET", "")
+EXT_APP_NOTION_CLIENT_ID = os.environ.get("EXT_APP_NOTION_CLIENT_ID", "")
+EXT_APP_NOTION_CLIENT_SECRET = os.environ.get("EXT_APP_NOTION_CLIENT_SECRET", "")
 
 INSTANCE_TYPE = (
     "managed"

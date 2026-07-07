@@ -749,16 +749,14 @@ def test_run_port_attempt_batch_retry_then_failed(
 def test_run_port_attempt_resumes_from_cursor(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """A resumed attempt scans only ids past its stored cursor and accumulates
-    docs_ported on top of the prior count."""
+    """A resume is a fresh NOT_STARTED attempt seeded with the prior cursor (how
+    check_for_port reschedules a FAILED port): it scans only ids past that cursor."""
     cc_pair, future_id = cc_pair_and_future
     doc_ids = _seed_cc_pair_documents(db_session, cc_pair, 5)
-    attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
-    # simulate a prior partial run: cursor at the 2nd doc, 2 docs ported
-    mark_port_in_progress(db_session, attempt_id)
-    commit_port_cursor(
-        db_session, attempt_id, last_processed_doc_id=doc_ids[1], docs_ported=2
-    )
+    # cursor at the 2nd doc, so only the 3 docs after it remain to port
+    attempt_id = create_port_attempt(
+        db_session, cc_pair.id, future_id, resume_from_doc_id=doc_ids[1]
+    ).id
 
     mock_copier = MagicMock()
     mock_copier.copy_doc_batch.side_effect = lambda ids, **_: (len(ids), False)
@@ -773,7 +771,7 @@ def test_run_port_attempt_resumes_from_cursor(
     assert row is not None
     assert row.status == PortAttemptStatus.SUCCESS
     assert row.last_processed_doc_id == doc_ids[-1]
-    assert row.docs_ported == 5  # 2 prior + 3 newly ported
+    assert row.docs_ported == 3  # this attempt ports the 3 docs after the cursor
 
 
 def test_run_port_attempt_stops_when_canceled(
@@ -900,8 +898,9 @@ def test_run_port_attempt_exits_when_cc_pair_deleting(
 def test_run_port_attempt_soft_time_limit_yields(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """Hitting the self-enforced soft time limit yields (no copy, no terminal
-    mark) so the watchdog can reschedule from the cursor."""
+    """Hitting the self-enforced soft time limit yields (no copy) and marks the
+    attempt FAILED, so check_for_port resumes it from the cursor next tick rather
+    than leaving it IN_PROGRESS to idle out a full stall window."""
     cc_pair, future_id = cc_pair_and_future
     _seed_cc_pair_documents(db_session, cc_pair, 3)
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
@@ -917,7 +916,7 @@ def test_run_port_attempt_soft_time_limit_yields(
     db_session.expire_all()
     row = db_session.get(PortAttempt, attempt_id)
     assert row is not None
-    assert row.status == PortAttemptStatus.IN_PROGRESS  # not terminal; watchdog resumes
+    assert row.status == PortAttemptStatus.FAILED  # reschedulable; resumes from cursor
 
 
 def test_check_for_port_creates_and_enqueues(

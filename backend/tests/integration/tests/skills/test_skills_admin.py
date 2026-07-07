@@ -12,9 +12,11 @@ from sqlalchemy import select
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import SkillSharePermission
 from onyx.db.models import FileRecord
 from onyx.db.models import Skill
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.skill.models import SkillPatchRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import build_minimal_bundle
@@ -66,22 +68,27 @@ def _skill_bundle_blob_ids() -> set[str]:
 def test_create_and_list_skill(admin_user: DATestUser) -> None:
     slug = f"test-create-{uuid4().hex[:6]}"
     skill = SkillManager.create_custom(admin_user, slug=slug)
-    assert skill.id is not None
     assert skill.slug == slug
     assert skill.enabled is True
 
     skills_list = SkillManager.list_all(admin_user)
-    custom_slugs = [c["slug"] for c in skills_list["customs"]]
+    custom_slugs = [skill.slug for skill in skills_list.customs]
     assert slug in custom_slugs
 
 
 def test_patch_skill_metadata(admin_user: DATestUser) -> None:
     skill = SkillManager.create_custom(admin_user, slug=f"patch-test-{uuid4().hex[:6]}")
 
-    public = SkillManager.patch_custom(skill, admin_user, is_public=True)
-    assert public.is_public is True
+    public = SkillManager.patch_custom(
+        skill,
+        admin_user,
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
+    )
+    assert public.public_permission == SkillSharePermission.VIEWER
 
-    disabled = SkillManager.patch_custom(skill, admin_user, enabled=False)
+    disabled = SkillManager.patch_custom(
+        skill, admin_user, SkillPatchRequest(enabled=False)
+    )
     assert disabled.enabled is False
 
 
@@ -108,7 +115,7 @@ def test_delete_skill(admin_user: DATestUser) -> None:
     SkillManager.delete_custom(skill, admin_user)
 
     skills_list = SkillManager.list_all(admin_user)
-    custom_slugs = [c["slug"] for c in skills_list["customs"]]
+    custom_slugs = [skill.slug for skill in skills_list.customs]
     assert slug not in custom_slugs
 
 
@@ -141,12 +148,12 @@ def test_bundle_with_template_rejected(admin_user: DATestUser) -> None:
     assert exc_info.value.response.status_code == 400
 
 
-def test_grants_replace(admin_user: DATestUser) -> None:
+def test_group_shares_replace(admin_user: DATestUser) -> None:
     skill = SkillManager.create_custom(
-        admin_user, slug=f"grants-test-{uuid4().hex[:6]}", is_public=False
+        admin_user, slug=f"group-shares-test-{uuid4().hex[:6]}", is_public=False
     )
-    updated = SkillManager.replace_grants(skill, [], admin_user)
-    assert updated.granted_group_ids == []
+    updated = SkillManager.replace_group_shares(skill, [], admin_user)
+    assert updated.group_shares == []
 
 
 def test_metadata_from_bundle_frontmatter(admin_user: DATestUser) -> None:
@@ -188,11 +195,11 @@ def test_bad_filename_rejected(admin_user: DATestUser) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_create_skill_201_persists_row_grants_bundle(
+def test_create_skill_201_persists_row_group_shares_bundle(
     admin_user: DATestUser,
 ) -> None:
-    """POST → row persisted with bundle blob and grants visible in DB."""
-    group = UserGroupManager.create(admin_user, name="create-grants-group")
+    """POST -> row persisted with bundle blob and group shares visible in DB."""
+    group = UserGroupManager.create(admin_user, name="create-shares-group")
 
     slug = f"persist-{uuid4().hex[:8]}"
     skill = SkillManager.create_custom(
@@ -202,13 +209,12 @@ def test_create_skill_201_persists_row_grants_bundle(
         group_ids=[group.id],
     )
 
-    assert skill.id is not None
-    assert skill.granted_group_ids == [group.id]
+    assert [share.group_id for share in skill.group_shares] == [group.id]
 
     row = _fetch_skill_row(skill.id)
     assert row is not None, "skill row missing after create"
     assert row.slug == slug
-    assert row.is_public is False
+    assert row.public_permission is None
     assert row.enabled is True
     assert row.bundle_file_id, "skill row has no bundle_file_id"
     assert _bundle_blob_exists(row.bundle_file_id), (
@@ -302,7 +308,7 @@ def test_create_skill_failure_cleans_up_orphan_blob(
 
     # First create — succeeds and saves blob #1.
     first = SkillManager.create_custom(admin_user, slug=slug)
-    first_row = _fetch_skill_row(first.id) if first.id is not None else None
+    first_row = _fetch_skill_row(first.id)
     assert first_row is not None
     first_blob_id = first_row.bundle_file_id
     assert first_blob_id is not None  # custom skills always have a bundle
@@ -344,11 +350,13 @@ def test_create_skill_failure_cleans_up_orphan_blob(
 
 
 # ---------------------------------------------------------------------------
-# Grants
+# Sharing
 # ---------------------------------------------------------------------------
 
 
-def test_replace_grants_400_on_unknown_group_id(admin_user: DATestUser) -> None:
+def test_replace_group_shares_400_on_unknown_group_id(
+    admin_user: DATestUser,
+) -> None:
     """Unknown group id → 400 with a message that names the failure mode.
 
     Regression for SHA `c5e427ceab`: FK violations must surface as a 400
@@ -359,7 +367,7 @@ def test_replace_grants_400_on_unknown_group_id(admin_user: DATestUser) -> None:
     )
 
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.replace_grants(skill, [10_000_000], admin_user)
+        SkillManager.replace_group_shares(skill, [10_000_000], admin_user)
 
     response = exc_info.value.response
     assert response.status_code == 400
@@ -378,7 +386,7 @@ def test_replace_grants_400_on_unknown_group_id(admin_user: DATestUser) -> None:
 def test_delete_skill_404_for_nonexistent(admin_user: DATestUser) -> None:
     bogus_id = uuid4()
     response = client.delete(
-        f"{API_SERVER_URL}/admin/skills/custom/{bogus_id}",
+        f"{API_SERVER_URL}/skills/custom/{bogus_id}",
         headers=admin_user.headers,
     )
     assert response.status_code == 404
@@ -389,28 +397,19 @@ def test_delete_skill_404_for_nonexistent(admin_user: DATestUser) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_non_admin_returns_403_on_post(basic_user: DATestUser) -> None:
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_custom(basic_user, slug=f"forbid-{uuid4().hex[:6]}")
-    assert exc_info.value.response.status_code == 403
-
-
-def test_non_admin_returns_403_on_admin_list(basic_user: DATestUser) -> None:
-    response = client.get(
-        f"{API_SERVER_URL}/admin/skills",
-        headers=basic_user.headers,
+def test_basic_user_can_create_private_skill(basic_user: DATestUser) -> None:
+    skill = SkillManager.create_custom(
+        basic_user, slug=f"basic-create-{uuid4().hex[:6]}"
     )
-    assert response.status_code == 403
+    assert skill.public_permission is None
+    assert skill.user_permission == "OWNER"
 
 
 def test_curator_can_post_skill(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
-    """Curators are accepted by the admin-skills endpoints.
-
-    Pins current behavior — see `craft-risks.md` §2.4.
-    """
+    """Curators can create through the same user-facing endpoint."""
     curator = UserManager.set_role(
         user_to_set=basic_user,
         target_role=UserRole.CURATOR,
@@ -421,7 +420,6 @@ def test_curator_can_post_skill(
         skill = SkillManager.create_custom(
             curator, slug=f"curator-create-{uuid4().hex[:6]}"
         )
-        assert skill.id is not None
         assert skill.enabled is True
     finally:
         # restore so module-shared basic_user fixture stays BASIC

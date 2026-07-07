@@ -20,6 +20,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
@@ -55,6 +56,7 @@ from onyx.document_index.opensearch.opensearch_document_index import (
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentSchema
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
+from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
@@ -161,6 +163,13 @@ def _create_os_index(index_name: str) -> OpenSearchIndexClient:
     return client
 
 
+# The port re-embeds PRESENT -> FUTURE against the local embedding model server;
+# ext-dep shards run with it disabled, so this composition test only runs where
+# a real model server is present (local dev / nightly with the server up).
+@pytest.mark.skipif(
+    MODEL_SERVER_HOST == "disabled",
+    reason="hits the real embedding model server, which is disabled in this env",
+)
 def test_port_flow_end_to_end(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001

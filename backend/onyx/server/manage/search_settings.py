@@ -8,11 +8,13 @@ from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
+from onyx.db.connector_credential_pair import (
+    fetch_indexable_standard_connector_credential_pair_ids,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import Permission
 from onyx.db.enums import SwitchoverType
 from onyx.db.index_attempt import create_synthetic_seed_attempt
@@ -184,13 +186,19 @@ def set_new_search_settings(
     # Seed the poll cursor: a synthetic SUCCESS IndexAttempt per in-scope cc_pair
     # carrying PRESENT's cursor, so the promoted settings resume instead of re-scanning
     # full history. INSTANT needs it too — it promotes immediately, so no seed means a
-    # full re-fetch. Scope mirrors the swap: ACTIVE_ONLY = active cc_pairs, else all non-deleting.
+    # full re-fetch. Seed exactly the cc_pairs the port will copy — the SAME scope helper
+    # the swap uses (excludes INVALID/DELETING; ACTIVE_ONLY further restricts to active).
+    # Seeding one the port skips leaves its backlog uncopied while the cursor claims
+    # "already ported" -> permanent recall loss once that connector is fixed.
     if new_search_settings.use_port_flow:
         active_only = new_search_settings.switchover_type == SwitchoverType.ACTIVE_ONLY
+        portable_cc_pair_ids = set(
+            fetch_indexable_standard_connector_credential_pair_ids(
+                db_session, active_cc_pairs_only=active_only
+            )
+        )
         for cc_pair in get_connector_credential_pairs(db_session):
-            if active_only and not cc_pair.status.is_active():
-                continue
-            if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
+            if cc_pair.id not in portable_cc_pair_ids:
                 continue
             indexing_start = cc_pair.connector.indexing_start
             earliest_index = indexing_start.timestamp() if indexing_start else 0.0
@@ -311,6 +319,8 @@ def update_saved_search_settings(
             detail="Contextual RAG disabled in Onyx Cloud",
         )
 
+    # enable_contextual_rag is preserved here (never written), so don't validate it:
+    # the flag is discarded, and validating would 400 a change we ignore.
     validate_contextual_rag_model(
         model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         db_session=db_session,

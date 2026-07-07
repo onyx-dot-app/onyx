@@ -68,10 +68,13 @@ No dedicated AGENTS.md section is needed.
 ## Gating
 
 `ENABLE_BROWSER` (`onyx/server/features/build/configs.py`, api-server runtime
-env, default OFF): set it to match the sandbox image's build-time
-`ENABLE_BROWSER` ARG. It's the single signal of "does this deployment's image
+env, default ON): must match the sandbox image's build-time `ENABLE_BROWSER` ARG
+(also default ON). It's the single signal of "does this deployment's image
 include the browser runtime," and gates the built-in `browser` skill via the
-registry. There is no per-user feature flag.
+registry. There is no per-user feature flag. Both defaults are on, so the
+standard released image surfaces the skill; a deployment that builds a
+browserless sandbox (`--build-arg ENABLE_BROWSER=false`) must also set this
+runtime env `false`, or the skill is advertised without its runtime.
 
 ## Image
 
@@ -81,7 +84,7 @@ at it via `AGENT_BROWSER_EXECUTABLE_PATH` rather than `agent-browser install`,
 which fetches a no-arm64 Chrome-for-Testing) + `libnss3-tools` (certutil) +
 `agent-browser` (npm global). The `browser` wrapper is always copied; it's inert
 when `ENABLE_BROWSER=false` (agent-browser absent) and only advertised via the
-per-user-gated skill.
+deployment-gated skill.
 
 ## Browser state is ephemeral
 
