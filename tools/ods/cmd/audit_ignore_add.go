@@ -77,7 +77,11 @@ func runAuditIgnoreAdd(id, url string, opts *AuditIgnoreAddOptions) {
 		log.Fatalf("Invalid suppression: %v", err)
 	}
 
-	orig, err := audit.LoadIgnoresForEdit(url)
+	// Use FetchIgnores, not LoadIgnoresForEdit: a missing local file must error
+	// rather than bootstrap an empty list. Unlike the interactive editor (which
+	// shows the empty table), a typo'd --ignore-url here would silently append to
+	// a fresh file and drop the real allowlist's entries on save.
+	orig, err := audit.FetchIgnores(url)
 	if err != nil {
 		log.Fatalf("Failed to fetch allowlist from %s: %v", url, err)
 	}
