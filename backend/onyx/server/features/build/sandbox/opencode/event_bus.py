@@ -182,6 +182,7 @@ class PodEventBus:
         consecutive_failures = 0
         while not self._stop.is_set():
             had_successful_read = False
+            healed_401 = False
             try:
                 self._read_one_stream()
                 had_successful_read = self.stream_ready.is_set()
@@ -191,20 +192,21 @@ class PodEventBus:
                         backoff,
                     )
             except Exception as e:
-                if (
+                # Cached password was stale (pod re-provisioned with a new
+                # Secret) — re-attach immediately with the rotated credential.
+                # Still counts against the failure budget so a Secret source
+                # that keeps rotating to wrong credentials can't spin forever.
+                healed_401 = (
                     isinstance(e, httpx.HTTPStatusError)
                     and e.response.status_code == 401
                     and self._refresh_auth_on_401()
-                ):
-                    # Cached password was stale (pod re-provisioned with a new
-                    # Secret) — not a failure; re-attach immediately with the
-                    # rotated credential.
-                    continue
-                logger.warning(
-                    "opencode /event stream error: %s; reconnecting in %.1fs",
-                    e,
-                    backoff,
                 )
+                if not healed_401:
+                    logger.warning(
+                        "opencode /event stream error: %s; reconnecting in %.1fs",
+                        e,
+                        backoff,
+                    )
             finally:
                 self.stream_ready.clear()
 
@@ -224,6 +226,8 @@ class PodEventBus:
                     self._signal_subscribers_closed()
                     return
 
+            if healed_401:
+                continue
             if self._stop.wait(backoff):
                 return
             backoff = min(backoff * 2.0, self._RECONNECT_BACKOFF_MAX)

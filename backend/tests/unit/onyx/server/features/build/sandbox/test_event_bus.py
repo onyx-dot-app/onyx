@@ -632,8 +632,9 @@ def test_dispatch_under_concurrent_subscribers(bus: PodEventBus) -> None:
 # ---------------------------------------------------------------------------
 # 401 self-heal: a peer api_server pod rotated the opencode password, so the
 # bus's cached auth is stale. The reader loop must reload auth and re-attach
-# immediately — a rotation-explained 401 is not a failure, so it consumes no
-# reconnect budget and no backoff wait.
+# immediately (no warning, no backoff wait). Heals still count against the
+# reconnect budget — which resets on any successful read — so a Secret source
+# that keeps rotating to wrong credentials cannot spin forever.
 # ---------------------------------------------------------------------------
 
 
@@ -689,12 +690,12 @@ def test_reader_loop_heals_rotated_password_in_same_cycle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Stale password: the 401 attach is retried immediately with the reloaded
-    credential and events flow. With a failure budget of 1, the loop only
-    survives to the second attach if the healed 401 was not counted."""
+    credential and events flow; the successful read resets the budget the
+    heal consumed."""
     _Status401ThenOKThenErrorStream.attempts = []
     monkeypatch.setattr(event_bus_mod.httpx, "stream", _Status401ThenOKThenErrorStream)
     monkeypatch.setattr(PodEventBus, "_RECONNECT_BACKOFF_INITIAL", 0.01)
-    monkeypatch.setattr(PodEventBus, "_RECONNECT_MAX_CONSECUTIVE_FAILURES", 1)
+    monkeypatch.setattr(PodEventBus, "_RECONNECT_MAX_CONSECUTIVE_FAILURES", 2)
     stale = httpx.BasicAuth("opencode", "stale-pw")
     fresh = httpx.BasicAuth("opencode", "fresh-pw")
 
@@ -725,7 +726,7 @@ def test_reader_loop_second_401_after_rotation_is_a_failure(
     the 401 counts against the reconnect budget (no reload loop)."""
     _Status401Stream.attempts = []
     monkeypatch.setattr(event_bus_mod.httpx, "stream", _Status401Stream)
-    monkeypatch.setattr(PodEventBus, "_RECONNECT_MAX_CONSECUTIVE_FAILURES", 1)
+    monkeypatch.setattr(PodEventBus, "_RECONNECT_MAX_CONSECUTIVE_FAILURES", 2)
     fresh = httpx.BasicAuth("opencode", "fresh-pw")
     reloads: list[int] = []
 
@@ -746,6 +747,35 @@ def test_reader_loop_second_401_after_rotation_is_a_failure(
     assert len(_Status401Stream.attempts) == 2
     assert len(reloads) == 2
     assert bus._auth is fresh
+    assert bus._stop.is_set()
+
+
+def test_reader_loop_perpetually_rotating_wrong_credential_self_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Secret source that returns a different wrong credential on every
+    reload heals each 401 but exhausts the reconnect budget instead of
+    spinning forever."""
+    _Status401Stream.attempts = []
+    monkeypatch.setattr(event_bus_mod.httpx, "stream", _Status401Stream)
+    monkeypatch.setattr(PodEventBus, "_RECONNECT_MAX_CONSECUTIVE_FAILURES", 3)
+    reloads: list[int] = []
+
+    def reload_auth() -> httpx.Auth:
+        reloads.append(1)
+        return httpx.BasicAuth("opencode", f"wrong-pw-{len(reloads)}")
+
+    bus = PodEventBus(
+        base_url="http://test.invalid:4096",
+        auth=httpx.BasicAuth("opencode", "stale-pw"),
+        reload_auth=reload_auth,
+    )
+    try:
+        bus._reader_loop()
+    finally:
+        bus.close()
+
+    assert len(_Status401Stream.attempts) == 3
     assert bus._stop.is_set()
 
 
