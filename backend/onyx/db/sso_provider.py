@@ -1,5 +1,9 @@
 import re
+from typing import Any
 
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,6 +13,56 @@ from onyx.db.models import SSOProvider
 # The name becomes the login URL path segment and the oauth_name stored on
 # linked login accounts, so it must be a stable, URL-safe slug.
 _PROVIDER_NAME_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
+
+
+class _ProviderConfig(BaseModel):
+    # Reject unknown keys so a config built for a different provider type (or a
+    # typo) fails loudly on write instead of being stored and mis-read later.
+    model_config = ConfigDict(extra="forbid")
+
+
+class GoogleProviderConfig(_ProviderConfig):
+    client_id: str
+    client_secret: str
+
+
+class OIDCProviderConfig(_ProviderConfig):
+    client_id: str
+    client_secret: str
+    openid_config_url: str
+
+
+class SAMLProviderConfig(_ProviderConfig):
+    """Stub for the not-yet-wired SAML login flow. Fields mirror what the
+    OneLogin toolkit needs (see onyx/server/saml.py) so the store, migration,
+    and admin path are proven before the flow itself lands."""
+
+    idp_entity_id: str
+    idp_sso_url: str
+    idp_x509_cert: str
+    sp_entity_id: str
+    email_attribute: str | None = None
+
+
+# provider_type selects the config shape. A new auth method is a new model plus
+# an entry here, never a schema migration.
+_CONFIG_MODEL_BY_TYPE: dict[SSOProviderType, type[_ProviderConfig]] = {
+    SSOProviderType.GOOGLE: GoogleProviderConfig,
+    SSOProviderType.OIDC: OIDCProviderConfig,
+    SSOProviderType.SAML: SAMLProviderConfig,
+}
+
+
+def validate_sso_config(
+    provider_type: SSOProviderType, config: dict[str, Any]
+) -> dict[str, Any]:
+    """Validate a raw config against its provider type and return the normalized
+    dict for storage. Raises ValueError on a missing or unknown field so callers
+    see one exception type regardless of the provider."""
+    try:
+        return _CONFIG_MODEL_BY_TYPE[provider_type].model_validate(config).model_dump()
+    except ValidationError as e:
+        raise ValueError(f"invalid {provider_type.value} provider config: {e}") from e
 
 
 def validate_sso_provider_name(name: str) -> None:
@@ -48,24 +102,15 @@ def create_sso_provider(
     name: str,
     display_name: str,
     provider_type: SSOProviderType,
-    client_id: str,
-    client_secret: str,
+    config: dict[str, Any],
     allowed_email_domains: list[str],
-    openid_config_url: str | None = None,
 ) -> SSOProvider:
     validate_sso_provider_name(name)
-    if provider_type == SSOProviderType.OIDC and not openid_config_url:
-        raise ValueError("OIDC providers require an openid_config_url")
-    if provider_type != SSOProviderType.OIDC and openid_config_url:
-        raise ValueError("openid_config_url only applies to OIDC providers")
-
     provider = SSOProvider(
         name=name,
         display_name=display_name,
         provider_type=provider_type,
-        client_id=client_id,
-        client_secret=client_secret,
-        openid_config_url=openid_config_url,
+        config=validate_sso_config(provider_type, config),
         allowed_email_domains=_normalize_domains(allowed_email_domains),
     )
     db_session.add(provider)
@@ -77,30 +122,25 @@ def update_sso_provider(
     db_session: Session,
     provider_id: int,
     display_name: str | None = None,
-    client_id: str | None = None,
-    client_secret: str | None = None,
+    config: dict[str, Any] | None = None,
     allowed_email_domains: list[str] | None = None,
-    openid_config_url: str | None = None,
 ) -> SSOProvider:
-    """Partial update. The provider name is immutable because linked login
-    accounts and the login URL reference it. A None field is left unchanged,
-    so a secret is only rewritten when a new one is supplied."""
+    """Partial update. Name and provider_type are immutable: linked login
+    accounts and the login URL reference the name, and the type fixes the config
+    shape. A None field is left unchanged, so the config (and its secrets) is
+    only rewritten when a new one is supplied."""
     provider = db_session.get(SSOProvider, provider_id)
     if provider is None:
         raise ValueError(f"SSO provider {provider_id} does not exist")
 
     if display_name is not None:
         provider.display_name = display_name
-    if client_id is not None:
-        provider.client_id = client_id
-    if client_secret is not None:
-        provider.client_secret = client_secret  # ty: ignore[invalid-assignment]
+    if config is not None:
+        provider.config = validate_sso_config(  # ty: ignore[invalid-assignment]
+            provider.provider_type, config
+        )
     if allowed_email_domains is not None:
         provider.allowed_email_domains = _normalize_domains(allowed_email_domains)
-    if openid_config_url is not None:
-        if provider.provider_type != SSOProviderType.OIDC:
-            raise ValueError("openid_config_url only applies to OIDC providers")
-        provider.openid_config_url = openid_config_url
 
     db_session.commit()
     return provider

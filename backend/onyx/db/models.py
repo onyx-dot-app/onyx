@@ -6567,8 +6567,11 @@ class ExternalAppPolicy(Base):
 
 class SSOProvider(Base):
     """A configured SSO identity provider. Providers are rows, not startup
-    wiring: login routes resolve the row at request time, so adding or
-    editing one requires no restart."""
+    wiring: login routes resolve the row at request time, so adding or editing
+    one requires no restart. Fields common to every auth method are columns;
+    everything protocol-specific lives in the encrypted `config` blob, validated
+    per provider_type in onyx.db.sso_provider. So a new method (OIDC, SAML, ...)
+    is a new config shape, not a set of new columns."""
 
     __tablename__ = "sso_provider"
 
@@ -6580,12 +6583,12 @@ class SSOProvider(Base):
     provider_type: Mapped[SSOProviderType] = mapped_column(
         Enum(SSOProviderType, native_enum=False), nullable=False
     )
-    client_id: Mapped[str] = mapped_column(String, nullable=False)
-    client_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=False
+    # Protocol-specific settings: OAuth client creds + discovery URL for
+    # GOOGLE/OIDC, or IdP metadata for SAML. Encrypted at rest; shape validated
+    # against provider_type on write.
+    config: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson(), nullable=False
     )
-    # OIDC discovery document URL; None for GOOGLE providers
-    openid_config_url: Mapped[str | None] = mapped_column(String, nullable=True)
     # Email domains admitted through this provider's login, lowercased
     allowed_email_domains: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list

@@ -8,6 +8,8 @@ Create Date: 2026-07-06 21:34:08.516250
 
 from __future__ import annotations
 
+import json
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -29,9 +31,9 @@ def _sso_provider_table(metadata: sa.MetaData) -> sa.Table:
         sa.Column("name", sa.String, nullable=False, unique=True),
         sa.Column("display_name", sa.String, nullable=False),
         sa.Column("provider_type", sa.String, nullable=False),
-        sa.Column("client_id", sa.String, nullable=False),
-        sa.Column("client_secret", sa.LargeBinary, nullable=False),
-        sa.Column("openid_config_url", sa.String, nullable=True),
+        # Protocol-specific config, encrypted JSON (matches the EncryptedJson
+        # ORM column). Shape differs by provider_type; validated in the app.
+        sa.Column("config", sa.LargeBinary, nullable=False),
         sa.Column(
             "allowed_email_domains",
             postgresql.ARRAY(sa.String),
@@ -95,14 +97,21 @@ def _seed_from_env(table: sa.Table) -> None:
     if bind.execute(sa.select(table.c.id).limit(1)).first():
         return
 
+    # Config shape matches the per-type models in onyx.db.sso_provider, encrypted
+    # exactly as the EncryptedJson column would store it (json then encrypt).
+    config: dict[str, str] = {
+        "client_id": OAUTH_CLIENT_ID,
+        "client_secret": OAUTH_CLIENT_SECRET,
+    }
+    if config_url is not None:
+        config["openid_config_url"] = config_url
+
     bind.execute(
         table.insert().values(
             name=name,
             display_name=display_name,
             provider_type=provider_type,
-            client_id=OAUTH_CLIENT_ID,
-            client_secret=encrypt_string_to_bytes(OAUTH_CLIENT_SECRET),
-            openid_config_url=config_url,
+            config=encrypt_string_to_bytes(json.dumps(config)),
             allowed_email_domains=[d.lower() for d in VALID_EMAIL_DOMAINS],
             enabled=True,
         )

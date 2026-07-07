@@ -641,3 +641,4 @@ class SSOProviderType(str, PyEnum):
     # so the two must match to round-trip (repo-wide convention).
     GOOGLE = "GOOGLE"
     OIDC = "OIDC"
+    SAML = "SAML"
