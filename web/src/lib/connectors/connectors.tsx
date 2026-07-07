@@ -754,6 +754,91 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Index service desk requests from your Jira Service Management instance. Supports scoping by project key or a custom JQL query.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira Service Management base URL:",
+        label: "Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: "What to Index",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label: "All JSM Projects",
+            fields: [
+              {
+                type: "string_tab",
+                label: "All JSM Projects",
+                name: "everything",
+                description:
+                  "Index all service desk requests across every JSM project the provided credentials have access to.",
+              },
+            ],
+          },
+          {
+            value: "project",
+            label: "Specific Project",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the project key:",
+                label: "Project Key",
+                name: "project_key",
+                description:
+                  "Key of a specific JSM project to index (e.g., 'SUP'). Must be a service_management project type.",
+              },
+            ],
+          },
+          {
+            value: "jql",
+            label: "Custom JQL",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the JQL query:",
+                label: "JQL Query",
+                name: "jql_query",
+                description:
+                  "A custom JQL query to filter which JSM requests to index." +
+                  "\n\nIMPORTANT: Do not include time-based filters (they conflict with the connector's incremental sync logic) or ORDER BY clauses." +
+                  "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for syntax reference.",
+              },
+            ],
+          },
+        ],
+        defaultTab: "everything",
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to exclude from comment indexing:",
+        label: "Comment Email Blocklist",
+        name: "comment_email_blacklist",
+        description:
+          "Comments from these email addresses will not be indexed. Useful for filtering out bot or automation accounts.",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
@@ -2030,6 +2115,14 @@ export interface JiraConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+}
+
+export interface JiraServiceManagementConfig {
+  jira_base_url: string;
+  project_key?: string;
+  comment_email_blacklist?: string[];
+  jql_query?: string;
+  scoped_token?: boolean;
 }
 
 export interface SalesforceConfig {
