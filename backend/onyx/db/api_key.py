@@ -16,7 +16,6 @@ from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
 from onyx.db.models import ApiKey
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
@@ -76,12 +75,6 @@ def get_api_key_fake_email(
     return f"{DANSWER_API_KEY_PREFIX}{name}@{unique_id}{DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN}"
 
 
-def _grant_limited_key_scope(api_key_user: User) -> None:
-    """LIMITED keys join no group; chat scope is granted directly
-    (WRITE_CHAT implies READ_CHAT)."""
-    api_key_user.effective_permissions = [Permission.WRITE_CHAT.value]
-
-
 def insert_api_key(
     db_session: Session, api_key_args: APIKeyArgs, user_id: uuid.UUID | None
 ) -> ApiKeyDescriptor:
@@ -125,8 +118,8 @@ def insert_api_key(
             api_key_user_row,
             is_admin=(api_key_args.role == UserRole.ADMIN),
         )
-    elif api_key_args.role == UserRole.LIMITED:
-        _grant_limited_key_scope(api_key_user_row)
+    else:
+        recompute_user_permissions__no_commit(api_key_user_id, db_session)
 
     db_session.commit()
 
@@ -180,13 +173,10 @@ def update_api_key(
                 api_key_user,
                 is_admin=(api_key_args.role == UserRole.ADMIN),
             )
-        elif api_key_args.role != UserRole.LIMITED:
-            # Recompute since we just removed the old default-group membership.
-            recompute_user_permissions__no_commit(api_key_user.id, db_session)
 
-    # On every update, not just role changes, so edits repair legacy keys.
-    if api_key_args.role == UserRole.LIMITED:
-        _grant_limited_key_scope(api_key_user)
+    # Converge on every update, not just role changes, so edits repair
+    # keys with stale permissions.
+    recompute_user_permissions__no_commit(api_key_user.id, db_session)
 
     db_session.commit()
 
@@ -220,8 +210,8 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
     existing_api_key.hashed_api_key = hash_api_key(new_api_key)
     existing_api_key.api_key_display = build_displayable_api_key(new_api_key)
 
-    if api_key_user.role == UserRole.LIMITED:
-        _grant_limited_key_scope(api_key_user)
+    # Converge so rotation repairs keys with stale permissions.
+    recompute_user_permissions__no_commit(api_key_user.id, db_session)
 
     db_session.commit()
 
