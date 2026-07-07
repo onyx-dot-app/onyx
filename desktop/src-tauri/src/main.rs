@@ -93,6 +93,14 @@ const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
     }
   }
 
+  function isSameOrigin(parsedUrl) {
+    try {
+      return parsedUrl.origin === window.location.origin;
+    } catch {
+      return false;
+    }
+  }
+
   function handleChatNavigation(rawUrl) {
     const parsedUrl = getAllowedNavigationUrl(rawUrl);
     if (!parsedUrl) {
@@ -101,16 +109,22 @@ const CHAT_LINK_INTERCEPT_SCRIPT: &str = r##"
 
     const safeUrl = parsedUrl.toString();
     const scheme = parsedUrl.protocol.toLowerCase();
-    if (scheme === "mailto:" || scheme === "tel:") {
-      void openWithTauri(safeUrl).then((opened) => {
-        if (!opened) {
-          window.location.assign(safeUrl);
-        }
-      });
+
+    // Same-origin links navigate in place so the app stays in-window. Everything
+    // else (mailto/tel and cross-origin http(s) links) is handed to the OS default
+    // handler from here — a genuine click / window.open. Keeping this decision in JS
+    // (rather than the Rust navigation handler) avoids opening third-party iframe
+    // sub-resource loads externally, e.g. Stripe's hidden fraud-detection iframe.
+    if (scheme !== "mailto:" && scheme !== "tel:" && isSameOrigin(parsedUrl)) {
+      window.location.assign(safeUrl);
       return true;
     }
 
-    window.location.assign(safeUrl);
+    void openWithTauri(safeUrl).then((opened) => {
+      if (!opened) {
+        window.location.assign(safeUrl);
+      }
+    });
     return true;
   }
 
@@ -511,12 +525,6 @@ fn open_settings(app: &AppHandle) {
     }
 }
 
-fn same_origin(left: &Url, right: &Url) -> bool {
-    left.scheme() == right.scheme()
-        && left.host_str() == right.host_str()
-        && left.port_or_known_default() == right.port_or_known_default()
-}
-
 fn is_chat_session_url(url: &Url) -> bool {
     url.path().starts_with("/app") && url.query_pairs().any(|(key, _)| key == "chatId")
 }
@@ -526,11 +534,12 @@ fn should_open_in_external_browser(current_url: &Url, destination_url: &Url) -> 
         return false;
     }
 
-    match destination_url.scheme() {
-        "mailto" | "tel" => true,
-        "http" | "https" => !same_origin(current_url, destination_url),
-        _ => false,
-    }
+    // Only non-web schemes are handed to the OS from this navigation handler.
+    // Cross-origin http(s) links are opened externally by the injected chat-link
+    // script on genuine clicks / window.open. Routing http(s) through here too would
+    // also catch third-party iframe sub-resource loads (e.g. Stripe's hidden
+    // fraud-detection iframe at js.stripe.com), spuriously popping open browser tabs.
+    matches!(destination_url.scheme(), "mailto" | "tel")
 }
 
 fn open_in_default_browser(url: &str) -> bool {
