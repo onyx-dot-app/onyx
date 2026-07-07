@@ -25,3 +25,10 @@ def build_ext_group_name_for_onyx(ext_group_name: str, source: DocumentSource) -
     NOTE: the name is lowercased to handle case sensitivity for group names
     """
     return f"{source.value}_{ext_group_name}".lower()
+
+
+def build_domain_group_id(domain: str) -> str:
+    """Derived pseudo-group for "everyone at <domain>" shares. It has no
+    membership rows: the doc side stores this id and the user side derives the
+    matching token from the user's own email domain."""
+    return f"domain:{domain.lower()}"

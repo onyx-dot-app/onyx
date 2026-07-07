@@ -13,6 +13,7 @@ from onyx.access.models import DocExternalAccess
 from onyx.access.models import ElementExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.access.models import NodeExternalAccess
+from onyx.access.utils import build_domain_group_id
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -148,6 +149,7 @@ def get_external_access_for_raw_gdrive_file(
     folder_ids_to_inherit_permissions_from: set[str] = set()
     user_emails: set[str] = set()
     group_emails: set[str] = set()
+    domain_groups: set[str] = set()
     public = False
 
     for permission in permissions_list:
@@ -187,12 +189,24 @@ def get_external_access_for_raw_gdrive_file(
                     doc_id,
                     permission,
                 )
-        elif permission.type == PermissionType.DOMAIN and company_domain:
-            if permission.domain == company_domain:
-                public = True
+        elif permission.type == PermissionType.DOMAIN:
+            # "Everyone at <domain>" grants a derived domain group scoped to that
+            # domain's users, never instance-public. The matching user-side token
+            # is derived from the user's own email domain in ee _get_acl_for_user.
+            if permission.domain:
+                domain_groups.add(build_domain_group_id(permission.domain))
+                if permission.domain != company_domain:
+                    # Cross-workspace domain share (e.g. a doc shared to a
+                    # partner company's whole domain).
+                    logger.debug(
+                        "Domain permission for %s scoped to external domain %s",
+                        doc_id,
+                        permission.domain,
+                    )
             else:
                 logger.warning(
-                    "Permission is type domain but does not match company domain:\n %s",
+                    "Permission is type `domain` but no domain is provided for document %s\n %s",
+                    doc_id,
                     permission,
                 )
         elif permission.type == PermissionType.ANYONE:
@@ -200,6 +214,7 @@ def get_external_access_for_raw_gdrive_file(
 
     group_ids = (
         group_emails
+        | domain_groups
         | folder_ids_to_inherit_permissions_from
         | ({drive_id} if drive_id is not None else set())
     )
@@ -268,6 +283,7 @@ def get_external_access_for_folder(
 
     user_emails: set[str] = set()
     group_emails: set[str] = set()
+    domain_groups: set[str] = set()
     is_public = False
 
     for permission in permissions_list:
@@ -285,18 +301,20 @@ def get_external_access_for_folder(
                     "Group permission without email for folder %s", folder_id
                 )
         elif permission.type == PermissionType.DOMAIN:
-            # Domain permission - check if it matches company domain
-            if permission.domain == google_domain:
-                # Only public if discoverable (allowFileDiscovery is not False)
-                # If allowFileDiscovery is False, it's "link only" access
-                is_public = permission.allow_file_discovery is not False
+            # "Everyone at <domain>" grants a derived domain group scoped to that
+            # domain's users, never instance-public. The matching user-side token
+            # is derived from the user's own email domain in ee _get_acl_for_user.
+            if permission.domain:
+                domain_groups.add(build_domain_group_id(permission.domain))
+                if permission.domain != google_domain:
+                    logger.debug(
+                        "Domain permission scoped to external domain %s for folder %s",
+                        permission.domain,
+                        folder_id,
+                    )
             else:
-                logger.debug(
-                    "Domain permission for %s does not match "
-                    "company domain %s for folder %s",
-                    permission.domain,
-                    google_domain,
-                    folder_id,
+                logger.warning(
+                    "Domain permission without domain for folder %s", folder_id
                 )
         elif permission.type == PermissionType.ANYONE:
             # Only public if discoverable (allowFileDiscovery is not False)
@@ -304,11 +322,11 @@ def get_external_access_for_folder(
             is_public = permission.allow_file_discovery is not False
 
     # Prefix group IDs with source type if requested (for indexing path)
-    group_ids: set[str] = group_emails
+    group_ids: set[str] = group_emails | domain_groups
     if add_prefix:
         group_ids = {
             build_ext_group_name_for_onyx(group_id, DocumentSource.GOOGLE_DRIVE)
-            for group_id in group_emails
+            for group_id in group_ids
         }
 
     return ExternalAccess(
