@@ -1,63 +1,38 @@
 "use client";
 
-import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
+import { useState } from "react";
 import useSWR from "swr";
+import { useRouter } from "next/navigation";
+import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import Modal from "@/refresh-components/Modal";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { logout, refreshToken } from "@/lib/users/svc";
-import { getSecondsUntilExpiration } from "@opal/time";
-import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
-import { Button } from "@opal/components";
-import { usePathname, useRouter } from "next/navigation";
-import { SvgAlertTriangle, SvgLogOut } from "@opal/icons";
-import { Content } from "@opal/layouts";
-import { useCurrentUser } from "@/lib/users/hooks";
+import {
+  useCurrentUser,
+  useCustomTokenRefresh,
+  useSessionWatcher,
+  useTokenExpiry,
+} from "@/lib/users/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
+import { MessageCard } from "@opal/components";
+import LoggedOutModal from "@/sections/modals/LoggedOutModal";
 
-export default function AppHealthBanner() {
+export default function HealthBanner() {
   const router = useRouter();
   const { error } = useSWR(SWR_KEYS.health, errorHandlingFetcher);
-  const [expired, setExpired] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
-  const pathname = usePathname();
-  const expirationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
-  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null
-  );
-  // Latches true once we see an authed user — separates mid-session logout
-  // from a fresh unauth load.
-  const hasSeenAuthenticatedUserRef = useRef(false);
-
   const { user, mutateUser, userError } = useCurrentUser();
-  if (user) {
-    hasSeenAuthenticatedUserRef.current = true;
-  }
-
-  const isAuthPage = pathname?.startsWith("/auth") ?? false;
-  const sessionEnded =
-    userError?.status === 403 || error instanceof RedirectError || expired;
-  const showLoggedOutModal =
-    !dismissed &&
-    sessionEnded &&
-    hasSeenAuthenticatedUserRef.current &&
-    !isAuthPage;
-
-  // Clear the server session on 403 for a previously-authed user.
-  useEffect(() => {
-    if (userError?.status === 403 && hasSeenAuthenticatedUserRef.current) {
-      logout();
-    }
-  }, [userError]);
+  const { expired, setupExpirationTimeout } = useTokenExpiry(user);
+  useCustomTokenRefresh(user, setupExpirationTimeout, mutateUser);
+  const { sessionEnded } = useSessionWatcher({
+    user,
+    userError,
+    healthError: error,
+    expired,
+  });
+  const [dismissed, setDismissed] = useState(false);
 
   function handleLogin() {
     setDismissed(true);
     const { isExtension } = getExtensionContext();
     if (isExtension) {
-      // In the Chrome extension, open login in a new tab so OAuth popups
-      // work correctly (the extension iframe has no navigable URL origin).
       window.open(
         window.location.origin + "/auth/login",
         "_blank",
@@ -68,202 +43,21 @@ export default function AppHealthBanner() {
     }
   }
 
-  const setupExpirationTimeout = useCallback(
-    (secondsUntilExpiration: number) => {
-      if (expirationTimeoutRef.current) {
-        clearTimeout(expirationTimeoutRef.current);
-      }
+  if (sessionEnded && !dismissed) {
+    return <LoggedOutModal onLogin={handleLogin} />;
+  }
 
-      const timeUntilExpire = (secondsUntilExpiration + 10) * 1000;
-      expirationTimeoutRef.current = setTimeout(() => {
-        setExpired(true);
-      }, timeUntilExpire);
-    },
-    []
+  if (!error || error instanceof RedirectError || expired) {
+    return null;
+  }
+
+  return (
+    <div className="fixed top-0 left-0 z-101 w-full p-3">
+      <MessageCard
+        variant="error"
+        title="The backend is currently unavailable"
+        description="If this is your initial setup or you just updated your Onyx deployment, this is likely because the backend is still starting up. Give it a minute or two, and then refresh the page. If that does not work, make sure the backend is setup and/or contact an administrator."
+      />
+    </div>
   );
-
-  // Clean up any timeouts/intervals when component unmounts
-  useEffect(() => {
-    return () => {
-      if (expirationTimeoutRef.current) {
-        clearTimeout(expirationTimeoutRef.current);
-      }
-
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
-    };
-  }, []);
-
-  // Set up token refresh logic if custom refresh URL exists
-  useEffect(() => {
-    if (!user) return;
-
-    const expiries: Date[] = [];
-    if (
-      user.current_token_created_at &&
-      user.current_token_expiry_length !== undefined
-    ) {
-      const createdAt = new Date(user.current_token_created_at);
-      expiries.push(
-        new Date(createdAt.getTime() + user.current_token_expiry_length * 1000)
-      );
-    }
-    if (user.oidc_expiry) {
-      expiries.push(new Date(user.oidc_expiry));
-    }
-    if (expiries.length === 0) return;
-    const secondsUntilExpiration = Math.min(
-      ...expiries.map(getSecondsUntilExpiration)
-    );
-
-    // Set up expiration timeout based on current user data
-    setupExpirationTimeout(secondsUntilExpiration);
-
-    if (NEXT_PUBLIC_CUSTOM_REFRESH_URL) {
-      const refreshUrl = NEXT_PUBLIC_CUSTOM_REFRESH_URL;
-
-      const attemptTokenRefresh = async () => {
-        let retryCount = 0;
-        const maxRetries = 3;
-
-        while (retryCount < maxRetries) {
-          try {
-            const refreshTokenData = await refreshToken(refreshUrl);
-            if (!refreshTokenData) {
-              throw new Error("Failed to refresh token");
-            }
-
-            const response = await fetch(
-              "/api/enterprise-settings/refresh-token",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify(refreshTokenData),
-              }
-            );
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            // Wait for backend to process the token
-            await new Promise((resolve) => setTimeout(resolve, 4000));
-
-            // Get updated user data
-            const updatedUser = await mutateUser();
-
-            if (updatedUser) {
-              // Reset expiration timeout with new expiration time
-              const newExpiries: Date[] = [];
-              if (
-                updatedUser.current_token_created_at &&
-                updatedUser.current_token_expiry_length !== undefined
-              ) {
-                const newCreatedAt = new Date(
-                  updatedUser.current_token_created_at
-                );
-                newExpiries.push(
-                  new Date(
-                    newCreatedAt.getTime() +
-                      updatedUser.current_token_expiry_length * 1000
-                  )
-                );
-              }
-              if (updatedUser.oidc_expiry) {
-                newExpiries.push(new Date(updatedUser.oidc_expiry));
-              }
-              if (newExpiries.length > 0) {
-                const newSecondsUntilExpiration = Math.min(
-                  ...newExpiries.map(getSecondsUntilExpiration)
-                );
-                setupExpirationTimeout(newSecondsUntilExpiration);
-                console.debug(
-                  `Token refreshed, new expiration in ${newSecondsUntilExpiration} seconds`
-                );
-              }
-            }
-
-            break; // Success - exit the retry loop
-          } catch (error) {
-            console.error(
-              `Error refreshing token (attempt ${
-                retryCount + 1
-              }/${maxRetries}):`,
-              error
-            );
-            retryCount++;
-
-            if (retryCount === maxRetries) {
-              console.error("Max retry attempts reached");
-            } else {
-              // Wait before retrying (exponential backoff)
-              await new Promise((resolve) =>
-                setTimeout(resolve, Math.pow(2, retryCount) * 1000)
-              );
-            }
-          }
-        }
-      };
-
-      // Set up refresh interval
-      const refreshInterval = 60 * 15; // 15 mins
-
-      // Clear any existing interval
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-      }
-
-      refreshIntervalRef.current = setInterval(() => {
-        // Hidden tabs skip the refresh; UserProvider's useTokenRefresh
-        // catches the session up on return to visibility.
-        if (document.hidden) return;
-        attemptTokenRefresh();
-      }, refreshInterval * 1000);
-
-      // If we're going to expire before the next refresh, kick off a refresh now
-      if (secondsUntilExpiration < refreshInterval) {
-        attemptTokenRefresh();
-      }
-    }
-  }, [user, setupExpirationTimeout, mutateUser]);
-
-  if (showLoggedOutModal) {
-    return (
-      <Modal open>
-        <Modal.Content width="sm" height="sm">
-          <Modal.Header icon={SvgLogOut} title="You Have Been Logged Out" />
-          <Modal.Body>
-            <p className="text-sm">
-              Your session has expired. Please log in again to continue.
-            </p>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button onClick={handleLogin}>Log In</Button>
-          </Modal.Footer>
-        </Modal.Content>
-      </Modal>
-    );
-  }
-
-  if (!error && !expired) {
-    return null;
-  }
-
-  if (error instanceof RedirectError || expired) {
-    return null;
-  } else {
-    return (
-      <div className="fixed top-0 left-0 z-101 w-full bg-status-error-01 p-3">
-        <Content
-          icon={SvgAlertTriangle}
-          title="The backend is currently unavailable"
-          description="If this is your initial setup or you just updated your Onyx deployment, this is likely because the backend is still starting up. Give it a minute or two, and then refresh the page. If that does not work, make sure the backend is setup and/or contact an administrator."
-          sizePreset="main-content"
-          variant="section"
-        />
-      </div>
-    );
-  }
 }

@@ -1,12 +1,12 @@
 import React from "react";
-import { render, screen, waitFor } from "@tests/setup/test-utils";
-import { RedirectError } from "@/lib/fetcher";
-import AppHealthBanner from "@/sections/banners/HealthBanner";
+import { render, screen } from "@tests/setup/test-utils";
+import HealthBanner from "@/sections/banners/HealthBanner";
 
-const mockLogout = jest.fn();
 const mockUseSWR = jest.fn();
 const mockUseCurrentUser = jest.fn();
-const mockUsePathname = jest.fn();
+const mockUseTokenExpiry = jest.fn();
+const mockUseCustomTokenRefresh = jest.fn();
+const mockUseSessionWatcher = jest.fn();
 
 jest.mock("swr", () => ({
   __esModule: true,
@@ -15,92 +15,71 @@ jest.mock("swr", () => ({
 }));
 
 jest.mock("next/navigation", () => ({
-  usePathname: () => mockUsePathname(),
-  useRouter: () => ({
-    push: jest.fn(),
-  }),
+  usePathname: () => "/chat",
+  useRouter: () => ({ push: jest.fn() }),
 }));
 
 jest.mock("@/lib/users/hooks", () => ({
   useCurrentUser: () => mockUseCurrentUser(),
+  useTokenExpiry: (...args: unknown[]) => mockUseTokenExpiry(...args),
+  useCustomTokenRefresh: (...args: unknown[]) =>
+    mockUseCustomTokenRefresh(...args),
+  useSessionWatcher: (...args: unknown[]) => mockUseSessionWatcher(...args),
 }));
 
-jest.mock("@/lib/users/svc", () => ({
-  logout: (...args: unknown[]) => mockLogout(...args),
-  refreshToken: jest.fn(),
-}));
-
-describe("AppHealthBanner logout handling", () => {
+describe("HealthBanner", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockLogout.mockResolvedValue(undefined);
     mockUseSWR.mockReturnValue({ error: undefined });
     mockUseCurrentUser.mockReturnValue({
       user: undefined,
       mutateUser: jest.fn(),
       userError: undefined,
     });
-    mockUsePathname.mockReturnValue("/auth/login");
+    mockUseTokenExpiry.mockReturnValue({
+      expired: false,
+      setupExpirationTimeout: jest.fn(),
+    });
+    mockUseCustomTokenRefresh.mockReturnValue(undefined);
+    mockUseSessionWatcher.mockReturnValue({ sessionEnded: false });
   });
 
-  it("does not show the logged-out modal or call logout on auth pages after a 403", async () => {
-    mockUseCurrentUser.mockReturnValue({
-      user: undefined,
-      mutateUser: jest.fn(),
-      userError: {
-        status: 403,
-      },
-    });
+  it("renders nothing when the backend is healthy and the session is active", () => {
+    const { container } = render(<HealthBanner />);
+    expect(container.firstChild).toBeNull();
+  });
 
-    render(<AppHealthBanner />);
-
-    await waitFor(() => {
-      expect(mockLogout).not.toHaveBeenCalled();
-    });
-
+  it("does not show the logged-out modal when the session has not ended", () => {
+    mockUseSessionWatcher.mockReturnValue({ sessionEnded: false });
+    render(<HealthBanner />);
     expect(
       screen.queryByText(/you have been logged out/i)
     ).not.toBeInTheDocument();
   });
 
-  it("does not show the logged-out modal on a fresh unauthenticated load", async () => {
-    mockUsePathname.mockReturnValue("/");
-    mockUseSWR.mockReturnValue({
-      error: new RedirectError("auth redirect", 403, {}),
-    });
-
-    render(<AppHealthBanner />);
-
-    await waitFor(() => {
-      expect(mockLogout).not.toHaveBeenCalled();
-    });
-
-    expect(
-      screen.queryByText(/you have been logged out/i)
-    ).not.toBeInTheDocument();
+  it("shows the logged-out modal when the session has ended", () => {
+    mockUseSessionWatcher.mockReturnValue({ sessionEnded: true });
+    render(<HealthBanner />);
+    expect(screen.getByText(/you have been logged out/i)).toBeInTheDocument();
   });
 
-  it("shows the logged-out modal after a 403 when a user was previously loaded", async () => {
-    mockUsePathname.mockReturnValue("/chat");
-    mockUseCurrentUser.mockReturnValue({
-      user: {
-        id: "user-1",
-        email: "a@example.com",
-      },
-      mutateUser: jest.fn(),
-      userError: {
-        status: 403,
-      },
-    });
-
-    render(<AppHealthBanner />);
-
-    await waitFor(() => {
-      expect(mockLogout).toHaveBeenCalled();
-    });
-
+  it("shows the backend unavailable banner on a non-auth health error", () => {
+    mockUseSWR.mockReturnValue({ error: new Error("network error") });
+    render(<HealthBanner />);
     expect(
-      await screen.findByText(/you have been logged out/i)
+      screen.getByText(/the backend is currently unavailable/i)
     ).toBeInTheDocument();
+  });
+
+  it("does not show the backend banner when the token has expired", () => {
+    mockUseSWR.mockReturnValue({ error: new Error("network error") });
+    mockUseTokenExpiry.mockReturnValue({
+      expired: true,
+      setupExpirationTimeout: jest.fn(),
+    });
+    render(<HealthBanner />);
+    expect(
+      screen.queryByText(/the backend is currently unavailable/i)
+    ).not.toBeInTheDocument();
   });
 });
