@@ -195,3 +195,10 @@ def jira_group_sync(
             id=group_name,
             user_emails=list(member_emails),
         )
+
+
+def jsm_group_sync(
+    tenant_id: str,
+    cc_pair: ConnectorCredentialPair,
+) -> Generator[ExternalUserGroup, None, None]:
+    yield from jira_group_sync(tenant_id, cc_pair)
