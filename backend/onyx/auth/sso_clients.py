@@ -16,16 +16,18 @@ class OpenIDConfigurationIssuerMismatch(ValueError):
     """The discovery document's issuer does not own the configured URL."""
 
 
-def _fully_decoded(path: str) -> str:
-    """Percent-decode until the string stops changing, so N-times-encoded
-    input collapses to its real form before validation. Bounded to avoid a
-    pathological loop; real inputs converge in one or two passes."""
+def _fully_decoded(path: str) -> tuple[str, bool]:
+    """Percent-decode until the string stops changing, so N-times-encoded input
+    collapses to its real form before validation. Returns (decoded, converged).
+    The loop is bounded to avoid a pathological input; a path that has not
+    stabilized within the bound is treated as hostile and the caller fails
+    closed rather than validating a still-encoded string."""
     for _ in range(8):
         once = unquote(path)
         if once == path:
-            return path
+            return path, True
         path = once
-    return path
+    return path, False
 
 
 def validate_issuer_owns_config_url(
@@ -45,8 +47,9 @@ def validate_issuer_owns_config_url(
 
     iss = urlsplit(issuer)
     cfg = urlsplit(openid_configuration_endpoint)
-    has_relative_segment = any(
-        segment in (".", "..") for segment in _fully_decoded(cfg.path).split("/")
+    decoded_path, converged = _fully_decoded(cfg.path)
+    has_relative_segment = not converged or any(
+        segment in (".", "..") for segment in decoded_path.split("/")
     )
     issuer_path = iss.path.rstrip("/")
     same_origin = (iss.scheme.lower(), iss.netloc.lower()) == (

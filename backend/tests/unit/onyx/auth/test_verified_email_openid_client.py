@@ -199,6 +199,24 @@ def test_path_based_issuer_legit_config_accepted() -> None:
     )
 
 
+def _encode_times(segment: str, times: int) -> str:
+    encoded = "".join(f"%{ord(ch):02x}" for ch in segment)
+    for _ in range(times - 1):
+        encoded = encoded.replace("%", "%25")
+    return encoded
+
+
+def test_encoding_beyond_decode_bound_fails_closed() -> None:
+    # 12 levels of encoding exceeds _fully_decoded's bound, so it must NOT
+    # silently validate a still-encoded traversal.
+    deep = _encode_times("..", 12)
+    with pytest.raises(OpenIDConfigurationIssuerMismatch):
+        validate_issuer_owns_config_url(
+            "https://idp.example.com/oidc",
+            f"https://idp.example.com/oidc/{deep}/evil/.well-known/openid-configuration",
+        )
+
+
 @pytest.mark.parametrize(
     "encoded",
     [
