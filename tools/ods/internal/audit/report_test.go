@@ -113,6 +113,117 @@ func TestRenderUnknownFormat(t *testing.T) {
 	}
 }
 
+func TestParseFormats(t *testing.T) {
+	cases := map[string][]string{
+		"":                {"text"},
+		"   ":             {"text"},
+		"sarif":           {"sarif"},
+		"SARIF, Text":     {"sarif", "text"},
+		"text,sarif,text": {"text", "sarif"}, // de-duped, order preserved
+		",json,":          {"json"},
+	}
+	for in, want := range cases {
+		got := parseFormats(in)
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("parseFormats(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+// TestRenderReportRouting is the core of the CI use case: a combined
+// sarif,text run must put valid SARIF on stdout (redirected to a file) and the
+// human report on stderr (visible in the log), never mixing the two.
+func TestRenderReportRouting(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := renderReport(&stdout, &stderr, "sarif,text", sampleResult()); err != nil {
+		t.Fatalf("renderReport: %v", err)
+	}
+
+	// stdout is pure SARIF.
+	var doc map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("stdout is not valid SARIF JSON: %v\n%s", err, stdout.String())
+	}
+	if strings.Contains(stdout.String(), "Dependency vulnerabilities:") {
+		t.Error("text report leaked into the SARIF stdout stream")
+	}
+
+	// stderr is the text report, and JSON must not have leaked into it.
+	if !strings.Contains(stderr.String(), "GHSA-crit") {
+		t.Errorf("stderr missing text report:\n%s", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "\"$schema\"") {
+		t.Error("SARIF leaked into the text stderr stream")
+	}
+}
+
+func TestRenderReportLoneTextGoesToStdout(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := renderReport(&stdout, &stderr, "text", sampleResult()); err != nil {
+		t.Fatalf("renderReport: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "GHSA-crit") {
+		t.Errorf("lone text should render to stdout, got stdout=%q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("lone text should not write to stderr, got %q", stderr.String())
+	}
+}
+
+func TestRenderReportRejectsTwoDataFormats(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := renderReport(&stdout, &stderr, "json,sarif", sampleResult()); err == nil {
+		t.Error("renderReport should reject two machine-readable formats")
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Error("nothing should be written when the format set is rejected")
+	}
+}
+
+func TestRenderReportRejectsUnknownFormat(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := renderReport(&stdout, &stderr, "sarif,xml", sampleResult()); err == nil {
+		t.Error("renderReport should reject an unknown format")
+	}
+	// Validation happens before any writing, so a valid format alongside the bad
+	// one must not produce partial output.
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Errorf("no output expected on bad format set; stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunbookShownOnlyWhenBlocking(t *testing.T) {
+	// A realistic blocking finding carries an ecosystem (blockingFindings copies
+	// the full finding), which the runbook threads into the example command.
+	blocking := Finding{ID: "GHSA-crit", Ecosystem: "npm", Package: "a", Version: "1.0.0", Severity: SeverityCritical}
+	res := &Result{Findings: []Finding{blocking}, Blocking: []Finding{blocking}}
+
+	var withBlocking bytes.Buffer
+	if err := renderText(&withBlocking, res); err != nil {
+		t.Fatalf("renderText: %v", err)
+	}
+	out := withBlocking.String()
+	if !strings.Contains(out, "ods audit ignore add GHSA-crit") {
+		t.Errorf("runbook should print a ready-to-fill ignore command:\n%s", out)
+	}
+	if !strings.Contains(out, "--ecosystem \"npm\"") {
+		t.Errorf("runbook command should carry the finding's ecosystem:\n%s", out)
+	}
+	if !strings.Contains(out, "Action required") {
+		t.Errorf("runbook header missing:\n%s", out)
+	}
+
+	// No blocking findings -> no runbook.
+	nonBlocking := &Result{Findings: []Finding{{ID: "GHSA-low", Severity: SeverityLow, Ecosystem: "npm", Package: "c"}}}
+	var buf bytes.Buffer
+	if err := renderText(&buf, nonBlocking); err != nil {
+		t.Fatalf("renderText: %v", err)
+	}
+	if strings.Contains(buf.String(), "Action required") {
+		t.Errorf("runbook should not appear without blocking findings:\n%s", buf.String())
+	}
+}
+
 func TestBlockingFindings(t *testing.T) {
 	findings := []Finding{
 		{ID: "c", Severity: SeverityCritical},
