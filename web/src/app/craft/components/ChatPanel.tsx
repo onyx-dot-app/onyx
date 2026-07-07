@@ -21,6 +21,7 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
+import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
 import { SessionErrorCode } from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
@@ -47,6 +48,7 @@ import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsR
 import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
+import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
@@ -94,6 +96,7 @@ export default function BuildChatPanel({
     useBuildContext();
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
+  const onWakeIntent = useWakeOnIntent();
 
   const { llmProviders } = useLLMProviders();
   // Picker shows the session's stored model unless the user picks another.
@@ -656,6 +659,7 @@ export default function BuildChatPanel({
               changes grow leftward into empty space without shifting anything. */}
               <div className="flex flex-row items-center gap-2 shrink-0">
                 <SandboxStatusIndicator />
+                <SandboxAsleepNotice />
                 {/* Output panel toggle — same icon for open and close */}
                 {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <IconButton
@@ -737,7 +741,11 @@ export default function BuildChatPanel({
                 {!videoBackgroundEnabled && (
                   <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
                 )}
-                <div className="max-w-[720px] mx-auto">
+                <div
+                  className="max-w-[720px] mx-auto"
+                  onFocusCapture={onWakeIntent}
+                  onKeyDownCapture={onWakeIntent}
+                >
                   {/* Scroll to bottom button - shown when user has scrolled away */}
                   {showScrollButton && (
                     <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
