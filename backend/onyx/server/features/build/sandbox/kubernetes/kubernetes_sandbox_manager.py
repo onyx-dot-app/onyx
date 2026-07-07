@@ -155,19 +155,22 @@ POD_READY_TIMEOUT_SECONDS = 30
 OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 60.0
 POD_IP_POLL_INTERVAL_SECONDS = 0.5
 
-# Lock TTL and waiter blocking timeout; must cover the worst-case hold.
-# Expiry falls open to provision()'s 409/pod-exists fallbacks.
-PROVISION_LOCK_TIMEOUT_SECONDS = (
-    OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
-    + POD_READY_TIMEOUT_SECONDS
-    + OPENCODE_SERVE_READY_TIMEOUT_SECONDS
-)
-
 # Resource deletion timeout and polling interval
 # Kubernetes deletes are async - we need to wait for resources to actually be
 # gone.
 RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
+
+# Lock TTL and waiter blocking timeout; the sum of every bounded wait a holder
+# can spend inside the lock (incl. a terminating-Service deletion wait in
+# _ensure_service_exists). Expiry falls open to provision()'s 409/pod-exists
+# fallbacks.
+PROVISION_LOCK_TIMEOUT_SECONDS = (
+    OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+    + POD_READY_TIMEOUT_SECONDS
+    + OPENCODE_SERVE_READY_TIMEOUT_SECONDS
+    + RESOURCE_DELETION_TIMEOUT_SECONDS
+)
 
 
 # Pinned to the proxy IP via pod hostAliases — the iptables lockdown blocks DNS,
