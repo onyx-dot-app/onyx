@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { type KeyedMutator } from "swr";
-import { RedirectError } from "@/lib/fetcher";
 import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
@@ -202,12 +201,10 @@ export function useCustomTokenRefresh(
 export function useSessionWatcher({
   user,
   userError,
-  healthError,
   expired,
 }: {
   user: User | null | undefined;
   userError: (Error & { status?: number }) | undefined;
-  healthError: unknown;
   expired: boolean;
 }): { sessionEnded: boolean } {
   const hasSeenAuthenticatedUserRef = useRef(false);
@@ -219,9 +216,7 @@ export function useSessionWatcher({
 
   const isAuthPage = pathname?.startsWith("/auth") ?? false;
   const sessionEnded =
-    (userError?.status === 403 ||
-      healthError instanceof RedirectError ||
-      expired) &&
+    (userError?.status === 403 || expired) &&
     hasSeenAuthenticatedUserRef.current &&
     !isAuthPage;
 

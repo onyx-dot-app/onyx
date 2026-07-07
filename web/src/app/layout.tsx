@@ -19,6 +19,7 @@ import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/banners/HealthBanner";
 import LicenseExpiryBanner from "@/sections/banners/LicenseExpiryBanner";
+import SessionWatcher from "@/sections/SessionWatcher";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
 
@@ -124,6 +125,7 @@ export default function Layout({ children }: LayoutProps) {
                 <SWRConfigProvider>
                   <AppHealthBanner />
                   <LicenseExpiryBanner />
+                  <SessionWatcher />
                   <AppProvider>
                     <PostHogRuntimeInitializer />
                     <CustomAnalyticsScript />
