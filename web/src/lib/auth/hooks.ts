@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { type KeyedMutator } from "swr";
 import { User } from "@/lib/types";
@@ -13,75 +13,8 @@ import { logout, refreshToken } from "@/lib/users/svc";
 // ---------------------------------------------------------------------------
 
 function computeSecondsUntilExpiration(user: User): number | null {
-  const expiries: Date[] = [];
-  if (
-    user.current_token_created_at &&
-    user.current_token_expiry_length !== undefined
-  ) {
-    const createdAt = new Date(user.current_token_created_at);
-    expiries.push(
-      new Date(createdAt.getTime() + user.current_token_expiry_length * 1000)
-    );
-  }
-  if (user.oidc_expiry) {
-    expiries.push(new Date(user.oidc_expiry));
-  }
-  if (expiries.length === 0) return null;
-  return Math.min(...expiries.map(getSecondsUntilExpiration));
-}
-
-// ---------------------------------------------------------------------------
-// useTokenExpiry
-// ---------------------------------------------------------------------------
-
-/**
- * Tracks whether the current user's token has expired client-side.
- *
- * Arms a `setTimeout` based on the user's token fields and re-arms it
- * whenever the user object changes (e.g. after a successful refresh).
- * Returns a stable `setupExpirationTimeout` so `useCustomTokenRefresh` can
- * re-arm the timer after obtaining a new token.
- */
-export function useTokenExpiry(user: User | null | undefined): {
-  expired: boolean;
-  setupExpirationTimeout: (secondsUntilExpiration: number) => void;
-} {
-  const [expired, setExpired] = useState(false);
-  const expirationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
-
-  const setupExpirationTimeout = useCallback(
-    (secondsUntilExpiration: number) => {
-      if (expirationTimeoutRef.current) {
-        clearTimeout(expirationTimeoutRef.current);
-      }
-      expirationTimeoutRef.current = setTimeout(
-        () => {
-          setExpired(true);
-        },
-        (secondsUntilExpiration + 10) * 1000
-      );
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (!user) return;
-    const seconds = computeSecondsUntilExpiration(user);
-    if (seconds === null) return;
-    setupExpirationTimeout(seconds);
-  }, [user, setupExpirationTimeout]);
-
-  useEffect(() => {
-    return () => {
-      if (expirationTimeoutRef.current) {
-        clearTimeout(expirationTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  return { expired, setupExpirationTimeout };
+  if (!user.token_expires_at) return null;
+  return getSecondsUntilExpiration(new Date(user.token_expires_at));
 }
 
 // ---------------------------------------------------------------------------
@@ -92,12 +25,13 @@ export function useTokenExpiry(user: User | null | undefined): {
  * Handles enterprise token refresh via `NEXT_PUBLIC_CUSTOM_REFRESH_URL`.
  *
  * Sets up a 15-minute refresh interval and kicks off an immediate refresh if
- * the token expires before the next scheduled interval. Re-arms the expiry
- * timeout on success. No-ops when `NEXT_PUBLIC_CUSTOM_REFRESH_URL` is unset.
+ * the token expires before the next scheduled interval. After a successful
+ * refresh, `mutateUser()` updates `user.token_expires_at`, which causes
+ * `useSessionWatcher` to re-arm its expiry timer automatically. No-ops when
+ * `NEXT_PUBLIC_CUSTOM_REFRESH_URL` is unset.
  */
 export function useCustomTokenRefresh(
   user: User | null | undefined,
-  setupExpirationTimeout: (secondsUntilExpiration: number) => void,
   mutateUser: KeyedMutator<User | null>
 ): void {
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
@@ -135,16 +69,7 @@ export function useCustomTokenRefresh(
           // Wait for the backend to process the new token.
           await new Promise((resolve) => setTimeout(resolve, 4000));
 
-          const updatedUser = await mutateUser();
-          if (updatedUser) {
-            const newSeconds = computeSecondsUntilExpiration(updatedUser);
-            if (newSeconds !== null) {
-              setupExpirationTimeout(newSeconds);
-              console.debug(
-                `Token refreshed, new expiration in ${newSeconds} seconds`
-              );
-            }
-          }
+          await mutateUser();
           break;
         } catch (error) {
           console.error(
@@ -180,7 +105,7 @@ export function useCustomTokenRefresh(
         clearInterval(refreshIntervalRef.current);
       }
     };
-  }, [user, setupExpirationTimeout, mutateUser]);
+  }, [user, mutateUser]);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,10 +115,10 @@ export function useCustomTokenRefresh(
 /**
  * Detects whether the user's session has ended mid-use.
  *
- * Latches `hasSeenAuthenticatedUser` so that a fresh unauthenticated page
- * load (where the user was never logged in) does not trigger the logged-out
- * UI. Only signals `sessionEnded` when the user was previously authenticated
- * and is not currently on an auth route.
+ * Schedules a `mutateUser()` call at `token_expires_at` so the server's 403
+ * response is the single mechanism for both timer-based and unexpected
+ * revocation. Latches `hasSeenAuthenticatedUser` so a fresh unauthenticated
+ * page load never triggers the logged-out UI. Suppressed on auth routes.
  *
  * Side effect: calls `logout()` to clear the server session on a 403 for a
  * previously-authenticated user.
@@ -201,12 +126,13 @@ export function useCustomTokenRefresh(
 export function useSessionWatcher({
   user,
   userError,
-  expired,
+  mutateUser,
 }: {
   user: User | null | undefined;
   userError: (Error & { status?: number }) | undefined;
-  expired: boolean;
+  mutateUser: KeyedMutator<User | null>;
 }): { sessionEnded: boolean } {
+  const expiryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasSeenAuthenticatedUserRef = useRef(false);
   const pathname = usePathname();
 
@@ -214,17 +140,35 @@ export function useSessionWatcher({
     hasSeenAuthenticatedUserRef.current = true;
   }
 
-  const isAuthPage = pathname?.startsWith("/auth") ?? false;
-  const sessionEnded =
-    (userError?.status === 403 || expired) &&
-    hasSeenAuthenticatedUserRef.current &&
-    !isAuthPage;
+  useEffect(() => {
+    if (!user) return;
+    const seconds = computeSecondsUntilExpiration(user);
+    if (seconds === null) return;
+    if (expiryTimeoutRef.current) {
+      clearTimeout(expiryTimeoutRef.current);
+    }
+    expiryTimeoutRef.current = setTimeout(() => mutateUser(), seconds * 1000);
+  }, [user, mutateUser]);
+
+  useEffect(() => {
+    return () => {
+      if (expiryTimeoutRef.current) {
+        clearTimeout(expiryTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (userError?.status === 403 && hasSeenAuthenticatedUserRef.current) {
       logout();
     }
   }, [userError]);
+
+  const isAuthPage = pathname?.startsWith("/auth") ?? false;
+  const sessionEnded =
+    userError?.status === 403 &&
+    hasSeenAuthenticatedUserRef.current &&
+    !isAuthPage;
 
   return { sessionEnded };
 }

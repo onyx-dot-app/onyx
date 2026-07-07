@@ -2,11 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  useCustomTokenRefresh,
-  useSessionWatcher,
-  useTokenExpiry,
-} from "@/lib/auth/hooks";
+import { useCustomTokenRefresh, useSessionWatcher } from "@/lib/auth/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 import LoggedOutModal from "@/sections/modals/LoggedOutModal";
@@ -14,9 +10,8 @@ import LoggedOutModal from "@/sections/modals/LoggedOutModal";
 export default function SessionWatcher() {
   const router = useRouter();
   const { user, mutateUser, userError } = useCurrentUser();
-  const { expired, setupExpirationTimeout } = useTokenExpiry(user);
-  useCustomTokenRefresh(user, setupExpirationTimeout, mutateUser);
-  const { sessionEnded } = useSessionWatcher({ user, userError, expired });
+  useCustomTokenRefresh(user, mutateUser);
+  const { sessionEnded } = useSessionWatcher({ user, userError, mutateUser });
   const [dismissed, setDismissed] = useState(false);
 
   function handleLogin() {
