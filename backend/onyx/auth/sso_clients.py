@@ -4,7 +4,7 @@ verified, and the discovery document's issuer must own the configured
 discovery URL, so one provider's tokens cannot be replayed against another
 provider's callback (OIDC mix-up defense)."""
 
-from typing import Any
+from urllib.parse import urlsplit
 
 from httpx_oauth.clients.openid import BASE_SCOPES
 from httpx_oauth.clients.openid import OpenID
@@ -18,10 +18,23 @@ class OpenIDConfigurationIssuerMismatch(ValueError):
 def validate_issuer_owns_config_url(
     issuer: str | None, openid_configuration_endpoint: str
 ) -> None:
-    """Per OIDC Discovery, the configuration document lives under the
-    issuer's own URL. A document whose issuer does not prefix the configured
-    endpoint is either misconfigured or an impersonation attempt."""
-    if not issuer or not openid_configuration_endpoint.startswith(issuer.rstrip("/")):
+    """Per OIDC Discovery, the configuration document lives directly under the
+    issuer's own URL. Compare scheme and host exactly and require a path
+    boundary, so a look-alike host (issuer.attacker.com) or a path prefix
+    (issuer/../evil) cannot pass. A document that fails this is misconfigured
+    or an impersonation attempt."""
+    if not issuer:
+        raise OpenIDConfigurationIssuerMismatch("discovery document has no issuer")
+
+    iss = urlsplit(issuer)
+    cfg = urlsplit(openid_configuration_endpoint)
+    issuer_path = iss.path.rstrip("/")
+    same_origin = (iss.scheme.lower(), iss.netloc.lower()) == (
+        cfg.scheme.lower(),
+        cfg.netloc.lower(),
+    )
+    path_owned = cfg.path == issuer_path or cfg.path.startswith(issuer_path + "/")
+    if not iss.scheme or not iss.netloc or not same_origin or not path_owned:
         raise OpenIDConfigurationIssuerMismatch(
             f"OpenID discovery document issuer {issuer!r} does not own "
             f"the configured endpoint {openid_configuration_endpoint!r}"
@@ -70,13 +83,32 @@ class VerifiedEmailOpenID(OpenID):
             if response.status_code >= 400:
                 raise GetIdEmailError(response=response)
 
-            data: dict[str, Any] = response.json()
+            # A malformed userinfo body must surface as a controlled login
+            # rejection, not a raw JSON/attribute error out of the callback.
+            try:
+                data = response.json()
+            except ValueError as e:
+                raise GetIdEmailError(
+                    "Userinfo response was not valid JSON", response
+                ) from e
+            if not isinstance(data, dict):
+                raise GetIdEmailError(
+                    "Userinfo response was not a JSON object", response
+                )
+
+            sub = data.get("sub")
+            if not isinstance(sub, str) or not sub:
+                raise GetIdEmailError(
+                    "Userinfo response missing a string 'sub'", response
+                )
 
             email = data.get("email")
+            if email is not None and not isinstance(email, str):
+                raise GetIdEmailError("Userinfo 'email' was not a string", response)
             if email is not None and data.get("email_verified") is not True:
                 raise GetIdEmailError(
                     "Identity provider did not mark the email as verified",
                     response,
                 )
 
-            return str(data["sub"]), email
+            return sub, email

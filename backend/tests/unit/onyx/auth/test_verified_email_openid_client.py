@@ -28,7 +28,9 @@ def _discovery(issuer: str = _ISSUER) -> dict[str, Any]:
     }
 
 
-def _build_client(discovery: dict[str, Any]) -> VerifiedEmailOpenID:
+def _build_client(
+    discovery: dict[str, Any], config_url: str = _CONFIG_URL
+) -> VerifiedEmailOpenID:
     discovery_response = MagicMock()
     discovery_response.json.return_value = discovery
     http_client = MagicMock()
@@ -36,15 +38,20 @@ def _build_client(discovery: dict[str, Any]) -> VerifiedEmailOpenID:
     http_client.__exit__ = MagicMock(return_value=None)
     http_client.get.return_value = discovery_response
     with patch("httpx_oauth.clients.openid.httpx.Client", return_value=http_client):
-        return VerifiedEmailOpenID("cid", "csecret", _CONFIG_URL)
+        return VerifiedEmailOpenID("cid", "csecret", config_url)
 
 
 class _FakeResponse:
-    def __init__(self, payload: dict[str, Any], status_code: int = 200) -> None:
+    def __init__(
+        self, payload: Any, status_code: int = 200, json_raises: bool = False
+    ) -> None:
         self._payload = payload
         self.status_code = status_code
+        self._json_raises = json_raises
 
-    def json(self) -> dict[str, Any]:
+    def json(self) -> Any:
+        if self._json_raises:
+            raise ValueError("not valid JSON")
         return self._payload
 
 
@@ -63,9 +70,12 @@ class _FakeAsyncClient:
 
 
 def _with_userinfo(
-    client: VerifiedEmailOpenID, payload: dict[str, Any], status_code: int = 200
+    client: VerifiedEmailOpenID,
+    payload: Any,
+    status_code: int = 200,
+    json_raises: bool = False,
 ) -> None:
-    fake = _FakeAsyncClient(_FakeResponse(payload, status_code))
+    fake = _FakeAsyncClient(_FakeResponse(payload, status_code, json_raises))
     client.get_httpx_client = MagicMock(  # ty: ignore[invalid-assignment]
         return_value=fake
     )
@@ -113,9 +123,49 @@ async def test_userinfo_error_status_raises() -> None:
         await client.get_id_email("tok")
 
 
+@pytest.mark.asyncio
+async def test_non_string_email_rejected() -> None:
+    client = _build_client(_discovery())
+    _with_userinfo(client, {"sub": "s1", "email": ["a@b.com"], "email_verified": True})
+    with pytest.raises(GetIdEmailError):
+        await client.get_id_email("tok")
+
+
+@pytest.mark.asyncio
+async def test_invalid_json_rejected() -> None:
+    client = _build_client(_discovery())
+    _with_userinfo(client, None, json_raises=True)
+    with pytest.raises(GetIdEmailError):
+        await client.get_id_email("tok")
+
+
+@pytest.mark.asyncio
+async def test_non_object_body_rejected() -> None:
+    client = _build_client(_discovery())
+    _with_userinfo(client, ["not", "an", "object"])
+    with pytest.raises(GetIdEmailError):
+        await client.get_id_email("tok")
+
+
+@pytest.mark.asyncio
+async def test_missing_sub_rejected() -> None:
+    client = _build_client(_discovery())
+    _with_userinfo(client, {"email": "bob@companyb.com", "email_verified": True})
+    with pytest.raises(GetIdEmailError):
+        await client.get_id_email("tok")
+
+
 def test_issuer_mismatch_rejected_at_construction() -> None:
     with pytest.raises(OpenIDConfigurationIssuerMismatch):
         _build_client(_discovery(issuer="https://evil.example.com"))
+
+
+def test_lookalike_host_prefix_rejected() -> None:
+    # discovery reports issuer https://idp.companyb.com, but the configured
+    # endpoint is on the look-alike host idp.companyb.com.attacker.com
+    lookalike = "https://idp.companyb.com.attacker.com/.well-known/openid-configuration"
+    with pytest.raises(OpenIDConfigurationIssuerMismatch):
+        _build_client(_discovery(), config_url=lookalike)
 
 
 def test_missing_issuer_rejected() -> None:
