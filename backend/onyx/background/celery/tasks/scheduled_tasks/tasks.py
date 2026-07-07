@@ -51,6 +51,7 @@ from onyx.db.scheduled_task import find_stuck_runs
 from onyx.db.scheduled_task import has_in_flight_run_for_task
 from onyx.db.scheduled_task import insert_run
 from onyx.db.scheduled_task import mark_run_status
+from onyx.db.users import get_craft_disabled_user_ids
 from onyx.server.features.build.scheduled_tasks.executor import (
     DEFAULT_EXECUTOR_BUDGET_SECONDS,
 )
@@ -116,9 +117,26 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
         # if our transaction rolls back for some reason.
         to_enqueue: list[UUID] = []
 
+        # Owners whose Craft access an admin has disabled get a visible
+        # SKIPPED row instead of a run; the schedule stays alive and
+        # resumes if they are re-enabled.
+        craft_disabled_owner_ids = get_craft_disabled_user_ids(
+            db_session=db_session,
+            user_ids={task.user_id for task in claimed_tasks},
+        )
+
         for task in claimed_tasks:
             try:
-                if has_in_flight_run_for_task(db_session=db_session, task_id=task.id):
+                if task.user_id in craft_disabled_owner_ids:
+                    insert_run(
+                        db_session=db_session,
+                        task_id=task.id,
+                        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+                        status=ScheduledTaskRunStatus.SKIPPED,
+                        skip_reason=ScheduledTaskSkipReason.OWNER_CRAFT_DISABLED,
+                    )
+                    skipped_count += 1
+                elif has_in_flight_run_for_task(db_session=db_session, task_id=task.id):
                     # SKIP_IF_RUNNING: a prior fire is still in flight.
                     # Write a skipped row so the user can see the miss,
                     # then advance next_run_at as if it had fired.

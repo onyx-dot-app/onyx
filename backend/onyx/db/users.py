@@ -134,6 +134,22 @@ def validate_user_role_update(
         )
 
 
+def get_craft_disabled_user_ids(
+    db_session: Session,
+    user_ids: set[UUID],
+) -> set[UUID]:
+    """Subset of ``user_ids`` whose Craft access an admin has disabled."""
+    if not user_ids:
+        return set()
+    rows = db_session.scalars(
+        select(User.id).where(  # ty: ignore[no-matching-overload]
+            User.id.in_(user_ids),  # ty: ignore[unresolved-attribute]
+            User.craft_enabled.is_(False),
+        )
+    ).all()
+    return set(rows)
+
+
 def get_all_users(
     db_session: Session,
     email_filter_string: str | None = None,

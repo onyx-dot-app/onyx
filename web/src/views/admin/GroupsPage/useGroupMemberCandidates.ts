@@ -5,31 +5,9 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
-import { AccountType, UserStatus, type UserRole } from "@/lib/types";
-import type {
-  UserGroupInfo,
-  UserRow,
-} from "@/views/admin/UsersPage/interfaces";
+import { AccountType, UserStatus } from "@/lib/types";
+import type { FullUserSnapshot } from "@/views/admin/UsersPage/interfaces";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
-
-// Backend response shape for `/api/manage/users?include_api_keys=true`. The
-// existing `AllUsersResponse` in `lib/types.ts` types `accepted` as `User[]`,
-// which is missing fields the table needs (`personal_name`, `account_type`,
-// `groups`, etc.), so we declare an accurate local type here.
-interface FullUserSnapshot {
-  id: string;
-  email: string;
-  role: UserRole;
-  account_type: AccountType;
-  is_active: boolean;
-  password_configured: boolean;
-  personal_name: string | null;
-  created_at: string;
-  updated_at: string;
-  groups: UserGroupInfo[];
-  is_scim_synced: boolean;
-  craft_enabled: boolean;
-}
 
 interface ManageUsersResponse {
   accepted: FullUserSnapshot[];

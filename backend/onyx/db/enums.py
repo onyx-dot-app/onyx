@@ -382,6 +382,7 @@ class ScheduledTaskSkipReason(str, PyEnum):
     """Well-known values for ``ScheduledTaskRun.skip_reason``."""
 
     PRIOR_IN_FLIGHT = "prior_in_flight"
+    OWNER_CRAFT_DISABLED = "owner_craft_disabled"
 
 
 class SandboxStatus(str, PyEnum):

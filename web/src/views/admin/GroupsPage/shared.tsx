@@ -25,7 +25,7 @@ export function apiKeyToMemberRow(key: ApiKeyDescriptor): MemberRow {
     status: UserStatus.ACTIVE,
     is_active: true,
     is_scim_synced: false,
-    craft_enabled: true,
+    craft_enabled: null,
     personal_name: key.api_key_name ?? "Unnamed Key",
     created_at: null,
     updated_at: null,

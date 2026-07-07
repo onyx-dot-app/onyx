@@ -91,6 +91,24 @@ def test_enabled_via_env_when_no_flag_provider(
     assert is_craft_enabled_for_user(_make_user()) is True
 
 
+def test_transient_user_with_none_craft_enabled_follows_deployment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transient User objects (e.g. anonymous) carry craft_enabled=None; only
+    an explicit admin disable (False) blocks, so None follows the deployment
+    gate and the result is a strict bool."""
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+
+    user = _make_user()
+    user.craft_enabled = None
+    assert is_craft_enabled_for_user(user) is True
+
+
 def test_admin_disabled_user_short_circuits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

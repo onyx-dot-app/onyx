@@ -66,14 +66,18 @@ export default function UserRowActions({
     setModal(type);
   };
 
+  // null (placeholder rows) is treated as enabled; the toggle only renders
+  // for real users anyway.
+  const craftCurrentlyEnabled = user.craft_enabled !== false;
+
   const toggleCraftAccess = () => {
     setPopoverOpen(false);
     void (async () => {
       try {
-        await setUserCraftEnabled(user.email, !user.craft_enabled);
+        await setUserCraftEnabled(user.email, !craftCurrentlyEnabled);
         onMutate();
         toast.success(
-          user.craft_enabled
+          craftCurrentlyEnabled
             ? "Craft disabled for user"
             : "Craft enabled for user"
         );
@@ -88,7 +92,7 @@ export default function UserRowActions({
   const craftToggleItem =
     settings?.onyx_craft_available === true && user.id ? (
       <LineItem icon={SvgDevKit} onClick={toggleCraftAccess}>
-        {user.craft_enabled ? "Disable Craft" : "Enable Craft"}
+        {craftCurrentlyEnabled ? "Disable Craft" : "Enable Craft"}
       </LineItem>
     ) : null;
 

@@ -5,31 +5,12 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { AccountType, UserStatus } from "@/lib/types";
-import type { UserRole, InvitedUserSnapshot } from "@/lib/types";
+import { UserStatus } from "@/lib/types";
+import type { InvitedUserSnapshot } from "@/lib/types";
 import type {
+  FullUserSnapshot,
   UserRow,
-  UserGroupInfo,
 } from "@/views/admin/UsersPage/interfaces";
-
-// ---------------------------------------------------------------------------
-// Backend response shape (GET /manage/users/accepted/all)
-// ---------------------------------------------------------------------------
-
-interface FullUserSnapshot {
-  id: string;
-  email: string;
-  role: UserRole;
-  account_type: AccountType;
-  is_active: boolean;
-  password_configured: boolean;
-  personal_name: string | null;
-  created_at: string;
-  updated_at: string;
-  groups: UserGroupInfo[];
-  is_scim_synced: boolean;
-  craft_enabled: boolean;
-}
 
 // ---------------------------------------------------------------------------
 // Converters
@@ -62,7 +43,7 @@ function emailToUserRow(
     status,
     is_active: false,
     is_scim_synced: false,
-    craft_enabled: true,
+    craft_enabled: null,
     personal_name: null,
     created_at: null,
     updated_at: null,

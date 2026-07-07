@@ -13,6 +13,7 @@ import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import useAdminUsers from "@/hooks/useAdminUsers";
+import { useSettings } from "@/lib/settings/hooks";
 import useGroups from "@/hooks/useGroups";
 import { downloadUsersCsv } from "./svc";
 import UserFilters from "./UserFilters";
@@ -43,7 +44,11 @@ function renderNameColumn(email: string, row: UserRow) {
   );
 }
 
-function renderStatusColumn(value: UserStatus, row: UserRow) {
+function renderStatusColumn(
+  value: UserStatus,
+  row: UserRow,
+  craftAvailable: boolean
+) {
   return (
     <div className="flex flex-col">
       <Text as="span" mainUiBody text03>
@@ -54,7 +59,7 @@ function renderStatusColumn(value: UserStatus, row: UserRow) {
           SCIM synced
         </Text>
       )}
-      {!row.craft_enabled && (
+      {craftAvailable && row.craft_enabled === false && (
         <Text as="span" secondaryBody text03>
           Craft disabled
         </Text>
@@ -77,7 +82,7 @@ function renderLastUpdatedColumn(value: string | null) {
 
 const tc = createTableColumns<UserRow>();
 
-function buildColumns(onMutate: () => void) {
+function buildColumns(onMutate: () => void, craftAvailable: boolean) {
   return [
     tc.qualifier({
       content: "icon",
@@ -113,7 +118,7 @@ function buildColumns(onMutate: () => void) {
     tc.column("status", {
       header: "Status",
       weight: 14,
-      cell: renderStatusColumn,
+      cell: (value, row) => renderStatusColumn(value, row, craftAvailable),
     }),
     tc.column("updated_at", {
       header: "Last Updated",
@@ -163,7 +168,13 @@ export default function UsersTable({
 
   const { users, isLoading, error, refresh } = useAdminUsers();
 
-  const columns = useMemo(() => buildColumns(refresh), [refresh]);
+  const settings = useSettings();
+  const craftAvailable = settings?.onyx_craft_available === true;
+
+  const columns = useMemo(
+    () => buildColumns(refresh, craftAvailable),
+    [refresh, craftAvailable]
+  );
 
   // Client-side filtering
   const filteredUsers = useMemo(() => {

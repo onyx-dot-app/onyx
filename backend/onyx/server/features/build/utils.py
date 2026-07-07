@@ -120,6 +120,10 @@ def is_craft_available_for_deployment(user: User) -> bool:
     - Flag = null/not found → disabled (Onyx Craft is not available)
 
     Only explicit True enables the feature.
+
+    On the PostHog path the flag is evaluated for the requesting user, so
+    "deployment-level" assumes tenant-scoped flag targeting; per-user cohort
+    rollouts would make this reflect the requester's own bucket.
     """
     feature_flag_provider = get_default_feature_flag_provider()
 
@@ -141,16 +145,25 @@ def is_craft_available_for_deployment(user: User) -> bool:
         return False
 
 
-def is_craft_enabled_for_user(user: User) -> bool:
+def is_craft_enabled_for_user(
+    user: User, deployment_available: bool | None = None
+) -> bool:
     """
     Check if Onyx Craft (Build Mode) is enabled for the user: the deployment
     must have Craft available AND the user must not have been disabled by an
     admin (User.craft_enabled).
+
+    Pass ``deployment_available`` when the deployment gate has already been
+    evaluated, to avoid a second flag-provider call.
     """
-    if not user.craft_enabled:
+    # Only an explicit admin disable blocks access — transient User objects
+    # (e.g. the anonymous user) carry craft_enabled=None.
+    if user.craft_enabled is False:
         return False
 
-    return is_craft_available_for_deployment(user)
+    if deployment_available is None:
+        deployment_available = is_craft_available_for_deployment(user)
+    return deployment_available
 
 
 def ensure_build_mode_intro_notification(user: User, db_session: Session) -> None:

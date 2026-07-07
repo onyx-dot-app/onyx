@@ -26,6 +26,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.features.build.utils import is_craft_available_for_deployment
+from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.server.features.notifications.models import NotificationResponse
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
@@ -127,11 +128,12 @@ def fetch_settings(
     general_settings = apply_fn(general_settings)
 
     # Check if Onyx Craft is enabled for this user (used for server-side
-    # redirects). Composed from the deployment gate + the per-user admin
-    # toggle so the flag provider is only consulted once.
+    # redirects). The deployment gate is evaluated once and shared.
     onyx_craft_available = is_craft_available_for_deployment(user) if user else False
     onyx_craft_enabled_for_user = (
-        onyx_craft_available and user is not None and user.craft_enabled
+        is_craft_enabled_for_user(user, deployment_available=onyx_craft_available)
+        if user
+        else False
     )
 
     # Dev/debug flag: tail-the-pod-logs button gated by an env var. Same

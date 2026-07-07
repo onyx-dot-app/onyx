@@ -5,7 +5,6 @@ invoked directly with constructed ``User`` rows and the test ``db_session``
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
@@ -53,8 +52,9 @@ def test_admin_toggle_disables_and_reenables_craft(
     assert target.craft_enabled is False
     assert is_craft_enabled_for_user(target) is False
     # The /build router dependency now rejects the user.
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(OnyxError) as exc_info:
         require_onyx_craft_enabled(user=target)
+    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     assert exc_info.value.status_code == 403
     # The admin's own access is unaffected.
     assert is_craft_enabled_for_user(admin) is True
