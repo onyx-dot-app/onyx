@@ -82,4 +82,4 @@ ENV PYTHONPATH=/app
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
 
-CMD ["uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "9000"]
+CMD ["python", "-m", "model_server"]
