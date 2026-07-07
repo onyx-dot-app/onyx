@@ -197,3 +197,11 @@ def test_path_based_issuer_legit_config_accepted() -> None:
         "https://idp.example.com/oidc",
         "https://idp.example.com/oidc/.well-known/openid-configuration",
     )
+
+
+def test_percent_encoded_dot_segments_rejected() -> None:
+    with pytest.raises(OpenIDConfigurationIssuerMismatch):
+        validate_issuer_owns_config_url(
+            "https://idp.example.com/oidc",
+            "https://idp.example.com/oidc/%2e%2e/evil/.well-known/openid-configuration",
+        )

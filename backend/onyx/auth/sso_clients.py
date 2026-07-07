@@ -4,6 +4,7 @@ verified, and the discovery document's issuer must own the configured
 discovery URL, so one provider's tokens cannot be replayed against another
 provider's callback (OIDC mix-up defense)."""
 
+from urllib.parse import unquote
 from urllib.parse import urlsplit
 
 from httpx_oauth.clients.openid import BASE_SCOPES
@@ -21,16 +22,18 @@ def validate_issuer_owns_config_url(
     """Per OIDC Discovery, the configuration document lives directly under the
     issuer's own URL. Compare scheme and host exactly and require a path
     boundary, so a look-alike host (issuer.attacker.com) cannot pass. Relative
-    path segments are rejected outright, otherwise `issuer/../evil/...` would
-    clear the prefix test yet resolve outside the issuer path on the same host.
-    A document that fails this is misconfigured or an impersonation attempt."""
+    path segments are rejected outright, including percent-encoded ones,
+    otherwise `issuer/../evil` or `issuer/%2e%2e/evil` would clear the prefix
+    test yet resolve outside the issuer path on the same host. A document that
+    fails this is misconfigured or an impersonation attempt."""
     if not issuer:
         raise OpenIDConfigurationIssuerMismatch("discovery document has no issuer")
 
     iss = urlsplit(issuer)
     cfg = urlsplit(openid_configuration_endpoint)
+    # Decode first so %2e / %2e%2e are caught alongside literal . / .. segments.
     has_relative_segment = any(
-        segment in (".", "..") for segment in cfg.path.split("/")
+        segment in (".", "..") for segment in unquote(cfg.path).split("/")
     )
     issuer_path = iss.path.rstrip("/")
     same_origin = (iss.scheme.lower(), iss.netloc.lower()) == (
