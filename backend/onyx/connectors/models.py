@@ -222,7 +222,8 @@ class DocumentBase(BaseModel):
 
     # UTC time
     doc_updated_at: datetime | None = None
-    # UTC time the document was created at the source
+    # UTC time the document was created at the source. Used as the primary axis
+    # for time-based search filtering (falls back to doc_updated_at when unset).
     doc_created_at: datetime | None = None
     chunk_count: int | None = None
 
