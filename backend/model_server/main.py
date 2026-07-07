@@ -141,7 +141,7 @@ def get_model_app() -> FastAPI:
 app = get_model_app()
 
 
-if __name__ == "__main__":
+def run_server() -> None:
     logger.notice(
         "Starting Onyx Model Server on http://%s:%s/",
         MODEL_SERVER_ALLOWED_HOST,
@@ -149,3 +149,7 @@ if __name__ == "__main__":
     )
     logger.notice("Model Server Version: %s", __version__)
     uvicorn.run(app, host=MODEL_SERVER_ALLOWED_HOST, port=MODEL_SERVER_PORT)
+
+
+if __name__ == "__main__":
+    run_server()
