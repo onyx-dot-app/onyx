@@ -182,3 +182,18 @@ def test_expected_issuer_exposed() -> None:
 
 def test_validate_issuer_allows_trailing_slash_difference() -> None:
     validate_issuer_owns_config_url(f"{_ISSUER}/", _CONFIG_URL)
+
+
+def test_path_based_issuer_dot_segments_rejected() -> None:
+    with pytest.raises(OpenIDConfigurationIssuerMismatch):
+        validate_issuer_owns_config_url(
+            "https://idp.example.com/oidc",
+            "https://idp.example.com/oidc/../../evil/.well-known/openid-configuration",
+        )
+
+
+def test_path_based_issuer_legit_config_accepted() -> None:
+    validate_issuer_owns_config_url(
+        "https://idp.example.com/oidc",
+        "https://idp.example.com/oidc/.well-known/openid-configuration",
+    )

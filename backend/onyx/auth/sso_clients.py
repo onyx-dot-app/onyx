@@ -20,21 +20,31 @@ def validate_issuer_owns_config_url(
 ) -> None:
     """Per OIDC Discovery, the configuration document lives directly under the
     issuer's own URL. Compare scheme and host exactly and require a path
-    boundary, so a look-alike host (issuer.attacker.com) or a path prefix
-    (issuer/../evil) cannot pass. A document that fails this is misconfigured
-    or an impersonation attempt."""
+    boundary, so a look-alike host (issuer.attacker.com) cannot pass. Relative
+    path segments are rejected outright, otherwise `issuer/../evil/...` would
+    clear the prefix test yet resolve outside the issuer path on the same host.
+    A document that fails this is misconfigured or an impersonation attempt."""
     if not issuer:
         raise OpenIDConfigurationIssuerMismatch("discovery document has no issuer")
 
     iss = urlsplit(issuer)
     cfg = urlsplit(openid_configuration_endpoint)
+    has_relative_segment = any(
+        segment in (".", "..") for segment in cfg.path.split("/")
+    )
     issuer_path = iss.path.rstrip("/")
     same_origin = (iss.scheme.lower(), iss.netloc.lower()) == (
         cfg.scheme.lower(),
         cfg.netloc.lower(),
     )
     path_owned = cfg.path == issuer_path or cfg.path.startswith(issuer_path + "/")
-    if not iss.scheme or not iss.netloc or not same_origin or not path_owned:
+    if (
+        not iss.scheme
+        or not iss.netloc
+        or not same_origin
+        or has_relative_segment
+        or not path_owned
+    ):
         raise OpenIDConfigurationIssuerMismatch(
             f"OpenID discovery document issuer {issuer!r} does not own "
             f"the configured endpoint {openid_configuration_endpoint!r}"
@@ -89,26 +99,28 @@ class VerifiedEmailOpenID(OpenID):
                 data = response.json()
             except ValueError as e:
                 raise GetIdEmailError(
-                    "Userinfo response was not valid JSON", response
+                    "Userinfo response was not valid JSON", response=response
                 ) from e
             if not isinstance(data, dict):
                 raise GetIdEmailError(
-                    "Userinfo response was not a JSON object", response
+                    "Userinfo response was not a JSON object", response=response
                 )
 
             sub = data.get("sub")
             if not isinstance(sub, str) or not sub:
                 raise GetIdEmailError(
-                    "Userinfo response missing a string 'sub'", response
+                    "Userinfo response missing a string 'sub'", response=response
                 )
 
             email = data.get("email")
             if email is not None and not isinstance(email, str):
-                raise GetIdEmailError("Userinfo 'email' was not a string", response)
+                raise GetIdEmailError(
+                    "Userinfo 'email' was not a string", response=response
+                )
             if email is not None and data.get("email_verified") is not True:
                 raise GetIdEmailError(
                     "Identity provider did not mark the email as verified",
-                    response,
+                    response=response,
                 )
 
             return sub, email
