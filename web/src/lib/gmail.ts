@@ -3,10 +3,14 @@ import { Credential } from "./connectors/credentials";
 export const setupGmailOAuth = async ({
   isAdmin,
   appCredential,
+  sourceCredentialId,
 }: {
   isAdmin: boolean;
-  // OAuth app ({"web": {...}}) to store on the credential.
-  appCredential: Record<string, unknown>;
+  // OAuth app ({"web": {...}}) to store on the credential. Exactly one of
+  // appCredential or sourceCredentialId must be provided.
+  appCredential?: Record<string, unknown>;
+  // Copy the OAuth app from this existing credential instead.
+  sourceCredentialId?: number;
 }): Promise<[string | null, string]> => {
   const credentialCreationResponse = await fetch("/api/manage/credential", {
     method: "POST",
@@ -15,7 +19,10 @@ export const setupGmailOAuth = async ({
     },
     body: JSON.stringify({
       admin_public: isAdmin,
-      credential_json: { google_app_credential: appCredential },
+      credential_json: appCredential
+        ? { google_app_credential: appCredential }
+        : {},
+      source_credential_id: sourceCredentialId,
       source: "gmail",
     }),
   });

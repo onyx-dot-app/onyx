@@ -13,6 +13,10 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.google_utils.google_kv import app_cred_from_credential_json
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY,
+)
 from onyx.db.credentials import alter_credential
 from onyx.db.credentials import create_credential
 from onyx.db.credentials import CREDENTIAL_PERMISSIONS_TO_IGNORE
@@ -27,6 +31,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import DocumentSource
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.models import CredentialBase
 from onyx.server.documents.models import CredentialDataUpdateRequest
 from onyx.server.documents.models import CredentialSnapshot
@@ -163,6 +169,30 @@ def create_credential_from_model(
             user=user,
             target_group_ids=credential_info.groups,
             object_is_public=credential_info.curator_public,
+        )
+
+    if credential_info.source_credential_id is not None:
+        source_credential = fetch_credential_by_id_for_user(
+            credential_info.source_credential_id, user, db_session
+        )
+        if source_credential is None:
+            raise OnyxError(
+                OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+                f"Source credential {credential_info.source_credential_id} not found",
+            )
+        source_json = (
+            source_credential.credential_json.get_value(apply_mask=False)
+            if source_credential.credential_json
+            else {}
+        )
+        app_cred = app_cred_from_credential_json(source_json)
+        if app_cred is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Source credential has no OAuth app credential to reuse",
+            )
+        credential_info.credential_json.setdefault(
+            DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY, app_cred
         )
 
     credential = create_credential(credential_info, user, db_session)

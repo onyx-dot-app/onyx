@@ -7,8 +7,10 @@ import { setupGoogleDriveOAuth } from "@/lib/googleDrive";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
+import { Credential } from "@/lib/connectors/credentials";
 import { Button, Text } from "@opal/components";
 import InputFile from "@/refresh-components/inputs/InputFile";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import {
   parseOauthAppCredentialJson,
@@ -20,15 +22,21 @@ import { markdown } from "@opal/utils";
 interface DriveCredentialSectionProps {
   refreshCredentials: () => void;
   user: User | null;
+  // OAuth credentials whose app can be reused for a new credential
+  existingOauthCredentials?: Credential<Record<string, unknown>>[];
 }
 
 export const DriveAuthSection = ({
   refreshCredentials,
   user,
+  existingOauthCredentials = [],
 }: DriveCredentialSectionProps) => {
   const router = useRouter();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
+  const [sourceCredentialId, setSourceCredentialId] = useState<number | null>(
+    null
+  );
   const [serviceAccountKey, setServiceAccountKey] = useState<Record<
     string,
     unknown
@@ -67,20 +75,52 @@ export const DriveAuthSection = ({
             `Upload the OAuth app JSON from Google Cloud Console ([setup instructions](${DOCS_ADMINS_PATH}/connectors/official/google_drive/overview)), then authenticate with the Google account whose Drive you want to index.`
           )}
         </Text>
-        <InputFile
-          accept="application/json"
-          placeholder="Upload or paste your OAuth app JSON"
-          setValue={(value) => {
-            setOauthAppCredential(
-              value ? parseOauthAppCredentialJson(value) : null
-            );
-          }}
-        />
+        {existingOauthCredentials.length > 0 && (
+          <InputSelect
+            value={
+              sourceCredentialId === null ? "new" : String(sourceCredentialId)
+            }
+            onValueChange={(value) =>
+              setSourceCredentialId(value === "new" ? null : Number(value))
+            }
+          >
+            <InputSelect.Trigger placeholder="Upload a new OAuth app" />
+            <InputSelect.Content>
+              <InputSelect.Item value="new">
+                Upload a new OAuth app
+              </InputSelect.Item>
+              {existingOauthCredentials.map((credential) => (
+                <InputSelect.Item
+                  key={credential.id}
+                  value={String(credential.id)}
+                >
+                  {`Use the app from credential #${credential.id}${
+                    credential.name ? ` (${credential.name})` : ""
+                  }`}
+                </InputSelect.Item>
+              ))}
+            </InputSelect.Content>
+          </InputSelect>
+        )}
+        {sourceCredentialId === null && (
+          <InputFile
+            accept="application/json"
+            placeholder="Upload or paste your OAuth app JSON"
+            setValue={(value) => {
+              setOauthAppCredential(
+                value ? parseOauthAppCredentialJson(value) : null
+              );
+            }}
+          />
+        )}
         <div className="flex w-full justify-end">
           <Button
-            disabled={!oauthAppCredential || isAuthenticating}
+            disabled={
+              (sourceCredentialId === null && !oauthAppCredential) ||
+              isAuthenticating
+            }
             onClick={async () => {
-              if (!oauthAppCredential) {
+              if (sourceCredentialId === null && !oauthAppCredential) {
                 return;
               }
               setIsAuthenticating(true);
@@ -88,7 +128,8 @@ export const DriveAuthSection = ({
                 const [authUrl, errorMsg] = await setupGoogleDriveOAuth({
                   isAdmin: true,
                   name: "OAuth (uploaded)",
-                  appCredential: oauthAppCredential,
+                  appCredential: oauthAppCredential ?? undefined,
+                  sourceCredentialId: sourceCredentialId ?? undefined,
                 });
                 if (authUrl) {
                   router.push(authUrl as Route);

@@ -75,6 +75,12 @@ export const GmailMain = ({
             user={user}
             buildMode={buildMode}
             onOAuthRedirect={onOAuthRedirect}
+            existingOauthCredentials={credentialsData.filter(
+              (credential) =>
+                credential.source === "gmail" &&
+                (credential.credential_json?.google_app_credential ||
+                  credential.credential_json?.google_tokens)
+            )}
           />
         </>
       )}

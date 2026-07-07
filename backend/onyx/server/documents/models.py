@@ -134,6 +134,8 @@ class CredentialDataUpdateRequest(BaseModel):
 
 class CredentialBase(BaseModel):
     credential_json: dict[str, Any]
+    # Copy the OAuth app credential from this credential at create time
+    source_credential_id: int | None = None
     # if `true`, then all Admins will have access to the credential
     admin_public: bool
     source: DocumentSource

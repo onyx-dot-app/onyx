@@ -1,5 +1,6 @@
 import { Button, Text } from "@opal/components";
 import InputFile from "@/refresh-components/inputs/InputFile";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { toast } from "@/hooks/useToast";
 import React, { useState, useEffect } from "react";
@@ -12,6 +13,7 @@ import { CRAFT_OAUTH_COOKIE_NAME } from "@/app/craft/v1/constants";
 import Cookies from "js-cookie";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
+import { Credential } from "@/lib/connectors/credentials";
 import {
   parseOauthAppCredentialJson,
   refreshAllGoogleData,
@@ -22,6 +24,8 @@ import { markdown } from "@opal/utils";
 interface GmailCredentialSectionProps {
   refreshCredentials: () => void;
   user: User | null;
+  // OAuth credentials whose app can be reused for a new credential
+  existingOauthCredentials?: Credential<Record<string, unknown>>[];
   buildMode?: boolean;
   onOAuthRedirect?: () => void;
 }
@@ -29,12 +33,16 @@ interface GmailCredentialSectionProps {
 export const GmailAuthSection = ({
   refreshCredentials,
   user,
+  existingOauthCredentials = [],
   buildMode = false,
   onOAuthRedirect,
 }: GmailCredentialSectionProps) => {
   const router = useRouter();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
+  const [sourceCredentialId, setSourceCredentialId] = useState<number | null>(
+    null
+  );
   const [serviceAccountKey, setServiceAccountKey] = useState<Record<
     string,
     unknown
@@ -73,20 +81,52 @@ export const GmailAuthSection = ({
             `Upload the OAuth app JSON from Google Cloud Console ([setup instructions](${DOCS_ADMINS_PATH}/connectors/official/gmail/overview)), then authenticate with the Google account whose Gmail you want to index.`
           )}
         </Text>
-        <InputFile
-          accept="application/json"
-          placeholder="Upload or paste your OAuth app JSON"
-          setValue={(value) => {
-            setOauthAppCredential(
-              value ? parseOauthAppCredentialJson(value) : null
-            );
-          }}
-        />
+        {existingOauthCredentials.length > 0 && (
+          <InputSelect
+            value={
+              sourceCredentialId === null ? "new" : String(sourceCredentialId)
+            }
+            onValueChange={(value) =>
+              setSourceCredentialId(value === "new" ? null : Number(value))
+            }
+          >
+            <InputSelect.Trigger placeholder="Upload a new OAuth app" />
+            <InputSelect.Content>
+              <InputSelect.Item value="new">
+                Upload a new OAuth app
+              </InputSelect.Item>
+              {existingOauthCredentials.map((credential) => (
+                <InputSelect.Item
+                  key={credential.id}
+                  value={String(credential.id)}
+                >
+                  {`Use the app from credential #${credential.id}${
+                    credential.name ? ` (${credential.name})` : ""
+                  }`}
+                </InputSelect.Item>
+              ))}
+            </InputSelect.Content>
+          </InputSelect>
+        )}
+        {sourceCredentialId === null && (
+          <InputFile
+            accept="application/json"
+            placeholder="Upload or paste your OAuth app JSON"
+            setValue={(value) => {
+              setOauthAppCredential(
+                value ? parseOauthAppCredentialJson(value) : null
+              );
+            }}
+          />
+        )}
         <div className="flex w-full justify-end">
           <Button
-            disabled={!oauthAppCredential || isAuthenticating}
+            disabled={
+              (sourceCredentialId === null && !oauthAppCredential) ||
+              isAuthenticating
+            }
             onClick={async () => {
-              if (!oauthAppCredential) {
+              if (sourceCredentialId === null && !oauthAppCredential) {
                 return;
               }
               setIsAuthenticating(true);
@@ -98,7 +138,8 @@ export const GmailAuthSection = ({
                 }
                 const [authUrl, errorMsg] = await setupGmailOAuth({
                   isAdmin: true,
-                  appCredential: oauthAppCredential,
+                  appCredential: oauthAppCredential ?? undefined,
+                  sourceCredentialId: sourceCredentialId ?? undefined,
                 });
                 if (authUrl) {
                   onOAuthRedirect?.();

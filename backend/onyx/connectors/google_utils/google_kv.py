@@ -175,6 +175,32 @@ def build_service_account_creds(
     )
 
 
+def app_cred_from_credential_json(
+    credential_json: dict[str, Any],
+) -> dict[str, Any] | None:
+    """App cred derivable from a credential's json: the stored value, else one
+    rebuilt from the token blob (which embeds the client id/secret), else None."""
+    existing = credential_json.get(DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY)
+    if existing is not None:
+        return _load_google_json(existing)
+    token_raw = credential_json.get(DB_CREDENTIALS_DICT_TOKEN_KEY)
+    if token_raw is None:
+        return None
+    token_dict = _load_google_json(token_raw)
+    if "client_id" not in token_dict or "client_secret" not in token_dict:
+        return None
+    return {
+        "web": {
+            "client_id": token_dict["client_id"],
+            "client_secret": token_dict["client_secret"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": token_dict.get(
+                "token_uri", "https://oauth2.googleapis.com/token"
+            ),
+        }
+    }
+
+
 def _app_cred_on_row(
     credential_id: int,
     user: User,
@@ -194,28 +220,12 @@ def _app_cred_on_row(
     if existing is not None:
         return _load_google_json(existing)
 
-    token_raw = existing_json.get(DB_CREDENTIALS_DICT_TOKEN_KEY)
-    if token_raw is None:
+    reconstructed = app_cred_from_credential_json(existing_json)
+    if reconstructed is None:
         raise ValueError(
             f"Credential {credential_id} has no OAuth app credential. "
             "Provide one when creating the credential."
         )
-    token_dict = _load_google_json(token_raw)
-    if "client_id" not in token_dict or "client_secret" not in token_dict:
-        raise ValueError(
-            f"Credential {credential_id} has no OAuth app credential and its "
-            "token does not embed one."
-        )
-    reconstructed = {
-        "web": {
-            "client_id": token_dict["client_id"],
-            "client_secret": token_dict["client_secret"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": token_dict.get(
-                "token_uri", "https://oauth2.googleapis.com/token"
-            ),
-        }
-    }
     # get_value returns SensitiveValue's cached dict, so build a new one rather
     # than mutating it in place.
     updated_json = {

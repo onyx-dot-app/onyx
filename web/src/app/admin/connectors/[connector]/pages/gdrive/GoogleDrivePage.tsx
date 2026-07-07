@@ -63,7 +63,16 @@ const GDriveMain = () => {
     <>
       {isAdmin && (
         <>
-          <DriveAuthSection refreshCredentials={handleRefresh} user={user} />
+          <DriveAuthSection
+            refreshCredentials={handleRefresh}
+            user={user}
+            existingOauthCredentials={credentialsData.filter(
+              (credential) =>
+                credential.source === "google_drive" &&
+                (credential.credential_json?.google_app_credential ||
+                  credential.credential_json?.google_tokens)
+            )}
+          />
         </>
       )}
     </>
