@@ -23,6 +23,7 @@ from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolCall
 from onyx.llm.models import UserMessage
+from onyx.llm.multi_llm import _parse_anthropic_model_version
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.utils import get_max_input_tokens
 
@@ -561,6 +562,50 @@ def test_keeps_temperature_for_older_sonnet_models(model_name: str) -> None:
 
         kwargs = mock_completion.call_args.kwargs
         assert "temperature" in kwargs
+
+
+@pytest.mark.parametrize(
+    "model_name, expected",
+    [
+        # Tier-first, hyphenated
+        ("claude-opus-4-8", (4, 8)),
+        ("claude-opus-4-7", (4, 7)),
+        ("claude-sonnet-4-6", (4, 6)),
+        ("claude-sonnet-4-5", (4, 5)),
+        # Tier-first, dot-separated
+        ("claude-opus-4.8", (4, 8)),
+        ("claude-opus-4.7", (4, 7)),
+        # Version-first (litellm_proxy / reversed schemes)
+        ("claude-4-8-opus", (4, 8)),
+        ("claude-4.8-opus", (4, 8)),
+        ("claude-4-7-opus", (4, 7)),
+        ("claude-4.7-opus", (4, 7)),
+        # Claude 5 named tiers, version digit on either side
+        ("claude-sonnet-5", (5, 0)),
+        ("claude-5-sonnet", (5, 0)),
+        ("claude-fable-5", (5, 0)),
+        ("claude-5-fable", (5, 0)),
+        ("claude-mythos-5", (5, 0)),
+        ("claude-5-mythos", (5, 0)),
+        # Date/snapshot suffixes stripped
+        ("claude-opus-4-8@20260101", (4, 8)),
+        ("claude-sonnet-5@20260203", (5, 0)),
+        ("claude-opus-4-5@20251101", (4, 5)),
+        ("claude-3-5-sonnet-20241022", (3, 5)),
+        # Legacy naming
+        ("claude-3-7-sonnet", (3, 7)),
+        # Provider-prefixed
+        ("anthropic/claude-opus-4-8", (4, 8)),
+        ("bedrock/anthropic.claude-opus-4-7", (4, 7)),
+        # Non-Claude models parse to None
+        ("gpt-5.2", None),
+        ("gemini-2.5-pro", None),
+    ],
+)
+def test_parse_anthropic_model_version(
+    model_name: str, expected: tuple[int, int] | None
+) -> None:
+    assert _parse_anthropic_model_version(model_name) == expected
 
 
 @pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
