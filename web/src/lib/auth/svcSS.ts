@@ -1,5 +1,7 @@
 import { buildUrl, UrlBuilder } from "@/lib/utilsSS";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { User, UserRole } from "@/lib/types";
+import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
@@ -94,4 +96,64 @@ export async function logoutSS(
     default:
       return logoutStandardSS(headers);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Auth guards
+// ---------------------------------------------------------------------------
+
+interface AuthCheckResult {
+  user: User | null;
+  authTypeMetadata: AuthTypeMetadata | null;
+  redirect?: string;
+}
+
+const ADMIN_ALLOWED_ROLES = [
+  UserRole.ADMIN,
+  UserRole.CURATOR,
+  UserRole.GLOBAL_CURATOR,
+];
+
+export async function requireAuth(): Promise<AuthCheckResult> {
+  let user: User | null = null;
+  let authTypeMetadata: AuthTypeMetadata | null = null;
+
+  try {
+    [authTypeMetadata, user] = await Promise.all([
+      getAuthTypeMetadataSS(),
+      getCurrentUserSS(),
+    ]);
+  } catch (e) {
+    console.log(`Failed to fetch auth information - ${e}`);
+  }
+
+  if (!user) {
+    return { user, authTypeMetadata, redirect: "/auth/login" };
+  }
+
+  if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
+    return {
+      user,
+      authTypeMetadata,
+      redirect: "/auth/waiting-on-verification",
+    };
+  }
+
+  return { user, authTypeMetadata };
+}
+
+export async function requireAdminAuth(): Promise<AuthCheckResult> {
+  const authResult = await requireAuth();
+
+  if (authResult.redirect) {
+    return authResult;
+  }
+
+  const { user, authTypeMetadata } = authResult;
+
+  if (user && !ADMIN_ALLOWED_ROLES.includes(user.role)) {
+    return { user, authTypeMetadata, redirect: "/app" };
+  }
+
+  return authResult;
 }

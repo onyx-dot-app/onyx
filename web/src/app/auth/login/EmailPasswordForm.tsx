@@ -14,7 +14,7 @@ import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputTypeIn } from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
+import { validateInternalRedirect } from "@/lib/auth/utils";
 import { APIFormFieldState } from "@/refresh-components/form/types";
 import { SvgArrowRightCircle } from "@opal/icons";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
