@@ -173,7 +173,7 @@ class DocumentChunkWithoutVectors(BaseModel):
     # If it exists, time zone should always be UTC.
     last_updated: datetime | None = None
     # Time the document was created at the source. If it exists, time zone should
-    # always be UTC. Preferred over last_updated for time-based filtering.
+    # always be UTC.
     created_at: datetime | None = None
 
     public: bool
@@ -469,8 +469,7 @@ class DocumentSchema:
                     # would make sense to sort by date.
                     "doc_values": True,
                 },
-                # Source creation time. Preferred over last_updated for
-                # time-based filtering; see _get_time_cutoff_filter.
+                # Source creation time.
                 CREATED_AT_FIELD_NAME: {
                     "type": "date",
                     "format": "epoch_second",
