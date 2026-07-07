@@ -442,6 +442,9 @@ ANTHROPIC_MODELS_OMITTING_SAMPLING_PARAMS = [
     "claude-5-fable",
     "claude-mythos-5",
     "claude-5-mythos",
+    "claude-sonnet-5",
+    "claude-sonnet-5@20260203",
+    "claude-5-sonnet",
 ]
 
 
@@ -477,6 +480,8 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
         "claude-5-fable",
         "claude-mythos-5",
         "claude-5-mythos",
+        "claude-sonnet-5",
+        "claude-5-sonnet",
     ],
 )
 @pytest.mark.parametrize(
@@ -524,6 +529,38 @@ def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> No
 
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["temperature"] == 0.0
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "claude-sonnet-4-5",
+        "claude-sonnet-4-6",
+        "claude-3-5-sonnet-20241022",
+    ],
+)
+def test_keeps_temperature_for_older_sonnet_models(model_name: str) -> None:
+    # The no-sampling-params match is substring-based; make sure sonnet-5
+    # entries don't catch older sonnets, which still accept temperature.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name=model_name,
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "temperature" in kwargs
 
 
 @pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
