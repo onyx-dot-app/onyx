@@ -1269,6 +1269,7 @@ export default function ChatPreferencesPage() {
                         }
                         disabled={!enterpriseTier}
                         withLabel
+                        fillInput
                       >
                         <RetentionField
                           value={s.maximum_chat_retention_days ?? null}
@@ -1284,6 +1285,7 @@ export default function ChatPreferencesPage() {
                       title="Query History Visibility"
                       description="Control how your organization's full chat history appears in the Admin Panel."
                       withLabel
+                      fillInput
                     >
                       <InputSelect
                         value={s.query_history_type ?? QueryHistoryType.NORMAL}
