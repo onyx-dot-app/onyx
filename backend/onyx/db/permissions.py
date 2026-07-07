@@ -15,6 +15,8 @@ from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
+from onyx.db.enums import AccountType
 from onyx.db.enums import Permission
 from onyx.db.models import PermissionGrant
 from onyx.db.models import User
@@ -51,12 +53,33 @@ def recompute_user_permissions__no_commit(
     Stores only directly granted permissions — implication expansion
     happens at read time via get_effective_permissions().
 
+    LIMITED service accounts are skipped: their permissions are set
+    directly by the API-key code (not derived from groups), so a group
+    recompute must not overwrite them.
+
     Does NOT commit — caller must commit the session.
     """
     if isinstance(user_ids, (UUID, str)):
         uid_list = [user_ids]
     else:
         uid_list = list(user_ids)
+
+    if not uid_list:
+        return
+
+    limited_service_account_ids = {
+        str(uid)
+        for uid in db_session.execute(
+            select(User.id).where(  # ty: ignore[no-matching-overload]
+                User.id.in_(uid_list),  # ty: ignore[unresolved-attribute]
+                User.account_type == AccountType.SERVICE_ACCOUNT,
+                User.role == UserRole.LIMITED,
+            )
+        )
+        .scalars()
+        .all()
+    }
+    uid_list = [uid for uid in uid_list if str(uid) not in limited_service_account_ids]
 
     if not uid_list:
         return
