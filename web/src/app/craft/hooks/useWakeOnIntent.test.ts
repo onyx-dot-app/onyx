@@ -26,7 +26,7 @@ describe("useWakeOnIntent", () => {
   let loadSession: jest.Mock;
 
   beforeEach(() => {
-    loadSession = jest.fn();
+    loadSession = jest.fn().mockResolvedValue(undefined);
     useBuildSessionStore.setState({
       sessions: new Map(),
       currentSessionId: null,
@@ -83,17 +83,32 @@ describe("useWakeOnIntent", () => {
     expect(loadSession).toHaveBeenCalledTimes(1);
   });
 
-  it("wakes again after status returns to running then sleeps again", () => {
+  it("wakes again after status returns to running then sleeps again", async () => {
     seedSession(sandbox({ status: "sleeping" }));
     const { result } = renderHook(() => useWakeOnIntent());
 
     result.current();
     expect(loadSession).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     seedSession(sandbox({ status: "running" }));
     result.current();
     expect(loadSession).toHaveBeenCalledTimes(1);
 
+    seedSession(sandbox({ status: "sleeping" }));
+    result.current();
+    expect(loadSession).toHaveBeenCalledTimes(2);
+  });
+
+  it("wakes again on a later sleep with no intent events in between", async () => {
+    seedSession(sandbox({ status: "sleeping" }));
+    const { result } = renderHook(() => useWakeOnIntent());
+
+    result.current();
+    expect(loadSession).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    seedSession(sandbox({ status: "running" }));
     seedSession(sandbox({ status: "sleeping" }));
     result.current();
     expect(loadSession).toHaveBeenCalledTimes(2);

@@ -11,14 +11,14 @@ export function useWakeOnIntent(): () => void {
       ? (sessions.get(currentSessionId)?.sandbox?.status ?? null)
       : null;
 
-    if (status !== "sleeping" && status !== "terminated") {
-      inFlightRef.current = false;
-      return;
-    }
-
+    if (status !== "sleeping" && status !== "terminated") return;
     if (!currentSessionId || inFlightRef.current) return;
 
     inFlightRef.current = true;
-    void loadSession(currentSessionId, { force: true });
+    void Promise.resolve(
+      loadSession(currentSessionId, { force: true })
+    ).finally(() => {
+      inFlightRef.current = false;
+    });
   }, []);
 }
