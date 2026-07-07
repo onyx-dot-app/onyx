@@ -1683,6 +1683,29 @@ class TestProcessItems:
         assert len(results) == 1
         assert isinstance(results[0], ConnectorFailure)
 
+    def test_permission_error_yields_connector_failure(self) -> None:
+        connector = _build_connector()
+        start = datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 6, 30, tzinfo=timezone.utc).timestamp()
+
+        with patch.object(
+            connector,
+            "_get_item_permissions",
+            side_effect=RuntimeError("permission lookup failed"),
+        ):
+            results, early_exit = connector._process_items(
+                response=[_mock_assignment(20, "HW1", 1, "2025-06-15T12:00:00Z")],
+                stage=CanvasStage.ASSIGNMENTS,
+                course_id=1,
+                start=start,
+                end=end,
+                include_permissions=True,
+            )
+
+        assert early_exit is False
+        assert len(results) == 1
+        assert isinstance(results[0], ConnectorFailure)
+
     def test_page_early_exit_on_old_item(self) -> None:
         """Pages sorted desc — item before start triggers early exit."""
         connector = _build_connector()
@@ -1743,6 +1766,61 @@ class TestMaybeAttachPermissions:
         assert result.external_access is None
 
 
+class TestRetrieveAllSlimDocsPermSync:
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_returns_docs_outside_time_window(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course()],
+            pages=[_mock_page(10, "Old page", "2025-06-01T12:00:00Z")],
+            assignments=[
+                _mock_assignment(20, "Old assignment", 1, "2025-06-01T12:00:00Z")
+            ],
+            announcements=[
+                _mock_announcement(30, "Old announcement", 1, "2025-06-01T12:00:00Z")
+            ],
+        )
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+        access = ExternalAccess.empty()
+        start = datetime(2025, 7, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime(2025, 7, 2, tzinfo=timezone.utc).timestamp()
+
+        with patch.object(connector, "_get_item_permissions", return_value=access):
+            batches = list(connector.retrieve_all_slim_docs_perm_sync(start, end))
+
+        doc_ids: set[str] = set()
+        for batch in batches:
+            for item in batch:
+                if isinstance(item, HierarchyNode):
+                    continue
+                doc_ids.add(item.id)
+
+        assert doc_ids == {
+            "canvas-page-1-10",
+            "canvas-assignment-1-20",
+            "canvas-announcement-1-30",
+        }
+
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_permission_error_fails_sync(self, mock_requests: MagicMock) -> None:
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course()],
+            assignments=[
+                _mock_assignment(20, "Old assignment", 1, "2025-06-01T12:00:00Z")
+            ],
+        )
+        connector = CanvasConnector(canvas_base_url=FAKE_BASE_URL)
+        connector.load_credentials({"canvas_access_token": FAKE_TOKEN})
+
+        with patch.object(
+            connector,
+            "_get_item_permissions",
+            side_effect=RuntimeError("permission lookup failed"),
+        ):
+            with pytest.raises(RuntimeError, match="permission lookup failed"):
+                list(connector.retrieve_all_slim_docs_perm_sync())
+
+
 class TestCanvasPermissionMapping:
     def _context(self, is_public: bool = False) -> CanvasCoursePermissionContext:
         return CanvasCoursePermissionContext(
@@ -1788,6 +1866,26 @@ class TestCanvasPermissionMapping:
             is_public=False,
         )
 
+    def test_public_section_announcement_stays_section_restricted(self) -> None:
+        announcement = CanvasAnnouncement(
+            id=30,
+            title="Section announcement",
+            html_url=f"{FAKE_BASE_URL}/courses/1/discussion_topics/30",
+            course_id=1,
+            is_section_specific=True,
+            sections=[CanvasAnnouncementSection(id=10)],
+        )
+
+        access = get_announcement_permissions(
+            self._context(is_public=True), announcement
+        )
+
+        assert access == ExternalAccess(
+            external_user_emails={"teacher@school.edu"},
+            external_user_group_ids={canvas_section_group_id(10)},
+            is_public=False,
+        )
+
     def test_student_override_assignment_resolves_emails_and_staff(self) -> None:
         assignment = CanvasAssignment(
             id=20,
@@ -1799,6 +1897,24 @@ class TestCanvasPermissionMapping:
         )
 
         access = get_assignment_permissions(self._context(), assignment)
+
+        assert access == ExternalAccess(
+            external_user_emails={"teacher@school.edu", "student2@school.edu"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+
+    def test_public_override_assignment_stays_override_restricted(self) -> None:
+        assignment = CanvasAssignment(
+            id=20,
+            name="Student override",
+            html_url=f"{FAKE_BASE_URL}/courses/1/assignments/20",
+            course_id=1,
+            only_visible_to_overrides=True,
+            overrides=[CanvasAssignmentOverride(student_ids=[201])],
+        )
+
+        access = get_assignment_permissions(self._context(is_public=True), assignment)
 
         assert access == ExternalAccess(
             external_user_emails={"teacher@school.edu", "student2@school.edu"},

@@ -677,22 +677,14 @@ class CanvasConnector(
         course_id: int,
         item: CanvasPage | CanvasAssignment | CanvasAnnouncement,
     ) -> ExternalAccess | None:
-        try:
-            course_context = self._get_course_permission_context(course_id)
-            if course_context is None:
-                return None
-            if isinstance(item, CanvasPage):
-                return get_page_permissions(course_context)
-            if isinstance(item, CanvasAssignment):
-                return get_assignment_permissions(course_context, item)
-            return get_announcement_permissions(course_context, item)
-        except Exception:
-            logger.exception(
-                "Failed to compute Canvas permissions for course %s item %s",
-                course_id,
-                getattr(item, "id", getattr(item, "page_id", "unknown")),
-            )
-            return ExternalAccess.empty()
+        course_context = self._get_course_permission_context(course_id)
+        if course_context is None:
+            return None
+        if isinstance(item, CanvasPage):
+            return get_page_permissions(course_context)
+        if isinstance(item, CanvasAssignment):
+            return get_assignment_permissions(course_context, item)
+        return get_announcement_permissions(course_context, item)
 
     def _maybe_attach_permissions(
         self,
@@ -961,16 +953,14 @@ class CanvasConnector(
     @override
     def retrieve_all_slim_docs_perm_sync(
         self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        start = start or 0
-        end = end or datetime.now(tz=timezone.utc).timestamp()
         slim_doc_batch: list[SlimDocument | HierarchyNode] = []
 
         for course in self._list_courses():
-            for slim_doc in self._retrieve_course_slim_docs(course.id, start, end):
+            for slim_doc in self._retrieve_course_slim_docs(course.id):
                 slim_doc_batch.append(slim_doc)
                 if len(slim_doc_batch) < self.batch_size:
                     continue
@@ -990,14 +980,10 @@ class CanvasConnector(
     def _retrieve_course_slim_docs(
         self,
         course_id: int,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
     ) -> list[SlimDocument]:
         slim_docs: list[SlimDocument] = []
 
         for page in self._list_pages(course_id):
-            if not page.updated_at or not _in_time_window(page.updated_at, start, end):
-                continue
             slim_docs.append(
                 SlimDocument(
                     id=f"canvas-page-{page.course_id}-{page.page_id}",
@@ -1007,10 +993,6 @@ class CanvasConnector(
             )
 
         for assignment in self._list_assignments(course_id):
-            if not assignment.updated_at or not _in_time_window(
-                assignment.updated_at, start, end
-            ):
-                continue
             slim_docs.append(
                 SlimDocument(
                     id=f"canvas-assignment-{assignment.course_id}-{assignment.id}",
@@ -1020,10 +1002,6 @@ class CanvasConnector(
             )
 
         for announcement in self._list_announcements(course_id):
-            if not announcement.posted_at or not _in_time_window(
-                announcement.posted_at, start, end
-            ):
-                continue
             slim_docs.append(
                 SlimDocument(
                     id=f"canvas-announcement-{announcement.course_id}-{announcement.id}",

@@ -145,13 +145,10 @@ def _restricted_access(
     group_ids: set[str],
     user_emails: set[str] | None = None,
 ) -> ExternalAccess:
-    return _add_public_course_groups(
-        context,
-        ExternalAccess(
-            external_user_emails=set(user_emails or set()) | context.staff_emails,
-            external_user_group_ids=group_ids,
-            is_public=False,
-        ),
+    return ExternalAccess(
+        external_user_emails=set(user_emails or set()) | context.staff_emails,
+        external_user_group_ids=group_ids,
+        is_public=False,
     )
 
 
