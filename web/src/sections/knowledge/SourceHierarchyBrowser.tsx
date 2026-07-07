@@ -27,6 +27,7 @@ import {
   SvgXCircle,
   SvgCheck,
   SvgArrowUpDown,
+  SvgFilter,
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
@@ -729,11 +730,13 @@ export default function SourceHierarchyBrowser({
       >
         <GeneralLayouts.Section height="auto" width="fit">
           <InputTypeIn
-            searchIcon
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Search..."
+            placeholder="Filter..."
             variant="internal"
+            rightChildren={
+              <SvgFilter className="w-4 h-4 stroke-text-02 shrink-0" />
+            }
           />
         </GeneralLayouts.Section>
       </GeneralLayouts.Section>

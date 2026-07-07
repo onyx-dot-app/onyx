@@ -29,6 +29,7 @@ import {
   SvgXCircle,
   SvgChevronRight,
   SvgFileText,
+  SvgFilter,
 } from "@opal/icons";
 import type { CCPairSummary } from "@/lib/types";
 import { getSourceMetadata } from "@/lib/sources";
@@ -346,7 +347,7 @@ function KnowledgeSearchResultsPanel({
       >
         <SvgSearch size={32} className="stroke-text-04" />
         <Text secondaryBody text03>
-          Start by entering a search term.
+          Input a search term and hit enter.
         </Text>
       </GeneralLayouts.Section>
     );
@@ -600,7 +601,7 @@ function KnowledgeTable<T>({
   onToggleItem,
   searchValue,
   onSearchChange,
-  searchPlaceholder = "Search...",
+  searchPlaceholder = "Filter...",
   headerActions,
   emptyMessage = "No items available.",
   ariaLabelPrefix,
@@ -618,11 +619,13 @@ function KnowledgeTable<T>({
         {onSearchChange !== undefined && (
           <GeneralLayouts.Section height="auto">
             <InputTypeIn
-              searchIcon
               value={searchValue ?? ""}
               onChange={(e) => onSearchChange?.(e.target.value)}
               placeholder={searchPlaceholder}
               variant="internal"
+              rightChildren={
+                <SvgFilter className="w-4 h-4 stroke-text-02 shrink-0" />
+              }
             />
           </GeneralLayouts.Section>
         )}
@@ -771,7 +774,7 @@ function DocumentSetsTableContent({
       onToggleItem={(id) => onDocumentSetToggle(id as number)}
       searchValue={searchValue}
       onSearchChange={setSearchValue}
-      searchPlaceholder="Search document sets..."
+      searchPlaceholder="Filter document sets..."
       emptyMessage="No document sets available."
       ariaLabelPrefix="document-set-row"
     />
@@ -901,7 +904,7 @@ function RecentFilesTableContent({
         onToggleItem={(id) => onToggleFile(id as string)}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        searchPlaceholder="Search files..."
+        searchPlaceholder="Filter files..."
         ariaLabelPrefix="user-file-row"
         headerActions={
           <Button
