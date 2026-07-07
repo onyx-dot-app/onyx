@@ -634,3 +634,8 @@ class PersonaSharingStatus(str, PyEnum):
     PRIVATE = "PRIVATE"
     SHARED = "SHARED"
     PUBLIC = "PUBLIC"
+
+
+class SSOProviderType(str, PyEnum):
+    GOOGLE = "google"
+    OIDC = "oidc"
