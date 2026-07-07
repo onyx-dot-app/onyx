@@ -130,6 +130,20 @@ def get_latest_access_token_for_user(
         return None
 
 
+def update_user_craft_enabled(
+    user_id: UUID,
+    craft_enabled: bool,
+    db_session: Session,
+) -> None:
+    """Admin-controlled per-user Craft access toggle."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(craft_enabled=craft_enabled)
+    )
+    db_session.commit()
+
+
 def update_user_temperature_override_enabled(
     user_id: UUID,
     temperature_override_enabled: bool,

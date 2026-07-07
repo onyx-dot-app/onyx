@@ -49,6 +49,7 @@ class FullUserSnapshot(BaseModel):
     updated_at: datetime.datetime
     groups: list[UserGroupInfo]
     is_scim_synced: bool
+    craft_enabled: bool
 
     @classmethod
     def from_user_model(
@@ -69,6 +70,7 @@ class FullUserSnapshot(BaseModel):
             updated_at=user.updated_at,
             groups=groups or [],
             is_scim_synced=is_scim_synced,
+            craft_enabled=user.craft_enabled,
         )
 
 

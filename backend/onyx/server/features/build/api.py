@@ -22,7 +22,7 @@ from onyx.server.features.build.scheduled_tasks.api import (
 from onyx.server.features.build.session.api import router as sessions_router
 from onyx.server.features.build.session.messages import router as messages_router
 from onyx.server.features.build.user_library.api import router as user_library_router
-from onyx.server.features.build.utils import is_onyx_craft_enabled
+from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -31,7 +31,7 @@ logger = setup_logger()
 def require_onyx_craft_enabled(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> User:
-    if not is_onyx_craft_enabled(user):
+    if not is_craft_enabled_for_user(user):
         raise HTTPException(
             status_code=403,
             detail="Onyx Craft is not available",

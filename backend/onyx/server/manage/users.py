@@ -67,6 +67,7 @@ from onyx.db.user_preferences import update_assistant_preferences
 from onyx.db.user_preferences import update_user_assistant_visibility
 from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_chat_background
+from onyx.db.user_preferences import update_user_craft_enabled
 from onyx.db.user_preferences import update_user_default_app_mode
 from onyx.db.user_preferences import update_user_default_model
 from onyx.db.user_preferences import update_user_language
@@ -108,6 +109,7 @@ from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
 from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
+from onyx.server.manage.models import UserCraftAccessUpdateRequest
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
 from onyx.server.manage.models import UserRoleResponse
@@ -191,6 +193,42 @@ def set_user_role(
             "target_email": user_to_update.email,
             "old_role": current_role.value,
             "new_role": requested_role.value,
+        },
+    )
+
+
+@router.patch("/manage/admin/users/craft-enabled")
+def set_user_craft_access(
+    craft_access_update_request: UserCraftAccessUpdateRequest,
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
+    db_session: Session = Depends(get_session),
+) -> None:
+    user_to_update = get_user_by_email(
+        email=craft_access_update_request.user_email, db_session=db_session
+    )
+    if not user_to_update:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+
+    if user_to_update.craft_enabled == craft_access_update_request.craft_enabled:
+        return
+
+    update_user_craft_enabled(
+        user_id=user_to_update.id,
+        craft_enabled=craft_access_update_request.craft_enabled,
+        db_session=db_session,
+    )
+
+    emit_audit_event(
+        AuditAction.USER_CRAFT_ACCESS_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(user_to_update.id),
+        extra={
+            "target_email": user_to_update.email,
+            "craft_enabled": craft_access_update_request.craft_enabled,
         },
     )
 

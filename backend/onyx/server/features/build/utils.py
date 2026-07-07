@@ -110,9 +110,9 @@ CRAFT_HAS_USAGE_LIMITS = "craft-has-usage-limits"
 BUILD_MODE_FEATURE_ID = "build_mode"
 
 
-def is_onyx_craft_enabled(user: User) -> bool:
+def is_craft_available_for_deployment(user: User) -> bool:
     """
-    Check if Onyx Craft (Build Mode) is enabled for the user.
+    Check whether Onyx Craft (Build Mode) is available at the deployment level.
 
     Flag logic for "onyx-craft-enabled":
     - Flag = True → enabled (Onyx Craft is available)
@@ -141,6 +141,18 @@ def is_onyx_craft_enabled(user: User) -> bool:
         return False
 
 
+def is_craft_enabled_for_user(user: User) -> bool:
+    """
+    Check if Onyx Craft (Build Mode) is enabled for the user: the deployment
+    must have Craft available AND the user must not have been disabled by an
+    admin (User.craft_enabled).
+    """
+    if not user.craft_enabled:
+        return False
+
+    return is_craft_available_for_deployment(user)
+
+
 def ensure_build_mode_intro_notification(user: User, db_session: Session) -> None:
     """
     Create Build Mode intro notification for user if enabled and not already exists.
@@ -149,7 +161,7 @@ def ensure_build_mode_intro_notification(user: User, db_session: Session) -> Non
     to ensure each user only gets one notification.
     """
     # PostHog feature flag check - only show notification if Onyx Craft is enabled
-    if not is_onyx_craft_enabled(user):
+    if not is_craft_enabled_for_user(user):
         return
 
     # Create notification (will be skipped if already exists due to deduplication)

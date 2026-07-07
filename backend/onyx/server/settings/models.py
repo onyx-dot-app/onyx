@@ -100,6 +100,9 @@ class UserSettings(Settings):
     tenant_id: str = POSTGRES_DEFAULT_SCHEMA
     # Feature flag for Onyx Craft (Build Mode) - used for server-side redirects
     onyx_craft_enabled: bool = False
+    # Deployment-level Craft availability, ignoring the per-user admin toggle.
+    # Gates visibility of the admin per-user Craft controls.
+    onyx_craft_available: bool = False
     # Dev/debug flag: when true, the FE renders a button that streams the
     # user's sandbox pod's opencode-serve logs. Gated by the
     # ENABLE_OPENCODE_DEBUGGING env var; never set in prod.

@@ -28,6 +28,7 @@ interface FullUserSnapshot {
   updated_at: string;
   groups: UserGroupInfo[];
   is_scim_synced: boolean;
+  craft_enabled: boolean;
 }
 
 interface ManageUsersResponse {
@@ -47,6 +48,7 @@ function snapshotToMemberRow(snapshot: FullUserSnapshot): MemberRow {
     status: snapshot.is_active ? UserStatus.ACTIVE : UserStatus.INACTIVE,
     is_active: snapshot.is_active,
     is_scim_synced: snapshot.is_scim_synced,
+    craft_enabled: snapshot.craft_enabled,
     personal_name: snapshot.personal_name,
     created_at: snapshot.created_at,
     updated_at: snapshot.updated_at,
@@ -65,6 +67,7 @@ function serviceAccountToMemberRow(
     status: UserStatus.ACTIVE,
     is_active: true,
     is_scim_synced: false,
+    craft_enabled: snapshot.craft_enabled,
     personal_name:
       apiKey?.api_key_name ?? snapshot.personal_name ?? "Unnamed Key",
     created_at: null,

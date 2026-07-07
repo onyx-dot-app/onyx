@@ -54,6 +54,11 @@ function renderStatusColumn(value: UserStatus, row: UserRow) {
           SCIM synced
         </Text>
       )}
+      {!row.craft_enabled && (
+        <Text as="span" secondaryBody text03>
+          Craft disabled
+        </Text>
+      )}
     </div>
   );
 }

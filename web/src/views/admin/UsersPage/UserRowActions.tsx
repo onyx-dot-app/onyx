@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button, Divider } from "@opal/components";
 import {
+  SvgDevKit,
   SvgMoreHorizontal,
   SvgUsers,
   SvgXCircle,
@@ -18,7 +19,8 @@ import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
-import { approveRequest } from "./svc";
+import { useSettings } from "@/lib/settings/hooks";
+import { approveRequest, setUserCraftEnabled } from "./svc";
 import EditUserModal from "./EditUserModal";
 import {
   CancelInviteModal,
@@ -57,11 +59,38 @@ export default function UserRowActions({
 }: UserRowActionsProps) {
   const [modal, setModal] = useState<Modal | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const settings = useSettings();
 
   const openModal = (type: Modal) => {
     setPopoverOpen(false);
     setModal(type);
   };
+
+  const toggleCraftAccess = () => {
+    setPopoverOpen(false);
+    void (async () => {
+      try {
+        await setUserCraftEnabled(user.email, !user.craft_enabled);
+        onMutate();
+        toast.success(
+          user.craft_enabled
+            ? "Craft disabled for user"
+            : "Craft enabled for user"
+        );
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "An error occurred");
+      }
+    })();
+  };
+
+  // Craft access is not IdP-managed, so the toggle is offered for SCIM users
+  // too. Hidden when Craft isn't available for the deployment.
+  const craftToggleItem =
+    settings?.onyx_craft_available === true && user.id ? (
+      <LineItem icon={SvgDevKit} onClick={toggleCraftAccess}>
+        {user.craft_enabled ? "Disable Craft" : "Enable Craft"}
+      </LineItem>
+    ) : null;
 
   const closeModal = () => setModal(null);
 
@@ -85,6 +114,7 @@ export default function UserRowActions({
               Groups &amp; Roles
             </LineItem>
           )}
+          {craftToggleItem}
           <Disabled disabled>
             <LineItem danger icon={SvgUserX}>
               Deactivate User
@@ -150,6 +180,7 @@ export default function UserRowActions({
             >
               Reset Password
             </LineItem>
+            {craftToggleItem}
             <Divider paddingPerpendicular="md" />
             <LineItem
               danger
@@ -178,6 +209,7 @@ export default function UserRowActions({
             >
               Reset Password
             </LineItem>
+            {craftToggleItem}
             <Divider paddingPerpendicular="md" />
             <LineItem
               icon={SvgUserPlus}

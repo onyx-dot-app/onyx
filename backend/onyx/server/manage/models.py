@@ -215,6 +215,11 @@ class UserRoleUpdateRequest(BaseModel):
     explicit_override: bool = False
 
 
+class UserCraftAccessUpdateRequest(BaseModel):
+    user_email: str
+    craft_enabled: bool
+
+
 class UserRoleResponse(BaseModel):
     role: str
 

@@ -25,7 +25,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.server.features.build.utils import is_onyx_craft_enabled
+from onyx.server.features.build.utils import is_craft_available_for_deployment
 from onyx.server.features.notifications.models import NotificationResponse
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
@@ -126,8 +126,13 @@ def fetch_settings(
     )
     general_settings = apply_fn(general_settings)
 
-    # Check if Onyx Craft is enabled for this user (used for server-side redirects)
-    onyx_craft_enabled_for_user = is_onyx_craft_enabled(user) if user else False
+    # Check if Onyx Craft is enabled for this user (used for server-side
+    # redirects). Composed from the deployment gate + the per-user admin
+    # toggle so the flag provider is only consulted once.
+    onyx_craft_available = is_craft_available_for_deployment(user) if user else False
+    onyx_craft_enabled_for_user = (
+        onyx_craft_available and user is not None and user.craft_enabled
+    )
 
     # Dev/debug flag: tail-the-pod-logs button gated by an env var. Same
     # check happens on the SSE endpoint so flipping the env var off
@@ -139,6 +144,7 @@ def fetch_settings(
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
+        onyx_craft_available=onyx_craft_available,
         opencode_debugging_enabled=ENABLE_OPENCODE_DEBUGGING,
         vector_db_enabled=not DISABLE_VECTOR_DB,
         hooks_enabled=not MULTI_TENANT,

@@ -59,6 +59,22 @@ export async function setUserRole(
   }
 }
 
+export async function setUserCraftEnabled(
+  email: string,
+  craftEnabled: boolean
+): Promise<void> {
+  const res = await fetch("/api/manage/admin/users/craft-enabled", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_email: email, craft_enabled: craftEnabled }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await parseErrorDetail(res, "Failed to update Craft access")
+    );
+  }
+}
+
 export async function addUserToGroup(
   groupId: number,
   userId: string
