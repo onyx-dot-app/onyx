@@ -7,13 +7,17 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import KV_CRED_KEY
 from onyx.configs.constants import KV_GOOGLE_DRIVE_CRED_KEY
-from onyx.configs.constants import KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY
+from onyx.connectors.google_utils.google_kv import build_service_account_creds
 from onyx.connectors.google_utils.google_kv import get_auth_url
 from onyx.connectors.google_utils.google_kv import get_google_app_cred
-from onyx.connectors.google_utils.google_kv import get_service_account_key
 from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
 from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
-from onyx.connectors.google_utils.google_kv import upsert_service_account_key
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
+)
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+)
 from onyx.connectors.google_utils.shared_constants import (
     GoogleOAuthAuthenticationMethod,
 )
@@ -75,25 +79,22 @@ def test_upsert_google_app_cred_stores_dict(monkeypatch: Any) -> None:
     assert stored["value"]["web"]["client_id"] == "client-id.apps.googleusercontent.com"
 
 
-def test_upsert_service_account_key_stores_dict(monkeypatch: Any) -> None:
-    stored: dict[str, Any] = {}
+def test_build_service_account_creds_puts_key_on_credential_row() -> None:
+    key = _make_service_account_key()
 
-    class _StubKvStore:
-        def store(self, key: str, value: object, encrypt: bool) -> None:
-            stored["key"] = key
-            stored["value"] = value
-            stored["encrypt"] = encrypt
-
-    monkeypatch.setattr(
-        "onyx.connectors.google_utils.google_kv.get_kv_store", lambda: _StubKvStore()
+    credential = build_service_account_creds(
+        DocumentSource.GOOGLE_DRIVE,
+        service_account_key=key,
+        primary_admin_email="admin@test-project.com",
     )
 
-    upsert_service_account_key(_make_service_account_key(), DocumentSource.GOOGLE_DRIVE)
-
-    assert stored["key"] == KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY
-    assert stored["encrypt"] is True
-    assert isinstance(stored["value"], dict)
-    assert stored["value"]["project_id"] == "test-project"
+    credential_json = credential.credential_json
+    assert (
+        credential_json[DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY]
+        == key.model_dump_json()
+    )
+    assert credential_json[DB_CREDENTIALS_PRIMARY_ADMIN_KEY] == "admin@test-project.com"
+    assert credential.source == DocumentSource.GOOGLE_DRIVE
 
 
 @pytest.mark.parametrize("legacy_string", [False, True])
@@ -117,30 +118,6 @@ def test_get_google_app_cred_accepts_dict_and_legacy_string(
     creds = get_google_app_cred(DocumentSource.GOOGLE_DRIVE)
 
     assert creds.web.client_id == "client-id.apps.googleusercontent.com"
-
-
-@pytest.mark.parametrize("legacy_string", [False, True])
-def test_get_service_account_key_accepts_dict_and_legacy_string(
-    monkeypatch: Any, legacy_string: bool
-) -> None:
-    stored_value: object = (
-        _make_service_account_key().model_dump(mode="json")
-        if not legacy_string
-        else _make_service_account_key().model_dump_json()
-    )
-
-    class _StubKvStore:
-        def load(self, key: str) -> object:
-            assert key == KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY
-            return stored_value
-
-    monkeypatch.setattr(
-        "onyx.connectors.google_utils.google_kv.get_kv_store", lambda: _StubKvStore()
-    )
-
-    key = get_service_account_key(DocumentSource.GOOGLE_DRIVE)
-
-    assert key.client_email == "test@test-project.iam.gserviceaccount.com"
 
 
 @pytest.mark.parametrize("legacy_string", [False, True])

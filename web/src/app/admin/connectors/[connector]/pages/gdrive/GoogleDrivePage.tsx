@@ -15,7 +15,6 @@ import {
 import { useUser } from "@/providers/UserProvider";
 import {
   useGoogleAppCredential,
-  useGoogleServiceAccountKey,
   useGoogleCredentials,
   useConnectorsByCredentialId,
   checkCredentialsFetched,
@@ -27,18 +26,12 @@ import {
 const GDriveMain = () => {
   const { isAdmin, user } = useUser();
 
-  // Get app credential and service account key
+  // Get app credential
   const {
     data: appCredentialData,
     isLoading: isAppCredentialLoading,
     error: isAppCredentialError,
   } = useGoogleAppCredential("google_drive");
-
-  const {
-    data: serviceAccountKeyData,
-    isLoading: isServiceAccountKeyLoading,
-    error: isServiceAccountKeyError,
-  } = useGoogleServiceAccountKey("google_drive");
 
   // Get all public credentials
   const {
@@ -56,9 +49,7 @@ const GDriveMain = () => {
   } = useGoogleCredentials(ValidSources.GoogleDrive);
 
   // Filter uploaded credentials and get credential ID
-  const { credential_id, uploadedCredentials } = filterUploadedCredentials(
-    googleDriveCredentials
-  );
+  const { credential_id } = filterUploadedCredentials(googleDriveCredentials);
 
   // Get connectors for the credential ID
   const {
@@ -69,14 +60,9 @@ const GDriveMain = () => {
   } = useConnectorsByCredentialId(credential_id);
 
   // Check if credentials were successfully fetched
-  const {
-    appCredentialSuccessfullyFetched,
-    serviceAccountKeySuccessfullyFetched,
-  } = checkCredentialsFetched(
+  const { appCredentialSuccessfullyFetched } = checkCredentialsFetched(
     appCredentialData,
-    isAppCredentialError,
-    serviceAccountKeyData,
-    isServiceAccountKeyError
+    isAppCredentialError
   );
 
   // Handle refresh of all data
@@ -89,7 +75,6 @@ const GDriveMain = () => {
   // Loading state
   if (
     (!appCredentialSuccessfullyFetched && isAppCredentialLoading) ||
-    (!serviceAccountKeySuccessfullyFetched && isServiceAccountKeyLoading) ||
     (!credentialsData && isCredentialsLoading) ||
     (!googleDriveCredentials && isGoogleDriveCredentialsLoading) ||
     (!googleDriveConnectors && isGoogleDriveConnectorsLoading)
@@ -112,10 +97,7 @@ const GDriveMain = () => {
     );
   }
 
-  if (
-    !appCredentialSuccessfullyFetched ||
-    !serviceAccountKeySuccessfullyFetched
-  ) {
+  if (!appCredentialSuccessfullyFetched) {
     return (
       <ErrorCallout errorTitle="Error loading Google Drive app credentials. Contact an administrator." />
     );
@@ -155,7 +137,6 @@ const GDriveMain = () => {
       <Title className="mb-2 mt-6">Step 1: Provide your Credentials</Title>
       <DriveJsonUploadSection
         appCredentialData={appCredentialData}
-        serviceAccountCredentialData={serviceAccountKeyData}
         isAdmin={isAdmin}
         onSuccess={handleRefresh}
         existingAuthCredential={Boolean(
@@ -164,26 +145,23 @@ const GDriveMain = () => {
         )}
       />
 
-      {isAdmin &&
-        (appCredentialData?.client_id ||
-          serviceAccountKeyData?.service_account_email) && (
-          <>
-            <Title className="mb-2 mt-6">Step 2: Authenticate with Onyx</Title>
-            <DriveAuthSection
-              refreshCredentials={handleRefresh}
-              googleDrivePublicUploadedCredential={
-                googleDrivePublicUploadedCredential
-              }
-              googleDriveServiceAccountCredential={
-                googleDriveServiceAccountCredential
-              }
-              appCredentialData={appCredentialData}
-              serviceAccountKeyData={serviceAccountKeyData}
-              connectorAssociated={connectorAssociated}
-              user={user}
-            />
-          </>
-        )}
+      {isAdmin && (
+        <>
+          <Title className="mb-2 mt-6">Step 2: Authenticate with Onyx</Title>
+          <DriveAuthSection
+            refreshCredentials={handleRefresh}
+            googleDrivePublicUploadedCredential={
+              googleDrivePublicUploadedCredential
+            }
+            googleDriveServiceAccountCredential={
+              googleDriveServiceAccountCredential
+            }
+            appCredentialData={appCredentialData}
+            connectorAssociated={connectorAssociated}
+            user={user}
+          />
+        </>
+      )}
     </>
   );
 };

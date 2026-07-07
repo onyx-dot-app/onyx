@@ -60,8 +60,6 @@ export const SWR_KEYS = {
   // ── Google Connectors ─────────────────────────────────────────────────────
   googleConnectorAppCredential: (service: "gmail" | "google-drive") =>
     `/api/manage/admin/connector/${service}/app-credential`,
-  googleConnectorServiceAccountKey: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/service-account-key`,
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
     `/api/manage/admin/connector/${service}/credentials`,
   googleConnectorPublicCredential: (service: "gmail" | "google-drive") =>

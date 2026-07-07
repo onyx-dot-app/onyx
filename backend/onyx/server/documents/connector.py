@@ -42,13 +42,10 @@ from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import build_service_account_creds
 from onyx.connectors.google_utils.google_kv import delete_google_app_cred
-from onyx.connectors.google_utils.google_kv import delete_service_account_key
 from onyx.connectors.google_utils.google_kv import get_auth_url
 from onyx.connectors.google_utils.google_kv import get_google_app_cred
-from onyx.connectors.google_utils.google_kv import get_service_account_key
 from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
 from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
-from onyx.connectors.google_utils.google_kv import upsert_service_account_key
 from onyx.connectors.google_utils.google_kv import verify_csrf
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
@@ -76,7 +73,6 @@ from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
-from onyx.db.credentials import delete_service_account_credentials
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_all_cc_pairs
@@ -123,7 +119,6 @@ from onyx.server.documents.models import GDriveCallback
 from onyx.server.documents.models import GmailCallback
 from onyx.server.documents.models import GoogleAppCredentials
 from onyx.server.documents.models import GoogleServiceAccountCredentialRequest
-from onyx.server.documents.models import GoogleServiceAccountKey
 from onyx.server.documents.models import IndexedSourcesResponse
 from onyx.server.documents.models import IndexingStatusRequest
 from onyx.server.documents.models import ObjectCreationIdResponse
@@ -243,121 +238,20 @@ def delete_google_app_credentials(
     )
 
 
-@router.get("/admin/connector/gmail/service-account-key")
-def check_google_service_gmail_account_key_exist(
-    _: User = Depends(current_curator_or_admin_user),
-) -> dict[str, str]:
-    try:
-        return {
-            "service_account_email": get_service_account_key(
-                DocumentSource.GMAIL
-            ).client_email
-        }
-    except KvKeyNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Google Service Account Key not found"
-        )
-
-
-@router.put("/admin/connector/gmail/service-account-key")
-def upsert_google_service_gmail_account_key(
-    service_account_key: GoogleServiceAccountKey,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> StatusResponse:
-    try:
-        upsert_service_account_key(service_account_key, DocumentSource.GMAIL)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully saved Google Service Account Key"
-    )
-
-
-@router.delete("/admin/connector/gmail/service-account-key")
-def delete_google_service_gmail_account_key(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> StatusResponse:
-    try:
-        delete_service_account_key(DocumentSource.GMAIL)
-        cleanup_gmail_credentials(db_session=db_session)
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully deleted Google Service Account Key"
-    )
-
-
-@router.get("/admin/connector/google-drive/service-account-key")
-def check_google_service_account_key_exist(
-    _: User = Depends(current_curator_or_admin_user),
-) -> dict[str, str]:
-    try:
-        return {
-            "service_account_email": get_service_account_key(
-                DocumentSource.GOOGLE_DRIVE
-            ).client_email
-        }
-    except KvKeyNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Google Service Account Key not found"
-        )
-
-
-@router.put("/admin/connector/google-drive/service-account-key")
-def upsert_google_service_account_key(
-    service_account_key: GoogleServiceAccountKey,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> StatusResponse:
-    try:
-        upsert_service_account_key(service_account_key, DocumentSource.GOOGLE_DRIVE)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully saved Google Service Account Key"
-    )
-
-
-@router.delete("/admin/connector/google-drive/service-account-key")
-def delete_google_service_account_key(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> StatusResponse:
-    try:
-        delete_service_account_key(DocumentSource.GOOGLE_DRIVE)
-        cleanup_google_drive_credentials(db_session=db_session)
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully deleted Google Service Account Key"
-    )
-
-
 @router.put("/admin/connector/google-drive/service-account-credential")
 def upsert_service_account_credential(
     service_account_credential_request: GoogleServiceAccountCredentialRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    """Special API which allows the creation of a credential for a service account.
-    Combines the input with the saved service account key to create an entry in the
-    `Credential` table."""
-    try:
-        credential_base = build_service_account_creds(
-            DocumentSource.GOOGLE_DRIVE,
-            primary_admin_email=service_account_credential_request.google_primary_admin,
-            name="Service Account (uploaded)",
-        )
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # first delete all existing service account credentials
-    delete_service_account_credentials(user, db_session, DocumentSource.GOOGLE_DRIVE)
-    # `user=None` since this credential is not a personal credential
+    """Create a credential from an uploaded service account key. Each call creates a new
+    credential, so an instance can hold multiple service accounts."""
+    credential_base = build_service_account_creds(
+        DocumentSource.GOOGLE_DRIVE,
+        service_account_key=service_account_credential_request.service_account_key,
+        primary_admin_email=service_account_credential_request.google_primary_admin,
+        name="Service Account (uploaded)",
+    )
     credential = create_credential(
         credential_data=credential_base, user=user, db_session=db_session
     )
@@ -370,20 +264,13 @@ def upsert_gmail_service_account_credential(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    """Special API which allows the creation of a credential for a service account.
-    Combines the input with the saved service account key to create an entry in the
-    `Credential` table."""
-    try:
-        credential_base = build_service_account_creds(
-            DocumentSource.GMAIL,
-            primary_admin_email=service_account_credential_request.google_primary_admin,
-        )
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # first delete all existing service account credentials
-    delete_service_account_credentials(user, db_session, DocumentSource.GMAIL)
-    # `user=None` since this credential is not a personal credential
+    """Create a credential from an uploaded service account key. Each call creates a new
+    credential, so an instance can hold multiple service accounts."""
+    credential_base = build_service_account_creds(
+        DocumentSource.GMAIL,
+        service_account_key=service_account_credential_request.service_account_key,
+        primary_admin_email=service_account_credential_request.google_primary_admin,
+    )
     credential = create_credential(
         credential_data=credential_base, user=user, db_session=db_session
     )

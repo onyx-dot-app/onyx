@@ -13,9 +13,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import KV_CRED_KEY
 from onyx.configs.constants import KV_GMAIL_CRED_KEY
-from onyx.configs.constants import KV_GMAIL_SERVICE_ACCOUNT_KEY
 from onyx.configs.constants import KV_GOOGLE_DRIVE_CRED_KEY
-from onyx.configs.constants import KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import get_gmail_service
 from onyx.connectors.google_utils.shared_constants import (
@@ -152,11 +150,10 @@ def update_credential_access_tokens(
 
 def build_service_account_creds(
     source: DocumentSource,
+    service_account_key: GoogleServiceAccountKey,
     primary_admin_email: str | None = None,
     name: str | None = None,
 ) -> CredentialBase:
-    service_account_key = get_service_account_key(source=source)
-
     credential_dict = {
         DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: service_account_key.model_dump_json(),
     }
@@ -239,45 +236,5 @@ def delete_google_app_cred(source: DocumentSource) -> None:
         get_kv_store().delete(KV_GOOGLE_DRIVE_CRED_KEY)
     elif source == DocumentSource.GMAIL:
         get_kv_store().delete(KV_GMAIL_CRED_KEY)
-    else:
-        raise ValueError(f"Unsupported source: {source}")
-
-
-def get_service_account_key(source: DocumentSource) -> GoogleServiceAccountKey:
-    if source == DocumentSource.GOOGLE_DRIVE:
-        creds = _load_google_json(
-            get_kv_store().load(KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY)
-        )
-    elif source == DocumentSource.GMAIL:
-        creds = _load_google_json(get_kv_store().load(KV_GMAIL_SERVICE_ACCOUNT_KEY))
-    else:
-        raise ValueError(f"Unsupported source: {source}")
-    return GoogleServiceAccountKey(**creds)
-
-
-def upsert_service_account_key(
-    service_account_key: GoogleServiceAccountKey, source: DocumentSource
-) -> None:
-    if source == DocumentSource.GOOGLE_DRIVE:
-        get_kv_store().store(
-            KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY,
-            service_account_key.model_dump(mode="json"),
-            encrypt=True,
-        )
-    elif source == DocumentSource.GMAIL:
-        get_kv_store().store(
-            KV_GMAIL_SERVICE_ACCOUNT_KEY,
-            service_account_key.model_dump(mode="json"),
-            encrypt=True,
-        )
-    else:
-        raise ValueError(f"Unsupported source: {source}")
-
-
-def delete_service_account_key(source: DocumentSource) -> None:
-    if source == DocumentSource.GOOGLE_DRIVE:
-        get_kv_store().delete(KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY)
-    elif source == DocumentSource.GMAIL:
-        get_kv_store().delete(KV_GMAIL_SERVICE_ACCOUNT_KEY)
     else:
         raise ValueError(f"Unsupported source: {source}")
