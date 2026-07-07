@@ -114,10 +114,14 @@ type Options struct {
 	Python     bool
 	Dependabot bool
 	Actions    bool
-	Format     string // text|json|sarif
+	Format     string // comma-separated list of text|json|sarif
 	FailOn     Severity
 	IgnoreURL  string
-	Writer     io.Writer
+	// Stdout receives the machine-readable formats (json, sarif), or the text
+	// report when it is the only format requested. Stderr receives the text
+	// report when it is combined with a machine format. See renderReport.
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // Result is the outcome of an audit run.
@@ -128,8 +132,8 @@ type Result struct {
 }
 
 // Run executes the selected audit backends, applies the allowlist, renders a
-// report to opts.Writer, and returns the result. With no selector flags set,
-// all backends are run.
+// report to opts.Stdout/opts.Stderr, and returns the result. With no selector
+// flags set, all backends are run.
 func Run(opts Options) (*Result, error) {
 	runAll := !opts.Web && !opts.Python && !opts.Dependabot && !opts.Actions
 	scanWeb := runAll || opts.Web
@@ -208,7 +212,7 @@ func Run(opts Options) (*Result, error) {
 		Blocking: blockingFindings(kept, opts.FailOn),
 	}
 
-	if err := render(opts.Writer, opts.Format, result); err != nil {
+	if err := renderReport(opts.Stdout, opts.Stderr, opts.Format, result); err != nil {
 		return nil, err
 	}
 	return result, nil

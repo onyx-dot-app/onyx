@@ -47,7 +47,7 @@ how it gates deploys.`,
 	cmd.Flags().BoolVar(&opts.Python, "python", false, "Audit Python dependencies (uv.lock)")
 	cmd.Flags().BoolVar(&opts.Dependabot, "dependabot", false, "Audit open Dependabot security alerts")
 	cmd.Flags().BoolVar(&opts.Actions, "actions", false, "Audit GitHub Actions in .github/workflows and .github/actions")
-	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format: text, json, or sarif")
+	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format(s), comma-separated: text, json, sarif (e.g. sarif,text)")
 	cmd.Flags().StringVar(&opts.FailOn, "fail-on", "critical", "Minimum severity that fails the audit: critical, high, moderate, or low")
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
 
@@ -71,7 +71,8 @@ func runAudit(opts *AuditOptions) {
 		Format:     opts.Format,
 		FailOn:     failOn,
 		IgnoreURL:  opts.IgnoreURL,
-		Writer:     os.Stdout,
+		Stdout:     os.Stdout,
+		Stderr:     os.Stderr,
 	})
 	if err != nil {
 		log.Fatalf("Audit failed: %v", err)

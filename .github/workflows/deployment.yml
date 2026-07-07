@@ -1899,12 +1899,15 @@ jobs:
 
       - name: Run image vulnerability audit
         if: steps.should-run.outputs.run == 'true'
-        # Exits non-zero on unsuppressed CRITICAL (gates the release). On a hard
-        # scan failure nothing is written, so seed a valid empty SARIF to keep the
-        # always() upload below from choking; either way it reaches the Security tab.
+        # Exits non-zero on unsuppressed CRITICAL (gates the release). --format
+        # writes SARIF to stdout (redirected to the file for the Security tab
+        # upload) and the human-readable report + runbook to stderr, so the CI log
+        # shows which advisories blocked and how to resolve/suppress them. On a
+        # hard scan failure nothing is written, so seed a valid empty SARIF to keep
+        # the always() upload below from choking.
         run: |
           uv run --no-sync --with onyx-devtools ods audit image "$IMAGE" \
-            --fail-on=critical --format=sarif > image-audit.sarif || status=$?
+            --fail-on=critical --format=sarif,text > image-audit.sarif || status=$?
           if [ ! -s image-audit.sarif ]; then
             # $schema is a literal SARIF key, not a shell variable.
             # shellcheck disable=SC2016
