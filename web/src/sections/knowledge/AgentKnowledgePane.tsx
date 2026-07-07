@@ -312,6 +312,7 @@ interface KnowledgeSearchResultsPanelProps {
   committedQuery: string;
   searchQuery: string;
   isSearching: boolean;
+  searchError: boolean;
   results: {
     docs: SearchDocWithContent[];
     nodes: HierarchyNodeSearchSummary[];
@@ -328,6 +329,7 @@ function KnowledgeSearchResultsPanel({
   committedQuery,
   searchQuery,
   isSearching,
+  searchError,
   results,
   activeSourceFilter,
   selectedDocumentIds,
@@ -363,6 +365,22 @@ function KnowledgeSearchResultsPanel({
       >
         <Text secondaryBody text03>
           Searching...
+        </Text>
+      </GeneralLayouts.Section>
+    );
+  }
+
+  // Error — request failed, distinct from a legitimately empty result set
+  if (searchError && committedQuery === searchQuery) {
+    return (
+      <GeneralLayouts.Section
+        alignItems="center"
+        justifyContent="center"
+        gap={0.5}
+        aria-label="search-error"
+      >
+        <Text secondaryBody text03>
+          Search failed, please try again.
         </Text>
       </GeneralLayouts.Section>
     );
@@ -974,6 +992,7 @@ interface KnowledgeTwoColumnViewProps {
     nodes: HierarchyNodeSearchSummary[];
   } | null;
   isSearching: boolean;
+  searchError: boolean;
   resultCountBySource: Map<ValidSources, number>;
   onSearchQueryChange: (q: string) => void;
   onSearchSubmit: () => void;
@@ -1020,6 +1039,7 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   activeSourceFilter,
   searchResults,
   isSearching,
+  searchError,
   resultCountBySource,
   onSearchQueryChange,
   onSearchSubmit,
@@ -1032,16 +1052,18 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
 }: KnowledgeTwoColumnViewProps) {
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
-      {/* Search bar row — always visible in expanded mode */}
-      <KnowledgeSearchBar
-        query={searchQuery}
-        onQueryChange={onSearchQueryChange}
-        onSubmit={onSearchSubmit}
-        onClear={onSearchClear}
-        onBack={onExitSearchMode}
-        onFocus={onEnterSearchMode}
-        isSearchMode={isSearchMode}
-      />
+      {/* Search bar row — visible in expanded mode; requires a vector DB */}
+      {vectorDbEnabled && (
+        <KnowledgeSearchBar
+          query={searchQuery}
+          onQueryChange={onSearchQueryChange}
+          onSubmit={onSearchSubmit}
+          onClear={onSearchClear}
+          onBack={onExitSearchMode}
+          onFocus={onEnterSearchMode}
+          isSearchMode={isSearchMode}
+        />
+      )}
 
       {isSearchMode ? (
         <TableLayouts.TwoColumnLayout minHeight={18.75}>
@@ -1057,6 +1079,7 @@ const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
               committedQuery={committedQuery}
               searchQuery={searchQuery}
               isSearching={isSearching}
+              searchError={searchError}
               results={searchResults}
               activeSourceFilter={activeSourceFilter}
               selectedDocumentIds={selectedDocumentIds}
@@ -1385,6 +1408,9 @@ export default function AgentKnowledgePane({
     nodes: HierarchyNodeSearchSummary[];
   } | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  // Guards against a stale, slower search request overwriting a newer one
+  const searchRequestIdRef = useRef(0);
   // Node ID to navigate to after exiting search mode into a source
   const [searchNavigateNodeId, setSearchNavigateNodeId] = useState<
     number | undefined
@@ -1501,6 +1527,10 @@ export default function AgentKnowledgePane({
 
   // Search handlers
   const handleEnterSearchMode = useCallback(() => {
+    // Search hits vector-backed endpoints (send-search-message, hierarchy
+    // node search), which require a vector DB — same gate as document
+    // sets/connected sources.
+    if (!vectorDbEnabled) return;
     if (!isSearchMode) {
       navStateRef.current = { view, activeSource };
       setIsSearchMode(true);
@@ -1509,13 +1539,15 @@ export default function AgentKnowledgePane({
         setView("add");
       }
     }
-  }, [isSearchMode, view, activeSource]);
+  }, [vectorDbEnabled, isSearchMode, view, activeSource]);
 
   const handleExitSearchMode = useCallback(() => {
+    searchRequestIdRef.current++;
     setIsSearchMode(false);
     setSearchQuery("");
     setCommittedQuery("");
     setSearchResults(null);
+    setSearchError(false);
     setActiveSourceFilter(null);
     setView(navStateRef.current.view);
     setActiveSource(navStateRef.current.activeSource);
@@ -1523,8 +1555,10 @@ export default function AgentKnowledgePane({
 
   const runSearch = useCallback(
     async (query: string, sourceFilter: ValidSources | null) => {
-      if (!query.trim()) return;
+      if (!query.trim() || !vectorDbEnabled) return;
+      const requestId = ++searchRequestIdRef.current;
       setIsSearching(true);
+      setSearchError(false);
       try {
         const [docResponse, nodeResponse] = await Promise.all([
           searchDocuments(query, {
@@ -1535,18 +1569,23 @@ export default function AgentKnowledgePane({
             sources: sourceFilter ? [sourceFilter] : undefined,
           }),
         ]);
+        if (requestId !== searchRequestIdRef.current) return;
         setSearchResults({
           docs: docResponse.search_docs,
           nodes: nodeResponse.nodes,
         });
       } catch (err) {
+        if (requestId !== searchRequestIdRef.current) return;
         console.error("Knowledge search failed:", err);
         setSearchResults({ docs: [], nodes: [] });
+        setSearchError(true);
       } finally {
-        setIsSearching(false);
+        if (requestId === searchRequestIdRef.current) {
+          setIsSearching(false);
+        }
       }
     },
-    []
+    [vectorDbEnabled]
   );
 
   const handleSearchSubmit = useCallback(() => {
@@ -1556,9 +1595,11 @@ export default function AgentKnowledgePane({
   }, [searchQuery, activeSourceFilter, runSearch]);
 
   const handleSearchClear = useCallback(() => {
+    searchRequestIdRef.current++;
     setSearchQuery("");
     setCommittedQuery("");
     setSearchResults(null);
+    setSearchError(false);
     setActiveSourceFilter(null);
   }, []);
 
@@ -1669,15 +1710,17 @@ export default function AgentKnowledgePane({
       case "add":
         return (
           <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
-            <KnowledgeSearchBar
-              query={searchQuery}
-              onQueryChange={setSearchQuery}
-              onSubmit={handleSearchSubmit}
-              onClear={handleSearchClear}
-              onBack={handleExitSearchMode}
-              onFocus={handleEnterSearchMode}
-              isSearchMode={isSearchMode}
-            />
+            {vectorDbEnabled && (
+              <KnowledgeSearchBar
+                query={searchQuery}
+                onQueryChange={setSearchQuery}
+                onSubmit={handleSearchSubmit}
+                onClear={handleSearchClear}
+                onBack={handleExitSearchMode}
+                onFocus={handleEnterSearchMode}
+                isSearchMode={isSearchMode}
+              />
+            )}
             {isSearchMode ? (
               <TableLayouts.TwoColumnLayout minHeight={18.75}>
                 <KnowledgeSearchSidebar
@@ -1692,6 +1735,7 @@ export default function AgentKnowledgePane({
                     committedQuery={committedQuery}
                     searchQuery={searchQuery}
                     isSearching={isSearching}
+                    searchError={searchError}
                     results={searchResults}
                     activeSourceFilter={activeSourceFilter}
                     selectedDocumentIds={selectedDocumentIds}
@@ -1757,6 +1801,7 @@ export default function AgentKnowledgePane({
             activeSourceFilter={activeSourceFilter}
             searchResults={searchResults}
             isSearching={isSearching}
+            searchError={searchError}
             resultCountBySource={resultCountBySource}
             onSearchQueryChange={setSearchQuery}
             onSearchSubmit={handleSearchSubmit}
@@ -1798,6 +1843,7 @@ export default function AgentKnowledgePane({
     activeSourceFilter,
     searchResults,
     isSearching,
+    searchError,
     resultCountBySource,
     searchNavigateNodeId,
     handleNavigateToAdd,

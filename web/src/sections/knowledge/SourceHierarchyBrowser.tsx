@@ -254,21 +254,22 @@ export default function SourceHierarchyBrowser({
     loadNodes();
   }, [source]);
 
-  // Track whether we've already applied the initialNodeId navigation
-  const initialNodeNavigatedRef = useRef(false);
+  // Track the last initialNodeId we navigated to, so a new value (even to a
+  // previously-visited node) re-triggers navigation instead of being skipped
+  const lastNavigatedNodeIdRef = useRef<number | null>(null);
 
-  // Navigate to initialNodeId once allNodes are available
+  // Navigate to initialNodeId whenever it changes to a new value and allNodes are available
   useEffect(() => {
     if (
       !initialNodeId ||
       allNodes.length === 0 ||
-      initialNodeNavigatedRef.current
+      lastNavigatedNodeIdRef.current === initialNodeId
     )
       return;
     const pathToNode = buildPathToNode(initialNodeId, allNodes);
     if (pathToNode) {
       setPath(pathToNode);
-      initialNodeNavigatedRef.current = true;
+      lastNavigatedNodeIdRef.current = initialNodeId;
     }
   }, [initialNodeId, allNodes]);
 
