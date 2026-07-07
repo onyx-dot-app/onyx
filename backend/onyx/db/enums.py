@@ -637,5 +637,7 @@ class PersonaSharingStatus(str, PyEnum):
 
 
 class SSOProviderType(str, PyEnum):
-    GOOGLE = "google"
-    OIDC = "oidc"
+    # name == value: Enum(native_enum=False) columns persist the member name,
+    # so the two must match to round-trip (repo-wide convention).
+    GOOGLE = "GOOGLE"
+    OIDC = "OIDC"

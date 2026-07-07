@@ -31,10 +31,16 @@ def fetch_sso_providers(
     return list(db_session.scalars(stmt).all())
 
 
-def fetch_sso_provider_by_name(db_session: Session, name: str) -> SSOProvider | None:
-    return db_session.scalars(
-        select(SSOProvider).where(SSOProvider.name == name)
-    ).first()
+def fetch_sso_provider_by_name(
+    db_session: Session, name: str, enabled_only: bool = False
+) -> SSOProvider | None:
+    """The login route must pass enabled_only=True so a disabled provider can
+    never resolve into an authorization flow. The admin API leaves it False to
+    read a disabled row for re-enabling."""
+    stmt = select(SSOProvider).where(SSOProvider.name == name)
+    if enabled_only:
+        stmt = stmt.where(SSOProvider.enabled.is_(True))
+    return db_session.scalars(stmt).first()
 
 
 def create_sso_provider(
@@ -50,6 +56,8 @@ def create_sso_provider(
     validate_sso_provider_name(name)
     if provider_type == SSOProviderType.OIDC and not openid_config_url:
         raise ValueError("OIDC providers require an openid_config_url")
+    if provider_type != SSOProviderType.OIDC and openid_config_url:
+        raise ValueError("openid_config_url only applies to OIDC providers")
 
     provider = SSOProvider(
         name=name,

@@ -8,12 +8,9 @@ Create Date: 2026-07-06 21:34:08.516250
 
 from __future__ import annotations
 
-import os
-
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-from dotenv import load_dotenv, find_dotenv
 
 from onyx.utils.encryption import encrypt_string_to_bytes
 
@@ -58,58 +55,55 @@ def _sso_provider_table(metadata: sa.MetaData) -> sa.Table:
 
 
 def _seed_from_env(table: sa.Table) -> None:
-    """One-time import of legacy single-provider env config. The DB is the
-    source of truth afterwards; env vars are never read at request time.
+    """One-time import of legacy single-provider config. The DB is the source
+    of truth afterwards; env vars are never read at request time.
 
-    Skipped in multi-tenant (cloud auth does not use per-instance provider
-    rows) and when the table already has any row.
+    Reads the already-resolved app_config constants (not raw os.environ) so
+    the legacy GOOGLE_OAUTH_* fallbacks and the VALID_EMAIL_DOMAINS parsing
+    stay in one place. Skipped in multi-tenant (cloud auth does not use
+    per-instance provider rows) and when the table already has any row.
     """
-    load_dotenv(find_dotenv())
+    from onyx.configs.app_configs import AUTH_TYPE
+    from onyx.configs.app_configs import OAUTH_CLIENT_ID
+    from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
+    from onyx.configs.app_configs import OPENID_CONFIG_URL
+    from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
+    from onyx.configs.constants import AuthType
+    from shared_configs.configs import MULTI_TENANT
 
-    if os.environ.get("MULTI_TENANT", "").lower() == "true":
+    if MULTI_TENANT:
         return
 
-    auth_type = os.environ.get("AUTH_TYPE", "").lower()
-    client_id = os.environ.get("OAUTH_CLIENT_ID")
-    client_secret = os.environ.get("OAUTH_CLIENT_SECRET")
-    openid_config_url = os.environ.get("OPENID_CONFIG_URL")
-
-    # Seed names match the oauth_name that existing linked login accounts
-    # carry ("google" / "openid"), so account linkage survives the cutover
-    # to provider-row routing.
-    if auth_type == "google_oauth":
-        provider_type, name, display_name = "google", "google", "Continue with Google"
-        config_url = None
-    elif auth_type == "oidc":
-        if not openid_config_url:
+    # provider_type is the enum member NAME (Enum(native_enum=False) storage);
+    # the login `name` matches the oauth_name existing linked accounts carry so
+    # linkage survives the routing cutover.
+    if AUTH_TYPE == AuthType.GOOGLE_OAUTH:
+        provider_type, name = "GOOGLE", "google"
+        display_name, config_url = "Continue with Google", None
+    elif AUTH_TYPE == AuthType.OIDC:
+        if not OPENID_CONFIG_URL:
             return
-        provider_type, name, display_name = "oidc", "openid", "Single Sign-On"
-        config_url = openid_config_url
+        provider_type, name = "OIDC", "openid"
+        display_name, config_url = "Single Sign-On", OPENID_CONFIG_URL
     else:
         return
 
-    if not client_id or not client_secret:
+    if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
         return
 
     bind = op.get_bind()
     if bind.execute(sa.select(table.c.id).limit(1)).first():
         return
 
-    allowed_email_domains = [
-        domain.strip().lower()
-        for domain in os.environ.get("VALID_EMAIL_DOMAINS", "").split(",")
-        if domain.strip()
-    ]
-
     bind.execute(
         table.insert().values(
             name=name,
             display_name=display_name,
             provider_type=provider_type,
-            client_id=client_id,
-            client_secret=encrypt_string_to_bytes(client_secret),
+            client_id=OAUTH_CLIENT_ID,
+            client_secret=encrypt_string_to_bytes(OAUTH_CLIENT_SECRET),
             openid_config_url=config_url,
-            allowed_email_domains=allowed_email_domains,
+            allowed_email_domains=[d.lower() for d in VALID_EMAIL_DOMAINS],
             enabled=True,
         )
     )

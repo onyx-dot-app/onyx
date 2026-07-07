@@ -82,6 +82,43 @@ def test_oidc_requires_config_url(db_session: Session, provider_name: str) -> No
         )
 
 
+def test_google_rejects_config_url(db_session: Session, provider_name: str) -> None:
+    with pytest.raises(ValueError):
+        _create(
+            db_session,
+            provider_name,
+            provider_type=SSOProviderType.GOOGLE,
+            openid_config_url="https://idp.example.com/.well-known/openid-configuration",
+        )
+
+
+def test_provider_type_roundtrips_through_db(
+    db_session: Session, provider_name: str
+) -> None:
+    created = _create(
+        db_session,
+        provider_name,
+        provider_type=SSOProviderType.OIDC,
+        openid_config_url="https://idp.example.com/.well-known/openid-configuration",
+    )
+    db_session.expire(created)
+    fetched = fetch_sso_provider_by_name(db_session, provider_name)
+    assert fetched is not None
+    assert fetched.provider_type is SSOProviderType.OIDC
+
+
+def test_disabled_provider_hidden_from_enabled_only_by_name(
+    db_session: Session, provider_name: str
+) -> None:
+    created = _create(db_session, provider_name)
+    set_sso_provider_enabled(db_session, created.id, enabled=False)
+
+    assert fetch_sso_provider_by_name(db_session, provider_name) is not None
+    assert (
+        fetch_sso_provider_by_name(db_session, provider_name, enabled_only=True) is None
+    )
+
+
 def test_partial_update_preserves_secret(
     db_session: Session, provider_name: str
 ) -> None:
