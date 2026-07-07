@@ -100,6 +100,59 @@ describe("useWakeOnIntent", () => {
     expect(loadSession).toHaveBeenCalledTimes(2);
   });
 
+  it("swallows a submitting Enter while asleep so it cannot race the wake", () => {
+    seedSession(sandbox({ status: "sleeping" }));
+    const { result } = renderHook(() => useWakeOnIntent());
+
+    const event = {
+      key: "Enter",
+      shiftKey: false,
+      preventDefault: jest.fn(),
+      stopPropagation: jest.fn(),
+    };
+    result.current(event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(event.stopPropagation).toHaveBeenCalled();
+    expect(loadSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not swallow Enter when the sandbox is running", () => {
+    seedSession(sandbox({ status: "running" }));
+    const { result } = renderHook(() => useWakeOnIntent());
+
+    const event = {
+      key: "Enter",
+      shiftKey: false,
+      preventDefault: jest.fn(),
+      stopPropagation: jest.fn(),
+    };
+    result.current(event);
+
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(event.stopPropagation).not.toHaveBeenCalled();
+    expect(loadSession).not.toHaveBeenCalled();
+  });
+
+  it("still swallows Enter while a wake is already in flight", () => {
+    seedSession(sandbox({ status: "sleeping" }));
+    const { result } = renderHook(() => useWakeOnIntent());
+
+    result.current();
+    expect(loadSession).toHaveBeenCalledTimes(1);
+
+    const event = {
+      key: "Enter",
+      shiftKey: false,
+      preventDefault: jest.fn(),
+      stopPropagation: jest.fn(),
+    };
+    result.current(event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(loadSession).toHaveBeenCalledTimes(1);
+  });
+
   it("wakes again on a later sleep with no intent events in between", async () => {
     seedSession(sandbox({ status: "sleeping" }));
     const { result } = renderHook(() => useWakeOnIntent());
