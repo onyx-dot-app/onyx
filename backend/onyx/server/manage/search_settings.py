@@ -324,7 +324,6 @@ def update_saved_search_settings(
     validate_contextual_rag_model(
         model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         db_session=db_session,
-        enable_contextual_rag=search_settings.enable_contextual_rag,
     )
 
     update_current_search_settings(
