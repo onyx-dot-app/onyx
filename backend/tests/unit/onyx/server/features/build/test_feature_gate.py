@@ -16,6 +16,7 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.db.enums import AccountType
 from onyx.feature_flags.interface import FeatureFlagProvider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.server.features.build import utils as build_utils
@@ -45,11 +46,12 @@ class _StubPostHogProvider(FeatureFlagProvider):
 
 
 def _make_user() -> MagicMock:
-    """Build a minimal stand-in for `User` - only `.id`, `.email`, and
-    `.craft_enabled` are read."""
+    """Build a minimal stand-in for `User` - only `.id`, `.email`,
+    `.account_type`, and `.craft_enabled` are read."""
     user = MagicMock()
     user.id = uuid4()
     user.email = "user@tenant-dev.example"
+    user.account_type = AccountType.STANDARD
     user.craft_enabled = True
     return user
 
@@ -107,6 +109,26 @@ def test_transient_user_with_none_craft_enabled_follows_deployment(
     user = _make_user()
     user.craft_enabled = None
     assert is_craft_enabled_for_user(user) is True
+
+
+def test_anonymous_user_never_gets_craft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The shared anonymous identity is excluded regardless of the deployment
+    gate, without consulting the flag provider."""
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: pytest.fail(
+            "the flag provider should not be consulted for the anonymous user"
+        ),
+    )
+
+    user = _make_user()
+    user.account_type = AccountType.ANONYMOUS
+    user.craft_enabled = None
+    assert is_craft_enabled_for_user(user) is False
 
 
 def test_admin_disabled_user_short_circuits(

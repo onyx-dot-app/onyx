@@ -6,6 +6,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NotificationType
+from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.notification import create_notification
 from onyx.feature_flags.factory import get_default_feature_flag_provider
@@ -156,8 +157,13 @@ def is_craft_enabled_for_user(
     Pass ``deployment_available`` when the deployment gate has already been
     evaluated, to avoid a second flag-provider call.
     """
+    # Craft is identity-bound (per-user sandbox, library, scheduled tasks);
+    # all anonymous visitors share one identity, so they never get it.
+    if user.account_type == AccountType.ANONYMOUS:
+        return False
+
     # Only an explicit admin disable blocks access — transient User objects
-    # (e.g. the anonymous user) carry craft_enabled=None.
+    # (e.g. the no-auth placeholder) carry craft_enabled=None.
     if user.craft_enabled is False:
         return False
 
