@@ -16,24 +16,37 @@ class OpenIDConfigurationIssuerMismatch(ValueError):
     """The discovery document's issuer does not own the configured URL."""
 
 
+def _fully_decoded(path: str) -> str:
+    """Percent-decode until the string stops changing, so N-times-encoded
+    input collapses to its real form before validation. Bounded to avoid a
+    pathological loop; real inputs converge in one or two passes."""
+    for _ in range(8):
+        once = unquote(path)
+        if once == path:
+            return path
+        path = once
+    return path
+
+
 def validate_issuer_owns_config_url(
     issuer: str | None, openid_configuration_endpoint: str
 ) -> None:
     """Per OIDC Discovery, the configuration document lives directly under the
     issuer's own URL. Compare scheme and host exactly and require a path
     boundary, so a look-alike host (issuer.attacker.com) cannot pass. Relative
-    path segments are rejected outright, including percent-encoded ones,
-    otherwise `issuer/../evil` or `issuer/%2e%2e/evil` would clear the prefix
-    test yet resolve outside the issuer path on the same host. A document that
-    fails this is misconfigured or an impersonation attempt."""
+    path segments are rejected outright, otherwise `issuer/../evil` would clear
+    the prefix test yet resolve outside the issuer path on the same host. The
+    path is decoded to a fixed point first, so single- or multiply-encoded
+    traversal (%2e, %252e, ...) is caught regardless of how many times a server
+    might decode it. A document that fails this is misconfigured or an
+    impersonation attempt."""
     if not issuer:
         raise OpenIDConfigurationIssuerMismatch("discovery document has no issuer")
 
     iss = urlsplit(issuer)
     cfg = urlsplit(openid_configuration_endpoint)
-    # Decode first so %2e / %2e%2e are caught alongside literal . / .. segments.
     has_relative_segment = any(
-        segment in (".", "..") for segment in unquote(cfg.path).split("/")
+        segment in (".", "..") for segment in _fully_decoded(cfg.path).split("/")
     )
     issuer_path = iss.path.rstrip("/")
     same_origin = (iss.scheme.lower(), iss.netloc.lower()) == (
