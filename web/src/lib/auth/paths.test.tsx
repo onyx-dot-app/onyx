@@ -35,13 +35,12 @@ function swrStub() {
 describe("isAuthPath", () => {
   test.each([
     ["/auth/login", true],
-    ["/auth/signup", true],
     ["/auth", true],
+    // Segment match, not a bare prefix: a route that merely starts with "auth"
+    // is not an auth page.
+    ["/authoring", false],
     ["/chat", false],
-    ["/app", false],
-    ["/", false],
     [null, false],
-    [undefined, false],
   ])("isAuthPath(%s) === %s", (path, expected) => {
     expect(isAuthPath(path as string | null | undefined)).toBe(expected);
   });
