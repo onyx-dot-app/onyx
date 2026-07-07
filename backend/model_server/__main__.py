@@ -1,10 +1,7 @@
-"""Process entry point for the Onyx model server (`python -m model_server`).
+"""Process entry point for the model server (`python -m model_server`).
 
-The `DISABLE_MODEL_SERVER` short-circuit used to live in the container command as a
-shell `if`. Hardened base images ship without `sh`/`bash`, so the gate runs here in
-Python instead. It is intentionally kept in front of `model_server.main`'s imports so a
-disabled container exits without pulling in torch / the ML stack — matching the old
-behavior where the shell exited before Python ever started.
+The `DISABLE_MODEL_SERVER` gate runs here, ahead of `model_server.main`'s heavy ML
+imports, so a disabled container exits without loading torch / the model stack.
 """
 
 import sys
