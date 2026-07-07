@@ -76,6 +76,12 @@ def get_api_key_fake_email(
     return f"{DANSWER_API_KEY_PREFIX}{name}@{unique_id}{DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN}"
 
 
+def _grant_limited_key_scope(api_key_user: User) -> None:
+    """LIMITED keys join no group; chat scope is granted directly
+    (WRITE_CHAT implies READ_CHAT)."""
+    api_key_user.effective_permissions = [Permission.WRITE_CHAT.value]
+
+
 def insert_api_key(
     db_session: Session, api_key_args: APIKeyArgs, user_id: uuid.UUID | None
 ) -> ApiKeyDescriptor:
@@ -120,10 +126,7 @@ def insert_api_key(
             is_admin=(api_key_args.role == UserRole.ADMIN),
         )
     elif api_key_args.role == UserRole.LIMITED:
-        # LIMITED keys join no group, so they get no group-derived permissions.
-        # Grant chat scope directly to preserve their chat-only capability
-        # (WRITE_CHAT implies READ_CHAT).
-        api_key_user_row.effective_permissions = [Permission.WRITE_CHAT.value]
+        _grant_limited_key_scope(api_key_user_row)
 
     db_session.commit()
 
@@ -177,13 +180,13 @@ def update_api_key(
                 api_key_user,
                 is_admin=(api_key_args.role == UserRole.ADMIN),
             )
-        elif api_key_args.role == UserRole.LIMITED:
-            # LIMITED keys join no group; grant chat scope directly to match
-            # insert_api_key (WRITE_CHAT implies READ_CHAT).
-            api_key_user.effective_permissions = [Permission.WRITE_CHAT.value]
-        else:
+        elif api_key_args.role != UserRole.LIMITED:
             # Recompute since we just removed the old default-group membership.
             recompute_user_permissions__no_commit(api_key_user.id, db_session)
+
+    # On every update, not just role changes, so edits repair legacy keys.
+    if api_key_args.role == UserRole.LIMITED:
+        _grant_limited_key_scope(api_key_user)
 
     db_session.commit()
 
@@ -216,6 +219,10 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
     new_api_key = generate_api_key(tenant_id)
     existing_api_key.hashed_api_key = hash_api_key(new_api_key)
     existing_api_key.api_key_display = build_displayable_api_key(new_api_key)
+
+    if api_key_user.role == UserRole.LIMITED:
+        _grant_limited_key_scope(api_key_user)
+
     db_session.commit()
 
     return ApiKeyDescriptor(
