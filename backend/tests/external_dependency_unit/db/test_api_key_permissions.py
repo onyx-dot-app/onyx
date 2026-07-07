@@ -98,6 +98,33 @@ def test_update_preserves_basic_key_permissions(db_session: Session) -> None:
     remove_api_key(db_session, descriptor.api_key_id)
 
 
+def test_update_role_change_swaps_permission_source(db_session: Session) -> None:
+    descriptor = insert_api_key(
+        db_session, APIKeyArgs(name="role-swap", role=UserRole.BASIC), user_id=None
+    )
+    user = _get_key_user(db_session, descriptor.user_id)
+    basic_perms = list(user.effective_permissions)
+    assert basic_perms
+
+    update_api_key(
+        db_session,
+        descriptor.api_key_id,
+        APIKeyArgs(name="role-swap", role=UserRole.LIMITED),
+    )
+    db_session.refresh(user)
+    assert user.effective_permissions == ["write:chat"]
+
+    update_api_key(
+        db_session,
+        descriptor.api_key_id,
+        APIKeyArgs(name="role-swap", role=UserRole.BASIC),
+    )
+    db_session.refresh(user)
+    assert user.effective_permissions == basic_perms
+
+    remove_api_key(db_session, descriptor.api_key_id)
+
+
 def test_regenerate_preserves_basic_key_permissions(db_session: Session) -> None:
     descriptor = insert_api_key(
         db_session, APIKeyArgs(name="basic-regen", role=UserRole.BASIC), user_id=None
