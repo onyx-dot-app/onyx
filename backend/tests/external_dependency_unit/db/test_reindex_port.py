@@ -35,6 +35,9 @@ from onyx.background.celery.tasks.docprocessing.utils import should_index
 from onyx.background.celery.tasks.port import tasks as port_task
 from onyx.background.celery.tasks.port.tasks import run_check_for_port
 from onyx.background.celery.tasks.port.tasks import run_port_attempt
+from onyx.background.celery.tasks.shared.tasks import (
+    _clear_port_orphan_candidate_for_live_doc,
+)
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import MAX_CONCURRENT_PORT_ATTEMPTS
 from onyx.configs.constants import OnyxCeleryQueues
@@ -1839,3 +1842,37 @@ def test_run_port_attempt_failed_sweep_marks_failed(
             PortOrphanCandidate.cc_pair_id == cc_pair.id
         ).delete(synchronize_session="fetch")
         db_session.commit()
+
+
+@patch("onyx.background.celery.tasks.shared.tasks.port_target_settings_id")
+def test_clear_for_live_doc_clears_only_this_cc_pair(
+    mock_target: MagicMock,
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+) -> None:
+    ss = get_current_search_settings(db_session)
+    mock_target.return_value = (
+        ss.id
+    )  # stand in for an active port on the current settings
+    other = make_cc_pair(db_session)
+    try:
+        record_port_orphan_candidates(db_session, ss.id, cc_pair.id, ["doc-x"])
+        record_port_orphan_candidates(db_session, ss.id, other.id, ["doc-x"])
+        db_session.commit()
+
+        _clear_port_orphan_candidate_for_live_doc(
+            db_session, cc_pair.connector_id, cc_pair.credential_id, "doc-x"
+        )
+        db_session.commit()
+
+        assert get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id) == []
+        # the same doc's candidate under another cc_pair is left intact
+        assert get_port_orphan_candidate_doc_ids(db_session, ss.id, other.id) == [
+            "doc-x"
+        ]
+    finally:
+        db_session.query(PortOrphanCandidate).filter(
+            PortOrphanCandidate.cc_pair_id.in_([cc_pair.id, other.id])
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+        cleanup_cc_pair(db_session, other)
