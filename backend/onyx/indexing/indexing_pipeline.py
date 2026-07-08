@@ -48,10 +48,12 @@ from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
 from onyx.db.index_attempt_metrics import time_stage_if_set
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
+from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import upsert_document_tags
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.document_metadata import DocumentMetadata
+from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import IndexingMetadata
@@ -70,6 +72,7 @@ from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
 from onyx.hooks.points.document_ingestion import DocumentIngestionSection
 from onyx.hooks.points.document_push import DocumentPushPayload
 from onyx.hooks.points.document_push import DocumentPushResponse
+from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
@@ -401,18 +404,14 @@ def get_docs_to_update(
 
 def sync_doc_created_at(
     documents: list[Document],
-    document_indices: list[DocumentIndex],
 ) -> None:
     """Propagate a newly-supplied ``doc_created_at`` to already-indexed docs
     without re-embedding.
 
-    The reindex gates skip documents whose content/timestamp are unchanged, so a
-    creation time that only becomes available later would never reach the index.
-    Here we compare each incoming ``doc_created_at`` against the value stored in
-    Postgres and, when it differs, issue a metadata-only update (a cheap field
-    patch, no re-chunk/re-embed) and persist the new value so later syncs no-op.
-    Documents not yet in Postgres are handled by the normal index path, which
-    writes ``created_at`` directly; ``post_index`` persists it for them.
+    Patches the live primary and, during an embedding-model swap, the FUTURE
+    secondary index too, so the value survives promotion of the secondary.
+    Postgres is updated only after every index is patched; a doc missing from any
+    index defers the whole batch to a later sync.
     """
     with get_session_with_current_tenant() as db_session:
         db_docs = get_documents_by_ids(
@@ -447,6 +446,23 @@ def sync_doc_created_at(
         if not update_requests:
             return
 
+        # Build a both-indices view (primary + FUTURE secondary during a swap) so
+        # the patch reaches every live index. Mirrors the metadata-sync task's
+        # INSTANT-port handling so an update to a still-porting primary defers.
+        active_search_settings = get_active_search_settings(db_session)
+        primary_backfill_in_progress = (
+            active_search_settings.primary.port_backfill_source_id is not None
+            and port_backfill_has_pending_work(
+                db_session, active_search_settings.primary.id
+            )
+        )
+        document_indices = get_all_document_indices(
+            search_settings=active_search_settings.primary,
+            secondary_search_settings=active_search_settings.secondary,
+            httpx_client=HttpxPool.get("vespa"),
+            primary_backfill_in_progress=primary_backfill_in_progress,
+        )
+
         try:
             for document_index in document_indices:
                 # Surface missing chunks so an absent doc defers instead of persisting.
@@ -461,7 +477,7 @@ def sync_doc_created_at(
             )
             return
 
-        # Persist only after a successful index patch so a failure retries next sync.
+        # Persist only after every index is patched so a failure retries next sync.
         update_docs_created_at__no_commit(
             ids_to_new_created_at=ids_to_new_created_at, db_session=db_session
         )
@@ -1369,7 +1385,7 @@ def index_doc_batch(
     # would otherwise skip, via a cheap metadata patch (no re-embed). Skipped when
     # writing to the secondary index — its reindex writes created_at directly.
     if not index_to_secondary:
-        sync_doc_created_at(filtered_documents, document_indices)
+        sync_doc_created_at(filtered_documents)
 
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(
