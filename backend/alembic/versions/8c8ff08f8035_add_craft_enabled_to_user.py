@@ -1,7 +1,7 @@
 """add craft_enabled to user
 
 Revision ID: 8c8ff08f8035
-Revises: 20f09b642ed0
+Revises: 1fc2904131a3
 Create Date: 2026-07-07 14:55:11.241402
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "8c8ff08f8035"
-down_revision = "20f09b642ed0"
+down_revision = "1fc2904131a3"
 branch_labels = None
 depends_on = None
 
