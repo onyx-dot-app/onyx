@@ -11,7 +11,7 @@ interface AuthenticatorProps {
   children: React.ReactNode;
 }
 
-export default function Authenticator({ children }: AuthenticatorProps) {
+export default function AuthenticationShell({ children }: AuthenticatorProps) {
   const router = useRouter();
   const sessionEnded = useSessionWatcher();
 
