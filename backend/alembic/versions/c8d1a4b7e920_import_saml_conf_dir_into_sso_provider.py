@@ -122,13 +122,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    metadata = sa.MetaData()
-    table = _sso_provider_table(metadata)
-    op.get_bind().execute(
-        table.delete().where(
-            sa.and_(
-                table.c.provider_type == "SAML",
-                table.c.name == _SAML_PROVIDER_NAME,
-            )
-        )
-    )
+    # No-op. The imported row may have been edited through the provider store
+    # since the upgrade, so deleting it would drop operator changes (IdP
+    # settings, signing material, domains). Seeded data is not cleanly
+    # reversible, so the row is left in place.
+    pass
