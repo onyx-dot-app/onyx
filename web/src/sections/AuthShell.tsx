@@ -7,10 +7,9 @@ import Modal from "@/refresh-components/Modal";
 import { Button, Text } from "@opal/components";
 import { SvgLogOut } from "@opal/icons";
 
-export default function SessionWatcher() {
+export default function AuthShell() {
   const router = useRouter();
   const sessionEnded = useSessionWatcher();
-  // const sessionEnded = true;
 
   function handleLogin() {
     const { isExtension } = getExtensionContext();
