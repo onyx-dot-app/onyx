@@ -427,7 +427,7 @@ def restore_session(
         llm_config, all_llm_configs = SessionManager(db_session).build_llm_configs(user)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
-            mark_sandbox_provisioning(db_session, sandbox.id)
+            mark_sandbox_provisioning(db_session, sandbox)
 
             # Provisions, hydrates managed content, and stages the new status;
             # a failure rolls the row back to SLEEPING in the handler below.

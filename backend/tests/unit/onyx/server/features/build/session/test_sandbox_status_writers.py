@@ -16,17 +16,6 @@ ALLOWED_REFERENCES: set[str] = {
     "onyx/server/features/build/session/sandbox_lifecycle.py",
 }
 
-# References that in-flight branches remove; tolerated (not required) so the
-# test keeps passing as each branch merges. Delete entries once stale.
-TEMPORARILY_TOLERATED: set[str] = {
-    # whuang/craft-skills-push-race moves restore_session's remaining writes
-    # (unhealthy-RUNNING recovery, post-provision RUNNING) into lifecycle.
-    "onyx/server/features/build/session/api.py",
-    # whuang/craft-sleep-lifecycle moves the reaper's sleep transition into
-    # lifecycle.
-    "onyx/background/celery/tasks/build/tasks.py",
-}
-
 
 def _modules_referencing_status_mutation() -> set[str]:
     backend_dir = Path(__file__).resolve().parents[7]
@@ -48,7 +37,7 @@ def _modules_referencing_status_mutation() -> set[str]:
 def test_sandbox_status_writers_confined_to_lifecycle_and_db_layer() -> None:
     found = _modules_referencing_status_mutation()
 
-    unexpected = found - ALLOWED_REFERENCES - TEMPORARILY_TOLERATED
+    unexpected = found - ALLOWED_REFERENCES
     assert not unexpected, (
         "New module(s) reference update_sandbox_status__no_commit: "
         f"{sorted(unexpected)}. Sandbox status transitions must go through "
