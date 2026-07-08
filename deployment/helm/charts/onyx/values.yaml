@@ -191,8 +191,9 @@ inferenceCapability:
   # /var/log/onyx. customCACerts no longer needs root — the distroless server
   # merges custom roots in Python, not via update-ca-certificates. NOTE: requires
   # the distroless model-server image; an older, root-built image can't write its
-  # root-owned dirs as 1001. To run as root, set runAsUser: 0 here and in
-  # podSecurityContext.
+  # root-owned dirs as 1001. To run as root, set runAsNonRoot: false and
+  # runAsUser: 0 in both this block and podSecurityContext (setting only
+  # runAsUser: 0 while runAsNonRoot stays true is rejected at admission).
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 1001
@@ -263,8 +264,9 @@ indexCapability:
   # /var/log/onyx. customCACerts no longer needs root — the distroless server
   # merges custom roots in Python, not via update-ca-certificates. NOTE: requires
   # the distroless model-server image; an older, root-built image can't write its
-  # root-owned dirs as 1001. To run as root, set runAsUser: 0 here and in
-  # podSecurityContext.
+  # root-owned dirs as 1001. To run as root, set runAsNonRoot: false and
+  # runAsUser: 0 in both this block and podSecurityContext (setting only
+  # runAsUser: 0 while runAsNonRoot stays true is rejected at admission).
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 1001
