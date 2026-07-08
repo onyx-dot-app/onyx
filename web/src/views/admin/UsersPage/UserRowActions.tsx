@@ -20,7 +20,8 @@ import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
 import { useSettings } from "@/lib/settings/hooks";
-import { approveRequest, setUsersCraftAccess } from "./svc";
+import { setUsersCraftAccess } from "@/views/admin/CraftPage/svc";
+import { approveRequest } from "./svc";
 import EditUserModal from "./EditUserModal";
 import {
   CancelInviteModal,

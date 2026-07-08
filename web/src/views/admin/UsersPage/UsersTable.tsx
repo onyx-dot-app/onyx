@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Table, createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { SvgDevKit, SvgDownload, SvgSimpleLoader } from "@opal/icons";
+import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
@@ -17,8 +17,6 @@ import { useSettings } from "@/lib/settings/hooks";
 import useGroups from "@/hooks/useGroups";
 import { downloadUsersCsv } from "./svc";
 import UserFilters from "./UserFilters";
-import CraftAccessModal from "./CraftAccessModal";
-import { setUsersCraftAccess } from "./svc";
 import GroupsCell from "./GroupsCell";
 import UserRowActions from "./UserRowActions";
 import UserRoleCell from "./UserRoleCell";
@@ -155,8 +153,6 @@ export default function UsersTable({
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
-  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
-  const [craftAccessOpen, setCraftAccessOpen] = useState(false);
 
   const { data: allGroups } = useGroups();
 
@@ -203,30 +199,6 @@ export default function UsersTable({
     return result;
   }, [users, selectedRoles, selectedStatuses, selectedGroups]);
 
-  // Bulk Craft actions apply only to real users (invited/requested rows
-  // have no user id yet).
-  const selectedEmails = useMemo(() => {
-    const ids = new Set(selectedRowIds);
-    return filteredUsers
-      .filter((u) => u.id !== null && ids.has(u.id))
-      .map((u) => u.email);
-  }, [filteredUsers, selectedRowIds]);
-
-  const applyBulkCraftAccess = (
-    craftEnabled: boolean | null,
-    message: string
-  ) => {
-    void (async () => {
-      try {
-        await setUsersCraftAccess(selectedEmails, craftEnabled);
-        refresh();
-        toast.success(message);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "An error occurred");
-      }
-    })();
-  };
-
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -262,67 +234,12 @@ export default function UsersTable({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <div className="flex-1">
-          <InputTypeIn
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search users..."
-            searchIcon
-          />
-        </div>
-        {craftAvailable && selectedEmails.length > 0 && (
-          <>
-            <Button
-              prominence="secondary"
-              size="sm"
-              onClick={() =>
-                applyBulkCraftAccess(
-                  true,
-                  `Craft enabled for ${selectedEmails.length} users`
-                )
-              }
-            >
-              Enable Craft
-            </Button>
-            <Button
-              prominence="secondary"
-              size="sm"
-              onClick={() =>
-                applyBulkCraftAccess(
-                  false,
-                  `Craft disabled for ${selectedEmails.length} users`
-                )
-              }
-            >
-              Disable Craft
-            </Button>
-            <Button
-              prominence="tertiary"
-              size="sm"
-              onClick={() =>
-                applyBulkCraftAccess(
-                  null,
-                  `Craft access reset for ${selectedEmails.length} users`
-                )
-              }
-            >
-              Use Default
-            </Button>
-          </>
-        )}
-        {craftAvailable && (
-          <Button
-            icon={SvgDevKit}
-            prominence="secondary"
-            size="sm"
-            onClick={() => setCraftAccessOpen(true)}
-          >
-            Craft Access
-          </Button>
-        )}
-        {craftAvailable && csvButton}
-      </div>
+      <InputTypeIn
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        placeholder="Search users..."
+        searchIcon
+      />
       <UserFilters
         selectedRoles={selectedRoles}
         onRolesChange={setSelectedRoles}
@@ -340,8 +257,6 @@ export default function UsersTable({
         getRowId={(row) => row.id ?? row.email}
         pageSize={PAGE_SIZE}
         searchTerm={searchTerm}
-        selectionBehavior={craftAvailable ? "multi-select" : "no-select"}
-        onSelectionChange={setSelectedRowIds}
         emptyState={
           <IllustrationContent
             illustration={SvgNoResult}
@@ -349,14 +264,8 @@ export default function UsersTable({
             description="No users match the current filters."
           />
         }
-        footer={craftAvailable ? {} : { leftExtra: csvButton }}
+        footer={{ leftExtra: csvButton }}
       />
-      {craftAvailable && (
-        <CraftAccessModal
-          open={craftAccessOpen}
-          onOpenChange={setCraftAccessOpen}
-        />
-      )}
     </div>
   );
 }
