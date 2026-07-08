@@ -492,3 +492,28 @@ def sleep_sandbox(
     update_sandbox_status__no_commit(db_session, sandbox_id, SandboxStatus.SLEEPING)
     db_session.commit()
     logger.info("Sandbox %s is now sleeping", sandbox_id)
+
+
+def mark_sandbox_provisioning(db_session: DBSession, sandbox_id: UUID) -> None:
+    """Mark a SLEEPING/TERMINATED sandbox as PROVISIONING before re-provisioning.
+
+    Commits deliberately so the transition is immediately visible to concurrent
+    pollers of the state machine (e.g. ``_wait_for_provisioning_to_complete``).
+    """
+    update_sandbox_status__no_commit(db_session, sandbox_id, SandboxStatus.PROVISIONING)
+    db_session.commit()
+
+
+def rollback_failed_provisioning(db_session: DBSession, sandbox: Sandbox) -> bool:
+    """Compensating transition for provisioning that died mid-flight:
+    return the sandbox to ``SLEEPING`` (committed) so the stuck status
+    doesn't block the next attempt. Returns whether a rollback was applied.
+    """
+    if sandbox.status != SandboxStatus.PROVISIONING:
+        return False
+    update_sandbox_status__no_commit(db_session, sandbox.id, SandboxStatus.SLEEPING)
+    db_session.commit()
+    logger.info(
+        "Rolled sandbox %s back to SLEEPING after failed provisioning", sandbox.id
+    )
+    return True

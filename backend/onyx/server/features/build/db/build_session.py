@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.db.llm import can_user_access_llm_provider
@@ -225,23 +224,6 @@ def delete_build_session__no_commit(
 # Sandbox operations
 # NOTE: Most sandbox operations have moved to sandbox.py
 # These remain here for convenience in session-related workflows
-
-
-def update_sandbox_status(
-    sandbox_id: UUID,
-    status: SandboxStatus,
-    db_session: Session,
-    container_id: str | None = None,
-) -> None:
-    """Update the status of a sandbox."""
-    sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
-    if sandbox:
-        sandbox.status = status
-        if container_id is not None:
-            sandbox.container_id = container_id
-        sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
-        db_session.commit()
-        logger.info("Updated sandbox %s status to %s", sandbox_id, status)
 
 
 def update_sandbox_heartbeat(
