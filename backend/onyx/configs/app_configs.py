@@ -70,6 +70,18 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
 
+# Skills marketplace: max compressed archive size fetched from GitHub/GitLab.
+# The whole archive is buffered in memory during fetch + extract, so this also
+# bounds per-request memory. A skill repo is small, so the default stays well
+# below the uncompressed bundle caps; raise via env if you host larger repos.
+SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES = _non_negative_int_env(
+    "SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES", 25 * 1024 * 1024
+)
+# Skills marketplace: HTTP fetch timeout in seconds for repo archive downloads.
+SKILL_MARKETPLACE_FETCH_TIMEOUT_SECONDS = _non_negative_int_env(
+    "SKILL_MARKETPLACE_FETCH_TIMEOUT_SECONDS", 30
+)
+
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 

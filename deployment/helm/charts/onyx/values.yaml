@@ -1569,6 +1569,9 @@ configMap:
   HARD_DELETE_CHATS: ""
   MAX_ALLOWED_UPLOAD_SIZE_MB: ""
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
+  # Skills marketplace (install skills from a git repo)
+  SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES: ""
+  SKILL_MARKETPLACE_FETCH_TIMEOUT_SECONDS: ""
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"

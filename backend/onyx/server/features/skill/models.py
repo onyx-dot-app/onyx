@@ -244,3 +244,36 @@ class SkillShareRequest(BaseModel):
 
 class TransferSkillOwnershipRequest(BaseModel):
     new_owner_user_id: UUID
+
+
+class RepoSkillsPreviewRequest(BaseModel):
+    source: str
+
+
+class RepoSkillPreviewItem(BaseModel):
+    slug: str
+    name: str
+    description: str
+    rel_path: str
+    pre_selected: bool
+
+
+class RepoSkillsPreview(BaseModel):
+    source_label: str
+    ref: str | None
+    skills: list[RepoSkillPreviewItem]
+
+
+class RepoSkillsInstallRequest(BaseModel):
+    source: str
+    slugs: list[str]
+
+
+class RepoSkillInstallFailure(BaseModel):
+    slug: str
+    error: str
+
+
+class RepoSkillsInstallResult(BaseModel):
+    created: list[SkillResponse]
+    failures: list[RepoSkillInstallFailure]

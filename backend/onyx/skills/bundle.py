@@ -73,36 +73,8 @@ def read_bundle_file(bundle_file: BinaryIO) -> bytes:
     return data
 
 
-def parse_skill_md_metadata(zip_bytes: bytes) -> tuple[str, str]:
-    """Extract ``(name, description)`` from the bundle's SKILL.md frontmatter.
-
-    The bundle is the source of truth for skill metadata. ``validate_custom_bundle``
-    has already confirmed structural shape; here we re-open the zip just for the
-    SKILL.md payload because parsing frontmatter requires the contents, not the
-    archive layout.
-    """
-    try:
-        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
-    except zipfile.BadZipFile:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
-
-    with zf:
-        try:
-            raw = zf.read(SKILL_MD_NAME)
-        except KeyError:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "SKILL.md missing at bundle root",
-            )
-
-    try:
-        content = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md must be UTF-8 encoded",
-        ) from exc
-
+def parse_skill_md_text(content: str) -> tuple[str, str]:
+    """Parse ``(name, description)`` from the raw text of a SKILL.md file."""
     match = _FRONTMATTER_REGEX.match(content)
     if match is None:
         raise OnyxError(
@@ -136,6 +108,39 @@ def parse_skill_md_metadata(zip_bytes: bytes) -> tuple[str, str]:
             "SKILL.md frontmatter must include a non-empty 'description'",
         )
     return name.strip(), description.strip()
+
+
+def parse_skill_md_metadata(zip_bytes: bytes) -> tuple[str, str]:
+    """Extract ``(name, description)`` from the bundle's SKILL.md frontmatter.
+
+    The bundle is the source of truth for skill metadata. ``validate_custom_bundle``
+    has already confirmed structural shape; here we re-open the zip just for the
+    SKILL.md payload because parsing frontmatter requires the contents, not the
+    archive layout.
+    """
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+    except zipfile.BadZipFile:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
+
+    with zf:
+        try:
+            raw = zf.read(SKILL_MD_NAME)
+        except KeyError:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "SKILL.md missing at bundle root",
+            )
+
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md must be UTF-8 encoded",
+        ) from exc
+
+    return parse_skill_md_text(content)
 
 
 def strip_skill_md_frontmatter(content: str) -> str:
