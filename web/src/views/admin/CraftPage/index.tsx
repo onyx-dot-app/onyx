@@ -204,7 +204,7 @@ export default function CraftPage() {
             sizePreset="main-content"
             variant="section"
             title="Per-user access"
-            description="Users you toggle away from the default keep their setting if the default changes."
+            description="Users you toggle away from the workspace default keep their setting if the default changes."
           />
 
           {isLoading && (
