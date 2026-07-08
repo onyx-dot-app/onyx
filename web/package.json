@@ -69,7 +69,7 @@
     "highlight.js": "^11.11.1",
     "highlightjs-sap-abap": "^0.3.0",
     "js-cookie": "^3.0.5",
-    "katex": "^0.16.38",
+    "katex": "^0.17.0",
     "linguist-languages": "^9.3.1",
     "lodash": "^4.18.1",
     "lowlight": "^3.3.0",
