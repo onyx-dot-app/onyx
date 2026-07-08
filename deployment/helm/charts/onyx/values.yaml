@@ -16,14 +16,24 @@ global:
   host: "0.0.0.0"
 
 # -- Custom (private/internal) CA certificates for outbound TLS.
-# When enabled, every pod that makes outbound TLS connections (api server,
-# celery workers, bots, MCP server, model servers) mounts the referenced
-# Secret/ConfigMap at /usr/local/share/ca-certificates, runs
-# `update-ca-certificates` at startup, and sets REQUESTS_CA_BUNDLE /
-# SSL_CERT_FILE so Python HTTP clients trust the updated bundle.
-# Keys must be PEM certs ending in `.crt`.
-# NOTE: requires the containers to run as root (the chart default);
-# incompatible with runAsNonRoot overrides.
+# When enabled, every pod that makes outbound TLS connections mounts the
+# referenced Secret/ConfigMap and trusts its roots. Keys must be PEM certs
+# ending in `.crt` (model servers also accept `.pem`). Two mechanisms, by pod
+# type:
+#   - Shell-based pods (api server, celery workers, bots, MCP server) mount at
+#     /usr/local/share/ca-certificates, run `update-ca-certificates` at startup,
+#     and get REQUESTS_CA_BUNDLE / SSL_CERT_FILE pointed at the merged system
+#     bundle. These require the container to run as root (the chart default);
+#     incompatible with runAsNonRoot overrides.
+#   - Model servers run on a distroless image with no shell, so they mount at
+#     /etc/onyx/certs and merge the mounted roots with certifi's public roots in
+#     Python at startup (additive — public roots stay trusted). No root required.
+# Version coupling: chart >= 0.7.0 pairs with the distroless model-server image
+# and can't run older ones — the model servers now run nonroot (65532, see their
+# securityContext below) and read ONYX_CUSTOM_CA_CERTS_DIR. Upgrade the chart and
+# the model-server image together: an old chart on the new image crash-loops (no
+# shell for update-ca-certificates), and this chart on an old, root-built image
+# can't write the image's root-owned dirs as 65532.
 customCACerts:
   enabled: false
   # Exactly one of secretName / configMapName must be set when enabled.
@@ -177,13 +187,24 @@ inferenceCapability:
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
-  podSecurityContext: {}
+  # Runs as the distroless image's nonroot UID (65532), which owns the venv, HF
+  # cache, and /var/log/onyx. customCACerts no longer needs root — the distroless
+  # server merges custom roots in Python, not via update-ca-certificates. NOTE:
+  # requires the distroless model-server image; an older, root-built image can't
+  # write its root-owned dirs as 65532. To run as root, set runAsUser: 0 here and
+  # in podSecurityContext.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    fsGroup: 65532
   securityContext:
-    # `privileged` is not needed by this workload and is intentionally omitted.
-    # root is kept only so the optional customCACerts feature can run
-    # update-ca-certificates; to run non-root, override this and
-    # podSecurityContext (see codeInterpreter below for the pattern).
-    runAsUser: 0
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: false
+    runAsNonRoot: true
+    runAsUser: 65532
+    allowPrivilegeEscalation: false
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -238,13 +259,24 @@ indexCapability:
   startupProbe: {}
   readinessProbe: {}
   livenessProbe: {}
-  podSecurityContext: {}
+  # Runs as the distroless image's nonroot UID (65532), which owns the venv, HF
+  # cache, and /var/log/onyx. customCACerts no longer needs root — the distroless
+  # server merges custom roots in Python, not via update-ca-certificates. NOTE:
+  # requires the distroless model-server image; an older, root-built image can't
+  # write its root-owned dirs as 65532. To run as root, set runAsUser: 0 here and
+  # in podSecurityContext.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    fsGroup: 65532
   securityContext:
-    # `privileged` is not needed by this workload and is intentionally omitted.
-    # root is kept only so the optional customCACerts feature can run
-    # update-ca-certificates; to run non-root, override this and
-    # podSecurityContext (see codeInterpreter below for the pattern).
-    runAsUser: 0
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: false
+    runAsNonRoot: true
+    runAsUser: 65532
+    allowPrivilegeEscalation: false
   nodeSelector: {}
   tolerations: []
   affinity: {}
