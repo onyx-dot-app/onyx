@@ -25,7 +25,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.server.features.build.utils import is_onyx_craft_enabled
+from onyx.server.features.build.utils import is_craft_available_for_deployment
+from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.server.features.notifications.models import NotificationResponse
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
@@ -37,6 +38,10 @@ from onyx.server.settings.models import UserSettings
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
 from onyx.server.settings.tier_order import tier_at_least
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.variable_functionality import (
@@ -54,7 +59,9 @@ basic_router = APIRouter(prefix="/settings")
 @admin_router.put("")
 def admin_put_settings(
     settings: Settings,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
 ) -> None:
     if (
         settings.user_file_max_upload_size_mb is not None
@@ -73,6 +80,11 @@ def admin_put_settings(
     else:
         current_tier = Tier.COMMUNITY
     existing = load_settings()
+
+    # craft_default_enabled is access control: a PUT that omits it (e.g. an
+    # older client) must not silently reset it to the pydantic default.
+    if "craft_default_enabled" not in settings.model_fields_set:
+        settings.craft_default_enabled = existing.craft_default_enabled
     # Search Mode is Business+; Chat Retention is Enterprise-only.
     # Use the same error code (FEATURE_NOT_AVAILABLE / 402) the tier_gate
     # middleware uses, so the FE has one shape to handle for tier-rejected
@@ -94,6 +106,15 @@ def admin_put_settings(
         )
 
     store_settings(settings)
+
+    if settings.craft_default_enabled != existing.craft_default_enabled:
+        emit_audit_event(
+            AuditAction.CRAFT_DEFAULT_CHANGE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(current_user),
+            resource_type="settings",
+            extra={"craft_default_enabled": settings.craft_default_enabled},
+        )
 
 
 def apply_license_status_to_settings(settings: Settings) -> Settings:
@@ -126,8 +147,18 @@ def fetch_settings(
     )
     general_settings = apply_fn(general_settings)
 
-    # Check if Onyx Craft is enabled for this user (used for server-side redirects)
-    onyx_craft_enabled_for_user = is_onyx_craft_enabled(user) if user else False
+    # Check if Onyx Craft is enabled for this user (used for server-side
+    # redirects). The deployment gate and already-loaded settings are shared.
+    onyx_craft_available = is_craft_available_for_deployment(user) if user else False
+    onyx_craft_enabled_for_user = (
+        is_craft_enabled_for_user(
+            user,
+            deployment_available=onyx_craft_available,
+            workspace_default=general_settings.craft_default_enabled,
+        )
+        if user
+        else False
+    )
 
     # Dev/debug flag: tail-the-pod-logs button gated by an env var. Same
     # check happens on the SSE endpoint so flipping the env var off
@@ -139,6 +170,7 @@ def fetch_settings(
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
+        onyx_craft_available=onyx_craft_available,
         opencode_debugging_enabled=ENABLE_OPENCODE_DEBUGGING,
         vector_db_enabled=not DISABLE_VECTOR_DB,
         hooks_enabled=not MULTI_TENANT,

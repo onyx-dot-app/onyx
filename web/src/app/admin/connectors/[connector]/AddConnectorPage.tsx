@@ -34,7 +34,6 @@ import {
 } from "@/lib/connectors/connectors";
 import { useSettings } from "@/lib/settings/hooks";
 import Modal from "@/refresh-components/Modal";
-import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
 import {
   useGmailCredentials,
   useGoogleDriveCredentials,
@@ -56,6 +55,7 @@ import {
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
 import { Button } from "@opal/components";
+import { Section } from "@opal/layouts";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";
@@ -534,116 +534,114 @@ export default function AddConnector({
                 Select a credential
               </Text>
 
-              {connector == ValidSources.Gmail ? (
-                <GmailMain />
-              ) : (
-                <>
-                  <ModifyCredential
-                    showIfEmpty
-                    accessType={formikProps.values.access_type}
-                    defaultedCredential={currentCredential!}
-                    credentials={credentials}
-                    editableCredentials={editableCredentials}
-                    onDeleteCredential={onDeleteCredential}
-                    onSwitch={onSwap}
-                  />
-                  {!createCredentialFormToggle && (
-                    <div className="mt-6 flex gap-4">
-                      {/* Button to pop up a form to manually enter credentials */}
-                      <Button
-                        onClick={async () => {
-                          if (oauthDetails && oauthDetails.oauth_enabled) {
-                            if (oauthDetails.additional_kwargs.length > 0) {
-                              setCreateCredentialFormToggle(true);
-                            } else {
-                              const redirectUrl =
-                                await getConnectorOauthRedirectUrl(
-                                  connector,
-                                  {}
-                                );
-                              // if redirect is supported, just use it
-                              if (redirectUrl) {
-                                window.location.href = redirectUrl;
-                              } else {
-                                setCreateCredentialFormToggle(
-                                  (createConnectorToggle) =>
-                                    !createConnectorToggle
-                                );
-                              }
-                            }
+              <>
+                <ModifyCredential
+                  showIfEmpty
+                  accessType={formikProps.values.access_type}
+                  defaultedCredential={currentCredential!}
+                  credentials={credentials}
+                  editableCredentials={editableCredentials}
+                  onDeleteCredential={onDeleteCredential}
+                  onSwitch={onSwap}
+                />
+                {!createCredentialFormToggle && (
+                  <Section
+                    flexDirection="row"
+                    justifyContent="start"
+                    gap={1}
+                    className="mt-6"
+                  >
+                    {/* Button to pop up a form to manually enter credentials */}
+                    <Button
+                      onClick={async () => {
+                        if (oauthDetails && oauthDetails.oauth_enabled) {
+                          if (oauthDetails.additional_kwargs.length > 0) {
+                            setCreateCredentialFormToggle(true);
                           } else {
-                            setCreateCredentialFormToggle(
-                              (createConnectorToggle) => !createConnectorToggle
-                            );
+                            const redirectUrl =
+                              await getConnectorOauthRedirectUrl(connector, {});
+                            // if redirect is supported, just use it
+                            if (redirectUrl) {
+                              window.location.href = redirectUrl;
+                            } else {
+                              setCreateCredentialFormToggle(
+                                (createConnectorToggle) =>
+                                  !createConnectorToggle
+                              );
+                            }
                           }
-                        }}
-                      >
-                        Create New
-                      </Button>
-                      {/* Button to sign in via OAuth */}
-                      {oauthSupportedSources.includes(connector) &&
-                        (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
-                          <Button
-                            disabled={isAuthorizing}
-                            variant="action"
-                            onClick={handleAuthorize}
-                            hidden={!isAuthorizeVisible}
-                          >
-                            {isAuthorizing
-                              ? "Authorizing..."
-                              : `Authorize with ${getSourceDisplayName(
-                                  connector
-                                )}`}
-                          </Button>
-                        )}
-                    </div>
-                  )}
-
-                  {createCredentialFormToggle && (
-                    <Modal
-                      open
-                      onOpenChange={() => setCreateCredentialFormToggle(false)}
+                        } else {
+                          setCreateCredentialFormToggle(
+                            (createConnectorToggle) => !createConnectorToggle
+                          );
+                        }
+                      }}
                     >
-                      <Modal.Content>
-                        <Modal.Header
-                          icon={SvgKey}
-                          title={`Create a ${getSourceDisplayName(
-                            connector
-                          )} credential`}
-                          onClose={() => setCreateCredentialFormToggle(false)}
-                        />
-                        <Modal.Body>
-                          {oauthDetailsLoading ? (
-                            <Spinner />
-                          ) : (
-                            <>
-                              {oauthDetails && oauthDetails.oauth_enabled ? (
-                                <CreateStdOAuthCredential
-                                  sourceType={connector}
-                                  additionalFields={
-                                    oauthDetails.additional_kwargs
-                                  }
-                                />
-                              ) : (
-                                <CreateCredential
-                                  close
-                                  refresh={refresh}
-                                  sourceType={connector}
-                                  accessType={formikProps.values.access_type}
-                                  onSwitch={onSwap}
-                                  onClose={() =>
-                                    setCreateCredentialFormToggle(false)
-                                  }
-                                />
-                              )}
-                            </>
-                          )}
-                        </Modal.Body>
-                      </Modal.Content>
-                    </Modal>
-                  )}
-                </>
-              )}
+                      Create New
+                    </Button>
+                    {/* Button to sign in via OAuth */}
+                    {oauthSupportedSources.includes(connector) &&
+                      (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
+                        <Button
+                          disabled={isAuthorizing}
+                          variant="action"
+                          onClick={handleAuthorize}
+                          hidden={!isAuthorizeVisible}
+                        >
+                          {isAuthorizing
+                            ? "Authorizing..."
+                            : `Authorize with ${getSourceDisplayName(
+                                connector
+                              )}`}
+                        </Button>
+                      )}
+                  </Section>
+                )}
+
+                {createCredentialFormToggle && (
+                  <Modal
+                    open
+                    onOpenChange={() => setCreateCredentialFormToggle(false)}
+                  >
+                    <Modal.Content>
+                      <Modal.Header
+                        icon={SvgKey}
+                        title={`Create a ${getSourceDisplayName(
+                          connector
+                        )} credential`}
+                        onClose={() => setCreateCredentialFormToggle(false)}
+                      />
+                      <Modal.Body>
+                        {oauthDetailsLoading ? (
+                          <Spinner />
+                        ) : (
+                          <>
+                            {oauthDetails && oauthDetails.oauth_enabled ? (
+                              <CreateStdOAuthCredential
+                                sourceType={connector}
+                                additionalFields={
+                                  oauthDetails.additional_kwargs
+                                }
+                              />
+                            ) : (
+                              <CreateCredential
+                                close
+                                refresh={refresh}
+                                sourceType={connector}
+                                accessType={formikProps.values.access_type}
+                                onSwitch={onSwap}
+                                onClose={() =>
+                                  setCreateCredentialFormToggle(false)
+                                }
+                              />
+                            )}
+                          </>
+                        )}
+                      </Modal.Body>
+                    </Modal.Content>
+                  </Modal>
+                )}
+              </>
             </CardSection>
           )}
 

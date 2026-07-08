@@ -77,6 +77,7 @@ from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
 from onyx.db.user_preferences import update_user_temperature_override_enabled
 from onyx.db.user_preferences import update_user_theme_preference
+from onyx.db.user_preferences import update_users_craft_enabled
 from onyx.db.users import batch_get_user_groups
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_accepted_users
@@ -108,6 +109,7 @@ from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
 from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
+from onyx.server.manage.models import UserCraftAccessUpdateRequest
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
 from onyx.server.manage.models import UserRoleResponse
@@ -191,6 +193,46 @@ def set_user_role(
             "target_email": user_to_update.email,
             "old_role": current_role.value,
             "new_role": requested_role.value,
+        },
+    )
+
+
+@router.patch("/manage/admin/users/craft-enabled")
+def set_user_craft_access(
+    craft_access_update_request: UserCraftAccessUpdateRequest,
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
+    db_session: Session = Depends(get_session),
+) -> None:
+    users_to_update: list[User] = []
+    missing_emails: list[str] = []
+    for email in craft_access_update_request.user_emails:
+        target = get_user_by_email(email=email, db_session=db_session)
+        if target:
+            users_to_update.append(target)
+        else:
+            missing_emails.append(email)
+    if missing_emails:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Users not found: {', '.join(missing_emails)}",
+        )
+
+    update_users_craft_enabled(
+        user_ids=[target.id for target in users_to_update],
+        craft_enabled=craft_access_update_request.craft_enabled,
+        db_session=db_session,
+    )
+
+    emit_audit_event(
+        AuditAction.USER_CRAFT_ACCESS_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        extra={
+            "target_emails": [target.email for target in users_to_update],
+            "craft_enabled": craft_access_update_request.craft_enabled,
         },
     )
 
@@ -971,6 +1013,23 @@ def verify_user_logged_in(
 
     token_created_at = _get_token_created_at(user, request, db_session)
 
+    token_expires_at: datetime | None = None
+    if token_created_at is not None:
+        token_expires_at = token_created_at + timedelta(
+            seconds=SESSION_EXPIRE_TIME_SECONDS
+        )
+    track_oidc = get_security_settings().track_external_idp_expiry
+    # When OIDC tracking is enabled, cap expiry at the IdP token's lifetime.
+    # Guard against stale oidc_expiry from a previous OIDC session (same comment
+    # as the old track_external_idp_expiry guard in UserInfo.from_model).
+    oidc_expiry = user.oidc_expiry if track_oidc else None
+    if oidc_expiry is not None:
+        token_expires_at = (
+            min(token_expires_at, oidc_expiry)
+            if token_expires_at is not None
+            else oidc_expiry
+        )
+
     team_name = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
     )(user.email)
@@ -1004,9 +1063,7 @@ def verify_user_logged_in(
 
     user_info = UserInfo.from_model(
         user,
-        track_external_idp_expiry=get_security_settings().track_external_idp_expiry,
-        current_token_created_at=token_created_at,
-        expiry_length=SESSION_EXPIRE_TIME_SECONDS,
+        token_expires_at=token_expires_at,
         is_cloud_superuser=user.email in super_users_list,
         team_name=team_name,
         tenant_info=TenantInfo(
@@ -1200,10 +1257,7 @@ def update_user_assistant_visibility_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_preferences = UserInfo.from_model(
-        user,
-        track_external_idp_expiry=get_security_settings().track_external_idp_expiry,
-    ).preferences
+    user_preferences = UserInfo.from_model(user).preferences
     updated_preferences = update_assistant_visibility(
         user_preferences, assistant_id, show
     )

@@ -66,6 +66,7 @@ from onyx.db.engine.async_sql_engine import reset_sqlalchemy_async_engine
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.sso_provider import seed_saml_provider_from_conf_dir
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.hooks.registry import validate_registry
@@ -152,7 +153,7 @@ from onyx.server.pat.api import router as pat_router
 from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.query_backend import admin_router as admin_query_router
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
-from onyx.server.saml import router as saml_router
+from onyx.server.saml_multi import router as saml_multi_router
 from onyx.server.security.api import admin_router as security_admin_router
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
@@ -395,6 +396,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         # If we are multi-tenant, we need to only set up initial public tables
         with get_session_with_current_tenant() as db_session:
             setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
+            # Import a legacy single-config SAML_CONF_DIR into a provider row. The
+            # api_server has the mount the migration job lacks, so this is where it
+            # runs. No-op unless AUTH_TYPE=saml with no SAML row yet.
+            seed_saml_provider_from_conf_dir(db_session)
             # set up the file store (e.g. create bucket if needed). On multi-tenant,
             # this is done via IaC
             get_default_file_store().initialize()
@@ -709,11 +714,14 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             prefix="/auth",
         )
 
-    elif AUTH_TYPE == AuthType.SAML:
-        include_auth_router_with_prefix(
-            application,
-            saml_router,
-        )
+    # The only SAML router. Always mounted: it resolves provider rows per request
+    # (parametric authorize, one issuer-resolved callback) and 404s when none
+    # exist, so it ships dark. A single-SAML deployment's row is seeded from
+    # SAML_CONF_DIR at startup, so its login keeps working with no reconfig.
+    include_auth_router_with_prefix(
+        application,
+        saml_multi_router,
+    )
 
     if (
         AUTH_TYPE == AuthType.CLOUD

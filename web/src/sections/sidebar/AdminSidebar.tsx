@@ -83,6 +83,9 @@ function buildItems(
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.IMAGE_GENERATION);
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.VOICE);
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CODE_INTERPRETER);
+    if (settings?.onyx_craft_available === true) {
+      add(SECTIONS.UNLABELED, ADMIN_ROUTES.CRAFT);
+    }
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
 
     if (!enableCloud && customAnalyticsEnabled) {

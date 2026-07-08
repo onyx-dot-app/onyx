@@ -163,6 +163,10 @@ export interface ApiSandboxResponse {
   nextjs_port: number | null;
 }
 
+export interface ApiSandboxStatusResponse {
+  status: Exclude<ApiSandboxResponse["status"], "restoring"> | null;
+}
+
 export interface ApiSessionResponse {
   id: string;
   user_id: string | null;

@@ -63,6 +63,7 @@ from fastapi_users.openapi import OpenAPIResponseType
 from fastapi_users.router.common import ErrorCode
 from fastapi_users.router.common import ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import GetAccessTokenError
@@ -2613,9 +2614,19 @@ def get_oauth_router(
         async def complete_login_flow(
             token: OAuth2Token, state_data: Dict[str, str]
         ) -> RedirectResponse:
-            account_id, account_email = await oauth_client.get_id_email(
-                token["access_token"]
-            )
+            # A failed or rejected userinfo fetch (bad status, malformed body,
+            # unverified email) must land as a controlled login rejection, not
+            # an unhandled 500. OnyxError has a global handler that GetIdEmailError
+            # does not.
+            try:
+                account_id, account_email = await oauth_client.get_id_email(
+                    token["access_token"]
+                )
+            except GetIdEmailError as e:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    "Could not retrieve a verified identity from the SSO provider",
+                ) from e
 
             if account_email is None:
                 raise OnyxError(

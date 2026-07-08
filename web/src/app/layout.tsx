@@ -17,8 +17,9 @@ import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import { cn } from "@opal/utils";
-import AppHealthBanner from "@/sections/AppHealthBanner";
-import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
+import AppHealthBanner from "@/sections/banners/HealthBanner";
+import LicenseExpiryBanner from "@/sections/banners/LicenseExpiryBanner";
+import { AuthenticationShell } from "@/lib/auth/components";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
 
@@ -124,18 +125,20 @@ export default function Layout({ children }: LayoutProps) {
                 <SWRConfigProvider>
                   <AppHealthBanner />
                   <LicenseExpiryBanner />
-                  <AppProvider>
-                    <PostHogRuntimeInitializer />
-                    <CustomAnalyticsScript />
-                    <PostHogPageTracker />
-                    <div id={MODAL_ROOT_ID} className="h-screen w-screen">
-                      <ProductGatingWrapper>{children}</ProductGatingWrapper>
-                    </div>
-                    <WebVitals />
-                    {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
-                      <StatsOverlayLoader />
-                    )}
-                  </AppProvider>
+                  <AuthenticationShell>
+                    <AppProvider>
+                      <PostHogRuntimeInitializer />
+                      <CustomAnalyticsScript />
+                      <PostHogPageTracker />
+                      <div id={MODAL_ROOT_ID} className="h-screen w-screen">
+                        <ProductGatingWrapper>{children}</ProductGatingWrapper>
+                      </div>
+                      <WebVitals />
+                      {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
+                        <StatsOverlayLoader />
+                      )}
+                    </AppProvider>
+                  </AuthenticationShell>
                 </SWRConfigProvider>
               </PHProvider>
             </TooltipProvider>

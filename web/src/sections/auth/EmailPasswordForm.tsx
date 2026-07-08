@@ -8,7 +8,7 @@ import { requestEmailVerification } from "@/lib/auth/svc";
 import { useMemo } from "react";
 import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
-import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
+import { validateInternalRedirect } from "@/lib/auth/utils";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
 import {
   AuthLayouts,

@@ -156,6 +156,12 @@ interface HorizontalProps extends InputLayoutProps {
    * compact controls like toggles/switches.
    */
   responsive?: boolean;
+  /**
+   * When true, the control grows to fill the row (capped at the form input
+   * column max) instead of hugging its content. Use for full-width inputs like
+   * selects/text fields; avoid for compact controls like toggles/switches.
+   */
+  fillInput?: boolean;
 }
 
 function Horizontal({
@@ -170,6 +176,7 @@ function Horizontal({
   description,
   suffix,
   responsive,
+  fillInput,
 }: HorizontalProps) {
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
@@ -188,6 +195,7 @@ function Horizontal({
         padding="fit"
         center={center}
         responsive={responsive}
+        fillRight={fillInput}
         rightChildren={children}
       />
       {fieldName && <FormikInputError name={fieldName} />}

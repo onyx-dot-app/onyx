@@ -5,6 +5,8 @@ import { getDomain } from "@/lib/redirectSS";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+import { User, UserRole } from "@/lib/types";
+import { getCurrentUserSS } from "@/lib/users/svcSS";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
   const res = await fetch(buildUrl("/auth/type"));
@@ -116,4 +118,64 @@ export async function authErrorRedirect(
     // response may not be JSON
   }
   return NextResponse.redirect(errorUrl, redirectStatus);
+}
+
+// ---------------------------------------------------------------------------
+// Auth guards
+// ---------------------------------------------------------------------------
+
+interface AuthCheckResult {
+  user: User | null;
+  authTypeMetadata: AuthTypeMetadata | null;
+  redirect?: string;
+}
+
+const ADMIN_ALLOWED_ROLES = [
+  UserRole.ADMIN,
+  UserRole.CURATOR,
+  UserRole.GLOBAL_CURATOR,
+];
+
+export async function requireAuth(): Promise<AuthCheckResult> {
+  let user: User | null = null;
+  let authTypeMetadata: AuthTypeMetadata | null = null;
+
+  try {
+    [authTypeMetadata, user] = await Promise.all([
+      getAuthTypeMetadataSS(),
+      getCurrentUserSS(),
+    ]);
+  } catch (e) {
+    console.log(`Failed to fetch auth information - ${e}`);
+  }
+
+  if (!user) {
+    return { user, authTypeMetadata, redirect: "/auth/login" };
+  }
+
+  if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
+    return {
+      user,
+      authTypeMetadata,
+      redirect: "/auth/send-email-verification",
+    };
+  }
+
+  return { user, authTypeMetadata };
+}
+
+export async function requireAdminAuth(): Promise<AuthCheckResult> {
+  const authResult = await requireAuth();
+
+  if (authResult.redirect) {
+    return authResult;
+  }
+
+  const { user, authTypeMetadata } = authResult;
+
+  if (user && !ADMIN_ALLOWED_ROLES.includes(user.role)) {
+    return { user, authTypeMetadata, redirect: "/app" };
+  }
+
+  return authResult;
 }

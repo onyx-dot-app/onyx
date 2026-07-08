@@ -130,6 +130,23 @@ def get_latest_access_token_for_user(
         return None
 
 
+def update_users_craft_enabled(
+    user_ids: list[UUID],
+    craft_enabled: bool | None,
+    db_session: Session,
+) -> None:
+    """Admin-controlled per-user Craft override; None clears the override
+    (follow the workspace default)."""
+    if not user_ids:
+        return
+    db_session.execute(
+        update(User)
+        .where(User.id.in_(user_ids))  # ty: ignore[unresolved-attribute]
+        .values(craft_enabled=craft_enabled)
+    )
+    db_session.commit()
+
+
 def update_user_temperature_override_enabled(
     user_id: UUID,
     temperature_override_enabled: bool,

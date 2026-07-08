@@ -1,12 +1,13 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.approvals.api import router as approvals_router
 from onyx.server.features.build.debug import router as debug_router
 from onyx.server.features.build.external_apps.api import router as external_apps_router
@@ -22,7 +23,7 @@ from onyx.server.features.build.scheduled_tasks.api import (
 from onyx.server.features.build.session.api import router as sessions_router
 from onyx.server.features.build.session.messages import router as messages_router
 from onyx.server.features.build.user_library.api import router as user_library_router
-from onyx.server.features.build.utils import is_onyx_craft_enabled
+from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -31,10 +32,10 @@ logger = setup_logger()
 def require_onyx_craft_enabled(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> User:
-    if not is_onyx_craft_enabled(user):
-        raise HTTPException(
-            status_code=403,
-            detail="Onyx Craft is not available",
+    if not is_craft_enabled_for_user(user):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Onyx Craft is not available",
         )
     return user
 

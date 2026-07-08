@@ -1,5 +1,5 @@
 import { authErrorRedirect } from "@/lib/auth/svcSS";
-import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
+import { validateInternalRedirect } from "@/lib/auth/utils";
 import { getDomain } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";
