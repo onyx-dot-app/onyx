@@ -18,7 +18,7 @@ from onyx.db.document import get_documents_by_cc_pair
 from onyx.db.document import get_ingestion_documents
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
-from onyx.db.port_orphan_candidate import delete_port_orphan_candidates_for_document
+from onyx.db.port_orphan_candidate import delete_port_orphan_candidates_by_id
 from onyx.db.port_orphan_candidate import record_port_orphan_candidates_for_document
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
@@ -196,13 +196,13 @@ def delete_ingestion_doc(
 
     # If a port is filling a target index, record this delete before the index delete
     # below so a racing create-only copy that resurrects the doc is swept back out.
-    recorded = record_port_orphan_candidates_for_document(
+    recorded_ids = record_port_orphan_candidates_for_document(
         db_session,
         document_id,
         active_search_settings.primary,
         active_search_settings.secondary,
     )
-    if recorded:
+    if recorded_ids:
         db_session.commit()
 
     # This flow is for deletion so we get all indices.
@@ -221,9 +221,10 @@ def delete_ingestion_doc(
         delete_documents_complete(db_session, [document_id])
     except Exception:
         # The delete didn't complete — this admin endpoint has no automatic retry, so the
-        # doc stays live. Roll back the candidate so the port sweep doesn't later treat the
-        # live doc's port-copied (marked) chunks as a resurrection and delete them.
-        if recorded:
-            delete_port_orphan_candidates_for_document(db_session, document_id)
+        # doc stays live. Roll back only the candidate rows THIS call inserted so the sweep
+        # doesn't later treat the live doc's port-copied (marked) chunks as a resurrection —
+        # and so we never erase a candidate another cc_pair or delete path recorded.
+        if recorded_ids:
+            delete_port_orphan_candidates_by_id(db_session, recorded_ids)
             db_session.commit()
         raise

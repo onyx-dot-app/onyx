@@ -35,25 +35,31 @@ def record_port_orphan_candidates(
     search_settings_id: int,
     cc_pair_id: int,
     document_ids: list[str],
-) -> None:
-    """Record docs deleted while a port targets `search_settings_id`. Idempotent; caller
-    commits before the index delete so the candidate is durable before any resurrection."""
+) -> list[int]:
+    """Record docs deleted while a port targets `search_settings_id`. Idempotent; returns the
+    ids of the rows this call actually inserted (empty when a row already existed), so a failed
+    delete rolls back exactly its own recording. Caller commits before the index delete so the
+    candidate is durable before any resurrection."""
     if not document_ids:
-        return
-    stmt = pg_insert(PortOrphanCandidate).values(
-        [
-            {
-                "search_settings_id": search_settings_id,
-                "cc_pair_id": cc_pair_id,
-                "document_id": document_id,
-            }
-            for document_id in document_ids
-        ]
+        return []
+    stmt = (
+        pg_insert(PortOrphanCandidate)
+        .values(
+            [
+                {
+                    "search_settings_id": search_settings_id,
+                    "cc_pair_id": cc_pair_id,
+                    "document_id": document_id,
+                }
+                for document_id in document_ids
+            ]
+        )
+        .on_conflict_do_nothing(
+            index_elements=["search_settings_id", "cc_pair_id", "document_id"]
+        )
+        .returning(PortOrphanCandidate.id)
     )
-    stmt = stmt.on_conflict_do_nothing(
-        index_elements=["search_settings_id", "cc_pair_id", "document_id"]
-    )
-    db_session.execute(stmt)
+    return list(db_session.scalars(stmt))
 
 
 def record_port_orphan_candidates_for_document(
@@ -61,32 +67,36 @@ def record_port_orphan_candidates_for_document(
     document_id: str,
     primary: SearchSettings,
     secondary: SearchSettings | None,
-) -> int:
+) -> list[int]:
     """Record a candidate under each cc_pair owning `document_id`, if a port is active.
     The single choke point every index-delete entry point (connector cleanup, ingestion)
-    funnels through. Returns rows recorded; caller commits (if > 0) before the index delete."""
+    funnels through. Returns the ids of the rows this call inserted (empty when none), so a
+    failed delete rolls back only its own recording — never a candidate another cc_pair or
+    delete path recorded for the same doc. Caller commits (if non-empty) before the index
+    delete."""
     target_settings_id = port_target_settings_id(primary, secondary)
     if target_settings_id is None:
-        return 0
-    cc_pairs = get_cc_pairs_for_document(db_session, document_id)
-    for cc_pair in cc_pairs:
-        record_port_orphan_candidates(
+        return []
+    recorded_ids: list[int] = []
+    for cc_pair in get_cc_pairs_for_document(db_session, document_id):
+        recorded_ids += record_port_orphan_candidates(
             db_session, target_settings_id, cc_pair.id, [document_id]
         )
-    return len(cc_pairs)
+    return recorded_ids
 
 
-def delete_port_orphan_candidates_for_document(
+def delete_port_orphan_candidates_by_id(
     db_session: Session,
-    document_id: str,
+    candidate_ids: list[int],
 ) -> None:
-    """Drop a document's candidate rows — rolls back recording when the delete fails and
-    the doc stays live, so the sweep doesn't treat the live doc's marked chunks as a
-    resurrection. Caller commits."""
+    """Drop exactly the given candidate rows — rolls back a failed delete's own recording
+    (the rows it inserted) when the doc stays live, so the sweep doesn't treat the live doc's
+    marked chunks as a resurrection. Scoped by id so it never removes a candidate another
+    cc_pair or delete path recorded for the same document. Caller commits."""
+    if not candidate_ids:
+        return
     db_session.execute(
-        delete(PortOrphanCandidate).where(
-            PortOrphanCandidate.document_id == document_id
-        )
+        delete(PortOrphanCandidate).where(PortOrphanCandidate.id.in_(candidate_ids))
     )
 
 

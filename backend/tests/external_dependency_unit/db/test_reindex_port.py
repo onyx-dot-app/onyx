@@ -82,6 +82,7 @@ from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.port_attempt import request_port_cancel
 from onyx.db.port_orphan_candidate import cleanup_stale_port_orphan_candidates
 from onyx.db.port_orphan_candidate import clear_port_orphan_candidates
+from onyx.db.port_orphan_candidate import delete_port_orphan_candidates_by_id
 from onyx.db.port_orphan_candidate import get_port_orphan_candidate_doc_ids
 from onyx.db.port_orphan_candidate import port_target_settings_id
 from onyx.db.port_orphan_candidate import record_port_orphan_candidates
@@ -1698,6 +1699,45 @@ def test_sweep_port_orphan_candidates_marker_delete_and_clears(
         copier.delete_port_written.assert_called_once()
         assert sorted(copier.delete_port_written.call_args.args[0]) == ["d1", "d2"]
         db_session.expire_all()
+        assert get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id) == []
+    finally:
+        db_session.query(PortOrphanCandidate).filter(
+            PortOrphanCandidate.cc_pair_id == cc_pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.commit()
+
+
+def test_record_returns_inserted_ids_and_rollback_is_scoped(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """record returns only the rows it actually inserted; a failed delete's by-id rollback
+    drops exactly those and never a candidate another delete already recorded for the doc."""
+    ss = get_current_search_settings(db_session)
+    try:
+        # a first delete records a valid candidate (swept later once the port resurrects it)
+        first_ids = record_port_orphan_candidates(
+            db_session, ss.id, cc_pair.id, ["doc-x"]
+        )
+        db_session.commit()
+        assert len(first_ids) == 1
+
+        # a second delete of the same doc re-records: the row exists, so nothing new inserts
+        second_ids = record_port_orphan_candidates(
+            db_session, ss.id, cc_pair.id, ["doc-x"]
+        )
+        db_session.commit()
+        assert second_ids == []
+
+        # the second delete failing rolls back only its own (empty) ids -> first row survives
+        delete_port_orphan_candidates_by_id(db_session, second_ids)
+        db_session.commit()
+        assert get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id) == [
+            "doc-x"
+        ]
+
+        # rolling back the first delete's own ids removes exactly that row
+        delete_port_orphan_candidates_by_id(db_session, first_ids)
+        db_session.commit()
         assert get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id) == []
     finally:
         db_session.query(PortOrphanCandidate).filter(
