@@ -11,6 +11,7 @@ from pydantic import field_validator
 from pydantic import model_serializer
 from pydantic import model_validator
 from pydantic import SerializerFunctionWrapHandler
+from pydantic import ValidationInfo
 
 from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_REPLICAS
 from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_SHARDS
@@ -260,7 +261,9 @@ class DocumentChunkWithoutVectors(BaseModel):
 
     @field_validator("last_updated", "created_at", mode="before")
     @classmethod
-    def parse_epoch_seconds_to_datetime(cls, value: Any) -> datetime | None:
+    def parse_epoch_seconds_to_datetime(
+        cls, value: Any, info: ValidationInfo
+    ) -> datetime | None:
         """Parses seconds since the Unix epoch to a datetime object.
 
         If the input is None, returns None.
@@ -274,7 +277,7 @@ class DocumentChunkWithoutVectors(BaseModel):
             return value
         if not isinstance(value, int):
             raise ValueError(
-                f"Bug: Expected an int for a datetime property from OpenSearch, got {type(value)} instead."
+                f"Bug: Expected an int for the datetime property '{info.field_name}' from OpenSearch, got {type(value)} instead."
             )
         return datetime.fromtimestamp(value, tz=timezone.utc)
 
