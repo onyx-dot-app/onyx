@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { SvgDevKit, SvgExternalLink, SvgUser, SvgUserPlus } from "@opal/icons";
+import { SvgExternalLink, SvgUser, SvgUserPlus } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
 import { useScimToken } from "@/hooks/useScimToken";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/settings/types";
 import useUserCounts from "@/hooks/useUserCounts";
 import { UserStatus } from "@/lib/types";
@@ -15,7 +14,6 @@ import type { StatusFilter } from "./interfaces";
 import UsersSummary from "./UsersSummary";
 import UsersTable from "./UsersTable";
 import InviteUsersModal from "./InviteUsersModal";
-import CraftAccessModal from "./CraftAccessModal";
 
 // ---------------------------------------------------------------------------
 // Users page content
@@ -68,9 +66,6 @@ function UsersContent() {
 
 export default function UsersPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [craftAccessOpen, setCraftAccessOpen] = useState(false);
-  const settings = useSettings();
-  const craftAvailable = settings?.onyx_craft_available === true;
 
   return (
     <SettingsLayouts.Root width="lg">
@@ -78,20 +73,9 @@ export default function UsersPage() {
         title="Users & Requests"
         icon={SvgUser}
         rightChildren={
-          <div className="flex items-center gap-2">
-            {craftAvailable && (
-              <Button
-                icon={SvgDevKit}
-                prominence="secondary"
-                onClick={() => setCraftAccessOpen(true)}
-              >
-                Craft Access
-              </Button>
-            )}
-            <Button icon={SvgUserPlus} onClick={() => setInviteOpen(true)}>
-              Invite Users
-            </Button>
-          </div>
+          <Button icon={SvgUserPlus} onClick={() => setInviteOpen(true)}>
+            Invite Users
+          </Button>
         }
       >
         <MessageCard
@@ -119,12 +103,6 @@ export default function UsersPage() {
       </SettingsLayouts.Body>
 
       <InviteUsersModal open={inviteOpen} onOpenChange={setInviteOpen} />
-      {craftAvailable && (
-        <CraftAccessModal
-          open={craftAccessOpen}
-          onOpenChange={setCraftAccessOpen}
-        />
-      )}
     </SettingsLayouts.Root>
   );
 }

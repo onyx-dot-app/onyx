@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Table, createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { Button } from "@opal/components";
-import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
+import { SvgDevKit, SvgDownload, SvgSimpleLoader } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
 import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
@@ -17,6 +17,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import useGroups from "@/hooks/useGroups";
 import { downloadUsersCsv } from "./svc";
 import UserFilters from "./UserFilters";
+import CraftAccessModal from "./CraftAccessModal";
 import { setUsersCraftAccess } from "./svc";
 import GroupsCell from "./GroupsCell";
 import UserRowActions from "./UserRowActions";
@@ -155,6 +156,7 @@ export default function UsersTable({
   const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+  const [craftAccessOpen, setCraftAccessOpen] = useState(false);
 
   const { data: allGroups } = useGroups();
 
@@ -269,6 +271,56 @@ export default function UsersTable({
             searchIcon
           />
         </div>
+        {craftAvailable && selectedEmails.length > 0 && (
+          <>
+            <Button
+              prominence="secondary"
+              size="sm"
+              onClick={() =>
+                applyBulkCraftAccess(
+                  true,
+                  `Craft enabled for ${selectedEmails.length} users`
+                )
+              }
+            >
+              Enable Craft
+            </Button>
+            <Button
+              prominence="secondary"
+              size="sm"
+              onClick={() =>
+                applyBulkCraftAccess(
+                  false,
+                  `Craft disabled for ${selectedEmails.length} users`
+                )
+              }
+            >
+              Disable Craft
+            </Button>
+            <Button
+              prominence="tertiary"
+              size="sm"
+              onClick={() =>
+                applyBulkCraftAccess(
+                  null,
+                  `Craft access reset for ${selectedEmails.length} users`
+                )
+              }
+            >
+              Use Default
+            </Button>
+          </>
+        )}
+        {craftAvailable && (
+          <Button
+            icon={SvgDevKit}
+            prominence="secondary"
+            size="sm"
+            onClick={() => setCraftAccessOpen(true)}
+          >
+            Craft Access
+          </Button>
+        )}
         {craftAvailable && csvButton}
       </div>
       <UserFilters
@@ -282,49 +334,6 @@ export default function UsersTable({
         roleCounts={roleCounts}
         statusCounts={statusCounts}
       />
-      {craftAvailable && selectedEmails.length > 0 && (
-        <div className="flex items-center gap-2">
-          <Text as="span" secondaryBody text03>
-            Craft access for {selectedEmails.length} selected:
-          </Text>
-          <Button
-            prominence="secondary"
-            size="sm"
-            onClick={() =>
-              applyBulkCraftAccess(
-                true,
-                `Craft enabled for ${selectedEmails.length} users`
-              )
-            }
-          >
-            Enable
-          </Button>
-          <Button
-            prominence="secondary"
-            size="sm"
-            onClick={() =>
-              applyBulkCraftAccess(
-                false,
-                `Craft disabled for ${selectedEmails.length} users`
-              )
-            }
-          >
-            Disable
-          </Button>
-          <Button
-            prominence="tertiary"
-            size="sm"
-            onClick={() =>
-              applyBulkCraftAccess(
-                null,
-                `Craft access reset for ${selectedEmails.length} users`
-              )
-            }
-          >
-            Use Default
-          </Button>
-        </div>
-      )}
       <Table
         data={filteredUsers}
         columns={columns}
@@ -342,6 +351,12 @@ export default function UsersTable({
         }
         footer={craftAvailable ? {} : { leftExtra: csvButton }}
       />
+      {craftAvailable && (
+        <CraftAccessModal
+          open={craftAccessOpen}
+          onOpenChange={setCraftAccessOpen}
+        />
+      )}
     </div>
   );
 }
