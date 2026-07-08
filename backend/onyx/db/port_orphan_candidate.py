@@ -8,6 +8,7 @@ docs/plans/reindexing/deleted-doc-resurrection-during-port.md.
 
 from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -55,7 +56,9 @@ def record_port_orphan_candidates(
             ]
         )
         .on_conflict_do_nothing(
-            index_elements=["search_settings_id", "cc_pair_id", "document_id"]
+            # Infer the connector-scope partial-unique index (cc_pair rows only).
+            index_elements=["search_settings_id", "cc_pair_id", "document_id"],
+            index_where=text("cc_pair_id IS NOT NULL"),
         )
         .returning(PortOrphanCandidate.id)
     )
