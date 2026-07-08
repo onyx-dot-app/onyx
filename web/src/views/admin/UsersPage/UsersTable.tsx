@@ -13,7 +13,6 @@ import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import useAdminUsers from "@/hooks/useAdminUsers";
-import { useSettings } from "@/lib/settings/hooks";
 import useGroups from "@/hooks/useGroups";
 import { downloadUsersCsv } from "./svc";
 import UserFilters from "./UserFilters";
@@ -44,11 +43,7 @@ function renderNameColumn(email: string, row: UserRow) {
   );
 }
 
-function renderStatusColumn(
-  value: UserStatus,
-  row: UserRow,
-  craftAvailable: boolean
-) {
+function renderStatusColumn(value: UserStatus, row: UserRow) {
   return (
     <div className="flex flex-col">
       <Text as="span" mainUiBody text03>
@@ -57,11 +52,6 @@ function renderStatusColumn(
       {row.is_scim_synced && (
         <Text as="span" secondaryBody text03>
           SCIM synced
-        </Text>
-      )}
-      {craftAvailable && row.craft_enabled !== null && (
-        <Text as="span" secondaryBody text03>
-          {row.craft_enabled ? "Craft enabled" : "Craft disabled"}
         </Text>
       )}
     </div>
@@ -82,7 +72,7 @@ function renderLastUpdatedColumn(value: string | null) {
 
 const tc = createTableColumns<UserRow>();
 
-function buildColumns(onMutate: () => void, craftAvailable: boolean) {
+function buildColumns(onMutate: () => void) {
   return [
     tc.qualifier({
       content: "icon",
@@ -118,7 +108,7 @@ function buildColumns(onMutate: () => void, craftAvailable: boolean) {
     tc.column("status", {
       header: "Status",
       weight: 14,
-      cell: (value, row) => renderStatusColumn(value, row, craftAvailable),
+      cell: renderStatusColumn,
     }),
     tc.column("updated_at", {
       header: "Last Updated",
@@ -168,13 +158,7 @@ export default function UsersTable({
 
   const { users, isLoading, error, refresh } = useAdminUsers();
 
-  const settings = useSettings();
-  const craftAvailable = settings?.onyx_craft_available === true;
-
-  const columns = useMemo(
-    () => buildColumns(refresh, craftAvailable),
-    [refresh, craftAvailable]
-  );
+  const columns = useMemo(() => buildColumns(refresh), [refresh]);
 
   // Client-side filtering
   const filteredUsers = useMemo(() => {
@@ -215,23 +199,6 @@ export default function UsersTable({
     );
   }
 
-  const csvButton = (
-    <Button
-      icon={SvgDownload}
-      prominence="tertiary"
-      size="sm"
-      tooltip="Download CSV"
-      aria-label="Download CSV"
-      onClick={() => {
-        downloadUsersCsv().catch((err) => {
-          toast.error(
-            err instanceof Error ? err.message : "Failed to download CSV"
-          );
-        });
-      }}
-    />
-  );
-
   return (
     <div className="flex flex-col gap-3">
       <InputTypeIn
@@ -264,7 +231,26 @@ export default function UsersTable({
             description="No users match the current filters."
           />
         }
-        footer={{ leftExtra: csvButton }}
+        footer={{
+          leftExtra: (
+            <Button
+              icon={SvgDownload}
+              prominence="tertiary"
+              size="sm"
+              tooltip="Download CSV"
+              aria-label="Download CSV"
+              onClick={() => {
+                downloadUsersCsv().catch((err) => {
+                  toast.error(
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to download CSV"
+                  );
+                });
+              }}
+            />
+          ),
+        }}
       />
     </div>
   );

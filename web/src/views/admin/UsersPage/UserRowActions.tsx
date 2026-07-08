@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Button, Divider } from "@opal/components";
 import {
-  SvgDevKit,
   SvgMoreHorizontal,
   SvgUsers,
   SvgXCircle,
@@ -19,8 +18,6 @@ import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
-import { useSettings } from "@/lib/settings/hooks";
-import { setUsersCraftAccess } from "@/views/admin/CraftPage/svc";
 import { approveRequest } from "./svc";
 import EditUserModal from "./EditUserModal";
 import {
@@ -60,59 +57,11 @@ export default function UserRowActions({
 }: UserRowActionsProps) {
   const [modal, setModal] = useState<Modal | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const settings = useSettings();
 
   const openModal = (type: Modal) => {
     setPopoverOpen(false);
     setModal(type);
   };
-
-  const craftDefaultEnabled = settings?.craft_default_enabled !== false;
-  const craftEffectivelyEnabled = user.craft_enabled ?? craftDefaultEnabled;
-
-  const applyCraftAccess = (craftEnabled: boolean | null, message: string) => {
-    setPopoverOpen(false);
-    void (async () => {
-      try {
-        await setUsersCraftAccess([user.email], craftEnabled);
-        onMutate();
-        toast.success(message);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "An error occurred");
-      }
-    })();
-  };
-
-  // Craft access is not IdP-managed, so the toggle is offered for SCIM users
-  // too. Hidden when Craft isn't available for the deployment.
-  const craftToggleItem =
-    settings?.onyx_craft_available === true && user.id ? (
-      <>
-        <LineItem
-          icon={SvgDevKit}
-          onClick={() =>
-            applyCraftAccess(
-              !craftEffectivelyEnabled,
-              craftEffectivelyEnabled
-                ? "Craft disabled for user"
-                : "Craft enabled for user"
-            )
-          }
-        >
-          {craftEffectivelyEnabled ? "Disable Craft" : "Enable Craft"}
-        </LineItem>
-        {user.craft_enabled !== null && (
-          <LineItem
-            icon={SvgDevKit}
-            onClick={() =>
-              applyCraftAccess(null, "Craft access reset to workspace default")
-            }
-          >
-            Use Craft Default
-          </LineItem>
-        )}
-      </>
-    ) : null;
 
   const closeModal = () => setModal(null);
 
@@ -136,7 +85,6 @@ export default function UserRowActions({
               Groups &amp; Roles
             </LineItem>
           )}
-          {craftToggleItem}
           <Disabled disabled>
             <LineItem danger icon={SvgUserX}>
               Deactivate User
@@ -202,7 +150,6 @@ export default function UserRowActions({
             >
               Reset Password
             </LineItem>
-            {craftToggleItem}
             <Divider paddingPerpendicular="md" />
             <LineItem
               danger
@@ -231,7 +178,6 @@ export default function UserRowActions({
             >
               Reset Password
             </LineItem>
-            {craftToggleItem}
             <Divider paddingPerpendicular="md" />
             <LineItem
               icon={SvgUserPlus}
