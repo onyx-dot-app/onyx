@@ -1,14 +1,25 @@
+import json
 import re
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import SAML_CONF_DIR
+from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
+from onyx.configs.constants import AuthType
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
+from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
+
+logger = setup_logger()
 
 # The name becomes the login URL path segment and the oauth_name stored on
 # linked login accounts, so it must be a stable, URL-safe slug.
@@ -161,3 +172,102 @@ def set_sso_provider_enabled(
     provider.enabled = enabled
     db_session.commit()
     return provider
+
+
+def seed_saml_provider_from_conf_dir(db_session: Session) -> None:
+    """Import a legacy single-config SAML_CONF_DIR/settings.json into a provider
+    row on api_server startup (the api_server has the mount; the migration job
+    does not). Idempotent and safe under concurrent pods."""
+    if MULTI_TENANT:
+        logger.debug("Skipping legacy SAML seed because multi-tenant mode is enabled")
+        return
+
+    if AUTH_TYPE != AuthType.SAML:
+        logger.debug("Skipping legacy SAML seed because auth type is %s", AUTH_TYPE)
+        return
+
+    for provider in fetch_sso_providers(db_session):
+        if provider.provider_type is SSOProviderType.SAML:
+            logger.debug(
+                "Skipping legacy SAML seed because a SAML provider already exists"
+            )
+            return
+
+    settings_path = Path(SAML_CONF_DIR) / "settings.json"
+    try:
+        raw_settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except OSError as e:
+        logger.debug(
+            "Skipping legacy SAML seed because %s could not be read: %s",
+            settings_path,
+            e,
+        )
+        return
+    except ValueError as e:
+        logger.info(
+            "Skipping legacy SAML seed because %s is invalid JSON: %s",
+            settings_path,
+            e,
+        )
+        return
+
+    settings = raw_settings if isinstance(raw_settings, dict) else {}
+
+    def get_nested_value(settings_dict: dict[str, Any], *keys: str) -> Any:
+        value: Any = settings_dict
+        for key in keys:
+            if not isinstance(value, dict):
+                return None
+            value = value.get(key)
+        return value
+
+    idp_entity_id = get_nested_value(settings, "idp", "entityId")
+    idp_sso_url = get_nested_value(settings, "idp", "singleSignOnService", "url")
+    idp_x509_cert = get_nested_value(settings, "idp", "x509cert")
+    sp_entity_id = get_nested_value(settings, "sp", "entityId")
+    sp_x509_cert = get_nested_value(settings, "sp", "x509cert")
+
+    sp_private_key: str | None = None
+    sp_private_key_path = Path(SAML_CONF_DIR) / "certs" / "sp.key"
+    try:
+        sp_private_key = sp_private_key_path.read_text(encoding="utf-8")
+    except OSError:
+        sp_private_key = None
+
+    required_values = (
+        idp_entity_id,
+        idp_sso_url,
+        idp_x509_cert,
+        sp_entity_id,
+    )
+    if not all(isinstance(value, str) and value for value in required_values):
+        logger.info(
+            "Skipping legacy SAML seed because %s is missing required IdP settings",
+            settings_path,
+        )
+        return
+
+    config: dict[str, Any] = {
+        "idp_entity_id": idp_entity_id,
+        "idp_sso_url": idp_sso_url,
+        "idp_x509_cert": idp_x509_cert,
+        "sp_entity_id": sp_entity_id,
+    }
+    if isinstance(sp_x509_cert, str) and sp_x509_cert:
+        config["sp_x509_cert"] = sp_x509_cert
+    if sp_private_key:
+        config["sp_private_key"] = sp_private_key
+
+    try:
+        create_sso_provider(
+            db_session,
+            name="saml",
+            display_name="SAML SSO",
+            provider_type=SSOProviderType.SAML,
+            config=config,
+            allowed_email_domains=[domain.lower() for domain in VALID_EMAIL_DOMAINS],
+        )
+    except IntegrityError:
+        db_session.rollback()
+        logger.debug("Skipping legacy SAML seed because another pod created the row")
+        return

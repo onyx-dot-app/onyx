@@ -1,7 +1,9 @@
-"""Unit coverage for the per-row SAML router: the OneLogin settings built from a
-provider row, fail-closed provider resolution, the per-provider email-domain
+"""Unit coverage for the DB-backed SAML router: the OneLogin settings built from
+a provider row (fixed ACS), fail-closed resolution by name and by issuer, the
+issuer extraction that routes the single callback, the per-provider email-domain
 gate, and email extraction from SAML attributes. No DB or live IdP."""
 
+import base64
 from types import SimpleNamespace
 from typing import Any
 from typing import cast
@@ -27,13 +29,13 @@ _IDP = {
 _DB = cast(Session, object())
 
 
-def test_build_saml_settings_shape() -> None:
+def test_build_saml_settings_fixed_acs() -> None:
     settings = saml_multi.build_saml_settings(
-        {**_IDP, "sp_x509_cert": "SPCERT", "sp_private_key": "SPKEY"}, "jito"
+        {**_IDP, "sp_x509_cert": "SPCERT", "sp_private_key": "SPKEY"}
     )
     assert settings["strict"] is True
     assert settings["sp"]["assertionConsumerService"]["url"].endswith(
-        "/auth/saml/jito/callback"
+        "/auth/saml/callback"
     )
     assert settings["sp"]["entityId"] == _IDP["sp_entity_id"]
     assert settings["sp"]["x509cert"] == "SPCERT"
@@ -44,7 +46,7 @@ def test_build_saml_settings_shape() -> None:
 
 
 def test_build_saml_settings_optional_sp_defaults_empty() -> None:
-    settings = saml_multi.build_saml_settings(_IDP, "jito")
+    settings = saml_multi.build_saml_settings(_IDP)
     assert settings["sp"]["x509cert"] == ""
     assert settings["sp"]["privateKey"] == ""
 
@@ -79,13 +81,13 @@ def test_domain_gate_denies_other_domain() -> None:
         saml_multi._enforce_allowed_email_domain(provider, "user@companyb.com")
 
 
-def test_resolve_fail_closed_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_by_name_fail_closed_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(saml_multi, "fetch_sso_provider_by_name", lambda **_kw: None)
     with pytest.raises(OnyxError):
         saml_multi._resolve_saml_provider(_DB, "missing")
 
 
-def test_resolve_fail_closed_non_saml(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_by_name_fail_closed_non_saml(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = _provider(provider_type=SSOProviderType.OIDC)
     monkeypatch.setattr(
         saml_multi, "fetch_sso_provider_by_name", lambda **_kw: provider
@@ -94,14 +96,64 @@ def test_resolve_fail_closed_non_saml(monkeypatch: pytest.MonkeyPatch) -> None:
         saml_multi._resolve_saml_provider(_DB, "oidc-row")
 
 
-def test_resolve_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_by_name_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = _provider()
     monkeypatch.setattr(
         saml_multi, "fetch_sso_provider_by_name", lambda **_kw: provider
     )
-    resolved, config = saml_multi._resolve_saml_provider(_DB, "jito")
+    resolved, config = saml_multi._resolve_saml_provider(_DB, "saml")
     assert resolved is provider
     assert config == dict(_IDP)
+
+
+def test_resolve_by_issuer_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider = _provider()
+    monkeypatch.setattr(saml_multi, "fetch_sso_providers", lambda **_kw: [provider])
+    resolved, config = saml_multi._resolve_saml_provider_by_issuer(
+        _DB, _IDP["idp_entity_id"]
+    )
+    assert resolved is provider
+    assert config == dict(_IDP)
+
+
+def test_resolve_by_issuer_no_match_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(saml_multi, "fetch_sso_providers", lambda **_kw: [_provider()])
+    with pytest.raises(OnyxError):
+        saml_multi._resolve_saml_provider_by_issuer(_DB, "https://other.example.com")
+
+
+_RESPONSE = (
+    '<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" '
+    'xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">{body}</samlp:Response>'
+)
+
+
+def _encode(xml: str) -> str:
+    return base64.b64encode(xml.encode()).decode()
+
+
+def test_extract_issuer_response_level() -> None:
+    xml = _RESPONSE.format(body="<saml:Issuer>https://idp.example.com/e</saml:Issuer>")
+    assert (
+        saml_multi._extract_issuer_from_saml_response(_encode(xml))
+        == "https://idp.example.com/e"
+    )
+
+
+def test_extract_issuer_assertion_fallback() -> None:
+    xml = _RESPONSE.format(
+        body="<saml:Assertion><saml:Issuer>https://idp.example.com/e"
+        "</saml:Issuer></saml:Assertion>"
+    )
+    assert (
+        saml_multi._extract_issuer_from_saml_response(_encode(xml))
+        == "https://idp.example.com/e"
+    )
+
+
+def test_extract_issuer_malformed_raises() -> None:
+    with pytest.raises(OnyxError):
+        saml_multi._extract_issuer_from_saml_response(_encode("not xml <"))
 
 
 class _FakeAuth:

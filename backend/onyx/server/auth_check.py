@@ -72,15 +72,13 @@ PUBLIC_ENDPOINT_SPECS = [
     # oidc
     ("/auth/oidc/authorize", {"GET"}),
     ("/auth/oidc/callback", {"GET"}),
-    # saml
+    # saml (single router: legacy-compatible + parametric authorize, one
+    # issuer-resolved callback)
     ("/auth/saml/authorize", {"GET"}),
-    ("/auth/saml/callback", {"POST"}),
-    ("/auth/saml/callback", {"GET"}),
-    ("/auth/saml/logout", {"POST"}),
-    # db-backed multi-provider saml (saml_multi router)
     ("/auth/saml/{provider_name}/authorize", {"GET"}),
-    ("/auth/saml/{provider_name}/callback", {"GET"}),
-    ("/auth/saml/{provider_name}/callback", {"POST"}),
+    ("/auth/saml/callback", {"GET"}),
+    ("/auth/saml/callback", {"POST"}),
+    ("/auth/saml/logout", {"POST"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),
     ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator
