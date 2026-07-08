@@ -19,6 +19,70 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: latest
+    created: "2026-07-08T17:44:39.267976253Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.3
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 234ead79b3bb7977908a67352de14fdfa652eef8e25a9d74d983d1fcd59e15bc
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://onyx-dot-app.github.io/onyx/onyx-0.6.10.tgz
+    version: 0.6.10
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: Support clusters running their own cluster-managed CloudNativePG operator.
+            New postgresqlOperator.enabled toggle (mirrors redisOperator.enabled) skips the bundled
+            CNPG operator and its CRDs while keeping the Cluster CR for the external operator to
+            reconcile; the CRDs move byte-for-byte into a condition-gated CRDs-only subchart
+            (onyx-cnpg-crds) with postgresql.installCRDs as an independent override. Default
+            behavior is unchanged; CRDs also no longer install when postgresql.enabled is false.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+    apiVersion: v2
+    appVersion: latest
     created: "2026-07-08T17:26:13.93419066Z"
     dependencies:
     - alias: postgresql
@@ -5002,7 +5066,7 @@ entries:
     version: 0.3.1
   onyx-cnpg-crds:
   - apiVersion: v2
-    created: "2026-07-08T17:26:13.937672964Z"
+    created: "2026-07-08T17:44:39.271679805Z"
     description: 'CloudNativePG CRDs for the Onyx chart, isolated in a CRDs-only subchart
       so they can be toggled via the parent''s postgresql.installCRDs value. Helm
       still gives crds/ its special pre-install treatment (applied before the main
@@ -5010,7 +5074,7 @@ entries:
       validation on a fresh install. Keep crds/cnpg-crds.yaml in byte-for-byte sync
       with the cloudnative-pg subchart pinned in the parent Chart.yaml (verified by
       onyx/scripts/check-cnpg-crds.sh). '
-    digest: a583d41283736fe68a4e35291a4ee4bb6218e7b59a1c276d69e3391fbb224ecc
+    digest: 2dfe752e09bd56f361cfb1e6af655a4c2ee7ccec4d1f9866c80e56a37aa39419
     name: onyx-cnpg-crds
     type: application
     urls:
@@ -5504,4 +5568,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-07-08T17:26:13.90631265Z"
+generated: "2026-07-08T17:44:39.238800078Z"
