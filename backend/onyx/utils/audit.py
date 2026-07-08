@@ -71,6 +71,7 @@ class AuditAction(str, Enum):
     USER_CRAFT_ACCESS_CHANGE = "user.craft_access_change"
 
     # API activity (admin config + resource CRUD)
+    CRAFT_DEFAULT_CHANGE = "settings.craft_default_change"
     LLM_PROVIDER_CREATE = "llm_provider.create"
     LLM_PROVIDER_UPDATE = "llm_provider.update"
     LLM_PROVIDER_DELETE = "llm_provider.delete"
@@ -105,6 +106,7 @@ _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
     AuditAction.USER_ROLE_CHANGE: OCSFEventClass.ACCOUNT_CHANGE,
     AuditAction.USER_GROUP_CHANGE: OCSFEventClass.ACCOUNT_CHANGE,
     AuditAction.USER_CRAFT_ACCESS_CHANGE: OCSFEventClass.ACCOUNT_CHANGE,
+    AuditAction.CRAFT_DEFAULT_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_PROVIDER_CREATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_PROVIDER_UPDATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_PROVIDER_DELETE: OCSFEventClass.API_ACTIVITY,

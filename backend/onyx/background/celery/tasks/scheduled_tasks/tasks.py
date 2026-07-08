@@ -51,11 +51,11 @@ from onyx.db.scheduled_task import find_stuck_runs
 from onyx.db.scheduled_task import has_in_flight_run_for_task
 from onyx.db.scheduled_task import insert_run
 from onyx.db.scheduled_task import mark_run_status
-from onyx.db.users import get_craft_disabled_user_ids
 from onyx.server.features.build.scheduled_tasks.executor import (
     DEFAULT_EXECUTOR_BUDGET_SECONDS,
 )
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
+from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.server.settings.store import load_settings
 
 # --- Tunables -----------------------------------------------------------------
@@ -118,14 +118,18 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
         # if our transaction rolls back for some reason.
         to_enqueue: list[UUID] = []
 
-        # Owners whose Craft access is disabled (per-user override or
-        # workspace default) get a visible SKIPPED row instead of a run;
+        # Owners for whom Craft is off — deployment gate, per-user override,
+        # or workspace default — get a visible SKIPPED row instead of a run;
         # the schedule stays alive and resumes if they are re-enabled.
-        craft_disabled_owner_ids = get_craft_disabled_user_ids(
-            db_session=db_session,
-            user_ids={task.user_id for task in claimed_tasks},
-            default_enabled=load_settings().craft_default_enabled,
-        )
+        craft_default_enabled = load_settings().craft_default_enabled
+        owners_by_id = {task.user_id: task.user for task in claimed_tasks}
+        craft_disabled_owner_ids = {
+            user_id
+            for user_id, owner in owners_by_id.items()
+            if not is_craft_enabled_for_user(
+                owner, workspace_default=craft_default_enabled
+            )
+        }
 
         for task in claimed_tasks:
             try:

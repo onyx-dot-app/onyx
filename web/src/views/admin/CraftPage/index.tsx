@@ -272,7 +272,7 @@ export default function CraftPage() {
                   explicitlyDisabled > 0
                     ? `, except the ${explicitlyDisabled} toggled off below`
                     : ""
-                }. Craft runs code in cloud sandboxes and consumes LLM credits.`
+                }. Craft agents run in sandboxes and can act on your behalf with your authorization and approvals.`
               : `Access is removed for everyone${
                   explicitlyEnabled > 0
                     ? ` except the ${explicitlyEnabled} users toggled on below`
