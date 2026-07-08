@@ -19,7 +19,7 @@ import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/banners/HealthBanner";
 import LicenseExpiryBanner from "@/sections/banners/LicenseExpiryBanner";
-import AuthenticationShell from "@/sections/AuthenticationShell";
+import { AuthenticationShell } from "@/lib/auth/components";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
 

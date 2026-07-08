@@ -7,11 +7,11 @@ import Modal from "@/refresh-components/Modal";
 import { Button, Text } from "@opal/components";
 import { SvgLogOut } from "@opal/icons";
 
-interface AuthenticatorProps {
+interface AuthenticationShellProps {
   children: React.ReactNode;
 }
 
-export default function AuthenticationShell({ children }: AuthenticatorProps) {
+export function AuthenticationShell({ children }: AuthenticationShellProps) {
   const router = useRouter();
   const sessionEnded = useSessionWatcher();
 
