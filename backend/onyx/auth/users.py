@@ -861,6 +861,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         *,
         associate_by_email: bool = False,
         is_verified_by_default: bool = False,
+        allowed_email_domains_override: Sequence[str] | None = None,
     ) -> User:
         referral_source = (
             getattr(request.state, "referral_source", None) if request else None
@@ -886,9 +887,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             verify_email_in_whitelist(account_email, tenant_id)
             oauth_security_settings = get_security_settings()
+            effective_valid_email_domains = (
+                allowed_email_domains_override
+                if allowed_email_domains_override is not None
+                else oauth_security_settings.valid_email_domains
+            )
             verify_email_domain(
                 account_email,
-                valid_email_domains=oauth_security_settings.valid_email_domains,
+                valid_email_domains=effective_valid_email_domains,
             )
 
             # NOTE(rkuo): If this UserManager is instantiated per connection
@@ -937,7 +943,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # per account, so dot-alias abuse isn't possible here.
                     verify_email_domain(
                         account_email,
-                        valid_email_domains=oauth_security_settings.valid_email_domains,
+                        valid_email_domains=effective_valid_email_domains,
                     )
 
                     # Lock + check on the same session that does the insert.
@@ -2261,6 +2267,112 @@ def get_pkce_cookie_name(state: str) -> str:
     return f"{PKCE_COOKIE_NAME_PREFIX}_{state_hash}"
 
 
+async def complete_login_flow(
+    *,
+    oauth_client: BaseOAuth2[Any],
+    token: OAuth2Token,
+    state_data: Dict[str, str],
+    request: Request,
+    user_manager: BaseUserManager[models.UP, models.ID],
+    backend: AuthenticationBackend,
+    strategy: Strategy[models.UP, models.ID],
+    associate_by_email: bool,
+    is_verified_by_default: bool,
+    allowed_email_domains_override: Sequence[str] | None = None,
+) -> RedirectResponse:
+    # A failed or rejected userinfo fetch (bad status, malformed body,
+    # unverified email) must land as a controlled login rejection, not
+    # an unhandled 500. OnyxError has a global handler that GetIdEmailError
+    # does not.
+    try:
+        account_id, account_email = await oauth_client.get_id_email(
+            token["access_token"]
+        )
+    except GetIdEmailError as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Could not retrieve a verified identity from the SSO provider",
+        ) from e
+
+    if account_email is None:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
+        )
+
+    next_url = sanitize_next_url(state_data.get("next_url"))
+    referral_source = state_data.get("referral_source", None)
+    try:
+        tenant_id = fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+        )(account_email)
+    except exceptions.UserNotExists:
+        tenant_id = None
+
+    request.state.referral_source = referral_source
+
+    # Proceed to authenticate or create the user
+    try:
+        user = await user_manager.oauth_callback(  # ty: ignore[invalid-argument-type]
+            oauth_client.name,
+            token["access_token"],
+            account_id,
+            account_email,
+            token.get("expires_at"),
+            token.get("refresh_token"),
+            request,
+            associate_by_email=associate_by_email,
+            is_verified_by_default=is_verified_by_default,
+            allowed_email_domains_override=allowed_email_domains_override,  # ty: ignore[unknown-argument]
+        )
+    except UserAlreadyExists:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            ErrorCode.OAUTH_USER_ALREADY_EXISTS,
+        )
+
+    if not user.is_active:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            ErrorCode.LOGIN_BAD_CREDENTIALS,
+        )
+
+    # Mobile clients get a PKCE one-time code over a deep link, not a web
+    # cookie. Guarded on the signed-state marker, so the web path below is
+    # byte-for-byte unchanged.
+    if is_mobile_sso(state_data):
+        redirect_response = await complete_mobile_sso(user, state_data, strategy)
+        # Fire analytics like the web/bearer-login paths (PostHog identify).
+        # No web response here, so its anon-cookie cleanup no-ops.
+        await user_manager.on_after_login(user, request)
+        return redirect_response
+
+    # Login user
+    response = await backend.login(strategy, user)
+    await user_manager.on_after_login(user, request, response)
+
+    # Prepare redirect response
+    if tenant_id is None:
+        # Use URL utility to add parameters
+        redirect_destination = add_url_params(next_url, {"new_team": "true"})
+        redirect_response = RedirectResponse(redirect_destination, status_code=302)
+    else:
+        # No parameters to add
+        redirect_response = RedirectResponse(next_url, status_code=302)
+
+    # Copy headers from auth response to redirect response, with special handling for Set-Cookie
+    for header_name, header_value in response.headers.items():
+        header_name_lower = header_name.lower()
+        if header_name_lower == "set-cookie":
+            redirect_response.headers.append(header_name, header_value)
+            continue
+        if header_name_lower in {"location", "content-length"}:
+            continue
+        redirect_response.headers[header_name] = header_value
+
+    return redirect_response
+
+
 # refer to https://github.com/fastapi-users/fastapi-users/blob/42ddc241b965475390e2bce887b084152ae1a2cd/fastapi_users/fastapi_users.py#L91
 def create_onyx_oauth_router(
     oauth_client: BaseOAuth2,
@@ -2611,112 +2723,36 @@ def get_oauth_router(
                 )
             state_data = decode_and_validate_state(callback_state)
 
-        async def complete_login_flow(
-            token: OAuth2Token, state_data: Dict[str, str]
-        ) -> RedirectResponse:
-            # A failed or rejected userinfo fetch (bad status, malformed body,
-            # unverified email) must land as a controlled login rejection, not
-            # an unhandled 500. OnyxError has a global handler that GetIdEmailError
-            # does not.
-            try:
-                account_id, account_email = await oauth_client.get_id_email(
-                    token["access_token"]
-                )
-            except GetIdEmailError as e:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    "Could not retrieve a verified identity from the SSO provider",
-                ) from e
-
-            if account_email is None:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
-                )
-
-            next_url = sanitize_next_url(state_data.get("next_url"))
-            referral_source = state_data.get("referral_source", None)
-            try:
-                tenant_id = fetch_ee_implementation_or_noop(
-                    "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
-                )(account_email)
-            except exceptions.UserNotExists:
-                tenant_id = None
-
-            request.state.referral_source = referral_source
-
-            # Proceed to authenticate or create the user
-            try:
-                user = await user_manager.oauth_callback(  # ty: ignore[invalid-argument-type]
-                    oauth_client.name,
-                    token["access_token"],
-                    account_id,
-                    account_email,
-                    token.get("expires_at"),
-                    token.get("refresh_token"),
-                    request,
-                    associate_by_email=associate_by_email,
-                    is_verified_by_default=is_verified_by_default,
-                )
-            except UserAlreadyExists:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    ErrorCode.OAUTH_USER_ALREADY_EXISTS,
-                )
-
-            if not user.is_active:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    ErrorCode.LOGIN_BAD_CREDENTIALS,
-                )
-
-            # Mobile clients get a PKCE one-time code over a deep link, not a web
-            # cookie. Guarded on the signed-state marker, so the web path below is
-            # byte-for-byte unchanged.
-            if is_mobile_sso(state_data):
-                redirect_response = await complete_mobile_sso(
-                    user, state_data, strategy
-                )
-                # Fire analytics like the web/bearer-login paths (PostHog
-                # identify). No web response here, so its anon-cookie cleanup no-ops.
-                await user_manager.on_after_login(user, request)
-                return redirect_response
-
-            # Login user
-            response = await backend.login(strategy, user)
-            await user_manager.on_after_login(user, request, response)
-
-            # Prepare redirect response
-            if tenant_id is None:
-                # Use URL utility to add parameters
-                redirect_destination = add_url_params(next_url, {"new_team": "true"})
-                redirect_response = RedirectResponse(
-                    redirect_destination, status_code=302
-                )
-            else:
-                # No parameters to add
-                redirect_response = RedirectResponse(next_url, status_code=302)
-
-            # Copy headers from auth response to redirect response, with special handling for Set-Cookie
-            for header_name, header_value in response.headers.items():
-                header_name_lower = header_name.lower()
-                if header_name_lower == "set-cookie":
-                    redirect_response.headers.append(header_name, header_value)
-                    continue
-                if header_name_lower in {"location", "content-length"}:
-                    continue
-                redirect_response.headers[header_name] = header_value
-
-            return redirect_response
-
         if enable_pkce:
             try:
-                redirect_response = await complete_login_flow(token, state_data)
+                redirect_response = await complete_login_flow(
+                    oauth_client=oauth_client,
+                    token=token,
+                    state_data=state_data,
+                    request=request,
+                    user_manager=user_manager,
+                    backend=backend,
+                    strategy=strategy,
+                    associate_by_email=associate_by_email,
+                    is_verified_by_default=is_verified_by_default,
+                    allowed_email_domains_override=None,
+                )
             except OnyxError as e:
                 return build_error_response(e)
             delete_pkce_cookie(redirect_response)
             return redirect_response
 
-        return await complete_login_flow(token, state_data)
+        return await complete_login_flow(
+            oauth_client=oauth_client,
+            token=token,
+            state_data=state_data,
+            request=request,
+            user_manager=user_manager,
+            backend=backend,
+            strategy=strategy,
+            associate_by_email=associate_by_email,
+            is_verified_by_default=is_verified_by_default,
+            allowed_email_domains_override=None,
+        )
 
     return router
