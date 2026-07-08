@@ -1191,18 +1191,23 @@ class SessionManager:
     ) -> bool:
         """Check if the NextJS dev server is responding.
 
-        Probes the session's basePath route with a short timeout — the dev
-        server 404s anything outside its configured basePath, so probing bare
-        "/" would render a spurious 404 on every poll. Returns True on any
-        non-5xx response, False on timeout or connection error.
+        Probes a basePath-scoped dev-asset path with a short timeout: probing
+        outside the basePath renders a spurious 404 page on every poll, and
+        probing the app page itself would report not-ready whenever generated
+        app code 500s (the iframe's error overlay is the right surface for
+        that). A missing /_next/static asset returns a plain 404 without
+        executing app code, so any response means the server is up.
         """
         try:
             sandbox_manager = get_sandbox_manager()
             internal_url = sandbox_manager.get_webapp_url(sandbox_id, port)
-            probe_url = f"{internal_url}/api/build/sessions/{session_id}/webapp"
+            probe_url = (
+                f"{internal_url}/api/build/sessions/{session_id}/webapp"
+                "/_next/static/onyx-ready-probe.js"
+            )
             with httpx.Client(timeout=2.0) as client:
-                resp = client.get(probe_url)
-                return resp.status_code < 500
+                client.get(probe_url)
+            return True
         except Exception:
             return False
 

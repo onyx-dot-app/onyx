@@ -49,9 +49,10 @@ def test_start_script_config_rewrite_matches_scaffold_template() -> None:
     assert _TEMPLATE_NEXT_CONFIG.read_text().strip() in script
 
 
-def test_nextjs_ready_probe_targets_session_base_path() -> None:
-    """Probing bare "/" is outside the dev server's basePath and would render
-    a spurious 404 on every poll — the probe must hit the basePath route."""
+def test_nextjs_ready_probe_targets_base_path_dev_asset() -> None:
+    """Probing bare "/" renders a spurious 404 page per poll, and probing the
+    app page reports not-ready when generated app code 500s — the probe must
+    hit a basePath-scoped /_next/static path and accept any response."""
     session_id = UUID("0d9ed7f2-8757-4d09-9812-bd7e4a45e232")
     sandbox_id = UUID("11111111-2222-3333-4444-555555555555")
 
@@ -59,7 +60,7 @@ def test_nextjs_ready_probe_targets_session_base_path() -> None:
     sandbox_manager.get_webapp_url.return_value = "http://sandbox-x:3010"
 
     response = MagicMock()
-    response.status_code = 200
+    response.status_code = 500
     http_client = MagicMock()
     http_client.__enter__.return_value = http_client
     http_client.get.return_value = response
@@ -80,4 +81,5 @@ def test_nextjs_ready_probe_targets_session_base_path() -> None:
     assert ready is True
     http_client.get.assert_called_once_with(
         f"http://sandbox-x:3010/api/build/sessions/{session_id}/webapp"
+        "/_next/static/onyx-ready-probe.js"
     )

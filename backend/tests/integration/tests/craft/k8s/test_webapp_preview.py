@@ -18,10 +18,18 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
 
-pytestmark = pytest.mark.skipif(
-    SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
-    reason="K8s tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
+        reason="K8s tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
+    ),
+    # Preview tests need a dev server; pool sessions are headless by default.
+    pytest.mark.parametrize(
+        "pool_session",
+        [pytest.param({"headless": False}, id="interactive")],
+        indirect=True,
+    ),
+]
 
 _WEBAPP_READY_TIMEOUT_S = 120.0
 _POLL_INTERVAL_S = 2.0
