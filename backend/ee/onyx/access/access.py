@@ -207,7 +207,4 @@ def _get_acl_for_user(user: User, db_session: Session) -> set[str]:
     user_acl = set(prefixed_user_groups + prefixed_external_groups)
     user_acl.update(get_acl_for_user_without_groups(user, db_session))
 
-    # Drive "everyone at <domain>" shares resolve through the synced domain group
-    # in prefixed_external_groups above (real Workspace membership), not from the
-    # user's email string.
     return user_acl

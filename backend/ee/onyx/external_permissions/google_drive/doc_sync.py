@@ -44,6 +44,8 @@ def _domain_group_for_permission(
             "Domain permission without a domain for %s\n %s", entity_desc, permission
         )
         return None
+    if permission.allow_file_discovery is False:
+        return None
     if permission.domain != own_domain:
         # Cross-workspace share (e.g. shared to a partner company's whole domain).
         logger.debug(
@@ -51,8 +53,6 @@ def _domain_group_for_permission(
             entity_desc,
             permission.domain,
         )
-    if permission.allow_file_discovery is False:
-        return None
     return build_domain_group_id(permission.domain)
 
 
