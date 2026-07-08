@@ -157,6 +157,7 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
     queue_mappings = {
         "celery_queue_length": OnyxCeleryQueues.PRIMARY,
         "docprocessing_queue_length": OnyxCeleryQueues.DOCPROCESSING,
+        "port_queue_length": OnyxCeleryQueues.PORT,
         "docfetching_queue_length": OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
         "sync_queue_length": OnyxCeleryQueues.VESPA_METADATA_SYNC,
         "deletion_queue_length": OnyxCeleryQueues.CONNECTOR_DELETION,
@@ -927,6 +928,7 @@ def monitor_celery_queues_helper(
         OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
     )
     n_docprocessing = celery_get_queue_length(OnyxCeleryQueues.DOCPROCESSING, r_celery)
+    n_port = celery_get_queue_length(OnyxCeleryQueues.PORT, r_celery)
 
     n_user_file_processing = celery_get_queue_length(
         OnyxCeleryQueues.USER_FILE_PROCESSING, r_celery
@@ -983,6 +985,7 @@ def monitor_celery_queues_helper(
         f"docfetching_prefetched={len(n_docfetching_prefetched)} "
         f"docprocessing={n_docprocessing} "
         f"docprocessing_prefetched={len(n_docprocessing_prefetched)} "
+        f"port={n_port} "
         f"user_file_processing={n_user_file_processing} "
         f"user_file_project_sync={n_user_file_project_sync} "
         f"user_file_delete={n_user_file_delete} "

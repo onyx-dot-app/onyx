@@ -32,6 +32,11 @@ from celery.backends.database.session import (  # ty: ignore[unresolved-import]
     ResultModelBase,
 )
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+
+# Match the app processes' edition so migrations that use versioned
+# implementations (e.g. encrypt_string_to_bytes) resolve the EE variants.
+set_is_ee_based_on_env_variable()
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)

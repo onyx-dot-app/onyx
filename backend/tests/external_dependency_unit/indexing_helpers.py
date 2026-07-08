@@ -19,8 +19,10 @@ from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import Document
 from onyx.connectors.models import InputType
 from onyx.connectors.models import TextSection
+from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import IndexModelStatus
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
@@ -28,7 +30,12 @@ from onyx.db.models import Credential
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import FileRecord
+from onyx.db.models import IndexAttempt
+from onyx.db.models import SearchSettings
+from onyx.db.search_settings import create_search_settings
+from onyx.db.search_settings import get_current_search_settings
 from onyx.file_store.file_store import get_default_file_store
+from onyx.kg.models import KGStage
 
 
 def make_doc(
@@ -84,8 +91,9 @@ def make_cc_pair(
 ) -> ConnectorCredentialPair:
     """Create a Connector + Credential + ConnectorCredentialPair for a test.
 
-    All names are UUID-suffixed so parallel test runs don't collide. Pass
-    ``commit=False`` to flush only (no commit) for lanes that rely on the
+    All names are UUID-suffixed so parallel test runs don't collide. Pass `source`
+    to build a non-standard pair (e.g. INGESTION_API for push-based-pair tests).
+    Pass ``commit=False`` to flush only (no commit) for lanes that rely on the
     surrounding transaction rollback for cleanup; the default commits +
     refreshes for callers whose work spans separate sessions.
     """
@@ -200,3 +208,95 @@ def cleanup_cc_pair(db_session: Session, pair: ConnectorCredentialPair) -> None:
         synchronize_session="fetch"
     )
     db_session.commit()
+
+
+def make_future_search_settings(
+    db_session: Session,
+    *,
+    status: IndexModelStatus = IndexModelStatus.FUTURE,
+    use_port_flow: bool = False,
+) -> SearchSettings:
+    """An isolated secondary SearchSettings cloned from the live PRESENT row with a
+    unique index_name, so the tenant-global port/count/cursor helpers see only this
+    test's rows. `use_port_flow` is set explicitly (default False) so the fixture
+    never inherits the live PRESENT row's flag; pass `status=PAST` for round-trip
+    tests that must not collide with concurrent FUTUREs.
+    """
+    present = get_current_search_settings(db_session)
+    saved = SavedSearchSettings.from_db_model(present).model_copy(
+        update={"index_name": f"test_future_{uuid4().hex[:8]}"}
+    )
+    return create_search_settings(
+        saved, db_session, status=status, use_port_flow=use_port_flow
+    )
+
+
+def seed_cc_pair_documents(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    count: int,
+    *,
+    prefix: str = "portdoc-",
+    unique: bool = False,
+) -> list[str]:
+    """Create `count` documents linked to the cc_pair; returns their ids, sorted.
+    `unique=True` adds a random suffix so a test seeding a real index across runs
+    never collides."""
+    if unique:
+        doc_ids = sorted(
+            f"{prefix}{i:03d}-{uuid4().hex[:6]}" for i in range(1, count + 1)
+        )
+    else:
+        doc_ids = [f"{prefix}{i:03d}" for i in range(1, count + 1)]
+    for doc_id in doc_ids:
+        db_session.add(
+            DBDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
+        )
+    db_session.flush()
+    for doc_id in doc_ids:
+        db_session.add(
+            DocumentByConnectorCredentialPair(
+                id=doc_id,
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+                has_been_indexed=True,
+            )
+        )
+    db_session.commit()
+    return doc_ids
+
+
+def cleanup_cc_pair_and_future(
+    db_session: Session,
+    pair: ConnectorCredentialPair,
+    future_id: int,
+    *,
+    doc_prefix: str | None = None,
+) -> None:
+    """Teardown for the cc_pair + isolated FUTURE settings fixtures.
+
+    Deleting the FUTURE SearchSettings cascades its PortAttempts (FK
+    ondelete=CASCADE), so they need no explicit delete. `doc_prefix` clears any
+    unlinked test docs that cleanup_cc_pair (which only removes cc_pair-linked
+    docs) won't reach. Rolls back first so a failed test's aborted transaction
+    doesn't block the cleanup queries.
+    """
+    db_session.rollback()
+    if doc_prefix is not None:
+        # Drop link rows first: document_by_connector_credential_pair.id -> document.id
+        # has no ON DELETE cascade, so a linked prefixed doc can't be deleted while
+        # its join row survives.
+        db_session.query(DocumentByConnectorCredentialPair).filter(
+            DocumentByConnectorCredentialPair.id.like(f"{doc_prefix}%")
+        ).delete(synchronize_session="fetch")
+        db_session.query(DBDocument).filter(
+            DBDocument.id.like(f"{doc_prefix}%")
+        ).delete(synchronize_session="fetch")
+    db_session.query(IndexAttempt).filter(
+        IndexAttempt.connector_credential_pair_id == pair.id
+    ).delete(synchronize_session="fetch")
+    db_session.query(SearchSettings).filter(SearchSettings.id == future_id).delete(
+        synchronize_session="fetch"
+    )
+    db_session.commit()
+    cleanup_cc_pair(db_session, pair)

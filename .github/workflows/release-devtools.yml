@@ -5,6 +5,9 @@ on:
     tags:
       - "ods/v*.*.*"
 
+permissions:
+  contents: read
+
 jobs:
   pypi:
     runs-on: ubuntu-latest
@@ -14,15 +17,6 @@ jobs:
       contents: read # needed to checkout the repo on private repos (no-op on public)
       id-token: write
     timeout-minutes: 10
-    strategy:
-      matrix:
-        os-arch:
-          - { goos: "linux", goarch: "amd64" }
-          - { goos: "linux", goarch: "arm64" }
-          - { goos: "windows", goarch: "amd64" }
-          - { goos: "windows", goarch: "arm64" }
-          - { goos: "darwin", goarch: "amd64" }
-          - { goos: "darwin", goarch: "arm64" }
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
@@ -31,10 +25,170 @@ jobs:
         with:
           enable-cache: false
           version: "0.11.25"
+      # Build every platform wheel first, then publish once. Publishing per
+      # platform would leave a partial release on PyPI if a later platform
+      # failed; building all up front keeps the release atomic. Remove the
+      # cached Go binary before each build so the build hook recompiles for the
+      # target platform instead of reusing the previous platform's binary.
       - run: |
-          GOOS="${{ matrix.os-arch.goos }}" \
-          GOARCH="${{ matrix.os-arch.goarch }}" \
-          uv build --wheel
+          for goos in linux windows darwin; do
+            for goarch in amd64 arm64; do
+              rm -f ods
+              GOOS="$goos" GOARCH="$goarch" uv build --wheel
+            done
+          done
         working-directory: tools/ods
+      - name: Upload built wheels
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: onyx-devtools-wheels
+          path: tools/ods/dist/*.whl
+          if-no-files-found: error
+          retention-days: 7
       - run: uv publish
         working-directory: tools/ods
+
+  open-devtools-upgrade-pr:
+    needs:
+      - pypi
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYPROJECT_FILE: pyproject.toml
+      DEV_REQUIREMENTS_FILE: backend/requirements/dev.txt
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: ${{ vars.CHERRY_PICK_APP_ID }}
+          private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: true
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: false
+          version: "0.11.25"
+
+      - name: Configure git identity as App
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          bot_user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${bot_user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+      - name: Open onyx-devtools version upgrade PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG_NAME: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          new_version="${TAG_NAME#ods/v}"
+          if ! printf '%s' "${new_version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Could not derive a semver version from tag '${TAG_NAME}'."
+            exit 1
+          fi
+
+          sed -i -E \
+            "s|(onyx-devtools==)[0-9]+\.[0-9]+\.[0-9]+|\1${new_version}|" \
+            "${PYPROJECT_FILE}"
+
+          if git diff --quiet -- "${PYPROJECT_FILE}"; then
+            echo "onyx-devtools already pinned to ${new_version}. Nothing to do."
+            exit 0
+          fi
+
+          # Regenerate the lockfile so pyproject.toml and uv.lock stay consistent.
+          # Retry to tolerate PyPI index propagation lag right after publish.
+          for attempt in 1 2 3 4 5; do
+            if uv lock --refresh-package onyx-devtools; then
+              break
+            fi
+            if [ "${attempt}" = 5 ]; then
+              echo "::error::uv lock failed after ${attempt} attempts (new version may not be on PyPI yet)."
+              exit 1
+            fi
+            echo "uv lock attempt ${attempt} failed; retrying in 15s..."
+            sleep 15
+          done
+
+          # Re-export the pinned dev requirements consumed by the Python CI
+          # workflows so they don't install a stale onyx-devtools version.
+          uv export --no-emit-project --no-default-groups --group dev \
+            -o "${DEV_REQUIREMENTS_FILE}"
+
+          branch="devtools-upgrade/${new_version}"
+
+          existing_pr="$(gh pr list --state open --head "${branch}" --json number --jq '.[0].number')"
+          if [ -n "${existing_pr}" ]; then
+            echo "Upgrade PR already open (#${existing_pr}) for branch ${branch}. Nothing to do."
+            exit 0
+          fi
+
+          git switch -c "${branch}"
+          git add "${PYPROJECT_FILE}" uv.lock "${DEV_REQUIREMENTS_FILE}"
+          git commit -m "chore(dev): upgrade onyx-devtools to ${new_version}"
+          git push --force origin "${branch}"
+
+          body="$(cat <<EOF
+          Automated upgrade of \`onyx-devtools\` to \`${new_version}\`, published by [this release run](${RUN_URL}).
+
+          Regenerated \`uv.lock\` and \`backend/requirements/dev.txt\` to match the new pin.
+
+          Generated by the Release Devtools workflow.
+          EOF
+          )"
+
+          gh pr create \
+            --base main \
+            --head "${branch}" \
+            --title "chore(dev): upgrade onyx-devtools to ${new_version}" \
+            --body "${body}"
+
+  notify-slack-on-failure:
+    needs:
+      - pypi
+      - open-devtools-upgrade-pr
+    if: >-
+      always() && (
+        needs.pypi.result == 'failure'
+        || needs.open-devtools-upgrade-pr.result == 'failure'
+      )
+    runs-on: ubuntu-latest
+    environment: ci-protected
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/slack-notify
+
+      - name: Build failure summary
+        id: summary
+        env:
+          PYPI_RESULT: ${{ needs.pypi.result }}
+          UPGRADE_PR_RESULT: ${{ needs.open-devtools-upgrade-pr.result }}
+        run: |
+          details="*One or more Release Devtools jobs failed:*"
+          if [ "${PYPI_RESULT}" = "failure" ]; then details="${details}\\n• pypi (build & publish wheels)"; fi
+          if [ "${UPGRADE_PR_RESULT}" = "failure" ]; then details="${details}\\n• open-devtools-upgrade-pr (open version upgrade PR)"; fi
+          echo "details=${details}" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Slack about release failure
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          title: "🚨 Devtools Release Failed"
+          details: ${{ steps.summary.outputs.details }}

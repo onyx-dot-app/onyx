@@ -117,6 +117,38 @@ def test_get_session_404_for_other_users_session(
     assert response.status_code == 404
 
 
+def test_get_sandbox_status_returns_status_fields(
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+) -> None:
+    body = BuildSessionManager.create(admin_user)
+    session_id = body.id
+
+    response = client.get(
+        f"{API_SERVER_URL}/build/sessions/{session_id}/sandbox-status",
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "status" in payload
+    assert payload["status"] is not None
+
+
+def test_get_sandbox_status_404_for_other_users_session(
+    shared_session: SharedSession,
+) -> None:
+    _owner, session_id = shared_session
+
+    other_user = UserManager.create(name=f"other-{uuid4().hex[:8]}")
+    response = client.get(
+        f"{API_SERVER_URL}/build/sessions/{session_id}/sandbox-status",
+        headers=other_user.headers,
+        cookies=other_user.cookies,
+    )
+    assert response.status_code == 404
+
+
 def test_list_sessions_only_returns_callers_interactive_sessions(
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001

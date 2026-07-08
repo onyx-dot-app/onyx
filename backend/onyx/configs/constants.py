@@ -117,10 +117,6 @@ KV_PENDING_USERS_KEY = "PENDING_USERS"
 KV_ANONYMOUS_USER_PREFERENCES_KEY = "anonymous_user_preferences"
 KV_ANONYMOUS_USER_PERSONALIZATION_KEY = "anonymous_user_personalization"
 KV_CRED_KEY = "credential_id_{}"
-KV_GMAIL_CRED_KEY = "gmail_app_credential"
-KV_GMAIL_SERVICE_ACCOUNT_KEY = "gmail_service_account_key"
-KV_GOOGLE_DRIVE_CRED_KEY = "google_drive_app_credential"
-KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY = "google_drive_service_account_key"
 KV_GEN_AI_KEY_CHECK_TIME = "genai_api_key_last_check_time"
 KV_SETTINGS_KEY = "onyx_settings"
 KV_CUSTOMER_UUID_KEY = "customer_uuid"
@@ -196,6 +192,11 @@ CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT = 5 * 60  # 5 minutes (in seconds)
 # Mirrors the processing task expiry to prevent indefinite queue growth when
 # files are stuck in DELETING status and the beat keeps re-enqueuing them.
 CELERY_USER_FILE_DELETE_TASK_EXPIRES = 60  # 1 minute (in seconds)
+
+# Per-doc metadata-sync task expiry: bounds queue growth if consumers stall. An
+# expired task's doc stays needs_sync / secondary_only_sync_pending and is
+# re-enqueued on the next vespa-sync beat pass, so dropping it is safe.
+CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
@@ -443,6 +444,10 @@ class OnyxCeleryQueues:
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
 
+    # Reindex port queue (heavy PRESENT -> FUTURE re-embed; kept off the
+    # docprocessing queue so a migration doesn't starve live indexing)
+    PORT = "port"
+
     # Monitoring queue
     MONITORING = "monitoring"
 
@@ -462,6 +467,7 @@ class OnyxRedisLocks:
     CHECK_PRUNE_BEAT_LOCK = "da_lock:check_prune_beat"
     CHECK_HIERARCHY_FETCHING_BEAT_LOCK = "da_lock:check_hierarchy_fetching_beat"
     CHECK_INDEXING_BEAT_LOCK = "da_lock:check_indexing_beat"
+    CHECK_PORT_BEAT_LOCK = "da_lock:check_port_beat"
     CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK = "da_lock:check_checkpoint_cleanup_beat"
     CHECK_INDEX_ATTEMPT_CLEANUP_BEAT_LOCK = "da_lock:check_index_attempt_cleanup_beat"
     CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = (
@@ -588,6 +594,10 @@ class OnyxCeleryTask:
 
     # Targeted reindex
     TARGETED_REINDEX_TASK = "targeted_reindex_task"
+
+    # Reindex port (PRESENT -> FUTURE chunk copy)
+    RUN_PORT_ATTEMPT = "run_port_attempt"
+    CHECK_FOR_PORT = "check_for_port"
 
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"

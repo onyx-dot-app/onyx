@@ -884,9 +884,14 @@ def project_sync_user_file_impl(
 
             if not skip_vespa:
                 active_search_settings = get_active_search_settings(db_session)
+                # User files are only ever written to the primary index (initial
+                # indexing passes no secondary, and the port flow never copies them).
+                # Targeting the secondary here would raise
+                # SecondaryIndexDocumentMissingError during a reindex and leave
+                # needs_project_sync stuck, retrying for the whole reindex window.
                 document_indices = get_all_document_indices(
                     search_settings=active_search_settings.primary,
-                    secondary_search_settings=active_search_settings.secondary,
+                    secondary_search_settings=None,
                     httpx_client=HttpxPool.get("vespa"),
                 )
                 retry_document_indices = [

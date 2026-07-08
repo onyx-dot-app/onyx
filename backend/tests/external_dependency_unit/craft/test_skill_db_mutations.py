@@ -10,10 +10,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill__User
 from onyx.db.models import Skill__UserGroup
-from onyx.db.skill import patch_skill
-from onyx.db.skill import replace_skill_grants
 from onyx.db.skill import replace_skill_shares
-from onyx.db.skill import SkillPatch
 from onyx.db.skill import transfer_skill_ownership
 from onyx.db.skill import update_skill_fields
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -69,21 +66,21 @@ def test_update_skill_fields_supports_permission_and_enabled_updates(
     assert skill.enabled is False
 
 
-def test_patch_skill_preserves_unset_fields(db_session: Session) -> None:
+def test_update_skill_fields_preserves_omitted_fields(db_session: Session) -> None:
     skill = make_skill(db_session, is_public=True, enabled=True)
 
-    updated = patch_skill(
-        skill_id=skill.id,
-        patch=SkillPatch(enabled=False),
+    updated = update_skill_fields(
+        skill=skill,
+        enabled=False,
         db_session=db_session,
     )
 
     assert updated.enabled is False
     assert updated.public_permission == SkillSharePermission.VIEWER
 
-    updated = patch_skill(
-        skill_id=skill.id,
-        patch=SkillPatch(is_public=False),
+    updated = update_skill_fields(
+        skill=skill,
+        is_public=False,
         db_session=db_session,
     )
 
@@ -148,35 +145,36 @@ def test_replace_skill_shares_leaves_omitted_share_types_unchanged(
     }
 
 
-def test_replace_skill_grants_deduplicates_group_ids_as_viewer(
-    db_session: Session,
-) -> None:
-    first_group = make_group(db_session)
-    second_group = make_group(db_session)
-    skill = make_skill(db_session)
-
-    replace_skill_grants(
-        skill.id,
-        [first_group.id, first_group.id, second_group.id],
-        db_session,
-    )
-
-    assert _group_share_permissions(db_session, skill.id) == {
-        first_group.id: SkillSharePermission.VIEWER,
-        second_group.id: SkillSharePermission.VIEWER,
-    }
-
-
-def test_replace_skill_grants_preserves_invalid_group_message(
+def test_replace_skill_shares_names_invalid_group_target(
     db_session: Session,
 ) -> None:
     skill = make_skill(db_session)
 
     with pytest.raises(OnyxError) as exc_info:
-        replace_skill_grants(skill.id, [-1], db_session)
+        replace_skill_shares(
+            skill=skill,
+            group_shares={-1: SkillSharePermission.VIEWER},
+            db_session=db_session,
+        )
 
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
-    assert exc_info.value.detail == "One or more group IDs do not exist."
+    assert exc_info.value.detail == "One or more group share targets do not exist."
+
+
+def test_replace_skill_shares_names_invalid_user_target(
+    db_session: Session,
+) -> None:
+    skill = make_skill(db_session)
+
+    with pytest.raises(OnyxError) as exc_info:
+        replace_skill_shares(
+            skill=skill,
+            user_shares={uuid4(): SkillSharePermission.VIEWER},
+            db_session=db_session,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert exc_info.value.detail == "One or more user share targets do not exist."
 
 
 def test_transfer_skill_ownership_removes_new_owner_direct_share_and_upgrades_previous_owner(
