@@ -106,11 +106,13 @@ export default function MultiModelPanel({
         rightChildren={
           readOnly ? (
             isPreferred ? (
-              <span className="text-action-link-05 shrink-0 px-2">
-                <Text font="secondary-body" color="inherit" nowrap>
-                  Preferred Response
-                </Text>
-              </span>
+              <div className="flex items-center px-2">
+                <span className="text-action-link-05 shrink-0">
+                  <Text font="secondary-body" color="inherit" nowrap>
+                    Preferred Response
+                  </Text>
+                </span>
+              </div>
             ) : undefined
           ) : (
             <div className="flex items-center gap-1 px-2">

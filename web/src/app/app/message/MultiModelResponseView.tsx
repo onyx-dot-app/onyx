@@ -29,9 +29,9 @@ export interface MultiModelResponseViewProps {
   /** Called whenever the set of hidden panel indices changes */
   onHiddenPanelsChange?: (hidden: Set<number>) => void;
   /**
-   * Read-only mode for the shared view: same layout as live (a preferred
-   * response centers with the others peeking), but select/hide interactions are
-   * disabled and nothing persists. Mirrors the author's model comparison.
+   * Read-only mode for the shared view: every response stays equal-width and
+   * fully visible (no selection carousel), select/hide interactions are
+   * disabled, and nothing persists. The preferred response is still marked.
    */
   readOnly?: boolean;
 }
@@ -393,6 +393,7 @@ export default function MultiModelResponseView({
   );
 
   const isActivelySelected =
+    !readOnly &&
     preferredIndex !== null &&
     preferredIdx !== -1 &&
     !isGenerating &&
@@ -404,9 +405,10 @@ export default function MultiModelResponseView({
 
   // Use the selection layout once a preferred response has been chosen, even
   // after deselect. Only fall through to generation layout before the first
-  // selection or during active streaming. The read-only (shared) view uses the
-  // same layout so a shared preferred response is centered like the author saw.
-  const showSelectionMode = isActivelySelected || hasEnteredSelection;
+  // selection or during active streaming. The read-only (shared) view stays in
+  // generation layout so every response is shown equal-width.
+  const showSelectionMode =
+    !readOnly && (isActivelySelected || hasEnteredSelection);
 
   // Trigger the slide-out animation one frame after a preferred panel is selected.
   // Uses isActivelySelected (not showSelectionMode) so re-selecting after a
