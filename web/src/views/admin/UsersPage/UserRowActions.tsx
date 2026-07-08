@@ -20,7 +20,7 @@ import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@/hooks/useToast";
 import { useSettings } from "@/lib/settings/hooks";
-import { approveRequest, setUserCraftEnabled } from "./svc";
+import { approveRequest, setUsersCraftAccess } from "./svc";
 import EditUserModal from "./EditUserModal";
 import {
   CancelInviteModal,
@@ -66,21 +66,16 @@ export default function UserRowActions({
     setModal(type);
   };
 
-  // null (placeholder rows) is treated as enabled; the toggle only renders
-  // for real users anyway.
-  const craftCurrentlyEnabled = user.craft_enabled !== false;
+  const craftDefaultEnabled = settings?.craft_default_enabled !== false;
+  const craftEffectivelyEnabled = user.craft_enabled ?? craftDefaultEnabled;
 
-  const toggleCraftAccess = () => {
+  const applyCraftAccess = (craftEnabled: boolean | null, message: string) => {
     setPopoverOpen(false);
     void (async () => {
       try {
-        await setUserCraftEnabled(user.email, !craftCurrentlyEnabled);
+        await setUsersCraftAccess([user.email], craftEnabled);
         onMutate();
-        toast.success(
-          craftCurrentlyEnabled
-            ? "Craft disabled for user"
-            : "Craft enabled for user"
-        );
+        toast.success(message);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "An error occurred");
       }
@@ -91,9 +86,31 @@ export default function UserRowActions({
   // too. Hidden when Craft isn't available for the deployment.
   const craftToggleItem =
     settings?.onyx_craft_available === true && user.id ? (
-      <LineItem icon={SvgDevKit} onClick={toggleCraftAccess}>
-        {craftCurrentlyEnabled ? "Disable Craft" : "Enable Craft"}
-      </LineItem>
+      <>
+        <LineItem
+          icon={SvgDevKit}
+          onClick={() =>
+            applyCraftAccess(
+              !craftEffectivelyEnabled,
+              craftEffectivelyEnabled
+                ? "Craft disabled for user"
+                : "Craft enabled for user"
+            )
+          }
+        >
+          {craftEffectivelyEnabled ? "Disable Craft" : "Enable Craft"}
+        </LineItem>
+        {user.craft_enabled !== null && (
+          <LineItem
+            icon={SvgDevKit}
+            onClick={() =>
+              applyCraftAccess(null, "Craft access reset to workspace default")
+            }
+          >
+            Use Craft Default
+          </LineItem>
+        )}
+      </>
     ) : null;
 
   const closeModal = () => setModal(null);

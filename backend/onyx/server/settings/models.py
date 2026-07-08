@@ -86,6 +86,10 @@ class Settings(BaseModel):
     # Default Assistant settings
     disable_default_assistant: bool | None = False
 
+    # Workspace default for Craft access; per-user User.craft_enabled
+    # overrides win. The deployment-level Craft gate still applies on top.
+    craft_default_enabled: bool = True
+
     # Seat usage - populated by license enforcement when seat limit is exceeded
     seat_count: int | None = None
     used_seats: int | None = None

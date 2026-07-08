@@ -17,9 +17,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # NULL = follow the workspace default.
     op.add_column(
         "user",
-        sa.Column("craft_enabled", sa.Boolean(), nullable=False, server_default="true"),
+        sa.Column("craft_enabled", sa.Boolean(), nullable=True),
     )
 
 

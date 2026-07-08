@@ -13,6 +13,7 @@ from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.server.features.build.configs import ENABLE_CRAFT
 from onyx.server.features.build.configs import MAX_UPLOAD_FILE_SIZE_BYTES
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -147,25 +148,32 @@ def is_craft_available_for_deployment(user: User) -> bool:
 
 
 def is_craft_enabled_for_user(
-    user: User, deployment_available: bool | None = None
+    user: User,
+    deployment_available: bool | None = None,
+    workspace_default: bool | None = None,
 ) -> bool:
     """
     Check if Onyx Craft (Build Mode) is enabled for the user: the deployment
-    must have Craft available AND the user must not have been disabled by an
-    admin (User.craft_enabled).
+    must have Craft available AND the workspace policy must grant it — the
+    per-user override (User.craft_enabled) when set, else the workspace
+    default (Settings.craft_default_enabled).
 
-    Pass ``deployment_available`` when the deployment gate has already been
-    evaluated, to avoid a second flag-provider call.
+    Pass ``deployment_available`` / ``workspace_default`` when already
+    evaluated, to avoid redundant flag-provider / KV-store reads.
     """
     # Craft is identity-bound (per-user sandbox, library, scheduled tasks);
     # all anonymous visitors share one identity, so they never get it.
     if user.account_type == AccountType.ANONYMOUS:
         return False
 
-    # Only an explicit admin disable blocks access — transient User objects
-    # (e.g. the no-auth placeholder) carry craft_enabled=None.
-    if user.craft_enabled is False:
+    override = user.craft_enabled
+    if override is False:
         return False
+    if override is None:
+        if workspace_default is None:
+            workspace_default = load_settings().craft_default_enabled
+        if not workspace_default:
+            return False
 
     if deployment_available is None:
         deployment_available = is_craft_available_for_deployment(user)

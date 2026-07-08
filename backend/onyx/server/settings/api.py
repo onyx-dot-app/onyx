@@ -128,10 +128,14 @@ def fetch_settings(
     general_settings = apply_fn(general_settings)
 
     # Check if Onyx Craft is enabled for this user (used for server-side
-    # redirects). The deployment gate is evaluated once and shared.
+    # redirects). The deployment gate and already-loaded settings are shared.
     onyx_craft_available = is_craft_available_for_deployment(user) if user else False
     onyx_craft_enabled_for_user = (
-        is_craft_enabled_for_user(user, deployment_available=onyx_craft_available)
+        is_craft_enabled_for_user(
+            user,
+            deployment_available=onyx_craft_available,
+            workspace_default=general_settings.craft_default_enabled,
+        )
         if user
         else False
     )

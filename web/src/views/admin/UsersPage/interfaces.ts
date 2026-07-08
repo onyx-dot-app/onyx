@@ -18,7 +18,8 @@ export interface FullUserSnapshot {
   updated_at: string;
   groups: UserGroupInfo[];
   is_scim_synced: boolean;
-  craft_enabled: boolean;
+  /** Per-user Craft override; null = follow the workspace default. */
+  craft_enabled: boolean | null;
 }
 
 export interface UserRow {
@@ -28,7 +29,8 @@ export interface UserRow {
   status: UserStatus;
   is_active: boolean;
   is_scim_synced: boolean;
-  /** null for rows that aren't real users yet (invited/requested, API keys). */
+  /** Per-user Craft override; null = follow the workspace default (also
+   * null for rows that aren't real users: invited/requested, API keys). */
   craft_enabled: boolean | null;
   personal_name: string | null;
   created_at: string | null;

@@ -59,9 +59,12 @@ export interface Settings {
   // Onyx Craft (Build Mode) feature flag
   onyx_craft_enabled?: boolean;
 
-  // Deployment-level Craft availability, ignoring the per-user admin toggle.
-  // Gates visibility of the admin per-user Craft controls.
+  // Deployment-level Craft availability, ignoring workspace/per-user policy.
+  // Gates visibility of the admin Craft-access controls.
   onyx_craft_available?: boolean;
+
+  // Workspace default for Craft access; per-user overrides win.
+  craft_default_enabled?: boolean;
 
   // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
   // button that streams the user's sandbox pod logs in real time. Backed

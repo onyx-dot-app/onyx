@@ -56,6 +56,7 @@ from onyx.server.features.build.scheduled_tasks.executor import (
     DEFAULT_EXECUTOR_BUDGET_SECONDS,
 )
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
+from onyx.server.settings.store import load_settings
 
 # --- Tunables -----------------------------------------------------------------
 
@@ -117,12 +118,13 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
         # if our transaction rolls back for some reason.
         to_enqueue: list[UUID] = []
 
-        # Owners whose Craft access an admin has disabled get a visible
-        # SKIPPED row instead of a run; the schedule stays alive and
-        # resumes if they are re-enabled.
+        # Owners whose Craft access is disabled (per-user override or
+        # workspace default) get a visible SKIPPED row instead of a run;
+        # the schedule stays alive and resumes if they are re-enabled.
         craft_disabled_owner_ids = get_craft_disabled_user_ids(
             db_session=db_session,
             user_ids={task.user_id for task in claimed_tasks},
+            default_enabled=load_settings().craft_default_enabled,
         )
 
         for task in claimed_tasks:

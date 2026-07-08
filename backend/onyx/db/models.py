@@ -328,10 +328,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         default=AccountType.STANDARD,
         server_default="STANDARD",
     )
-    # Admin-controlled per-user Craft access; ANDed with the deployment-level
+    # Admin-controlled per-user Craft override: None = follow the workspace
+    # default (Settings.craft_default_enabled). ANDed with the deployment-level
     # Craft gate (PostHog flag / ENABLE_CRAFT).
-    craft_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default="true"
+    craft_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
     )
 
     """

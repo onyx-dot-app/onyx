@@ -67,7 +67,6 @@ from onyx.db.user_preferences import update_assistant_preferences
 from onyx.db.user_preferences import update_user_assistant_visibility
 from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_chat_background
-from onyx.db.user_preferences import update_user_craft_enabled
 from onyx.db.user_preferences import update_user_default_app_mode
 from onyx.db.user_preferences import update_user_default_model
 from onyx.db.user_preferences import update_user_language
@@ -78,6 +77,7 @@ from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
 from onyx.db.user_preferences import update_user_temperature_override_enabled
 from onyx.db.user_preferences import update_user_theme_preference
+from onyx.db.user_preferences import update_users_craft_enabled
 from onyx.db.users import batch_get_user_groups
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_accepted_users
@@ -205,17 +205,22 @@ def set_user_craft_access(
     ),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_to_update = get_user_by_email(
-        email=craft_access_update_request.user_email, db_session=db_session
-    )
-    if not user_to_update:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+    users_to_update: list[User] = []
+    missing_emails: list[str] = []
+    for email in craft_access_update_request.user_emails:
+        target = get_user_by_email(email=email, db_session=db_session)
+        if target:
+            users_to_update.append(target)
+        else:
+            missing_emails.append(email)
+    if missing_emails:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Users not found: {', '.join(missing_emails)}",
+        )
 
-    if user_to_update.craft_enabled == craft_access_update_request.craft_enabled:
-        return
-
-    update_user_craft_enabled(
-        user_id=user_to_update.id,
+    update_users_craft_enabled(
+        user_ids=[target.id for target in users_to_update],
         craft_enabled=craft_access_update_request.craft_enabled,
         db_session=db_session,
     )
@@ -225,9 +230,8 @@ def set_user_craft_access(
         AuditOutcome.SUCCESS,
         actor=actor_from_user(current_user),
         resource_type="user",
-        resource_id=str(user_to_update.id),
         extra={
-            "target_email": user_to_update.email,
+            "target_emails": [target.email for target in users_to_update],
             "craft_enabled": craft_access_update_request.craft_enabled,
         },
     )

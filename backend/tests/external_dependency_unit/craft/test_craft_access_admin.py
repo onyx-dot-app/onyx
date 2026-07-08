@@ -29,61 +29,75 @@ def _enable_craft_deployment(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_admin_toggle_disables_and_reenables_craft(
+def test_admin_batch_disable_and_reset_to_default(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_craft_deployment(monkeypatch)
     admin = make_user(db_session, role=UserRole.ADMIN, email_prefix="craft_admin")
-    target = make_user(db_session, role=UserRole.BASIC, email_prefix="craft_target")
+    target_a = make_user(db_session, role=UserRole.BASIC, email_prefix="craft_a")
+    target_b = make_user(db_session, role=UserRole.BASIC, email_prefix="craft_b")
 
-    assert target.craft_enabled is True
-    assert is_craft_enabled_for_user(target) is True
+    # No override: everyone follows the workspace default (True out of the box).
+    assert target_a.craft_enabled is None
+    assert is_craft_enabled_for_user(target_a) is True
 
+    # Batch-disable both users with one call.
     set_user_craft_access(
         craft_access_update_request=UserCraftAccessUpdateRequest(
-            user_email=target.email, craft_enabled=False
+            user_emails=[target_a.email, target_b.email], craft_enabled=False
         ),
         current_user=admin,
         db_session=db_session,
     )
-    db_session.refresh(target)
-    assert target.craft_enabled is False
-    assert is_craft_enabled_for_user(target) is False
+    db_session.refresh(target_a)
+    db_session.refresh(target_b)
+    assert target_a.craft_enabled is False
+    assert target_b.craft_enabled is False
+    assert is_craft_enabled_for_user(target_a) is False
     # The /build router dependency now rejects the user.
     with pytest.raises(OnyxError) as exc_info:
-        require_onyx_craft_enabled(user=target)
+        require_onyx_craft_enabled(user=target_a)
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     assert exc_info.value.status_code == 403
     # The admin's own access is unaffected.
     assert is_craft_enabled_for_user(admin) is True
 
+    # Clearing the override (None) returns both to the workspace default.
     set_user_craft_access(
         craft_access_update_request=UserCraftAccessUpdateRequest(
-            user_email=target.email, craft_enabled=True
+            user_emails=[target_a.email, target_b.email], craft_enabled=None
         ),
         current_user=admin,
         db_session=db_session,
     )
-    db_session.refresh(target)
-    assert target.craft_enabled is True
-    assert is_craft_enabled_for_user(target) is True
-    assert require_onyx_craft_enabled(user=target) is target
+    db_session.refresh(target_a)
+    db_session.refresh(target_b)
+    assert target_a.craft_enabled is None
+    assert target_b.craft_enabled is None
+    assert is_craft_enabled_for_user(target_a) is True
+    assert require_onyx_craft_enabled(user=target_a) is target_a
 
 
-def test_unknown_user_raises_not_found(
+def test_unknown_user_rejects_whole_batch(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     admin = make_user(db_session, role=UserRole.ADMIN, email_prefix="craft_admin")
+    target = make_user(db_session, role=UserRole.BASIC, email_prefix="craft_known")
 
     with pytest.raises(OnyxError) as exc_info:
         set_user_craft_access(
             craft_access_update_request=UserCraftAccessUpdateRequest(
-                user_email="craft_missing_user@example.com", craft_enabled=False
+                user_emails=[target.email, "craft_missing_user@example.com"],
+                craft_enabled=False,
             ),
             current_user=admin,
             db_session=db_session,
         )
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
+
+    # The valid user in the batch was not modified.
+    db_session.refresh(target)
+    assert target.craft_enabled is None

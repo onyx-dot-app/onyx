@@ -49,7 +49,8 @@ class FullUserSnapshot(BaseModel):
     updated_at: datetime.datetime
     groups: list[UserGroupInfo]
     is_scim_synced: bool
-    craft_enabled: bool
+    # Per-user Craft override; None = follow the workspace default.
+    craft_enabled: bool | None
 
     @classmethod
     def from_user_model(

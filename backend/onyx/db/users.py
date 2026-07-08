@@ -137,14 +137,21 @@ def validate_user_role_update(
 def get_craft_disabled_user_ids(
     db_session: Session,
     user_ids: set[UUID],
+    default_enabled: bool,
 ) -> set[UUID]:
-    """Subset of ``user_ids`` whose Craft access an admin has disabled."""
+    """Subset of ``user_ids`` for whom Craft is disabled: an explicit
+    override of False, or no override while the workspace default is off."""
     if not user_ids:
         return set()
+    disabled_condition = (
+        User.craft_enabled.is_(False)
+        if default_enabled
+        else User.craft_enabled.is_not(True)
+    )
     rows = db_session.scalars(
         select(User.id).where(  # ty: ignore[no-matching-overload]
             User.id.in_(user_ids),  # ty: ignore[unresolved-attribute]
-            User.craft_enabled.is_(False),
+            disabled_condition,
         )
     ).all()
     return set(rows)
