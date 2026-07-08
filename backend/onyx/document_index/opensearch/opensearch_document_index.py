@@ -603,7 +603,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     update_request.persona_ids
                 )
             if update_request.created_at is not None:
-                # Stored as epoch seconds (see the schema's datetime serializer).
+                # Stored as epoch seconds
                 properties_to_update[CREATED_AT_FIELD_NAME] = int(
                     set_or_convert_timezone_to_utc(
                         update_request.created_at
@@ -665,7 +665,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                     document_chunk_ids=doc_chunk_ids_to_update,
                     properties_to_update=properties_to_update,
                     # Normal metadata sync tolerates benign 404s (indexing race);
-                    # a port surfaces them instead so deferred-sync can retry.
+                    # a port or opt-in surfaces them so deferred-sync can retry.
                     ignore_missing=not surface_document_missing,
                     surface_document_missing=surface_document_missing,
                 )
@@ -1019,12 +1019,15 @@ class OpenSearchIndexPair(DocumentIndex):
             total += self._secondary.delete(document_id, chunk_count)
         return total
 
-    def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
-        if self._primary_backfill_in_progress:
-            # A doc the port hasn't copied into this now-live primary yet is silently
-            # missing; surface it (typed signal, like secondary) so the caller defers
-            # instead of clearing needs_sync and letting the create-only port reinstall
-            # a stale, possibly-revoked ACL nothing would correct.
+    def update(
+        self,
+        update_requests: list[MetadataUpdateRequest],
+        surface_document_missing: bool = False,
+    ) -> None:
+        # Surface primary misses so the caller defers rather than clearing
+        # needs_sync and letting the create-only port reinstall a stale ACL.
+        # Triggered by a live backfill port (uncopied docs) or an explicit opt-in.
+        if self._primary_backfill_in_progress or surface_document_missing:
             try:
                 self._primary.update(update_requests, surface_document_missing=True)
             except OpenSearchDocumentMissingError as e:

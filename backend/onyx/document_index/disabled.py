@@ -55,6 +55,7 @@ class DisabledDocumentIndex(DocumentIndex):
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],  # noqa: ARG002
+        surface_document_missing: bool = False,  # noqa: ARG002
     ) -> None:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
 

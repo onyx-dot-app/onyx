@@ -153,6 +153,7 @@ class MetadataUpdateRequest(BaseModel):
     persona_ids: set[int] | None = None
     # Source creation time. Patched onto existing chunks without re-embedding when
     # a connector supplies a creation time for an already-indexed document.
+    # TODO: Can be removed after some time - used for backfill sync
     created_at: datetime | None = None
 
 
@@ -310,6 +311,7 @@ class Updatable(abc.ABC):
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
+        surface_document_missing: bool = False,
     ) -> None:
         """Updates some set of chunks.
 
@@ -321,6 +323,9 @@ class Updatable(abc.ABC):
             update_requests: A list of update requests, each containing a list
                 of document IDs and the fields to update. The field updates
                 apply to all of the specified documents in each update request.
+            surface_document_missing: When True, backends that can detect it
+                raise instead of silently ignoring chunks absent from the index,
+                letting the caller defer and retry. Others ignore it.
         """
         raise NotImplementedError
 

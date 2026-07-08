@@ -1038,8 +1038,7 @@ class Document(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    # Source creation time. Used to detect when a newly-supplied creation time
-    # must be propagated to the index. Null for docs indexed before this column.
+    # Source creation time. Null for docs indexed before this column.
     doc_created_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

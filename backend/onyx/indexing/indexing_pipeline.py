@@ -431,13 +431,14 @@ def sync_doc_created_at(
                 or db_doc.doc_created_at == doc.doc_created_at
             ):
                 continue
-            # A chunk count < 0 means the index update will skip the doc (its
-            # chunks aren't known yet); the normal index path will set created_at.
-            chunk_cnt = db_doc.chunk_count if db_doc.chunk_count is not None else -1
+            # Unknown chunk count makes the index update a no-op; defer instead of
+            # persisting a created_at the index never received.
+            if db_doc.chunk_count is None:
+                continue
             update_requests.append(
                 MetadataUpdateRequest(
                     document_ids=[doc.id],
-                    doc_id_to_chunk_cnt={doc.id: chunk_cnt},
+                    doc_id_to_chunk_cnt={doc.id: db_doc.chunk_count},
                     created_at=doc.doc_created_at,
                 )
             )
@@ -448,7 +449,8 @@ def sync_doc_created_at(
 
         try:
             for document_index in document_indices:
-                document_index.update(update_requests)
+                # Surface missing chunks so an absent doc defers instead of persisting.
+                document_index.update(update_requests, surface_document_missing=True)
         except (SecondaryIndexDocumentMissingError, OpenSearchDocumentMissingError):
             # Best-effort: a doc missing from an index (e.g. mid reindex port) will
             # get its created_at on the next sync. Never fail indexing over this.
