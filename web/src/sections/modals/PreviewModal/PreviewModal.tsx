@@ -97,7 +97,10 @@ export default function PreviewModal({
         presentingDocument.semantic_identifier,
         resolvedMime
       );
-      if (resolved.needsTextContent) {
+      if (resolved.needsParsedContent) {
+        const parsedResponse = await fetchChatFile(fileIdLocal, true);
+        setFileContent(await parsedResponse.text());
+      } else if (resolved.needsTextContent) {
         setFileContent(await blob.text());
       }
     } catch {

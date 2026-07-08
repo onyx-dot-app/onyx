@@ -6,6 +6,9 @@ import { ChatFileType, FileDescriptor } from "@/app/app/interfaces";
 import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import CsvContent from "@/components/tools/CSVContent";
+import SpreadsheetContent, {
+  isSpreadsheetFileName,
+} from "@/components/tools/SpreadsheetContent";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
@@ -42,9 +45,6 @@ export default function FileDisplay({ files }: FileDisplayProps) {
       file.type === ChatFileType.DOCUMENT
   );
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  // TODO(danelegend): XLSX files are binary (OOXML) and will fail to parse in CsvContent.
-  // The backend should convert XLSX to CSV text before serving via /api/chat/file,
-  // or XLSX should be split into a separate ChatFileType and rendered as an Attachment.
   const tabularFiles = files.filter(
     (file) => file.type === ChatFileType.TABULAR
   );
@@ -91,7 +91,13 @@ export default function FileDisplay({ files }: FileDisplayProps) {
                 key={file.id}
                 fileDescriptor={file}
                 close={() => setClose(false)}
-                ContentComponent={CsvContent}
+                // XLSX is binary (OOXML zip) — render it via the backend-parsed
+                // spreadsheet preview instead of decoding raw bytes as CSV text.
+                ContentComponent={
+                  isSpreadsheetFileName(file.name)
+                    ? SpreadsheetContent
+                    : CsvContent
+                }
               />
             ) : (
               <Attachment
