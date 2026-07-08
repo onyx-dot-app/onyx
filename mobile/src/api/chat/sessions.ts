@@ -4,14 +4,12 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/api/client";
 import { QUERY_KEYS } from "@/api/query-keys";
 import { useSession } from "@/state/session";
+import { DEFAULT_AGENT_ID } from "@/chat/agents";
 import { BackendChatSession } from "@/chat/interfaces";
 
-// default agent; selection lands in PR 5
-const DEFAULT_PERSONA_ID = 0;
-
-// Pre-creates a session so the first message can send with a real chat_session_id.
+// Pre-creates a session so the first message sends with a real chat_session_id.
 export async function createChatSession(
-  personaId: number = DEFAULT_PERSONA_ID,
+  personaId: number = DEFAULT_AGENT_ID,
   projectId: number | null = null,
 ): Promise<string> {
   const { chat_session_id } = await apiFetch<{ chat_session_id: string }>(
@@ -35,6 +33,14 @@ export async function getChatSession(
 export async function stopChatSession(sessionId: string): Promise<void> {
   await apiFetch<void>(`/chat/stop-chat-session/${sessionId}`, {
     method: "POST",
+  });
+}
+
+// `name: null` makes the backend LLM-generate a title from the session's history.
+export async function renameChatSession(sessionId: string): Promise<void> {
+  await apiFetch<{ new_name: string | null }>("/chat/rename-chat-session", {
+    method: "PUT",
+    body: { chat_session_id: sessionId, name: null },
   });
 }
 
@@ -85,9 +91,8 @@ export function useChatSessions() {
     getNextPageParam: (lastPage) => {
       if (!lastPage.has_more || lastPage.sessions.length === 0)
         return undefined;
-      // `before` is exclusive (backend: time_updated < before); a same-microsecond
-      // tie straddling a page boundary can drop a session. Matches web's cursor; a
-      // real fix needs a backend (time_updated, id) compound cursor — deferred to PR 4.
+      // `before` is exclusive, so a same-timestamp tie across a page boundary can drop a session.
+      // Matches web; the compound-cursor fix stays out of scope to keep the port backend-free.
       return lastPage.sessions[lastPage.sessions.length - 1]!.time_updated;
     },
   });

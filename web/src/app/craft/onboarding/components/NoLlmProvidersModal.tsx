@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Text } from "@opal/components";
 import { SvgLock, SvgArrowRight } from "@opal/icons";
-import { logout } from "@/lib/user";
+import { logout } from "@/lib/users/svc";
 import { cn } from "@opal/utils";
 
 interface NoLlmProvidersModalProps {

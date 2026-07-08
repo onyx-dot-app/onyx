@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { User } from "@/lib/types";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
-import { AuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import { AuthType } from "@/lib/constants";
 
 const REFRESH_INTERVAL = 600000;

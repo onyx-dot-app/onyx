@@ -16,6 +16,7 @@ Inherits **all** props from [`Content`](../content/README.md) (same discriminate
 |---|---|---|---|
 | `rightChildren` | `ReactNode` | `undefined` | Content rendered on the right side. Wrapper stretches to the full height of the row. |
 | `padding` | `SizeVariant` | `"lg"` | Padding preset applied around the `Content` area. Uses the shared size scale from `@opal/shared`. |
+| `fillRight` | `boolean` | `false` | When `true`, the `rightChildren` column grows to fill the row (capped at `--block-width-form-input-column-max`, 240px) instead of hugging its content. Use for full-width form inputs; leave off for compact controls like toggles/buttons. Ignored in the `responsive` branch. |
 
 ### `padding` reference
 
@@ -39,6 +40,10 @@ These values are identical to the padding applied by `Interactive.Container` at 
 - The outer wrapper is `flex flex-row items-stretch w-full`.
 - `Content` sits inside a `flex-1 min-w-0` div with padding from `padding`.
 - `rightChildren` is wrapped in `flex items-stretch shrink-0` so it stretches vertically.
+- With `fillRight`, the `rightChildren` wrapper instead becomes `flex-1 min-w-0` with a
+  `max-width: var(--block-width-form-input-column-max)` (240px) cap, so the input grows to fill
+  the row up to the Figma input-column width. The child input keeps its own `w-full` +
+  `min-width` floor.
 
 ## Usage Examples
 
@@ -84,6 +89,25 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
   }
 />
 ```
+
+### Full-width form input (`fillRight`)
+
+```tsx
+import { ContentAction } from "@opal/layouts";
+import { InputSelect } from "@/refresh-components/inputs/InputSelect";
+
+<ContentAction
+  title="Query History Visibility"
+  description="Control what is shown in query history"
+  sizePreset="main-ui"
+  variant="section"
+  fillRight
+  rightChildren={<InputSelect ... />}
+/>
+```
+
+The select grows to fill the row (up to 240px) instead of sitting at its content width. Compact
+controls like `Switch`/`Button` should omit `fillRight` so they keep hugging the right edge.
 
 ### No right children (padding-only wrapper)
 

@@ -24,22 +24,25 @@ spec:
       {{- include "onyx.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: sandbox-proxy
   policyTypes: [Egress]
-  # IPv4 and IPv6 are kept in SEPARATE egress rules on purpose. AWS VPC CNI fails the
-  # whole policy closed (drops ALL egress) when both an IPv4 and an IPv6 ipBlock share a
-  # single `to:` peer list; splitting them into distinct rules programs correctly.
-  # Verified on the craft-dev EKS cluster (VPC CNI enforcing).
+  # The IPv6 rule is opt-in (sandboxProxy.egressAllowIPv6) and OFF by default. Even as a
+  # separate egress rule, the AWS VPC CNI network-policy agent intermittently fails to
+  # program an IPv6 ipBlock into the egress eBPF map (EINVAL), which leaves the map empty
+  # and FAIL-CLOSED — new sandbox-proxy pods crash-loop unable to reach the api-server.
+  # Single-stack IPv4 clusters (the common case) have no IPv6 egress to gate anyway.
+  # Dual-stack clusters must enable it: once an Egress policy selects the pod, unmatched
+  # IPv6 is denied, so an IPv4-only allow silently drops all IPv6 egress there.
   egress:
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
             except:
               - 169.254.0.0/16 # link-local incl. cloud metadata (IMDS) — SSRF block
-    # IPv6: once an Egress policy selects the pod, unmatched IPv6 is denied, so an
-    # IPv4-only allow would silently drop all IPv6 egress on dual-stack clusters.
+    {{- if .Values.sandboxProxy.egressAllowIPv6 }}
     - to:
         - ipBlock:
             cidr: ::/0
             except:
               - fe80::/10         # link-local
               - fd00:ec2::254/128 # IPv6 cloud metadata (IMDS) — SSRF block
+    {{- end }}
 {{- end }}

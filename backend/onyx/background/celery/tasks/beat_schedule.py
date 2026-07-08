@@ -74,6 +74,18 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-port",
+        "task": OnyxCeleryTask.CHECK_FOR_PORT,
+        "schedule": timedelta(seconds=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Intentionally gated (skip_gated defaults True): don't run the port's
+            # expensive re-embed for non-paying tenants; it pauses and self-heals on un-gate.
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-checkpoint-cleanup",
         "task": OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
         "schedule": timedelta(hours=1),
@@ -282,6 +294,7 @@ if (
 # Beat task names that require a vector DB. Filtered out when DISABLE_VECTOR_DB.
 _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "check-for-indexing",
+    "check-for-port",
     "check-for-connector-deletion",
     "check-for-vespa-sync",
     "check-for-pruning",

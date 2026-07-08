@@ -194,6 +194,16 @@ export interface ParsedConnectAppRequest {
   reason: string | null;
 }
 
+export interface ParsedContextUsage {
+  type: "context_usage";
+  usedTokens: number;
+}
+
+export interface ParsedCompaction {
+  type: "compaction";
+  summary: string | null;
+}
+
 export interface ParsedUnknown {
   type: "unknown";
 }
@@ -208,5 +218,7 @@ export type ParsedPacket =
   | ParsedApprovalRequested
   | ParsedSubagentStarted
   | ParsedConnectAppRequest
+  | ParsedContextUsage
+  | ParsedCompaction
   | ParsedError
   | ParsedUnknown;

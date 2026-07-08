@@ -10,7 +10,7 @@ import {
   builtinFixture,
   customFixture,
 } from "@/lib/skills/__fixtures__/picker";
-import type { SkillsList } from "@/views/admin/SkillsPage/interfaces";
+import type { SkillsList } from "@/lib/skills/types";
 
 describe("detectSlashTrigger", () => {
   it("returns null when no slash present", () => {

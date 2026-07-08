@@ -1054,3 +1054,31 @@ def test_get_docs_to_update_mixed_batch() -> None:
     assert docs[0].id == "changed"
     assert "changed" in hashes
     assert "unchanged" not in hashes
+
+
+def test_get_docs_to_update_secondary_build_ignores_content_hash_gate() -> None:
+    """FUTURE/secondary build (ignore_content_hash_gate=True) must NOT hash-skip.
+
+    content_hash is a single column shared by both indices but tracks only the
+    PRESENT/live index. A matching hash means PRESENT already has the doc — it
+    says nothing about the FUTURE index being built. Honoring the gate here is
+    the #11159 regression: the secondary write gets suppressed and FUTURE never
+    receives the doc (swap deadlock / stale promotion). The gate must be bypassed.
+    """
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = None
+    stored_hash = doc.content_hash()  # PRESENT already indexed this exact content
+    db_doc = _make_db_doc("doc1", content_hash=stored_hash)
+
+    # Default (PRESENT write): hash matches → skipped, as before.
+    present_docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+    assert present_docs == []
+
+    # Secondary/FUTURE write: gate bypassed → doc still indexed into FUTURE.
+    future_docs, future_hashes = get_docs_to_update(
+        [doc], db_docs=[db_doc], ignore_content_hash_gate=True
+    )
+    assert len(future_docs) == 1
+    assert future_docs[0].id == "doc1"
+    assert "doc1" in future_hashes

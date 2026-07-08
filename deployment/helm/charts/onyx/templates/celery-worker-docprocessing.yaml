@@ -76,7 +76,7 @@ spec:
               {{- end }}
               "--hostname=docprocessing@%n",
               "-Q",
-              "docprocessing",
+              "docprocessing,port",
             ]
           ports:
             - name: metrics

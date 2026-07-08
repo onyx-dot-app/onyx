@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "@/hooks/useToast";
-import { basicLogin, basicSignup } from "@/lib/user";
+import { basicLogin, basicSignup } from "@/lib/users/svc";
 import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";

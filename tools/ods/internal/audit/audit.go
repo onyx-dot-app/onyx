@@ -33,6 +33,7 @@ const (
 	SourceOSV        = "osv-scanner"
 	SourceDependabot = "dependabot"
 	SourceImage      = "osv-scanner-image"
+	SourceActions    = "github-actions"
 )
 
 // rank gives an orderable weight to a severity; higher is more severe.
@@ -112,10 +113,15 @@ type Options struct {
 	Web        bool
 	Python     bool
 	Dependabot bool
-	Format     string // text|json|sarif
+	Actions    bool
+	Format     string // comma-separated list of text|json|sarif
 	FailOn     Severity
 	IgnoreURL  string
-	Writer     io.Writer
+	// Stdout receives the machine-readable formats (json, sarif), or the text
+	// report when it is the only format requested. Stderr receives the text
+	// report when it is combined with a machine format. See renderReport.
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // Result is the outcome of an audit run.
@@ -126,13 +132,20 @@ type Result struct {
 }
 
 // Run executes the selected audit backends, applies the allowlist, renders a
-// report to opts.Writer, and returns the result. With no selector flags set,
-// all backends are run.
+// report to opts.Stdout/opts.Stderr, and returns the result. With no selector
+// flags set, all backends are run.
 func Run(opts Options) (*Result, error) {
-	runAll := !opts.Web && !opts.Python && !opts.Dependabot
+	runAll := !opts.Web && !opts.Python && !opts.Dependabot && !opts.Actions
 	scanWeb := runAll || opts.Web
 	scanPython := runAll || opts.Python
 	scanDependabot := runAll || opts.Dependabot
+	scanActionsSrc := runAll || opts.Actions
+
+	// A lockfile scan (web/python) is the primary deploy gate. While one is
+	// running, a flaky Dependabot/Actions backend is downgraded to a warning;
+	// otherwise a failure of an explicitly requested backend is fatal, so the
+	// audit can't report success without having actually checked anything.
+	lockfileGate := scanWeb || scanPython
 
 	var findings []Finding
 
@@ -151,13 +164,22 @@ func Run(opts Options) (*Result, error) {
 	if scanDependabot {
 		fs, err := auditDependabot()
 		if err != nil {
-			// When Dependabot is the only requested source, surface the error.
-			// Otherwise the lockfile scan is the primary gate, so warn and
-			// continue rather than fail the whole audit on an API hiccup.
-			if opts.Dependabot && !opts.Web && !opts.Python {
+			if !lockfileGate {
 				return nil, fmt.Errorf("dependabot audit failed: %w", err)
 			}
 			log.Warnf("Dependabot audit skipped: %v", err)
+		} else {
+			findings = append(findings, fs...)
+		}
+	}
+
+	if scanActionsSrc {
+		fs, err := scanActions()
+		if err != nil {
+			if !lockfileGate {
+				return nil, fmt.Errorf("github actions audit failed: %w", err)
+			}
+			log.Warnf("GitHub Actions audit skipped: %v", err)
 		} else {
 			findings = append(findings, fs...)
 		}
@@ -170,7 +192,7 @@ func Run(opts Options) (*Result, error) {
 		}
 	}
 
-	ignores, err := fetchIgnores(opts.IgnoreURL)
+	ignores, err := FetchIgnores(opts.IgnoreURL)
 	if err != nil {
 		// Err toward blocking: proceed with an empty allowlist so unignored
 		// criticals still fail the gate rather than slipping through.
@@ -190,7 +212,7 @@ func Run(opts Options) (*Result, error) {
 		Blocking: blockingFindings(kept, opts.FailOn),
 	}
 
-	if err := render(opts.Writer, opts.Format, result); err != nil {
+	if err := renderReport(opts.Stdout, opts.Stderr, opts.Format, result); err != nil {
 		return nil, err
 	}
 	return result, nil

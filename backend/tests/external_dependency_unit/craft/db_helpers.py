@@ -131,6 +131,7 @@ def make_skill(
     is_public: bool = False,
     public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
     enabled: bool = True,
+    author_user_id: UUID | None = None,
 ) -> Skill:
     """Create a single custom ``Skill`` row.
 
@@ -147,6 +148,7 @@ def make_skill(
         bundle_sha256="0" * 64,
         public_permission=public_permission if is_public else None,
         enabled=enabled,
+        author_user_id=author_user_id,
     )
     db_session.add(skill)
     db_session.flush()
@@ -297,16 +299,6 @@ def share_skill_with_group(
     db_session.add(share)
     db_session.flush()
     return share
-
-
-def grant_skill_to_group(
-    db_session: Session,
-    skill: Skill,
-    group: UserGroup,
-    permission: SkillSharePermission = SkillSharePermission.VIEWER,
-) -> Skill__UserGroup:
-    """Backward-compatible alias for group skill shares."""
-    return share_skill_with_group(db_session, skill, group, permission)
 
 
 def make_cc_pair(
