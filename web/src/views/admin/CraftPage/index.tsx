@@ -182,11 +182,7 @@ export default function CraftPage() {
             <InputHorizontal
               title="Enable Craft by default"
               tag={{ title: "beta", color: "blue" }}
-              description={
-                defaultEnabled
-                  ? "Craft is on for all users. Toggle individual users off below."
-                  : "Craft is off for everyone. Toggle individual users on below — ideal while piloting the beta."
-              }
+              description={`Craft is ${defaultEnabled ? "on" : "off"} for everyone. Toggle individual users below.`}
               withLabel
             >
               <Switch
