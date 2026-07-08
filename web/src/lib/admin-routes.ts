@@ -9,6 +9,7 @@ import {
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
+  SvgDevKit,
   SvgDownload,
   SvgEmpty,
   SvgFileText,
@@ -154,6 +155,12 @@ export const ADMIN_ROUTES = {
     icon: SvgTerminal,
     title: "Code Interpreter",
     sidebarLabel: "Code Interpreter",
+  },
+  CRAFT: {
+    path: "/admin/configuration/craft",
+    icon: SvgDevKit,
+    title: "Craft",
+    sidebarLabel: "Craft",
   },
   INDEX_SETTINGS: {
     path: "/admin/configuration/index-settings",

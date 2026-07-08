@@ -328,6 +328,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         default=AccountType.STANDARD,
         server_default="STANDARD",
     )
+    # Admin-controlled per-user Craft override: None = follow the workspace
+    # default (Settings.craft_default_enabled). ANDed with the deployment-level
+    # Craft gate (PostHog flag / ENABLE_CRAFT).
+    craft_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
 
     """
     Preferences probably should be in a separate table at some point, but for now

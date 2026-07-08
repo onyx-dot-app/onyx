@@ -215,6 +215,13 @@ class UserRoleUpdateRequest(BaseModel):
     explicit_override: bool = False
 
 
+class UserCraftAccessUpdateRequest(BaseModel):
+    user_emails: list[str] = Field(min_length=1)
+    # True/False = explicit override; None = clear the override (follow the
+    # workspace default).
+    craft_enabled: bool | None
+
+
 class UserRoleResponse(BaseModel):
     role: str
 
