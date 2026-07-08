@@ -80,7 +80,7 @@ def _seed_from_env(table: sa.Table) -> None:
     # the login `name` matches the oauth_name existing linked accounts carry so
     # linkage survives the routing cutover.
     if AUTH_TYPE == AuthType.GOOGLE_OAUTH:
-        provider_type, name = "GOOGLE", "google"
+        provider_type, name = "GOOGLE_OAUTH", "google"
         display_name, config_url = "Continue with Google", None
     elif AUTH_TYPE == AuthType.OIDC:
         if not OPENID_CONFIG_URL:

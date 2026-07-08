@@ -46,7 +46,7 @@ class SAMLProviderConfig(_ProviderConfig):
 
 # provider_type selects the config shape. A new auth method adds a model here.
 _CONFIG_MODEL_BY_TYPE: dict[SSOProviderType, type[_ProviderConfig]] = {
-    SSOProviderType.GOOGLE: GoogleProviderConfig,
+    SSOProviderType.GOOGLE_OAUTH: GoogleProviderConfig,
     SSOProviderType.OIDC: OIDCProviderConfig,
     SSOProviderType.SAML: SAMLProviderConfig,
 }

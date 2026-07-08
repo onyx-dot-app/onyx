@@ -45,7 +45,7 @@ def _create(db_session: Session, name: str, **overrides: object) -> SSOProvider:
     kwargs: dict = dict(
         name=name,
         display_name="Company A",
-        provider_type=SSOProviderType.GOOGLE,
+        provider_type=SSOProviderType.GOOGLE_OAUTH,
         config=dict(_GOOGLE_CONFIG),
         allowed_email_domains=["CompanyA.com ", "companya.com"],
     )
@@ -73,7 +73,7 @@ def test_invalid_name_rejected(db_session: Session) -> None:
             db_session,
             name="Not A Slug!",
             display_name="X",
-            provider_type=SSOProviderType.GOOGLE,
+            provider_type=SSOProviderType.GOOGLE_OAUTH,
             config=dict(_GOOGLE_CONFIG),
             allowed_email_domains=[],
         )
@@ -99,7 +99,7 @@ def test_google_rejects_unknown_config_key(
         _create(
             db_session,
             provider_name,
-            provider_type=SSOProviderType.GOOGLE,
+            provider_type=SSOProviderType.GOOGLE_OAUTH,
             config=dict(_OIDC_CONFIG),  # openid_config_url not allowed for GOOGLE
         )
 
