@@ -219,7 +219,8 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             if doc.doc_updated_at is not None:
                 ids_to_new_updated_at[doc.id] = doc.doc_updated_at
             # doc_created_at is written to the index on this path; persist it so the
-            # created-at scan on later syncs recognizes it as already propagated.
+            # DB reflects that this doc's creation time is collected (the backfill
+            # sweep keys off doc_created_at IS NULL).
             if doc.doc_created_at is not None:
                 ids_to_new_created_at[doc.id] = doc.doc_created_at
 

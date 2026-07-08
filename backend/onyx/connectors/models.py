@@ -466,6 +466,9 @@ class SlimDocument(BaseModel):
     id: str
     external_access: ExternalAccess | None = None
     parent_hierarchy_raw_node_id: str | None = None
+    # UTC time the document was created at the source. Carried on slim extraction
+    # so pruning/permission-sync can backfill it without re-indexing content.
+    doc_created_at: datetime | None = None
 
 
 class HierarchyNode(BaseModel):

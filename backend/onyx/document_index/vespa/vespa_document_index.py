@@ -804,7 +804,6 @@ class VespaDocumentIndex(DocumentIndex):
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
-        surface_document_missing: bool = False,  # noqa: ARG002
     ) -> None:
         # WARNING: This method can be called by document_index_metadata_sync_task,
         # which is kicked off by check_for_vespa_sync_task, notably before a document
@@ -1287,11 +1286,7 @@ class VespaIndexPair(DocumentIndex):
             total += self._secondary.delete(document_id, chunk_count)
         return total
 
-    def update(
-        self,
-        update_requests: list[MetadataUpdateRequest],
-        surface_document_missing: bool = False,  # noqa: ARG002
-    ) -> None:
+    def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
         self._primary.update(update_requests)
         if self._secondary is not None:
             self._secondary.update(update_requests)
