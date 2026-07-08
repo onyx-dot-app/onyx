@@ -104,9 +104,8 @@ export default function PreviewModal({
 
       const response = await fetchChatFile(fileIdLocal);
 
-      const blob = await response.blob();
-      updateFileUrl(window.URL.createObjectURL(blob));
-
+      // Re-resolve using the stored MIME from the response headers, which is
+      // authoritative, BEFORE materializing the body as a blob.
       const rawContentType =
         response.headers.get("Content-Type") || "application/octet-stream";
       const resolvedMime =
@@ -120,11 +119,20 @@ export default function PreviewModal({
         resolvedMime
       );
       if (resolved.needsParsedContent) {
-        // Name alone didn't identify the file, but the stored MIME did
-        // (e.g. an xlsx with a renamed/missing display name).
+        // Name alone didn't identify a spreadsheet, but the stored MIME did
+        // (e.g. an xlsx with a renamed/missing display name). Discard the raw
+        // workbook body and render from the parsed payload instead.
+        await response.body?.cancel();
+        updateFileUrl(rawFileUrl);
         const parsedResponse = await fetchChatFile(fileIdLocal, true);
         setFileContent(await parsedResponse.text());
-      } else if (resolved.needsTextContent) {
+        return;
+      }
+
+      const blob = await response.blob();
+      updateFileUrl(window.URL.createObjectURL(blob));
+
+      if (resolved.needsTextContent) {
         setFileContent(await blob.text());
       }
     } catch (error) {

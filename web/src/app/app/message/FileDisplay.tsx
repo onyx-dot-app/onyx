@@ -5,10 +5,7 @@ import { cn } from "@opal/utils";
 import { ChatFileType, FileDescriptor } from "@/app/app/interfaces";
 import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
-import CsvContent from "@/components/tools/CSVContent";
-import SpreadsheetContent, {
-  isCsvFileName,
-} from "@/components/tools/SpreadsheetContent";
+import SpreadsheetContent from "@/components/tools/SpreadsheetContent";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import ExpandableContentWrapper from "@/components/tools/ExpandableContentWrapper";
@@ -91,14 +88,12 @@ export default function FileDisplay({ files }: FileDisplayProps) {
                 key={file.id}
                 fileDescriptor={file}
                 close={() => setClose(false)}
-                // Only files clearly named as CSVs keep the raw CsvContent
-                // path. Everything else TABULAR (xlsx — a binary OOXML zip —
-                // or files with missing/renamed names) goes through the
-                // parsed preview, which handles both spreadsheet JSON and
-                // raw CSV passthrough based on the response content type.
-                ContentComponent={
-                  isCsvFileName(file.name) ? CsvContent : SpreadsheetContent
-                }
+                // All TABULAR files render via the parsed preview, which
+                // dispatches on the response content type: spreadsheet JSON
+                // (xlsx is a binary OOXML zip the browser can't decode as
+                // text) or raw CSV passthrough. Display names are never
+                // trusted — a renamed xlsx/csv still renders correctly.
+                ContentComponent={SpreadsheetContent}
               />
             ) : (
               <Attachment

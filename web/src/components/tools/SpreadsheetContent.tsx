@@ -42,11 +42,6 @@ export function isSpreadsheetFileName(
   return SPREADSHEET_EXTENSIONS.some((ext) => lowered.endsWith(ext));
 }
 
-export function isCsvFileName(fileName: string | null | undefined): boolean {
-  if (!fileName) return false;
-  return fileName.toLowerCase().endsWith(".csv");
-}
-
 export function parseSpreadsheetPreview(
   jsonText: string
 ): SpreadsheetPreviewData | null {
