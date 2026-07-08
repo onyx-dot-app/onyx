@@ -158,6 +158,27 @@ export default function CraftPage() {
     />
   );
 
+  // useSettings returns a default object while loading (and on error), which
+  // lacks onyx_craft_available — don't misreport Craft as unavailable.
+  if (settings.isLoading || settings.error) {
+    return (
+      <SettingsLayouts.Root>
+        {header}
+        <SettingsLayouts.Body>
+          {settings.error ? (
+            <Text as="p" secondaryBody text03>
+              Failed to load settings. Please try refreshing the page.
+            </Text>
+          ) : (
+            <div className="flex justify-center py-12">
+              <SvgSimpleLoader className="h-6 w-6" />
+            </div>
+          )}
+        </SettingsLayouts.Body>
+      </SettingsLayouts.Root>
+    );
+  }
+
   if (!craftAvailable) {
     return (
       <SettingsLayouts.Root>
