@@ -17,7 +17,7 @@ import (
 )
 
 // searchOutputResult is the per-document JSON shape `onyx-cli search` prints
-// (without --raw). One ``content`` field per result, no Onyx-internal jargon.
+// (without --raw). One `content` field per result, no Onyx-internal jargon.
 type searchOutputResult struct {
 	Title      string  `json:"title"`
 	URL        *string `json:"url"`
@@ -28,7 +28,21 @@ type searchOutputResult struct {
 
 // searchOutput is the top-level wrapper for `onyx-cli search` default stdout.
 type searchOutput struct {
-	Results []searchOutputResult `json:"results"`
+	Results    []searchOutputResult `json:"results"`
+	Truncation *searchTruncation    `json:"truncation,omitempty"`
+}
+
+// searchTruncation is attached to searchOutput when results were dropped or
+// trimmed to keep stdout under the output limit. The full pretty-printed
+// response is saved to FullResponsePath.
+type searchTruncation struct {
+	Truncated        bool   `json:"truncated"`
+	TotalResults     int    `json:"total_results"`
+	ShownResults     int    `json:"shown_results"`
+	TotalBytes       int    `json:"total_bytes"`
+	ContentTruncated bool   `json:"content_truncated"`
+	FullResponsePath string `json:"full_response_path"`
+	Hint             string `json:"hint"`
 }
 
 // maxSearchDays caps --days at ~100 years. The cap mostly exists to keep
@@ -51,6 +65,124 @@ func toSearchOutput(resp models.SearchResponse) searchOutput {
 		})
 	}
 	return out
+}
+
+// writeSearchJSON prints the search output as pretty JSON. When the payload
+// exceeds truncateAt bytes (> 0), the full response is saved to a temp file
+// and a smaller — but always valid — JSON envelope with truncation metadata
+// is printed instead. Human-oriented notes go to stderr only.
+func writeSearchJSON(ios *iostreams.IOStreams, output searchOutput, truncateAt int) error {
+	data, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal response: %w", err)
+	}
+
+	if truncateAt <= 0 || len(data) <= truncateAt {
+		fmt.Fprintln(ios.Out, string(data))
+		return nil
+	}
+
+	fullPath, err := overflow.SaveFull("onyx-search-*.json", string(data))
+	if err != nil {
+		fmt.Fprintf(ios.ErrOut, "warning: could not save full response: %v\n", err)
+		fullPath = ""
+	}
+	envelope, err := buildTruncatedSearchOutput(output, truncateAt, len(data), fullPath)
+	if err != nil {
+		return fmt.Errorf("failed to marshal response: %w", err)
+	}
+	fmt.Fprintln(ios.Out, string(envelope))
+
+	note := fmt.Sprintf("response truncated (%d bytes total)", len(data))
+	if fullPath != "" {
+		note += "; full response: " + fullPath
+	}
+	fmt.Fprintln(ios.ErrOut, note)
+	return nil
+}
+
+// buildTruncatedSearchOutput marshals a valid-JSON envelope that fits under
+// limit by dropping whole results (relevance-ordered, so a prefix is kept).
+// If the first result alone exceeds the limit, its content is trimmed at a
+// rune boundary. The envelope may exceed limit only when the truncation
+// metadata alone does: valid JSON always wins over the byte bound.
+func buildTruncatedSearchOutput(
+	full searchOutput, limit int, totalBytes int, fullPath string,
+) ([]byte, error) {
+	hint := "results were dropped to fit the output limit"
+	if fullPath != "" {
+		hint += "; the complete response is at full_response_path"
+	}
+	trunc := &searchTruncation{
+		Truncated:        true,
+		TotalResults:     len(full.Results),
+		TotalBytes:       totalBytes,
+		FullResponsePath: fullPath,
+		Hint:             hint,
+	}
+	marshal := func(results []searchOutputResult) ([]byte, error) {
+		trunc.ShownResults = len(results)
+		return json.MarshalIndent(searchOutput{Results: results, Truncation: trunc}, "", "  ")
+	}
+
+	fit, data, err := largestFit(len(full.Results), limit, func(n int) ([]byte, error) {
+		return marshal(full.Results[:n])
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Trim content only when the metadata fits but the first whole result
+	// doesn't; otherwise nothing can fit and the n=0 envelope is best effort.
+	if fit >= 1 || len(full.Results) == 0 || len(data) > limit {
+		return data, nil
+	}
+
+	zeroEnvelope := data
+	trunc.ContentTruncated = true
+	trimmed := full.Results[0]
+	runes := []rune(trimmed.Content)
+	_, data, err = largestFit(len(runes), limit, func(k int) ([]byte, error) {
+		trimmed.Content = string(runes[:k])
+		return marshal([]searchOutputResult{trimmed})
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Even an empty-content result overflows (oversized title/url): fall back
+	// to the zero-results envelope, which is known to fit.
+	if len(data) > limit {
+		return zeroEnvelope, nil
+	}
+	return data, nil
+}
+
+// largestFit binary-searches for the largest n in [0, maxN] whose rendering is
+// at most limit bytes, returning n and its rendering. render must produce
+// output whose size is non-decreasing in n. Falls back to render(0) when
+// nothing fits.
+func largestFit(
+	maxN int, limit int, render func(n int) ([]byte, error),
+) (int, []byte, error) {
+	best := 0
+	bestData, err := render(0)
+	if err != nil {
+		return 0, nil, err
+	}
+	lo, hi := 1, maxN
+	for lo <= hi {
+		mid := (lo + hi) / 2
+		data, err := render(mid)
+		if err != nil {
+			return 0, nil, err
+		}
+		if len(data) <= limit {
+			best, bestData = mid, data
+			lo = mid + 1
+		} else {
+			hi = mid - 1
+		}
+	}
+	return best, bestData, nil
 }
 
 // searchFlags bundles the resolved CLI flag inputs for buildSearchRequest.
@@ -117,8 +249,10 @@ Results contain only documents the LLM judged relevant, ordered by relevance;
 content is the full chunk text of each. Use --raw for the full API response
 (adds per-result citation_id).
 
-When stdout is not a TTY, output is truncated to --max-output bytes and the
-full response is saved to a temp file.`,
+When stdout is not a TTY and the response exceeds --max-output bytes, whole
+results are dropped so stdout stays valid JSON; a "truncation" object carries
+metadata (total_results, shown_results, full_response_path, ...) and the full
+response is saved to a temp file.`,
 		Args: cobra.MaximumNArgs(1),
 		Example: `  onyx-cli search "What is our deployment process?"
   onyx-cli search --source slack "auth migration status"
@@ -192,17 +326,7 @@ full response is saved to a temp file.`,
 				truncateAt = defaultMaxOutputBytes
 			}
 
-			output := toSearchOutput(*resp)
-			data, err := json.MarshalIndent(output, "", "  ")
-			if err != nil {
-				return fmt.Errorf("failed to marshal response: %w", err)
-			}
-
-			ow := &overflow.Writer{Limit: truncateAt, Out: ios.Out, ErrOut: ios.ErrOut}
-			ow.Write(string(data))
-			ow.Finish()
-
-			return nil
+			return writeSearchJSON(ios, toSearchOutput(*resp), truncateAt)
 		},
 	}
 
