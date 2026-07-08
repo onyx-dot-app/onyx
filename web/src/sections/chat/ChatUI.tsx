@@ -145,7 +145,7 @@ const ChatUI = React.memo(
 
     // Group a user message's sibling assistant responses into multi-model
     // panels. Memoized on the tree + provider lookup so identity is stable
-    // across renders; the grouping itself lives in the shared util so the
+    // across renders. The grouping itself lives in the shared util so the
     // read-only shared view can reuse it.
     const getMultiModelResponsesForMessage = useCallback(
       (userMessage: Message): MultiModelResponse[] | null =>

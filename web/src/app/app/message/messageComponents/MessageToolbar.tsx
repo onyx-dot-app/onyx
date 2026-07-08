@@ -113,7 +113,7 @@ export interface MessageToolbarProps {
   parentMessage?: Message | null;
   llmManager: LlmManager | null;
   currentModelName?: string;
-  /** Provider slug for `currentModelName`; used to resolve the model icon in
+  /** Provider slug for `currentModelName`, used to resolve the model icon in
    * the read-only footer chip shown when there's no `llmManager`. */
   currentModelProvider?: string;
 

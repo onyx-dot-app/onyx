@@ -39,7 +39,7 @@ export default function SharedChatDisplay({
   const isMounted = useOnMount();
 
   // The shared viewer is authenticated, so the user-facing provider list is
-  // available for resolving each model's provider icon — same as the live view.
+  // available for resolving each model's provider icon, same as the live view.
   const { llmProviders } = useLLMProviders();
   const modelProviderLookup = useMemo(
     () => buildModelProviderLookup(llmProviders),
@@ -159,7 +159,7 @@ export default function SharedChatDisplay({
                 }
 
                 // Non-user (assistant or error): skip the single child the
-                // chain surfaced when its parent is a multi-model turn — the
+                // chain surfaced when its parent is a multi-model turn. The
                 // panels already render every response, including failures.
                 const previousMessage = i !== 0 ? messages[i - 1] : null;
                 if (
@@ -187,7 +187,7 @@ export default function SharedChatDisplay({
                           citations: message.citations,
                           setPresentingDocument: setPresentingDocument,
                           // Shared payload carries the model as `modelDisplayName`,
-                          // not `overridden_model`; surface it in the read-only footer.
+                          // not `overridden_model`. Surface it in the read-only footer.
                           overriddenModel:
                             message.modelDisplayName ?? undefined,
                           overriddenModelProvider: message.modelDisplayName

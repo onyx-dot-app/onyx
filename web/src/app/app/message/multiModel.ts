@@ -12,7 +12,7 @@ import { MultiModelResponse } from "@/app/app/message/interfaces";
  *
  * `modelProviderLookup` maps a model identifier → provider slug for icon
  * resolution. Pass an empty map when the provider list is unavailable (e.g. the
- * read-only shared view); `getModelIcon` then falls back to the model name.
+ * read-only shared view). `getModelIcon` then falls back to the model name.
  */
 export function getMultiModelResponses(
   userMessage: Message,
