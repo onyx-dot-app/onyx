@@ -2,6 +2,7 @@ import base64
 import uuid
 from typing import Any
 from typing import NoReturn
+from typing import TypedDict
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -40,10 +41,36 @@ logger = setup_logger()
 router = APIRouter(prefix="/auth/saml")
 
 
-def build_saml_settings(config: SAMLProviderConfig) -> dict[str, Any]:
-    """The OneLogin settings dict (its own schema, consumed as old_settings),
-    built from a typed provider config. The ACS is fixed so every provider
-    shares the one issuer-resolved callback."""
+# The OneLogin settings schema (its own key names, camelCase). We build and hand
+# this to OneLogin_Saml2_Auth as old_settings.
+class _SamlEndpoint(TypedDict):
+    url: str
+    binding: str
+
+
+class _SamlSpSettings(TypedDict):
+    entityId: str
+    assertionConsumerService: _SamlEndpoint
+    x509cert: str
+    privateKey: str
+
+
+class _SamlIdpSettings(TypedDict):
+    entityId: str
+    singleSignOnService: _SamlEndpoint
+    x509cert: str
+
+
+class _SamlSettings(TypedDict):
+    strict: bool
+    debug: bool
+    sp: _SamlSpSettings
+    idp: _SamlIdpSettings
+
+
+def build_saml_settings(config: SAMLProviderConfig) -> _SamlSettings:
+    """OneLogin old_settings built from a typed provider config. The ACS is fixed
+    so every provider shares the one issuer-resolved callback."""
     return {
         "strict": True,
         "debug": False,
@@ -142,7 +169,7 @@ def _extract_issuer_from_saml_response(encoded_response: str) -> str:
 
 
 async def _build_saml_auth(
-    request: Request, settings: dict[str, Any]
+    request: Request, settings: _SamlSettings
 ) -> OneLogin_Saml2_Auth:
     req = await prepare_from_fastapi_request(request)
     return OneLogin_Saml2_Auth(req, old_settings=settings)
