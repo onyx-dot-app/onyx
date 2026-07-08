@@ -13,6 +13,7 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from transformers import logging as transformer_logging
 
+from model_server.ca_certs import configure_trusted_ca_bundle
 from model_server.encoders import router as encoders_router
 from model_server.management_endpoints import router as management_router
 from model_server.utils import get_cgroup_cpu_limit
@@ -108,6 +109,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
 
 def get_model_app() -> FastAPI:
+    # Point the TLS trust store at any operator-supplied CA roots before the app
+    # (or Sentry, or the first outbound request) is created. Runs on every startup
+    # path since `app = get_model_app()` executes on import.
+    configure_trusted_ca_bundle()
+
     application = FastAPI(
         title="Onyx Model Server", version=__version__, lifespan=lifespan
     )
