@@ -1,14 +1,4 @@
-async function parseErrorDetail(
-  res: Response,
-  fallback: string
-): Promise<string> {
-  try {
-    const body = await res.json();
-    return body?.detail ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
+import { parseErrorDetail } from "@/lib/fetcher";
 
 /** Set (true/false) or clear (null) the Craft override for one or more users. */
 export async function setUsersCraftAccess(
