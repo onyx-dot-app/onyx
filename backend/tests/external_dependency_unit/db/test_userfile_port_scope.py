@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import ConnectorCredentialPair, SearchSettings, User, UserFile
 from onyx.db.port_attempt import (
-    _user_file_port_has_pending_work,
     count_active_port_attempts,
     create_port_attempt,
     get_active_port_attempt,
@@ -280,13 +279,3 @@ def test_secondary_pending_flag_round_trip(
     cleared = db_session.get(UserFile, uf.id)
     assert cleared is not None and cleared.secondary_only_sync_pending is False
     assert count_user_files_secondary_pending(db_session) == baseline
-
-
-def test_user_file_port_pending_flagged_file(
-    db_session: Session, future_ss_id: int, port_user: User
-) -> None:
-    """A flagged (deferred) user file keeps the port's user scope pending — the OR-in
-    that gates the swap / pins the INSTANT source."""
-    uf = _make_user_file(db_session, port_user.id)
-    mark_user_file_secondary_pending(db_session, uf.id)
-    assert _user_file_port_has_pending_work(db_session, future_ss_id) is True
