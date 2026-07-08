@@ -130,9 +130,7 @@ class UserInfo(BaseModel):
     role: UserRole
     preferences: UserPreferences
     personalization: UserPersonalization = Field(default_factory=UserPersonalization)
-    oidc_expiry: datetime | None = None
-    current_token_created_at: datetime | None = None
-    current_token_expiry_length: int | None = None
+    token_expires_at: datetime | None = None
     is_cloud_superuser: bool = False
     team_name: str | None = None
     is_anonymous_user: bool | None = None
@@ -144,9 +142,7 @@ class UserInfo(BaseModel):
         cls,
         user: User,
         *,
-        track_external_idp_expiry: bool,
-        current_token_created_at: datetime | None = None,
-        expiry_length: int | None = None,
+        token_expires_at: datetime | None = None,
         is_cloud_superuser: bool = False,
         team_name: str | None = None,
         is_anonymous_user: bool | None = None,
@@ -184,13 +180,7 @@ class UserInfo(BaseModel):
                 )
             ),
             team_name=team_name,
-            # set to None if track_external_idp_expiry is False so that we avoid cases
-            # where they previously had this set + used OIDC, and now they switched to
-            # basic auth are now constantly getting redirected back to the login page
-            # since their "oidc_expiry is old"
-            oidc_expiry=user.oidc_expiry if track_external_idp_expiry else None,
-            current_token_created_at=current_token_created_at,
-            current_token_expiry_length=expiry_length,
+            token_expires_at=token_expires_at,
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
             tenant_info=tenant_info,

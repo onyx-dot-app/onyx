@@ -1013,6 +1013,23 @@ def verify_user_logged_in(
 
     token_created_at = _get_token_created_at(user, request, db_session)
 
+    token_expires_at: datetime | None = None
+    if token_created_at is not None:
+        token_expires_at = token_created_at + timedelta(
+            seconds=SESSION_EXPIRE_TIME_SECONDS
+        )
+    track_oidc = get_security_settings().track_external_idp_expiry
+    # When OIDC tracking is enabled, cap expiry at the IdP token's lifetime.
+    # Guard against stale oidc_expiry from a previous OIDC session (same comment
+    # as the old track_external_idp_expiry guard in UserInfo.from_model).
+    oidc_expiry = user.oidc_expiry if track_oidc else None
+    if oidc_expiry is not None:
+        token_expires_at = (
+            min(token_expires_at, oidc_expiry)
+            if token_expires_at is not None
+            else oidc_expiry
+        )
+
     team_name = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
     )(user.email)
@@ -1046,9 +1063,7 @@ def verify_user_logged_in(
 
     user_info = UserInfo.from_model(
         user,
-        track_external_idp_expiry=get_security_settings().track_external_idp_expiry,
-        current_token_created_at=token_created_at,
-        expiry_length=SESSION_EXPIRE_TIME_SECONDS,
+        token_expires_at=token_expires_at,
         is_cloud_superuser=user.email in super_users_list,
         team_name=team_name,
         tenant_info=TenantInfo(
@@ -1242,10 +1257,7 @@ def update_user_assistant_visibility_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_preferences = UserInfo.from_model(
-        user,
-        track_external_idp_expiry=get_security_settings().track_external_idp_expiry,
-    ).preferences
+    user_preferences = UserInfo.from_model(user).preferences
     updated_preferences = update_assistant_visibility(
         user_preferences, assistant_id, show
     )
