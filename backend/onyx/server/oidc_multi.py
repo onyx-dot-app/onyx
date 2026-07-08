@@ -58,17 +58,19 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import sanitize_next_url
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 router = APIRouter(prefix="/auth/oidc")
 
 _CLIENT_CACHE_TTL_SECONDS = 600
-# Link a second provider to an existing account by verified email. Same-domain
-# deployments (two IdPs sharing an email domain) must run this off.
-_ALLOW_AUTO_LINK = True
+# Off by default: linking a second provider to an existing account by verified
+# email is an account-takeover vector when two IdPs can assert the same domain.
+# An admin opt-in belongs on the provider row.
+_ALLOW_AUTO_LINK = False
 
 _CLIENT_CACHE: dict[
-    tuple[str, SSOProviderType, str],
+    tuple[str, str, SSOProviderType, str],
     tuple[BaseOAuth2[Any], float],
 ] = {}
 
@@ -124,11 +126,13 @@ def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[A
 
 def _get_cache_key(
     provider: SSOProvider, config: dict[str, Any]
-) -> tuple[str, SSOProviderType, str]:
+) -> tuple[str, str, SSOProviderType, str]:
     config_hash = hashlib.sha256(
         json.dumps(config, sort_keys=True).encode("utf-8")
     ).hexdigest()
-    return provider.name, provider.provider_type, config_hash
+    # Tenant-scope the key so two tenants with a same-named provider never share
+    # a client.
+    return get_current_tenant_id(), provider.name, provider.provider_type, config_hash
 
 
 async def _get_oauth_client(
@@ -175,7 +179,9 @@ def _delete_pkce_cookie(response: Response, state: str) -> None:
     )
 
 
-def _decode_and_validate_state(request: Request, state: str) -> dict[str, str]:
+def _decode_and_validate_state(
+    request: Request, state: str, provider_name: str
+) -> dict[str, str]:
     try:
         state_data = decode_jwt(state, USER_AUTH_SECRET, [STATE_TOKEN_AUDIENCE])
     except jwt.DecodeError:
@@ -218,6 +224,14 @@ def _decode_and_validate_state(request: Request, state: str) -> dict[str, str]:
             getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
         )
 
+    # Bind the flow to its provider so a state minted for one provider cannot be
+    # replayed against another provider's callback.
+    if state_data.get("provider_name") != provider_name:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "SSO state does not match the callback provider",
+        )
+
     return state_data
 
 
@@ -229,11 +243,17 @@ async def oidc_login_for_provider(
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
-    redirect_uri = f"{WEB_DOMAIN}/auth/oidc/{provider_name}/callback"
+    # The IdP redirects the browser here, so route it through /api to reach
+    # FastAPI. The bare /auth/oidc path is served by the web app, not the API.
+    redirect_uri = f"{WEB_DOMAIN}/api/auth/oidc/{provider_name}/callback"
     next_url = sanitize_next_url(request.query_params.get("next"))
     csrf_token = generate_csrf_token()
     state = generate_state_token(
-        {"next_url": next_url, CSRF_TOKEN_KEY: csrf_token},
+        {
+            "next_url": next_url,
+            "provider_name": provider_name,
+            CSRF_TOKEN_KEY: csrf_token,
+        },
         USER_AUTH_SECRET,
     )
 
@@ -293,7 +313,7 @@ async def oidc_login_callback_for_provider(
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
-    redirect_uri = f"{WEB_DOMAIN}/auth/oidc/{provider_name}/callback"
+    redirect_uri = f"{WEB_DOMAIN}/api/auth/oidc/{provider_name}/callback"
 
     if error is not None:
         raise OnyxError(
@@ -311,7 +331,7 @@ async def oidc_login_callback_for_provider(
             "Missing state parameter in OAuth callback",
         )
 
-    state_data = _decode_and_validate_state(request, state)
+    state_data = _decode_and_validate_state(request, state, provider_name)
 
     code_verifier: str | None = None
     if OIDC_PKCE_ENABLED:
