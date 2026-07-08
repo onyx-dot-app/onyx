@@ -1,20 +1,18 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSessionWatcher } from "@/lib/auth/hooks";
-import { useCurrentUser } from "@/lib/users/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
-import LoggedOutModal from "@/sections/modals/LoggedOutModal";
+import Modal from "@/refresh-components/Modal";
+import { Button, Text } from "@opal/components";
+import { SvgLogOut } from "@opal/icons";
 
 export default function SessionWatcher() {
   const router = useRouter();
-  const { user, mutateUser, userError } = useCurrentUser();
-  const { sessionEnded } = useSessionWatcher({ user, userError, mutateUser });
-  const [dismissed, setDismissed] = useState(false);
+  const sessionEnded = useSessionWatcher();
+  // const sessionEnded = true;
 
   function handleLogin() {
-    setDismissed(true);
     const { isExtension } = getExtensionContext();
     if (isExtension) {
       window.open(
@@ -27,9 +25,21 @@ export default function SessionWatcher() {
     }
   }
 
-  if (sessionEnded && !dismissed) {
-    return <LoggedOutModal onLogin={handleLogin} />;
-  }
+  if (!sessionEnded) return null;
 
-  return null;
+  return (
+    <Modal open>
+      <Modal.Content width="sm" height="sm">
+        <Modal.Header icon={SvgLogOut} title="You Have Been Logged Out" />
+        <Modal.Body>
+          <Text font="main-ui-body" color="text-03">
+            Your session has expired. Please log in again to continue.
+          </Text>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button onClick={handleLogin}>Log In</Button>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal>
+  );
 }

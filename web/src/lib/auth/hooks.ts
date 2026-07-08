@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { type KeyedMutator } from "swr";
 import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
+import { useCurrentUser } from "@/lib/users/hooks";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -35,15 +35,8 @@ function computeSecondsUntilExpiration(user: User): number | null {
  * Side effect: calls `logout()` to clear the server session on a 403 for a
  * previously-authenticated user.
  */
-export function useSessionWatcher({
-  user,
-  userError,
-  mutateUser,
-}: {
-  user: User | null | undefined;
-  userError: (Error & { status?: number }) | undefined;
-  mutateUser: KeyedMutator<User | null>;
-}): { sessionEnded: boolean } {
+export function useSessionWatcher(): boolean {
+  const { user, mutateUser, userError } = useCurrentUser();
   const expiryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasSeenAuthenticatedUserRef = useRef(false);
   const pathname = usePathname();
@@ -82,5 +75,5 @@ export function useSessionWatcher({
     hasSeenAuthenticatedUserRef.current &&
     !isAuthPage;
 
-  return { sessionEnded };
+  return sessionEnded;
 }
