@@ -10,8 +10,9 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
 import { MultiModelResponse } from "@/app/app/message/interfaces";
+import { getMultiModelResponses } from "@/app/app/message/multiModel";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
-import { buildLlmOptions } from "@/lib/languageModels/options";
+import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
   useCurrentMessageHistory,
@@ -84,16 +85,10 @@ const ChatUI = React.memo(
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
 
     // Lookup: model identifier → provider slug (for icon resolution).
-    // Indexes by both raw model name ("claude-sonnet-4-6") and display name
-    // ("Claude Sonnet 4.6") so it works for live streaming AND history reload.
-    const modelProviderLookup = useMemo(() => {
-      const map = new Map<string, string>();
-      for (const opt of buildLlmOptions(llmManager.llmProviders)) {
-        map.set(opt.modelName, opt.provider);
-        map.set(opt.displayName, opt.provider);
-      }
-      return map;
-    }, [llmManager.llmProviders]);
+    const modelProviderLookup = useMemo(
+      () => buildModelProviderLookup(llmManager.llmProviders),
+      [llmManager.llmProviders]
+    );
 
     // Use refs to keep callbacks stable while always using latest values
     const onSubmitRef = useRef(onSubmit);
@@ -140,65 +135,20 @@ const ChatUI = React.memo(
       []
     );
 
-    /**
-     * Detect multi-model responses: a user message whose children are 2+
-     * assistant messages each carrying modelDisplayName or overridden_model.
-     * Distinguishes from regeneration (which also creates sibling assistants)
-     * because regenerated messages don't have model display metadata.
-     */
-    // Use ref to avoid modelProviderLookup triggering callback recreation
-    const modelProviderLookupRef = useRef(modelProviderLookup);
-    modelProviderLookupRef.current = modelProviderLookup;
-
-    const getMultiModelResponses = useCallback(
-      (userMessage: Message): MultiModelResponse[] | null => {
-        if (!messageTree) return null;
-
-        const childIds = userMessage.childrenNodeIds ?? [];
-        if (childIds.length < 2) return null;
-
-        const assistantChildren = childIds
-          .map((id) => messageTree.get(id))
-          .filter(
-            (msg): msg is Message =>
-              msg !== undefined &&
-              (msg.type === "assistant" || msg.type === "error")
-          );
-
-        // Multi-model messages have modelDisplayName or overridden_model set.
-        // Regenerations don't — that's how we distinguish them.
-        const multiModelChildren = assistantChildren.filter(
-          (msg) => msg.modelDisplayName || msg.overridden_model
-        );
-        if (multiModelChildren.length < 2) return null;
-
-        const lookup = modelProviderLookupRef.current;
-        return multiModelChildren.map((msg, idx): MultiModelResponse => {
-          const modelVersion =
-            msg.overridden_model || msg.modelDisplayName || "Model";
-          const provider = lookup.get(modelVersion) ?? "";
-          const displayName = msg.modelDisplayName || modelVersion;
-          const isError = msg.type === "error";
-          return {
-            modelIndex: idx,
-            provider,
-            modelName: modelVersion,
-            displayName,
-            packets: msg.packets || [],
-            packetCount: msg.packetCount || msg.packets?.length || 0,
-            nodeId: msg.nodeId,
-            messageId: msg.messageId,
-            currentFeedback: msg.currentFeedback,
-            isGenerating: msg.is_generating || false,
-            errorMessage: isError ? msg.message : null,
-            errorCode: isError ? msg.errorCode : null,
-            isRetryable: isError ? msg.isRetryable : undefined,
-            errorStackTrace: isError ? msg.stackTrace : null,
-            errorDetails: isError ? msg.errorDetails : null,
-          };
-        });
-      },
-      [messageTree]
+    // Group a user message's sibling assistant responses into multi-model
+    // panels. Memoized on the tree + provider lookup so identity is stable
+    // across renders. The grouping itself lives in the shared util so the
+    // read-only shared view can reuse it.
+    const getMultiModelResponsesForMessage = useCallback(
+      (userMessage: Message): MultiModelResponse[] | null =>
+        messageTree
+          ? getMultiModelResponses(
+              userMessage,
+              messageTree,
+              modelProviderLookup
+            )
+          : null,
+      [messageTree, modelProviderLookup]
     );
 
     return (
@@ -214,7 +164,8 @@ const ChatUI = React.memo(
             if (message.type === "user") {
               const nextMessage =
                 messages.length > i + 1 ? messages[i + 1] : null;
-              const multiModelResponses = getMultiModelResponses(message);
+              const multiModelResponses =
+                getMultiModelResponsesForMessage(message);
 
               return (
                 <div
@@ -287,7 +238,7 @@ const ChatUI = React.memo(
               // Skip assistant messages already rendered in MultiModelResponseView
               if (
                 previousMessage?.type === "user" &&
-                getMultiModelResponses(previousMessage)
+                getMultiModelResponsesForMessage(previousMessage)
               ) {
                 return null;
               }
