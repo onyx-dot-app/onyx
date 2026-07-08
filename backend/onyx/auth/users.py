@@ -2616,7 +2616,7 @@ def get_oauth_router(
         ) -> RedirectResponse:
             # A failed or rejected userinfo fetch (bad status, malformed body,
             # unverified email) must land as a controlled login rejection, not
-            # an unhandled 500. OnyxError has a global handler; GetIdEmailError
+            # an unhandled 500. OnyxError has a global handler that GetIdEmailError
             # does not.
             try:
                 account_id, account_email = await oauth_client.get_id_email(

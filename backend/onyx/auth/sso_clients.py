@@ -19,7 +19,7 @@ class OpenIDConfigurationIssuerMismatch(ValueError):
 def _fully_decoded(path: str) -> tuple[str, bool]:
     """Percent-decode until the string stops changing, so N-times-encoded input
     collapses to its real form before validation. Returns (decoded, converged).
-    The loop is bounded to avoid a pathological input; a path that has not
+    The loop is bounded to avoid a pathological input. A path that has not
     stabilized within the bound is treated as hostile and the caller fails
     closed rather than validating a still-encoded string."""
     for _ in range(8):
