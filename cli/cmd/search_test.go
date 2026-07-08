@@ -402,6 +402,33 @@ func TestWriteSearchJSON_OverLimitIsValidJSON(t *testing.T) {
 	}
 }
 
+func TestWriteSearchJSON_TempSaveFailureEmitsFullResponse(t *testing.T) {
+	// Dropped results must never be unrecoverable: with no temp copy, the
+	// full over-limit response is emitted instead of a truncated envelope.
+	t.Setenv("TMPDIR", "/nonexistent-onyx-cli-test")
+	var out, errOut bytes.Buffer
+	ios := &iostreams.IOStreams{Out: &out, ErrOut: &errOut}
+	output := searchOutput{Results: makeSearchResults(20, 500)}
+
+	if err := writeSearchJSON(ios, output, 3000); err != nil {
+		t.Fatalf("writeSearchJSON failed: %v", err)
+	}
+
+	var parsed searchOutput
+	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v", err)
+	}
+	if parsed.Truncation != nil {
+		t.Fatal("full-response fallback must not carry truncation metadata")
+	}
+	if len(parsed.Results) != 20 {
+		t.Fatalf("Results length = %d, want all 20", len(parsed.Results))
+	}
+	if !strings.Contains(errOut.String(), "could not save full response") {
+		t.Errorf("stderr should warn about the failed save, got %q", errOut.String())
+	}
+}
+
 func TestBuildTruncatedSearchOutput_SingleOversizedResult(t *testing.T) {
 	// Multibyte runes verify the trim lands on a rune boundary.
 	content := strings.Repeat("héllo→wörld ", 500)

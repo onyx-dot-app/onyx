@@ -84,8 +84,13 @@ func writeSearchJSON(ios *iostreams.IOStreams, output searchOutput, truncateAt i
 
 	fullPath, err := overflow.SaveFull("onyx-search-*.json", string(data))
 	if err != nil {
-		fmt.Fprintf(ios.ErrOut, "warning: could not save full response: %v\n", err)
-		fullPath = ""
+		// Without the temp copy, dropped results would be unrecoverable —
+		// emit the full response instead (valid JSON beats the byte bound).
+		fmt.Fprintf(
+			ios.ErrOut, "warning: could not save full response, emitting it whole: %v\n", err,
+		)
+		fmt.Fprintln(ios.Out, string(data))
+		return nil
 	}
 	envelope, err := buildTruncatedSearchOutput(output, truncateAt, len(data), fullPath)
 	if err != nil {
@@ -109,16 +114,12 @@ func writeSearchJSON(ios *iostreams.IOStreams, output searchOutput, truncateAt i
 func buildTruncatedSearchOutput(
 	full searchOutput, limit int, totalBytes int, fullPath string,
 ) ([]byte, error) {
-	hint := "results were dropped to fit the output limit"
-	if fullPath != "" {
-		hint += "; the complete response is at full_response_path"
-	}
 	trunc := &searchTruncation{
 		Truncated:        true,
 		TotalResults:     len(full.Results),
 		TotalBytes:       totalBytes,
 		FullResponsePath: fullPath,
-		Hint:             hint,
+		Hint:             "output was reduced to fit the output limit; the complete response is at full_response_path",
 	}
 	marshal := func(results []searchOutputResult) ([]byte, error) {
 		trunc.ShownResults = len(results)
