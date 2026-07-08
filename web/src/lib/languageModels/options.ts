@@ -97,6 +97,26 @@ export function buildLlmOptions(
 }
 
 // ---------------------------------------------------------------------------
+// buildModelProviderLookup
+// ---------------------------------------------------------------------------
+
+/**
+ * Model identifier → provider slug map for icon resolution. Indexes by both
+ * raw model name ("gpt-4.1") and display name ("GPT-4.1") so it resolves for
+ * both live streaming and history reload, where only one of the two is known.
+ */
+export function buildModelProviderLookup(
+  llmProviders: LLMProviderDescriptor[] | undefined
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const opt of buildLlmOptions(llmProviders)) {
+    map.set(opt.modelName, opt.provider);
+    map.set(opt.displayName, opt.provider);
+  }
+  return map;
+}
+
+// ---------------------------------------------------------------------------
 // groupLlmOptions
 // ---------------------------------------------------------------------------
 
