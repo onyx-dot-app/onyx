@@ -37,8 +37,8 @@ def _domain_group_for_permission(
     None when the share grants searchable access to no one. Link-only shares
     (allow_file_discovery=False) grant nothing: Google exposes them only to
     domain users who already hold the link, not to domain-wide search. The
-    matching user-side token is derived from the user's own email domain in ee
-    _get_acl_for_user."""
+    matching user-side token is derived from the user's own email domain at
+    query time."""
     if not permission.domain:
         logger.warning(
             "Domain permission without a domain for %s\n %s", entity_desc, permission
