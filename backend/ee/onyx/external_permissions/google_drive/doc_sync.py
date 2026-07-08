@@ -33,12 +33,12 @@ def _domain_group_for_permission(
     own_domain: str | None,
     entity_desc: str,
 ) -> str | None:
-    """Map an "everyone at <domain>" permission to its derived domain group, or
-    None when the share grants searchable access to no one. Link-only shares
+    """Map an "everyone at <domain>" permission to its domain group, or None when
+    the share grants searchable access to no one. Link-only shares
     (allow_file_discovery=False) grant nothing: Google exposes them only to
-    domain users who already hold the link, not to domain-wide search. The
-    matching user-side token is derived from the user's own email domain at
-    query time."""
+    domain users who already hold the link, not to domain-wide search. The Drive
+    group sync populates the domain group with that domain's real Workspace
+    members."""
     if not permission.domain:
         logger.warning(
             "Domain permission without a domain for %s\n %s", entity_desc, permission

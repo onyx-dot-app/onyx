@@ -28,7 +28,7 @@ def build_ext_group_name_for_onyx(ext_group_name: str, source: DocumentSource) -
 
 
 def build_domain_group_id(domain: str) -> str:
-    """Derived pseudo-group for "everyone at <domain>" shares. It has no
-    membership rows: the doc side stores this id and the user side derives the
-    matching token from the user's own email domain."""
+    """Group id for "everyone at <domain>" Drive shares. The Drive group sync
+    populates it with the real Workspace roster for the domain, so membership is
+    Google's own rather than inferred from a user's email string."""
     return f"domain:{domain.lower()}"

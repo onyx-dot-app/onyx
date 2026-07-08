@@ -1,7 +1,7 @@
-"""Drive "everyone at <domain>" shares must map to a derived domain group
+"""Drive "everyone at <domain>" shares must map to a domain group
 (domain:<domain>), never to instance-public, on both the file and folder
-permission paths, and the user-side ACL must carry the matching token derived
-from the user's own email domain."""
+permission paths. The user-side token comes from the synced domain group's real
+Workspace membership, not from the user's email string."""
 
 from types import SimpleNamespace
 from typing import Any
@@ -165,7 +165,35 @@ def test_folder_anyone_link_only_stays_non_public() -> None:
     assert access.is_public is False
 
 
-def test_user_acl_carries_own_domain_token() -> None:
+def test_user_acl_carries_synced_domain_group() -> None:
+    from ee.onyx.access.access import _get_acl_for_user
+
+    user = cast(
+        User, SimpleNamespace(id="u1", email="Alice@CompanyA.com", is_anonymous=False)
+    )
+    domain_group = build_ext_group_name_for_onyx(
+        f"domain:{COMPANY_DOMAIN}", DocumentSource.GOOGLE_DRIVE
+    )
+    with (
+        patch("ee.onyx.access.access.fetch_user_groups_for_user", return_value=[]),
+        patch(
+            "ee.onyx.access.access.fetch_external_groups_for_user",
+            return_value=[SimpleNamespace(external_user_group_id=domain_group)],
+        ),
+        patch(
+            "ee.onyx.access.access.get_acl_for_user_without_groups",
+            return_value=set(),
+        ),
+    ):
+        acl = _get_acl_for_user(user, db_session=cast(Session, None))
+
+    assert prefix_external_group(domain_group) in acl
+
+
+def test_user_acl_has_no_domain_token_without_synced_membership() -> None:
+    # A user's email domain alone must not grant the domain group. Membership
+    # comes only from the synced group, so a user Google never placed in the
+    # Workspace gets nothing even if their email string matches.
     from ee.onyx.access.access import _get_acl_for_user
 
     user = cast(
@@ -181,12 +209,7 @@ def test_user_acl_carries_own_domain_token() -> None:
     ):
         acl = _get_acl_for_user(user, db_session=cast(Session, None))
 
-    expected = prefix_external_group(
-        build_ext_group_name_for_onyx(
-            f"domain:{COMPANY_DOMAIN}", DocumentSource.GOOGLE_DRIVE
-        )
-    )
-    assert expected in acl
+    assert not any(entry.startswith("external_group:") for entry in acl)
 
 
 def test_anonymous_user_gets_no_domain_token() -> None:
@@ -200,3 +223,22 @@ def test_anonymous_user_gets_no_domain_token() -> None:
         acl = _get_acl_for_user(user, db_session=cast(Session, None))
 
     assert not any(entry.startswith("external_group:") for entry in acl)
+
+
+def test_group_sync_domain_group_uses_real_roster() -> None:
+    from ee.onyx.external_permissions.google_drive import group_sync
+
+    roster = [
+        {"primaryEmail": "alice@companya.com"},
+        {"primaryEmail": "bob@companya.com"},
+        {},  # rows Google returns without a primaryEmail are skipped
+    ]
+    admin_service = cast(
+        Any, SimpleNamespace(users=lambda: SimpleNamespace(list=object()))
+    )
+    with patch.object(
+        group_sync, "execute_paginated_retrieval", return_value=iter(roster)
+    ):
+        members = group_sync._get_all_domain_users(admin_service, COMPANY_DOMAIN)
+
+    assert set(members) == {"alice@companya.com", "bob@companya.com"}

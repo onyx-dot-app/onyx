@@ -11,11 +11,8 @@ from onyx.access.access import (
 from onyx.access.access import _get_acl_for_user as get_acl_for_user_without_groups
 from onyx.access.access import collect_user_file_access
 from onyx.access.models import DocumentAccess
-from onyx.access.utils import build_domain_group_id
-from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.access.utils import prefix_external_group
 from onyx.access.utils import prefix_user_group
-from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_document_sources
 from onyx.db.document import get_documents_by_ids
 from onyx.db.models import User
@@ -210,18 +207,7 @@ def _get_acl_for_user(user: User, db_session: Session) -> set[str]:
     user_acl = set(prefixed_user_groups + prefixed_external_groups)
     user_acl.update(get_acl_for_user_without_groups(user, db_session))
 
-    # Drive "everyone at <domain>" shares are stored as derived domain groups
-    # (domain:<domain>); membership is the user's own email domain, so no
-    # directory lookup or membership rows are involved.
-    if not is_anonymous and user.email and "@" in user.email:
-        email_domain = user.email.rsplit("@", 1)[-1].strip().lower()
-        if email_domain:
-            user_acl.add(
-                prefix_external_group(
-                    build_ext_group_name_for_onyx(
-                        build_domain_group_id(email_domain), DocumentSource.GOOGLE_DRIVE
-                    )
-                )
-            )
-
+    # Drive "everyone at <domain>" shares resolve through the synced domain group
+    # in prefixed_external_groups above (real Workspace membership), not from the
+    # user's email string.
     return user_acl
