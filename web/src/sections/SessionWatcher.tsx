@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useCustomTokenRefresh, useSessionWatcher } from "@/lib/auth/hooks";
+import { useSessionWatcher } from "@/lib/auth/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 import LoggedOutModal from "@/sections/modals/LoggedOutModal";
@@ -10,7 +10,6 @@ import LoggedOutModal from "@/sections/modals/LoggedOutModal";
 export default function SessionWatcher() {
   const router = useRouter();
   const { user, mutateUser, userError } = useCurrentUser();
-  useCustomTokenRefresh(user, mutateUser);
   const { sessionEnded } = useSessionWatcher({ user, userError, mutateUser });
   const [dismissed, setDismissed] = useState(false);
 
