@@ -309,8 +309,9 @@ jobs:
                       "id": f"onyx-cli-govulncheck/{sarif_path.stem}",
                   }
                   results = []
+                  upload_levels = {"error", "warning"}
                   for result in run.get("results", []):
-                      if result.get("level") != "error":
+                      if result.get("level") not in upload_levels:
                           continue
                       if not result.get("locations"):
                           result["locations"] = [
