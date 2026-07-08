@@ -370,6 +370,7 @@ const AgentMessage = React.memo(function AgentMessage({
           parentMessage={parentMessage}
           llmManager={llmManager}
           currentModelName={chatState.overriddenModel}
+          currentModelProvider={chatState.overriddenModelProvider}
           citations={citations}
           documentMap={documentMap}
         />
