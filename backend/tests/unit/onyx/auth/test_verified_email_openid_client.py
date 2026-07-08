@@ -9,9 +9,9 @@ from unittest.mock import patch
 import pytest
 from httpx_oauth.exceptions import GetIdEmailError
 
-from onyx.auth.sso_clients import OpenIDConfigurationIssuerMismatch
-from onyx.auth.sso_clients import validate_issuer_owns_config_url
-from onyx.auth.sso_clients import VerifiedEmailOpenID
+from onyx.auth.oidc_client import OpenIDConfigurationIssuerMismatch
+from onyx.auth.oidc_client import validate_issuer_owns_config_url
+from onyx.auth.oidc_client import VerifiedEmailOpenID
 
 _ISSUER = "https://idp.companyb.com"
 _CONFIG_URL = f"{_ISSUER}/.well-known/openid-configuration"
