@@ -28,6 +28,12 @@ export interface MultiModelResponseViewProps {
   onMessageSelection?: (nodeId: number) => void;
   /** Called whenever the set of hidden panel indices changes */
   onHiddenPanelsChange?: (hidden: Set<number>) => void;
+  /**
+   * Read-only mode for the shared view: every panel renders equal-width and
+   * fully visible, selection/hide interactions are disabled, and nothing
+   * persists. Used so a shared link mirrors the author's model comparison.
+   */
+  readOnly?: boolean;
 }
 
 // How many pixels of a non-preferred panel are visible at the viewport edge
@@ -70,11 +76,15 @@ export default function MultiModelResponseView({
   otherMessagesCanSwitchTo,
   onMessageSelection,
   onHiddenPanelsChange,
+  readOnly = false,
 }: MultiModelResponseViewProps) {
-  // Initialize preferredIndex from the backend's preferred_response_id when
-  // loading an existing conversation.
+  // Initialize preferredIndex from the backend's preferred_response_id. When a
+  // preferred response is picked the backend also points latest_child at it, so
+  // this marks the response the flow continued through. A turn the user never
+  // picked from (e.g. a final multi-model turn) has no preference and stays
+  // unhighlighted.
   const [preferredIndex, setPreferredIndex] = useState<number | null>(() => {
-    if (!parentMessage?.preferredResponseId) return null;
+    if (parentMessage?.preferredResponseId == null) return null;
     const match = responses.find(
       (r) => r.messageId === parentMessage.preferredResponseId
     );
@@ -383,6 +393,7 @@ export default function MultiModelResponseView({
   );
 
   const isActivelySelected =
+    !readOnly &&
     preferredIndex !== null &&
     preferredIdx !== -1 &&
     !isGenerating &&
@@ -394,8 +405,10 @@ export default function MultiModelResponseView({
 
   // Use the selection layout once a preferred response has been chosen,
   // even after deselect. Only fall through to generation layout before
-  // the first selection or during active streaming.
-  const showSelectionMode = isActivelySelected || hasEnteredSelection;
+  // the first selection or during active streaming. Read-only views never
+  // enter selection mode — they always show every panel equal-width.
+  const showSelectionMode =
+    !readOnly && (isActivelySelected || hasEnteredSelection);
 
   // Trigger the slide-out animation one frame after a preferred panel is selected.
   // Uses isActivelySelected (not showSelectionMode) so re-selecting after a
@@ -418,6 +431,7 @@ export default function MultiModelResponseView({
       isPreferred: preferredIndex === response.modelIndex,
       isHidden: hiddenPanels.has(response.modelIndex),
       isNonPreferredInSelection: isNonPreferred,
+      readOnly,
       onSelect: () => handleSelectPreferred(response.modelIndex),
       onDeselect: handleDeselectPreferred,
       onToggleVisibility: () => toggleVisibility(response.modelIndex),
@@ -444,6 +458,7 @@ export default function MultiModelResponseView({
     [
       preferredIndex,
       hiddenPanels,
+      readOnly,
       handleSelectPreferred,
       handleDeselectPreferred,
       toggleVisibility,

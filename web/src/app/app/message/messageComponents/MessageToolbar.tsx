@@ -30,6 +30,7 @@ import TTSButton from "@/app/app/message/messageComponents/TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
+import { getModelIcon } from "@/lib/languageModels";
 
 interface SouurcesTagWrapperProps {
   citations: StreamingCitation[];
@@ -112,6 +113,9 @@ export interface MessageToolbarProps {
   parentMessage?: Message | null;
   llmManager: LlmManager | null;
   currentModelName?: string;
+  /** Provider slug for `currentModelName`; used to resolve the model icon in
+   * the read-only footer chip shown when there's no `llmManager`. */
+  currentModelProvider?: string;
 
   // Citations
   citations: StreamingCitation[];
@@ -134,6 +138,7 @@ export default function MessageToolbar({
   parentMessage,
   llmManager,
   currentModelName,
+  currentModelProvider,
   citations,
   documentMap,
 }: MessageToolbarProps) {
@@ -290,6 +295,20 @@ export default function MessageToolbar({
                   removeThinkingTokens(getTextContent(rawPackets)) as string
                 }
               />
+            )}
+
+            {/* Read-only model label for the shared view: no llmManager to
+                power the interactive selector, so surface which model answered. */}
+            {!llmManager && currentModelName && (
+              <OpenButton
+                disabled
+                icon={getModelIcon(
+                  currentModelProvider ?? "",
+                  currentModelName
+                )}
+              >
+                {currentModelName}
+              </OpenButton>
             )}
 
             {onRegenerate &&
