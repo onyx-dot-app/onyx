@@ -32,6 +32,7 @@ from onyx.db.models import UserFile
 from onyx.db.port_attempt import _user_file_port_has_pending_work
 from onyx.db.port_attempt import all_user_scopes_ported
 from onyx.db.port_attempt import create_port_attempt
+from onyx.db.port_attempt import mark_port_canceled
 from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
 from onyx.db.port_orphan_candidate import clear_port_orphan_candidates
@@ -265,6 +266,25 @@ def test_swap_gate_blocks_on_unsettled_user_then_releases(
 
     assert all_user_scopes_ported(db_session, future_ss_id, [port_user.id]) is True
     assert _port_swap_ready(db_session, future_ss, [], [port_user.id]) is True
+
+
+def test_swap_gate_not_deadlocked_by_canceled_user(
+    db_session: Session, future_ss_id: int, port_user: User
+) -> None:
+    """A CANCELED user attempt is settled (no tick recreates a non-FAILED attempt), so the
+    gate must treat it as done — else the swap waits forever for a SUCCESS that never comes."""
+    future_ss = db_session.get(SearchSettings, future_ss_id)
+    assert future_ss is not None
+    _make_user_file(db_session, port_user.id)
+    attempt = create_port_attempt(
+        db_session, None, future_ss_id, port_user_id=port_user.id
+    )
+    mark_port_canceled(db_session, attempt.id)
+
+    assert all_user_scopes_ported(db_session, future_ss_id, [port_user.id]) is True
+    assert _port_swap_ready(db_session, future_ss, [], [port_user.id]) is True
+    # consistent: no longer pending (won't be recreated)
+    assert _user_file_port_has_pending_work(db_session, future_ss_id) is False
 
 
 # --- INSTANT reclaim: the source stays pinned until user files drain ---------
