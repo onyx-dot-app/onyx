@@ -1,16 +1,22 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import useSWR from "swr";
 import { cn } from "@opal/utils";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgAlertCircle } from "@opal/icons";
 import { AnimatePresence, motion } from "motion/react";
 import Logo from "@/refresh-components/Logo";
+import SetupCard from "@/app/craft/components/setup-requests/SetupCard";
+import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
+import CompactionMarker from "@/app/craft/components/CompactionMarker";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
@@ -79,6 +85,16 @@ export default function BuildMessageList({
     autoScrollEnabled,
     scrollContainerRef,
   ]);
+
+  // Resolve a connect card's app (oauth-vs-form, credential fields) by slug.
+  const { data: connectableApps } = useSWR<ExternalAppUserResponse[]>(
+    SWR_KEYS.buildExternalApps,
+    errorHandlingFetcher
+  );
+  const appsBySlug = useMemo(
+    () => new Map((connectableApps ?? []).map((app) => [app.slug, app])),
+    [connectableApps]
+  );
 
   const hasStreamItems = streamItems.length > 0;
   const lastMessage = messages[messages.length - 1];
@@ -207,6 +223,23 @@ export default function BuildMessageList({
                 todoList={item.todoList}
                 defaultOpen={item.todoList.isOpen}
               />
+            </div>
+          );
+        case "connect_app_request":
+          return (
+            <div key={item.id} className={cn(topMargin)}>
+              <SetupCard
+                requestId={item.requestId}
+                appSlug={item.appSlug}
+                reason={item.reason}
+                userApp={appsBySlug.get(item.appSlug)}
+              />
+            </div>
+          );
+        case "compaction":
+          return (
+            <div key={item.id} className={cn(topMargin)}>
+              <CompactionMarker summary={item.summary} />
             </div>
           );
         case "error":

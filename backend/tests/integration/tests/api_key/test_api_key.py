@@ -156,8 +156,8 @@ def test_api_key_admin_service_account(reset: None) -> None:  # noqa: ARG001
 
 
 def test_limited_key_blocked_by_current_user(reset: None) -> None:  # noqa: ARG001
-    """A LIMITED API key (service account, no permissions) should be rejected
-    by endpoints behind current_user but allowed through current_limited_user."""
+    """A LIMITED API key (service account, chat scope only) should be rejected
+    by BASIC_ACCESS-scoped endpoints but allowed through current_limited_user."""
     admin_user: DATestUser = UserManager.create(name="admin_user")
 
     limited_key: DATestAPIKey = APIKeyManager.create(

@@ -98,6 +98,10 @@ def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
     return "".join(c if c.isalnum() or c in safe else "_" for c in name)
 
 
+def _is_hidden_workspace_entry(entry: FilesystemEntry) -> bool:
+    return entry.name in HIDDEN_PATTERNS or entry.name.startswith(".")
+
+
 class SessionManager:
     """Public interface for session operations.
 
@@ -382,7 +386,9 @@ class SessionManager:
         )
         user_name = user.personal_name
 
-        skills_section, skills_files = build_user_skills_payload(user, self._db_session)
+        skills_section, connectable_apps_section, skills_files = (
+            build_user_skills_payload(user, self._db_session)
+        )
 
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
@@ -390,6 +396,7 @@ class SessionManager:
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
         self._hydrate_skills(sandbox.id, user, files=skills_files)
@@ -908,6 +915,8 @@ class SessionManager:
             except ValueError:
                 return
             for entry in entries:
+                if _is_hidden_workspace_entry(entry):
+                    continue
                 if entry.is_directory:
                     _walk(entry.path)
                 else:
@@ -1336,9 +1345,7 @@ class SessionManager:
 
         # Filter hidden files and directories
         entries: list[FilesystemEntry] = [
-            entry
-            for entry in raw_entries
-            if entry.name not in HIDDEN_PATTERNS and not entry.name.startswith(".")
+            entry for entry in raw_entries if not _is_hidden_workspace_entry(entry)
         ]
 
         # Sort: directories first, then files, both alphabetically

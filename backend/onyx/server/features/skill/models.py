@@ -6,121 +6,241 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
 from pydantic import model_validator
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import SkillAccessLevel
+from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill
-from onyx.db.skill import SkillPatch
+from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
 
 
-class BuiltinSkillResponse(BaseModel):
-    """A built-in skill — backed by a ``skill`` row whose
-    ``built_in_skill_id`` references a definition in
-    ``onyx.skills.built_in.BUILT_IN_SKILLS``. Display fields come from
-    the row; ``is_available`` / ``unavailable_reason`` come from the
-    codified definition. Built-ins are not admin-mutable, so lifecycle
-    fields (``enabled``, ``is_public``, group grants) are not part of
-    this response — they're row-level implementation detail."""
+class SkillUserShare(BaseModel):
+    user: MinimalUserSnapshot
+    permission: SkillSharePermission
 
-    source: Literal["builtin"] = "builtin"
+
+class SkillGroupShare(BaseModel):
+    group_id: int
+    group_name: str
+    permission: SkillSharePermission
+
+
+class SkillResponse(BaseModel):
+    source: Literal["builtin", "custom"]
+    id: UUID
     slug: str
     name: str
     description: str
-    is_available: bool
+
+    is_available: bool | None = None
     unavailable_reason: str | None = None
 
+    enabled: bool | None = None
+    author_user_id: UUID | None = None
+    author_email: str | None = None
+    owner: MinimalUserSnapshot | None = None
+    ownership_vacant: bool = False
+    created_at: datetime.datetime | None = None
+    updated_at: datetime.datetime | None = None
+    user_shares: list[SkillUserShare] = Field(default_factory=list)
+    group_shares: list[SkillGroupShare] = Field(default_factory=list)
+    public_permission: SkillSharePermission | None = None
+    is_personal: bool = False
+    user_permission: SkillAccessLevel | None = None
+
     @classmethod
-    def from_row(
+    def from_builtin(
         cls,
         skill: Skill,
         definition: BuiltInSkillDefinition,
         db_session: Session,
-    ) -> "BuiltinSkillResponse":
+    ) -> "SkillResponse":
         return cls(
+            source="builtin",
+            id=skill.id,
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
             is_available=definition.is_available(db_session),
             unavailable_reason=definition.unavailable_reason,
+            user_permission=SkillAccessLevel.VIEWER,
         )
-
-
-class CustomSkillResponse(BaseModel):
-    source: Literal["custom"] = "custom"
-    id: UUID
-    slug: str
-    name: str
-    description: str
-    is_public: bool
-    enabled: bool
-    author_user_id: UUID | None = None
-    author_email: str | None = None
-    created_at: datetime.datetime | None = None
-    updated_at: datetime.datetime | None = None
-    granted_group_ids: list[int] = []
-    is_personal: bool
 
     @classmethod
-    def from_model(
+    def from_custom(
         cls,
         skill: Skill,
-        group_ids: list[int],
         *,
-        has_grants: bool | None = None,
-    ) -> "CustomSkillResponse":
-        # Paths that withhold group ids from the response (user-facing) must
-        # still pass grant existence so grants-shared skills aren't marked
-        # personal.
-        grants_exist = bool(group_ids) if has_grants is None else has_grants
-        is_personal = (
-            skill.built_in_skill_id is None and not skill.is_public and not grants_exist
-        )
+        user_permission: SkillAccessLevel | None = None,
+        include_share_details: bool = False,
+    ) -> "SkillResponse":
+        user_shares = [
+            SkillUserShare(
+                user=MinimalUserSnapshot(id=share.user.id, email=share.user.email),
+                permission=share.permission,
+            )
+            for share in skill.user_shares
+            if share.user is not None
+        ]
+        group_shares = [
+            SkillGroupShare(
+                group_id=share.user_group_id,
+                group_name=share.user_group.name,
+                permission=share.permission,
+            )
+            for share in skill.group_shares
+            if share.user_group is not None
+        ]
+        visible_user_shares = user_shares if include_share_details else []
+        visible_group_shares = group_shares if include_share_details else []
         return cls(
+            source="custom",
             id=skill.id,
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
-            is_public=skill.is_public,
             enabled=skill.enabled,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
+            owner=(
+                MinimalUserSnapshot(id=skill.author.id, email=skill.author.email)
+                if skill.author is not None
+                else None
+            ),
+            ownership_vacant=skill.author_user_id is None
+            or skill.author is None
+            or not skill.author.is_active,
             created_at=skill.created_at,
             updated_at=skill.updated_at,
-            granted_group_ids=group_ids,
-            is_personal=is_personal,
+            user_shares=visible_user_shares,
+            group_shares=visible_group_shares,
+            public_permission=skill.public_permission,
+            is_personal=skill.public_permission is None
+            and not user_shares
+            and not group_shares,
+            user_permission=user_permission,
         )
 
 
 class SkillsList(BaseModel):
-    builtins: list[BuiltinSkillResponse]
-    customs: list[CustomSkillResponse]
+    builtins: list[SkillResponse]
+    customs: list[SkillResponse]
+
+
+class SkillPreviewResponse(BaseModel):
+    source: Literal["builtin", "custom"]
+    id: UUID
+    name: str
+    description: str
+    author_email: str | None = None
+    instructions_markdown: str
+
+    @classmethod
+    def from_builtin(
+        cls,
+        skill: Skill,
+        *,
+        instructions_markdown: str,
+    ) -> "SkillPreviewResponse":
+        return cls(
+            source="builtin",
+            id=skill.id,
+            name=skill.name,
+            description=skill.description,
+            author_email=None,
+            instructions_markdown=instructions_markdown,
+        )
+
+    @classmethod
+    def from_custom(
+        cls,
+        skill: Skill,
+        *,
+        instructions_markdown: str,
+    ) -> "SkillPreviewResponse":
+        return cls(
+            source="custom",
+            id=skill.id,
+            name=skill.name,
+            description=skill.description,
+            author_email=skill.author.email if skill.author is not None else None,
+            instructions_markdown=instructions_markdown,
+        )
+
+
+class SkillEditableDetailResponse(SkillResponse):
+    instructions_markdown: str
 
 
 class SkillPatchRequest(BaseModel):
-    is_public: bool | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    description: str | None = None
+    instructions_markdown: str | None = None
+    public_permission: SkillSharePermission | None = None
     enabled: bool | None = None
 
     @model_validator(mode="before")
     @classmethod
     def _reject_explicit_nulls(cls, data: Any) -> Any:
-        """Omitting a field = 'leave unchanged'. Sending null = invalid."""
+        """Omitting a field = 'leave unchanged'. Null is invalid for these
+        fields; null ``public_permission`` is valid and revokes org access."""
         if isinstance(data, dict):
-            for field in ("is_public", "enabled"):
+            for field in (
+                "name",
+                "description",
+                "instructions_markdown",
+                "enabled",
+            ):
                 if field in data and data[field] is None:
                     raise ValueError(f"{field} cannot be null")
         return data
 
-    def to_domain(self) -> SkillPatch:
-        return SkillPatch(**{f: getattr(self, f) for f in self.model_fields_set})
+    @model_validator(mode="after")
+    def _strip_values(self) -> "SkillPatchRequest":
+        for field in ("name", "description", "instructions_markdown"):
+            value = getattr(self, field)
+            if value is None:
+                continue
+            stripped = value.strip()
+            if not stripped:
+                raise ValueError(f"{field} cannot be empty")
+            setattr(self, field, stripped)
+        return self
+
+    @property
+    def has_details_update(self) -> bool:
+        return bool(
+            self.model_fields_set & {"name", "description", "instructions_markdown"}
+        )
+
+    @property
+    def has_db_field_update(self) -> bool:
+        return bool(self.model_fields_set & {"public_permission", "enabled"})
 
 
-class PersonalSkillPatchRequest(BaseModel):
-    """User-endpoint patch: ``enabled`` only. ``is_public`` is the promotion
-    seam and stays admin-only."""
-
-    enabled: bool
+class SkillUserShareRequest(BaseModel):
+    user_id: UUID
+    permission: SkillSharePermission
 
 
-class GrantsReplace(BaseModel):
-    group_ids: list[int]
+class SkillGroupShareRequest(BaseModel):
+    group_id: int
+    permission: SkillSharePermission
+
+
+class SkillShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_shares: list[SkillUserShareRequest] | None = None
+    group_shares: list[SkillGroupShareRequest] | None = None
+    public_permission: SkillSharePermission | None = None
+
+
+class TransferSkillOwnershipRequest(BaseModel):
+    new_owner_user_id: UUID

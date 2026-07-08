@@ -16,6 +16,7 @@ from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
+from tests.daily.connectors.utils import set_test_staging_callback
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(
@@ -120,6 +121,7 @@ def test_blob_s3_connector(
     This is intentional in order to allow searching by just the title even if we can't
     index the file content.
     """
+    staged_csvs = set_test_staging_callback(blob_connector)
     all_docs: list[Document] = []
     document_batches = blob_connector.load_from_state()
     for doc_batch in document_batches:
@@ -135,7 +137,8 @@ def test_blob_s3_connector(
 
         if is_tabular_file(doc.semantic_identifier):
             assert isinstance(section, TabularSection)
-            assert len(section.text) > 0
+            assert section.csv_file_id
+            assert len(staged_csvs[section.csv_file_id]) > 0
             continue
 
         assert isinstance(section, TextSection)

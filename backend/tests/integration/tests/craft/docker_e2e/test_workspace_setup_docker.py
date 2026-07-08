@@ -9,7 +9,6 @@ hydration, and file API operations backed by docker exec.
 
 from __future__ import annotations
 
-from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -23,6 +22,7 @@ from tests.integration.common_utils.managers.build_session import BuildSessionMa
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
+from tests.integration.tests.craft.docker_e2e.conftest import DockerSandbox
 from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
 
 pytestmark = pytest.mark.skipif(
@@ -40,13 +40,13 @@ def workspace_user() -> DATestUser:
 def workspace_sandbox(
     workspace_user: DATestUser,
     provision_sandbox: ProvisionSandbox,
-) -> tuple[UUID, str]:
+) -> DockerSandbox:
     return provision_sandbox(workspace_user)
 
 
 def test_session_setup_creates_user_writable_workspace(
     workspace_user: DATestUser,
-    workspace_sandbox: tuple[UUID, str],
+    workspace_sandbox: DockerSandbox,
     docker_exec: DockerExec,
 ) -> None:
     """
@@ -148,7 +148,7 @@ def test_session_setup_creates_user_writable_workspace(
     private_listing = BuildSessionManager.list_files(
         workspace_user, session_id, "outputs/private"
     )
-    private_names = {entry["name"] for entry in private_listing["entries"]}
+    private_names = {entry.name for entry in private_listing.entries}
     assert "private.txt" in private_names
 
     downloaded = BuildSessionManager.download_artifact(
@@ -163,16 +163,16 @@ def test_session_setup_creates_user_writable_workspace(
         filename=upload_name,
         content=b"docker workspace setup check",
     )
-    assert upload["filename"] == upload_name
-    assert upload["path"] == f"attachments/{upload_name}"
+    assert upload.filename == upload_name
+    assert upload.path == f"attachments/{upload_name}"
 
     listing = BuildSessionManager.list_files(workspace_user, session_id, "attachments")
-    attachment_names = {entry["name"] for entry in listing["entries"]}
+    attachment_names = {entry.name for entry in listing.entries}
     assert upload_name in attachment_names
 
-    BuildSessionManager.delete_file(workspace_user, session_id, upload["path"])
+    BuildSessionManager.delete_file(workspace_user, session_id, upload.path)
     post_delete_listing = BuildSessionManager.list_files(
         workspace_user, session_id, "attachments"
     )
-    post_delete_names = {entry["name"] for entry in post_delete_listing["entries"]}
+    post_delete_names = {entry.name for entry in post_delete_listing.entries}
     assert upload_name not in post_delete_names

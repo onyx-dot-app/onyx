@@ -5,9 +5,9 @@ External-app providers are *built-in skills* created on demand: their ``Skill``
 row carries a ``built_in_skill_id`` (e.g. ``slack``) so it renders through the
 exact same disk-backed path as a seeded built-in — there is no external-app
 special case in the push pipeline. These tests verify that an authenticated,
-enabled provider delivers its on-disk content under its stable directory, and
-that the gate (``list_skills_for_sandbox_injection``: enabled + per-user
-credential completeness) keeps content out otherwise.
+    enabled provider delivers its on-disk content under its stable directory, and
+    that the USE access policy (enabled + per-user credential completeness) keeps
+    content out otherwise.
 
 Uses the real Slack provider directory on disk so the wiring
 (``built_in_skill_id -> source dir``) is exercised end to end. The DB-layer

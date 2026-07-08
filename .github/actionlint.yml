@@ -14,9 +14,11 @@ self-hosted-runner:
     - runner=8cpu-linux-x64
     - runner=16cpu-linux-arm64
     - runner=16cpu-linux-x64
+    - spot=false # On-demand (no spot reclamation) for long-running lanes
     - ubuntu-slim # Currently in public preview
     - volume=40gb
     - volume=50gb
+    - volume=60gb
     - volume=100gb
 
 # Configuration variables in array of strings defined in your repository or
@@ -37,7 +39,7 @@ paths:
   .github/workflows/**/*.{yml,yaml}:
     # TODO: These are real and should be fixed eventually.
     ignore:
-      - 'shellcheck reported issue in this script: SC2038:.+'
-      - 'shellcheck reported issue in this script: SC2046:.+'
-      - 'shellcheck reported issue in this script: SC2086:.+'
-      - 'shellcheck reported issue in this script: SC2193:.+'
+      - "shellcheck reported issue in this script: SC2038:.+"
+      - "shellcheck reported issue in this script: SC2046:.+"
+      - "shellcheck reported issue in this script: SC2086:.+"
+      - "shellcheck reported issue in this script: SC2193:.+"

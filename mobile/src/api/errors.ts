@@ -1,11 +1,3 @@
-// Normalized API error model.
-//
-// The Onyx backend returns errors as `{ error_code, detail }` (the global
-// OnyxError handler) or occasionally `{ detail }` / `{ message }`. `apiFetch`
-// flattens whichever shape it gets into these typed fields so call sites never
-// have to dig into a raw body. Mirrors the intent of web's `FetchError` while
-// exposing `status`/`code`/`detail` as first-class fields.
-
 interface ApiErrorArgs {
   status: number;
   code?: string;
@@ -33,9 +25,7 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
-// 401 (unauthenticated) / 403 (forbidden) — used both to skip retries and,
-// later, to drive the router auth-gate. 402 is included for tier-gated routes,
-// matching web's `skipRetryOnAuthError`.
+// 401/403, plus 402 for tier-gated routes; skips retries and drives the auth-gate.
 export function isAuthError(error: unknown): boolean {
   return (
     isApiError(error) &&

@@ -1,10 +1,17 @@
-# Runs the Craft Kubernetes sandbox tests against a kind cluster on each PR that
-# touches sandbox source. The sandbox image is built from the current tree and
-# served from a local docker registry; kind pulls from that registry rather than
-# going through `kind load docker-image`, which would write a multi-GB tar to
-# tmpfs-backed /tmp. Canonical kind-in-CI pattern:
+# Runs the Craft Kubernetes integration tests against a Helm-installed kind
+# cluster with the real API, Celery workers, sandbox proxy, and sandbox pods.
+#
+# Each test file owns a module-scoped sandbox pod and the single-node kind
+# cluster fits one sandbox pod at a time, so the lane shards per test file, each
+# shard on its own kind cluster (dynamic `fail-fast: false` matrix).
+#
+# Images are built once and pushed to the shared ECR repo, then each shard
+# mirrors them into a local `localhost:5001` registry that kind pulls from
+# unauthenticated — sandbox pods have no `imagePullSecrets`, so the image must
+# come from an unauthenticated registry. (kind pulls from the local registry
+# rather than `kind load`, which writes a multi-GB tar to tmpfs /tmp.)
 # https://kind.sigs.k8s.io/docs/user/local-registry/
-name: Craft Kubernetes Sandbox Tests
+name: Craft Kubernetes Integration Tests
 concurrency:
   group: Craft-K8s-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
@@ -17,7 +24,8 @@ on:
     branches: [main]
     # NOTE: Intentionally no `paths:` filter. Trigger-level `paths:` is ignored
     # for `merge_group`, so we always trigger and let the `changes` job below
-    # decide whether the real test job runs.
+    # decide whether the real test job runs (matches the docker-compose lane
+    # cadence; this lane is expensive and must not run on every PR).
   push:
     tags:
       - "v*.*.*"
@@ -36,40 +44,45 @@ env:
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
-  # Sandbox pod resource requests live in values-ci.yaml
-  # (configMap.SANDBOX_POD_*).
-  SANDBOX_API_SERVER_URL: "http://api-server.onyx-ci.invalid"
+  # Sandbox pod resource requests live in values-ci.yaml (configMap.SANDBOX_POD_*).
+  SANDBOX_API_SERVER_URL: "http://onyx-api-service.onyx.svc.cluster.local:8080"
 
-  # Proxy lives in release namespace `onyx`. SANDBOX_PROXY_HOST is set later to
-  # the proxy Service ClusterIP — the runner has no cluster DNS, so a Service
-  # FQDN here would fail _resolve_proxy_ip in the manager.
+  # Proxy lives in release namespace `onyx`. SANDBOX_PROXY_HOST is set
+  # later to the proxy Service ClusterIP — the runner has no cluster DNS,
+  # so a Service FQDN here would fail _resolve_proxy_ip in the manager.
   HELM_RELEASE_NAMESPACE: "onyx"
   SANDBOX_PROXY_PORT: "8080"
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
   BACKEND_IMAGE: "localhost:5001/onyx-backend:ci"
-  # Fail fast on opencode hangs (default is 900s). Without this, CI waits 15 min
-  # for the per-turn timeout while the 20-min workflow timeout kills the job
-  # first — losing failure logs and giving zero signal.
+  # Fail fast on opencode hangs (default is 900s) so a stuck turn surfaces logs
+  # well within the job timeout instead of being killed with zero signal.
   SANDBOX_TURN_TIMEOUT_SECONDS: "120"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
 
-  # Must match the helm values-ci.yaml redis_password the proxy reads from its
-  # onyx-redis secret. Compose Redis is set to require this password right after
-  # startup (see Start Postgres step).
+  # The pytest process runs on the runner, so it reaches chart-managed
+  # Postgres/Redis through kubectl port-forwards.
+  POSTGRES_HOST: "127.0.0.1"
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: "postgres"
+  POSTGRES_PASSWORD: "password"
+  POSTGRES_DB: "postgres"
+  REDIS_HOST: "127.0.0.1"
+  REDIS_PORT: "6379"
   REDIS_PASSWORD: "password"
+  API_SERVER_HOST: "127.0.0.1"
+  API_SERVER_PORT: "8080"
 
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
   changes:
-    # Decides whether the heavy test job runs. On pull_request / merge_group we
-    # use paths-filter; on schedule / push (tags) / workflow_dispatch the filter
-    # is skipped and the output defaults to `true` so everything runs.
+    # Gates the expensive test job. On pull_request / merge_group we use
+    # paths-filter; on schedule / push (tags) / workflow_dispatch the filter is
+    # skipped and the output defaults to `true` so the lane runs.
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # paths-filter needs pull-requests:read to list PR files on private repos.
     permissions:
       contents: read
       pull-requests: read
@@ -78,7 +91,7 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
@@ -87,40 +100,154 @@ jobs:
         with:
           filters: |
             craft_k8s:
+              - 'backend/Dockerfile'
               - 'backend/onyx/sandbox_proxy/**'
-              - 'backend/onyx/server/features/build/sandbox/**'
-              - 'backend/onyx/server/features/build/approvals/**'
+              - 'backend/onyx/server/features/build/**'
+              - 'backend/onyx/server/features/skill/**'
               - 'backend/onyx/skills/**'
-              - 'backend/tests/external_dependency_unit/craft/**'
-              # Whole chart: shared inputs (_helpers.tpl, values.yaml,
-              # Chart.yaml) all feed `helm template`, so a chart edit anywhere
-              # can break it.
-              - 'deployment/helm/charts/onyx/**'
+              - 'backend/shared_configs/**'
+              - 'deployment/helm/**'
+              - 'backend/tests/integration/tests/craft/*.py'
+              - 'backend/tests/integration/tests/craft/k8s/**'
+              - 'backend/tests/common/craft/**'
+              - 'backend/tests/integration/conftest.py'
+              - 'backend/tests/integration/common_utils/**'
               - '.github/workflows/pr-craft-k8s-tests.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
+              - '.github/actions/setup-test-license/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
 
-  craft-k8s-tests:
+  discover-test-files:
+    # One shard per craft k8s test file (module-scoped pool fixtures keep a file on one shard).
     needs: changes
-    if: ${{ needs.changes.outputs.craft_k8s == 'true' }}
+    if: needs.changes.outputs.craft_k8s == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      test-files: ${{ steps.set-matrix.outputs.test-files }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Discover craft k8s test files
+        id: set-matrix
+        run: |
+          set -eo pipefail
+          # `name` = log-friendly shard id; `path` = repo-root-relative pytest target.
+          entries=""
+          for f in $(find backend/tests/integration/tests/craft/k8s \
+              -maxdepth 1 -name 'test_*.py' -type f | sort); do
+            base=$(basename "$f" .py)
+            shard="${base#test_}"
+            entries="${entries}{\"path\":\"${f}\",\"name\":\"${shard}\"},"
+          done
+          if [ -z "${entries}" ]; then
+            echo "::error::no craft k8s test files discovered"
+            exit 1
+          fi
+          echo "test-files=[${entries%,}]" >> "$GITHUB_OUTPUT"
+
+  build-images:
+    # Build both images in parallel (one matrix leg each) and push to the shared
+    # ECR repo so each test shard pulls prebuilt images instead of cold-building.
+    name: build-image (${{ matrix.image }})
+    needs: changes
+    if: needs.changes.outputs.craft_k8s == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: sandbox
+            context: ./backend/onyx/server/features/build/sandbox/image
+            file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
+            # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
+            # so skip LibreOffice et al. to keep the CI image lean. Browser stays
+            # on (ENABLE_BROWSER defaults true) — chromium is lighter and the
+            # browser integration test needs it.
+            extra_build_args: "ENABLE_SKILLS=false"
+          - image: backend
+            context: ./backend
+            file: ./backend/Dockerfile
+            extra_build_args: ""
     runs-on:
       - runs-on
-      - runner=4cpu-linux-x64
+      - runner=8cpu-linux-x64
+      - spot=false
       - volume=100gb
-      - ${{ format('run-id={0}-craft-k8s-tests', github.run_id) }}
-      - extras=s3-cache
-    timeout-minutes: 35
+      - ${{ format('run-id={0}-craft-k8s-build-{1}', github.run_id, matrix.image) }}
+      - extras=ecr-cache
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+
+      - name: Build and push ${{ matrix.image }} image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+            ${{ matrix.extra_build_args }}
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-k8s-${{ matrix.image }}-${{ github.run_id }}
+          push: true
+          cache-from: type=gha,scope=craft-${{ matrix.image }}
+          cache-to: type=gha,scope=craft-${{ matrix.image }},mode=max
+
+  craft-k8s-tests:
+    name: craft-k8s (${{ matrix.test-file.name }})
+    needs: [changes, discover-test-files, build-images]
+    if: needs.changes.outputs.craft_k8s == 'true'
+    # spot=false: this is a long lane (full kind cluster per shard); on-demand
+    # avoids mid-run spot reclamation. Matches the compose lane.
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - spot=false
+      - volume=100gb
+      - ${{ format('run-id={0}-craft-k8s-tests-{1}', github.run_id, matrix.test-file.name) }}
+      - extras=ecr-cache
+    timeout-minutes: 40
+
+    strategy:
+      # fail-fast off so one shard's failure doesn't cancel the others.
+      fail-fast: false
+      matrix:
+        test-file: ${{ fromJson(needs.discover-test-files.outputs.test-files) }}
+
+    # id-token: OIDC for the setup-test-license step.
+    permissions:
+      contents: read
+      id-token: write
 
     env:
       PYTHONPATH: ./backend
       MODEL_SERVER_HOST: "disabled"
       DISABLE_TELEMETRY: "true"
+      DISABLE_VECTOR_DB: "false"
 
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -137,13 +264,6 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
-      # network=host so buildx (running in a container) can push to the host's
-      # registry at localhost:5001.
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
-        with:
-          driver-opts: network=host
-
       - name: Start local image registry
         run: |
           docker run -d --restart=always \
@@ -151,37 +271,22 @@ jobs:
             --name "${KIND_REGISTRY_NAME}" \
             "${BASE_IMAGE_REGISTRY:-docker.io}/library/registry:2"
 
-      - name: Build and push sandbox image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
-        with:
-          context: ./backend/onyx/server/features/build/sandbox/image
-          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
-          platforms: linux/amd64
-          # CI tests don't exercise skill runtime deps
-          # (soffice/pdftoppm/pptxgenjs), so skip LibreOffice et al. to keep the
-          # CI image lean.
-          build-args: |
-            ENABLE_SKILLS=false
-            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          tags: localhost:5001/onyx-sandbox:ci
-          push: true
-          cache-from: type=gha,scope=craft-sandbox
-          cache-to: type=gha,scope=craft-sandbox,mode=max
-
-      # Backend image runs the sandbox-proxy via `python -m
-      # onyx.sandbox_proxy.server`.
-      - name: Build and push backend image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/amd64
-          tags: ${{ env.BACKEND_IMAGE }}
-          push: true
-          build-args: |
-            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          cache-from: type=gha,scope=craft-backend
-          cache-to: type=gha,scope=craft-backend,mode=max
+      # Re-push the prebuilt ECR images into this shard's local registry under the
+      # tags kind pulls (unauthenticated); the blob copy is cheap vs a cold build.
+      - name: Mirror prebuilt images into local registry
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -eo pipefail
+          mirror() {
+            local src="$1" dst="$2"
+            docker pull "$src"
+            docker tag "$src" "$dst"
+            docker push "$dst"
+          }
+          mirror "${ECR_CACHE}:craft-k8s-sandbox-${RUN_ID}" "${SANDBOX_CONTAINER_IMAGE}"
+          mirror "${ECR_CACHE}:craft-k8s-backend-${RUN_ID}" "${BACKEND_IMAGE}"
 
       - name: Write kind config
         run: |
@@ -195,14 +300,12 @@ jobs:
           EOF
 
       - name: Create kind cluster
-        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # ratchet:helm/kind-action@v1.14.0
         with:
           cluster_name: onyx-craft-ci
           node_image: kindest/node:v1.33.1
           config: ${{ runner.temp }}/kind-config.yaml
 
-      # Connect the registry to kind's docker network and tell containerd to
-      # route localhost:5001 → kind-registry:5000.
       - name: Connect local registry to kind network
         run: |
           docker network connect "kind" "${KIND_REGISTRY_NAME}" || true
@@ -212,22 +315,14 @@ jobs:
           [host.\"http://${KIND_REGISTRY_NAME}:5000\"]
           EOF"
 
-      # Make pod IPs routable from the CI runner so write_files_to_sandbox
-      # (which does httpx.post to pod_ip:8731) can reach the in-pod daemon.
-      - name: Add host route to kind pod subnet
-        run: |
-          NODE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' onyx-craft-ci-control-plane)
-          sudo ip route add 10.244.0.0/16 via "$NODE_IP"
-
       # Pod spec sets nodeSelector onyx.app/workload=sandbox
-      # (kubernetes_sandbox_manager.py). In prod this matches a dedicated node
-      # pool; in kind we just label the single control-plane node.
+      # (kubernetes_sandbox_manager.py). In prod this matches a dedicated
+      # node pool; in kind we just label the single control-plane node.
       - name: Label kind node for sandbox workload
         run: kubectl label node onyx-craft-ci-control-plane onyx.app/workload=sandbox
 
-      # `helm template` validates Chart.yaml dependencies up front, even for
-      # --show-only of a parent-chart template. Add the repos and build the deps
-      # so the render step doesn't error out.
+      # `helm upgrade --install` validates Chart.yaml dependencies up front.
+      # Add the repos and build deps before installing the CI release.
       - name: Build helm chart dependencies
         run: |
           helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
@@ -237,71 +332,157 @@ jobs:
           helm repo add minio https://charts.min.io/
           helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
           helm repo update
-          helm dependency build deployment/helm/charts/onyx
+          if ! helm dependency build deployment/helm/charts/onyx; then
+            echo "helm dependency build failed; pulling disabled code-interpreter dependency directly"
+            code_interpreter_version=$(awk '
+              $1 == "-" && $2 == "name:" && $3 == "code-interpreter" { found = 1 }
+              found && $1 == "version:" { print $2; exit }
+            ' deployment/helm/charts/onyx/Chart.yaml)
+            test -n "${code_interpreter_version}"
+            helm pull code-interpreter/code-interpreter \
+              --version "${code_interpreter_version}" \
+              --destination deployment/helm/charts/onyx/charts
+          fi
+          helm dependency list deployment/helm/charts/onyx
+          helm dependency list deployment/helm/charts/onyx \
+            | awk 'NR > 1 && NF && $4 != "ok" { bad = 1 } END { exit bad }'
 
-      # Render the sandbox namespace, proxy, and MinIO manifests from the helm
-      # chart rather than maintaining a parallel copy here. Future chart edits
-      # (proxy spec, RBAC, NetworkPolicy, env-configmap) flow into CI
-      # automatically. When you add a new chart component the K8s sandbox tests
-      # depend on, add its template path to --show-only here.
-      - name: Render sandbox + proxy manifests from chart
+      - name: Generate sandbox push key
         run: |
-          mkdir -p /tmp/manifests
-          helm template onyx deployment/helm/charts/onyx \
-            -n "${HELM_RELEASE_NAMESPACE}" \
-            -f deployment/helm/charts/onyx/values-ci.yaml \
-            --kube-version 1.33.0 \
-            --set "celery_shared.image.repository=localhost:5001/onyx-backend" \
-            --set "celery_shared.image.tag=ci" \
-            --show-only templates/sandbox-namespace.yaml \
-            --show-only templates/sandbox-rbac.yaml \
-            --show-only templates/sandbox-podtemplate.yaml \
-            --show-only templates/sandbox-proxy/deployment.yaml \
-            --show-only templates/sandbox-proxy/service.yaml \
-            --show-only templates/sandbox-proxy/rbac.yaml \
-            --show-only templates/sandbox-proxy/networkpolicy.yaml \
-            --show-only templates/auth-secrets.yaml \
-            --show-only templates/configmap.yaml \
-            --show-only charts/minio/templates/serviceaccount.yaml \
-            --show-only charts/minio/templates/configmap.yaml \
-            --show-only charts/minio/templates/pvc.yaml \
-            --show-only charts/minio/templates/deployment.yaml \
-            --show-only charts/minio/templates/service.yaml \
-            --show-only charts/minio/templates/post-job.yaml \
-            > /tmp/manifests/sandbox.yaml
-          echo "--- rendered resources ---"
-          grep -E '^(kind|  name):' /tmp/manifests/sandbox.yaml || true
+          python - <<'PY' >> "$GITHUB_ENV"
+          import base64
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          from cryptography.hazmat.primitives.serialization import Encoding
+          from cryptography.hazmat.primitives.serialization import NoEncryption
+          from cryptography.hazmat.primitives.serialization import PrivateFormat
 
-      # The release namespace `onyx` isn't in the rendered output (only
-      # `onyx-sandboxes` is), so create it explicitly before applying.
-      - name: Apply sandbox and proxy manifests
+          key = Ed25519PrivateKey.generate()
+          raw = key.private_bytes(
+              encoding=Encoding.Raw,
+              format=PrivateFormat.Raw,
+              encryption_algorithm=NoEncryption(),
+          )
+          print(f"ONYX_SANDBOX_PUSH_PRIVATE_KEY={base64.b64encode(raw).decode('ascii')}")
+          PY
+
+      - name: Install Onyx chart into kind
         run: |
+          set -eo pipefail
           kubectl create namespace "${HELM_RELEASE_NAMESPACE}" \
             --dry-run=client -o yaml | kubectl apply -f -
-          # Pin context ns so objects without metadata.namespace fall back
-          # here; objects with explicit ns (proxy RBAC in onyx-sandboxes)
-          # land where they declare. Passing -n would conflict with those.
           kubectl config set-context --current --namespace="${HELM_RELEASE_NAMESPACE}"
-          kubectl apply -f /tmp/manifests/sandbox.yaml
 
-      - name: Wait for proxy ready
+          for attempt in 1 2 3; do
+            if helm upgrade --install onyx deployment/helm/charts/onyx \
+              -n "${HELM_RELEASE_NAMESPACE}" \
+              -f deployment/helm/charts/onyx/values-ci.yaml \
+              --set "api.image.repository=localhost:5001/onyx-backend" \
+              --set "api.image.tag=ci" \
+              --set "celery_shared.image.repository=localhost:5001/onyx-backend" \
+              --set "celery_shared.image.tag=ci" \
+              --set-string "auth.sandboxPushSecret.values.private_key=${ONYX_SANDBOX_PUSH_PRIVATE_KEY}" \
+              --timeout 10m; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "helm install failed (attempt ${attempt}/3); waiting before retry ..."
+              kubectl -n "${HELM_RELEASE_NAMESPACE}" get pods || true
+              sleep 20
+            fi
+          done
+
+          helm status onyx -n "${HELM_RELEASE_NAMESPACE}" || true
+          kubectl get pods -A || true
+          exit 1
+
+      - name: Wait for chart Postgres ready
+        run: |
+          set -eo pipefail
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
+            deployment/onyx-cloudnative-pg --timeout=180s
+          # Don't add a `pod -l cnpg.io/cluster` wait — it also matches the
+          # transient initdb pod (deleted mid-wait → NotFound).
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" wait \
+            --for=condition=Ready cluster/onyx-pg \
+            --timeout=300s
+
+      - name: Forward chart Postgres to runner
+        run: |
+          set -eo pipefail
+          # setsid survives the step-boundary process-group cleanup; the loop
+          # survives kubectl port-forward's mid-run drops.
+          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-pg-rw \"$POSTGRES_PORT\":5432; sleep 1; done" \
+            > "${RUNNER_TEMP}/postgres-port-forward.log" 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/postgres-port-forward.pid"
+          for _ in $(seq 1 60); do
+            if python -c 'import os, psycopg2; conn = psycopg2.connect(dbname=os.environ["POSTGRES_DB"], user=os.environ["POSTGRES_USER"], password=os.environ["POSTGRES_PASSWORD"], host=os.environ["POSTGRES_HOST"], port=os.environ["POSTGRES_PORT"], connect_timeout=2); conn.close()'; then
+              echo "chart Postgres is reachable at ${POSTGRES_HOST}:${POSTGRES_PORT}"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "${RUNNER_TEMP}/postgres-port-forward.log" || true
+          exit 1
+
+      - name: Run migrations
+        run: |
+          cd backend
+          alembic upgrade head
+          alembic heads --verbose
+
+      - name: Wait for chart OpenSearch ready
         run: |
           kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
-            deployment/onyx-sandbox-proxy --timeout=180s
+            statefulset/onyx-opensearch-master --timeout=420s
+
+      - name: Wait for chart Redis ready
+        run: |
+          set -eo pipefail
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
+            deployment/redis-operator --timeout=180s
+          for _ in $(seq 1 120); do
+            endpoints=$(kubectl -n "${HELM_RELEASE_NAMESPACE}" get endpoints onyx \
+              -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)
+            if [ -n "${endpoints}" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" get redis,pods,svc || true
+          exit 1
+
+      - name: Forward chart Redis to runner
+        run: |
+          set -eo pipefail
+          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx \"$REDIS_PORT\":6379; sleep 1; done" \
+            > "${RUNNER_TEMP}/redis-port-forward.log" 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/redis-port-forward.pid"
+          for _ in $(seq 1 60); do
+            if python -c 'import os; from redis import Redis; Redis(host=os.environ["REDIS_HOST"], port=int(os.environ["REDIS_PORT"]), password=os.environ["REDIS_PASSWORD"], socket_connect_timeout=2).ping()'; then
+              echo "chart Redis is reachable at ${REDIS_HOST}:${REDIS_PORT}"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "${RUNNER_TEMP}/redis-port-forward.log" || true
+          exit 1
 
       - name: Wait for chart MinIO ready
         run: |
           kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
             deployment/onyx-minio --timeout=180s
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" wait \
-            --for=condition=complete job/onyx-minio-post-job \
-            --timeout=180s
+          if kubectl -n "${HELM_RELEASE_NAMESPACE}" get job/onyx-minio-post-job >/dev/null 2>&1; then
+            kubectl -n "${HELM_RELEASE_NAMESPACE}" wait \
+              --for=condition=complete job/onyx-minio-post-job \
+              --timeout=180s
+          else
+            echo "MinIO post-install hook job already completed and was deleted by Helm"
+          fi
 
       - name: Forward chart MinIO to runner
         run: |
           set -eo pipefail
-          nohup kubectl -n "${HELM_RELEASE_NAMESPACE}" port-forward \
-            svc/onyx-minio 9004:9000 \
+          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-minio 9004:9000; sleep 1; done" \
             > "${RUNNER_TEMP}/minio-port-forward.log" 2>&1 &
           echo "$!" > "${RUNNER_TEMP}/minio-port-forward.pid"
           for _ in $(seq 1 30); do
@@ -314,11 +495,66 @@ jobs:
           cat "${RUNNER_TEMP}/minio-port-forward.log" || true
           exit 1
 
+      - name: Wait for chart app runtime ready
+        run: |
+          set -eo pipefail
+          for deployment in \
+            onyx-sandbox-proxy \
+            onyx-api-server \
+            onyx-celery-beat \
+            onyx-celery-worker-primary \
+            onyx-celery-worker-light \
+            onyx-celery-worker-heavy \
+            onyx-celery-worker-scheduled-tasks; do
+            kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
+              "deployment/${deployment}" --timeout=360s
+          done
+
+      # Tier-gated EE routes (test_skill_push user-groups) need a license.
+      - name: Fetch dev license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
+      - name: Seed dev license
+        # The api-server can briefly restart if Postgres/cnpg flaps right after
+        # rollout, so re-assert readiness and retry the exec.
+        run: |
+          set -eo pipefail
+          for attempt in $(seq 1 5); do
+            kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
+              deployment/onyx-api-server --timeout=120s || true
+            if kubectl -n "${HELM_RELEASE_NAMESPACE}" exec deployment/onyx-api-server -- \
+                env ONYX_DEV_LICENSE="${ONYX_DEV_LICENSE}" python -m scripts.seed_dev_license; then
+              echo "seeded dev license (attempt ${attempt})"
+              exit 0
+            fi
+            echo "seed dev license failed (attempt ${attempt}); retrying ..."
+            sleep 10
+          done
+          exit 1
+
+      - name: Forward chart API to runner
+        run: |
+          set -eo pipefail
+          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-api-service \"$API_SERVER_PORT\":8080; sleep 1; done" \
+            > "${RUNNER_TEMP}/api-port-forward.log" 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/api-port-forward.pid"
+          for _ in $(seq 1 60); do
+            if curl -fsS "http://${API_SERVER_HOST}:${API_SERVER_PORT}/health"; then
+              echo "chart API reachable at ${API_SERVER_HOST}:${API_SERVER_PORT}"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "${RUNNER_TEMP}/api-port-forward.log" || true
+          exit 1
+
       # The test process runs on the CI runner, which has no cluster DNS.
-      # `socket.gethostbyname(IP)` returns the IP unchanged, so resolving the
-      # Service ClusterIP here lets _resolve_proxy_ip in the manager succeed
-      # without any DNS resolution. host_aliases on sandbox pods then pins
-      # `sandbox-proxy` to this same IP.
+      # `socket.gethostbyname(IP)` returns the IP unchanged, so resolving
+      # the Service ClusterIP here lets _resolve_proxy_ip in the manager
+      # succeed without any DNS resolution. host_aliases on sandbox pods
+      # then pins `sandbox-proxy` to this same IP.
       - name: Resolve proxy Service IP and export to env
         run: |
           PROXY_IP=$(kubectl -n "${HELM_RELEASE_NAMESPACE}" get svc \
@@ -326,123 +562,8 @@ jobs:
           echo "SANDBOX_PROXY_HOST=${PROXY_IP}" >> "$GITHUB_ENV"
           echo "resolved proxy ClusterIP: ${PROXY_IP}"
 
-      - name: Create .env for Docker Compose
-        run: |
-          cat <<EOF > deployment/docker_compose/.env
-          DISABLE_TELEMETRY=true
-          EOF
-
-      - name: Start Postgres and Redis
-        run: |
-          cd deployment/docker_compose
-          docker compose \
-            -f docker-compose.yml \
-            -f docker-compose.dev.yml \
-            up -d \
-            relational_db \
-            cache
-
-          # The proxy chart bakes in REDIS_PASSWORD=password (helm
-          # values-ci.yaml). Compose Redis ships without requirepass, so a
-          # CONFIG SET aligns the daemon with what the proxy expects -- without
-          # it, the proxy's grant-cache check trips NOAUTH and the approval row
-          # gets terminalized.
-          REDIS_ID=$(docker compose \
-            -f docker-compose.yml \
-            -f docker-compose.dev.yml \
-            ps -q cache)
-          docker exec "$REDIS_ID" redis-cli CONFIG SET requirepass password
-
-      - name: Expose Postgres inside the kind cluster
-        run: |
-          set -eo pipefail
-          PG_ID=$(cd deployment/docker_compose && \
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q relational_db)
-          # Attach the postgres container to kind's docker network so the
-          # in-cluster sandbox-proxy can route to it.
-          docker network connect kind "$PG_ID" --alias relational_db
-          PG_IP=$(docker inspect "$PG_ID" \
-            --format '{{ (index .NetworkSettings.Networks "kind").IPAddress }}')
-          echo "postgres on kind network at $PG_IP"
-
-          # The sandbox-proxy is the only in-cluster component that reads the
-          # DB; the chart renders its POSTGRES_HOST as `onyx-pg-rw` (the
-          # release-name + "-pg-rw"). CloudNativePG isn't deployed in this lane
-          # (only the proxy/configmap templates are rendered), so expose the
-          # docker-compose Postgres under that name via a selector-less Service
-          # + manual Endpoints pointing at the container's IP on kind's docker
-          # network. Without this the proxy's identity lookups raise (DNS for
-          # `onyx-pg-rw` fails) and every egress fail-closes 403.
-          cat <<EOF | kubectl apply -f -
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: onyx-pg-rw
-            namespace: onyx
-          spec:
-            ports:
-              - port: 5432
-                targetPort: 5432
-                protocol: TCP
-          ---
-          apiVersion: v1
-          kind: Endpoints
-          metadata:
-            name: onyx-pg-rw
-            namespace: onyx
-          subsets:
-            - addresses:
-                - ip: ${PG_IP}
-              ports:
-                - port: 5432
-                  protocol: TCP
-          EOF
-
-      # Same selector-less Service trick as Postgres above. The configmap
-      # renders REDIS_HOST as the helm release name (`onyx`); The proxy uses it
-      # for the approval-grant cache check.
-      - name: Expose Redis inside the kind cluster
-        run: |
-          set -eo pipefail
-          REDIS_ID=$(cd deployment/docker_compose && \
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q cache)
-          docker network connect kind "$REDIS_ID" --alias cache
-          REDIS_IP=$(docker inspect "$REDIS_ID" \
-            --format '{{ (index .NetworkSettings.Networks "kind").IPAddress }}')
-          echo "redis on kind network at $REDIS_IP"
-          cat <<EOF | kubectl apply -f -
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: onyx
-            namespace: onyx
-          spec:
-            ports:
-              - port: 6379
-                targetPort: 6379
-                protocol: TCP
-          ---
-          apiVersion: v1
-          kind: Endpoints
-          metadata:
-            name: onyx
-            namespace: onyx
-          subsets:
-            - addresses:
-                - ip: ${REDIS_IP}
-              ports:
-                - port: 6379
-                  protocol: TCP
-          EOF
-
-      - name: Run migrations
-        run: |
-          cd backend
-          alembic upgrade head
-          alembic heads --verbose
-
-      # Sandbox pods are torn down on failure before `kind export logs` runs, so
-      # kubelet GCs their opencode-serve logs. Stream them to disk live (one
+      # Sandbox pods are torn down on failure before `kind export logs` runs,
+      # so kubelet GCs their opencode-serve logs. Stream them to disk live (one
       # follower per pod, retrying the attach) so failures leave a trail.
       - name: Start sandbox pod log capture
         run: |
@@ -470,66 +591,42 @@ jobs:
               sleep 1
             done
           ' > sandbox-logs/_watcher.log 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/sandbox-log-watcher.pid"
           disown || true
           echo "sandbox pod log capture started (pid $!)"
 
-      - name: Run Craft K8s tests
+      - name: Run Craft K8s tests (${{ matrix.test-file.name }})
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           py.test \
             --durations=8 \
             -o junit_family=xunit2 \
-            -xv \
+            -v \
             --ff \
             -m "not nightly" \
-            --log-cli-level=INFO \
-            --log-cli-format='%(asctime)s %(levelname)s %(name)s:%(funcName)s:%(lineno)d %(message)s' \
-            backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py \
-            backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox_file_ops.py \
-            backend/tests/external_dependency_unit/craft/test_bun_node_modules_dedup.py \
-            backend/tests/external_dependency_unit/craft/test_snapshot_restore.py \
-            backend/tests/external_dependency_unit/craft/test_idle_cleanup.py \
-            backend/tests/external_dependency_unit/craft/test_skill_push.py \
-            backend/tests/external_dependency_unit/craft/test_user_library_sync.py \
-            backend/tests/external_dependency_unit/craft/test_ensure_sandbox_running.py \
-            backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py \
-            backend/tests/external_dependency_unit/craft/test_approval_gate.py
+            "${{ matrix.test-file.path }}"
 
-      # Surface the live-captured sandbox pod logs inline so the serve startup
-      # output is visible in the run without downloading artifacts.
-      - name: Dump captured sandbox pod logs on failure
+      - name: Collect diagnostics on failure
         if: failure()
         run: |
-          echo "=== captured sandbox pod logs ==="
+          mkdir -p kind-logs
+
+          echo "::group::sandbox pod logs"
           if compgen -G "sandbox-logs/*.log" > /dev/null; then
-            for f in sandbox-logs/*.log; do
-              echo "----- ${f} -----"
-              cat "${f}" || true
-            done
+            for f in sandbox-logs/*.log; do echo "--- ${f} ---"; cat "${f}" || true; done
           else
             echo "no sandbox pod logs were captured"
           fi
+          echo "::endgroup::"
 
-      - name: Disk and docker status on failure
-        if: failure()
-        run: |
-          echo "=== df -h ==="; df -h || true
-          echo "=== docker system df ==="; docker system df || true
-          echo "=== docker images ==="; docker images || true
-          echo "=== /tmp contents ==="; ls -lah /tmp || true
+          echo "::group::disk and docker status"
+          df -h || true; docker system df || true; docker images || true; ls -lah /tmp || true
+          echo "::endgroup::"
 
-      - name: MinIO FileStore diagnostics on failure
-        if: failure()
-        run: |
-          echo "=== chart MinIO resources ==="
+          echo "::group::MinIO diagnostics"
           kubectl -n "${HELM_RELEASE_NAMESPACE}" get pods,svc,job -l release=onyx || true
-          echo "=== chart MinIO deployment logs ==="
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-minio --tail=500 || true
-          echo "=== chart MinIO bucket job logs ==="
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs job/onyx-minio-post-job --all-containers --tail=500 || true
-          echo "=== MinIO port-forward log ==="
-          cat "${RUNNER_TEMP}/minio-port-forward.log" || true
-          echo "=== host boto3 view via S3_ENDPOINT_URL ==="
           python - <<'PY' || true
           import os, boto3
           from botocore.config import Config
@@ -546,53 +643,77 @@ jobs:
               objs = s3.list_objects_v2(Bucket=b["Name"]).get("Contents", [])
               print(b["Name"], "->", [o["Key"] for o in objs][:20])
           PY
+          echo "::endgroup::"
 
-      - name: Collect kind logs on failure
-        if: failure()
-        run: |
-          mkdir -p kind-logs
+          echo "::group::chart resources and app logs"
+          helm status onyx -n "${HELM_RELEASE_NAMESPACE}" || true
+          for dep in onyx-api-server onyx-celery-worker-primary \
+              onyx-celery-worker-heavy onyx-celery-worker-scheduled-tasks \
+              onyx-cloudnative-pg redis-operator; do
+            kubectl -n "${HELM_RELEASE_NAMESPACE}" logs "deployment/${dep}" --all-containers --tail=500 || true
+          done
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs statefulset/onyx-opensearch-master --all-containers --tail=500 || true
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" get cluster,redis,statefulset,pods,svc,pvc || true
+          echo "::endgroup::"
+
+          echo "::group::port-forward logs"
+          for f in postgres redis minio api; do
+            echo "--- ${f} ---"; cat "${RUNNER_TEMP}/${f}-port-forward.log" 2>/dev/null || true
+          done
+          echo "::endgroup::"
+
           kind export logs ./kind-logs --name onyx-craft-ci || true
           kubectl get pods -A -o wide > kind-logs/pods.txt 2>&1 || true
+          kubectl get svc -A -o wide > kind-logs/services.txt 2>&1 || true
           kubectl describe pods -n onyx-sandboxes > kind-logs/sandbox-pods-describe.txt 2>&1 || true
           kubectl describe pods -n "${HELM_RELEASE_NAMESPACE}" > kind-logs/release-ns-pods-describe.txt 2>&1 || true
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs -l app.kubernetes.io/component=sandbox-proxy --tail=500 > kind-logs/sandbox-proxy.log 2>&1 || true
-
-      - name: Collect Docker logs on failure
-        if: failure()
-        run: |
-          mkdir -p docker-logs
-          cd deployment/docker_compose
-          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q)
-          for container in $containers; do
-            name=$(docker inspect --format='{{.Name}}' "$container" | sed 's/^\///')
-            docker logs "$container" > "../../docker-logs/${name}.log" 2>&1
-          done
+          cp "${RUNNER_TEMP}"/*-port-forward.log kind-logs/ 2>/dev/null || true
 
       - name: Upload logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: craft-k8s-logs
+          name: craft-k8s-logs-${{ matrix.test-file.name }}
           path: |
             kind-logs/
-            docker-logs/
             sandbox-logs/
           retention-days: 7
 
+      - name: Cleanup kind cluster and port-forwards
+        if: always()
+        run: |
+          set +e
+          for pid_file in \
+            "${RUNNER_TEMP}/postgres-port-forward.pid" \
+            "${RUNNER_TEMP}/redis-port-forward.pid" \
+            "${RUNNER_TEMP}/minio-port-forward.pid" \
+            "${RUNNER_TEMP}/api-port-forward.pid" \
+            "${RUNNER_TEMP}/sandbox-log-watcher.pid"; do
+            if [ -f "${pid_file}" ]; then
+              kill "$(cat "${pid_file}")" 2>/dev/null || true
+            fi
+          done
+          kind delete cluster --name onyx-craft-ci || true
+          docker network disconnect kind "${KIND_REGISTRY_NAME}" 2>/dev/null || true
+          docker rm -f "${KIND_REGISTRY_NAME}" 2>/dev/null || true
+
   craft-k8s-tests-required:
-    # Single required status check for the craft k8s suite. Always runs so
+    # Single required status check for the craft-k8s suite. Always runs so
     # branch protection has a stable target, and passes cleanly when `changes`
     # reports no relevant paths changed (i.e. the test job was legitimately
     # skipped).
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [changes, craft-k8s-tests]
+    needs: [changes, discover-test-files, build-images, craft-k8s-tests]
     if: ${{ always() }}
     steps:
       - name: Check job status
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           RUN_TESTS: ${{ needs.changes.outputs.craft_k8s }}
+          DISCOVER_RESULT: ${{ needs.discover-test-files.result }}
+          BUILD_RESULT: ${{ needs.build-images.result }}
           TEST_RESULT: ${{ needs.craft-k8s-tests.result }}
         run: |
           # Fail closed if `changes` didn't succeed. Otherwise an empty
@@ -606,6 +727,10 @@ jobs:
           if [ "${RUN_TESTS}" != "true" ]; then
             echo "No relevant paths changed -- required check passes."
             exit 0
+          fi
+          if [ "${DISCOVER_RESULT}" != "success" ] || [ "${BUILD_RESULT}" != "success" ]; then
+            echo "Setup results: discover-test-files=${DISCOVER_RESULT}, build-images=${BUILD_RESULT}"
+            exit 1
           fi
           if [ "${TEST_RESULT}" != "success" ]; then
             echo "Test result: ${TEST_RESULT}"

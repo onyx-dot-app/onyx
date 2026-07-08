@@ -62,7 +62,7 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
@@ -94,7 +94,7 @@ jobs:
       editions: ${{ steps.set-editions.outputs.editions }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -103,7 +103,6 @@ jobs:
         run: |
           # Find all leaf-level directories in both test directories.
           # ``craft`` excluded: needs sandbox infra this lane doesn't set up;
-          # coverage lives in pr-craft-k8s-tests.yml + external_dependency_unit.
           tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" -exec basename {} \; | sort)
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
@@ -144,7 +143,7 @@ jobs:
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -203,7 +202,7 @@ jobs:
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -275,7 +274,7 @@ jobs:
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -373,7 +372,7 @@ jobs:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
           timeout_minutes: 20
           max_attempts: 3
@@ -476,7 +475,7 @@ jobs:
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -519,7 +518,7 @@ jobs:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Onyx Lite Integration Tests
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
           timeout_minutes: 20
           max_attempts: 3
@@ -583,7 +582,7 @@ jobs:
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 

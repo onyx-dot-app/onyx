@@ -59,6 +59,13 @@ export interface Settings {
   // Onyx Craft (Build Mode) feature flag
   onyx_craft_enabled?: boolean;
 
+  // Deployment-level Craft availability, ignoring workspace/per-user policy.
+  // Gates visibility of the admin Craft-access controls.
+  onyx_craft_available?: boolean;
+
+  // Workspace default for Craft access; per-user overrides win.
+  craft_default_enabled?: boolean;
+
   // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
   // button that streams the user's sandbox pod logs in real time. Backed
   // by the ENABLE_OPENCODE_DEBUGGING env var on the server. Never set in
@@ -141,7 +148,7 @@ export interface EnterpriseSettings {
 
 /**
  * Combined settings shape returned by the server-side `fetchSettingsSS`
- * helper in `components/settings/lib.ts`. Used only for SSR — client
+ * helper in `lib/settings/svcSS.ts`. Used only for SSR — client
  * components access settings via the SWR hooks in `lib/settings/hooks.ts`.
  */
 export interface CombinedSettings {

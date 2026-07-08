@@ -10,14 +10,16 @@ from typing_extensions import override
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_PROVIDER
-from onyx.db.image_generation import get_default_image_generation_config
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import load_chat_file_by_id
 from onyx.file_store.utils import save_files
 from onyx.image_gen.factory import get_image_generation_provider
-from onyx.image_gen.factory import validate_credentials
+from onyx.image_gen.generation import generate_images_with_provider
+from onyx.image_gen.generation import is_image_generation_configured
+from onyx.image_gen.generation import resolve_image_size
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
+from onyx.image_gen.interfaces import ImageShape
 from onyx.image_gen.interfaces import ReferenceImage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
@@ -31,7 +33,6 @@ from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.images.models import ImageGenerationResponse
-from onyx.tools.tool_implementations.images.models import ImageShape
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -90,30 +91,7 @@ class ImageGenerationTool(Tool[None]):
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
         """Available if a default image generation config exists with valid credentials."""
-        try:
-            config = get_default_image_generation_config(db_session)
-            if not config or not config.model_configuration:
-                return False
-
-            llm_provider = config.model_configuration.llm_provider
-            credentials = ImageGenerationProviderCredentials(
-                api_key=(
-                    llm_provider.api_key.get_value(apply_mask=False)
-                    if llm_provider.api_key
-                    else None
-                ),
-                api_base=llm_provider.api_base,
-                api_version=llm_provider.api_version,
-                deployment_name=llm_provider.deployment_name,
-                custom_config=llm_provider.custom_config,
-            )
-            return validate_credentials(
-                provider=llm_provider.provider,
-                credentials=credentials,
-            )
-        except Exception:
-            logger.exception("Error checking if image generation is available")
-            return False
+        return is_image_generation_configured(db_session)
 
     def tool_definition(self) -> dict:
         return {
@@ -168,50 +146,22 @@ class ImageGenerationTool(Tool[None]):
         prompt: str,
         shape: ImageShape,
         reference_images: list[ReferenceImage] | None = None,
-    ) -> tuple[ImageGenerationResponse, Any]:
-        if shape == ImageShape.LANDSCAPE:
-            if "gpt-image-" in self.model:
-                size = "1536x1024"
-            else:
-                size = "1792x1024"
-        elif shape == ImageShape.PORTRAIT:
-            if "gpt-image-" in self.model:
-                size = "1024x1536"
-            else:
-                size = "1024x1792"
-        else:
-            size = "1024x1024"
+    ) -> ImageGenerationResponse:
+        size = resolve_image_size(self.model, shape)
         logger.debug("Generating image with model: %s, size: %s", self.model, size)
         try:
-            response = self.img_provider.generate_image(
-                prompt=prompt,
+            generated = generate_images_with_provider(
+                provider=self.img_provider,
                 model=self.model,
+                prompt=prompt,
                 size=size,
                 n=1,
                 reference_images=reference_images,
-                # response_format parameter is not supported for gpt-image-* models
-                response_format=None if "gpt-image-" in self.model else "b64_json",
             )
-
-            if not response.data or len(response.data) == 0:
-                raise RuntimeError("No image data returned from the API")
-
-            image_item = response.data[0].model_dump()
-
-            image_data = image_item.get("b64_json")
-            if not image_data:
-                raise RuntimeError("No base64 image data returned from the API")
-
-            revised_prompt = image_item.get("revised_prompt")
-            if revised_prompt is None:
-                revised_prompt = prompt
-
-            return (
-                ImageGenerationResponse(
-                    revised_prompt=revised_prompt,
-                    image_data=image_data,
-                ),
-                response,
+            first = generated[0]
+            return ImageGenerationResponse(
+                revised_prompt=first.revised_prompt,
+                image_data=first.b64_data,
             )
 
         except requests.RequestException as e:
@@ -367,9 +317,7 @@ class ImageGenerationTool(Tool[None]):
         reference_images = self._load_reference_images(reference_image_file_ids)
 
         # Use threading to generate images in parallel while emitting heartbeats
-        results: list[tuple[ImageGenerationResponse, Any] | None] = [
-            None
-        ] * self.num_imgs
+        results: list[ImageGenerationResponse | None] = [None] * self.num_imgs
         completed = threading.Event()
         error_holder: list[Exception | None] = [None]
 
@@ -377,7 +325,7 @@ class ImageGenerationTool(Tool[None]):
         def generate_all_images() -> None:
             try:
                 generated_results = cast(
-                    list[tuple[ImageGenerationResponse, Any]],
+                    list[ImageGenerationResponse],
                     run_functions_tuples_in_parallel(
                         [
                             (
@@ -432,8 +380,7 @@ class ImageGenerationTool(Tool[None]):
         if not valid_results:
             raise ValueError("No images were generated")
 
-        # Extract ImageGenerationResponse objects
-        image_generation_responses = [r[0] for r in valid_results]
+        image_generation_responses = valid_results
 
         # Save files and create GeneratedImage objects
         file_ids = save_files(

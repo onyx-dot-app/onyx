@@ -28,9 +28,14 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import MessageType
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
+from onyx.server.features.build import connect_app
+from onyx.server.features.build.configs import (
+    SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
+)
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import update_session_activity
@@ -39,6 +44,9 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.packets import ApprovalRequestedPacket
 from onyx.server.features.build.packets import BuildPacket
+from onyx.server.features.build.packets import CompactionPacket
+from onyx.server.features.build.packets import ConnectAppRequestPacket
+from onyx.server.features.build.packets import ContextUsagePacket
 from onyx.server.features.build.packets import ErrorPacket
 from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -93,6 +101,8 @@ class BuildStreamingState:
 
         # For upserting agent_plan_update - track ID so we can update in place
         self.plan_message_id: UUID | None = None
+
+        self.latest_context_usage: dict[str, Any] | None = None
 
         # Track what type of chunk we were last receiving
         self._last_chunk_type: str | None = None
@@ -250,7 +260,17 @@ def event_to_sse(event: Any) -> str:
     """
     if isinstance(event, SSEKeepalive):
         return SSE_KEEPALIVE
-    if isinstance(event, (ApprovalRequestedPacket, ErrorPacket, SubagentStartedPacket)):
+    if isinstance(
+        event,
+        (
+            ApprovalRequestedPacket,
+            ErrorPacket,
+            SubagentStartedPacket,
+            ConnectAppRequestPacket,
+            ContextUsagePacket,
+            CompactionPacket,
+        ),
+    ):
         return _format_packet_event(event)
     return _serialize_sandbox_event(event, _get_event_type(event))
 
@@ -265,11 +285,12 @@ def merge_events_with_announces(
     session_id: UUID,
     tenant_id: str,
 ) -> Generator[Any, None, None]:
-    """Merge sandbox events and approval announces into one stream.
+    """Merge sandbox events and announces into one stream.
 
-    Two producer threads feed a shared queue: the sandbox-event iterator, and a
-    BLPOP poller that emits `ApprovalRequestedPacket` when the proxy
-    signals a new approval. Announce latency is bounded by the 1s BLPOP.
+    Three producer threads feed a shared queue: the sandbox-event iterator, and
+    two BLPOP pollers that inject an `ApprovalRequestedPacket` / a
+    `ConnectAppRequestPacket` when a request is announced from another worker.
+    Announce latency is bounded by the 1s BLPOP.
     """
     output: queue_lib.Queue[Any] = queue_lib.Queue()
     stop = threading.Event()
@@ -309,6 +330,29 @@ def merge_events_with_announces(
                 ApprovalRequestedPacket(approval_id=approval_id, session_id=session_id)
             )
 
+    def drive_connect_app_announces() -> None:
+        cache = get_cache_backend(tenant_id=tenant_id)
+        while not stop.is_set():
+            try:
+                request = connect_app.pop_announcement(
+                    str(session_id), timeout_s=1, cache=cache
+                )
+            except Exception:
+                logger.exception(
+                    "connect_app.announce_poll_failed session_id=%s", session_id
+                )
+                time.sleep(1)
+                continue
+            if request is None:
+                continue
+            output.put(
+                ConnectAppRequestPacket(
+                    request_id=request.request_id,
+                    app_slug=request.app_slug,
+                    reason=request.reason,
+                )
+            )
+
     # Spawn via the context-preserving helper so the event iterator's lazy
     # tenant-scoped DB access (e.g. event-bus creation) sees the caller's
     # contextvars instead of raising "Tenant ID is not set".
@@ -323,6 +367,11 @@ def merge_events_with_announces(
     )
     start_thread_with_context(
         drive_announces, name=f"announce-pump-{session_id}", daemon=True
+    )
+    start_thread_with_context(
+        drive_connect_app_announces,
+        name=f"connect-app-pump-{session_id}",
+        daemon=True,
     )
     try:
         while True:
@@ -413,6 +462,16 @@ def load_turn_session(
     return build_session
 
 
+def _refresh_sandbox_heartbeat_best_effort(sandbox_id: UUID) -> None:
+    try:
+        with get_session_with_current_tenant() as hb_session:
+            update_sandbox_heartbeat(hb_session, sandbox_id)
+    except Exception:
+        logger.warning(
+            "Failed to refresh heartbeat for sandbox %s", sandbox_id, exc_info=True
+        )
+
+
 def yield_sandbox_events(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
@@ -445,7 +504,10 @@ def yield_sandbox_events(
         # opencode session (dropping conversation history).
         _persist_opencode_session_id(db_session, session_id, new_id)
 
-    yield from sandbox_manager.send_message(
+    # The idle reaper keys off last_heartbeat; a turn can outlast the idle timeout.
+    _refresh_sandbox_heartbeat_best_effort(sandbox_id)
+    last_heartbeat_refresh = time.monotonic()
+    event_stream = sandbox_manager.send_message(
         sandbox_id,
         session_id,
         user_message_content,
@@ -455,6 +517,19 @@ def yield_sandbox_events(
         on_opencode_session_resolved=_persist_resolved_id,
         should_interrupt=should_interrupt,
     )
+    try:
+        for sandbox_event in event_stream:
+            if (
+                time.monotonic() - last_heartbeat_refresh
+                >= SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS
+            ):
+                _refresh_sandbox_heartbeat_best_effort(sandbox_id)
+                last_heartbeat_refresh = time.monotonic()
+            yield sandbox_event
+    finally:
+        # close() must reach the transport generator deterministically — its
+        # GeneratorExit handler aborts the opencode turn.
+        event_stream.close()
 
 
 def _ensure_opencode_session_id(
@@ -563,11 +638,29 @@ def persist_sandbox_event(
     if isinstance(sandbox_event, SSEKeepalive):
         return
 
+    # Must return BEFORE should_finalize_chunks — routing it through would fragment
+    # the in-progress streaming text. Captured here, persisted once at finalize.
+    if isinstance(sandbox_event, ContextUsagePacket):
+        state.latest_context_usage = sandbox_event.model_dump(
+            mode="json", by_alias=True
+        )
+        return
+
     # Flush any pending chunks if the event type changed.
     event_type = _get_event_type(sandbox_event)
     event_routing_meta = _routing_meta_from_event(sandbox_event) or routing_meta
     if state.should_finalize_chunks(event_type, event_routing_meta):
         _save_pending_chunks(db_session, session_id, state)
+
+    if isinstance(sandbox_event, CompactionPacket):
+        create_message(
+            session_id=session_id,
+            message_type=MessageType.ASSISTANT,
+            turn_index=state.turn_index,
+            message_metadata=sandbox_event.model_dump(mode="json", by_alias=True),
+            db_session=db_session,
+        )
+        return
 
     if isinstance(sandbox_event, AgentMessageChunk):
         text = _extract_text_from_content(sandbox_event.content)
@@ -666,6 +759,17 @@ def finalize_persist(
     """End-of-stream persistence hook. Flushes any pending chunks."""
     _save_pending_chunks(db_session, session_id, state, routing_meta)
 
+    # One context-usage row per turn seeds the input-bar ring on reload.
+    if state.latest_context_usage is not None:
+        create_message(
+            session_id=session_id,
+            message_type=MessageType.ASSISTANT,
+            turn_index=state.turn_index,
+            message_metadata=state.latest_context_usage,
+            db_session=db_session,
+        )
+        state.latest_context_usage = None
+
 
 def stream_subagent_turn(
     db_session: DBSession,
@@ -740,6 +844,9 @@ def stream_subagent_turn(
         state = BuildStreamingState(turn_index=0)
 
         # Subagent runs on the parent session's model, not the child's default.
+        # Turn-start heartbeat is written by the send-message endpoint; only
+        # the periodic refresh lives here.
+        last_heartbeat_refresh = time.monotonic()
         for sandbox_event in sandbox_manager.send_subagent_message(
             sandbox_id,
             session_id,
@@ -748,9 +855,22 @@ def stream_subagent_turn(
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
         ):
+            if (
+                time.monotonic() - last_heartbeat_refresh
+                >= SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS
+            ):
+                _refresh_sandbox_heartbeat_best_effort(sandbox_id)
+                last_heartbeat_refresh = time.monotonic()
+
             # Keepalives + terminators pass through untagged.
             if isinstance(sandbox_event, SSEKeepalive):
                 yield SSE_KEEPALIVE
+                continue
+
+            # Context usage / compaction belong to the main session's ring and
+            # transcript; a subagent turn's own values would otherwise persist
+            # against the parent session and mislabel it on reload.
+            if isinstance(sandbox_event, (ContextUsagePacket, CompactionPacket)):
                 continue
 
             # Tag tool + agent-message events with routing _meta BEFORE

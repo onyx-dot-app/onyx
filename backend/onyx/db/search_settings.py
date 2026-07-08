@@ -42,6 +42,13 @@ def create_search_settings(
     search_settings: SavedSearchSettings,
     db_session: Session,
     status: IndexModelStatus = IndexModelStatus.FUTURE,
+    # Default used only when the saved model omits use_port_flow (None). The reindex
+    # request never carries the flag (not a request field), so the endpoint opts in
+    # via this param; an explicit value on the saved model wins (e.g. a round-trip).
+    use_port_flow: bool = False,
+    # False flushes instead of committing, so the caller can commit this row
+    # atomically with its port seeds (a seedless FUTURE makes workers re-scan).
+    commit: bool = True,
 ) -> SearchSettings:
     embedding_model = SearchSettings(
         model_name=search_settings.model_name,
@@ -59,10 +66,18 @@ def create_search_settings(
         enable_contextual_rag=search_settings.enable_contextual_rag,
         contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         switchover_type=search_settings.switchover_type,
+        use_port_flow=(
+            search_settings.use_port_flow
+            if search_settings.use_port_flow is not None
+            else use_port_flow
+        ),
     )
 
     db_session.add(embedding_model)
-    db_session.commit()
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()  # populate id without committing
 
     return embedding_model
 
@@ -100,10 +115,19 @@ def get_current_db_embedding_provider(
 
 
 def delete_search_settings(db_session: Session, search_settings_id: int) -> None:
+    from onyx.db.port_attempt import is_active_port_backfill_source
+
     current_settings = get_current_search_settings(db_session)
 
     if current_settings.id == search_settings_id:
         raise ValueError("Cannot delete currently active search settings")
+
+    # A promoted index may still be backfilling its port from this one; deleting it
+    # would strand that port (SET NULL drops the source out from under it).
+    if is_active_port_backfill_source(db_session, search_settings_id):
+        raise ValueError(
+            "Cannot delete search settings: a reindex port is still backfilling from it"
+        )
 
     # First, delete associated index attempts
     index_attempts_query = delete(IndexAttempt).where(
@@ -147,6 +171,12 @@ def get_secondary_search_settings(db_session: Session) -> SearchSettings | None:
     latest_settings = result.scalars().first()
 
     return latest_settings
+
+
+def get_search_settings_by_id(
+    db_session: Session, search_settings_id: int
+) -> SearchSettings | None:
+    return db_session.get(SearchSettings, search_settings_id)
 
 
 def get_active_search_settings(db_session: Session) -> ActiveSearchSettings:

@@ -11,6 +11,11 @@ arithmetic is deterministic and expected chunks can be spelled out
 exactly.
 """
 
+import io
+from collections.abc import Iterator
+
+import pytest
+
 from onyx.connectors.models import Section
 from onyx.connectors.models import TabularSection
 from onyx.indexing.chunking.section_chunker import AccumulatorState
@@ -50,14 +55,49 @@ def _make_chunker_with_metadata() -> TabularChunker:
 
 
 _DEFAULT_LINK = "https://example.com/doc"
+_STAGED_CSVS: dict[str, bytes] = {}
+_NEXT_STAGED_CSV_INDEX = 0
+
+
+@pytest.fixture(autouse=True)
+def _fake_tabular_file_store(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    import onyx.indexing.chunking.tabular_section_chunker.tabular_section_chunker as mod
+
+    global _STAGED_CSVS
+    global _NEXT_STAGED_CSV_INDEX
+    _STAGED_CSVS = {}
+    _NEXT_STAGED_CSV_INDEX = 0
+
+    class _FakeStore:
+        def read_file(
+            self, file_id: str, mode: str | None = None, use_tempfile: bool = False
+        ) -> io.BytesIO:
+            del mode, use_tempfile
+            return io.BytesIO(_STAGED_CSVS[file_id])
+
+    monkeypatch.setattr(mod, "get_default_file_store", lambda: _FakeStore())
+    yield
+
+
+def _stage_csv(csv_text: str) -> str:
+    global _NEXT_STAGED_CSV_INDEX
+
+    file_id = f"csv-{_NEXT_STAGED_CSV_INDEX}"
+    _NEXT_STAGED_CSV_INDEX += 1
+    _STAGED_CSVS[file_id] = csv_text.encode("utf-8")
+    return file_id
 
 
 def _tabular_section(
-    text: str,
+    csv_text: str,
     link: str = _DEFAULT_LINK,
     heading: str | None = "sheet:Test",
 ) -> Section:
-    return TabularSection(text=text, link=link, heading=heading)
+    return TabularSection(
+        csv_file_id=_stage_csv(csv_text),
+        link=link,
+        heading=heading,
+    )
 
 
 class TestTabularChunkerChunkSection:
@@ -1060,3 +1100,39 @@ class TestBuildTotalDescriptorChunks:
         assert "Column b: total (sum across all rows) = 7" in body
         assert "Column c: total (sum across all rows) = 9" in body
         assert "Total row count: 2." in body
+
+
+def test_file_backed_section_streams_all_rows() -> None:
+    """A file-backed TabularSection (csv_file_id) is chunked by streaming the
+    staged CSV from the file store — every row appears, nothing is truncated."""
+    csv_text = "name,score\n" + "\n".join(f"user{i},{i}" for i in range(60))
+
+    chunker = _make_chunker_no_metadata()
+    section = _tabular_section(csv_text, link="x", heading="big :: Sheet1")
+    out = chunker.chunk_section(
+        section, AccumulatorState(), content_token_limit=100_000
+    )
+
+    assert out.payloads
+    joined = "\n".join(p.text for p in out.payloads)
+    assert "user0" in joined
+    assert "user59" in joined  # last row present -> no truncation
+
+
+def test_file_backed_section_emits_descriptor_chunks() -> None:
+    """A file-backed (streamed) section also gets descriptor/total chunks, built
+    by the bounded streaming analyze pass — not just row chunks."""
+    rows = ["1,US,10", "2,US,20", "3,EU,30", "4,US,40", "5,EU,50", "6,US,60"]
+    csv_text = "id,region,amount\n" + "\n".join(rows)
+
+    chunker = _make_chunker_with_metadata()
+    section = _tabular_section(csv_text, link="x", heading="S")
+    out = chunker.chunk_section(
+        section, AccumulatorState(), content_token_limit=100_000
+    )
+
+    joined = "\n".join(p.text for p in out.payloads)
+    assert "id=1" in joined  # row chunks
+    assert "Sheet overview." in joined  # sheet descriptor
+    assert "total (sum across all rows)" in joined  # numeric totals
+    assert "most frequent value: US (4 occurrences)" in joined  # categorical top

@@ -1,109 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
+// Floating banner for self-hosted license expiry. Renders the most urgent
+// undismissed LICENSE_EXPIRY_WARNING notification and dismisses through the
+// notifications API, so a dismissal persists per-user server-side and survives
+// browser/localStorage resets. Notifications are created per stage (admins
+// only, single-tenant) by the license-expiry Celery task. Fetches the
+// notifications feed filtered to this type so the warning can't be paged out
+// behind unrelated notifications.
+
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
+import useSWR from "swr";
 import { MessageCard } from "@opal/components";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { dismissNotification } from "@/lib/notifications/api";
+import {
+  NotificationType,
+  type Notification,
+  type NotificationsResponse,
+} from "@/lib/notifications/interfaces";
 import type { ExpiryWarningStage } from "@/lib/billing/interfaces";
-import { useLicense } from "@/hooks/useLicense";
 
-const DISMISS_STORAGE_KEY = "license-expiry-banner-dismissed";
+// Per-user license notifications are few (one per active stage, plus a daily
+// one during grace), so a single max-size page always contains them all.
+const LICENSE_NOTIFICATIONS_PAGE_SIZE = 50;
 
-type BannerVariant = "warning" | "error";
+// Single source for stage semantics (higher = more urgent): picks which warning
+// to show when several are undismissed and drives the banner variant. Typed
+// against ExpiryWarningStage so a stage added to that union must be ranked here.
+const STAGE_SEVERITY: Record<Exclude<ExpiryWarningStage, "none">, number> = {
+  t_30d: 0,
+  t_14d: 1,
+  t_1d: 2,
+  grace: 3,
+};
 
-interface BannerCopy {
-  title: string;
-  description: string;
-  variant: BannerVariant;
-}
+// t_1d and grace (and anything more urgent) render as an error.
+const ERROR_THRESHOLD = STAGE_SEVERITY.t_1d;
 
-function buildCopy(
-  stage: ExpiryWarningStage,
-  expiresAt: string | null,
-  graceDaysRemaining: number
-): BannerCopy | null {
-  const expiresDisplay = expiresAt
-    ? new Date(expiresAt).toLocaleDateString()
-    : "soon";
-
-  if (stage === "t_30d") {
-    return {
-      title: `Your Onyx license expires on ${expiresDisplay}.`,
-      description:
-        "Renewal is due in approximately 30 days. Contact your Onyx representative to renew.",
-      variant: "warning",
-    };
-  }
-  if (stage === "t_14d") {
-    return {
-      title: `Your Onyx license expires on ${expiresDisplay}.`,
-      description:
-        "Renewal is due in approximately 2 weeks. Complete renewal soon to avoid service interruption.",
-      variant: "warning",
-    };
-  }
-  if (stage === "t_1d") {
-    return {
-      title: `Your Onyx license expires tomorrow (${expiresDisplay}).`,
-      description:
-        "Renewal is due within 24 hours. Renew now to avoid service interruption.",
-      variant: "error",
-    };
-  }
-  if (stage === "grace") {
-    return {
-      title: `Your Onyx license expired on ${expiresDisplay}.`,
-      description: `${graceDaysRemaining} grace day${
-        graceDaysRemaining === 1 ? "" : "s"
-      } remaining before access is gated. Renew now.`,
-      variant: "error",
-    };
-  }
-  return null;
-}
-
-function computeGraceDaysRemaining(gracePeriodEnd: string | null): number {
-  if (!gracePeriodEnd) return 0;
-  const msLeft = new Date(gracePeriodEnd).getTime() - Date.now();
-  if (msLeft <= 0) return 0;
-  return Math.max(1, Math.ceil(msLeft / 86400000));
-}
-
-function dismissKey(
-  stage: ExpiryWarningStage,
-  expiresAt: string | null
-): string {
-  const base = `${DISMISS_STORAGE_KEY}:${stage}:${expiresAt ?? "unknown"}`;
-  if (stage === "grace") {
-    const today = new Date().toISOString().slice(0, 10);
-    return `${base}:${today}`;
-  }
-  return base;
-}
-
-interface LicenseExpiryBannerViewProps {
-  stage: ExpiryWarningStage;
-  expiresAt: string | null;
-  graceDaysRemaining: number;
-  onDismiss?: () => void;
-}
-
-export function LicenseExpiryBannerView({
-  stage,
-  expiresAt,
-  graceDaysRemaining,
-  onDismiss,
-}: LicenseExpiryBannerViewProps) {
-  const copy = buildCopy(stage, expiresAt, graceDaysRemaining);
-  if (!copy) return null;
-
-  return (
-    <MessageCard
-      variant={copy.variant}
-      title={copy.title}
-      description={copy.description}
-      onClose={onDismiss}
-    />
-  );
+function severityForStage(stage: string | undefined): number {
+  return (STAGE_SEVERITY as Record<string, number>)[stage ?? ""] ?? 0;
 }
 
 function useMainContainerOffset(): { left: number; width: number } {
@@ -156,30 +93,66 @@ function useMainContainerOffset(): { left: number; width: number } {
 }
 
 export default function LicenseExpiryBanner() {
-  const { data } = useLicense();
-  const [dismissed, setDismissed] = useState(false);
+  const { data, mutate } = useSWR<NotificationsResponse>(
+    SWR_KEYS.notificationsByType(
+      NotificationType.LICENSE_EXPIRY_WARNING,
+      LICENSE_NOTIFICATIONS_PAGE_SIZE
+    ),
+    errorHandlingFetcher,
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
+  );
   const { left, width } = useMainContainerOffset();
+  // IDs hidden optimistically while the server dismissal is in flight.
+  const [pendingDismissals, setPendingDismissals] = useState<Set<number>>(
+    new Set()
+  );
 
-  const stage = data?.expiry_warning_stage ?? "none";
-  const expiresAt = data?.expires_at ?? null;
-  const graceDays = computeGraceDaysRemaining(data?.grace_period_end ?? null);
-  const hasLicense = data?.has_license ?? false;
-  const key = dismissKey(stage, expiresAt);
+  const active = useMemo<Notification | null>(() => {
+    const candidates = (data?.notifications ?? []).filter(
+      (notification) =>
+        notification.notif_type === NotificationType.LICENSE_EXPIRY_WARNING &&
+        !notification.dismissed &&
+        !pendingDismissals.has(notification.id)
+    );
+    return candidates.reduce<Notification | null>((best, notification) => {
+      if (!best) return notification;
+      const next = severityForStage(notification.additional_data?.stage);
+      const current = severityForStage(best.additional_data?.stage);
+      if (next > current) return notification;
+      // Same stage: keep the most recent. Compare instants, not raw strings.
+      if (
+        next === current &&
+        new Date(notification.last_shown).getTime() >
+          new Date(best.last_shown).getTime()
+      ) {
+        return notification;
+      }
+      return best;
+    }, null);
+  }, [data, pendingDismissals]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setDismissed(window.localStorage.getItem(key) === "1");
-  }, [key]);
+  if (!active) return null;
 
-  if (!hasLicense || stage === "none" || dismissed) {
-    return null;
-  }
+  const activeId = active.id;
+  const variant =
+    severityForStage(active.additional_data?.stage) >= ERROR_THRESHOLD
+      ? "error"
+      : "warning";
 
   function handleDismiss() {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(key, "1");
-    }
-    setDismissed(true);
+    // Hide immediately; persist server-side. Restore on failure so the warning
+    // isn't silently lost and the user can retry.
+    setPendingDismissals((prev) => new Set(prev).add(activeId));
+    void dismissNotification(activeId)
+      .then(() => mutate())
+      .catch((error) => {
+        console.error("Failed to dismiss license expiry notification:", error);
+        setPendingDismissals((prev) => {
+          const next = new Set(prev);
+          next.delete(activeId);
+          return next;
+        });
+      });
   }
 
   return (
@@ -188,11 +161,11 @@ export default function LicenseExpiryBanner() {
       style={{ left, width: width || undefined }}
     >
       <div className="w-full max-w-3xl pointer-events-auto">
-        <LicenseExpiryBannerView
-          stage={stage}
-          expiresAt={expiresAt}
-          graceDaysRemaining={graceDays}
-          onDismiss={handleDismiss}
+        <MessageCard
+          variant={variant}
+          title={active.title}
+          description={active.description ?? undefined}
+          onClose={handleDismiss}
         />
       </div>
     </div>

@@ -12,6 +12,9 @@
 @import "./css/line-item.css" layer(base);
 @import "./css/square-button.css" layer(base);
 @import "./css/z-index.css" layer(base);
+/* Imported unlayered (and gated on html.onyx-desktop) so it overrides the
+   frozen desktop-wrapper shim regardless of source order. */
+@import "./css/desktop-titlebar.css";
 @config '../../tailwind.config.js';
 
 /*
@@ -34,23 +37,6 @@
 
 @utility no-scrollbar {
   scrollbar-width: none;
-}
-
-@utility shadow-00 {
-  /* SHADOWS */
-  box-shadow: 0px 0px 2px 1px var(--shadow-01);
-}
-
-@utility shadow-01 {
-  box-shadow:
-    0px 2px 12px 0px var(--shadow-02),
-    0px 0px 4px 1px var(--shadow-02);
-}
-
-@utility shadow-02 {
-  box-shadow:
-    0px 2px 24px 0px var(--shadow-03),
-    0px 0px 12px 1px var(--shadow-03);
 }
 
 @utility radial-00 {

@@ -140,8 +140,8 @@ def test_session_and_opencode_history_survive_snapshot_restore(
     # The container name derives from the sandbox id, which restore keeps
     # stable, so `container` still points at the fresh container. Assert it so a
     # future re-key fails here loudly rather than as a cryptic exec error below.
-    assert restored["sandbox"] is not None
-    assert restored["sandbox"]["id"] == str(sandbox_id), (
+    assert restored.sandbox is not None
+    assert restored.sandbox.id == str(sandbox_id), (
         "Restore changed the sandbox id; the container name derived from the "
         "original id is now stale."
     )

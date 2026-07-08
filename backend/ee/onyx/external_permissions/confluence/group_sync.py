@@ -163,6 +163,9 @@ def confluence_group_sync(
 ) -> Generator[ExternalUserGroup, None, None]:
     provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
+    scoped_token = cc_pair.connector.connector_specific_config.get(
+        "scoped_token", False
+    )
     wiki_base: str = cc_pair.connector.connector_specific_config["wiki_base"]
     url = wiki_base.rstrip("/")
 
@@ -176,7 +179,9 @@ def confluence_group_sync(
         "max_backoff_seconds": 60,
     }
 
-    confluence_client = OnyxConfluence(is_cloud, url, provider)
+    confluence_client = OnyxConfluence(
+        is_cloud, url, provider, scoped_token=scoped_token
+    )
     confluence_client._probe_connection(**probe_kwargs)
     confluence_client._initialize_connection(**final_kwargs)
 

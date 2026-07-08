@@ -5,7 +5,7 @@ The Celery `run_scheduled_task` task is a thin wrapper around
 logic importable + testable without a Celery worker (external-dependency
 unit tests instantiate it directly).
 
-Lifecycle (see ``docs/craft/features/scheduled-tasks.md``):
+Lifecycle (see ``docs/craft/features/scheduled-tasks/overview.md``):
 
 1. Fetch the run row + owning task. Bail out idempotently if the run is
    not ``QUEUED`` (Celery may redeliver, or a sweeper may have already
@@ -52,7 +52,10 @@ from onyx.db.scheduled_task import get_run
 from onyx.db.scheduled_task import mark_run_status
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.event_schema import RequestPermissionRequest
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.utils.logger import setup_logger
@@ -73,6 +76,16 @@ SUMMARY_MAX_CHARS = 120
 PROVISIONING_WAIT_SECONDS = 120
 
 
+def _clip_summary(text: str) -> str:
+    if len(text) <= SUMMARY_MAX_CHARS:
+        return text
+    clipped = text[:SUMMARY_MAX_CHARS]
+    last_space = clipped.rfind(" ")
+    if last_space > SUMMARY_MAX_CHARS // 2:
+        clipped = clipped[:last_space]
+    return clipped.rstrip() + "…"
+
+
 def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
     """Build a ~120-char summary from accumulated agent message text.
 
@@ -82,8 +95,8 @@ def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
     if state.message_chunks:
         full = "".join(state.message_chunks).strip()
         if full:
-            return full[:SUMMARY_MAX_CHARS]
-    return fallback[:SUMMARY_MAX_CHARS] if fallback else ""
+            return _clip_summary(full)
+    return _clip_summary(fallback) if fallback else ""
 
 
 def _summary_from_session_messages(session_id: UUID, db_session: Any) -> str:
@@ -105,7 +118,7 @@ def _summary_from_session_messages(session_id: UUID, db_session: Any) -> str:
         if isinstance(content, dict):
             text = content.get("text") or ""
             if isinstance(text, str) and text.strip():
-                return text.strip()[:SUMMARY_MAX_CHARS]
+                return _clip_summary(text.strip())
     return ""
 
 
@@ -374,6 +387,11 @@ def _drive_agent(
         # that lets scheduled and interactive runs share a build_session
         # inherits the protection without needing to remember to add it.
         approval_required = False
+        # persist_sandbox_event drops Error/PromptResponse, so a timed-out turn
+        # (terminal Error only) would otherwise be recorded SUCCEEDED (ENG-4234).
+        terminal_error: Error | None = None
+        got_prompt_response = False
+        cancelled = False
         final_event_count = 0
         # Acquire the per-build_session lock for the duration of the
         # agent loop. __enter__/__exit__ used directly (rather than a
@@ -407,6 +425,20 @@ def _drive_agent(
                 # "terminal for display" until it ships.
                 if isinstance(sandbox_event, RequestPermissionRequest):
                     approval_required = True
+                    break
+
+                if isinstance(sandbox_event, Error):
+                    terminal_error = sandbox_event
+                    break
+                # Break before the budget check: a deadline tripping exactly as
+                # the agent finishes must not mis-mark a success as timed-out.
+                if isinstance(sandbox_event, PromptResponse):
+                    # Scheduled runs have no interrupt mechanism, so a cancelled
+                    # terminal means opencode aborted the agent
+                    # (MessageAbortedError) — record it as a failure, not success.
+                    if getattr(sandbox_event, "stop_reason", None) == "cancelled":
+                        cancelled = True
+                    got_prompt_response = True
                     break
 
                 # Budget check happens before persistence so a runaway
@@ -463,6 +495,49 @@ def _drive_agent(
                 )
                 db_session.commit()
                 return True
+
+            if terminal_error is not None or cancelled or not got_prompt_response:
+                session_manager.finalize_persist(session_id, state)
+                db_session.commit()
+                if terminal_error is not None:
+                    error_class = (
+                        ScheduledTaskErrorClass.TIMEOUT
+                        if terminal_error.code == TURN_ERROR_CODE_TIMEOUT
+                        else ScheduledTaskErrorClass.AGENT_EXCEPTION
+                    )
+                    error_detail = (
+                        terminal_error.message or "agent turn ended with an error"
+                    )
+                elif cancelled:
+                    error_class = ScheduledTaskErrorClass.AGENT_EXCEPTION
+                    error_detail = "agent turn was aborted before completion"
+                else:
+                    error_class = ScheduledTaskErrorClass.AGENT_EXCEPTION
+                    error_detail = "agent stream ended without a completion response"
+                mark_run_status(
+                    db_session=db_session,
+                    run_id=run_id,
+                    status=ScheduledTaskRunStatus.FAILED,
+                    error_class=error_class,
+                    error_detail=error_detail[:1000],
+                )
+                _notify(
+                    db_session=db_session,
+                    user_id=task_user_id,
+                    task_name=task_name,
+                    task_id=task_id,
+                    run_id=run_id,
+                    notif_type=NotificationType.SCHEDULED_TASK_FAILED,
+                )
+                db_session.commit()
+                logger.warning(
+                    "Scheduled run %s failed (events=%d, error_class=%s): %s",
+                    run_id,
+                    final_event_count,
+                    error_class.value,
+                    error_detail,
+                )
+                return False
 
             # Clean completion path.
             summary_from_chunks = _summary_from_state(state)

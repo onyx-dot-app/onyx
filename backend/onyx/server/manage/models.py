@@ -14,6 +14,7 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import DefaultAppMode
+from onyx.db.enums import SupportedLanguage
 from onyx.db.enums import ThemePreference
 from onyx.db.memory import MAX_MEMORIES_PER_USER
 from onyx.db.models import AllowedAnswerFilters
@@ -80,6 +81,7 @@ class UserPreferences(BaseModel):
     auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
     theme_preference: ThemePreference | None = None
+    language: str | None = None
     chat_background: str | None = None
     default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
 
@@ -171,6 +173,7 @@ class UserInfo(BaseModel):
                     auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,
                     theme_preference=user.theme_preference,
+                    language=user.language,
                     chat_background=user.chat_background,
                     default_app_mode=user.default_app_mode,
                     paste_as_tile=user.paste_as_tile,
@@ -212,6 +215,13 @@ class UserRoleUpdateRequest(BaseModel):
     explicit_override: bool = False
 
 
+class UserCraftAccessUpdateRequest(BaseModel):
+    user_emails: list[str] = Field(min_length=1)
+    # True/False = explicit override; None = clear the override (follow the
+    # workspace default).
+    craft_enabled: bool | None
+
+
 class UserRoleResponse(BaseModel):
     role: str
 
@@ -240,6 +250,10 @@ class AutoScrollRequest(BaseModel):
 
 class ThemePreferenceRequest(BaseModel):
     theme_preference: ThemePreference
+
+
+class LanguageRequest(BaseModel):
+    language: SupportedLanguage
 
 
 class DefaultAppModeRequest(BaseModel):

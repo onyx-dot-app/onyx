@@ -80,7 +80,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           padding={0}
           gap={0}
           height="full"
-          className="radial-00 hover:shadow-00"
+          className="radial-00 hover:shadow-box-00"
         >
           <div className="flex self-stretch h-24">
             <CardItemLayout
@@ -89,18 +89,19 @@ export default function AgentCard({ agent }: AgentCardProps) {
               description={agent.description}
               rightChildren={
                 <>
-                  {isOwnedByUser && businessTier && (
-                    // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-                    <IconButton
-                      icon={SvgBarChart}
-                      tertiary
-                      onClick={noProp(() =>
-                        router.push(`/ee/agents/stats/${agent.id}` as Route)
-                      )}
-                      tooltip="View Agent Stats"
-                      className="hidden group-hover/AgentCard:flex"
-                    />
-                  )}
+                  {isOwnedByUser &&
+                    businessTier && (
+                      // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
+                      <IconButton
+                        icon={SvgBarChart}
+                        tertiary
+                        onClick={noProp(() =>
+                          router.push(`/ee/agents/stats/${agent.id}` as Route)
+                        )}
+                        tooltip="View Agent Stats"
+                        className="hidden group-hover/AgentCard:flex"
+                      />
+                    )}
                   {canEditAgent && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton

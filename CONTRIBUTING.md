@@ -286,7 +286,7 @@ You've successfully set up a local Onyx instance!
 
 ### Running on a Local Kubernetes Cluster
 
-For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Local Kubernetes Development](/docs/dev/local-kubernetes.md) for the full workflow.
+For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Local Kubernetes Development](/docs/craft/dev/local-kubernetes.md) for the full workflow.
 
 ### Running in Docker
 
@@ -305,6 +305,17 @@ If you want to make changes to Onyx and run those changes in Docker, you can als
 ```bash
 docker compose up -d --build
 ```
+
+> **Note:** Building the web image (`web/Dockerfile`) pulls its base from Docker Hardened
+> Images (`dhi.io`), so you must authenticate first with a Docker account that has access to
+> the DHI catalog:
+>
+> ```bash
+> docker login dhi.io
+> ```
+>
+> Pulling the pre-built `onyxdotapp/onyx-web-server` image (the default `docker compose up -d`
+> without `--build`) does not require this.
 
 ---
 

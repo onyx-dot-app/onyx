@@ -85,6 +85,24 @@ class PermissionSyncStatus(str, PyEnum):
         )
 
 
+class PortAttemptStatus(str, PyEnum):
+    NOT_STARTED = "NOT_STARTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+
+    def is_terminal(self) -> bool:
+        return self in {
+            PortAttemptStatus.SUCCESS,
+            PortAttemptStatus.FAILED,
+            PortAttemptStatus.CANCELED,
+        }
+
+    def is_successful(self) -> bool:
+        return self == PortAttemptStatus.SUCCESS
+
+
 class IndexingMode(str, PyEnum):
     UPDATE = "update"
     REINDEX = "reindex"
@@ -239,6 +257,14 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class SupportedLanguage(str, PyEnum):
+    EN = "en"
+    ES = "es"
+    PT = "pt"
+    FR = "fr"
+    DE = "de"
+
+
 class DefaultAppMode(str, PyEnum):
     AUTO = "AUTO"
     CHAT = "CHAT"
@@ -356,6 +382,7 @@ class ScheduledTaskSkipReason(str, PyEnum):
     """Well-known values for ``ScheduledTaskRun.skip_reason``."""
 
     PRIOR_IN_FLIGHT = "prior_in_flight"
+    OWNER_CRAFT_DISABLED = "owner_craft_disabled"
 
 
 class SandboxStatus(str, PyEnum):
@@ -394,6 +421,8 @@ class ExternalAppType(str, PyEnum):
     SLACK = "SLACK"
     LINEAR = "LINEAR"
     GITHUB = "GITHUB"
+    HUBSPOT = "HUBSPOT"
+    NOTION = "NOTION"
     CUSTOM = "CUSTOM"
 
     @property
@@ -445,6 +474,10 @@ class HierarchyNodeType(str, PyEnum):
 
     # Root-level type
     SOURCE = "source"  # Root node for a source (e.g., "Google Drive")
+
+    # Placeholder created when a child is indexed before its parent exists in the DB.
+    # Promoted to the real type when the parent page is later processed.
+    STUB = "stub"
 
     # Google Drive
     SHARED_DRIVE = "shared_drive"
@@ -514,6 +547,7 @@ class Permission(str, PyEnum):
     READ_CHAT = "read:chat"
     WRITE_CHAT = "write:chat"
     READ_ADMIN = "read:admin"
+    GENERATE_IMAGE = "generate:image"
 
     # Add / Manage pairs
     ADD_AGENTS = "add:agents"
@@ -531,6 +565,10 @@ class Permission(str, PyEnum):
     CREATE_USER_API_KEYS = "create:user_api_keys"
     CREATE_SERVICE_ACCOUNT_API_KEYS = "create:service_account_api_keys"
     CREATE_SLACK_DISCORD_BOTS = "create:slack_discord_bots"
+
+    # Role scopes — a bundle token implying the surfaces a given machine
+    # identity may use. PAT-only; never granted to a group/user.
+    CRAFT_SANDBOX = "craft_sandbox"
 
     # Override — any permission check passes
     FULL_ADMIN_PANEL_ACCESS = "admin"
@@ -550,6 +588,7 @@ Permission.IMPLIED = frozenset(
         Permission.READ_CHAT,
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
+        Permission.GENERATE_IMAGE,
     }
 )
 
@@ -558,6 +597,22 @@ class PersonaSharePermission(str, PyEnum):
     """Level granted by a persona share row (user or group), or to the whole
     org via `Persona.public_permission`."""
 
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class SkillSharePermission(str, PyEnum):
+    """Level granted by a skill share row (user or group), or to the whole org
+    via `Skill.public_permission`."""
+
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class SkillAccessLevel(str, PyEnum):
+    """Computed access the requesting user holds on a skill."""
+
+    OWNER = "OWNER"
     EDITOR = "EDITOR"
     VIEWER = "VIEWER"
 
@@ -580,3 +635,11 @@ class PersonaSharingStatus(str, PyEnum):
     PRIVATE = "PRIVATE"
     SHARED = "SHARED"
     PUBLIC = "PUBLIC"
+
+
+class SSOProviderType(str, PyEnum):
+    # name == value: Enum(native_enum=False) columns persist the member name,
+    # so the two must match to round-trip (repo-wide convention).
+    GOOGLE_OAUTH = "GOOGLE_OAUTH"
+    OIDC = "OIDC"
+    SAML = "SAML"

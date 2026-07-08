@@ -1,7 +1,10 @@
 """Test bulk invite limit for free trial tenants."""
 
+import json
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -141,6 +144,62 @@ def _with_common_patches(fn: object) -> object:
     for p in reversed(_COMMON_PATCHES):
         fn = p(fn)  # ty: ignore[no-matching-overload]
     return fn
+
+
+@_with_common_patches
+@patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
+def test_bulk_invite_emits_user_create(
+    _rate_limit: MagicMock,
+    _seat_limit: MagicMock,
+    _write_invited: MagicMock,
+    _get_all_users: MagicMock,
+    _get_invited_users: MagicMock,
+    _get_tenant_id: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    admin = MagicMock(id="admin-1", email="admin@example.com")
+
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        bulk_invite_users(emails=["new@example.com"], current_user=admin)
+
+    events: list[dict[str, Any]] = [
+        json.loads(r.getMessage())
+        for r in caplog.records
+        if r.name.startswith("onyx.audit")
+    ]
+    assert len(events) == 1
+    assert events[0]["action"] == "user.create"
+    assert events[0]["outcome"] == "success"
+    assert events[0]["actor"]["email"] == "admin@example.com"
+    assert events[0]["extra"]["invited_emails"] == ["new@example.com"]
+
+
+# Explicit patches (not _with_common_patches): this case needs
+# get_invited_users to report the email as already-invited, which the helper
+# hardcodes to [] and re-patching from inside the stack doesn't override.
+@patch("onyx.server.manage.users.MULTI_TENANT", False)
+@patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
+@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
+@patch("onyx.server.manage.users.get_invited_users", return_value=["known@example.com"])
+@patch("onyx.server.manage.users.get_all_users", return_value=[])
+@patch("onyx.server.manage.users.write_invited_users", return_value=1)
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
+@patch("onyx.server.manage.users.enforce_invite_rate_limit")
+def test_bulk_invite_reinvite_emits_nothing(
+    _rate_limit: MagicMock,
+    _seat_limit: MagicMock,
+    _write_invited: MagicMock,
+    _get_all_users: MagicMock,
+    _get_invited_users: MagicMock,
+    _get_tenant_id: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Re-inviting an already-invited email provisions no new access -> no event.
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        bulk_invite_users(emails=["known@example.com"], current_user=MagicMock())
+
+    events = [r for r in caplog.records if r.name.startswith("onyx.audit")]
+    assert events == []
 
 
 @_with_common_patches

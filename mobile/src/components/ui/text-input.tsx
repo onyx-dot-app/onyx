@@ -1,4 +1,3 @@
-// RN port of web Opal's `InputTypeIn` / `PasswordInputTypeIn`.
 import { cva, type VariantProps } from "class-variance-authority";
 import { cssInterop } from "nativewind";
 import { useCallback, useRef, useState, type ReactNode, type Ref } from "react";
@@ -56,12 +55,10 @@ export type TextInputVariant = NonNullable<
 
 export interface TextInputProps extends Omit<RNTextInputProps, "editable"> {
   ref?: Ref<RNTextInput>;
-  /** Border/background tokens + editability. @default "idle" */
   variant?: TextInputVariant;
   leftIcon?: IconFunctionComponent;
   prefixText?: string;
   rightSlot?: ReactNode;
-  /** Clear (×) button while non-empty; suppressed by `rightSlot`. */
   clearButton?: boolean;
   className?: string;
 }
@@ -98,7 +95,7 @@ function TextInput({
   }, [editable]);
 
   const focusBorder = focused && variant === "idle" ? "border-border-05" : "";
-  // Always mounted (stable input width), inert when empty — web's `invisible` reserve-space.
+  // Always mounted (stable input width), inert when empty.
   const hasValue = !!value;
   const showClear = clearButton && !rightSlot && editable;
 
@@ -165,7 +162,6 @@ export interface PasswordTextInputProps extends Omit<
   TextInputProps,
   "rightSlot" | "secureTextEntry" | "leftIcon" | "clearButton"
 > {
-  /** When false (or for a stored backend value) the reveal toggle is disabled. @default true */
   revealable?: boolean;
 }
 

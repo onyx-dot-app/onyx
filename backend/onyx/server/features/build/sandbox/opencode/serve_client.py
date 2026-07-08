@@ -21,15 +21,21 @@ from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
 from typing import cast
+from uuid import uuid4
 
 import httpx
 
+from onyx.cache.factory import get_cache_backend
+from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
+from onyx.server.features.build.packets import CompactionPacket
+from onyx.server.features.build.packets import ContextUsagePacket
 from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
@@ -37,13 +43,20 @@ from onyx.server.features.build.sandbox.event_schema import Error
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
 from onyx.server.features.build.sandbox.event_schema import ToolCallStart
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_SESSION
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TRANSPORT
 from onyx.server.features.build.sandbox.opencode.event_bus import _Subscription
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# opencode permission category emitted by the no-op ``connect_app`` tool
+_CONNECT_APP_PERMISSION = "connect_app"
 
 
 # Event union (kept narrow — only the types we actually translate to).
@@ -124,6 +137,12 @@ class _TurnState:
     # terminator (fired from session.idle/status) consumes it — message.updated
     # itself is per-step and can't terminate the turn.
     last_finish: str | None = None
+    # connect_app permission id → monotonic deadline. Timeout fallback only (the
+    # decision endpoint answers directly); reject an undecided request for a clean
+    # decline. A late reject after the user answered is a harmless no-op.
+    pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
+    # Set from BOTH message.updated and hydration — text deltas race ahead of message.updated.
+    summary_message_ids: set[str] = field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +336,8 @@ def _hydrate_message(
     )
     if role == "assistant":
         state.assistant_message_ids.add(msg_id)
+        if info.get("summary") is True:
+            state.summary_message_ids.add(msg_id)
     elif role == "user":
         state.user_message_ids.add(msg_id)
     else:
@@ -365,6 +386,8 @@ def _emit_text_delta(
     # Assistant-only filter. Deltas race ~300ms ahead of message.updated;
     # _is_assistant_message hydrates via REST when the role is unknown.
     if not _is_assistant_message(state, msg_id, fetch_message):
+        return
+    if isinstance(msg_id, str) and msg_id in state.summary_message_ids:
         return
     if field_name != "text":
         # Non-text fields (e.g. tool input streaming, future extensions)
@@ -434,6 +457,57 @@ def _state_for_session(state: _TurnState, session_id: str) -> _TurnState:
         child_state = _TurnState(session_id=session_id)
         state.child_states[session_id] = child_state
     return child_state
+
+
+def _is_summary_message(state: _TurnState, msg_id: Any) -> bool:
+    return isinstance(msg_id, str) and msg_id in state.summary_message_ids
+
+
+def _context_usage_from_info(info: dict[str, Any]) -> ContextUsagePacket | None:
+    if info.get("summary") is True:
+        return None
+    tokens = info.get("tokens")
+    if not isinstance(tokens, dict):
+        return None
+    cache = tokens.get("cache")
+    cache = cache if isinstance(cache, dict) else {}
+
+    def _n(value: Any) -> int:
+        return int(value) if isinstance(value, (int, float)) else 0
+
+    used = (
+        _n(tokens.get("input"))
+        + _n(tokens.get("output"))
+        + _n(tokens.get("reasoning"))
+        + _n(cache.get("read"))
+        + _n(cache.get("write"))
+    )
+    if used <= 0:
+        return None
+    cost = info.get("cost")
+    return ContextUsagePacket(
+        used_tokens=used,
+        cost=float(cost) if isinstance(cost, (int, float)) else None,
+    )
+
+
+def _fetch_summary_text(
+    state: _TurnState,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None,
+) -> str | None:
+    if fetch_message is None or not state.summary_message_ids:
+        return None
+    texts: list[str] = []
+    for msg_id in state.summary_message_ids:
+        body = fetch_message(msg_id)
+        if not isinstance(body, dict):
+            continue
+        for part in body.get("parts") or []:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text = part.get("text")
+                if isinstance(text, str) and text:
+                    texts.append(text)
+    return "\n\n".join(texts) or None
 
 
 def translate_opencode_event(
@@ -582,11 +656,15 @@ def translate_opencode_event(
         if part_type == "reasoning":
             if not _is_assistant_message(state, part.get("messageID"), fetch_message):
                 return
+            if _is_summary_message(state, part.get("messageID")):
+                return
             yield from _reconcile_reasoning_part(part, state)
             return
 
         if part_type == "text":
             if not _is_assistant_message(state, part.get("messageID"), fetch_message):
+                return
+            if _is_summary_message(state, part.get("messageID")):
                 return
             yield from _reconcile_text_part(part, state)
             return
@@ -634,9 +712,14 @@ def translate_opencode_event(
         msg_id = info.get("id")
         if isinstance(msg_id, str):
             state.assistant_message_ids.add(msg_id)
+            if info.get("summary") is True:
+                state.summary_message_ids.add(msg_id)
         finish = info.get("finish")
         if isinstance(finish, str):
             state.last_finish = finish
+        usage = _context_usage_from_info(info)
+        if usage is not None:
+            yield usage
         # A message error DOES kill the turn — surface it.
         err = info.get("error")
         if err and isinstance(err, dict):
@@ -661,6 +744,10 @@ def translate_opencode_event(
         err = props.get("error") or {}
         if isinstance(err, dict):
             yield from _emit_terminator(state, error=err)
+        return
+
+    if etype == "session.compacted":
+        yield CompactionPacket(summary=_fetch_summary_text(state, fetch_message))
         return
 
     # Everything else (server.heartbeat, session.created, session.diff,
@@ -824,13 +911,19 @@ def _emit_terminator(
     state.terminator_yielded = True
 
     if error:
+        # An aborted message is a cancellation (the user interrupted), not a
+        # turn failure — emit the normal cancelled terminal so consumers don't
+        # treat an interrupt as an error.
+        if error.get("name") == "MessageAbortedError":
+            yield PromptResponse.model_validate({"stopReason": "cancelled"})
+            return
         msg = ""
         data = error.get("data")
         if isinstance(data, dict):
             msg = str(data.get("message") or "")
         if not msg:
             msg = str(error.get("name") or "session error")
-        yield Error.model_validate({"code": -1, "message": msg})
+        yield Error.model_validate({"code": TURN_ERROR_CODE_SESSION, "message": msg})
         return
 
     stop_reason = "end_turn"
@@ -1285,7 +1378,10 @@ class OpencodeServeClient:
                 return
             except httpx.HTTPError as e:
                 yield Error.model_validate(
-                    {"code": -3, "message": f"prompt_async failed: {e}"}
+                    {
+                        "code": TURN_ERROR_CODE_TRANSPORT,
+                        "message": f"prompt_async failed: {e}",
+                    }
                 )
                 return
 
@@ -1330,7 +1426,7 @@ class OpencodeServeClient:
             if self._event_bus is None:
                 yield Error.model_validate(
                     {
-                        "code": -3,
+                        "code": TURN_ERROR_CODE_TRANSPORT,
                         "message": "opencode /event bus is unavailable",
                     }
                 )
@@ -1339,7 +1435,7 @@ class OpencodeServeClient:
             if self._event_bus.closed:
                 yield Error.model_validate(
                     {
-                        "code": -3,
+                        "code": TURN_ERROR_CODE_TRANSPORT,
                         "message": "event bus closed before /event stream became ready",
                     }
                 )
@@ -1359,7 +1455,7 @@ class OpencodeServeClient:
             if remaining <= 0:
                 yield Error.model_validate(
                     {
-                        "code": -3,
+                        "code": TURN_ERROR_CODE_TRANSPORT,
                         "message": "opencode /event stream did not become ready",
                     }
                 )
@@ -1380,7 +1476,7 @@ class OpencodeServeClient:
             if raw is BUS_CLOSED_SENTINEL:
                 yield Error.model_validate(
                     {
-                        "code": -3,
+                        "code": TURN_ERROR_CODE_TRANSPORT,
                         "message": "event bus closed before /event stream became ready",
                     }
                 )
@@ -1424,11 +1520,18 @@ class OpencodeServeClient:
                     yield PromptResponse.model_validate({"stopReason": "cancelled"})
                     return
 
+            self._reject_expired_connect_app_permissions(
+                state, now, directory=directory
+            )
+
             remaining = timeout - (time.monotonic() - start)
             if remaining <= 0:
                 self.abort(opencode_session_id, directory=directory)
                 yield Error.model_validate(
-                    {"code": -1, "message": "Timeout waiting for response"}
+                    {
+                        "code": TURN_ERROR_CODE_TIMEOUT,
+                        "message": "Timeout waiting for response",
+                    }
                 )
                 return
 
@@ -1447,7 +1550,7 @@ class OpencodeServeClient:
                 if not terminated_locally:
                     yield Error.model_validate(
                         {
-                            "code": -3,
+                            "code": TURN_ERROR_CODE_TRANSPORT,
                             "message": "event bus closed before terminator",
                         }
                     )
@@ -1473,7 +1576,7 @@ class OpencodeServeClient:
                 yield sandbox_event
 
             if raw.get("type") == "permission.asked":
-                self._handle_permission_ask(raw, state.session_id, directory=directory)
+                self._handle_permission_ask(raw, state, directory=directory)
 
             if terminated_locally:
                 return
@@ -1510,14 +1613,12 @@ class OpencodeServeClient:
         _raise_for_status(r, "prompt_async")
 
     def _handle_permission_ask(
-        self, evt: dict[str, Any], session_id: str, *, directory: str
+        self, evt: dict[str, Any], state: _TurnState, *, directory: str
     ) -> None:
-        """Auto-allow + telemetry per §Decisions #1.
-
-        Production ``opencode.json`` should already cover every permission
-        category we use. Reaching this path means opencode added a new
-        category we haven't configured — auto-allow keeps the turn moving
-        and the WARN log lets us notice.
+        """Answer opencode's ``permission.asked``. ``connect_app`` defers to the
+        connect-card flow; every other category is auto-allowed (production
+        ``opencode.json`` covers them — an unexpected one is a config gap, so
+        WARN + allow).
         """
         props = evt.get("properties") or {}
         perm_id = props.get("id")
@@ -1528,25 +1629,133 @@ class OpencodeServeClient:
                 "opencode-serve: permission.asked without id; cannot respond"
             )
             return
+
+        if perm_type == _CONNECT_APP_PERMISSION:
+            self._handle_connect_app_permission(
+                evt, state, perm_id, directory=directory
+            )
+            return
+
         logger.warning(
             "opencode-serve: auto-allowing unexpected permission.asked "
             "(type=%s patterns=%s session=%s id=%s) — update opencode.json",
             perm_type,
             patterns,
-            session_id,
+            state.session_id,
             perm_id,
         )
+        self.answer_permission(
+            state.session_id, perm_id, allow=True, directory=directory
+        )
+
+    def answer_permission(
+        self, session_id: str, perm_id: str, *, allow: bool, directory: str
+    ) -> bool:
+        """Resolve a pending opencode permission: ``allow`` (``once``) runs the
+        tool, deny (``reject``) surfaces the rejection to the agent. Returns
+        whether opencode accepted the answer; answering an already-resolved
+        permission is a no-op on opencode's side."""
+        response = "once" if allow else "reject"
         try:
-            self._http.post(
+            r = self._http.post(
                 f"/session/{session_id}/permissions/{perm_id}",
                 params={"directory": directory},
-                json={"response": "once"},
+                json={"response": response},
             )
         except httpx.HTTPError as e:
             logger.warning(
-                "opencode-serve: permission auto-allow failed for %s: %s",
+                "opencode-serve: permission %s (%s) failed for %s: %s",
+                "allow" if allow else "deny",
+                response,
                 perm_id,
                 e,
+            )
+            return False
+        if not r.is_success:
+            logger.warning(
+                "opencode-serve: permission %s (%s) for %s -> HTTP %s",
+                "allow" if allow else "deny",
+                response,
+                perm_id,
+                r.status_code,
+            )
+            return False
+        return True
+
+    def _handle_connect_app_permission(
+        self, evt: dict[str, Any], state: _TurnState, perm_id: str, *, directory: str
+    ) -> None:
+        """Announce the card and stash the answer context, then return — the
+        decision endpoint answers opencode out-of-band (see :mod:`connect_app`).
+        Doesn't block; the consume loop's timeout fallback rejects if the user
+        never decides. App slug comes from the tool's ``context.ask`` metadata.
+        """
+        props = evt.get("properties") or {}
+        meta_raw = props.get("metadata")
+        meta = meta_raw if isinstance(meta_raw, dict) else {}
+        app_slug = meta.get("app")
+        if not app_slug:
+            logger.warning(
+                "connect_app permission missing app metadata (meta=%s perm_id=%s); "
+                "denying",
+                meta,
+                perm_id,
+            )
+            self.answer_permission(
+                state.session_id, perm_id, allow=False, directory=directory
+            )
+            return
+
+        build_session_id = directory.rstrip("/").rsplit("/", 1)[-1]
+        request_id = str(uuid4())
+        try:
+            cache = get_cache_backend(tenant_id=get_current_tenant_id())
+            connect_app.stash_pending(
+                request_id,
+                connect_app.ConnectAppPending(
+                    build_session_id=build_session_id,
+                    opencode_session_id=state.session_id,
+                    perm_id=perm_id,
+                    directory=directory,
+                ),
+                cache,
+            )
+            connect_app.announce_request(
+                build_session_id,
+                connect_app.ConnectAppRequest(
+                    request_id=request_id,
+                    app_slug=str(app_slug),
+                    reason=meta.get("reason") or None,
+                ),
+                cache,
+            )
+        except Exception:
+            logger.exception(
+                "connect_app announce failed for app=%s; denying", app_slug
+            )
+            self.answer_permission(
+                state.session_id, perm_id, allow=False, directory=directory
+            )
+            return
+
+        state.pending_connect_app_deadlines[perm_id] = (
+            time.monotonic() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+        )
+
+    def _reject_expired_connect_app_permissions(
+        self, state: _TurnState, now: float, *, directory: str
+    ) -> None:
+        """Timeout fallback: reject connect_app permissions the user never
+        answered, so the agent gets a clean decline instead of a hung turn."""
+        expired = [
+            perm_id
+            for perm_id, deadline in state.pending_connect_app_deadlines.items()
+            if deadline <= now
+        ]
+        for perm_id in expired:
+            del state.pending_connect_app_deadlines[perm_id]
+            self.answer_permission(
+                state.session_id, perm_id, allow=False, directory=directory
             )
 
 

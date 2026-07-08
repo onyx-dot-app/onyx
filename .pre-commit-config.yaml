@@ -71,21 +71,30 @@ repos:
         types_or: [python]
         # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
         # are sandbox-only scripts importing deps absent from the backend venv
-        # (lxml, PIL, office.*). loadtest/ is a standalone uv project with its
-        # own venv (locust). All are excluded from the full ty run via
+        # (lxml, PIL, office.*). loadtest/ imports locust/gevent, which live in
+        # the non-default `loadtest` dependency group and so aren't in the venv
+        # ty runs against. All are excluded from the full ty run via
         # [tool.ty.src] in pyproject; repeat here because pre-commit passes
         # explicit filenames, which bypass that discovery-time exclude.
         exclude: ^(backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)|loadtest/)
       - id: uv-run
         alias: ruff
         name: ruff
-        args: ["ruff", "check", "--fix"]
+        # Run ruff from an isolated overlay (`--no-project --with`) so the hook
+        # never syncs the dev `.venv` or pulls in the backend toolchain (torch,
+        # nvidia-*, etc.) — a full project sync on a cold CI runner installs
+        # 450+ packages just to lint. Same isolation goal as the zizmor hook
+        # below. ruff discovers `[tool.ruff]` from pyproject.toml independently
+        # of uv's project handling, so config still applies. Keep the pinned
+        # version in sync with `ruff` in the dev dependency group in
+        # pyproject.toml.
+        args: ["--no-project", "--with=ruff==0.12.0", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
         alias: ruff-format
         name: ruff format
-        args: ["ruff", "format"]
+        args: ["--no-project", "--with=ruff==0.12.0", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
@@ -157,6 +166,21 @@ repos:
 
   - repo: local
     hooks:
+      # Regenerate the baseline with `env_inventory.py --write-baseline`.
+      - id: env-drift-baseline
+        name: env drift baseline
+        description: "Fail on new undocumented operator-facing env vars (drift gate)"
+        language: system
+        entry: python3 backend/scripts/env_inventory.py --check-baseline
+        pass_filenames: false
+        stages: [pre-commit]
+        files: >-
+          (?x)^(
+            backend/(onyx|ee|shared_configs|model_server)/.*\.py
+            |backend/scripts/env_inventory(\.py|_baseline\.txt)
+            |deployment/docker_compose/env\.(template|prod\.template)
+            |deployment/helm/charts/onyx/(values\.yaml|templates/configmap\.yaml)
+          )$
       - id: bun-install
         name: bun install
         description: "Automatically run 'bun install' after a checkout, pull or rebase"

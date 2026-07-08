@@ -3,6 +3,9 @@
 A shared compose-named volume is the source of truth: the proxy mounts it
 read-write so it can persist on cold start; every sandbox container mounts it
 read-only so ``firewall-init.sh`` can install ``ca.crt`` into the trust store.
+That mount also makes ``ca.key`` present in Docker sandbox filesystems; the
+key is protected by ``0600`` root ownership, and the sandbox agent runs as
+UID 1000 after ``firewall-init.sh`` finishes.
 
 Concurrent-persist arbitration: the shipped compose deployment runs exactly one
 ``sandbox-proxy`` replica, so the cold-start race is not a routine concern in
@@ -50,7 +53,7 @@ class FileCAStore(CAStore):
     Layout:
         $root/
             ca.crt   # public cert, world-readable; mounted into sandboxes
-            ca.key   # private key, proxy-only
+            ca.key   # private key, mode 0600; root-only in Docker sandboxes
 
     ``persist`` is idempotent under concurrent callers via ``O_EXCL`` on the
     cert (the rendezvous file). The key is written second; if a crash interrupts

@@ -1,6 +1,6 @@
 import { CombinedSettings } from "@/lib/settings/types";
 import { ChatSession, toChatSession } from "@/app/app/interfaces";
-import { fetchSettingsSS } from "@/components/settings/lib";
+import { fetchSettingsSS } from "@/lib/settings/svcSS";
 import { fetchBackendChatSessionSS } from "@/lib/chat/fetchBackendChatSessionSS";
 
 export interface HeaderData {

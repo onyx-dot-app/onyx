@@ -10,11 +10,11 @@ import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { Popover, PopoverMenu } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
+import type { Project } from "@/lib/projects/types";
 import {
-  Project,
   removeChatSessionFromProject,
   createProject as createProjectService,
-} from "@/app/app/projects/projectsService";
+} from "@/lib/projects/svc";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import { UNNAMED_CHAT } from "@/lib/constants";

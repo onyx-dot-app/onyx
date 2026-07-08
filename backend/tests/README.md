@@ -16,19 +16,13 @@ pytest -xv backend/tests/unit
 ### External Dependency Unit Tests (`tests/external_dependency_unit/`)
 
 Real Postgres, Redis, MinIO, and Vespa available. Real OpenAI key when set. Real
-Kubernetes cluster when configured (`SANDBOX_BACKEND=kubernetes`) — gated by
-file-level `pytest.mark.skipif`. Onyx application processes (API server, Celery
-workers) are **not** running. Tests import and call functions directly and can
-mock selectively.
+Docker daemon when a Docker-backend test opts into it. Onyx application
+processes (API server, Celery workers) are **not** running. Tests import and
+call functions directly and can mock selectively.
 
-Conditional external dependencies (K8s, OpenAI) are gated by `skipif` at the
-top of the test file so the suite stays runnable in environments that lack
-those dependencies. Tests that need them only execute when the relevant env
-var or credential is present.
-
-There is no separate K8s integration layer. K8s-requiring tests live in
-`external_dependency_unit/` with a `skipif` gate. CI runs them in a dedicated
-job ([pr-craft-k8s-tests.yml](../../.github/workflows/pr-craft-k8s-tests.yml)).
+Conditional external dependencies such as OpenAI are gated by `skipif` at the
+top of the test file so the suite stays runnable in environments that lack the
+relevant env var or credential.
 
 Use when you need a real database or real API calls but want control over setup.
 
@@ -38,7 +32,19 @@ python -m dotenv -f .vscode/.env run -- pytest backend/tests/external_dependency
 
 ### Integration Tests (`tests/integration/`)
 
-Full Onyx deployment running. No mocking. Prefer this over other test types when possible.
+Full Onyx deployment running. No mocking. Prefer this over other test types when
+possible. Most integration tests exercise the product through HTTP API manager
+helpers under `tests/integration/common_utils`.
+
+Craft Kubernetes coverage lives in `tests/integration/tests/craft/k8s/` and
+runs in the dedicated Helm-installed kind job
+([pr-craft-k8s-tests.yml](../../.github/workflows/pr-craft-k8s-tests.yml)).
+That suite is a full deployed Craft integration lane: the chart provides
+Postgres, Redis, MinIO, OpenSearch, api_server, web_server, Celery workers,
+sandbox-proxy, and real sandbox pods in kind. API-facing setup goes through the
+deployed api_server; direct manager calls are reserved for low-level Kubernetes
+contracts that do not have an HTTP API. Direct task/stub checks belong in
+`tests/external_dependency_unit/craft/`.
 
 ```bash
 python -m dotenv -f .vscode/.env run -- pytest backend/tests/integration

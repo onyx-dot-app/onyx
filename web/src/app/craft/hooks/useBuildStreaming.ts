@@ -148,30 +148,46 @@ export function useBuildStreaming() {
   const reconcileInterruptedTurn = useCallback(
     async (
       sessionId: string,
-      interruptedTurnId: string | null
+      interruptedTurnId: string | null,
+      generation: number
     ): Promise<void> => {
-      let reconciledTurnId = interruptedTurnId;
-      for (
-        let attempt = 0;
-        attempt < INTERRUPT_RECONCILE_MAX_ATTEMPTS;
-        attempt++
-      ) {
-        await sleep(INTERRUPT_RECONCILE_INTERVAL_MS);
+      // Only act while this is still the interrupt we launched for; otherwise a
+      // newer turn (a queued auto-send bumps the generation) would be clobbered.
+      const ownsInterrupt = (turnId: string | null): boolean => {
+        const s = useBuildSessionStore.getState().sessions.get(sessionId);
+        return (
+          !!s &&
+          s.turnGeneration === generation &&
+          s.status === "running" &&
+          (turnId === null || !s.activeTurnId || s.activeTurnId === turnId)
+        );
+      };
 
-        const currentSession = useBuildSessionStore
+      // Reload BEFORE the flip to "active": the flip triggers the queued
+      // auto-send, so reloading after would race the freshly-started next turn.
+      const settle = async (): Promise<void> => {
+        await useBuildSessionStore
           .getState()
-          .sessions.get(sessionId);
-        if (
-          !currentSession ||
-          currentSession.status !== "running" ||
-          (reconciledTurnId &&
-            currentSession.activeTurnId &&
-            currentSession.activeTurnId !== reconciledTurnId)
-        ) {
-          return;
-        }
+          .loadSession(sessionId, { force: true, preferPersisted: true })
+          .catch((err) =>
+            console.warn("[Streaming] Failed to reload settled turn:", err)
+          );
+        if (!ownsInterrupt(null)) return;
+        updateSessionData(sessionId, {
+          status: "active",
+          isInterrupting: false,
+          activeTurnId: null,
+          activeTurnIndex: null,
+          activeTurnLocalOwner: false,
+        });
+      };
 
-        let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
+      let turnId = interruptedTurnId;
+      for (let i = 0; i < INTERRUPT_RECONCILE_MAX_ATTEMPTS; i++) {
+        await sleep(INTERRUPT_RECONCILE_INTERVAL_MS);
+        if (!ownsInterrupt(turnId)) return;
+
+        let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>>;
         try {
           activeTurn = await fetchActiveTurn(sessionId);
         } catch (err) {
@@ -182,50 +198,26 @@ export function useBuildStreaming() {
           continue;
         }
 
-        if (activeTurn) {
-          if (reconciledTurnId === null) {
-            reconciledTurnId = activeTurn.turn_id;
-            continue;
-          }
-          if (activeTurn.turn_id === reconciledTurnId) {
-            continue;
-          }
+        if (!activeTurn) {
+          await settle();
           return;
         }
-
-        updateSessionData(sessionId, {
-          status: "active",
-          isInterrupting: false,
-          activeTurnId: null,
-          activeTurnIndex: null,
-          activeTurnLocalOwner: false,
-        });
-        await useBuildSessionStore
-          .getState()
-          .loadSession(sessionId, { force: true })
-          .catch((err) =>
-            console.warn(
-              "[Streaming] Failed to reload reconciled interrupted turn:",
-              err
-            )
-          );
-        return;
+        // turnId is null when the interrupt beat the local activeTurnId — adopt
+        // the backend's; a different id means the backend moved on, so bail.
+        if (turnId === null) turnId = activeTurn.turn_id;
+        else if (activeTurn.turn_id !== turnId) return;
       }
 
-      const currentSession = useBuildSessionStore
-        .getState()
-        .sessions.get(sessionId);
-      if (
-        currentSession?.status !== "running" ||
-        (reconciledTurnId &&
-          currentSession.activeTurnId &&
-          currentSession.activeTurnId !== reconciledTurnId)
-      ) {
-        return;
-      }
-
+      // Timed out: settle if the turn is actually gone now (unblock the UI),
+      // otherwise it's genuinely still running — just clear the "stopping" state.
       console.warn("[Streaming] Interrupted turn reconciliation timed out");
-      updateSessionData(sessionId, { isInterrupting: false });
+      if (!ownsInterrupt(turnId)) return;
+      const turnGone = await fetchActiveTurn(sessionId)
+        .then((t) => t === null)
+        .catch(() => false);
+      if (!ownsInterrupt(turnId)) return;
+      if (turnGone) await settle();
+      else updateSessionData(sessionId, { isInterrupting: false });
     },
     [updateSessionData]
   );
@@ -683,10 +675,10 @@ export function useBuildStreaming() {
 
           case "prompt_response": {
             finalizeStreaming();
-            if (
-              useBuildSessionStore.getState().sessions.get(sessionId)
-                ?.isInterrupting
-            ) {
+            const isInterrupting = useBuildSessionStore
+              .getState()
+              .sessions.get(sessionId)?.isInterrupting;
+            if (isInterrupting) {
               cancelLatestInFlightToolCallStreamItem(sessionId);
             }
 
@@ -695,12 +687,16 @@ export function useBuildStreaming() {
               .sessions.get(sessionId);
 
             if (session && session.streamItems.length > 0) {
-              const savedStreamItems = session.streamItems.map((item) => ({
-                ...item,
-                ...(item.type === "text" || item.type === "thinking"
-                  ? { isStreaming: false }
-                  : {}),
-              }));
+              // Connect cards are transient interaction prompts, not transcript
+              // content — drop them from the persisted message.
+              const savedStreamItems = session.streamItems
+                .filter((item) => item.type !== "connect_app_request")
+                .map((item) => ({
+                  ...item,
+                  ...(item.type === "text" || item.type === "thinking"
+                    ? { isStreaming: false }
+                    : {}),
+                }));
               const textContent = session.streamItems
                 .filter((item) => item.type === "text")
                 .map((item) => item.content)
@@ -718,14 +714,20 @@ export function useBuildStreaming() {
               });
             }
 
-            updateSessionData(sessionId, {
-              status: "active",
-              streamItems: [],
-              isInterrupting: false,
-              activeTurnId: null,
-              activeTurnIndex: null,
-              activeTurnLocalOwner: false,
-            });
+            if (isInterrupting) {
+              // While interrupting, defer settlement to reconcile (settling now races the
+              // in-flight cancel → "Concurrent turn in flight"); just clear persisted streamItems.
+              updateSessionData(sessionId, { streamItems: [] });
+            } else {
+              updateSessionData(sessionId, {
+                status: "active",
+                streamItems: [],
+                isInterrupting: false,
+                activeTurnId: null,
+                activeTurnIndex: null,
+                activeTurnLocalOwner: false,
+              });
+            }
             options?.onPromptResponse?.();
             break;
           }
@@ -735,7 +737,47 @@ export function useBuildStreaming() {
             break;
           }
 
+          case "connect_app_request": {
+            // The `connect_app` tool is parked server-side; render the card
+            // inline so resolving it can unblock the tool.
+            if (!parsed.requestId) break;
+            appendStreamItem(sessionId, {
+              type: "connect_app_request",
+              id: parsed.requestId,
+              requestId: parsed.requestId,
+              appSlug: parsed.appSlug,
+              reason: parsed.reason,
+            });
+            break;
+          }
+
+          case "context_usage": {
+            updateSessionData(sessionId, {
+              contextUsage: {
+                usedTokens: parsed.usedTokens,
+              },
+            });
+            break;
+          }
+
+          case "compaction": {
+            appendStreamItem(sessionId, {
+              type: "compaction",
+              id: genId("compaction"),
+              summary: parsed.summary,
+            });
+            break;
+          }
+
           case "error": {
+            // Safety net for an error arriving mid-interrupt: defer to reconcile rather than
+            // marking failed, which strands the queued auto-send and stalls reconcile.
+            if (
+              useBuildSessionStore.getState().sessions.get(sessionId)
+                ?.isInterrupting
+            ) {
+              break;
+            }
             appendErrorItem(parsed.message);
             updateSessionData(sessionId, {
               status: "failed",
@@ -873,26 +915,32 @@ export function useBuildStreaming() {
           const currentSession = useBuildSessionStore
             .getState()
             .sessions.get(sessionId);
-          if (
-            !transportError &&
-            currentSession?.status === "running" &&
-            currentSession?.activeTurnId === turnId
-          ) {
-            clearTurnIfCurrent({
-              status: "active",
-              isInterrupting: false,
-            });
-          }
-          const settledStatus = useBuildSessionStore
-            .getState()
-            .sessions.get(sessionId)?.status;
-          if (settledStatus !== "failed") {
-            await useBuildSessionStore
+          // While interrupting, reconcileInterruptedTurn owns settlement; settling here races it and strands the queued auto-send.
+          if (!currentSession?.isInterrupting) {
+            if (
+              !transportError &&
+              currentSession?.status === "running" &&
+              currentSession?.activeTurnId === turnId
+            ) {
+              clearTurnIfCurrent({
+                status: "active",
+                isInterrupting: false,
+              });
+            }
+            const settledStatus = useBuildSessionStore
               .getState()
-              .loadSession(sessionId, { force: true })
-              .catch((err) =>
-                console.warn("[Streaming] Failed to reload settled turn:", err)
-              );
+              .sessions.get(sessionId)?.status;
+            if (settledStatus !== "failed") {
+              await useBuildSessionStore
+                .getState()
+                .loadSession(sessionId, { force: true })
+                .catch((err) =>
+                  console.warn(
+                    "[Streaming] Failed to reload settled turn:",
+                    err
+                  )
+                );
+            }
           }
           if (!settledFromPromptResponse) {
             onSettled?.();
@@ -926,6 +974,8 @@ export function useBuildStreaming() {
       updateSessionData(sessionId, {
         status: "running",
         isInterrupting: false,
+        wasInterrupted: false,
+        turnGeneration: (existingSession?.turnGeneration ?? 0) + 1,
         activeTurnId: null,
         activeTurnIndex: null,
         activeTurnLocalOwner: true,
@@ -972,7 +1022,13 @@ export function useBuildStreaming() {
           });
         }
       } finally {
-        setAbortController(sessionId, new AbortController());
+        // Only reset if this turn still owns the controller; clobbering a newer
+        // turn's controller trips its streamTurnEvents duplicate-watcher guard
+        // (signal mismatch) and hangs the FE while the backend completes.
+        const session = useBuildSessionStore.getState().sessions.get(sessionId);
+        if (session?.abortController === controller) {
+          setAbortController(sessionId, new AbortController());
+        }
       }
     },
     [setAbortController, updateSessionData, clearStreamItems, streamTurnEvents]
@@ -990,14 +1046,21 @@ export function useBuildStreaming() {
       }
 
       const interruptedTurnId = session.activeTurnId;
-      updateSessionData(sessionId, { isInterrupting: true });
+      const generation = session.turnGeneration;
+      updateSessionData(sessionId, {
+        isInterrupting: true,
+        wasInterrupted: true,
+      });
       cancelLatestInFlightToolCallStreamItem(sessionId);
       try {
         await interruptMessageStream(sessionId);
-        void reconcileInterruptedTurn(sessionId, interruptedTurnId);
+        void reconcileInterruptedTurn(sessionId, interruptedTurnId, generation);
       } catch (err) {
         console.error("[Streaming] Failed to interrupt:", err);
-        updateSessionData(sessionId, { isInterrupting: false });
+        updateSessionData(sessionId, {
+          isInterrupting: false,
+          wasInterrupted: false,
+        });
       }
     },
     [

@@ -41,6 +41,13 @@ LLM_FIRST_CHUNK_MAX_RETRIES = max(
 # Socket-read timeout for deep-research report calls — bounds inter-chunk gaps
 # (including a zero-chunk stall), not total generation time.
 DR_REPORT_LLM_TIMEOUT_S = int(os.environ.get("DR_REPORT_LLM_TIMEOUT_S") or "60")
+# Timeout for non-streaming secondary LLM flows (e.g. search section-relevance
+# classification and section-expansion selection). These are short, low-effort
+# calls; the bound exists so a stalled provider connection fails fast into the
+# existing graceful fallback instead of hanging a worker until liveness kills it.
+SECONDARY_LLM_FLOW_TIMEOUT_S = int(
+    os.environ.get("SECONDARY_LLM_FLOW_TIMEOUT_S") or "60"
+)
 # Live buffer TTL. Refreshed per write.
 CHAT_STREAM_BUFFER_TTL_S = int(os.environ.get("CHAT_STREAM_BUFFER_TTL_S") or 3600)
 # Retention after the run is done.

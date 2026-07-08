@@ -9,6 +9,7 @@ import {
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
+  SvgDevKit,
   SvgDownload,
   SvgEmpty,
   SvgFileText,
@@ -155,6 +156,12 @@ export const ADMIN_ROUTES = {
     title: "Code Interpreter",
     sidebarLabel: "Code Interpreter",
   },
+  CRAFT: {
+    path: "/admin/configuration/craft",
+    icon: SvgDevKit,
+    title: "Craft",
+    sidebarLabel: "Craft",
+  },
   INDEX_SETTINGS: {
     path: "/admin/configuration/index-settings",
     icon: SvgSearchMenu,
@@ -184,6 +191,12 @@ export const ADMIN_ROUTES = {
     icon: SvgProgressBars,
     title: "Spending Limits",
     sidebarLabel: "Spending Limits",
+  },
+  TRACING: {
+    path: "/admin/tracing",
+    icon: SvgBarChart,
+    title: "Tracing",
+    sidebarLabel: "Tracing",
   },
   USAGE: {
     path: "/admin/performance/usage",

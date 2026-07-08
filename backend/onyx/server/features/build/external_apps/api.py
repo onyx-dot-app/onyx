@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
@@ -7,9 +9,11 @@ from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import Permission
+from onyx.db.enums import SandboxStatus
 from onyx.db.external_app import create_external_app
 from onyx.db.external_app import delete_external_app
 from onyx.db.external_app import get_external_app_by_id
@@ -29,12 +33,18 @@ from onyx.db.utils import UNSET
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.models import BuiltInExternalAppDescriptor
+from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import action_policy_views
 from onyx.external_apps.providers.registry import fetch_available_built_in_apps
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
+from onyx.external_apps.providers.registry import get_provider_for_app
 from onyx.external_apps.providers.registry import resolve_action_overrides
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build import connect_app
+from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.external_apps.models import ConnectAppDecisionRequest
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
 )
@@ -42,12 +52,16 @@ from onyx.server.features.build.external_apps.models import ExternalAppAdminResp
 from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
 from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
 from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.skills.bundle import read_bundle_file
 from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.ingest import ingest_skill_bundle
+from onyx.skills.ingest import ingested_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
+from onyx.utils.encryption import mask_string
 from onyx.utils.pydantic_util import parse_json_form_field
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
 
@@ -92,19 +106,23 @@ def _to_user_response(
     app: ExternalApp, user_cred: ExternalAppUserCredential | None
 ) -> ExternalAppUserResponse:
     """User-facing view of an app. ``credential_keys`` = auth_template keys the
-    org hasn't pre-filled; ``credential_values`` = the user's stored values for
-    those keys (stale keys filtered out).
+    org hasn't pre-filled; ``credential_values`` = the user's masked stored
+    values for those keys (stale keys filtered out).
     """
     required_keys = required_user_credential_keys(
         app.auth_template, app.organization_credentials.get_value(apply_mask=False)
     )
-    stored = (
+    stored_raw = (
         user_cred.user_credentials.get_value(apply_mask=False)
         if user_cred is not None
         else {}
     )
-    credential_values = {key: stored[key] for key in required_keys if key in stored}
-    authenticated = all(key in credential_values for key in required_keys)
+    credential_values = {
+        key: mask_string(str(stored_raw[key]))
+        for key in required_keys
+        if key in stored_raw
+    }
+    authenticated = all(key in stored_raw for key in required_keys)
 
     return ExternalAppUserResponse(
         id=app.id,
@@ -115,6 +133,7 @@ def _to_user_response(
         credential_keys=required_keys,
         credential_values=credential_values,
         authenticated=authenticated,
+        supports_oauth=isinstance(get_provider_for_app(app), OAuthExternalAppProvider),
     )
 
 
@@ -277,8 +296,11 @@ def create_custom_external_app(
         )
 
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(bundle.file.read(), bundle.filename, file_store)
-    try:
+    with ingested_skill_bundle(
+        read_bundle_file(bundle.file),
+        bundle.filename,
+        file_store,
+    ) as ingested:
         app = create_external_app(
             db_session=db_session,
             name=name.strip(),
@@ -296,9 +318,6 @@ def create_custom_external_app(
         # Push before commit so a failure rolls back the create + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     return _to_admin_response(app)
 
@@ -322,10 +341,12 @@ def replace_custom_app_bundle(
         )
 
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        bundle.file.read(), bundle.filename, file_store, slug=app.skill.slug
-    )
-    try:
+    with ingested_skill_bundle(
+        read_bundle_file(bundle.file),
+        bundle.filename,
+        file_store,
+        slug=app.skill.slug,
+    ) as ingested:
         app, old_bundle_file_id = update_external_app(
             db_session=db_session,
             external_app_id=external_app_id,
@@ -336,9 +357,6 @@ def replace_custom_app_bundle(
         # Push before commit so a failure rolls back the swap + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     # Drop the superseded blob only after the swap committed.
     if old_bundle_file_id:
@@ -411,6 +429,7 @@ def upsert_user_credentials(
         external_app_id=external_app_id,
         user_id=user.id,
         user_credentials=request.user_credentials,
+        resolve_masked_values=True,
     )
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes now.
@@ -436,3 +455,42 @@ def list_external_apps(
         for app in apps
         if app.skill.enabled
     ]
+
+
+@router.post("/apps/connect/{request_id}/decision")
+def resolve_connect_app_request(
+    request_id: str,
+    body: ConnectAppDecisionRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Answer a pending ``connect_app`` request: load the stashed context and
+    answer opencode on the user's sandbox — connected (allow) / declined
+    (reject). Idempotent; an expired or already-answered request is a no-op.
+    """
+    cache = get_cache_backend(tenant_id=get_current_tenant_id())
+    pending = connect_app.load_pending(request_id, cache)
+    if pending is None:
+        return
+
+    # Scope to the caller's own session before touching their sandbox.
+    if get_build_session(UUID(pending.build_session_id), user.id, db_session) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connect request not found.")
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    if sandbox is None or sandbox.status != SandboxStatus.RUNNING:
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, "Sandbox is not running.")
+
+    answered = get_sandbox_manager().answer_connect_app_permission(
+        sandbox.id,
+        opencode_session_id=pending.opencode_session_id,
+        perm_id=pending.perm_id,
+        directory=pending.directory,
+        allow=body.decision == connect_app.ConnectAppDecision.CONNECTED,
+    )
+    if not answered:
+        # Leave the pending record intact (TTL) so the user can retry
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Could not reach the sandbox to apply your choice — please try again.",
+        )
+    connect_app.clear_pending(request_id, cache)

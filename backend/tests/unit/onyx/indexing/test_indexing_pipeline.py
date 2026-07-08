@@ -15,6 +15,7 @@ import pytest
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentSource
 from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
@@ -600,6 +601,17 @@ def _make_image_doc(
     )
 
 
+def _make_tabular_doc(doc_id: str, section: TabularSection) -> Document:
+    return Document(
+        id=doc_id,
+        title=f"Doc {doc_id}",
+        semantic_identifier=doc_id,
+        sections=[section],
+        source=DocumentSource.FILE,
+        metadata={},
+    )
+
+
 class TestProcessImageSections:
     """Validate that parallel image summarization places results in the
     correct section positions — especially under concurrent execution."""
@@ -637,6 +649,31 @@ class TestProcessImageSections:
             ),
         ):
             return process_image_sections(documents)
+
+    def test_file_backed_tabular_preserved_with_llm(self) -> None:
+        """A file-backed TabularSection keeps its csv_file_id through the
+        image-processing rebuild (vision-LLM path)."""
+        doc = _make_tabular_doc(
+            "doc-fb", TabularSection(link="l", csv_file_id="fid-1", heading="Sheet1")
+        )
+        section = self._run([doc], image_map={})[0].processed_sections[0]
+        assert isinstance(section, TabularSection)
+        assert section.csv_file_id == "fid-1"
+        assert section.text is None
+
+    def test_file_backed_tabular_preserved_without_llm(self) -> None:
+        """Same guarantee on the no-LLM path (image analysis disabled)."""
+        doc = _make_tabular_doc(
+            "doc-fb", TabularSection(link="l", csv_file_id="fid-2", heading="Sheet1")
+        )
+        with patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=False,
+        ):
+            section = process_image_sections([doc])[0].processed_sections[0]
+        assert isinstance(section, TabularSection)
+        assert section.csv_file_id == "fid-2"
+        assert section.text is None
 
     def test_interleaved_sections_preserve_order(self) -> None:
         """Text and image sections must stay in their original positions."""
@@ -1017,3 +1054,31 @@ def test_get_docs_to_update_mixed_batch() -> None:
     assert docs[0].id == "changed"
     assert "changed" in hashes
     assert "unchanged" not in hashes
+
+
+def test_get_docs_to_update_secondary_build_ignores_content_hash_gate() -> None:
+    """FUTURE/secondary build (ignore_content_hash_gate=True) must NOT hash-skip.
+
+    content_hash is a single column shared by both indices but tracks only the
+    PRESENT/live index. A matching hash means PRESENT already has the doc — it
+    says nothing about the FUTURE index being built. Honoring the gate here is
+    the #11159 regression: the secondary write gets suppressed and FUTURE never
+    receives the doc (swap deadlock / stale promotion). The gate must be bypassed.
+    """
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = None
+    stored_hash = doc.content_hash()  # PRESENT already indexed this exact content
+    db_doc = _make_db_doc("doc1", content_hash=stored_hash)
+
+    # Default (PRESENT write): hash matches → skipped, as before.
+    present_docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+    assert present_docs == []
+
+    # Secondary/FUTURE write: gate bypassed → doc still indexed into FUTURE.
+    future_docs, future_hashes = get_docs_to_update(
+        [doc], db_docs=[db_doc], ignore_content_hash_gate=True
+    )
+    assert len(future_docs) == 1
+    assert future_docs[0].id == "doc1"
+    assert "doc1" in future_hashes

@@ -53,6 +53,9 @@ export interface ChatScrollContainerProps {
 
   /** Hide the scrollbar (scroll still works, just invisible) */
   hideScrollbar?: boolean;
+
+  /** Drop the content-wrapper horizontal padding so content sits flush with the chat edge. */
+  flushContent?: boolean;
 }
 
 // Build a CSS mask that fades content opacity at top/bottom edges
@@ -74,6 +77,7 @@ const ChatScrollContainer = React.memo(
         onScrollButtonVisibilityChange,
         sessionId,
         hideScrollbar = false,
+        flushContent = false,
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
@@ -362,7 +366,9 @@ const ChatScrollContainer = React.memo(
             )}
             onScroll={handleScroll}
             style={{
-              scrollbarGutter: "stable both-edges",
+              // Full-width drops the reserved gutters so content sits flush with
+              // the chat edge; centered mode keeps both-edges to avoid shift.
+              scrollbarGutter: flushContent ? "auto" : "stable both-edges",
               // Apply mask to fade content opacity at edges
               maskImage: contentMask,
               WebkitMaskImage: contentMask,
@@ -370,7 +376,10 @@ const ChatScrollContainer = React.memo(
           >
             <div
               ref={contentWrapperRef}
-              className="w-full flex-1 flex flex-col items-center px-4"
+              className={cn(
+                "w-full flex-1 flex flex-col items-center",
+                !flushContent && "px-4"
+              )}
               data-scroll-ready={isScrollReady}
               style={{
                 visibility: isScrollReady ? "visible" : "hidden",

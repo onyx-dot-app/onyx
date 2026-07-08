@@ -4,8 +4,7 @@ import {
   type FieldValues,
 } from "react-hook-form";
 
-// Resolves `control`: explicit prop wins, else the nearest <FormProvider> — keeping
-// FormProvider optional. Throws a clear error when neither is present.
+// Explicit `control` prop wins, else the nearest <FormProvider>, keeping the provider optional.
 export function useFieldController<TFieldValues extends FieldValues>(
   explicit?: Control<TFieldValues>,
 ): Control<TFieldValues> {

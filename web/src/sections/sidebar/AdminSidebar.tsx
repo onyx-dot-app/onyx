@@ -83,6 +83,9 @@ function buildItems(
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.IMAGE_GENERATION);
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.VOICE);
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CODE_INTERPRETER);
+    if (settings?.onyx_craft_available === true) {
+      add(SECTIONS.UNLABELED, ADMIN_ROUTES.CRAFT);
+    }
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
 
     if (!enableCloud && customAnalyticsEnabled) {
@@ -133,6 +136,10 @@ function buildItems(
 
   // 6. Usage (admin only)
   if (!isCurator) {
+    // Tracing config is not supported on multi-tenant cloud.
+    if (!enableCloud) {
+      add(SECTIONS.USAGE, ADMIN_ROUTES.TRACING);
+    }
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.TOKEN_RATE_LIMITS, Tier.ENTERPRISE);
     if (

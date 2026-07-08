@@ -2,7 +2,6 @@ import Svg, { Path } from "react-native-svg";
 
 import type { IconProps } from "@/icons/types";
 
-// RN variant of web Opal `SvgEyeClosed` (web/lib/opal/src/icons/eye-closed.tsx).
 const SvgEyeClosed = ({ size = 16, ...props }: IconProps) => (
   <Svg
     width={size}

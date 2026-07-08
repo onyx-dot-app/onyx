@@ -3,7 +3,9 @@
 from collections.abc import Iterable
 from pathlib import Path
 
+from onyx.db.models import ExternalApp
 from onyx.db.models import Skill
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -89,9 +91,21 @@ def build_skills_section_from_data(skills: Iterable[Skill]) -> str:
     return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
 
 
+def build_connectable_apps_list(apps: Iterable[ExternalApp]) -> str:
+    """Render the connectable-apps bullet list — org apps the user hasn't set up
+    yet. The heading and explanatory prose live in AGENTS.template.md; this only
+    supplies the dynamic ``{{CONNECTABLE_APPS_LIST}}`` value. Mirrors
+    ``build_skills_section_from_data``: a fallback line when there's nothing."""
+    entries = sorted((app.skill.slug, _truncate(app.skill.description)) for app in apps)
+    if not entries:
+        return "No connectable apps available."
+    return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
+
+
 def generate_agent_instructions(
     template_path: Path,
     skills_section: str,
+    connectable_apps_section: str,
     provider: str | None = None,
     model_name: str | None = None,
     nextjs_port: int | None = None,
@@ -103,6 +117,7 @@ def generate_agent_instructions(
     Args:
         template_path: Path to the AGENTS.template.md file
         skills_section: Pre-rendered skills section
+        connectable_apps_section: Pre-rendered connectable-apps list (may be empty)
         provider: LLM provider type (e.g., "openai", "anthropic")
         model_name: Model name (e.g., "claude-sonnet-4-5", "gpt-4o")
         nextjs_port: Port for Next.js development server
@@ -139,7 +154,16 @@ def generate_agent_instructions(
     content = content.replace(
         "{{NEXTJS_PORT}}", str(nextjs_port) if nextjs_port else "Unknown"
     )
+    content = content.replace(
+        "{{APPROVAL_WAIT_TIMEOUT_SECONDS}}",
+        str(SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS),
+    )
+    content = content.replace(
+        "{{APPROVAL_CLIENT_TIMEOUT_SECONDS}}",
+        str(SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 20),
+    )
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", skills_section)
+    content = content.replace("{{CONNECTABLE_APPS_LIST}}", connectable_apps_section)
 
     return content

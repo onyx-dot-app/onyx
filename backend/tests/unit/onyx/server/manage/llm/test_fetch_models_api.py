@@ -2,7 +2,7 @@
 
 These tests verify the full request/response flow for fetching models
 from dynamic providers (Ollama, OpenRouter, Litellm), including the
-sync-to-DB behavior when provider_name is specified.
+sync-to-DB behavior when provider_id is specified.
 """
 
 import os
@@ -131,10 +131,10 @@ class TestGetOllamaAvailableModels:
         assert exc_info.value.error_code == OnyxErrorCode.BAD_GATEWAY
         assert exc_info.value.status_code == 502
 
-    def test_syncs_to_db_when_provider_name_specified(
+    def test_syncs_to_db_when_provider_id_specified(
         self, mock_ollama_tags_response: dict, mock_ollama_show_response: dict
     ) -> None:
-        """Test that models are synced to DB when provider_name is given."""
+        """Test that models are synced to DB when provider_id is given."""
         from onyx.server.manage.llm.api import get_ollama_available_models
 
         mock_session = MagicMock()
@@ -145,7 +145,8 @@ class TestGetOllamaAvailableModels:
         with (
             patch("onyx.server.manage.llm.api.httpx") as mock_httpx,
             patch(
-                "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+                "onyx.db.llm.fetch_existing_llm_provider_by_id",
+                return_value=mock_provider,
             ),
         ):
             mock_get_response = MagicMock()
@@ -160,7 +161,7 @@ class TestGetOllamaAvailableModels:
 
             request = OllamaModelsRequest(
                 api_base="http://localhost:11434",
-                provider_name="my-ollama",
+                provider_id=1,
             )
             get_ollama_available_models(request, MagicMock(), mock_session)
 
@@ -168,10 +169,10 @@ class TestGetOllamaAvailableModels:
             assert mock_session.execute.call_count == 6
             mock_session.commit.assert_called_once()
 
-    def test_no_sync_when_provider_name_not_specified(
+    def test_no_sync_when_provider_id_not_specified(
         self, mock_ollama_tags_response: dict, mock_ollama_show_response: dict
     ) -> None:
-        """Test that models are NOT synced when provider_name is None."""
+        """Test that models are NOT synced when provider_id is None."""
         from onyx.server.manage.llm.api import get_ollama_available_models
 
         mock_session = MagicMock()
@@ -373,10 +374,10 @@ class TestGetOpenRouterAvailableModels:
             assert claude.supports_image_input is True
             assert llama.supports_image_input is False
 
-    def test_syncs_to_db_when_provider_name_specified(
+    def test_syncs_to_db_when_provider_id_specified(
         self, mock_openrouter_response: dict
     ) -> None:
-        """Test that models are synced to DB when provider_name is given."""
+        """Test that models are synced to DB when provider_id is given."""
         from onyx.server.manage.llm.api import get_openrouter_available_models
 
         mock_session = MagicMock()
@@ -387,7 +388,8 @@ class TestGetOpenRouterAvailableModels:
         with (
             patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
             patch(
-                "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+                "onyx.db.llm.fetch_existing_llm_provider_by_id",
+                return_value=mock_provider,
             ),
         ):
             mock_response = MagicMock()
@@ -398,7 +400,7 @@ class TestGetOpenRouterAvailableModels:
             request = OpenRouterModelsRequest(
                 api_base="https://openrouter.ai/api/v1",
                 api_key="test-key",
-                provider_name="my-openrouter",
+                provider_id=1,
             )
             get_openrouter_available_models(request, MagicMock(), mock_session)
 
@@ -431,7 +433,8 @@ class TestGetOpenRouterAvailableModels:
         with (
             patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
             patch(
-                "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+                "onyx.db.llm.fetch_existing_llm_provider_by_id",
+                return_value=mock_provider,
             ),
         ):
             mock_response = MagicMock()
@@ -442,17 +445,17 @@ class TestGetOpenRouterAvailableModels:
             request = OpenRouterModelsRequest(
                 api_base="https://openrouter.ai/api/v1",
                 api_key="test-key",
-                provider_name="my-openrouter",
+                provider_id=1,
             )
             get_openrouter_available_models(request, MagicMock(), mock_session)
 
             # Only 2 new models should be inserted (claude already exists)
             assert mock_session.execute.call_count == 5
 
-    def test_no_sync_when_provider_name_not_specified(
+    def test_no_sync_when_provider_id_not_specified(
         self, mock_openrouter_response: dict
     ) -> None:
-        """Test that models are NOT synced when provider_name is None."""
+        """Test that models are NOT synced when provider_id is None."""
         from onyx.server.manage.llm.api import get_openrouter_available_models
 
         mock_session = MagicMock()
@@ -670,7 +673,7 @@ class TestGetLMStudioAvailableModels:
         with (
             patch("onyx.server.manage.llm.api.httpx") as mock_httpx,
             patch(
-                "onyx.server.manage.llm.api.fetch_existing_llm_provider",
+                "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
                 return_value=mock_provider,
             ),
         ):
@@ -683,7 +686,7 @@ class TestGetLMStudioAvailableModels:
                 api_base="http://localhost:1234",
                 api_key="masked-value",
                 api_key_changed=False,
-                provider_name="my-lm-studio",
+                provider_id=1,
             )
             get_lm_studio_available_models(request, MagicMock(), mock_session)
 
@@ -717,7 +720,7 @@ class TestGetLMStudioAvailableModels:
                 api_base="http://localhost:1234",
                 api_key="new-secret",
                 api_key_changed=True,
-                provider_name="my-lm-studio",
+                provider_id=1,
             )
             get_lm_studio_available_models(request, MagicMock(), mock_session)
 
@@ -794,7 +797,8 @@ class TestGetLMStudioAvailableModels:
         with (
             patch("onyx.server.manage.llm.api.httpx") as mock_httpx,
             patch(
-                "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+                "onyx.db.llm.fetch_existing_llm_provider_by_id",
+                return_value=mock_provider,
             ),
         ):
             mock_response = MagicMock()
@@ -804,7 +808,7 @@ class TestGetLMStudioAvailableModels:
 
             request = LMStudioModelsRequest(
                 api_base="http://localhost:1234",
-                provider_name="my-lm-studio",
+                provider_id=1,
             )
             get_lm_studio_available_models(request, MagicMock(), mock_session)
 
@@ -1599,7 +1603,7 @@ class TestGetBedrockAvailableModels:
                 return_value=mock_session,
             ) as mock_session_cls,
             patch(
-                "onyx.server.manage.llm.api.fetch_existing_llm_provider",
+                "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
                 return_value=existing_provider,
             ),
             patch("onyx.server.manage.llm.api._sync_fetched_models"),
@@ -1607,7 +1611,7 @@ class TestGetBedrockAvailableModels:
             request = BedrockModelsRequest(
                 aws_region_name="us-west-2",
                 aws_bearer_token_bedrock=masked_token,
-                provider_name="my-bedrock",
+                provider_id=1,
             )
             get_bedrock_available_models(request, MagicMock(), MagicMock())
 

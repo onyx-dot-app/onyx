@@ -6,7 +6,7 @@ import { ProjectFile } from "@/providers/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
-import { UserFileStatus } from "@/app/app/projects/projectsService";
+import { UserFileStatus } from "@/lib/projects/types";
 import AttachmentButton from "@/refresh-components/buttons/AttachmentButton";
 import Modal from "@/refresh-components/Modal";
 import { useModal } from "@/refresh-components/contexts/ModalContext";

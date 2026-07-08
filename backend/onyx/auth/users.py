@@ -63,6 +63,7 @@ from fastapi_users.openapi import OpenAPIResponseType
 from fastapi_users.router.common import ErrorCode
 from fastapi_users.router.common import ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
+from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import GetAccessTokenError
@@ -142,6 +143,10 @@ from onyx.redis.redis_pool import retrieve_ws_token_data
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditActor
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_identify_user
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -149,6 +154,7 @@ from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params
+from onyx.utils.url import sanitize_next_url
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import async_return_default_schema
 from shared_configs.configs import MULTI_TENANT
@@ -1061,6 +1067,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             request=request,
         )
 
+        emit_audit_event(
+            AuditAction.LOGIN,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+        )
+
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
     ) -> None:
@@ -1175,6 +1187,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_id=str(user.id),
         )
 
+        emit_audit_event(
+            AuditAction.REGISTER,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+        )
+
     async def on_after_forgot_password(
         self,
         user: User,
@@ -1197,6 +1215,23 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
 
+        emit_audit_event(
+            AuditAction.PASSWORD_FORGOT,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+        )
+
+    async def on_after_reset_password(
+        self,
+        user: User,
+        request: Optional[Request] = None,  # noqa: ARG002
+    ) -> None:
+        emit_audit_event(
+            AuditAction.PASSWORD_RESET,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+        )
+
     async def on_after_request_verify(
         self,
         user: User,
@@ -1216,11 +1251,26 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user.email, token, new_organization=user_count == 1
         )
 
+        emit_audit_event(
+            AuditAction.EMAIL_VERIFY,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+        )
+
     @log_function_time(print_only=True)
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
         email = credentials.username
+
+        def _audit_login_failure(
+            outcome: AuditOutcome = AuditOutcome.FAILURE,
+        ) -> None:
+            emit_audit_event(
+                AuditAction.LOGIN_FAILURE,
+                outcome,
+                actor=AuditActor(email=email),
+            )
 
         tenant_id: str | None = None
         try:
@@ -1239,6 +1289,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if not tenant_id:
             # User not found in mapping
             self.password_helper.hash(credentials.password)
+            _audit_login_failure()
             return None
 
         # Create a tenant-specific session
@@ -1254,9 +1305,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             except exceptions.UserNotExists:
                 self.password_helper.hash(credentials.password)
+                _audit_login_failure()
                 return None
 
             if not user.account_type.is_web_login():
+                _audit_login_failure(AuditOutcome.DENIED)
                 raise BasicAuthenticationError(
                     detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
                 )
@@ -1265,6 +1318,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 credentials.password, user.hashed_password
             )
             if not verified:
+                _audit_login_failure()
                 return None
 
             if updated_password_hash is not None:
@@ -1607,7 +1661,13 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
             strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
         ) -> Response:
             user, token = user_token
-            return await backend.logout(strategy, user, token)
+            result = await backend.logout(strategy, user, token)
+            emit_audit_event(
+                AuditAction.LOGOUT,
+                AuditOutcome.SUCCESS,
+                actor=AuditActor(user_id=str(user.id), email=user.email),
+            )
+            return result
 
         return router
 
@@ -2015,11 +2075,19 @@ async def current_user(
     return user
 
 
+_CURATOR_OR_ADMIN_ROLES = frozenset(
+    {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
+)
+
+
+def is_user_curator_or_admin(user: User) -> bool:
+    return user.role in _CURATOR_OR_ADMIN_ROLES
+
+
 async def current_curator_or_admin_user(
     user: User = Depends(current_user),
 ) -> User:
-    allowed_roles = {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
-    if user.role not in allowed_roles:
+    if not is_user_curator_or_admin(user):
         raise BasicAuthenticationError(
             detail="Access denied. User is not a curator or admin.",
         )
@@ -2283,7 +2351,7 @@ def get_oauth_router(
             callback_path = request.app.url_path_for(callback_route_name)
             authorize_redirect_url = f"{WEB_DOMAIN}{callback_path}"
 
-        next_url = request.query_params.get("next", "/")
+        next_url = sanitize_next_url(request.query_params.get("next"))
 
         csrf_token = generate_csrf_token()
         state_data: Dict[str, str] = {
@@ -2546,9 +2614,19 @@ def get_oauth_router(
         async def complete_login_flow(
             token: OAuth2Token, state_data: Dict[str, str]
         ) -> RedirectResponse:
-            account_id, account_email = await oauth_client.get_id_email(
-                token["access_token"]
-            )
+            # A failed or rejected userinfo fetch (bad status, malformed body,
+            # unverified email) must land as a controlled login rejection, not
+            # an unhandled 500. OnyxError has a global handler that GetIdEmailError
+            # does not.
+            try:
+                account_id, account_email = await oauth_client.get_id_email(
+                    token["access_token"]
+                )
+            except GetIdEmailError as e:
+                raise OnyxError(
+                    OnyxErrorCode.VALIDATION_ERROR,
+                    "Could not retrieve a verified identity from the SSO provider",
+                ) from e
 
             if account_email is None:
                 raise OnyxError(
@@ -2556,7 +2634,7 @@ def get_oauth_router(
                     ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
                 )
 
-            next_url = state_data.get("next_url", "/")
+            next_url = sanitize_next_url(state_data.get("next_url"))
             referral_source = state_data.get("referral_source", None)
             try:
                 tenant_id = fetch_ee_implementation_or_noop(

@@ -20,7 +20,6 @@ from tests.integration.common_utils.test_models import DATestUser
 # covered by test_chat_scopes.py.
 BASIC_ACCESS_ENDPOINTS: list[tuple[str, str]] = [
     ("GET", "/manage/credential"),
-    ("GET", "/manage/connector"),
     ("GET", "/users"),
     ("GET", "/settings"),
     ("GET", "/query/valid-tags"),

@@ -16,6 +16,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
+from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -75,11 +76,12 @@ class MCPTool(Tool[None]):
         self._user_oauth_token = user_oauth_token
         self._additional_headers = additional_headers or {}
 
-        self._name = tool_name
+        self._mcp_tool_name = tool_name
+        self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
         self._tool_definition = tool_definition
         self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
-        self._llm_name = f"mcp:{mcp_server.name}:{tool_name}"
+        self._llm_name = sanitize_tool_name(f"mcp_{mcp_server.name}_{tool_name}")
 
     @property
     def id(self) -> int:
@@ -97,9 +99,8 @@ class MCPTool(Tool[None]):
     def display_name(self) -> str:
         return self._display_name
 
-    @property
-    def llm_name(self) -> str:
-        return self._llm_name
+    def use_disambiguated_name(self) -> None:
+        self._name = self._llm_name
 
     def tool_definition(self) -> dict:
         """Return the tool definition from the MCP server"""
@@ -247,7 +248,7 @@ class MCPTool(Tool[None]):
 
             tool_result = call_mcp_tool(
                 self.mcp_server.server_url,
-                self._name,
+                self._mcp_tool_name,
                 llm_kwargs,
                 connection_headers=headers,
                 transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,

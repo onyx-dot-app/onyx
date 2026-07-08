@@ -70,12 +70,16 @@ _CONFCLOUD_77618_404_BODY_SIGNATURES = (
 )
 
 _USER_NOT_FOUND = "Unknown Confluence User"
-_USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
-_USER_EMAIL_CACHE: dict[str, str | None] = {}
+# All three caches are keyed by (confluence instance base url, identifier). The
+# Confluence Server/DC username and userKey namespaces are per-instance, so a bare
+# identifier key would let one instance's user resolve to another instance's email
+# when several Confluence connectors run in the same multi-tenant worker process.
+_USER_ID_TO_DISPLAY_NAME_CACHE: dict[tuple[str, str], str | None] = {}
+_USER_EMAIL_CACHE: dict[tuple[str, str], str | None] = {}
 # Separate cache from _USER_EMAIL_CACHE: the DC 9.1+ REST space-permissions
 # response only includes a user's userKey (CONFSERVER-100505), not their
 # username, so we have to resolve email by a different identifier.
-_USER_KEY_TO_EMAIL_CACHE: dict[str, str | None] = {}
+_USER_KEY_TO_EMAIL_CACHE: dict[tuple[str, str], str | None] = {}
 _DEFAULT_PAGINATION_LIMIT = 1000
 _MINIMUM_PAGINATION_LIMIT = 5
 
@@ -1298,7 +1302,8 @@ def get_user_email_from_username__server(
     confluence_client: OnyxConfluence, user_name: str
 ) -> str | None:
     global _USER_EMAIL_CACHE
-    if _USER_EMAIL_CACHE.get(user_name) is None:
+    cache_key = (confluence_client._url, user_name)
+    if _USER_EMAIL_CACHE.get(cache_key) is None:
         try:
             response = confluence_client.get_mobile_parameters(user_name)
             email = response.get("email")
@@ -1321,8 +1326,8 @@ def get_user_email_from_username__server(
                 e,
             )
             email = None
-        _USER_EMAIL_CACHE[user_name] = email
-    return _USER_EMAIL_CACHE[user_name]
+        _USER_EMAIL_CACHE[cache_key] = email
+    return _USER_EMAIL_CACHE[cache_key]
 
 
 def get_user_email_from_userkey__server(
@@ -1339,7 +1344,8 @@ def get_user_email_from_userkey__server(
     different (userKey is opaque hex, username is human-readable).
     """
     global _USER_KEY_TO_EMAIL_CACHE
-    if user_key not in _USER_KEY_TO_EMAIL_CACHE:
+    cache_key = (confluence_client._url, user_key)
+    if cache_key not in _USER_KEY_TO_EMAIL_CACHE:
         try:
             response = confluence_client.get_user_details_by_userkey(user_key)
             email = response.get("email") if isinstance(response, dict) else None
@@ -1360,8 +1366,8 @@ def get_user_email_from_userkey__server(
                 e,
             )
             email = None
-        _USER_KEY_TO_EMAIL_CACHE[user_key] = email
-    return _USER_KEY_TO_EMAIL_CACHE[user_key]
+        _USER_KEY_TO_EMAIL_CACHE[cache_key] = email
+    return _USER_KEY_TO_EMAIL_CACHE[cache_key]
 
 
 def _parse_dc_version(version_str: str) -> tuple[int, int] | None:
@@ -1388,7 +1394,8 @@ def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
         str: The User Display Name. 'Unknown User' if the user is deactivated or not found
     """
     global _USER_ID_TO_DISPLAY_NAME_CACHE
-    if _USER_ID_TO_DISPLAY_NAME_CACHE.get(user_id) is None:
+    cache_key = (confluence_client._url, user_id)
+    if _USER_ID_TO_DISPLAY_NAME_CACHE.get(cache_key) is None:
         try:
             result = confluence_client.get_user_details_by_userkey(user_id)
             found_display_name = result.get("displayName")
@@ -1402,9 +1409,9 @@ def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
             except Exception:
                 found_display_name = None
 
-        _USER_ID_TO_DISPLAY_NAME_CACHE[user_id] = found_display_name
+        _USER_ID_TO_DISPLAY_NAME_CACHE[cache_key] = found_display_name
 
-    return _USER_ID_TO_DISPLAY_NAME_CACHE.get(user_id) or _USER_NOT_FOUND
+    return _USER_ID_TO_DISPLAY_NAME_CACHE.get(cache_key) or _USER_NOT_FOUND
 
 
 def sanitize_attachment_title(title: str) -> str:

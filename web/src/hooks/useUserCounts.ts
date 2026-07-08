@@ -5,7 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { InvitedUserSnapshot } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { StatusCountMap } from "@/refresh-pages/admin/UsersPage/interfaces";
+import type { StatusCountMap } from "@/views/admin/UsersPage/interfaces";
 
 type UserCountsResponse = {
   role_counts: Record<string, number>;
