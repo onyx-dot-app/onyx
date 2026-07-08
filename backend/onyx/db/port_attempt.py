@@ -7,8 +7,10 @@ history. Nothing here enqueues celery work — that is the caller's job.
 """
 
 from datetime import datetime
+from typing import Literal
+from uuid import UUID
 
-from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy import ColumnElement, and_, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.connector_credential_pair import (
@@ -16,11 +18,26 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.enums import IndexModelStatus, PortAttemptStatus, SwitchoverType
 from onyx.db.models import PortAttempt, SearchSettings
+from onyx.db.user_file import any_user_file_secondary_pending, fetch_port_scope_user_ids
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+PortScope = Literal["connector", "user_file"]
+
 _ACTIVE_STATUSES = [PortAttemptStatus.NOT_STARTED, PortAttemptStatus.IN_PROGRESS]
+
+
+def _scope_where(
+    cc_pair_id: int | None, port_user_id: UUID | None
+) -> ColumnElement[bool]:
+    """Exactly-one-scope filter for the lifecycle helpers; raises if both/neither set."""
+    if (cc_pair_id is None) == (port_user_id is None):
+        raise ValueError("exactly one of cc_pair_id / port_user_id must be set")
+    if cc_pair_id is not None:
+        return PortAttempt.cc_pair_id == cc_pair_id
+    return PortAttempt.port_user_id == port_user_id
+
 
 # States check_for_port won't create a further attempt for; anything else
 # (none / active / FAILED) is still pending work.
@@ -45,21 +62,27 @@ def _get_locked(db_session: Session, port_attempt_id: int) -> PortAttempt:
 
 def create_port_attempt(
     db_session: Session,
-    cc_pair_id: int,
+    cc_pair_id: int | None,
     search_settings_id: int,
     celery_task_id: str | None = None,
     resume_from_doc_id: str | None = None,
     up_to_doc_id: str | None = None,
+    *,
+    port_user_id: UUID | None = None,
 ) -> PortAttempt:
-    """Create a NOT_STARTED attempt. Raises IntegrityError (the active-unique
-    index) if an active attempt already exists for the pair.
+    """Create a NOT_STARTED attempt for exactly one scope (connector `cc_pair_id`
+    or user `port_user_id`). Raises IntegrityError (the scope's active-unique
+    index) if an active attempt already exists for that scope.
 
     `resume_from_doc_id` seeds the cursor so the run continues `WHERE
     document_id > resume_from_doc_id` — used when rescheduling a FAILED attempt.
     `up_to_doc_id` is the snapshot upper bound, carried across resumes.
     """
+    # clear ValueError on a bad scope, rather than a CHECK-violation IntegrityError
+    _scope_where(cc_pair_id, port_user_id)
     attempt = PortAttempt(
         cc_pair_id=cc_pair_id,
+        port_user_id=port_user_id,
         search_settings_id=search_settings_id,
         status=PortAttemptStatus.NOT_STARTED,
         celery_task_id=celery_task_id,
@@ -83,30 +106,80 @@ def get_port_attempt(db_session: Session, port_attempt_id: int) -> PortAttempt |
 
 
 def get_active_port_attempt(
-    db_session: Session, cc_pair_id: int, search_settings_id: int
+    db_session: Session,
+    cc_pair_id: int | None,
+    search_settings_id: int,
+    *,
+    port_user_id: UUID | None = None,
 ) -> PortAttempt | None:
-    """The single active (NOT_STARTED / IN_PROGRESS) attempt for the pair, if any."""
+    """The single active (NOT_STARTED / IN_PROGRESS) attempt for the scope, if any."""
     return db_session.execute(
         select(PortAttempt).where(
-            PortAttempt.cc_pair_id == cc_pair_id,
+            _scope_where(cc_pair_id, port_user_id),
             PortAttempt.search_settings_id == search_settings_id,
             PortAttempt.status.in_(_ACTIVE_STATUSES),
         )
     ).scalar_one_or_none()
 
 
-def count_active_port_attempts(db_session: Session, search_settings_id: int) -> int:
-    """Active (NOT_STARTED / IN_PROGRESS) attempts across all cc_pairs for a settings.
-    check_for_port caps new attempt creation on this so the port doesn't fill every
-    docprocessing slot and starve live indexing."""
+def count_active_port_attempts(
+    db_session: Session,
+    search_settings_id: int,
+    scope: PortScope = "connector",
+) -> int:
+    """Active (NOT_STARTED / IN_PROGRESS) attempts for a settings within one scope.
+    check_for_port caps new attempt creation on this so the port doesn't starve live
+    indexing. Scope-filtered so the connector and user-file caps stay independent."""
+    scope_filter = (
+        PortAttempt.cc_pair_id.isnot(None)
+        if scope == "connector"
+        else PortAttempt.port_user_id.isnot(None)
+    )
     return db_session.execute(
         select(func.count())
         .select_from(PortAttempt)
         .where(
             PortAttempt.search_settings_id == search_settings_id,
             PortAttempt.status.in_(_ACTIVE_STATUSES),
+            scope_filter,
         )
     ).scalar_one()
+
+
+def _user_file_port_has_pending_work(
+    db_session: Session, search_settings_id: int
+) -> bool:
+    """True while the user-file scope isn't drained: a deferred edit is still flagged
+    (FUTURE stale/missing), or some portable user lacks a settled latest attempt.
+
+    User-set-aware, not existing-row-aware (mirrors the connector term): a cap-deferred
+    user has no row yet but still needs a port, so key off portable-users minus settled
+    — the row-aware form reintroduces the fixed cap-predicate stall. Users have no
+    paused concept, so the set is switchover-agnostic.
+    """
+    if any_user_file_secondary_pending(db_session):
+        return True
+    portable_users = set(fetch_port_scope_user_ids(db_session))
+    if not portable_users:
+        return False
+    settled_users = {
+        user_id
+        for user_id, status in db_session.execute(
+            select(PortAttempt.port_user_id, PortAttempt.status)
+            .where(
+                PortAttempt.search_settings_id == search_settings_id,
+                PortAttempt.port_user_id.in_(portable_users),
+            )
+            .distinct(PortAttempt.port_user_id)
+            .order_by(
+                PortAttempt.port_user_id,
+                PortAttempt.time_created.desc(),
+                PortAttempt.id.desc(),
+            )
+        )
+        if status in _SETTLED_STATUSES
+    }
+    return bool(portable_users - settled_users)
 
 
 def port_backfill_has_pending_work(
@@ -121,6 +194,9 @@ def port_backfill_has_pending_work(
     rest, leaving the live index incomplete. Scope + _SETTLED_STATUSES match check_for_port
     so this never reports pending for a cc_pair it won't act on.
     """
+    # user-file scope first, so a zero-connector tenant still gates on user files
+    if _user_file_port_has_pending_work(db_session, search_settings_id):
+        return True
     settings = db_session.get(SearchSettings, search_settings_id)
     active_only = (
         settings is not None and settings.switchover_type == SwitchoverType.ACTIVE_ONLY
@@ -187,16 +263,20 @@ def get_port_attempts_for_future(
 
 
 def get_latest_port_attempt(
-    db_session: Session, cc_pair_id: int, search_settings_id: int
+    db_session: Session,
+    cc_pair_id: int | None,
+    search_settings_id: int,
+    *,
+    port_user_id: UUID | None = None,
 ) -> PortAttempt | None:
-    """The most recent attempt (any status) for a (cc_pair, FUTURE). The watchdog
+    """The most recent attempt (any status) for a (scope, FUTURE). The watchdog
     reads its status/cursor to decide whether to skip (SUCCESS/CANCELED) or
     reschedule resuming the cursor (FAILED)."""
     return (
         db_session.execute(
             select(PortAttempt)
             .where(
-                PortAttempt.cc_pair_id == cc_pair_id,
+                _scope_where(cc_pair_id, port_user_id),
                 PortAttempt.search_settings_id == search_settings_id,
             )
             .order_by(PortAttempt.time_created.desc())
@@ -207,7 +287,11 @@ def get_latest_port_attempt(
 
 
 def count_consecutive_failed_port_attempts_no_progress(
-    db_session: Session, cc_pair_id: int, search_settings_id: int
+    db_session: Session,
+    cc_pair_id: int | None,
+    search_settings_id: int,
+    *,
+    port_user_id: UUID | None = None,
 ) -> int:
     """Length of the trailing run of FAILED attempts stuck at the SAME cursor (no
     docs ported since). A durably-erroring port fails repeatedly at one cursor, so
@@ -217,7 +301,7 @@ def count_consecutive_failed_port_attempts_no_progress(
         db_session.execute(
             select(PortAttempt)
             .where(
-                PortAttempt.cc_pair_id == cc_pair_id,
+                _scope_where(cc_pair_id, port_user_id),
                 PortAttempt.search_settings_id == search_settings_id,
             )
             .order_by(PortAttempt.time_created.desc())
