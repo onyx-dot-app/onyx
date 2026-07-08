@@ -263,11 +263,10 @@ def ensure_sandbox_ready(
     policy: ProvisioningPolicy,
     provisioning_wait_seconds: float = 30.0,
     user: User | None = None,
-) -> tuple[Sandbox, bool]:
-    """Return ``(sandbox, provisioned)`` for ``user_id``, creating, waking,
-    or recovering the sandbox as needed. ``provisioned`` is True when this
-    call provisioned the pod (managed content was hydrated as part of
-    provisioning); False when an already-RUNNING sandbox was returned.
+) -> Sandbox:
+    """Return the sandbox for ``user_id``, creating, waking, or recovering
+    it as needed. Provisioning hydrates managed content before the row
+    reports RUNNING.
 
     Branches by current sandbox status:
     - No sandbox row: create + provision.
@@ -313,7 +312,7 @@ def ensure_sandbox_ready(
         if sandbox_manager.health_check(
             sandbox.id, timeout=_HEALTHCHECK_TIMEOUT_SECONDS
         ):
-            return sandbox, False
+            return sandbox
         logger.warning(
             "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
             sandbox.id,
@@ -359,4 +358,4 @@ def ensure_sandbox_ready(
         tenant_id,
         all_llm_configs,
     )
-    return sandbox, True
+    return sandbox

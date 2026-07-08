@@ -266,7 +266,7 @@ class SessionManager:
         if user is None:
             raise ValueError(f"User {user_id} not found")
         _, all_llm_configs = self.build_llm_configs(user)
-        sandbox, _ = ensure_sandbox_ready(
+        sandbox = ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
             user_id,
@@ -353,7 +353,7 @@ class SessionManager:
         # afford to wait through a concurrent provisioner, so we use the
         # FAIL policy (raise RuntimeError if another request is mid-
         # provision).
-        sandbox, provisioned = ensure_sandbox_ready(
+        sandbox = ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
             user_id,
@@ -371,6 +371,15 @@ class SessionManager:
         skills_section, connectable_apps_section, skills_files = (
             build_user_skills_payload(user, self._db_session)
         )
+        # Push the exact fileset AGENTS.md is rendered from, before rendering
+        # it — a skill can never be advertised while missing from disk.
+        hydrate_managed_content(
+            self._sandbox_manager,
+            sandbox.id,
+            user,
+            self._db_session,
+            skills_files=skills_files,
+        )
 
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
@@ -381,16 +390,6 @@ class SessionManager:
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
-        # Fresh provisions hydrate managed content before RUNNING; only
-        # refresh here when reusing an already-running sandbox.
-        if not provisioned:
-            hydrate_managed_content(
-                self._sandbox_manager,
-                sandbox.id,
-                user,
-                self._db_session,
-                skills_files=skills_files,
-            )
         self._prewarm_opencode_session(sandbox.id, build_session)
 
         logger.info(

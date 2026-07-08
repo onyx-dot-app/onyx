@@ -421,7 +421,6 @@ def restore_session(
 
         llm_config, all_llm_configs = SessionManager(db_session).build_llm_configs(user)
 
-        managed_content_hydrated = False
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
             update_sandbox_status__no_commit(
                 db_session, sandbox.id, SandboxStatus.PROVISIONING
@@ -440,7 +439,6 @@ def restore_session(
                 all_llm_configs,
             )
             db_session.commit()
-            managed_content_hydrated = True
 
         if sandbox.status == SandboxStatus.RUNNING:
             workspace_exists = sandbox_manager.session_workspace_exists(
@@ -456,6 +454,16 @@ def restore_session(
 
                 skills_section, connectable_apps_section, skills_files = (
                     build_user_skills_payload(user, db_session)
+                )
+                # Push the exact fileset AGENTS.md is rendered from, before
+                # rendering it — a skill can never be advertised while
+                # missing from disk.
+                hydrate_managed_content(
+                    sandbox_manager,
+                    sandbox.id,
+                    user,
+                    db_session,
+                    skills_files=skills_files,
                 )
                 if snapshot:
                     try:
@@ -489,14 +497,6 @@ def restore_session(
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()
 
-                if not managed_content_hydrated:
-                    hydrate_managed_content(
-                        sandbox_manager,
-                        sandbox.id,
-                        user,
-                        db_session,
-                        skills_files=skills_files,
-                    )
         else:
             logger.warning(
                 "Sandbox %s status is %s after re-provision, expected RUNNING",
