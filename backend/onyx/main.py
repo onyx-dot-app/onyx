@@ -153,6 +153,7 @@ from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.query_backend import admin_router as admin_query_router
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.server.saml import router as saml_router
+from onyx.server.saml_multi import router as saml_multi_router
 from onyx.server.security.api import admin_router as security_admin_router
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
@@ -714,6 +715,14 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             application,
             saml_router,
         )
+
+    # DB-backed multi-provider SAML routes (/auth/saml/<name>/*). Mounted for any
+    # auth type: they resolve provider rows per request and 404 when none exist,
+    # so this ships dark and coexists with the legacy single-config saml_router.
+    include_auth_router_with_prefix(
+        application,
+        saml_multi_router,
+    )
 
     if (
         AUTH_TYPE == AuthType.CLOUD

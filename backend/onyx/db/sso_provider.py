@@ -33,14 +33,19 @@ class OIDCProviderConfig(_ProviderConfig):
 
 
 class SAMLProviderConfig(_ProviderConfig):
-    """SAML provider config: the IdP metadata a SAML login needs. No login flow
-    consumes it yet, so a SAML row validates and stores but cannot drive a
-    login."""
+    """Config for a SAML provider: the IdP metadata a SAML login validates
+    against, plus optional SP signing material."""
 
     idp_entity_id: str
     idp_sso_url: str
     idp_x509_cert: str
     sp_entity_id: str
+    # SP signing material, only needed when the deployment signs AuthnRequests
+    # or decrypts assertions. Held in the encrypted config blob.
+    sp_x509_cert: str | None = None
+    sp_private_key: str | None = None
+    # IdP attribute the email is read from. None falls back to the common keys
+    # (email, mail, the Entra/ADFS claim URIs) the SAML callback already tries.
     email_attribute: str | None = None
 
 
