@@ -21,7 +21,6 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.build.tasks import is_sandbox_idle
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
@@ -37,6 +36,7 @@ from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
 from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.sandbox_lifecycle import is_sandbox_idle
 from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
 from onyx.skills.push import SKILLS_MOUNT_PATH
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
