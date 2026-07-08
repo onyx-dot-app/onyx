@@ -33,6 +33,12 @@ release can be unblocked without a code change.
 The ref may be a remote image (e.g. docker.io/onyxdotapp/onyx-backend:v1.2.3),
 which is pulled using the ambient Docker credentials.
 
+--format accepts a comma-separated list. Machine formats (json, sarif) write to
+stdout while the human-readable text report writes to stderr, so a single run can
+feed a SARIF upload and still print a readable report to the log:
+
+  ods audit image "$IMAGE" --format=sarif,text > image-audit.sarif
+
 Exits non-zero when an unignored finding at or above --fail-on remains, which is
 how it gates deploys.`,
 		Args: cobra.ExactArgs(1),
@@ -41,7 +47,7 @@ how it gates deploys.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format: text, json, or sarif")
+	cmd.Flags().StringVar(&opts.Format, "format", "text", "Output format(s), comma-separated: text, json, sarif (e.g. sarif,text)")
 	cmd.Flags().StringVar(&opts.FailOn, "fail-on", "critical", "Minimum severity that fails the audit: critical, high, moderate, or low")
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
 
@@ -59,7 +65,8 @@ func runAuditImage(ref string, opts *AuditImageOptions) {
 		Format:    opts.Format,
 		FailOn:    failOn,
 		IgnoreURL: opts.IgnoreURL,
-		Writer:    os.Stdout,
+		Stdout:    os.Stdout,
+		Stderr:    os.Stderr,
 	})
 	if err != nil {
 		log.Fatalf("Image audit failed: %v", err)

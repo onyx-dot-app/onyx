@@ -18,12 +18,13 @@ import {
 import { usePostHog } from "posthog-js/react";
 import { useSettings } from "@/lib/settings/hooks";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCurrentUser } from "@/lib/users/hooks";
+import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import {
-  useAuthTypeMetadata,
-  AuthTypeMetadata,
-} from "@/hooks/useAuthTypeMetadata";
-import { updateUserPersonalization as persistPersonalization } from "@/lib/userSettings";
+  updateUserPersonalization as persistPersonalization,
+  setUserDefaultModel,
+} from "@/lib/users/svc";
 import { useTheme } from "next-themes";
 
 interface UserContextType {
@@ -447,13 +448,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         return prevUser;
       });
 
-      const response = await fetch(`/api/user/default-model`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ default_model: defaultModel }),
-      });
+      const response = await setUserDefaultModel(defaultModel);
 
       if (!response.ok) {
         await refreshUser();

@@ -651,37 +651,6 @@ class TestServiceApiKeyAPI:
         delete_discord_service_api_key(db_session)
         db_session.commit()
 
-    def test_get_or_create_backfills_legacy_key_scope(
-        self, db_session: Session
-    ) -> None:
-        """A key provisioned before chat APIs were scoped (empty permissions) is
-        repaired with chat scope on the next get_or_create call."""
-        delete_discord_service_api_key(db_session)
-        db_session.commit()
-
-        get_or_create_discord_service_api_key(db_session, "public")
-        db_session.commit()
-
-        # Simulate a legacy key whose backing user has no permissions.
-        stored_key = get_discord_service_api_key(db_session)
-        assert stored_key is not None
-        legacy_user = db_session.scalar(
-            select(User).where(User.id == stored_key.user_id)  # ty: ignore[invalid-argument-type]
-        )
-        assert legacy_user is not None
-        legacy_user.effective_permissions = []
-        db_session.commit()
-
-        get_or_create_discord_service_api_key(db_session, "public")
-        db_session.commit()
-
-        db_session.refresh(legacy_user)
-        perms = get_effective_permissions(legacy_user)
-        assert {Permission.READ_CHAT, Permission.WRITE_CHAT} <= perms
-
-        delete_discord_service_api_key(db_session)
-        db_session.commit()
-
     def test_delete_service_api_key(self, db_session: Session) -> None:
         """Delete service API key removes it from DB."""
         # Clean up any existing key first

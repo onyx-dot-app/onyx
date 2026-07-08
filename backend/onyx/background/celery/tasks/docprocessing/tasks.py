@@ -1796,6 +1796,9 @@ def _docprocessing_task(
             )
             search_settings_id: int = index_attempt.search_settings.id
             from_beginning: bool = index_attempt.from_beginning
+            # FUTURE build: skip the PRESENT-only content_hash dedup so the two
+            # indices don't suppress each other's writes.
+            index_to_secondary: bool = index_attempt.search_settings.status.is_future()
 
         # Session is now closed; no connection held during embedding.
 
@@ -1831,6 +1834,7 @@ def _docprocessing_task(
             embedder=embedding_model,
             document_indices=document_indices,
             ignore_time_skip=True,  # Documents are already filtered during extraction
+            index_to_secondary=index_to_secondary,
             tenant_id=tenant_id,
             document_batch=documents,
             request_id=index_attempt_metadata.request_id,

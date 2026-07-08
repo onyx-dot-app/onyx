@@ -25,6 +25,11 @@ import {
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { deleteChatSession } from "@/app/app/services/lib";
+import {
+  exportChatSession,
+  ChatExportFormat,
+} from "@/lib/chat/exportChatSession";
+import { UNNAMED_CHAT } from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -43,9 +48,13 @@ import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
+  SvgChevronLeft,
+  SvgDownload,
+  SvgFileText,
   SvgFitWidth,
   SvgFolderIn,
   SvgFullWidth,
+  SvgHash,
   SvgMoreHorizontal,
   SvgSearchMenu,
   SvgShare,
@@ -82,6 +91,7 @@ function Header() {
     number | null
   >(null);
   const [showMoveOptions, setShowMoveOptions] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
@@ -194,52 +204,112 @@ function Header() {
     }
   }, []);
 
+  const handleExport = useCallback(
+    async (format: ChatExportFormat) => {
+      if (!currentChatSession) return;
+      try {
+        await exportChatSession(
+          currentChatSession.id,
+          currentChatSession.name || UNNAMED_CHAT,
+          format
+        );
+      } catch (error) {
+        console.error("Failed to export chat:", error);
+        showErrorNotification("Failed to export chat. Please try again.");
+      }
+    },
+    [currentChatSession]
+  );
+
   useEffect(() => {
-    const items = showMoveOptions
-      ? [
-          <PopoverSearchInput
-            key="search"
-            setShowMoveOptions={setShowMoveOptions}
-            onSearch={setSearchTerm}
-          />,
-          ...filteredProjects.map((project) => (
-            <LineItemButton
-              key={project.id}
-              sizePreset="main-ui"
-              rounding="sm"
-              icon={SvgFolderIn}
-              title={project.name}
-              onClick={noProp(() => handleMoveClick(project.id))}
-            />
-          )),
-        ]
-      : [
+    let items: ReactNode[];
+    if (showMoveOptions) {
+      items = [
+        <PopoverSearchInput
+          key="search"
+          setShowMoveOptions={setShowMoveOptions}
+          onSearch={setSearchTerm}
+        />,
+        ...filteredProjects.map((project) => (
           <LineItemButton
-            key="move"
+            key={project.id}
             sizePreset="main-ui"
             rounding="sm"
             icon={SvgFolderIn}
-            title="Move to Project"
-            onClick={noProp(() => setShowMoveOptions(true))}
-          />,
+            title={project.name}
+            onClick={noProp(() => handleMoveClick(project.id))}
+          />
+        )),
+      ];
+    } else if (showExportOptions) {
+      items = [
+        <LineItemButton
+          key="export-back"
+          sizePreset="main-ui"
+          rounding="sm"
+          icon={SvgChevronLeft}
+          title="Export As…"
+          onClick={noProp(() => setShowExportOptions(false))}
+        />,
+        <Popover.Close asChild key="export-plaintext">
           <LineItemButton
-            key="delete"
             sizePreset="main-ui"
             rounding="sm"
-            color="danger"
-            icon={SvgTrash}
-            title="Delete"
-            onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-          />,
-        ];
+            icon={SvgFileText}
+            title="Plaintext"
+            onClick={noProp(() => handleExport("text"))}
+          />
+        </Popover.Close>,
+        <Popover.Close asChild key="export-markdown">
+          <LineItemButton
+            sizePreset="main-ui"
+            rounding="sm"
+            icon={SvgHash}
+            title="Markdown"
+            onClick={noProp(() => handleExport("markdown"))}
+          />
+        </Popover.Close>,
+      ];
+    } else {
+      items = [
+        <LineItemButton
+          key="move"
+          sizePreset="main-ui"
+          rounding="sm"
+          icon={SvgFolderIn}
+          title="Move to Project"
+          onClick={noProp(() => setShowMoveOptions(true))}
+        />,
+        <LineItemButton
+          key="export"
+          sizePreset="main-ui"
+          rounding="sm"
+          icon={SvgDownload}
+          title="Export As…"
+          onClick={noProp(() => setShowExportOptions(true))}
+        />,
+        null,
+        <LineItemButton
+          key="delete"
+          sizePreset="main-ui"
+          rounding="sm"
+          color="danger"
+          icon={SvgTrash}
+          title="Delete"
+          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+        />,
+      ];
+    }
 
     setPopoverItems(items);
   }, [
     showMoveOptions,
+    showExportOptions,
     filteredProjects,
     currentChatSession,
     setDeleteConfirmationModalOpen,
     handleMoveClick,
+    handleExport,
   ]);
 
   return (
@@ -419,6 +489,7 @@ function Header() {
                         setPopoverOpen(state);
                         if (!state) {
                           setShowMoveOptions(false);
+                          setShowExportOptions(false);
                           setSearchTerm("");
                         }
                       }}

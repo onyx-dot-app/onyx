@@ -845,6 +845,17 @@ export default function IndexSettingsPage() {
             enableReinitialize
             initialValues={initialFormValues}
             onSubmit={async (values) => {
+              // Contextual Retrieval re-embeds each chunk through an LLM; with
+              // the toggle on but no model chosen the port fails, so block here.
+              if (
+                values.enable_contextual_rag &&
+                values.contextual_rag_model_configuration_id === null
+              ) {
+                toast.error(
+                  "Select a Contextual Retrieval LLM before re-indexing."
+                );
+                return;
+              }
               // Custom self-hosted models live outside the static registry,
               // so the form carries their spec (`modelDim`, `normalize`, etc.)
               // in `custom_model` for submission. The provider, however, is
@@ -894,6 +905,10 @@ export default function IndexSettingsPage() {
                 !!values.model_name;
               const stagedModelName = isModelStaged ? values.model_name : null;
               const statusVariant = dirty ? "warning" : undefined;
+              // Block apply when Contextual Retrieval is on but no LLM is set.
+              const contextualRagModelMissing =
+                values.enable_contextual_rag &&
+                values.contextual_rag_model_configuration_id === null;
 
               return (
                 <>
@@ -955,11 +970,19 @@ export default function IndexSettingsPage() {
                   ) : (
                     !NEXT_PUBLIC_CLOUD_ENABLED && (
                       <MessageCard
-                        variant={statusVariant}
+                        variant={
+                          contextualRagModelMissing ? "error" : statusVariant
+                        }
                         headerPadding="sm"
-                        title="Changes require a full re-index."
+                        title={
+                          contextualRagModelMissing
+                            ? "Select a Contextual Retrieval LLM"
+                            : "Changes require a full re-index."
+                        }
                         description={markdown(
-                          "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+                          contextualRagModelMissing
+                            ? "Contextual Retrieval is enabled but no model is selected. Pick a Contextual Retrieval LLM below before re-indexing — without one, the re-index cannot run."
+                            : "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
                         )}
                         bottomChildren={
                           dirty ? (
@@ -1010,7 +1033,10 @@ export default function IndexSettingsPage() {
                                 >
                                   Revert
                                 </Button>
-                                <Button onClick={() => void submitForm()}>
+                                <Button
+                                  onClick={() => void submitForm()}
+                                  disabled={contextualRagModelMissing}
+                                >
                                   Apply & Re-index
                                 </Button>
                               </div>

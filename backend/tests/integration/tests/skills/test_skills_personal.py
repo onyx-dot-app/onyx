@@ -3,8 +3,7 @@
 Covers the user-facing ``POST /skills/custom``,
 ``PUT /skills/custom/{id}/bundle``, and ``DELETE /skills/custom/{id}``
 endpoints: ownership/visibility rules, reserved slugs, duplicate slugs,
-promotion to org-wide, admin disable as a reversible mute, and the
-per-user cap.
+promotion to org-wide, and admin disable as a reversible mute.
 """
 
 from __future__ import annotations
@@ -14,7 +13,8 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from onyx.server.features.skill.api import MAX_PERSONAL_SKILLS_PER_USER
+from onyx.db.enums import SkillSharePermission
+from onyx.server.features.skill.models import SkillPatchRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import build_minimal_bundle
@@ -30,7 +30,7 @@ def other_basic_user(admin_user: DATestUser) -> DATestUser:  # noqa: ARG001
 
 
 def _user_custom_slugs(user: DATestUser) -> list[str]:
-    return [c["slug"] for c in SkillManager.list_for_user(user)["customs"]]
+    return [skill.slug for skill in SkillManager.list_for_user(user).customs]
 
 
 def test_create_personal_skill_visibility(
@@ -41,20 +41,14 @@ def test_create_personal_skill_visibility(
     slug = f"personal-vis-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
     assert skill.is_personal is True
-    assert skill.is_public is False
+    assert skill.public_permission is None
 
-    own_list = SkillManager.list_for_user(basic_user)["customs"]
-    mine = [c for c in own_list if c["slug"] == slug]
+    own_list = SkillManager.list_for_user(basic_user).customs
+    mine = [skill for skill in own_list if skill.slug == slug]
     assert len(mine) == 1
-    assert mine[0]["is_personal"] is True
+    assert mine[0].is_personal is True
 
     assert slug not in _user_custom_slugs(other_basic_user)
-
-    response = client.get(
-        f"{API_SERVER_URL}/skills/{slug}",
-        headers=other_basic_user.headers,
-    )
-    assert response.status_code == 404
 
     response = client.get(
         f"{API_SERVER_URL}/skills/{skill.id}",
@@ -62,19 +56,19 @@ def test_create_personal_skill_visibility(
     )
     assert response.status_code == 404
 
-    admin_customs = SkillManager.list_all(admin_user)["customs"]
-    admin_match = [c for c in admin_customs if c["slug"] == slug]
+    admin_customs = SkillManager.list_all(admin_user).customs
+    admin_match = [skill for skill in admin_customs if skill.slug == slug]
     assert len(admin_match) == 1
-    assert admin_match[0]["is_personal"] is True
+    assert admin_match[0].is_personal is True
 
 
 def test_owner_can_fetch_own_personal_skill(basic_user: DATestUser) -> None:
     slug = f"personal-fetch-{uuid4().hex[:6]}"
-    SkillManager.create_personal(basic_user, slug=slug)
+    skill = SkillManager.create_personal(basic_user, slug=slug)
 
-    fetched = SkillManager.get_for_user(slug, basic_user)
-    assert fetched["slug"] == slug
-    assert fetched["is_personal"] is True
+    fetched = SkillManager.get_for_user(str(skill.id), basic_user)
+    assert fetched.slug == slug
+    assert fetched.is_personal is True
 
 
 def test_owner_can_replace_bundle_and_delete(basic_user: DATestUser) -> None:
@@ -158,43 +152,47 @@ def test_admin_can_hard_delete_personal_skill(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
-    slug = f"personal-admin-kill-{uuid4().hex[:6]}"
+    """Admins can hard-delete any custom skill, mirroring agents/personas."""
+    slug = f"personal-admin-delete-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
 
-    # admin's hard kill switch (the admin DELETE route) wipes another user's
-    # personal skill outright
     SkillManager.delete_custom(skill, admin_user)
 
     assert slug not in _user_custom_slugs(basic_user)
-    admin_slugs = [c["slug"] for c in SkillManager.list_all(admin_user)["customs"]]
+    admin_slugs = [skill.slug for skill in SkillManager.list_all(admin_user).customs]
     assert slug not in admin_slugs
 
 
-def test_promotion_makes_skill_org_wide_and_locks_owner_out(
-    admin_user: DATestUser,
+def test_owner_can_share_org_wide_and_retain_edit_permissions(
     basic_user: DATestUser,
     other_basic_user: DATestUser,
 ) -> None:
     slug = f"personal-promote-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
 
-    promoted = SkillManager.patch_custom(skill, admin_user, is_public=True)
-    assert promoted.is_public is True
+    promoted = SkillManager.patch_personal(
+        skill,
+        basic_user,
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
+    )
+    assert promoted.public_permission is not None
     assert promoted.is_personal is False
 
-    other_list = SkillManager.list_for_user(other_basic_user)["customs"]
-    visible = [c for c in other_list if c["slug"] == slug]
+    other_list = SkillManager.list_for_user(other_basic_user).customs
+    visible = [skill for skill in other_list if skill.slug == slug]
     assert len(visible) == 1
-    assert visible[0]["is_personal"] is False
+    assert visible[0].is_personal is False
 
-    new_bundle = build_minimal_bundle(slug)
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.replace_personal_bundle(skill, new_bundle, basic_user)
-    assert exc_info.value.response.status_code == 403
+    new_bundle = build_minimal_bundle(
+        slug, name="Retained Owner Edit", description="Owner can still edit"
+    )
+    updated = SkillManager.replace_personal_bundle(skill, new_bundle, basic_user)
+    assert updated.name == "Retained Owner Edit"
 
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.delete_personal(skill, basic_user)
-    assert exc_info.value.response.status_code == 403
+    disabled = SkillManager.patch_personal(
+        skill, basic_user, SkillPatchRequest(enabled=False)
+    )
+    assert disabled.enabled is False
 
 
 def test_owner_can_toggle_personal_skill(
@@ -204,40 +202,50 @@ def test_owner_can_toggle_personal_skill(
     slug = f"personal-toggle-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
 
-    toggled = SkillManager.patch_personal(skill, basic_user, enabled=False)
+    toggled = SkillManager.patch_personal(
+        skill, basic_user, SkillPatchRequest(enabled=False)
+    )
     assert toggled.enabled is False
     assert toggled.is_personal is True
 
     # still listed for the owner (greyed out in the UI), enabled=False
     own = [
-        c
-        for c in SkillManager.list_for_user(basic_user)["customs"]
-        if c["slug"] == slug
+        skill
+        for skill in SkillManager.list_for_user(basic_user).customs
+        if skill.slug == slug
     ]
     assert len(own) == 1
-    assert own[0]["enabled"] is False
+    assert own[0].enabled is False
 
     # still invisible to everyone else
     assert slug not in _user_custom_slugs(other_basic_user)
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.patch_personal(skill, other_basic_user, enabled=True)
+        SkillManager.patch_personal(
+            skill, other_basic_user, SkillPatchRequest(enabled=True)
+        )
     assert exc_info.value.response.status_code == 404
 
-    reenabled = SkillManager.patch_personal(skill, basic_user, enabled=True)
+    reenabled = SkillManager.patch_personal(
+        skill, basic_user, SkillPatchRequest(enabled=True)
+    )
     assert reenabled.enabled is True
 
 
-def test_owner_cannot_toggle_after_promotion(
-    admin_user: DATestUser,
+def test_owner_can_toggle_after_sharing_org_wide(
     basic_user: DATestUser,
 ) -> None:
     slug = f"personal-toggle-promo-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
-    SkillManager.patch_custom(skill, admin_user, is_public=True)
+    SkillManager.patch_personal(
+        skill,
+        basic_user,
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
+    )
 
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.patch_personal(skill, basic_user, enabled=False)
-    assert exc_info.value.response.status_code == 403
+    disabled = SkillManager.patch_personal(
+        skill, basic_user, SkillPatchRequest(enabled=False)
+    )
+    assert disabled.enabled is False
 
 
 def test_admin_disable_then_owner_reenable(
@@ -245,35 +253,26 @@ def test_admin_disable_then_owner_reenable(
     basic_user: DATestUser,
 ) -> None:
     """Admin disable is a reversible mute, not a sticky lock: the skill stays
-    listed (greyed) for the owner and the owner can re-enable it. The admin's
-    irreversible override is delete (see test_admin_can_hard_delete_personal_skill)."""
+    listed (greyed) for the owner and the owner can re-enable it."""
     slug = f"personal-admin-toggle-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
+    SkillManager.patch_personal(
+        skill,
+        basic_user,
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
+    )
 
-    SkillManager.patch_custom(skill, admin_user, enabled=False)
+    SkillManager.patch_custom(skill, admin_user, SkillPatchRequest(enabled=False))
     own = [
-        c
-        for c in SkillManager.list_for_user(basic_user)["customs"]
-        if c["slug"] == slug
+        skill
+        for skill in SkillManager.list_for_user(basic_user).customs
+        if skill.slug == slug
     ]
-    assert len(own) == 1 and own[0]["enabled"] is False
+    assert len(own) == 1 and own[0].enabled is False
 
     # enabled is a shared flag with no who-disabled tracking, so the owner can
     # turn it back on.
-    reenabled = SkillManager.patch_personal(skill, basic_user, enabled=True)
+    reenabled = SkillManager.patch_personal(
+        skill, basic_user, SkillPatchRequest(enabled=True)
+    )
     assert reenabled.enabled is True
-
-
-def test_per_user_personal_skill_cap(admin_user: DATestUser) -> None:  # noqa: ARG001
-    # dedicated user so personal skills from other tests don't skew the count
-    capped_user = UserManager.create(name=f"capped_{uuid4().hex[:8]}")
-    for i in range(MAX_PERSONAL_SKILLS_PER_USER):
-        SkillManager.create_personal(capped_user, slug=f"cap-{i}-{uuid4().hex[:6]}")
-
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_personal(capped_user, slug=f"cap-over-{uuid4().hex[:6]}")
-    response = exc_info.value.response
-    assert response.status_code == 400
-    body = response.json()
-    detail = str(body.get("detail") or body)
-    assert "limit" in detail.lower()

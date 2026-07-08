@@ -15,23 +15,25 @@ import (
 // ImageOptions configures a container image audit run.
 type ImageOptions struct {
 	Image     string
-	Format    string // text|json|sarif
+	Format    string // comma-separated list of text|json|sarif
 	FailOn    Severity
 	IgnoreURL string
-	Writer    io.Writer
+	// Stdout/Stderr route the requested formats; see Options and renderReport.
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // RunImage scans a container image for known vulnerabilities, applies the same
-// S3 allowlist used by Run, renders a report to opts.Writer, and returns the
-// result. Findings at or above opts.FailOn are reported as Blocking, which is
-// how it gates a release.
+// S3 allowlist used by Run, renders a report to opts.Stdout/opts.Stderr, and
+// returns the result. Findings at or above opts.FailOn are reported as Blocking,
+// which is how it gates a release.
 func RunImage(opts ImageOptions) (*Result, error) {
 	findings, err := scanImage(opts.Image)
 	if err != nil {
 		return nil, fmt.Errorf("image scan failed: %w", err)
 	}
 
-	ignores, err := fetchIgnores(opts.IgnoreURL)
+	ignores, err := FetchIgnores(opts.IgnoreURL)
 	if err != nil {
 		// Err toward blocking: proceed with an empty allowlist so unignored
 		// criticals still fail the gate rather than slipping through.
@@ -51,7 +53,7 @@ func RunImage(opts ImageOptions) (*Result, error) {
 		Blocking: blockingFindings(kept, opts.FailOn),
 	}
 
-	if err := render(opts.Writer, opts.Format, result); err != nil {
+	if err := renderReport(opts.Stdout, opts.Stderr, opts.Format, result); err != nil {
 		return nil, err
 	}
 	return result, nil

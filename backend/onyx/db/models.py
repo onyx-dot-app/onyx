@@ -25,6 +25,7 @@ from sqlalchemy import ForeignKeyConstraint
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
+from sqlalchemy import Numeric
 from sqlalchemy import PrimaryKeyConstraint
 from sqlalchemy import Sequence
 from sqlalchemy import String
@@ -36,14 +37,12 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine.interfaces import Dialect
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import Mapper
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import validates
-from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from typing_extensions import TypedDict  # noreorder
@@ -91,6 +90,7 @@ from onyx.db.enums import PatType
 from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.enums import PersonaSharePermission
+from onyx.db.enums import PortAttemptStatus
 from onyx.db.enums import ProcessingMode
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import ScheduledTaskRunStatus
@@ -99,6 +99,7 @@ from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.db.enums import SkillSharePermission
+from onyx.db.enums import SSOProviderType
 from onyx.db.enums import SwitchoverType
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
@@ -1050,6 +1051,12 @@ class Document(Base):
     last_synced: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+
+    # True when a metadata sync hit PRESENT but the doc wasn't in FUTURE yet
+    # (reindex port). Cleared once a later sync reaches FUTURE; the swap waits on these.
+    secondary_only_sync_pending: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     # The following are not attached to User because the account/email may not be known
     # within Onyx
     # Something like the document creator
@@ -1130,6 +1137,12 @@ class Document(Base):
             "ix_document_needs_sync",
             "id",
             postgresql_where=text("last_modified > last_synced OR last_synced IS NULL"),
+        ),
+        # for the reindex-port swap criterion sweep
+        Index(
+            "ix_document_secondary_only_sync_pending",
+            "id",
+            postgresql_where=text("secondary_only_sync_pending IS TRUE"),
         ),
     )
 
@@ -2084,6 +2097,18 @@ class SearchSettings(Base):
         Enum(SwitchoverType, native_enum=False), default=SwitchoverType.REINDEX
     )
 
+    # Reindex "port" flow gate. When True, this FUTURE is filled by porting
+    # chunks from PRESENT (re-embedded) instead of re-running every connector.
+    use_port_flow: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
+    # Set by an INSTANT port-flow swap to the now-PAST index the port keeps
+    # backfilling from after promotion; cleared once the backfill completes.
+    port_backfill_source_id: Mapped[int | None] = mapped_column(
+        ForeignKey("search_settings.id", ondelete="SET NULL"), nullable=True
+    )
+
     # allows for quantization -> less memory usage for a small performance hit.
     # Defaults to FLOAT (float32). OpenSearch ignores this field and stores
     # vectors as float32 regardless; BFLOAT16 is only honored by Vespa.
@@ -2340,6 +2365,11 @@ class IndexAttempt(Base):
         back_populates="index_attempts",
         primaryjoin="IndexAttempt.targeted_reindex_job_id == TargetedReindexJob.id",
     )
+    # Marks the synthetic seed attempt for the reindex port's FUTURE poll cursor
+    # (not a connector run).
+    is_synthetic_seed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False, index=True)
     )
@@ -2479,6 +2509,91 @@ class IndexAttempt(Base):
             self.total_batches is not None
             and self.completed_batches >= self.total_batches
         )
+
+
+class PortAttempt(Base):
+    """One attempt to port a cc_pair's chunks from PRESENT into the FUTURE index,
+    re-embedding under FUTURE settings. Doc-id cursor, distinct from IndexAttempt."""
+
+    __tablename__ = "port_attempt"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    search_settings_id: Mapped[int] = mapped_column(  # the FUTURE settings
+        ForeignKey("search_settings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    status: Mapped[PortAttemptStatus] = mapped_column(
+        Enum(PortAttemptStatus, native_enum=False, name="portattemptstatus"),
+        nullable=False,
+        default=PortAttemptStatus.NOT_STARTED,
+        index=True,
+    )
+
+    # Resume cursor: last Document.id ported, committed per batch.
+    last_processed_doc_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Upper bound (max Document.id for the cc_pair at attempt creation) so the port
+    # covers the backlog as of start and never chases docs added during the run —
+    # those are the FUTURE poll's job. Null = unbounded (legacy attempts).
+    up_to_doc_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    docs_ported: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+    # Bumped after every batch commit; the stall watchdog fails stale attempts.
+    last_progress_time: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Non-terminal cancel request: the port stays active (waiter keeps blocking)
+    # until the task acks by going CANCELED itself, after its last write.
+    cancel_requested: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+
+    # only filled if status = FAILED (failure reason, including any traceback)
+    error_msg: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+
+    celery_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    time_started: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    time_completed: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    connector_credential_pair: Mapped["ConnectorCredentialPair"] = relationship(
+        "ConnectorCredentialPair"
+    )
+    search_settings: Mapped["SearchSettings"] = relationship("SearchSettings")
+
+    # at most one active attempt per (cc_pair, FUTURE)
+    __table_args__ = (
+        Index(
+            "ix_port_attempt_active_unique",
+            "cc_pair_id",
+            "search_settings_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
+        ),
+    )
+
+    def is_finished(self) -> bool:
+        return self.status.is_terminal()
 
 
 class HierarchyFetchAttempt(Base):
@@ -3448,6 +3563,41 @@ class InternetContentProvider(Base):
         return f"<InternetContentProvider(name='{self.name}', provider_type='{self.provider_type}')>"
 
 
+class TracingProviderConfig(Base):
+    """Admin-configured tracing provider (Braintrust, Langfuse), one row each.
+
+    api_key holds the Braintrust API key / Langfuse secret key; non-secret settings
+    (Braintrust project; Langfuse public_key, host) live in config.
+    """
+
+    __tablename__ = "tracing_provider_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_type: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    config: Mapped[dict[str, str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<TracingProviderConfig(provider_type='{self.provider_type}', "
+            f"enabled={self.enabled})>"
+        )
+
+
 class DocumentSet(Base):
     __tablename__ = "document_set"
 
@@ -4327,19 +4477,6 @@ class Skill(Base):
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    @hybrid_property
-    def is_public(self) -> bool:
-        return self.public_permission is not None
-
-    @is_public.inplace.setter
-    def _is_public_setter(self, value: bool) -> None:
-        self.public_permission = SkillSharePermission.VIEWER if value else None
-
-    @is_public.inplace.expression
-    @classmethod
-    def _is_public_expression(cls) -> ColumnElement[bool]:
-        return cls.public_permission.isnot(None)
-
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -4668,13 +4805,25 @@ class TokenRateLimit(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    token_budget: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Null side skips its gate; at least one must be set (check constraint below).
+    token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # USD cents; Numeric(18,6) exact accumulation, 6dp for sub-cent per-token deltas.
+    cost_budget_cents: Mapped[float | None] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=True
+    )
     period_hours: Mapped[int] = mapped_column(Integer, nullable=False)
     scope: Mapped[TokenRateLimitScope] = mapped_column(
         Enum(TokenRateLimitScope, native_enum=False)
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "token_budget IS NOT NULL OR cost_budget_cents IS NOT NULL",
+            name="ck_token_rate_limit_budget_set",
+        ),
     )
 
 
@@ -5419,6 +5568,122 @@ class TenantUsage(Base):
     __table_args__ = (
         # Ensure only one row per window start (tenant_id is in the schema name)
         UniqueConstraint("window_start", name="uq_tenant_usage_window"),
+    )
+
+
+class UserUsage(Base):
+    """
+    Per-user LLM usage rollup within a time window — the source of truth for
+    per-user cost/token attribution and budget checks. Mirrors TenantUsage's
+    window-rollup model (one accumulating row per window+dims, not a per-call
+    ledger).
+
+    One row per (user, window, model, flow, provider), accumulated in place;
+    windows match the tenant-usage alignment so per-user and per-tenant totals
+    reconcile.
+    """
+
+    __tablename__ = "user_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # No index=True: uq_user_usage_dims (user_id-first) covers user-only lookups.
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+
+    window_start: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    flow: Mapped[str] = mapped_column(String, nullable=False)
+    # '' not NULL: unique index dedups pre-PG15 without NULLS NOT DISTINCT.
+    provider: Mapped[str] = mapped_column(
+        String, nullable=False, default="", server_default=""
+    )
+
+    input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    cache_read_tokens: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+    cost_cents: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False, default=0.0
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        # Upsert key: accumulate into one row per dimension tuple per window.
+        # provider is non-null ('' when absent), so a plain unique index dedups
+        # correctly on every Postgres version (no NULLS NOT DISTINCT needed).
+        Index(
+            "uq_user_usage_dims",
+            "user_id",
+            "window_start",
+            "model",
+            "flow",
+            "provider",
+            unique=True,
+        ),
+    )
+
+
+class ModelCostOverride(Base):
+    """Admin-set per-model rates that supersede litellm pricing.
+
+    Negotiated enterprise rates win over litellm's published numbers, so cost
+    computation consults this table before falling back to litellm.
+    """
+
+    __tablename__ = "model_cost_override"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # litellm-style model name (e.g. "gpt-4o").
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    # Empty string (not NULL) for a provider-agnostic override, so the unique key
+    # below works on every Postgres version without NULLS NOT DISTINCT (PG15+).
+    provider: Mapped[str] = mapped_column(
+        String, nullable=False, default="", server_default=""
+    )
+
+    # Rates in USD per million tokens.
+    input_cost_per_mtok: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
+    )
+    output_cost_per_mtok: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
+    )
+    # Cache-read rate; null bills cache reads at the input rate (litellm default).
+    cache_read_cost_per_mtok: Mapped[float | None] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=True
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        # provider+model so the same model can be priced per provider.
+        UniqueConstraint(
+            "provider", "model", name="uq_model_cost_override_provider_model"
+        ),
     )
 
 
@@ -6217,6 +6482,14 @@ class ExternalAppUserCredential(Base):
     user_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
         EncryptedJson(), nullable=False, default=dict
     )
+    # OAuth scopes the user actually granted for this app. NULL means
+    # we have no authoritative record of the grant (provider doesn't report
+    # scopes, or the best-effort lookup failed); a non-null list is the exact
+    # set the user granted. Consumers must distinguish the two.
+    granted_scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String),
+        nullable=True,
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -6289,4 +6562,43 @@ class ExternalAppPolicy(Base):
             "action_id",
             name="uq_external_app_policy_app_action",
         ),
+    )
+
+
+class SSOProvider(Base):
+    """A configured SSO identity provider. Providers are rows, not startup
+    wiring: login routes resolve the row at request time, so adding or editing
+    one requires no restart. Fields common to every auth method are columns. The
+    protocol-specific settings live in the encrypted `config` blob, validated
+    per provider_type on write."""
+
+    __tablename__ = "sso_provider"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # URL path segment for the login routes and the oauth_name stored on
+    # linked login accounts. Renaming a provider orphans those links.
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    provider_type: Mapped[SSOProviderType] = mapped_column(
+        Enum(SSOProviderType, native_enum=False), nullable=False
+    )
+    # Protocol-specific settings: OAuth client creds + discovery URL for
+    # GOOGLE/OIDC, or IdP metadata for SAML. Encrypted at rest, validated
+    # against provider_type on write.
+    config: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson(), nullable=False
+    )
+    # Email domains admitted through this provider's login, lowercased
+    allowed_email_domains: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )

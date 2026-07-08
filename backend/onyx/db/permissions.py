@@ -15,6 +15,8 @@ from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
+from onyx.db.enums import AccountType
 from onyx.db.enums import Permission
 from onyx.db.models import PermissionGrant
 from onyx.db.models import User
@@ -40,16 +42,24 @@ def parse_permission_values(values: Iterable[str]) -> list[Permission]:
     return parsed
 
 
+def role_derived_permissions(account_type: AccountType, role: UserRole) -> set[str]:
+    """Permissions a user holds by virtue of what they are, independent of
+    group grants. LIMITED service accounts join no group; their chat scope
+    derives from the role (WRITE_CHAT implies READ_CHAT at read time)."""
+    if account_type == AccountType.SERVICE_ACCOUNT and role == UserRole.LIMITED:
+        return {Permission.WRITE_CHAT.value}
+    return set()
+
+
 def recompute_user_permissions__no_commit(
     user_ids: UUID | str | list[UUID] | list[str], db_session: Session
 ) -> None:
-    """Recompute granted permissions for one or more users.
+    """Recompute granted permissions for one or more users: group grants
+    plus role-derived permissions. Implication expansion happens at read
+    time via get_effective_permissions().
 
     Accepts a single UUID or a list.  Uses a single query regardless of
     how many users are passed, avoiding N+1 issues.
-
-    Stores only directly granted permissions — implication expansion
-    happens at read time via get_effective_permissions().
 
     Does NOT commit — caller must commit the session.
     """
@@ -75,6 +85,15 @@ def recompute_user_permissions__no_commit(
         )
     ).all()
 
+    role_derived_by_user: dict[str, set[str]] = {
+        str(user_id).lower(): role_derived_permissions(account_type, role)
+        for user_id, account_type, role in db_session.execute(
+            select(User.id, User.account_type, User.role).where(  # ty: ignore[no-matching-overload]
+                User.id.in_(uid_list)  # ty: ignore[unresolved-attribute]
+            )
+        ).all()
+    }
+
     # Group permissions by user; users with no grants get an empty set.
     perms_by_user: dict[UUID | str, set[str]] = defaultdict(set)
     for uid in uid_list:
@@ -83,6 +102,7 @@ def recompute_user_permissions__no_commit(
         perms_by_user[uid].add(perm.value)
 
     for uid, perms in perms_by_user.items():
+        perms |= role_derived_by_user.get(str(uid).lower(), set())
         db_session.execute(
             update(User)
             .where(User.id == uid)  # ty: ignore[invalid-argument-type]

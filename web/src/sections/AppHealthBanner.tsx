@@ -5,14 +5,14 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import Modal from "@/refresh-components/Modal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { logout, refreshToken } from "@/lib/user";
+import { logout, refreshToken } from "@/lib/users/svc";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
 import { Button } from "@opal/components";
 import { usePathname, useRouter } from "next/navigation";
 import { SvgAlertTriangle, SvgLogOut } from "@opal/icons";
 import { Content } from "@opal/layouts";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCurrentUser } from "@/lib/users/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 
 export default function AppHealthBanner() {

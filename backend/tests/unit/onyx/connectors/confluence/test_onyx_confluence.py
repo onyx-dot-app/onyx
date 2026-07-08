@@ -1440,7 +1440,7 @@ def test_get_user_email_from_userkey_caches_lookups(
     cache.
     """
     user_key = "test_userkey_unique_to_this_case"
-    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.pop(user_key, None)
+    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.clear()
 
     user_details_mock = mock.Mock(
         return_value={
@@ -1474,7 +1474,7 @@ def test_get_user_email_from_userkey_caches_negative_result(
     HTTP load and keeps the warning log from spamming.
     """
     user_key = "missing_userkey_unique_to_this_case"
-    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.pop(user_key, None)
+    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.clear()
 
     user_details_mock = mock.Mock(
         side_effect=HTTPError(response=_create_mock_response(404, {}, "x"))

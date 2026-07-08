@@ -85,6 +85,24 @@ class PermissionSyncStatus(str, PyEnum):
         )
 
 
+class PortAttemptStatus(str, PyEnum):
+    NOT_STARTED = "NOT_STARTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+
+    def is_terminal(self) -> bool:
+        return self in {
+            PortAttemptStatus.SUCCESS,
+            PortAttemptStatus.FAILED,
+            PortAttemptStatus.CANCELED,
+        }
+
+    def is_successful(self) -> bool:
+        return self == PortAttemptStatus.SUCCESS
+
+
 class IndexingMode(str, PyEnum):
     UPDATE = "update"
     REINDEX = "reindex"
@@ -403,6 +421,7 @@ class ExternalAppType(str, PyEnum):
     LINEAR = "LINEAR"
     GITHUB = "GITHUB"
     HUBSPOT = "HUBSPOT"
+    NOTION = "NOTION"
     CUSTOM = "CUSTOM"
 
     @property
@@ -589,6 +608,14 @@ class SkillSharePermission(str, PyEnum):
     VIEWER = "VIEWER"
 
 
+class SkillAccessLevel(str, PyEnum):
+    """Computed access the requesting user holds on a skill."""
+
+    OWNER = "OWNER"
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
 class PersonaAccessLevel(str, PyEnum):
     """Computed access the requesting user holds on a persona.
 
@@ -607,3 +634,11 @@ class PersonaSharingStatus(str, PyEnum):
     PRIVATE = "PRIVATE"
     SHARED = "SHARED"
     PUBLIC = "PUBLIC"
+
+
+class SSOProviderType(str, PyEnum):
+    # name == value: Enum(native_enum=False) columns persist the member name,
+    # so the two must match to round-trip (repo-wide convention).
+    GOOGLE_OAUTH = "GOOGLE_OAUTH"
+    OIDC = "OIDC"
+    SAML = "SAML"

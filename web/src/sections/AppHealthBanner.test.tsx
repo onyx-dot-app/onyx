@@ -21,11 +21,11 @@ jest.mock("next/navigation", () => ({
   }),
 }));
 
-jest.mock("@/hooks/useCurrentUser", () => ({
+jest.mock("@/lib/users/hooks", () => ({
   useCurrentUser: () => mockUseCurrentUser(),
 }));
 
-jest.mock("@/lib/user", () => ({
+jest.mock("@/lib/users/svc", () => ({
   logout: (...args: unknown[]) => mockLogout(...args),
   refreshToken: jest.fn(),
 }));

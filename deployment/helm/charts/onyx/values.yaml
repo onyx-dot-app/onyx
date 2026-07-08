@@ -30,15 +30,30 @@ customCACerts:
   secretName: ""
   configMapName: ""
 
+# Uncomment to skip the bundled CNPG operator and its CRDs, and let an existing
+# cluster-managed CloudNativePG operator reconcile the Cluster CR below (keep
+# postgresql.enabled: true). Two operators/CRD copies on one cluster drift in
+# version and fight over ownership of the cluster-scoped postgresql.cnpg.io
+# CRDs and webhook configurations — see
+# https://github.com/onyx-dot-app/onyx/issues/12490. Unset = follow
+# postgresql.enabled. Mirrors redisOperator below.
+# postgresqlOperator:
+#   enabled: false
+
 postgresql:
   enabled: true
   # IMPORTANT: This nameOverride is required for the CloudNativePG operator to find itself.
   # The operator looks for a deployment with label app.kubernetes.io/name=cloudnative-pg,
   # but since the subchart is aliased as "postgresql", Helm defaults to that name.
   nameOverride: cloudnative-pg
-  # CRDs are shipped in our chart's crds/ directory (pre-installed before
-  # templates). Disable the subchart's own CRD template to avoid ownership
-  # conflicts between the two copies.
+  # Uncomment to override, independently of postgresqlOperator.enabled below,
+  # whether the bundled CNPG CRDs (onyx-cnpg-crds subchart) are installed.
+  # Unset = follow postgresqlOperator.enabled, then postgresql.enabled.
+  # installCRDs: false
+
+  # Disable the CNPG subchart's own templated CRD copy — the onyx-cnpg-crds
+  # subchart is the single source of the CRDs (its crds/ dir gets Helm's
+  # pre-install treatment, which templated CRDs don't).
   crds:
     create: false
   cluster:
@@ -297,7 +312,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "5"
+      onyx.app/nginx-config-version: "6"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -305,6 +320,11 @@ nginx:
         value: localhost
 
     config:
+      # Hide the nginx version in Server headers/error pages. Set via the
+      # controller's supported knob — do NOT put `server_tokens` in the
+      # http-snippet files: ingress-nginx already emits the directive in the
+      # http{} block, and a duplicate fails `nginx -t` (config reload/startup).
+      server-tokens: "false"
       # Expose DOMAIN to the nginx config and pull in our custom snippets
       main-snippet: |
         env DOMAIN;
@@ -1510,6 +1530,8 @@ configMap:
   INDEXING_WORKER_MEMORY_LIMIT_MB: ""
   INDEXING_WORKER_TRACEMALLOC: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
+  # OpenSearch Point-In-Time keep-alive for the reindex/port scan (default 5m)
+  PIT_KEEP_ALIVE: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""
   CONFLUENCE_CONNECTOR_LABELS_TO_SKIP: ""
   JIRA_CLOUD_API_VERSION: ""
@@ -1589,6 +1611,12 @@ sandboxPod:
 
 # -- Sandbox egress proxy.
 sandboxProxy:
+  # Allow IPv6 (::/0 minus link-local/IMDS) egress from the proxy. OFF by default: the AWS
+  # VPC CNI network-policy agent intermittently fails to program IPv6 ipBlocks into the
+  # egress eBPF map (EINVAL), leaving it empty and fail-closed (proxy pods crash-loop), and
+  # single-stack IPv4 clusters have no IPv6 egress to gate. Enable ONLY on dual-stack
+  # clusters, where an Egress policy without an IPv6 allow silently drops all IPv6 egress.
+  egressAllowIPv6: false
   replicaCount: 2
   terminationGracePeriodSeconds: 200
   progressDeadlineSeconds: 300

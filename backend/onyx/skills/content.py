@@ -34,6 +34,14 @@ def read_custom_skill_bundle_instructions(
     skill: Skill,
     file_store: FileStore | None = None,
 ) -> str:
+    bundle_bytes = read_custom_skill_bundle_bytes(skill, file_store)
+    return read_custom_bundle_instructions(bundle_bytes)
+
+
+def read_custom_skill_bundle_bytes(
+    skill: Skill,
+    file_store: FileStore | None = None,
+) -> bytes:
     if skill.bundle_file_id is None:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
@@ -47,4 +55,4 @@ def read_custom_skill_bundle_instructions(
             OnyxErrorCode.INTERNAL_ERROR,
             f"Failed to read bundle for skill '{skill.slug}'.",
         ) from exc
-    return read_custom_bundle_instructions(bundle_bytes)
+    return bundle_bytes

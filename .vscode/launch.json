@@ -552,7 +552,7 @@
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
         "-Q",
-        "docprocessing"
+        "docprocessing,port"
       ],
       "presentation": {
         "group": "2",
@@ -846,7 +846,7 @@
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",
         "-Q",
-        "docprocessing"
+        "docprocessing,port"
       ],
       "presentation": {
         "group": "2",

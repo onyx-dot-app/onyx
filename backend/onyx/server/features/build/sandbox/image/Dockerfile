@@ -47,7 +47,16 @@ FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:f82c96458eedc847b233
 # the API server at session-setup, but their runtime tools must already be in
 # the image.
 ARG ENABLE_SKILLS=true
+ARG ENABLE_BROWSER=true
 ARG OPENCODE_VERSION=1.15.7
+ARG AGENT_BROWSER_VERSION=0.31.1
+# trixie-security's chromium 150.0.7871.46-1~deb13u1 SIGTRAPs at launch
+# (https://bugs.debian.org/chromium — also broke grafana-image-renderer and
+# linuxserver/docker-chromium), which kills the Craft `browser` command and the
+# craft-k8s browser CI lane. Pin the last known-good build (from
+# trixie-proposed-updates) until a fixed security build lands, then drop the
+# pin and the proposed-updates apt source below.
+ARG CHROMIUM_VERSION=149.0.7827.196-1~deb13u1
 
 # firewall-init.sh needs: iptables (egress lockdown), ca-certificates (trust
 # store), gosu (legacy, not currently invoked). setpriv ships with util-linux in
@@ -88,6 +97,31 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     fonts-ebgaramond \
     fonts-firacode \
     && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+# Chromium engine + certutil (libnss3-tools imports the egress-proxy CA into
+# Chromium's NSS db). Its own layer: big and rarely-changing, so an
+# AGENT_BROWSER_VERSION bump below re-pulls only the small CLI layer, not this.
+RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
+    echo "deb http://deb.debian.org/debian trixie-proposed-updates main" \
+    > /etc/apt/sources.list.d/trixie-proposed-updates.list && \
+    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    chromium="${CHROMIUM_VERSION}" \
+    chromium-common="${CHROMIUM_VERSION}" \
+    libnss3-tools \
+    && rm /etc/apt/sources.list.d/trixie-proposed-updates.list \
+    && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+# agent-browser CLI/daemon. Do NOT run `agent-browser install` — it fetches
+# Chrome-for-Testing (no arm64 build); we use system chromium via
+# AGENT_BROWSER_EXECUTABLE_PATH. --allow-scripts lets the npm postinstall run on
+# npm 11+.
+RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
+    npm install -g --allow-scripts=agent-browser "agent-browser@${AGENT_BROWSER_VERSION}" && \
+    agent-browser --version && \
+    npm cache clean --force && \
+    rm -rf /root/.npm; \
     fi
 
 # Reconcile UID/GID 1000 with whatever the base image already ships with.
@@ -163,6 +197,9 @@ RUN chmod +x /workspace/firewall-init.sh
 # Per-session egress tagging plugin. Path must match
 # kubernetes_sandbox_manager._OPENCODE_SESSION_TAG_PLUGIN_PATH.
 COPY opencode-plugins/ /workspace/opencode-plugins/
+
+COPY browser-cli.sh /usr/local/bin/browser
+RUN chmod 0755 /usr/local/bin/browser
 
 RUN chown -R sandbox:sandbox /workspace
 

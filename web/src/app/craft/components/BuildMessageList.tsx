@@ -16,6 +16,7 @@ import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
+import CompactionMarker from "@/app/craft/components/CompactionMarker";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
@@ -233,6 +234,12 @@ export default function BuildMessageList({
                 reason={item.reason}
                 userApp={appsBySlug.get(item.appSlug)}
               />
+            </div>
+          );
+        case "compaction":
+          return (
+            <div key={item.id} className={cn(topMargin)}>
+              <CompactionMarker summary={item.summary} />
             </div>
           );
         case "error":
