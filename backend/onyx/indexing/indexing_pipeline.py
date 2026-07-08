@@ -4,6 +4,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from typing import NamedTuple
 from typing import Protocol
 
@@ -35,6 +36,7 @@ from onyx.connectors.models import TextSection
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import update_docs_content_hash__no_commit
+from onyx.db.document import update_docs_created_at__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -53,6 +55,9 @@ from onyx.document_index.document_metadata import DocumentMetadata
 from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import IndexingMetadata
+from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
+from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import promote_staged_file
@@ -392,6 +397,73 @@ def get_docs_to_update(
         updatable_docs.append(doc)
 
     return _DocsToUpdateResult(updatable_docs, doc_id_to_content_hash)
+
+
+def sync_doc_created_at(
+    documents: list[Document],
+    document_indices: list[DocumentIndex],
+) -> None:
+    """Propagate a newly-supplied ``doc_created_at`` to already-indexed docs
+    without re-embedding.
+
+    The reindex gates skip documents whose content/timestamp are unchanged, so a
+    creation time that only becomes available later would never reach the index.
+    Here we compare each incoming ``doc_created_at`` against the value stored in
+    Postgres and, when it differs, issue a metadata-only update (a cheap field
+    patch, no re-chunk/re-embed) and persist the new value so later syncs no-op.
+    Documents not yet in Postgres are handled by the normal index path, which
+    writes ``created_at`` directly; ``post_index`` persists it for them.
+    """
+    with get_session_with_current_tenant() as db_session:
+        db_docs = get_documents_by_ids(
+            db_session=db_session,
+            document_ids=[doc.id for doc in documents],
+        )
+        id_to_db_doc = {db_doc.id: db_doc for db_doc in db_docs}
+
+        update_requests: list[MetadataUpdateRequest] = []
+        ids_to_new_created_at: dict[str, datetime] = {}
+        for doc in documents:
+            db_doc = id_to_db_doc.get(doc.id)
+            if (
+                db_doc is None
+                or doc.doc_created_at is None
+                or db_doc.doc_created_at == doc.doc_created_at
+            ):
+                continue
+            # A chunk count < 0 means the index update will skip the doc (its
+            # chunks aren't known yet); the normal index path will set created_at.
+            chunk_cnt = db_doc.chunk_count if db_doc.chunk_count is not None else -1
+            update_requests.append(
+                MetadataUpdateRequest(
+                    document_ids=[doc.id],
+                    doc_id_to_chunk_cnt={doc.id: chunk_cnt},
+                    created_at=doc.doc_created_at,
+                )
+            )
+            ids_to_new_created_at[doc.id] = doc.doc_created_at
+
+        if not update_requests:
+            return
+
+        try:
+            for document_index in document_indices:
+                document_index.update(update_requests)
+        except (SecondaryIndexDocumentMissingError, OpenSearchDocumentMissingError):
+            # Best-effort: a doc missing from an index (e.g. mid reindex port) will
+            # get its created_at on the next sync. Never fail indexing over this.
+            logger.warning(
+                "Deferred created_at propagation for %s doc(s); chunks missing "
+                "from an index.",
+                len(update_requests),
+            )
+            return
+
+        # Persist only after a successful index patch so a failure retries next sync.
+        update_docs_created_at__no_commit(
+            ids_to_new_created_at=ids_to_new_created_at, db_session=db_session
+        )
+        db_session.commit()
 
 
 def index_doc_batch_with_handler(
@@ -1290,6 +1362,13 @@ def index_doc_batch(
 
     filtered_documents, filter_failures = filter_fnc(document_batch)
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
+
+    # Propagate a newly-available source creation time to docs the reindex gates
+    # would otherwise skip, via a cheap metadata patch (no re-embed). Skipped when
+    # writing to the secondary index — its reindex writes created_at directly.
+    if not index_to_secondary:
+        sync_doc_created_at(filtered_documents, document_indices)
+
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(
             filtered_documents, ignore_time_skip, index_to_secondary
