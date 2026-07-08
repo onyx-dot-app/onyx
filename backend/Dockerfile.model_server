@@ -29,8 +29,11 @@ RUN mkdir -p /app/.cache/huggingface /var/log/onyx
 
 # Recreate the `onyx` user (UID 1001) from the previous image so deployments that
 # pin `-u onyx` / `user: onyx` keep resolving and their 1001-owned volumes stay
-# writable. Its passwd/group entries are copied into the distroless runtime below.
-RUN groupadd -g 1001 onyx && useradd -u 1001 -g onyx -M -s /usr/sbin/nologin onyx
+# writable. The DHI "-dev" image ships a shell but not the `shadow` tools
+# (groupadd/useradd), so write the passwd/group entries directly; they're copied
+# into the distroless runtime below.
+RUN printf 'onyx:x:1001:\n' >> /etc/group && \
+    printf 'onyx:x:1001:1001::/home/onyx:/usr/sbin/nologin\n' >> /etc/passwd
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt
 
