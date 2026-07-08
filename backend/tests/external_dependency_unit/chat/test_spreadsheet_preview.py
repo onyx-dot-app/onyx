@@ -14,7 +14,9 @@ from openpyxl.worksheet.worksheet import Worksheet
 from onyx.configs.constants import FileOrigin
 from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.models import ChatFileType
 from onyx.server.query_and_chat.chat_utils import is_spreadsheet_mime_type
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.chat_utils import parse_spreadsheet_for_preview
 
 
@@ -103,6 +105,37 @@ def test_parse_spreadsheet_for_preview_truncates_large_sheets() -> None:
         preview = parse_spreadsheet_for_preview(buf, "big.xlsx")
     assert preview.sheets[0].truncated
     assert preview.sheets[0].csv == ""
+
+
+def test_truncation_skips_newlines_inside_quoted_cells() -> None:
+    """A pathological quoted cell packed with newlines must not be treated as
+    row boundaries — the cut lands after the last complete row before it."""
+    workbook = openpyxl.Workbook()
+    sheet = cast(Worksheet, workbook.active)
+    sheet.title = "Quoted"
+    sheet.append(["col_a", "col_b"])
+    # Second row's cell is a quoted multi-line value far larger than the cap
+    sheet.append(["a", "line\n" * 500])
+    buf = io.BytesIO()
+    workbook.save(buf)
+    buf.seek(0)
+
+    with patch("onyx.server.query_and_chat.chat_utils.MAX_PREVIEW_CHARS_PER_SHEET", 50):
+        preview = parse_spreadsheet_for_preview(buf, "quoted.xlsx")
+
+    quoted_sheet = preview.sheets[0]
+    assert quoted_sheet.truncated
+    # Only the complete header row survives; no partial quoted field leaks out
+    rows = list(csv.reader(io.StringIO(quoted_sheet.csv)))
+    assert rows == [["col_a", "col_b"]]
+
+
+def test_xlsm_mime_type_classifies_as_tabular() -> None:
+    """XLSM must classify TABULAR so chat routes it to the spreadsheet preview."""
+    assert (
+        mime_type_to_chat_file_type("application/vnd.ms-excel.sheet.macroEnabled.12")
+        == ChatFileType.TABULAR
+    )
 
 
 def test_is_spreadsheet_mime_type() -> None:

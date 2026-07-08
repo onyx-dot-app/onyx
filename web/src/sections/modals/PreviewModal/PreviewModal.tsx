@@ -140,8 +140,9 @@ export default function PreviewModal({
         `Failed to load preview for chat file ${fileIdLocal}:`,
         error
       );
-      // Keep a usable download link even when the preview itself failed.
-      setFileUrl((prev) => prev || rawFileUrl);
+      // Keep a usable download link for the CURRENT file even when the
+      // preview itself failed (a stale previous-file URL must never win).
+      updateFileUrl(rawFileUrl);
       setLoadError("Failed to load document.");
     } finally {
       setIsLoading(false);

@@ -5,18 +5,12 @@ from pydantic import BaseModel
 
 from onyx.file_processing.extract_file_text import xlsx_sheet_extraction
 from onyx.file_processing.file_types import OnyxMimeTypes
-from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
+from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPES
 from onyx.file_store.models import ChatFileType
 
 # Per-sheet cap on CSV text returned for in-chat spreadsheet previews. Sheets are
 # truncated (at a row boundary) beyond this to keep preview payloads bounded.
 MAX_PREVIEW_CHARS_PER_SHEET = 500_000
-
-# MIME types that can be parsed into per-sheet CSV previews by openpyxl.
-_SPREADSHEET_PREVIEW_MIME_TYPES = {
-    SPREADSHEET_MIME_TYPE,
-    "application/vnd.ms-excel.sheet.macroenabled.12",
-}
 
 
 class SpreadsheetSheetPreview(BaseModel):
@@ -36,19 +30,26 @@ def _normalize_mime_type(mime_type: str) -> str:
 def is_spreadsheet_mime_type(mime_type: str | None) -> bool:
     return (
         mime_type is not None
-        and _normalize_mime_type(mime_type) in _SPREADSHEET_PREVIEW_MIME_TYPES
+        and _normalize_mime_type(mime_type) in SPREADSHEET_MIME_TYPES
     )
 
 
 def _truncate_csv_at_row_boundary(csv_text: str, max_chars: int) -> str:
-    """Cut CSV text to at most max_chars, ending on a row boundary. A newline is
-    only a row boundary when the preceding text has balanced quotes (i.e. we are
-    not inside a quoted multi-line field). If no complete row fits within the
+    """Cut CSV text to at most max_chars, ending on a row boundary. Single
+    forward pass tracking quote parity: a newline only counts as a row boundary
+    when it falls outside a quoted field. If no complete row fits within the
     cap, return an empty string rather than emitting malformed CSV."""
-    cut = csv_text.rfind("\n", 0, max_chars)
-    while cut > 0 and csv_text.count('"', 0, cut) % 2 == 1:
-        cut = csv_text.rfind("\n", 0, cut)
-    return csv_text[:cut] if cut > 0 else ""
+    if len(csv_text) <= max_chars:
+        return csv_text
+    last_boundary = 0
+    in_quotes = False
+    for i in range(max_chars):
+        char = csv_text[i]
+        if char == '"':
+            in_quotes = not in_quotes
+        elif char == "\n" and not in_quotes:
+            last_boundary = i
+    return csv_text[:last_boundary]
 
 
 def parse_spreadsheet_for_preview(

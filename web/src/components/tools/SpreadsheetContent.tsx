@@ -67,7 +67,9 @@ interface SheetTableProps {
 function SheetTable({ sheet }: SheetTableProps) {
   let rows: string[][] = [];
   try {
-    rows = parseCSV(sheet.csv.trim());
+    // Drop at most one trailing newline; trimming any further would mutate
+    // cell data (significant leading/trailing whitespace).
+    rows = parseCSV(sheet.csv.replace(/\r?\n$/, ""));
   } catch (error) {
     console.error(
       `Failed to parse CSV for spreadsheet preview sheet "${sheet.name}":`,
