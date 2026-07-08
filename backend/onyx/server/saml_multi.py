@@ -270,7 +270,7 @@ async def saml_login_callback_get(
 
 
 @router.post("/callback")
-async def saml_login_callback(
+async def saml_login_callback_post(
     request: Request,
     db_session: Session = Depends(get_session),
     strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
