@@ -18,7 +18,7 @@ annotations:
   artifacthub.io/changes: |
     - kind: changed
       description: The inference and indexing model servers now run on a distroless Docker
-        Hardened Image (no shell or package manager) as nonroot (UID 65532). Custom CA
+        Hardened Image (no shell or package manager) as nonroot (the onyx user, UID 1001). Custom CA
         certificates for the model servers are merged with certifi's public roots in Python
         at startup instead of via update-ca-certificates. This chart version requires the
         distroless model-server image — upgrade the chart and the model-server image
