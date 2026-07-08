@@ -78,14 +78,14 @@ def configure_trusted_ca_bundle() -> None:
         bundle_path = Path(tempfile.gettempdir()) / _MERGED_BUNDLE_NAME
         bundle_path.write_bytes(merged)
     except OSError:
-        # Leave certifi as the trust store so public-endpoint TLS still works;
-        # only endpoints presenting the custom roots will fail to verify.
+        # The operator explicitly configured custom CA roots. If we can't assemble
+        # the bundle, fail fast rather than boot into a state that passes health
+        # checks but silently can't verify TLS to their private-CA endpoints.
         logger.exception(
-            "Failed to assemble the custom CA bundle from %s; falling back to "
-            "certifi's public roots.",
+            "Failed to assemble the custom CA bundle from %s.",
             certs_dir_value,
         )
-        return
+        raise
 
     os.environ["REQUESTS_CA_BUNDLE"] = str(bundle_path)
     os.environ["SSL_CERT_FILE"] = str(bundle_path)
