@@ -269,14 +269,6 @@ export default function CraftPage() {
           </Section>
         </Card>
 
-        {!isLoading && !defaultEnabled && enabledCount === 0 && (
-          <MessageCard
-            variant="warning"
-            title="No one can use Craft yet"
-            description="Turn on the default, or enable specific users below."
-          />
-        )}
-
         {redundantExceptions.length > 0 && (
           <MessageCard
             variant="info"
