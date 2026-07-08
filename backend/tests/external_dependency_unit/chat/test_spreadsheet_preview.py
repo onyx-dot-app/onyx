@@ -97,6 +97,13 @@ def test_parse_spreadsheet_for_preview_truncates_large_sheets() -> None:
     assert all(len(row) == 2 for row in rows)
     assert rows[0] == ["row-0", "x" * 20]
 
+    # A first row larger than the cap yields empty CSV (never a mid-row slice)
+    buf.seek(0)
+    with patch("onyx.server.query_and_chat.chat_utils.MAX_PREVIEW_CHARS_PER_SHEET", 5):
+        preview = parse_spreadsheet_for_preview(buf, "big.xlsx")
+    assert preview.sheets[0].truncated
+    assert preview.sheets[0].csv == ""
+
 
 def test_is_spreadsheet_mime_type() -> None:
     assert is_spreadsheet_mime_type(SPREADSHEET_MIME_TYPE)

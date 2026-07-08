@@ -8,12 +8,19 @@ import {
 } from "@/components/tools/SpreadsheetContent";
 import { Text } from "@opal/components";
 
-const SPREADSHEET_MIME_TYPE =
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const SPREADSHEET_MIME_TYPES = [
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel.sheet.macroenabled.12",
+];
+
+function isSpreadsheetMimeType(mime: string): boolean {
+  const normalized = mime.split(";")[0]?.trim().toLowerCase() ?? "";
+  return SPREADSHEET_MIME_TYPES.includes(normalized);
+}
 
 export const xlsxVariant: PreviewVariant = {
   matches: (name, mime) =>
-    mime === SPREADSHEET_MIME_TYPE || isSpreadsheetFileName(name),
+    isSpreadsheetMimeType(mime) || isSpreadsheetFileName(name),
   width: "full",
   height: "full",
   needsTextContent: false,

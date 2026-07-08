@@ -7,7 +7,7 @@ import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import CsvContent from "@/components/tools/CSVContent";
 import SpreadsheetContent, {
-  isSpreadsheetFileName,
+  isCsvFileName,
 } from "@/components/tools/SpreadsheetContent";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -91,12 +91,13 @@ export default function FileDisplay({ files }: FileDisplayProps) {
                 key={file.id}
                 fileDescriptor={file}
                 close={() => setClose(false)}
-                // XLSX is binary (OOXML zip) — render it via the backend-parsed
-                // spreadsheet preview instead of decoding raw bytes as CSV text.
+                // Only files clearly named as CSVs keep the raw CsvContent
+                // path. Everything else TABULAR (xlsx — a binary OOXML zip —
+                // or files with missing/renamed names) goes through the
+                // parsed preview, which handles both spreadsheet JSON and
+                // raw CSV passthrough based on the response content type.
                 ContentComponent={
-                  isSpreadsheetFileName(file.name)
-                    ? SpreadsheetContent
-                    : CsvContent
+                  isCsvFileName(file.name) ? CsvContent : SpreadsheetContent
                 }
               />
             ) : (

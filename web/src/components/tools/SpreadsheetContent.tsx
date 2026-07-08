@@ -1,6 +1,8 @@
-// SpreadsheetContent — renders xlsx chat files using the backend-parsed
-// per-sheet CSV payload (`/api/chat/file/{id}?parsed=true`) instead of
-// attempting to decode the raw binary xlsx bytes as text.
+// SpreadsheetContent — renders tabular chat files via `?parsed=true`.
+// Spreadsheets (xlsx) come back as a backend-parsed JSON payload of per-sheet
+// CSV text (instead of raw binary bytes); anything else (e.g. a real CSV) is
+// passed through raw by the backend and rendered as a single CSV sheet, so
+// routing here never depends solely on the file's display name.
 import React, { useState, useEffect } from "react";
 import {
   Table,
@@ -29,12 +31,20 @@ export interface SpreadsheetPreviewData {
 
 const SPREADSHEET_EXTENSIONS = [".xlsx", ".xlsm"];
 
+// Matches the guard CsvContent applies when rendering raw CSV bodies.
+const MAX_RAW_CSV_SIZE_MB = 5;
+
 export function isSpreadsheetFileName(
   fileName: string | null | undefined
 ): boolean {
   if (!fileName) return false;
   const lowered = fileName.toLowerCase();
   return SPREADSHEET_EXTENSIONS.some((ext) => lowered.endsWith(ext));
+}
+
+export function isCsvFileName(fileName: string | null | undefined): boolean {
+  if (!fileName) return false;
+  return fileName.toLowerCase().endsWith(".csv");
 }
 
 export function parseSpreadsheetPreview(
@@ -63,7 +73,11 @@ function SheetTable({ sheet }: SheetTableProps) {
   let rows: string[][] = [];
   try {
     rows = parseCSV(sheet.csv.trim());
-  } catch {
+  } catch (error) {
+    console.error(
+      `Failed to parse CSV for spreadsheet preview sheet "${sheet.name}":`,
+      error
+    );
     rows = [];
   }
   const headers = rows[0];
@@ -72,7 +86,9 @@ function SheetTable({ sheet }: SheetTableProps) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-8">
         <Text as="p" font="main-ui-body" color="text-03">
-          This sheet is empty.
+          {sheet.truncated
+            ? "This sheet is too large to preview — download the file to view it."
+            : "This sheet is empty."}
         </Text>
       </div>
     );
@@ -192,13 +208,37 @@ function SpreadsheetContent({
       setIsFetching(true);
       try {
         const response = await fetchChatFile(cacheKey, true);
-        const preview = parseSpreadsheetPreview(await response.text());
-        if (!preview) {
-          throw new Error("Failed to parse spreadsheet preview");
+        const contentType = response.headers.get("Content-Type") ?? "";
+
+        let fetchedSheets: SpreadsheetSheet[];
+        if (contentType.toLowerCase().includes("application/json")) {
+          // Backend-parsed spreadsheet payload
+          const preview = parseSpreadsheetPreview(await response.text());
+          if (!preview) {
+            throw new Error("Failed to parse spreadsheet preview");
+          }
+          fetchedSheets = preview.sheets;
+        } else {
+          // `parsed=true` is a passthrough for non-spreadsheet files (e.g. a
+          // CSV whose display name is missing or renamed) — the body is plain
+          // CSV text, rendered as a single sheet.
+          const contentLength = response.headers.get("Content-Length");
+          const fileSizeInMB = contentLength
+            ? parseInt(contentLength) / (1024 * 1024)
+            : 0;
+          if (fileSizeInMB > MAX_RAW_CSV_SIZE_MB) {
+            throw new Error(
+              `File size exceeds the maximum limit of ${MAX_RAW_CSV_SIZE_MB}MB`
+            );
+          }
+          fetchedSheets = [
+            { name: "Sheet 1", csv: await response.text(), truncated: false },
+          ];
         }
+
         if (!cancelled) {
-          setSheets(preview.sheets);
-          spreadsheetCache.set(cacheKey, preview.sheets);
+          setSheets(fetchedSheets);
+          spreadsheetCache.set(cacheKey, fetchedSheets);
         }
       } catch (error) {
         console.error("Error fetching spreadsheet preview:", error);

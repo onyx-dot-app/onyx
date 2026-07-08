@@ -43,11 +43,12 @@ def is_spreadsheet_mime_type(mime_type: str | None) -> bool:
 def _truncate_csv_at_row_boundary(csv_text: str, max_chars: int) -> str:
     """Cut CSV text to at most max_chars, ending on a row boundary. A newline is
     only a row boundary when the preceding text has balanced quotes (i.e. we are
-    not inside a quoted multi-line field)."""
+    not inside a quoted multi-line field). If no complete row fits within the
+    cap, return an empty string rather than emitting malformed CSV."""
     cut = csv_text.rfind("\n", 0, max_chars)
     while cut > 0 and csv_text.count('"', 0, cut) % 2 == 1:
         cut = csv_text.rfind("\n", 0, cut)
-    return csv_text[:cut] if cut > 0 else csv_text[:max_chars]
+    return csv_text[:cut] if cut > 0 else ""
 
 
 def parse_spreadsheet_for_preview(
