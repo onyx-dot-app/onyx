@@ -217,13 +217,12 @@ def delete_ingestion_doc(
                 document_id,
                 chunk_count=document.chunk_count,
             )
-        # Delete from database
         delete_documents_complete(db_session, [document_id])
     except Exception:
-        # The delete didn't complete — this admin endpoint has no automatic retry, so the
-        # doc stays live. Roll back only the candidate rows THIS call inserted so the sweep
-        # doesn't later treat the live doc's port-copied (marked) chunks as a resurrection —
-        # and so we never erase a candidate another cc_pair or delete path recorded.
+        # A failed DB delete leaves the session aborted; roll back before the candidate
+        # cleanup or it raises and masks the real error. The doc stays live (no retry here),
+        # so drop only the rows this call inserted to keep the sweep off its live chunks.
+        db_session.rollback()
         if recorded_ids:
             delete_port_orphan_candidates_by_id(db_session, recorded_ids)
             db_session.commit()
