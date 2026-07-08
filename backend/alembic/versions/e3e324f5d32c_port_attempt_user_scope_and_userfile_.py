@@ -154,6 +154,9 @@ def downgrade() -> None:
     op.drop_column("user_file", "secondary_only_sync_pending")
 
     # port_orphan_candidate
+    # user-scope rows have cc_pair_id NULL and can't exist in the connector-only
+    # schema; drop them before restoring NOT NULL.
+    op.execute("DELETE FROM port_orphan_candidate WHERE port_user_id IS NOT NULL")
     op.drop_index("uq_port_orphan_candidate_user", table_name="port_orphan_candidate")
     op.drop_index(
         "uq_port_orphan_candidate_connector", table_name="port_orphan_candidate"
@@ -186,6 +189,7 @@ def downgrade() -> None:
     )
 
     # port_attempt
+    op.execute("DELETE FROM port_attempt WHERE port_user_id IS NOT NULL")
     op.drop_index("ix_port_attempt_active_unique_user", table_name="port_attempt")
     op.drop_index("ix_port_attempt_active_unique", table_name="port_attempt")
     op.create_index(
