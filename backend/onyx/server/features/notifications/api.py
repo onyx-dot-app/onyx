@@ -65,7 +65,7 @@ def _ensure_license_expiry_notification(user: User, db_session: Session) -> None
     task. No-op on non-EE builds (and for non-admins / no active warning)."""
     try:
         fetch_ee_implementation_or_noop(
-            "ee.onyx.utils.license_notifications",
+            "onyx.utils.license_notifications",
             "ensure_license_expiry_notification_for_user",
         )(user, db_session)
     except Exception:
