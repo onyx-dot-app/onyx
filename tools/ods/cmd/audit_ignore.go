@@ -41,6 +41,7 @@ on disk instead.`,
 	cmd.PersistentFlags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL or local path of the advisory allowlist")
 
 	cmd.AddCommand(newAuditIgnoreEditCommand(opts))
+	cmd.AddCommand(newAuditIgnoreAddCommand(opts))
 
 	return cmd
 }

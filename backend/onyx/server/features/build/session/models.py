@@ -66,6 +66,12 @@ class SandboxResponse(BaseModel):
         )
 
 
+class SandboxStatusResponse(BaseModel):
+    """Lightweight sandbox status for the frontend sleep poll."""
+
+    status: SandboxStatus | None
+
+
 class ArtifactResponse(BaseModel):
     """Artifact metadata in session response."""
 
