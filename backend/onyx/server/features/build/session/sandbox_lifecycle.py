@@ -23,10 +23,13 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
+from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.errors import SandboxProvisioningError
+from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -58,6 +61,20 @@ def snapshot_opencode_history_before_recovery(
             sandbox_id,
             exc_info=True,
         )
+
+
+def recover_unhealthy_sandbox(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+    tenant_id: str,
+) -> None:
+    """Tear down a RUNNING sandbox whose pod is unhealthy/missing: preserve
+    opencode history best-effort, terminate, mark TERMINATED so the caller
+    can re-provision. Caller is responsible for committing."""
+    snapshot_opencode_history_before_recovery(sandbox_manager, sandbox.id, tenant_id)
+    sandbox_manager.terminate(sandbox.id)
+    update_sandbox_status__no_commit(db_session, sandbox.id, SandboxStatus.TERMINATED)
 
 
 def create_session_snapshot_keep_latest(
@@ -99,6 +116,43 @@ def create_session_snapshot_keep_latest(
     return result
 
 
+def hydrate_managed_content(
+    sandbox_manager: SandboxManager,
+    sandbox_id: UUID,
+    user: User,
+    db_session: DBSession,
+    skills_files: FileSet | None = None,
+) -> None:
+    """Push managed skills + user library into a sandbox.
+
+    Must complete before the sandbox is reported RUNNING: turns dispatch as
+    soon as RUNNING is visible, and opencode scans the skills directory once
+    per instance, so a turn started mid-push permanently misses managed
+    skills. Each push is best-effort — failures are logged, never raised.
+    """
+    try:
+        hydrate_sandbox_skills(
+            sandbox_id,
+            user,
+            db_session,
+            sandbox_manager=sandbox_manager,
+            files=skills_files,
+        )
+    except Exception:
+        logger.warning("Failed to push skills to sandbox %s", sandbox_id, exc_info=True)
+    try:
+        hydrate_user_library(
+            sandbox_id,
+            user.id,
+            db_session,
+            sandbox_manager=sandbox_manager,
+        )
+    except Exception:
+        logger.warning(
+            "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
+        )
+
+
 class ProvisioningPolicy(str, Enum):
     """How to handle a sandbox already in ``PROVISIONING`` when we arrive.
 
@@ -126,6 +180,10 @@ def provision_sandbox(
     provider pre-loaded so per-prompt model overrides can cross providers
     without a pod restart. ``all_llm_configs[0]`` is the default.
 
+    Managed content (skills, user library) is pushed before the row is
+    flipped to RUNNING so no turn can start against a pod that is still
+    receiving its skills.
+
     Updates the sandbox row's status to whatever the manager returns.
     Caller is responsible for committing.
     """
@@ -138,6 +196,8 @@ def provision_sandbox(
         onyx_pat=onyx_pat,
         all_llm_configs=all_llm_configs,
     )
+    if sandbox_info.status == SandboxStatus.RUNNING:
+        hydrate_managed_content(sandbox_manager, sandbox.id, user, db_session)
     update_sandbox_status__no_commit(db_session, sandbox.id, sandbox_info.status)
 
 
@@ -204,8 +264,9 @@ def ensure_sandbox_ready(
     provisioning_wait_seconds: float = 30.0,
     user: User | None = None,
 ) -> Sandbox:
-    """Return a ``RUNNING`` sandbox for ``user_id``, creating, waking, or
-    recovering as needed.
+    """Return the sandbox for ``user_id``, creating, waking, or recovering
+    it as needed. Provisioning hydrates managed content before the row
+    reports RUNNING.
 
     Branches by current sandbox status:
     - No sandbox row: create + provision.
@@ -256,13 +317,7 @@ def ensure_sandbox_ready(
             "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
             sandbox.id,
         )
-        snapshot_opencode_history_before_recovery(
-            sandbox_manager, sandbox.id, tenant_id
-        )
-        sandbox_manager.terminate(sandbox.id)
-        update_sandbox_status__no_commit(
-            db_session, sandbox.id, SandboxStatus.TERMINATED
-        )
+        recover_unhealthy_sandbox(db_session, sandbox_manager, sandbox, tenant_id)
         # Fall through into the re-provision path below.
 
     if sandbox is not None and sandbox.status not in {
