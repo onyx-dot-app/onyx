@@ -107,6 +107,10 @@ EXCLUDED_REQUEST_HEADERS = {
     # CSRF.
     "x-csrf-token",
     "x-xsrf-token",
+    # Browser context. cors-mode fetches send the product Origin even
+    # same-origin; Next dev blocks /_next/* requests from unlisted origins.
+    # The proxy is the trust boundary (sec-fetch-* is stripped by prefix).
+    "origin",
     # Client identity (RFC 7239 + common ingress/IDP conventions).
     "forwarded",
     "x-forwarded-for",
@@ -185,6 +189,7 @@ async def _proxy_request(
         if not (
             (lowered := key.lower()) in EXCLUDED_REQUEST_HEADERS
             or lowered.startswith("x-onyx-")
+            or lowered.startswith("sec-fetch-")
         )
     }
 

@@ -125,6 +125,7 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
@@ -249,50 +250,6 @@ def _stream_stdout_from_container_as_sandbox_user(
         environment=SANDBOX_EXEC_ENV,
         chunk_size=chunk_size,
     )
-
-
-def _build_nextjs_start_script(
-    session_path: str,
-    nextjs_port: int,
-    check_node_modules: bool = False,
-) -> str:
-    """Shell script to spawn Next.js in the background and record its PID."""
-    install_check = ""
-    if check_node_modules:
-        install_check = f"""
-if [ ! -d "node_modules" ]; then
-    echo "Installing dependencies with bun..."
-    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \
-        bun install --frozen-lockfile --backend=hardlink
-fi
-"""
-
-    return f"""
-set -e
-cd {session_path}/outputs/web
-{install_check}
-export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename {session_path})/webapp"
-if grep -q "WEBAPP_ASSET_PREFIX" next.config.ts 2>/dev/null; then
-    cat > next.config.ts <<'EOF'
-import type {{ NextConfig }} from "next";
-
-const webappBasePath = process.env.ONYX_WEBAPP_BASE_PATH || undefined;
-
-const nextConfig: NextConfig = {{
-  ...(webappBasePath
-    ? {{ basePath: webappBasePath, assetPrefix: webappBasePath }}
-    : {{}}),
-}};
-
-export default nextConfig;
-EOF
-fi
-echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
-NEXTJS_PID=$!
-echo "Next.js server started with PID $NEXTJS_PID"
-echo $NEXTJS_PID > {session_path}/nextjs.pid
-"""
 
 
 def _sandbox_container_name(sandbox_id: str | UUID) -> str:
@@ -1142,7 +1099,7 @@ class DockerSandboxManager(SandboxManager):
         )
 
         nextjs_start = (
-            _build_nextjs_start_script(session_path, nextjs_port)
+            build_nextjs_start_script(session_path, nextjs_port)
             if nextjs_port is not None
             else ""
         )
@@ -1550,7 +1507,7 @@ fi
         )
 
         if nextjs_port is not None:
-            start_script = _build_nextjs_start_script(
+            start_script = build_nextjs_start_script(
                 session_path, nextjs_port, check_node_modules=True
             )
             try:

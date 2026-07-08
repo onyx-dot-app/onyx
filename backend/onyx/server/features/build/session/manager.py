@@ -1174,7 +1174,9 @@ class SessionManager:
             webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
 
             # Quick health check: can the API server reach the NextJS dev server?
-            ready = self._check_nextjs_ready(sandbox.id, session.nextjs_port)
+            ready = self._check_nextjs_ready(
+                sandbox.id, session_id, session.nextjs_port
+            )
 
         return {
             "has_webapp": session.nextjs_port is not None,
@@ -1184,21 +1186,24 @@ class SessionManager:
             "sharing_scope": session.sharing_scope,
         }
 
-    def _check_nextjs_ready(self, sandbox_id: UUID, port: int) -> bool:
+    def _check_nextjs_ready(
+        self, sandbox_id: UUID, session_id: UUID, port: int
+    ) -> bool:
         """Check if the NextJS dev server is responding.
 
-        Does a quick HTTP GET to the sandbox's internal URL with a short timeout.
-        Returns True if the server responds with any status code, False on timeout
-        or connection error.
+        Probes the session's basePath route with a short timeout — the dev
+        server 404s anything outside its configured basePath, so probing bare
+        "/" would render a spurious 404 on every poll. Returns True on any
+        non-5xx response, False on timeout or connection error.
         """
         try:
             sandbox_manager = get_sandbox_manager()
             internal_url = sandbox_manager.get_webapp_url(sandbox_id, port)
+            probe_url = f"{internal_url}/api/build/sessions/{session_id}/webapp"
             with httpx.Client(timeout=2.0) as client:
-                resp = client.get(internal_url)
-                # Any response (even 500) means the server is up
+                resp = client.get(probe_url)
                 return resp.status_code < 500
-        except (httpx.TimeoutException, httpx.ConnectError, Exception):
+        except Exception:
             return False
 
     def download_webapp_zip(
