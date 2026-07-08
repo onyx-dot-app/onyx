@@ -446,6 +446,9 @@ class OnyxCeleryQueues:
     # Reindex port queue (heavy PRESENT -> FUTURE re-embed; kept off the
     # docprocessing queue so a migration doesn't starve live indexing)
     PORT = "port"
+    # User-file reindex port; runs on the user-file worker with its own budget, so it
+    # never competes with the connector port or docprocessing.
+    USER_FILE_PORT = "user_file_port"
 
     # Monitoring queue
     MONITORING = "monitoring"
@@ -596,6 +599,7 @@ class OnyxCeleryTask:
 
     # Reindex port (PRESENT -> FUTURE chunk copy)
     RUN_PORT_ATTEMPT = "run_port_attempt"
+    RUN_USER_FILE_PORT_ATTEMPT = "run_user_file_port_attempt"
     CHECK_FOR_PORT = "check_for_port"
 
     # Connector checkpoint cleanup

@@ -946,6 +946,12 @@ MAX_CONCURRENT_PORT_ATTEMPTS = max(
     1, _non_negative_int_env("MAX_CONCURRENT_PORT_ATTEMPTS", 2)
 )
 
+# User-file ports run on the 2-thread user-file worker and a running port can't be
+# preempted, so default 1 leaves a thread for live uploads.
+MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS = max(
+    1, _non_negative_int_env("MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS", 1)
+)
+
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:
     env_value = os.environ.get("CELERY_WORKER_DOCFETCHING_CONCURRENCY")

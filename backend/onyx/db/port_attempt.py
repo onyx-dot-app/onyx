@@ -27,6 +27,8 @@ from onyx.db.enums import PortAttemptStatus
 from onyx.db.enums import SwitchoverType
 from onyx.db.models import PortAttempt
 from onyx.db.models import SearchSettings
+from onyx.db.user_file import any_user_file_secondary_pending
+from onyx.db.user_file import fetch_port_scope_user_ids
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -154,6 +156,42 @@ def count_active_port_attempts(
     ).scalar_one()
 
 
+def _user_file_port_has_pending_work(
+    db_session: Session, search_settings_id: int
+) -> bool:
+    """True while the user-file scope isn't drained: a deferred edit is still flagged
+    (FUTURE stale/missing), or some portable user lacks a settled latest attempt.
+
+    User-set-aware, not existing-row-aware (mirrors the connector term): a cap-deferred
+    user has no row yet but still needs a port, so key off portable-users minus settled
+    — the row-aware form reintroduces the fixed cap-predicate stall. Users have no
+    paused concept, so the set is switchover-agnostic.
+    """
+    if any_user_file_secondary_pending(db_session):
+        return True
+    portable_users = set(fetch_port_scope_user_ids(db_session))
+    if not portable_users:
+        return False
+    settled_users = {
+        user_id
+        for user_id, status in db_session.execute(
+            select(PortAttempt.port_user_id, PortAttempt.status)
+            .where(
+                PortAttempt.search_settings_id == search_settings_id,
+                PortAttempt.port_user_id.in_(portable_users),
+            )
+            .distinct(PortAttempt.port_user_id)
+            .order_by(
+                PortAttempt.port_user_id,
+                PortAttempt.time_created.desc(),
+                PortAttempt.id.desc(),
+            )
+        )
+        if status in _SETTLED_STATUSES
+    }
+    return bool(portable_users - settled_users)
+
+
 def port_backfill_has_pending_work(
     db_session: Session, search_settings_id: int
 ) -> bool:
@@ -166,6 +204,9 @@ def port_backfill_has_pending_work(
     rest, leaving the live index incomplete. Scope + _SETTLED_STATUSES match check_for_port
     so this never reports pending for a cc_pair it won't act on.
     """
+    # user-file scope first, so a zero-connector tenant still gates on user files
+    if _user_file_port_has_pending_work(db_session, search_settings_id):
+        return True
     settings = db_session.get(SearchSettings, search_settings_id)
     active_only = (
         settings is not None and settings.switchover_type == SwitchoverType.ACTIVE_ONLY
@@ -195,6 +236,34 @@ def port_backfill_has_pending_work(
     }
     # Pending if any in-scope cc_pair has no settled latest attempt (incl. none at all).
     return bool(set(in_scope_cc_pair_ids) - settled_cc_pairs)
+
+
+def all_user_scopes_ported(
+    db_session: Session, search_settings_id: int, user_ids: list[UUID]
+) -> bool:
+    """True iff every user in `user_ids` has a SUCCESS latest attempt for the settings —
+    the user-scope swap-gate check. An active or
+    FAILED latest attempt (or none) fails the gate."""
+    if not user_ids:
+        return True
+    succeeded = {
+        user_id
+        for user_id, status in db_session.execute(
+            select(PortAttempt.port_user_id, PortAttempt.status)
+            .where(
+                PortAttempt.search_settings_id == search_settings_id,
+                PortAttempt.port_user_id.in_(user_ids),
+            )
+            .distinct(PortAttempt.port_user_id)
+            .order_by(
+                PortAttempt.port_user_id,
+                PortAttempt.time_created.desc(),
+                PortAttempt.id.desc(),
+            )
+        )
+        if status == PortAttemptStatus.SUCCESS
+    }
+    return set(user_ids) <= succeeded
 
 
 def is_active_port_backfill_source(

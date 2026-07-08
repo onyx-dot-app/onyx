@@ -40,6 +40,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
+from onyx.db.port_orphan_candidate import record_port_orphan_candidates_for_user_file
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.user_file import fetch_user_files_with_access_relationships
@@ -696,6 +697,20 @@ def delete_user_file_impl(
                     RetryDocumentIndex(document_index)
                     for document_index in document_indices
                 ]
+
+                # Record the deletion before the index delete (below) so a racing port's
+                # sweep removes any chunk its create-only copy resurrects. No-op when no
+                # port targets this file.
+                if user_file.user_id is not None:
+                    recorded = record_port_orphan_candidates_for_user_file(
+                        db_session,
+                        port_user_id=user_file.user_id,
+                        document_id=str(user_file.id),
+                        primary=active_search_settings.primary,
+                        secondary=active_search_settings.secondary,
+                    )
+                    if recorded:
+                        db_session.commit()
 
         # Phase 2: vector DB deletes + file store deletes (no DB session held).
         # Pass the DB chunk count when known; otherwise None, which each document

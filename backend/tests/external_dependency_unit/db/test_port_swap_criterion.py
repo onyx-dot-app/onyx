@@ -91,7 +91,7 @@ def test_port_swap_ready_when_port_succeeded(
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
     _make_success_port(db_session, cc_pair.id, future_id)
-    assert _port_swap_ready(db_session, future_ss, [cc_pair]) is True
+    assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
 
 
 def test_port_swap_blocks_when_no_port(
@@ -100,7 +100,7 @@ def test_port_swap_blocks_when_no_port(
     cc_pair, future_id = cc_pair_and_future
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
-    assert _port_swap_ready(db_session, future_ss, [cc_pair]) is False
+    assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
 
 
 def test_port_swap_blocks_on_active_port(
@@ -111,7 +111,7 @@ def test_port_swap_blocks_on_active_port(
     assert future_ss is not None
     attempt = create_port_attempt(db_session, cc_pair.id, future_id)
     mark_port_in_progress(db_session, attempt.id)  # active, not terminal
-    assert _port_swap_ready(db_session, future_ss, [cc_pair]) is False
+    assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
 
 
 def test_port_swap_blocks_on_pending_sync_backlog(
@@ -139,7 +139,7 @@ def test_port_swap_blocks_on_pending_sync_backlog(
     )
     db_session.commit()
     mark_document_synced_secondary_pending(doc_id, db_session)
-    assert _port_swap_ready(db_session, future_ss, [cc_pair]) is False
+    assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
 
 
 def test_port_swap_blocks_on_unfinished_ingestion_port(
@@ -155,7 +155,7 @@ def test_port_swap_blocks_on_unfinished_ingestion_port(
     try:
         attempt = create_port_attempt(db_session, ingestion.id, future_id)
         mark_port_in_progress(db_session, attempt.id)  # active -> not done
-        assert _port_swap_ready(db_session, future_ss, [ingestion]) is False
+        assert _port_swap_ready(db_session, future_ss, [ingestion], []) is False
     finally:
         db_session.query(PortAttempt).filter(
             PortAttempt.cc_pair_id == ingestion.id
@@ -175,7 +175,7 @@ def test_port_swap_ready_ingestion_skips_index_attempt(
     ingestion = make_cc_pair(db_session, source=DocumentSource.INGESTION_API)
     try:
         _make_success_port(db_session, ingestion.id, future_id)
-        assert _port_swap_ready(db_session, future_ss, [ingestion]) is True
+        assert _port_swap_ready(db_session, future_ss, [ingestion], []) is True
     finally:
         db_session.query(PortAttempt).filter(
             PortAttempt.cc_pair_id == ingestion.id
