@@ -31,8 +31,8 @@ def _sso_provider_table(metadata: sa.MetaData) -> sa.Table:
         sa.Column("name", sa.String, nullable=False, unique=True),
         sa.Column("display_name", sa.String, nullable=False),
         sa.Column("provider_type", sa.String, nullable=False),
-        # Protocol-specific config, encrypted JSON (matches the EncryptedJson
-        # ORM column). Shape differs by provider_type; validated in the app.
+        # Protocol-specific config as encrypted JSON. Shape differs by
+        # provider_type and is validated in the app.
         sa.Column("config", sa.LargeBinary, nullable=False),
         sa.Column(
             "allowed_email_domains",
@@ -97,8 +97,7 @@ def _seed_from_env(table: sa.Table) -> None:
     if bind.execute(sa.select(table.c.id).limit(1)).first():
         return
 
-    # Config shape matches the per-type models in onyx.db.sso_provider, encrypted
-    # exactly as the EncryptedJson column would store it (json then encrypt).
+    # Store the config the way the ORM does: JSON-encode, then encrypt.
     config: dict[str, str] = {
         "client_id": OAUTH_CLIENT_ID,
         "client_secret": OAUTH_CLIENT_SECRET,

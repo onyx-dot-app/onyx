@@ -33,9 +33,9 @@ class OIDCProviderConfig(_ProviderConfig):
 
 
 class SAMLProviderConfig(_ProviderConfig):
-    """Stub for the not-yet-wired SAML login flow. Fields mirror what the
-    OneLogin toolkit needs (see onyx/server/saml.py) so the store, migration,
-    and admin path are proven before the flow itself lands."""
+    """SAML provider config: the IdP metadata a SAML login needs. No login flow
+    consumes it yet, so a SAML row validates and stores but cannot drive a
+    login."""
 
     idp_entity_id: str
     idp_sso_url: str
@@ -44,8 +44,7 @@ class SAMLProviderConfig(_ProviderConfig):
     email_attribute: str | None = None
 
 
-# provider_type selects the config shape. A new auth method is a new model plus
-# an entry here, never a schema migration.
+# provider_type selects the config shape. A new auth method adds a model here.
 _CONFIG_MODEL_BY_TYPE: dict[SSOProviderType, type[_ProviderConfig]] = {
     SSOProviderType.GOOGLE: GoogleProviderConfig,
     SSOProviderType.OIDC: OIDCProviderConfig,

@@ -6568,10 +6568,9 @@ class ExternalAppPolicy(Base):
 class SSOProvider(Base):
     """A configured SSO identity provider. Providers are rows, not startup
     wiring: login routes resolve the row at request time, so adding or editing
-    one requires no restart. Fields common to every auth method are columns;
-    everything protocol-specific lives in the encrypted `config` blob, validated
-    per provider_type in onyx.db.sso_provider. So a new method (OIDC, SAML, ...)
-    is a new config shape, not a set of new columns."""
+    one requires no restart. Fields common to every auth method are columns. The
+    protocol-specific settings live in the encrypted `config` blob, validated
+    per provider_type on write."""
 
     __tablename__ = "sso_provider"
 
@@ -6584,7 +6583,7 @@ class SSOProvider(Base):
         Enum(SSOProviderType, native_enum=False), nullable=False
     )
     # Protocol-specific settings: OAuth client creds + discovery URL for
-    # GOOGLE/OIDC, or IdP metadata for SAML. Encrypted at rest; shape validated
+    # GOOGLE/OIDC, or IdP metadata for SAML. Encrypted at rest, validated
     # against provider_type on write.
     config: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
         EncryptedJson(), nullable=False
