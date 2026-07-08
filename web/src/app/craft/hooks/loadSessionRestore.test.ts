@@ -89,23 +89,6 @@ describe("loadSession restore status", () => {
     expect(session?.sandbox?.status).toBe("running");
   });
 
-  it("remounts the preview on restore, while edits only refresh (HMR handles them)", async () => {
-    mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
-    mockedApi.restoreSession.mockResolvedValue(runningSession() as never);
-
-    await useBuildSessionStore.getState().loadSession(SESSION_ID);
-
-    let session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
-    expect(session?.webappNeedsRefresh).toBe(1);
-    expect(session?.webappNeedsRemount).toBe(1);
-
-    // A web/ file edit mid-turn must not remount the iframe.
-    useBuildSessionStore.getState().triggerWebappRefresh(SESSION_ID);
-    session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
-    expect(session?.webappNeedsRefresh).toBe(2);
-    expect(session?.webappNeedsRemount).toBe(1);
-  });
-
   it("restores persisted agent thought packets as collapsed transcript stream items", async () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     mockedApi.fetchMessages.mockResolvedValue([

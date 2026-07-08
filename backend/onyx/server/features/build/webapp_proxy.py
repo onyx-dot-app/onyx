@@ -3,7 +3,6 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from urllib.parse import parse_qsl
 from urllib.parse import urlencode
-from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
@@ -27,6 +26,7 @@ from websockets.exceptions import ConnectionClosed
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.users import auth_backend
 from onyx.auth.users import get_user_manager
+from onyx.auth.users import is_same_origin
 from onyx.auth.users import optional_user
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -260,27 +260,16 @@ def _webapp_hmr_websocket_url(
     return target_url
 
 
-def _is_allowed_websocket_origin(origin: str | None) -> bool:
-    """Blocks cross-site WebSocket hijacking: WebSockets are exempt from the
-    same-origin policy, and cookie auth is attached automatically by browsers.
-    Non-browser clients send no Origin header and carry no ambient credentials,
-    so a missing header is allowed."""
-    if origin is None:
-        return True
-    expected = urlsplit(WEB_DOMAIN)
-    actual = urlsplit(origin)
-    return (
-        actual.scheme == expected.scheme
-        and actual.netloc.lower() == expected.netloc.lower()
-    )
-
-
 async def _current_webapp_websocket_user(
     websocket: WebSocket,
     user_manager: BaseUserManager[User, UUID] = Depends(get_user_manager),
     strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
 ) -> User:
-    if not _is_allowed_websocket_origin(websocket.headers.get("origin")):
+    # CSWSH guard: WebSockets are exempt from the same-origin policy and
+    # cookie auth is attached automatically. Browsers always send Origin on
+    # WebSocket upgrades, so a missing header is rejected too.
+    origin = websocket.headers.get("origin")
+    if origin is None or not is_same_origin(origin, WEB_DOMAIN):
         raise WebSocketException(code=1008)
     token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
     user = await strategy.read_token(token, user_manager)

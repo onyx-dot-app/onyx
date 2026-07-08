@@ -636,8 +636,6 @@ export interface BuildSessionData {
   outputPanelOpen: boolean;
   /** Counter to trigger webapp refresh when web/ files change (increments on each edit) */
   webappNeedsRefresh: number;
-  /** Counter to force an iframe remount (restore only — live edits are handled by HMR) */
-  webappNeedsRemount: number;
   /** Counter to trigger files list refresh when outputs/ directory changes (increments on each write/edit) */
   filesNeedsRefresh: number;
   /** Transient panel tabs open in this session (files, subagents, etc.) */
@@ -872,7 +870,6 @@ const createInitialSessionData = (
   contextUsage: null,
   outputPanelOpen: false,
   webappNeedsRefresh: 0,
-  webappNeedsRemount: 0,
   filesNeedsRefresh: 0,
   panelTabs: [],
   subagents: new Map(),
@@ -1578,14 +1575,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             (get().sessions.get(sessionId)?.webappNeedsRefresh || 0) + 1,
         });
 
-        // Remount the iframe only once the restored pod serves — its HMR
-        // socket died with the old pod, so a reload is required exactly here.
         await waitForWebappReady(sessionId);
-        updateSessionData(sessionId, {
-          sandbox: sessionData.sandbox,
-          webappNeedsRemount:
-            (get().sessions.get(sessionId)?.webappNeedsRemount || 0) + 1,
-        });
+        updateSessionData(sessionId, { sandbox: sessionData.sandbox });
 
         // An artifact-fetch failure must NOT flip the sandbox to "failed".
         try {
@@ -2644,14 +2635,6 @@ export const useWebappNeedsRefresh = () =>
     const { currentSessionId, sessions } = state;
     if (!currentSessionId) return 0;
     return sessions.get(currentSessionId)?.webappNeedsRefresh ?? 0;
-  });
-
-// Webapp remount selector
-export const useWebappNeedsRemount = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return 0;
-    return sessions.get(currentSessionId)?.webappNeedsRemount ?? 0;
   });
 
 // Files refresh selector
