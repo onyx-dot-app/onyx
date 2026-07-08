@@ -86,6 +86,10 @@ def _clear_port_orphan_candidate_for_live_doc(
     )
     if target_settings_id is None:
         return
+    # Keep the candidate if the doc lost its last link (being deleted): its port-copied
+    # chunks remain (the index delete failed), so the sweep still needs to clean them.
+    if get_document_connector_count(db_session, document_id) == 0:
+        return
     cc_pair = get_connector_credential_pair(db_session, connector_id, credential_id)
     if cc_pair is None:
         return  # cc_pair deleted -> its FK cascade already dropped the candidate
@@ -318,7 +322,7 @@ def document_by_cc_pair_cleanup_task(
                         ),
                     )
                     mark_document_as_modified(document_id, db_session)
-                    # reconciliation is UPDATE-only, so a surviving-link doc stays live
+                    # helper keeps the candidate if this removed the doc's last link
                     _clear_port_orphan_candidate_for_live_doc(
                         db_session, connector_id, credential_id, document_id
                     )

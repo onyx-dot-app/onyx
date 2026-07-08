@@ -1845,30 +1845,37 @@ def test_run_port_attempt_failed_sweep_marks_failed(
 
 
 @patch("onyx.background.celery.tasks.shared.tasks.port_target_settings_id")
-def test_clear_for_live_doc_clears_only_this_cc_pair(
+def test_clear_for_live_doc_clears_live_but_keeps_removed(
     mock_target: MagicMock,
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
 ) -> None:
+    """Clears a still-linked doc's candidate (scoped to this cc_pair) but keeps a doc with no
+    surviving link — it's being deleted, so the sweep still needs the candidate."""
     ss = get_current_search_settings(db_session)
     mock_target.return_value = (
         ss.id
     )  # stand in for an active port on the current settings
     other = make_cc_pair(db_session)
+    (live_doc,) = _seed_cc_pair_documents(db_session, cc_pair, 1, unique=True)
     try:
-        record_port_orphan_candidates(db_session, ss.id, cc_pair.id, ["doc-x"])
-        record_port_orphan_candidates(db_session, ss.id, other.id, ["doc-x"])
+        record_port_orphan_candidates(db_session, ss.id, cc_pair.id, [live_doc])
+        record_port_orphan_candidates(db_session, ss.id, other.id, [live_doc])
+        record_port_orphan_candidates(db_session, ss.id, cc_pair.id, ["removed-doc"])
         db_session.commit()
 
-        _clear_port_orphan_candidate_for_live_doc(
-            db_session, cc_pair.connector_id, cc_pair.credential_id, "doc-x"
-        )
+        for doc in (live_doc, "removed-doc"):
+            _clear_port_orphan_candidate_for_live_doc(
+                db_session, cc_pair.connector_id, cc_pair.credential_id, doc
+            )
         db_session.commit()
 
-        assert get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id) == []
-        # the same doc's candidate under another cc_pair is left intact
+        this_cc = get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id)
+        assert live_doc not in this_cc
+        assert "removed-doc" in this_cc
+        # scoped: the live doc's candidate under another cc_pair is untouched
         assert get_port_orphan_candidate_doc_ids(db_session, ss.id, other.id) == [
-            "doc-x"
+            live_doc
         ]
     finally:
         db_session.query(PortOrphanCandidate).filter(
