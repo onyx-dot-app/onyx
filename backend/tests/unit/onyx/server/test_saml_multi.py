@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
+from onyx.db.sso_provider import SAMLProviderConfig
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server import saml_multi
 from onyx.utils.sensitive import make_mock_sensitive_value
@@ -29,9 +30,13 @@ _IDP = {
 _DB = cast(Session, object())
 
 
+def _config(**overrides: Any) -> SAMLProviderConfig:
+    return SAMLProviderConfig(**{**_IDP, **overrides})
+
+
 def test_build_saml_settings_fixed_acs() -> None:
     settings = saml_multi.build_saml_settings(
-        {**_IDP, "sp_x509_cert": "SPCERT", "sp_private_key": "SPKEY"}
+        _config(sp_x509_cert="SPCERT", sp_private_key="SPKEY")
     )
     assert settings["strict"] is True
     assert settings["sp"]["assertionConsumerService"]["url"].endswith(
@@ -46,7 +51,7 @@ def test_build_saml_settings_fixed_acs() -> None:
 
 
 def test_build_saml_settings_optional_sp_defaults_empty() -> None:
-    settings = saml_multi.build_saml_settings(_IDP)
+    settings = saml_multi.build_saml_settings(_config())
     assert settings["sp"]["x509cert"] == ""
     assert settings["sp"]["privateKey"] == ""
 
@@ -103,7 +108,7 @@ def test_resolve_by_name_returns_config(monkeypatch: pytest.MonkeyPatch) -> None
     )
     resolved, config = saml_multi._resolve_saml_provider(_DB, "saml")
     assert resolved is provider
-    assert config == dict(_IDP)
+    assert config == _config()
 
 
 def test_resolve_by_issuer_matches(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -113,7 +118,7 @@ def test_resolve_by_issuer_matches(monkeypatch: pytest.MonkeyPatch) -> None:
         _DB, _IDP["idp_entity_id"]
     )
     assert resolved is provider
-    assert config == dict(_IDP)
+    assert config == _config()
 
 
 def test_resolve_by_issuer_no_match_raises(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -180,22 +185,22 @@ def _fake_auth(attrs: dict[str, list[str]]) -> OneLogin_Saml2_Auth:
 def test_extract_email_configured_attribute() -> None:
     auth = _fake_auth({"urn:custom:mail": ["a@b.com"]})
     assert (
-        saml_multi._extract_user_email(auth, {"email_attribute": "urn:custom:mail"})
+        saml_multi._extract_user_email(auth, _config(email_attribute="urn:custom:mail"))
         == "a@b.com"
     )
 
 
 def test_extract_email_common_key() -> None:
     auth = _fake_auth({"email": ["a@b.com"]})
-    assert saml_multi._extract_user_email(auth, {}) == "a@b.com"
+    assert saml_multi._extract_user_email(auth, _config()) == "a@b.com"
 
 
 def test_extract_email_case_insensitive_fallback() -> None:
     auth = _fake_auth({"EMAIL": ["a@b.com"]})
-    assert saml_multi._extract_user_email(auth, {}) == "a@b.com"
+    assert saml_multi._extract_user_email(auth, _config()) == "a@b.com"
 
 
 def test_extract_email_missing_raises() -> None:
     auth = _fake_auth({"displayName": ["Alice"]})
     with pytest.raises(OnyxError):
-        saml_multi._extract_user_email(auth, {})
+        saml_multi._extract_user_email(auth, _config())

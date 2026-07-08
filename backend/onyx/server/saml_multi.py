@@ -10,6 +10,7 @@ from fastapi import Response
 from fastapi_users.authentication import Strategy
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.xml_utils import OneLogin_Saml2_XML
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import auth_backend
@@ -24,6 +25,7 @@ from onyx.db.models import SSOProvider
 from onyx.db.models import User
 from onyx.db.sso_provider import fetch_sso_provider_by_name
 from onyx.db.sso_provider import fetch_sso_providers
+from onyx.db.sso_provider import SAMLProviderConfig
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.saml import _sanitize_relay_state
@@ -38,46 +40,46 @@ logger = setup_logger()
 router = APIRouter(prefix="/auth/saml")
 
 
-def build_saml_settings(config: dict[str, Any]) -> dict[str, Any]:
+def build_saml_settings(config: SAMLProviderConfig) -> dict[str, Any]:
+    """The OneLogin settings dict (its own schema, consumed as old_settings),
+    built from a typed provider config. The ACS is fixed so every provider
+    shares the one issuer-resolved callback."""
     return {
         "strict": True,
         "debug": False,
         "sp": {
-            "entityId": config["sp_entity_id"],
+            "entityId": config.sp_entity_id,
             "assertionConsumerService": {
                 "url": f"{WEB_DOMAIN}/auth/saml/callback",
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
             },
-            "x509cert": config.get("sp_x509_cert") or "",
-            "privateKey": config.get("sp_private_key") or "",
+            "x509cert": config.sp_x509_cert or "",
+            "privateKey": config.sp_private_key or "",
         },
         "idp": {
-            "entityId": config["idp_entity_id"],
+            "entityId": config.idp_entity_id,
             "singleSignOnService": {
-                "url": config["idp_sso_url"],
+                "url": config.idp_sso_url,
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
             },
-            "x509cert": config["idp_x509_cert"],
+            "x509cert": config.idp_x509_cert,
         },
     }
 
 
-def _has_required_saml_settings(config: dict[str, Any]) -> bool:
-    required_fields = (
-        "idp_entity_id",
-        "idp_sso_url",
-        "idp_x509_cert",
-        "sp_entity_id",
-    )
-    return all(
-        isinstance(config.get(field), str) and config.get(field)
-        for field in required_fields
-    )
+def _parse_saml_config(raw: dict[str, Any]) -> SAMLProviderConfig | None:
+    """Parse a stored config into the typed SAML model, or None when it is
+    incomplete or malformed, so resolution fails closed instead of raising
+    deeper in."""
+    try:
+        return SAMLProviderConfig.model_validate(raw)
+    except ValidationError:
+        return None
 
 
 def _resolve_saml_provider(
     db_session: Session, provider_name: str
-) -> tuple[SSOProvider, dict[str, Any]]:
+) -> tuple[SSOProvider, SAMLProviderConfig]:
     provider = fetch_sso_provider_by_name(
         db_session=db_session,
         name=provider_name,
@@ -90,8 +92,8 @@ def _resolve_saml_provider(
     if provider.config is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown SAML provider")
 
-    config = provider.config.get_value(apply_mask=False)
-    if not _has_required_saml_settings(config):
+    config = _parse_saml_config(provider.config.get_value(apply_mask=False))
+    if config is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown SAML provider")
 
     return provider, config
@@ -99,7 +101,7 @@ def _resolve_saml_provider(
 
 def _resolve_saml_provider_by_issuer(
     db_session: Session, issuer: str
-) -> tuple[SSOProvider, dict[str, Any]]:
+) -> tuple[SSOProvider, SAMLProviderConfig]:
     for provider in fetch_sso_providers(db_session=db_session, enabled_only=True):
         if (
             provider.provider_type is not SSOProviderType.SAML
@@ -107,10 +109,10 @@ def _resolve_saml_provider_by_issuer(
         ):
             continue
 
-        config = provider.config.get_value(apply_mask=False)
-        if not _has_required_saml_settings(config):
+        config = _parse_saml_config(provider.config.get_value(apply_mask=False))
+        if config is None:
             continue
-        if config.get("idp_entity_id") == issuer:
+        if config.idp_entity_id == issuer:
             return provider, config
 
     raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "unrecognized SAML issuer")
@@ -167,9 +169,9 @@ def _first_attribute_value(values: object) -> str | None:
     return first_value
 
 
-def _extract_user_email(auth: OneLogin_Saml2_Auth, config: dict[str, Any]) -> str:
-    configured_email_attribute = config.get("email_attribute")
-    if isinstance(configured_email_attribute, str) and configured_email_attribute:
+def _extract_user_email(auth: OneLogin_Saml2_Auth, config: SAMLProviderConfig) -> str:
+    configured_email_attribute = config.email_attribute
+    if configured_email_attribute:
         configured_email = _first_attribute_value(
             auth.get_attribute(configured_email_attribute)
         )
@@ -182,7 +184,7 @@ def _extract_user_email(auth: OneLogin_Saml2_Auth, config: dict[str, Any]) -> st
             return attribute_email
 
     fallback_keys_lower = set(EMAIL_ATTRIBUTE_KEYS_LOWER)
-    if isinstance(configured_email_attribute, str) and configured_email_attribute:
+    if configured_email_attribute:
         fallback_keys_lower.add(configured_email_attribute.lower())
 
     attributes = auth.get_attributes()
