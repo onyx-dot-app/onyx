@@ -79,7 +79,6 @@ export default function AccessCell({
             <LineItem
               icon={enabled ? SvgCheck : SvgCheckCircle}
               selected={enabled}
-              emphasized={enabled}
               onClick={() => handleSelect(true, "Craft enabled for user")}
             >
               Enabled
@@ -87,7 +86,6 @@ export default function AccessCell({
             <LineItem
               icon={!enabled ? SvgCheck : SvgXCircle}
               selected={!enabled}
-              emphasized={!enabled}
               onClick={() => handleSelect(false, "Craft disabled for user")}
             >
               Disabled
