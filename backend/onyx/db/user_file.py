@@ -179,9 +179,11 @@ def get_user_file_ids_for_user_batch(
     up_to_id: str | None,
 ) -> list[str]:
     """One ascending cursor page of a user's COMPLETED file ids for the port copy.
-    Bounded above by `up_to_id` (the attempt's snapshot max) so the run covers the
-    backlog as of creation and never chases files added mid-run — those are the
-    dual-write's job."""
+    `up_to_id` (the snapshot max id at attempt creation) bounds the scan so the attempt
+    terminates and covers every file COMPLETED as of creation (all have id <= max). Ids
+    are random UUIDs, not creation-ordered, so a file that completes later with id <=
+    up_to may also be picked up — harmless (create-only write); guaranteeing mid-run
+    files reach FUTURE is the dual-write's job, not this bound."""
     stmt = select(UserFile.id).where(
         UserFile.user_id == user_id,
         UserFile.status == UserFileStatus.COMPLETED,
