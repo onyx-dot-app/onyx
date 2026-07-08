@@ -61,6 +61,8 @@ onyx-cli search "What is our deployment process?"
 
 Returns ranked, cited documents from the Onyx knowledge base as JSON. Default output is a lean shape: `{"results": [{title, url, source_type, content, updated_at}, ...]}`. Results contain only documents the LLM judged relevant, ordered by relevance; `content` is the full chunk text of each. Use `--raw` for the full API response (adds per-result `citation_id`).
 
+Stdout is always valid JSON. If the response exceeds `--max-output` bytes (default 50000 for non-TTY), lowest-ranked results are dropped and a `truncation` object is added: `{truncated, total_results, shown_results, total_bytes, content_truncated, full_response_path, hint}`. The complete response is saved to `full_response_path`; read that file for the dropped results.
+
 ```bash
 # Filter by source
 onyx-cli search --source slack,google_drive "auth migration status"
@@ -136,7 +138,7 @@ Checks config exists, PAT is present, server is reachable, and credentials are v
 - **stdout**: Results only (answer text, agent list, status)
 - **stderr**: Progress indicators, warnings, errors
 - **Non-TTY**: No ANSI escape codes, no interactive prompts
-- **Truncation**: When stdout is not a TTY, `search` and `ask` output is truncated to 50000 bytes. Full response is saved to a temp file whose path is printed. Read the temp file for more.
+- **Truncation**: When stdout is not a TTY, `search` and `ask` output is limited to 50000 bytes and the full response is saved to a temp file. `search` stays valid JSON — whole results are dropped and a `truncation` object carries the temp file path. `ask` (plain text) is cut at the byte limit with the temp file path printed at the end.
 
 ## Exit Codes
 
