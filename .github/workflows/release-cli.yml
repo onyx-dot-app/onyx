@@ -229,10 +229,15 @@ jobs:
       - pypi
     runs-on: ubuntu-latest
     permissions:
+      contents: read # needed to checkout the repo for SARIF source locations
       actions: read # needed to download the wheel artifact from the release job
       security-events: write # needed for SARIF uploads
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # ratchet:actions/download-artifact@v4
         with:
           name: onyx-cli-wheels
@@ -276,9 +281,10 @@ jobs:
               exit 1
             fi
 
-            if ! govulncheck -mode=binary -format=sarif "$binary" > "$sarif_file"; then
+            if ! govulncheck -mode=binary "$binary"; then
               scan_exit=1
             fi
+            govulncheck -mode=binary -format=sarif "$binary" > "$sarif_file"
           done
 
           python3 <<'PY'
@@ -292,12 +298,31 @@ jobs:
               "runs": [],
           }
 
-          for sarif_path in sorted(raw_results_dir.glob("*.sarif")):
+          sarif_paths = sorted(raw_results_dir.glob("*.sarif"))
+          if not sarif_paths:
+              raise SystemExit("No govulncheck SARIF files were generated")
+
+          for sarif_path in sarif_paths:
               data = json.loads(sarif_path.read_text())
               for run in data.get("runs", []):
                   run["automationDetails"] = {
                       "id": f"onyx-cli-govulncheck/{sarif_path.stem}",
                   }
+                  results = []
+                  for result in run.get("results", []):
+                      if result.get("level") != "error":
+                          continue
+                      if not result.get("locations"):
+                          result["locations"] = [
+                              {
+                                  "physicalLocation": {
+                                      "artifactLocation": {"uri": "cli/go.mod"},
+                                      "region": {"startLine": 1},
+                                  }
+                              }
+                          ]
+                      results.append(result)
+                  run["results"] = results
                   merged["runs"].append(run)
 
           if not merged["runs"]:
