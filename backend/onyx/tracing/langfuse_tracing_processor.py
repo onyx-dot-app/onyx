@@ -85,25 +85,36 @@ class LangfuseTracingProcessor(TracingProcessor):
             return data
 
     def _calculate_cost(self, data: GenerationSpanData) -> Optional[float]:
-        """Calculate LLM cost for this generation span."""
+        """Calculate LLM cost for this generation span (USD for Langfuse)."""
         try:
-            from onyx.llm.cost import calculate_llm_cost_cents
+            from onyx.llm.cost import compute_cost_cents
 
             usage = data.usage or {}
-            prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
-            completion_tokens = (
-                usage.get("completion_tokens") or usage.get("output_tokens") or 0
+            input_tokens = int(
+                usage.get("input_tokens") or usage.get("prompt_tokens") or 0
             )
+            output_tokens = int(
+                usage.get("output_tokens") or usage.get("completion_tokens") or 0
+            )
+            cache_read = int(usage.get("cache_read_input_tokens") or 0)
+            if not data.model or (not input_tokens and not output_tokens):
+                return None
 
-            if data.model and prompt_tokens and completion_tokens:
-                cost_cents = calculate_llm_cost_cents(
-                    model_name=data.model,
-                    prompt_tokens=int(prompt_tokens),
-                    completion_tokens=int(completion_tokens),
-                )
-                if cost_cents > 0:
-                    # Convert cents to dollars for Langfuse
-                    return cost_cents / 100.0
+            model_config = data.model_config or {}
+            provider = model_config.get("model_provider")
+            flow = model_config.get("flow")
+            non_cached_input = max(input_tokens - cache_read, 0)
+            input_cents, output_cents = compute_cost_cents(
+                data.model,
+                provider,
+                non_cached_input,
+                output_tokens,
+                cache_read_tokens=cache_read,
+                flow=flow,
+            )
+            cost_cents = input_cents + output_cents
+            if cost_cents > 0:
+                return cost_cents / 100.0
         except Exception as e:
             logger.debug("Failed to calculate cost: %s", e)
         return None

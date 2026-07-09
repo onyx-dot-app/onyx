@@ -18,7 +18,6 @@ from onyx.configs.chat_configs import (
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE, LITELLM_EXTRA_BODY
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.cost import calculate_llm_cost_cents
 from onyx.llm.interfaces import (
     LLM,
     LanguageModelInput,
@@ -34,6 +33,7 @@ from onyx.llm.models import (
     ANTHROPIC_REASONING_EFFORT_BUDGET,
     OPENAI_REASONING_EFFORT,
 )
+from onyx.llm.cost import compute_cost_cents
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.well_known_providers.constants import (
@@ -481,18 +481,24 @@ class LitellmLLM(LLM):
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
         from onyx.db.usage import UsageType, increment_usage
 
-        # Calculate cost in cents
-        cost_cents = calculate_llm_cost_cents(
-            model_name=self._model_version,
-            prompt_tokens=usage.prompt_tokens,
-            completion_tokens=usage.completion_tokens,
-        )
-
-        if cost_cents <= 0:
-            return
+        cache_read = usage.cache_read_input_tokens
+        # prompt_tokens is cache-inclusive; price non-cached + cache separately.
+        non_cached_input = max(usage.prompt_tokens - cache_read, 0)
+        provider = self._custom_llm_provider or self._model_provider
 
         try:
             with get_session_with_current_tenant() as db_session:
+                input_cents, output_cents = compute_cost_cents(
+                    self._model_version,
+                    provider,
+                    non_cached_input,
+                    usage.completion_tokens,
+                    cache_read_tokens=cache_read,
+                    db_session=db_session,
+                )
+                cost_cents = input_cents + output_cents
+                if cost_cents <= 0:
+                    return
                 increment_usage(db_session, UsageType.LLM_COST, cost_cents)
                 db_session.commit()
         except Exception as e:

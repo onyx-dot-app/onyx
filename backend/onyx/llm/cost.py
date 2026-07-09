@@ -14,34 +14,6 @@ logger = setup_logger()
 _IMAGE_FLOWS = {LLMFlow.IMAGE_GENERATION, LLMFlow.IMAGE_EDIT}
 
 
-def calculate_llm_cost_cents(
-    model_name: str,
-    prompt_tokens: int,
-    completion_tokens: int,
-) -> float:
-    """Litellm-based cents; 0 on unknown model or error."""
-    try:
-        import litellm
-
-        prompt_cost_usd, completion_cost_usd = litellm.cost_per_token(
-            model=model_name,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-        )
-
-        total_cost_cents = (prompt_cost_usd + completion_cost_usd) * 100
-        return total_cost_cents
-
-    except Exception as e:
-        # Log but don't fail - unknown models or errors shouldn't block usage
-        logger.debug(
-            "Could not calculate cost for model %s: %s. Assuming cost is 0.",
-            model_name,
-            e,
-        )
-        return 0.0
-
-
 def get_model_price_per_million(
     model: str,
     provider: str | None,
