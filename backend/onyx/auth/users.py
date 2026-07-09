@@ -2306,10 +2306,7 @@ def decode_and_validate_oauth_state(
         expected_provider_name is not None
         and state_data.get("provider_name") != expected_provider_name
     ):
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "SSO state does not match the callback provider",
-        )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, ErrorCode.OAUTH_INVALID_STATE)
 
     return state_data
 

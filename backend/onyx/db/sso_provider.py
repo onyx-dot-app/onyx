@@ -61,7 +61,7 @@ class SAMLProviderConfig(_ProviderConfig):
 
 
 # provider_type selects the config shape. A new auth method adds a model here.
-CONFIG_MODEL_BY_TYPE: dict[SSOProviderType, type[_ProviderConfig]] = {
+_CONFIG_MODEL_BY_TYPE: dict[SSOProviderType, type[_ProviderConfig]] = {
     SSOProviderType.GOOGLE_OAUTH: GoogleProviderConfig,
     SSOProviderType.OIDC: OIDCProviderConfig,
     SSOProviderType.SAML: SAMLProviderConfig,
@@ -75,7 +75,7 @@ def validate_sso_config(
     dict for storage. Raises ValueError on a missing or unknown field so callers
     see one exception type regardless of the provider."""
     try:
-        return CONFIG_MODEL_BY_TYPE[provider_type].model_validate(config).model_dump()
+        return _CONFIG_MODEL_BY_TYPE[provider_type].model_validate(config).model_dump()
     except ValidationError as e:
         raise ValueError(f"invalid {provider_type.value} provider config: {e}") from e
 

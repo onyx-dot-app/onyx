@@ -22,7 +22,6 @@ from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
 from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import GetAccessTokenError
-from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.oidc_client import VerifiedEmailOpenID
@@ -47,15 +46,13 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.db.models import User
-from onyx.db.sso_provider import CONFIG_MODEL_BY_TYPE
 from onyx.db.sso_provider import fetch_sso_provider_by_name
+from onyx.db.sso_provider import validate_sso_config
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.utils.logger import setup_logger
 from onyx.utils.url import sanitize_next_url
 from shared_configs.contextvars import get_current_tenant_id
 
-logger = setup_logger()
 router = APIRouter(prefix="/auth/oidc")
 
 _CLIENT_CACHE_TTL_SECONDS = 600
@@ -89,12 +86,8 @@ def _resolve_oidc_provider(
 
     raw_config = provider.config.get_value(apply_mask=False)
     try:
-        config = (
-            CONFIG_MODEL_BY_TYPE[provider.provider_type]
-            .model_validate(raw_config)
-            .model_dump()
-        )
-    except ValidationError as e:
+        config = validate_sso_config(provider.provider_type, raw_config)
+    except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown OIDC provider") from e
     return provider, config
 
@@ -135,7 +128,7 @@ async def _get_oauth_client(
 ) -> BaseOAuth2[Any]:
     # Building an OIDC client fetches the IdP discovery doc over the network, so
     # cache per provider+config (Google clients share the cache, no fetch). The
-    # TTL bounds how long a rotated upstream config stays stale before a re-key.
+    # TTL bounds how long stale IdP discovery data lives before a rebuild.
     cache_key = _get_cache_key(provider, config)
     cached_client = _CLIENT_CACHE.get(cache_key)
     if cached_client is not None:

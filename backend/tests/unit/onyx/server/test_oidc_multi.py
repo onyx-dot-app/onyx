@@ -1,5 +1,5 @@
 """Unit coverage for the DB-backed OIDC/Google router: fail-closed provider
-resolution, the per-provider client cache (keying, TTL, config-rotation bust),
+resolution, the per-provider client cache (keying, config-rotation bust),
 per-provider client construction, and OAuth state/CSRF validation. No DB, no
 network, no live IdP."""
 
