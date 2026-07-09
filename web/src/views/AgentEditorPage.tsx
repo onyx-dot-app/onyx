@@ -552,6 +552,9 @@ export default function AgentEditorPage({
 
   const agentDraftStorageKey = draftKey("agent-editor", "new");
   const clearAgentDraftRef = useRef<(() => void) | null>(null);
+  // Tracks the latest user_file_ids so async upload callbacks reconcile against
+  // current form state rather than a stale snapshot from when the upload began.
+  const userFileIdsRef = useRef<string[]>([]);
 
   // Labels are edited in the Share Agent section and saved with the form
   const { labels: allLabels, createLabel } = useLabels();
@@ -1082,7 +1085,15 @@ export default function AgentEditorPage({
     const files = e.target.files;
     if (!files || files.length === 0) return;
     try {
-      let selectedIds = [...(currentFileIds || [])];
+      // Seed lazily from the latest form state on the first async callback so
+      // selections the user changed while the upload was in flight are kept.
+      // onFailure and onSuccess share this variable and both run in the same
+      // resolution, so their edits stay consistent with each other.
+      let workingIds: string[] | null = null;
+      const seed = () => {
+        if (workingIds === null) workingIds = [...userFileIdsRef.current];
+        return workingIds;
+      };
       const optimistic = await beginUpload(
         Array.from(files),
         null,
@@ -1094,17 +1105,23 @@ export default function AgentEditorPage({
               .filter((f) => f.temp_id)
               .map((f) => [f.temp_id as string, f.id])
           );
-          const replaced = (selectedIds || []).map(
-            (id: string) => tempToFinal.get(id) ?? id
-          );
-          selectedIds = replaced;
-          setFieldValue("user_file_ids", replaced);
+          workingIds = seed().map((id) => tempToFinal.get(id) ?? id);
+          setFieldValue("user_file_ids", workingIds);
+        },
+        (failedTempIds) => {
+          // Drop optimistic ids for rejected files (e.g. size/token limit) so
+          // they don't linger as "uploading" and keep the submit button disabled.
+          const failed = new Set(failedTempIds);
+          workingIds = seed().filter((id) => !failed.has(id));
+          setFieldValue("user_file_ids", workingIds);
         }
       );
       if (optimistic) {
         const optimisticIds = optimistic.map((f) => f.id);
-        selectedIds = [...selectedIds, ...optimisticIds];
-        setFieldValue("user_file_ids", selectedIds);
+        setFieldValue("user_file_ids", [
+          ...(currentFileIds || []),
+          ...optimisticIds,
+        ]);
       }
     } catch (error) {
       console.error("Upload error:", error);
@@ -1144,6 +1161,9 @@ export default function AgentEditorPage({
           initialStatus={{ warnings: {} }}
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
+            // Keep the ref in sync so async upload callbacks read current ids.
+            userFileIdsRef.current = values.user_file_ids;
+
             const fileStatusMap = new Map(
               allRecentFiles.map((f) => [f.id, f.status])
             );
