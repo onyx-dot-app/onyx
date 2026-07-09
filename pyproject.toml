@@ -9,7 +9,7 @@ requires-python = ">=3.13"
 # Shared dependencies between backend and model_server
 dependencies = [
     "aioboto3==15.1.0",
-    "cohere==5.6.1",
+    "cohere==7.0.5",
     "fastapi==0.133.1",
     "google-genai==1.52.0",
     "litellm[google]==1.89.4",
