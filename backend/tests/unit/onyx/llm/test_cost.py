@@ -45,7 +45,7 @@ def db_session() -> Generator[Session, None, None]:
 
 @pytest.fixture(autouse=True)
 def _clear_override_cache() -> Generator[None, None, None]:
-    # Wipe every tenant's snapshot (invalidate_override_cache is tenant-scoped).
+    # Clear process-global override cache.
     cost_overrides._cache.clear()
     yield
     cost_overrides._cache.clear()
@@ -75,7 +75,6 @@ class TestComputeCostCents:
     def test_unknown_model_uses_configurable_fallback_rates(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # With a fallback configured, an unpriced model accrues cost instead of $0.
         monkeypatch.setattr(cost_mod, "DEFAULT_LLM_INPUT_COST_PER_MTOK", 2.0)
         monkeypatch.setattr(cost_mod, "DEFAULT_LLM_OUTPUT_COST_PER_MTOK", 6.0)
         in_cents, out_cents = compute_cost_cents(
@@ -208,8 +207,7 @@ class TestOverride:
         assert in_cents == pytest.approx(110.0)
 
     def test_override_cache_is_tenant_scoped(self) -> None:
-        # Each tenant has its own schema/session. Tenant A's negotiated rate
-        # must not leak into tenant B's cost computation.
+        # Override cache is tenant-scoped.
         def _session() -> Session:
             engine = create_engine("sqlite://")
             cast(Table, ModelCostOverride.__table__).create(bind=engine)
@@ -236,8 +234,6 @@ class TestOverride:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         assert (a_in, a_out) == pytest.approx((100.0, 200.0))
 
-        # Tenant B has no override row → falls through to litellm gpt-4o pricing,
-        # NOT tenant A's cached negotiated rate.
         token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_b")
         try:
             b_in, b_out = compute_cost_cents(

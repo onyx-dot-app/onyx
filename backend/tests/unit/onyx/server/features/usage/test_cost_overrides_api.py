@@ -1,6 +1,4 @@
-"""Admin cost-override CRUD: upsert is idempotent, GET reflects writes, DELETE
-removes (404 on missing), non-admins are rejected, and every write busts the
-per-tenant override cache."""
+"""Admin cost-override CRUD, auth, and cache invalidation."""
 
 from collections.abc import Generator
 from typing import cast
@@ -41,9 +39,7 @@ _NON_ADMIN = _StubUser([])
 
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
-    # StaticPool shares one in-memory connection so the table survives the
-    # endpoint's commit() (which otherwise returns the connection to the pool
-    # and the next checkout would hit a fresh, empty :memory: database).
+    # StaticPool: one in-memory DB survives endpoint commit().
     engine: Engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
@@ -180,8 +176,6 @@ def test_db_helpers_upsert_list_delete(
 
 
 def test_negative_rate_rejected_by_api(db_session: Session) -> None:
-    # A negative rate would credit usage and corrupt budgets; the request model
-    # enforces ge=0, so the endpoint rejects it before any write.
     client = TestClient(_make_app(db_session, _ADMIN))
     res = client.put(
         "/admin/cost-overrides",

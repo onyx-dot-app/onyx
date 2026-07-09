@@ -56,20 +56,8 @@ def make_short_id() -> str:
 def set_current_user_id_dependency(
     user_dependency: Callable[..., Any],
 ) -> Callable[..., AsyncGenerator[None, None]]:
-    """Build a dependency that pins CURRENT_USER_ID_CONTEXTVAR to the request's user.
-
-    Must be set in the event-loop context (not inside the StreamingResponse
-    generator): Starlette drives a sync streaming generator via
-    ``iterate_in_threadpool``, where anyio does a fresh ``copy_context()`` per
-    ``next()`` — a ``.set()`` inside the generator survives only the first chunk,
-    and the matching ``.reset()`` raises (different context). Setting in the
-    async dependency's event-loop context propagates into every per-step copy
-    and resets cleanly, covering all branches of the endpoint (incl. multi-model
-    and non-streaming).
-
-    ``user_dependency`` is the endpoint's own user-providing auth dependency, so
-    the var is set only after auth succeeds.
-    """
+    """Pin CURRENT_USER_ID_CONTEXTVAR in the async dependency so it survives
+    StreamingResponse threadpool context copies; reset on exit."""
 
     async def _dep(
         user: User = Depends(user_dependency),

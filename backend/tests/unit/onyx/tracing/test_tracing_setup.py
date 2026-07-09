@@ -1,4 +1,4 @@
-"""Unit tests for tracing setup functions."""
+"""setup_tracing: dynamic processor, user_usage registration, idempotency."""
 
 from unittest.mock import patch
 
@@ -60,7 +60,6 @@ def test_setup_tracing_is_idempotent() -> None:
         patch(BUILD, return_value=[]),
     ):
         tracing_setup.setup_tracing()
-        # Second call should be a no-op (already initialized).
         result2 = tracing_setup.setup_tracing()
         assert result2 == []
         mock_set.assert_called_once()

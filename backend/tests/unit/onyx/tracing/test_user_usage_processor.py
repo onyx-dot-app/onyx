@@ -1,4 +1,4 @@
-"""Unit tests for the per-user usage recording processor (in-memory SQLite)."""
+"""Per-user usage recorder: capture, pricing args, drain, shutdown."""
 
 from __future__ import annotations
 
@@ -28,8 +28,7 @@ from onyx.tracing.processors.user_usage_processor import UserUsageTracingProcess
 from shared_configs.contextvars import CURRENT_USER_ID_CONTEXTVAR
 
 
-# Map the postgres-only column types onto SQLite equivalents so the real
-# UserUsage table from models.py can be created against an in-memory DB.
+# SQLite type shims for UserUsage.
 @compiles(PGUUID, "sqlite")
 def _compile_pguuid_sqlite(_element: object, _compiler: object, **_kw: object) -> str:
     return "CHAR(36)"
@@ -70,9 +69,7 @@ def _generation_span(
 
 @pytest.fixture
 def sqlite_engine() -> Engine:
-    # StaticPool + single connection so the table is visible across the drain
-    # thread's separately-opened sessions (a plain sqlite:// gives each
-    # connection its own empty in-memory DB).
+    # StaticPool so drain-thread sessions see the same in-memory DB.
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -87,12 +84,7 @@ def sqlite_engine() -> Engine:
 def processor(
     monkeypatch: pytest.MonkeyPatch, sqlite_engine: Engine
 ) -> Generator[UserUsageTracingProcessor, None, None]:
-    """A processor whose flush thread writes to the in-memory SQLite engine.
-
-    `get_session_with_tenant` is monkeypatched to bind sessions to the test
-    engine; compute_cost_cents is pinned to a known value so the recorded cost
-    is deterministic without touching litellm.
-    """
+    """Processor wired to test SQLite; compute_cost_cents pinned."""
     SessionLocal = sessionmaker(bind=sqlite_engine)
 
     from contextlib import contextmanager
@@ -234,10 +226,7 @@ def test_on_span_end_never_raises_on_internal_error(
 def test_excludes_cache_reads_from_priced_input(
     monkeypatch: pytest.MonkeyPatch, sqlite_engine: Engine
 ) -> None:
-    # The span's input_tokens is the litellm prompt total (cache-inclusive). The
-    # processor must price only the non-cached remainder as input and pass cache
-    # reads separately, so compute_cost_cents can't double-charge them. Asserting
-    # the args passed to compute_cost_cents keeps this independent of live pricing.
+    # Assert compute_cost_cents gets non-cached input + separate cache_reads.
     SessionLocal = sessionmaker(bind=sqlite_engine)
 
     from contextlib import contextmanager
@@ -287,13 +276,10 @@ def test_excludes_cache_reads_from_priced_input(
     finally:
         p.shutdown()
 
-    # Priced the non-cached remainder (3000 - 2000) as input; cache reads passed
-    # separately rather than folded into the input total.
     assert priced == [(1000, 500, 2000)]
 
     rows = _read_rows(sqlite_engine)
     assert len(rows) == 1
-    # Ledger keeps the full (cache-inclusive) input token count.
     assert rows[0].input_tokens == 3000
     assert rows[0].cache_read_tokens == 2000
 

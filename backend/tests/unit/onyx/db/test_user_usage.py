@@ -26,8 +26,7 @@ from onyx.db.user_usage import get_window_start
 from onyx.db.user_usage import record_user_usage
 
 
-# Map the postgres-only column types onto SQLite equivalents so the real
-# UserUsage table from models.py can be created against an in-memory DB.
+# SQLite type shims for UserUsage.
 @compiles(PGUUID, "sqlite")
 def _compile_pguuid_sqlite(_element: object, _compiler: object, **_kw: object) -> str:
     return "CHAR(36)"
@@ -155,8 +154,6 @@ class TestRecordUserUsage:
         assert len(rows) == 1
         assert rows[0].input_tokens == 40
         assert rows[0].cost_cents == pytest.approx(0.4)
-        # A missing provider is stored as "" (not NULL) so the dedup unique index
-        # collapses these rows on every Postgres version.
         assert rows[0].provider == ""
 
 
@@ -301,9 +298,7 @@ class TestCostInWindow:
 
 
 class TestUserCostSince:
-    """Range-scan read used by enforcement: sums ledger rows with
-    window_start >= cutoff. The cutoff is grid-relaxed by the caller
-    (_worst_triggered_cost_limit), so this helper is a plain range scan."""
+    """Range-scan cost read: sums window_start >= cutoff."""
 
     def test_includes_rows_at_or_after_cutoff(self, db_session: Session) -> None:
         user_id = str(uuid4())

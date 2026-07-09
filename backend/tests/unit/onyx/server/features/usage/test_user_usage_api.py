@@ -1,8 +1,4 @@
-"""Self-service /user/usage: returns only the caller's rows, aggregates per
-day x model, sums the current-window cost, leaves budget fields null, and
-prices the tenant default chat model (override-aware, nulls for unknown).
-
-Also unit-tests get_model_price_per_million directly."""
+"""Self-service /user/usage: isolation, aggregation, budget, model price."""
 
 import datetime
 from collections.abc import Generator
@@ -93,8 +89,6 @@ class _StubModelConfig:
 
 
 def _seed_current_window(db_session: Session, user_id: str) -> datetime.datetime:
-    """Record one row in the live window so window_cost_cents is non-zero, and
-    return that window_start."""
     from onyx.db.user_usage import get_window_start
 
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -177,8 +171,6 @@ def test_selected_model_price_unknown_model_nulls(
     )
 
     client = TestClient(_make_app(db_session, _StubUser(caller)))
-    # An unpriced model surfaces no price block (None), so the UI shows
-    # "price unavailable" rather than a $null that would crash .toFixed().
     price = client.get("/user/usage").json()["selected_model_price"]
     assert price is None
 
@@ -201,7 +193,7 @@ class TestGetModelPricePerMillion:
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
-        # Cache is a process-global keyed by tenant; drop any leak from a sibling test.
+        # Clear tenant override cache between tests.
         cost_overrides.invalidate_override_cache()
         in_price, out_price = get_model_price_per_million(
             "gpt-4o", "openai", db_session
@@ -230,7 +222,6 @@ class TestGetModelPricePerMillion:
 def test_budget_reflects_user_cost_limit(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A per-user cost limit surfaces as budget + remaining in /user/usage.
     from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())
@@ -259,8 +250,6 @@ def test_budget_reflects_user_cost_limit(
 def test_budget_reflects_group_cost_limit(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A group cost limit the user belongs to surfaces in /user/usage, mirroring
-    # how the gate enforces group cost budgets.
     from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())

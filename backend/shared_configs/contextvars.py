@@ -29,14 +29,10 @@ CURRENT_ENDPOINT_CONTEXTVAR: contextvars.ContextVar[str | None] = (
     contextvars.ContextVar("current_endpoint", default=None)
 )
 
-# Set per-request (after auth) so the usage recorder can attribute usage to the
-# requesting user. Unset (None) in background-worker contexts.
+# Per-request user id for usage attribution; None in workers.
 CURRENT_USER_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "current_user_id", default=None
 )
-
-
-"""Utils related to contextvars"""
 
 
 def get_current_tenant_id() -> str:

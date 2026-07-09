@@ -1,8 +1,4 @@
-"""Admin /admin/usage/export: tenant-wide usage joined to email, grouped per
-(email x model x window-day) with a per-user totals roll-up, the model filter
-narrows results, the date range bounds half-open, and non-admins are rejected.
-
-Also unit-tests the get_usage_export DB helper directly."""
+"""Admin /admin/usage/export: grouping, filters, auth, and get_usage_export helper."""
 
 import datetime
 from collections.abc import Generator
@@ -44,9 +40,6 @@ def _compile_jsonb_sqlite(_element: object, _compiler: object, **_kw: object) ->
 
 
 class _StubUser:
-    """require_permission only reads effective_permissions; the JOIN target is
-    the separately-created `user` table, not this auth stub."""
-
     def __init__(self, permissions: list[str]) -> None:
         self.id = "00000000-0000-0000-0000-000000000001"
         self.effective_permissions = permissions
@@ -126,7 +119,6 @@ class TestGetUsageExportHelper:
             start=datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc),
             end=datetime.datetime(2026, 6, 15, tzinfo=datetime.timezone.utc),
         )
-        # email-then-day-then-model ordering.
         assert rows == [
             {
                 "email": "alice@example.com",

@@ -1466,10 +1466,7 @@ DEFAULT_IMAGE_COST_CENTS = max(
     0.0, float(os.environ.get("DEFAULT_IMAGE_COST_CENTS") or 4.0)
 )
 
-# Fallback per-million-token rates (USD) for models litellm can't price, so
-# unknown/BYO models still accrue cost instead of being silently free. Default 0
-# preserves prior behavior; operators set these to give unpriced models a rate.
-# Clamped to >= 0 so a negative can't produce negative usage cost.
+# Fallback USD/Mtok when litellm can't price (default 0 = free). Clamped >= 0.
 DEFAULT_LLM_INPUT_COST_PER_MTOK = max(
     0.0, float(os.environ.get("DEFAULT_LLM_INPUT_COST_PER_MTOK") or 0.0)
 )

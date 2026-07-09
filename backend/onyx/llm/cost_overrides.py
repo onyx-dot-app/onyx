@@ -53,23 +53,17 @@ def _lookup(
 def get_override(
     db_session: Session, model: str, provider: str = ""
 ) -> _OverrideRates | None:
-    """Return the (input, output, cache_read) rates for `model` (+ optional
-    `provider`) in the current tenant, or None if unset."""
     tenant_id = get_current_tenant_id()
     with _cache_lock:
         entry = _cache.get(tenant_id)
     if entry is not None and (time.monotonic() - entry[0]) < _CACHE_TTL_SECONDS:
         return _lookup(entry[1], model, provider)
 
-    # Reload outside the lock so a slow DB query doesn't serialize every other
-    # tenant's lookups. A concurrent double-load is harmless (idempotent).
+    # Reload outside lock — slow query must not block other tenants.
     try:
         snapshot = _load_cache(db_session)
     except Exception:
-        # Cost computation must never raise. On a transient load failure keep
-        # serving the last good snapshot (stale rates beat silently dropping
-        # negotiated rates); only with no prior snapshot do we treat as no
-        # overrides. The stale timestamp is left as-is so the next lookup retries.
+        # Load failure: serve last snapshot if any; else no overrides.
         logger.exception("Failed to load model cost overrides")
         return _lookup(entry[1], model, provider) if entry is not None else None
 
@@ -105,12 +99,8 @@ def upsert_override(
     cache_read_cost_per_mtok: float | None = None,
     provider: str = "",
 ) -> ModelCostOverride:
-    """Set the negotiated rates for (`provider`, `model`), creating or replacing
-    its row. `provider` is "" for a provider-agnostic override.
-
-    Rates are USD per million tokens; a null cache rate bills cache reads at the
-    input rate. Caller invalidates the cache and commits.
-    """
+    """Set negotiated USD/Mtok rates for (provider, model).
+    Caller commits + invalidates cache."""
     # Defense in depth behind the request model's ge=0: a negative rate would
     # credit usage and corrupt budget enforcement.
     for rate in (input_cost_per_mtok, output_cost_per_mtok, cache_read_cost_per_mtok):

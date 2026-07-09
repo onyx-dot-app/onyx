@@ -19,23 +19,16 @@ def calculate_llm_cost_cents(
     prompt_tokens: int,
     completion_tokens: int,
 ) -> float:
-    """
-    Calculate the cost in cents for an LLM API call.
-
-    Uses litellm's cost_per_token function to get current pricing.
-    Returns 0 if the model is not found or on any error.
-    """
+    """Litellm-based cents; 0 on unknown model or error."""
     try:
         import litellm
 
-        # cost_per_token returns (prompt_cost, completion_cost) in USD
         prompt_cost_usd, completion_cost_usd = litellm.cost_per_token(
             model=model_name,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
         )
 
-        # Convert to cents (multiply by 100)
         total_cost_cents = (prompt_cost_usd + completion_cost_usd) * 100
         return total_cost_cents
 
@@ -54,12 +47,7 @@ def get_model_price_per_million(
     provider: str | None,
     db_session: Session | None = None,
 ) -> tuple[float | None, float | None]:
-    """Return (input, output) USD price per 1M tokens for a model, override-aware.
-
-    Same resolution as compute_cost_cents: admin override wins, else litellm's
-    price map. Unknown/unpriced models yield (None, None) — never raises (drives
-    a read-only UI panel).
-    """
+    """Override-aware USD/Mtok for UI; (None, None) if unpriced; never raises."""
     if db_session is not None:
         try:
             rates = cost_overrides.get_override(db_session, model, provider or "")
@@ -67,7 +55,6 @@ def get_model_price_per_million(
             logger.exception("Override lookup failed for model %s", model)
             rates = None
         if rates is not None:
-            # rates is (input, output, cache); the price display is input/output.
             return rates[0], rates[1]
 
     try:
@@ -88,10 +75,7 @@ def get_model_price_per_million(
 
 
 def _image_cost_cents(model: str, provider: str | None) -> float:
-    """Per-image cost in cents from litellm, falling back to a flat constant.
-
-    provider disambiguates non-self-identifying model names so image pricing
-    resolves the same way token pricing + admin overrides do."""
+    """Per-image cents from litellm, else DEFAULT_IMAGE_COST_CENTS."""
     try:
         import litellm
 
@@ -141,11 +125,8 @@ def compute_cost_cents(
 ) -> tuple[float, float]:
     """Return (input_cost_cents, output_cost_cents) for an LLM call.
 
-    Resolution order: admin override (negotiated rates win) → image pricing for
-    image flows → litellm token pricing → the configurable default fallback
-    rates (0 unless set). Never raises (it runs in the usage hot path).
-    """
-    # Admin override beats everything, including image pricing.
+    Resolution order: admin override → image pricing → litellm → default
+    fallback rates (0 unless set). Never raises (usage hot path)."""
     if db_session is not None:
         try:
             rates = cost_overrides.get_override(db_session, model, provider or "")
@@ -158,8 +139,7 @@ def compute_cost_cents(
             )
 
     if flow in _IMAGE_FLOWS:
-        # Image generation isn't priced per token; attribute the whole cost
-        # to the output (generated-image) half.
+        # Per-image pricing — full cost on output side.
         return 0.0, _image_cost_cents(model, provider)
 
     try:
@@ -179,10 +159,8 @@ def compute_cost_cents(
         )
         return prompt_cost_usd * 100, completion_cost_usd * 100
     except Exception:
-        # litellm has no price for this model — fall back to the configurable
-        # default rates so unpriced/BYO models still accrue cost (0 by default).
-        # Log at debug so a transient litellm failure (vs a genuinely unpriced
-        # model) is diagnosable without spamming on every BYO model.
+        # Unpriced model: configurable default rates; debug log distinguishes
+        # transient litellm failure from a genuinely unpriced model.
         logger.debug(
             "litellm pricing failed for model %s (provider %s); using default rates",
             model,

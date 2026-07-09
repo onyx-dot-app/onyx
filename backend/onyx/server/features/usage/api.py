@@ -1,6 +1,4 @@
-"""Admin CRUD for per-model cost overrides — negotiated rates that win over
-litellm in compute_cost_cents. Writes invalidate the per-tenant override cache
-so subsequent cost computations don't bill stale rates."""
+"""Admin cost overrides + user/usage endpoints."""
 
 from collections import defaultdict
 from datetime import date
@@ -53,20 +51,15 @@ from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 # Default trailing range for the export when no start is given.
 _DEFAULT_EXPORT_DAYS = 30
 
-# Cost buckets at this grid; match the gate's cutoff relaxation so the budget the
-# user sees agrees with what enforcement (token_limit._worst_triggered_cost_limit) does.
+# Ledger grid; relax cutoff like cost gate so UI matches enforcement.
 _LEDGER_GRID = timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS)
 
 
 def _user_cost_budget(
     db_session: Session, user_id: str
 ) -> tuple[float | None, float | None, int | None]:
-    """The cost budget (cents), how much is left, and the budget's window (hours)
-    for this user — or (None, None, None) if no cost limit applies. Picks the most
-    binding limit (least remaining) across per-user, global, and group cost
-    limits, mirroring how the gate enforces them."""
+    """Effective cost budget (most binding across user/global/group limits)."""
     now = datetime.now(tz=timezone.utc)
-    # (remaining_cents, budget_cents, period_hours) per applicable cost limit.
     candidates: list[tuple[float, float, int]] = []
 
     def _add(budget: float | None, used: float, period_hours: int) -> None:
@@ -102,12 +95,8 @@ def _user_cost_budget(
 def _group_cost_budget_candidate(
     db_session: Session, user_id: str, now: datetime
 ) -> tuple[float, float, int] | None:
-    """The user's group-scope cost headroom as one (remaining, budget, period)
-    candidate, or None if groups impose no cost cap.
-
-    The gate blocks on groups only when EVERY group is over its cost budget, so
-    the binding group is the MOST PERMISSIVE one (the most remaining). A group
-    with no cost limit is cost-exempt, which exempts the whole group scope."""
+    """Group cost headroom. Gate requires all groups over budget → pick most
+    permissive; cost-exempt group exempts scope."""
     group_limits = fetch_user_group_token_rate_limits(db_session, UUID(user_id))
     if not group_limits:
         return None
@@ -131,7 +120,6 @@ def _group_cost_budget_candidate(
     most_permissive: tuple[float, float, int] | None = None
     for group_id, limits in group_limits.items():
         group_buckets = buckets.get(group_id, [])
-        # This group's binding cost limit = the one with the least remaining.
         group_binding: tuple[float, float, int] | None = None
         for rl in limits:
             if rl.cost_budget_cents is None:
@@ -162,11 +150,7 @@ def get_my_usage(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserUsageResponse:
-    """The calling user's own token/cost usage — backs the Usage tab.
-
-    Aggregates the current window by default; `days` widens the per-day table to
-    a trailing N-day range. Budget fields are null when the user has no cost limit.
-    """
+    """Caller's token/cost usage for the Usage tab."""
     now = datetime.now(timezone.utc)
     window_start = get_window_start(now, period_hours=USAGE_PERIOD_HOURS)
 
@@ -181,8 +165,7 @@ def get_my_usage(
     ]
     window_cost_cents = get_user_cost_cents_in_window(db_session, user_id, window_start)
 
-    # No per-user selected-model resolution exists yet; price the tenant default
-    # chat model. Override-aware via the shared cost helper.
+    # Price tenant default chat model (no per-user model selection yet).
     default_model = fetch_default_llm_model(db_session)
     selected_model_price: ModelPrice | None = None
     if default_model is not None:
@@ -190,8 +173,7 @@ def get_my_usage(
         input_per_mtok, output_per_mtok = get_model_price_per_million(
             default_model.name, provider, db_session
         )
-        # Only surface a price block when both sides are known; an unpriced model
-        # stays None so the UI shows "price unavailable" rather than $null.
+        # Omit price block unless both input/output rates known.
         if input_per_mtok is not None and output_per_mtok is not None:
             selected_model_price = ModelPrice(
                 model=default_model.name,
@@ -222,14 +204,7 @@ def export_usage(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> UsageExportResponse:
-    """Company-wide GenAI usage report, keyed by user email.
-
-    Aggregates every user's usage over the half-open range [start, end) into
-    per (email x model x window-day) records plus a per-user totals roll-up.
-    `start` defaults to 30 days ago, `end` to today. Day granularity follows the
-    configured usage window (weekly by default), so each record's day is the
-    window's start day — not the calendar day a call was made.
-    """
+    """Company-wide usage export by email; day = window start, not call calendar day."""
     end_date = end or datetime.now(timezone.utc).date()
     start_date = start or (end_date - timedelta(days=_DEFAULT_EXPORT_DAYS))
 

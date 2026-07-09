@@ -64,22 +64,13 @@ def _usage_field(usage: dict[str, Any], *names: str) -> int:
 
 
 class UserUsageTracingProcessor(TracingProcessor):
-    """Records every priced generation span into the per-user usage ledger.
-
-    on_span_end captures the sample synchronously (contextvars are only valid
-    there) and enqueues it; a daemon thread drains the queue to Postgres so the
-    streaming/LLM path is never blocked by a DB write. Cost is computed in the
-    drain thread under the captured tenant's session + tenant context."""
-
     def __init__(
         self, flush_interval_seconds: float = _DEFAULT_FLUSH_INTERVAL_SECONDS
     ) -> None:
         self._queue: queue.Queue[Any] = queue.Queue(maxsize=_MAX_QUEUE_SIZE)
         self._flush_interval = flush_interval_seconds
         self._shutdown = threading.Event()
-        # Serializes the shutdown flag against enqueues so a record can't slip in
-        # after the _SHUTDOWN sentinel — every record is enqueued before it or
-        # dropped, never lost to a drained-and-exited thread.
+        # Serializes shutdown vs enqueue so no record lands after the sentinel.
         self._enqueue_lock = threading.Lock()
         self._thread = threading.Thread(
             target=self._drain_loop, name="user-usage-recorder", daemon=True
@@ -93,8 +84,7 @@ class UserUsageTracingProcessor(TracingProcessor):
             if record is None:
                 return
             with self._enqueue_lock:
-                # Drop once shutting down — the sentinel is or will be the last
-                # item, so the drain thread won't pick this up.
+                # Drop if shutdown started — drain won't see this record.
                 if self._shutdown.is_set():
                     return
                 try:
@@ -115,11 +105,8 @@ class UserUsageTracingProcessor(TracingProcessor):
 
         user_id = get_current_user_id()
         if user_id is None:
-            # v1 attributes usage only for interactive chat (the user-id
-            # contextvar is set on the chat-send endpoints). Non-chat LLM calls
-            # — search-answer, Slack, agent sub-calls, background workers —
-            # yield no row rather than mis-attributing. Fails safe (undercount,
-            # never wrong-user); widening the set-sites is a follow-up.
+            # No user id → skip (undercount, never wrong-user). Only chat
+            # endpoints set the var today.
             return None
 
         model = data.model
@@ -191,8 +178,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                     record.model,
                 )
             finally:
-                # task_done per real record so force_flush()'s join() unblocks
-                # even when the write raised.
+                # task_done even on write failure so join() unblocks.
                 self._queue.task_done()
 
     def _write(self, record: _UsageRecord) -> None:
@@ -201,11 +187,8 @@ class UserUsageTracingProcessor(TracingProcessor):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(record.tenant_id)
         try:
             with get_session_with_tenant(tenant_id=record.tenant_id) as db_session:
-                # The span's input_tokens is the litellm prompt total, which
-                # already includes cache reads; compute_cost_cents expects the
-                # NON-cached count and adds cache reads back at the cache rate.
-                # Subtract here to avoid pricing cache reads twice. The ledger
-                # column keeps the full input_tokens for token reporting.
+                # input_tokens is cache-inclusive; price (input - cache) + cache
+                # separately; ledger keeps full input_tokens.
                 non_cached_input = max(
                     record.input_tokens - record.cache_read_tokens, 0
                 )
@@ -252,9 +235,7 @@ class UserUsageTracingProcessor(TracingProcessor):
         self._queue.join()
 
     def shutdown(self) -> None:
-        # Set the flag under the lock so any concurrent on_span_end either
-        # enqueues before the sentinel or sees the flag and drops — no record
-        # lands after _SHUTDOWN.
+        # Lock: no enqueue after shutdown sentinel.
         with self._enqueue_lock:
             if self._shutdown.is_set():
                 return

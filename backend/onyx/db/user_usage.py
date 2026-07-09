@@ -16,33 +16,22 @@ from sqlalchemy.orm import Session
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserUsage
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 logger = setup_logger()
 
-# Dimension columns that uniquely identify a ledger row within a window.
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
 
-# Per-user windows coincide with the tenant-usage window. Floor at 1h so a
-# sub-hour USAGE_LIMIT_WINDOW_SECONDS can't truncate to 0 (div-by-zero); windows
-# finer than hourly aren't supported. Shared so the recorder and the /user/usage
-# read agree on the window — a drift here would mis-bucket the displayed cost.
+# Match tenant usage window; floor 1h. Recorder + /user/usage must share this grid.
 USAGE_PERIOD_HOURS = max(USAGE_LIMIT_WINDOW_SECONDS // 3600, 1)
 
 
 def get_window_start(dt: datetime, period_hours: int) -> datetime:
-    """
-    Align `dt` to the start of its fixed window.
-
-    Mirrors the tenant-usage windowing in onyx/db/usage.py so per-user and
-    per-tenant windows coincide: weekly windows snap to Monday 00:00 UTC,
-    other sizes use epoch-aligned windows of `period_hours`.
-    """
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    else:
-        dt = dt.astimezone(timezone.utc)
+    """Fixed UTC window start; weekly → Monday 00:00, else epoch-aligned.
+    Must match onyx/db/usage.py."""
+    dt = datetime_to_utc(dt)
 
     # Guard against a 0/negative period producing a div-by-zero below.
     period_seconds = max(period_hours, 1) * 3600
@@ -69,13 +58,7 @@ def record_user_usage(
     cost_cents: float,
     window_start: datetime,
 ) -> None:
-    """
-    Atomically accumulate a usage sample into the per-user ledger.
-
-    Postgres path is a single INSERT ... ON CONFLICT DO UPDATE that adds the
-    new amounts to the existing row, so concurrent recorders can't lose an
-    update. Caller owns the transaction commit.
-    """
+    """Atomically accumulate into the ledger (Postgres upsert). Caller commits."""
     # Store "" rather than NULL for a missing provider so the dedup unique index
     # collapses these rows on every Postgres version (no NULLS NOT DISTINCT).
     provider = provider or ""
@@ -149,12 +132,7 @@ def get_user_usage_by_day_and_model(
     since: datetime,
     until: datetime,
 ) -> list[dict[str, object]]:
-    """
-    Aggregate a user's usage by calendar day (UTC) and model over [since, until).
-
-    Returns rows of {day, model, input_tokens, output_tokens, cache_read_tokens,
-    cost_cents} sorted by (day, model).
-    """
+    """Sum usage by UTC day and model over [since, until)."""
     rows = db_session.execute(
         select(
             func.date(UserUsage.window_start).label("day"),
@@ -192,16 +170,8 @@ def get_usage_export(
     end: datetime,
     model: str | None = None,
 ) -> list[dict[str, object]]:
-    """Tenant-wide usage joined to user email, grouped by (email, model, day).
-
-    Covers windows whose start falls in [start, end). Day granularity follows
-    the configured usage window (weekly by default), so func.date(window_start)
-    is the window day, not necessarily the calendar day a call was made — a
-    "daily" caller gets one row per window, labelled by that window's start day.
-
-    Rows: {email, model, day, input_tokens, output_tokens, cache_read_tokens,
-    cost_cents}, sorted by (email, day, model).
-    """
+    """Tenant-wide usage by email/model/window-day.
+    day = window start (weekly grid), not call calendar day."""
     query = (
         # User.email comes from the fastapi-users base; ty mis-resolves it as a
         # non-column role, so the multi-column select overload doesn't match.
@@ -246,11 +216,7 @@ def get_user_cost_cents_in_window(
     user_id: str,
     window_start: datetime,
 ) -> float:
-    """Total cost (cents) a user accrued in one exact ledger window — for display.
-
-    Exact-match read against the ledger's own grid. Budget enforcement must use
-    the sliding `*_since` helpers instead (see their docstrings).
-    """
+    """Exact-window total for display; enforcement uses get_user_cost_cents_since."""
     total = db_session.execute(
         select(func.coalesce(func.sum(UserUsage.cost_cents), 0.0)).where(
             UserUsage.user_id == user_id,
@@ -265,13 +231,8 @@ def get_user_cost_cents_since(
     user_id: str,
     cutoff: datetime,
 ) -> float:
-    """Cost (cents) a user accrued in ledger windows starting at/after `cutoff`.
-
-    Sliding-window mirror of the token check: sums every ledger row whose
-    window_start >= cutoff, period-agnostic. The ledger buckets on a single
-    fixed grid (USAGE_LIMIT_WINDOW_SECONDS), so a range scan — not an
-    exact-window match — is the only way a sub-grid budget period reads any cost.
-    """
+    """Sliding cost: sum rows with window_start >= cutoff
+    (fixed grid → range scan, not exact-window match)."""
     total = db_session.execute(
         select(func.coalesce(func.sum(UserUsage.cost_cents), 0.0)).where(
             UserUsage.user_id == user_id,
@@ -316,9 +277,7 @@ def get_group_cost_cents_buckets_since(
     user_group_ids: list[int],
     cutoff: datetime,
 ) -> dict[int, list[tuple[datetime, float]]]:
-    """Per-group cost buckets (window_start, cents) for windows >= `cutoff`, in
-    one query. Batched counterpart to get_group_cost_cents_since so the group
-    cost gate can window in Python instead of a query per group/limit."""
+    """Per-group (window_start, cents) buckets in one query for Python windowing."""
     rows = db_session.execute(
         select(
             User__UserGroup.user_group_id,
@@ -335,9 +294,6 @@ def get_group_cost_cents_buckets_since(
 
     result: dict[int, list[tuple[datetime, float]]] = defaultdict(list)
     for group_id, window_start, cost in rows:
-        # Coerce to tz-aware UTC; SQLite returns naive datetimes, which can't be
-        # compared against the tz-aware cutoffs callers window with.
-        if window_start.tzinfo is None:
-            window_start = window_start.replace(tzinfo=timezone.utc)
-        result[group_id].append((window_start, float(cost)))
+        # SQLite returns naive datetimes; coerce so they compare with tz-aware cutoffs.
+        result[group_id].append((datetime_to_utc(window_start), float(cost)))
     return result
