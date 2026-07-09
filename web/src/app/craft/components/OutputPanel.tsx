@@ -1,11 +1,12 @@
 "use client";
 
-import { memo, useState, useEffect, useCallback, useRef } from "react";
+import { memo, useState, useEffect, useCallback } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useSession,
   useWebappNeedsRefresh,
+  useWebappNeedsRemount,
   useBuildSessionStore,
   usePanelTabs,
   useActiveOutputTab,
@@ -16,7 +17,6 @@ import {
   OutputTabType,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { type PanelTab, panelTabId } from "@/app/craft/types/displayTypes";
-import { nextPreviewReadiness } from "@/app/craft/utils/previewReadiness";
 import {
   fetchWebappInfo,
   fetchArtifacts,
@@ -187,12 +187,12 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
     if (session?.id !== cachedForSessionId) {
       setCachedWebappUrl(null);
       setCachedForSessionId(session?.id ?? null);
-      consecutiveUnreadyRef.current = 0;
     }
   }, [session?.id, cachedForSessionId]);
 
   // Webapp refresh trigger from streaming / restore
   const webappNeedsRefresh = useWebappNeedsRefresh();
+  const webappNeedsRemount = useWebappNeedsRemount();
 
   // Track polling window: poll for up to 30s after a restore/refresh trigger
   const [pollingDeadline, setPollingDeadline] = useState<number | null>(null);
@@ -223,9 +223,6 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const shouldPoll =
     !isWebappReady && pollingDeadline !== null && Date.now() < pollingDeadline;
 
-  // Consecutive unready polls, fed to nextPreviewReadiness.
-  const consecutiveUnreadyRef = useRef(0);
-
   const { data: webappInfo, mutate } = useSWR(
     shouldFetchWebapp ? SWR_KEYS.buildSessionWebappInfo(session.id) : null,
     () => (session?.id ? fetchWebappInfo(session.id) : null),
@@ -233,21 +230,12 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
       refreshInterval: shouldPoll ? 2000 : 0,
       revalidateOnFocus: true,
       keepPreviousData: true,
-      // React in onSuccess (not a useEffect over `ready`) — a refresh bump
-      // resets isWebappReady while `ready` stays true across fetches, so an
-      // effect keyed on the value never re-fires and each poll window runs
+      // Stop polling via onSuccess (not a useEffect over `ready`) — a refresh
+      // bump resets isWebappReady while `ready` stays true across fetches, so
+      // an effect keyed on the value never re-fires and each poll window runs
       // its full 30s instead of stopping at the first healthy response.
       onSuccess: (data) => {
-        if (!data) return;
-        const decision = nextPreviewReadiness(
-          consecutiveUnreadyRef.current,
-          data.ready
-        );
-        consecutiveUnreadyRef.current = decision.consecutiveUnready;
-        if (decision.remount) {
-          setPreviewRefreshKey((k) => k + 1);
-        }
-        if (data.ready) {
+        if (data?.ready) {
           setIsWebappReady(true);
           setPollingDeadline(null);
         }
@@ -630,10 +618,10 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
               ) : (
                 <PreviewTab
                   webappUrl={displayUrl}
-                  // Remounts on manual refresh and when polling sees the dev
-                  // server come (back) up — see nextPreviewReadiness. Live
-                  // edits flow through HMR and never remount.
-                  refreshKey={previewRefreshKey}
+                  // Remounts on manual refresh and after a restore (the new
+                  // pod's HMR socket can't update the old page). Live edits
+                  // flow through HMR and never remount.
+                  refreshKey={previewRefreshKey + webappNeedsRemount}
                 />
               ))}
             {activeOutputTab === "files" && (
