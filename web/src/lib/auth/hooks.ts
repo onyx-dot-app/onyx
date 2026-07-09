@@ -6,8 +6,7 @@ import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
 import { useCurrentUser } from "@/lib/users/hooks";
-
-const AUTH_FLOW_PREFIX = "/auth";
+import { isAuthPath } from "@/lib/auth/paths";
 
 function computeSecondsUntilExpiration(user: User): number | null {
   if (!user.token_expires_at) return null;
@@ -32,7 +31,7 @@ function computeSecondsUntilExpiration(user: User): number | null {
  */
 export function useSessionWatcher(): boolean {
   const pathname = usePathname();
-  const inAuthFlow = pathname?.startsWith(AUTH_FLOW_PREFIX) ?? false;
+  const inAuthFlow = isAuthPath(pathname);
 
   const { user, mutateUser, userError } = useCurrentUser();
   const expiryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

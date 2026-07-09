@@ -15,6 +15,7 @@ import { MessageCard } from "@opal/components";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { dismissNotification } from "@/lib/notifications/api";
+import { isAuthPath } from "@/lib/auth/paths";
 import {
   NotificationType,
   type Notification,
@@ -93,11 +94,16 @@ function useMainContainerOffset(): { left: number; width: number } {
 }
 
 export default function LicenseExpiryBanner() {
+  const pathname = usePathname();
+  // Admins-only license banner: never relevant on unauthenticated /auth/* routes,
+  // where the notifications feed 403s.
   const { data, mutate } = useSWR<NotificationsResponse>(
-    SWR_KEYS.notificationsByType(
-      NotificationType.LICENSE_EXPIRY_WARNING,
-      LICENSE_NOTIFICATIONS_PAGE_SIZE
-    ),
+    isAuthPath(pathname)
+      ? null
+      : SWR_KEYS.notificationsByType(
+          NotificationType.LICENSE_EXPIRY_WARNING,
+          LICENSE_NOTIFICATIONS_PAGE_SIZE
+        ),
     errorHandlingFetcher,
     { revalidateOnFocus: false, dedupingInterval: 30000 }
   );
