@@ -88,3 +88,48 @@ class TestUnsupportedMimeTypeLogging:
         # Check the format string args contain magic bytes and size
         assert "49492a00" in str(log_args)
         assert "104" in str(log_args)  # 4 + 100 bytes
+
+
+class TestTransientFailureDegradesGracefully:
+    """A transient vision-model failure must not fail the whole file."""
+
+    @patch("onyx.file_processing.image_summarization.summarize_image_pipeline")
+    def test_llm_timeout_returns_none_instead_of_raising(
+        self,
+        mock_pipeline: MagicMock,
+    ) -> None:
+        """A timeout (surfaced as ValueError by _summarize_image) is swallowed."""
+        # _summarize_image re-raises any provider error as a plain ValueError;
+        # the wrapper must catch it, log a warning, and return None (skip summary).
+        mock_pipeline.side_effect = ValueError(
+            "Summarization failed: Timeout: request timed out | status_code=408"
+        )
+        mock_llm = MagicMock()
+        image_data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+
+        with patch("onyx.file_processing.image_summarization.logger") as mock_logger:
+            result = summarize_image_with_error_handling(
+                llm=mock_llm,
+                image_data=image_data,
+                context_name="poison.png",
+            )
+
+        assert result is None
+        mock_logger.warning.assert_called_once()
+
+    @patch("onyx.file_processing.image_summarization.summarize_image_pipeline")
+    def test_unexpected_exception_returns_none(
+        self,
+        mock_pipeline: MagicMock,
+    ) -> None:
+        """Any non-UnsupportedImageFormatError exception degrades to None."""
+        mock_pipeline.side_effect = RuntimeError("connection reset by peer")
+        mock_llm = MagicMock()
+
+        result = summarize_image_with_error_handling(
+            llm=mock_llm,
+            image_data=b"\x89PNG\r\n\x1a\n",
+            context_name="broken.png",
+        )
+
+        assert result is None
