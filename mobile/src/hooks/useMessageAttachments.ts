@@ -165,12 +165,19 @@ export function useMessageAttachments(resetKey: string): UseMessageAttachments {
   // rather than returning empty on denial).
   const runPicked = useCallback(
     async (pick: () => Promise<NormalizedAsset[]>) => {
+      // Capture the draft key before the picker opens; if the user switches
+      // conversations while it's open, drop the picked files and any error so they
+      // can't land in the new chat.
+      const myKey = keyRef.current;
       // A fresh pick starts from a clean error state (mirrors useProjectFiles),
       // so stale/duplicate rejections don't stack across attempts.
       setErrors([]);
       try {
-        await runUpload(await pick());
+        const assets = await pick();
+        if (keyRef.current !== myKey) return;
+        await runUpload(assets);
       } catch (error) {
+        if (keyRef.current !== myKey) return;
         console.warn("file picker failed", error);
         setErrors((prev) => [
           ...prev,

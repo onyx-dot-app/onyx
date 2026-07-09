@@ -77,12 +77,8 @@ export function InputBar({
           onPress={attachments.dismissErrors}
           className="mb-8 gap-4 rounded-12 border border-border-01 px-12 py-8"
         >
-          {attachments.errors.map((message, index) => (
-            <Text
-              key={`${index}:${message}`}
-              font="secondary-body"
-              color="status-error-05"
-            >
+          {attachments.errors.map((message) => (
+            <Text key={message} font="secondary-body" color="status-error-05">
               {message}
             </Text>
           ))}

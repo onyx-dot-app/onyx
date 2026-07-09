@@ -3,7 +3,7 @@ import type { Mock } from "jest-mock";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getUserFileStatuses } from "@/api/files/files";
-import { uploadUserFile } from "@/api/files/upload";
+import { generateTempId, uploadUserFile } from "@/api/files/upload";
 import { pickDocuments, pickImages } from "@/api/files/pickers";
 import {
   UserFileStatus,
@@ -21,13 +21,10 @@ jest.mock("@/api/files/pickers", () => ({
   pickDocuments: jest.fn(),
   pickImages: jest.fn(),
 }));
-jest.mock("@/api/files/upload", () => {
-  let counter = 0;
-  return {
-    uploadUserFile: jest.fn(),
-    generateTempId: () => `tmp-${++counter}`,
-  };
-});
+jest.mock("@/api/files/upload", () => ({
+  uploadUserFile: jest.fn(),
+  generateTempId: jest.fn(),
+}));
 jest.mock("@/api/files/files", () => ({
   getUserFileStatuses: jest.fn(),
 }));
@@ -52,15 +49,20 @@ const uploadMock = uploadUserFile as unknown as Mock<
 const statusesMock = getUserFileStatuses as unknown as Mock<
   (ids: string[]) => Promise<ProjectFile[]>
 >;
+const generateTempIdMock = generateTempId as unknown as Mock<() => string>;
 
 function serverFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
   return makeProjectFile({ name: "server.pdf", token_count: 9, ...overrides });
 }
 
 describe("useMessageAttachments", () => {
+  let tempIdCounter = 0;
   beforeEach(() => {
     mockSettingsRef.maxMb = null;
     jest.clearAllMocks();
+    // Reset per test so reconciliation fixtures can rely on the first id being "tmp-1".
+    tempIdCounter = 0;
+    generateTempIdMock.mockImplementation(() => `tmp-${++tempIdCounter}`);
   });
 
   it("uploads a picked document, reconciles the optimistic entry, and builds descriptors", async () => {
@@ -389,6 +391,37 @@ describe("useMessageAttachments", () => {
     });
 
     expect(result.current.errors).toHaveLength(0);
+    expect(result.current.files).toHaveLength(0);
+  });
+
+  it("drops files picked while the user switched conversations mid-pick", async () => {
+    let resolvePick: (
+      assets: { uri: string; name: string; size?: number }[],
+    ) => void = () => {};
+    pickDocumentsMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolvePick = resolve;
+      }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ key }: { key: string }) => useMessageAttachments(key),
+      { initialProps: { key: "chat-1:" } },
+    );
+
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = result.current.addDocuments();
+    });
+
+    // Switch conversations while the native picker is still open, then let it resolve.
+    rerender({ key: "chat-2:" });
+    await act(async () => {
+      resolvePick([{ uri: "file:///a.pdf", name: "a.pdf", size: 1 }]);
+      await pending;
+    });
+
+    expect(uploadMock).not.toHaveBeenCalled();
     expect(result.current.files).toHaveLength(0);
   });
 });

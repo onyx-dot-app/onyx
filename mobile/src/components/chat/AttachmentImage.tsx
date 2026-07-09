@@ -26,15 +26,17 @@ export function AttachmentImage({
     [size, radius],
   );
   // Stable source ref (cachePolicy="none" means a fresh object would trigger a re-fetch).
+  // baseUrl is a dep so the source changes at an instance switch, not just on fileId/token.
+  const baseUrl = getBaseUrl();
   const source = useMemo(
     () =>
       token
         ? {
-            uri: `${getBaseUrl()}/chat/file/${fileId}`,
+            uri: `${baseUrl}/chat/file/${fileId}`,
             headers: { Authorization: `Bearer ${token}` },
           }
         : null,
-    [fileId, token],
+    [baseUrl, fileId, token],
   );
 
   if (!source) {

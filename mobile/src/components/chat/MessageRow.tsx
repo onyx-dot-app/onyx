@@ -72,5 +72,7 @@ export const MessageRow = memo(
     prev.node.type === next.node.type &&
     prev.node.message === next.node.message &&
     prev.node.messageId === next.node.messageId &&
-    prev.node.packets.length === next.node.packets.length,
+    prev.node.packets.length === next.node.packets.length &&
+    // user rows render attachment chips from node.files; re-render if that array is replaced
+    prev.node.files === next.node.files,
 );

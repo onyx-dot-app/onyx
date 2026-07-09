@@ -102,7 +102,10 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
 
   // Capture descriptors before clearing; submit reads its `files` arg, not the live draft,
   // so the clear can't race the send. Shared by the composer and the empty-state starters.
+  // Gate on hasBlockingFiles so the starter path can't send temp-id descriptors for a file
+  // that's still uploading/indexing/failed (the composer's send button is already disabled).
   const sendWithAttachments = (message?: string) => {
+    if (attachments.hasBlockingFiles) return;
     void submit(message, attachments.descriptors);
     attachments.clear();
   };
