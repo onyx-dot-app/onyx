@@ -1,5 +1,6 @@
 import copy
 import os
+import re
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -79,41 +80,22 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
     "claude-opus-4-8",
 )
 
-# Anthropic models that require the adaptive thinking API (thinking.type.adaptive
-# + output_config.effort) instead of the legacy thinking.type.enabled + budget_tokens.
-_ANTHROPIC_ADAPTIVE_THINKING_MODELS = (
-    "claude-opus-4-7",
-    "claude-opus-4-8",
-    "claude-fable-5",
-    "claude-5-fable",
-    "claude-mythos-5",
-    "claude-5-mythos",
-    "claude-sonnet-5",
-    "claude-5-sonnet",
-)
+# Starting with Claude Opus 4.7, Anthropic requires the adaptive thinking API
+# (thinking.type.adaptive + output_config.effort) in place of the legacy
+# thinking.type.enabled + budget_tokens, and rejects any non-default sampling
+# parameter (temperature/top_p/top_k) with a 400 invalid_request_error. Every
+# later model — Opus 4.8, the Claude 5 line (fable/mythos/sonnet), and beyond —
+# inherits both behaviors, so we gate on the parsed model version rather than an
+# explicit list. This lets new releases be handled without a code change, and
+# avoids relying on LiteLLM's drop_params (unreliable here, since AnthropicConfig
+# still advertises temperature as supported).
+_ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
 
-# Anthropic models that reject any non-default sampling parameter (temperature,
-# top_p, top_k). For these models we must omit these params entirely from the
-# request payload — passing them returns a 400 invalid_request_error. LiteLLM's
-# drop_params is unreliable here because AnthropicConfig still lists temperature
-# as supported. Match on substring to cover proxy/Vertex naming variants (e.g.
-# "claude-4.7-opus" via litellm_proxy).
-_ANTHROPIC_NO_SAMPLING_PARAMS_MODELS = (
-    "claude-opus-4-7",
-    "claude-opus-4.7",
-    "claude-4-7-opus",
-    "claude-4.7-opus",
-    "claude-opus-4-8",
-    "claude-opus-4.8",
-    "claude-4-8-opus",
-    "claude-4.8-opus",
-    "claude-fable-5",
-    "claude-5-fable",
-    "claude-mythos-5",
-    "claude-5-mythos",
-    "claude-sonnet-5",
-    "claude-5-sonnet",
-)
+# Named tiers spanning Claude's naming schemes, including the Claude 5 line whose
+# version digit can precede or follow the tier ("claude-sonnet-5" vs
+# "claude-5-sonnet").
+_ANTHROPIC_MODEL_TIERS = ("opus", "sonnet", "haiku", "fable", "mythos")
+_ANTHROPIC_VERSION_PATTERN = r"\d+(?:[.-]\d+)?"
 
 
 class LLMTimeoutError(Exception):
@@ -276,20 +258,53 @@ def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
     )
 
 
+def _parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
+    """Extract the (major, minor) version from a Claude model name.
+
+    Handles the naming variants that reach LiteLLM: tier-first
+    ("claude-opus-4-8"), version-first ("claude-4-8-opus"), dot-separated
+    ("claude-opus-4.8"), the named Claude 5 tiers ("claude-fable-5",
+    "claude-5-sonnet"), legacy names ("claude-3-5-sonnet-20241022"), and
+    provider-prefixed / date-snapshot forms. Returns None when the name is not a
+    Claude model or carries no parseable version.
+    """
+    name = model_name.lower()
+    if "claude" not in name:
+        return None
+    # Drop any provider prefix (e.g. "anthropic/", "bedrock/anthropic.").
+    name = name[name.index("claude") :]
+    # Drop date/snapshot suffixes ("@20260101", "-20241022") so their digits
+    # can't be mistaken for a version.
+    name = name.split("@")[0]
+    name = re.sub(r"\d{6,}", "", name)
+
+    tier = next((t for t in _ANTHROPIC_MODEL_TIERS if t in name), None)
+    if tier is not None:
+        # The version can sit on either side of the tier depending on scheme.
+        match = re.search(
+            rf"{tier}[.-]?({_ANTHROPIC_VERSION_PATTERN})", name
+        ) or re.search(rf"({_ANTHROPIC_VERSION_PATTERN})[.-]?{tier}", name)
+        version_str = match.group(1) if match else None
+    else:
+        match = re.search(_ANTHROPIC_VERSION_PATTERN, name)
+        version_str = match.group(0) if match else None
+
+    if not version_str:
+        return None
+    parts = re.split(r"[.-]", version_str)
+    major = int(parts[0])
+    minor = int(parts[1]) if len(parts) > 1 else 0
+    return (major, minor)
+
+
 def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
-    normalized_model_name = model_name.lower()
-    return any(
-        adaptive_model in normalized_model_name
-        for adaptive_model in _ANTHROPIC_ADAPTIVE_THINKING_MODELS
-    )
+    version = _parse_anthropic_model_version(model_name)
+    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
 
 
 def _anthropic_omits_sampling_params(model_name: str) -> bool:
-    normalized_model_name = model_name.lower()
-    return any(
-        no_sampling_model in normalized_model_name
-        for no_sampling_model in _ANTHROPIC_NO_SAMPLING_PARAMS_MODELS
-    )
+    version = _parse_anthropic_model_version(model_name)
+    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
 
 
 class LitellmLLM(LLM):

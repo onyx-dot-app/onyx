@@ -382,6 +382,7 @@ class ScheduledTaskSkipReason(str, PyEnum):
     """Well-known values for ``ScheduledTaskRun.skip_reason``."""
 
     PRIOR_IN_FLIGHT = "prior_in_flight"
+    OWNER_CRAFT_DISABLED = "owner_craft_disabled"
 
 
 class SandboxStatus(str, PyEnum):
@@ -634,3 +635,11 @@ class PersonaSharingStatus(str, PyEnum):
     PRIVATE = "PRIVATE"
     SHARED = "SHARED"
     PUBLIC = "PUBLIC"
+
+
+class SSOProviderType(str, PyEnum):
+    # name == value: Enum(native_enum=False) columns persist the member name,
+    # so the two must match to round-trip (repo-wide convention).
+    GOOGLE_OAUTH = "GOOGLE_OAUTH"
+    OIDC = "OIDC"
+    SAML = "SAML"

@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from fastapi import Response
+from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -80,6 +81,8 @@ from onyx.llm.factory import get_llm_token_counter
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
+from onyx.server.query_and_chat.chat_utils import is_spreadsheet_mime_type
+from onyx.server.query_and_chat.chat_utils import parse_spreadsheet_for_preview
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -893,6 +896,7 @@ def seed_chat_from_slack(
 def fetch_chat_file(
     file_id: str,
     request: Request,
+    parsed: bool = Query(False),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
@@ -912,11 +916,13 @@ def fetch_chat_file(
         raise HTTPException(status_code=404, detail="File not found")
 
     media_type = file_record.file_type
-    file_io = file_store.read_file(file_id, mode="b")
+    # `parsed` only changes behavior for spreadsheet files (xlsx is a binary zip
+    # the frontend cannot render); everything else is served raw as usual.
+    parse_spreadsheet = parsed and is_spreadsheet_mime_type(media_type)
 
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
-    etag = f'"{file_id}"'
+    etag = f'"{file_id}-parsed"' if parse_spreadsheet else f'"{file_id}"'
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
@@ -926,6 +932,16 @@ def fetch_chat_file(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    if parse_spreadsheet:
+        # Use a tempfile since openpyxl needs a seekable file and the workbook
+        # may be large.
+        with file_store.read_file(file_id, mode="b", use_tempfile=True) as xlsx_io:
+            preview = parse_spreadsheet_for_preview(
+                xlsx_io, file_record.display_name or ""
+            )
+        return JSONResponse(content=preview.model_dump(), headers=cache_headers)
+
+    file_io = file_store.read_file(file_id, mode="b")
     return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
 
 

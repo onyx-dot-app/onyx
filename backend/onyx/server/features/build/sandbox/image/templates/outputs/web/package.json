@@ -23,7 +23,7 @@
     "react": "19.2.7",
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.7",
-    "react-resizable-panels": "^4.4.1",
+    "react-resizable-panels": "^4.11.2",
     "recharts": "^2.15.4",
     "shadcn": "^4.11.0",
     "sonner": "^2.0.7",
@@ -32,9 +32,9 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.0",
+    "@tailwindcss/postcss": "^4.3.1",
     "@types/node": "24.12.2",
-    "@types/react": "19.2.10",
+    "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "oxlint": "^1.66.0",
     "tailwindcss": "^4.3.0",

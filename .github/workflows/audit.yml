@@ -67,7 +67,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # Don't fail the report job on findings; the SARIF upload surfaces them.
-        run: uv run --no-sync --with onyx-devtools ods audit --format=sarif > audit.sarif || true
+        # SARIF goes to stdout (the uploaded file); the text report goes to stderr
+        # so the run's findings are also readable in the log.
+        run: uv run --no-sync --with onyx-devtools ods audit --format=sarif,text > audit.sarif || true
 
       - name: Upload SARIF file
         if: github.event_name != 'pull_request'

@@ -182,6 +182,7 @@ class PodEventBus:
         consecutive_failures = 0
         while not self._stop.is_set():
             had_successful_read = False
+            healed_401 = False
             try:
                 self._read_one_stream()
                 had_successful_read = self.stream_ready.is_set()
@@ -191,11 +192,21 @@ class PodEventBus:
                         backoff,
                     )
             except Exception as e:
-                logger.warning(
-                    "opencode /event stream error: %s; reconnecting in %.1fs",
-                    e,
-                    backoff,
+                # Cached password was stale (pod re-provisioned with a new
+                # Secret) — re-attach immediately with the rotated credential.
+                # Still counts against the failure budget so a Secret source
+                # that keeps rotating to wrong credentials can't spin forever.
+                healed_401 = (
+                    isinstance(e, httpx.HTTPStatusError)
+                    and e.response.status_code == 401
+                    and self._refresh_auth_on_401()
                 )
+                if not healed_401:
+                    logger.warning(
+                        "opencode /event stream error: %s; reconnecting in %.1fs",
+                        e,
+                        backoff,
+                    )
             finally:
                 self.stream_ready.clear()
 
@@ -215,6 +226,8 @@ class PodEventBus:
                     self._signal_subscribers_closed()
                     return
 
+            if healed_401:
+                continue
             if self._stop.wait(backoff):
                 return
             backoff = min(backoff * 2.0, self._RECONNECT_BACKOFF_MAX)
@@ -236,8 +249,6 @@ class PodEventBus:
             params=params,
             timeout=timeout,
         ) as response:
-            if response.status_code == 401:
-                self._refresh_auth_on_401()
             response.raise_for_status()
             self.stream_ready.set()
             logger.info(
@@ -258,22 +269,22 @@ class PodEventBus:
                         continue
                     self._dispatch(evt)
 
-    def _refresh_auth_on_401(self) -> None:
-        """Reload auth so the next reconnect uses the rotated password. No-op
-        when the credential is unchanged (genuine auth failure) to avoid a
-        misleading log on every reconnect. Best-effort: failed reload keeps
-        the current auth."""
+    def _refresh_auth_on_401(self) -> bool:
+        """Reload auth after a 401; True if the credential actually rotated.
+        Unchanged credential (genuine auth failure) or a failed reload keeps
+        the current auth and returns False."""
         if self._reload_auth is None:
-            return
+            return False
         try:
             new_auth = self._reload_auth()
         except Exception as e:
             logger.warning("PodEventBus reload_auth failed after 401: %s", e)
-            return
+            return False
         if _auth_token(new_auth) == _auth_token(self._auth):
-            return
+            return False
         self._auth = new_auth
         logger.info("PodEventBus reloaded auth after 401 on %s/event", self._base_url)
+        return True
 
     def _dispatch(self, event: dict[str, Any]) -> None:
         event_type = event.get("type")

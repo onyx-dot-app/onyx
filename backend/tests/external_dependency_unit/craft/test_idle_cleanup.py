@@ -1,9 +1,10 @@
 """Idle cleanup (Celery task).
 
 Exercises ``cleanup_idle_sandboxes_task`` end-to-end against real Postgres +
-Redis. The sandbox operations (``list_session_workspaces``,
+Redis; the per-sandbox reap runs through ``sleep_sandbox`` (sandbox
+lifecycle). The sandbox operations (``list_session_workspaces``,
 ``create_snapshot``, ``terminate``) are routed through the
-``StubSandboxManager`` from ``conftest.py``. The task body is
+``StubSandboxManager`` from ``conftest.py``. The sweep is
 backend-agnostic, so we only need to install the stub via
 ``get_sandbox_manager``.
 """
@@ -30,6 +31,9 @@ from onyx.db.models import Snapshot
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.session import (
+    sandbox_lifecycle as sandbox_lifecycle_module,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.stubs import StubSandboxManager
@@ -48,7 +52,7 @@ def stubbed_cleanup(
 ) -> StubSandboxManager:
     """Wire the stub so the cleanup task runs entirely against it.
 
-    The task body is backend-agnostic now: it calls
+    The sweep is backend-agnostic: it calls
     ``sandbox_manager.list_session_workspaces(sandbox_id)`` rather than a
     Kubernetes-only helper, so we just need to redirect
     ``get_sandbox_manager`` to the stub. Per-test bodies can override
@@ -64,11 +68,18 @@ def stubbed_cleanup(
 def short_idle_threshold(monkeypatch: pytest.MonkeyPatch) -> int:
     """Lower the idle threshold so tests can backdate a heartbeat cheaply.
 
+    Patched in both consuming modules: the task reads it for the background
+    snapshot cutoff; ``is_sandbox_idle`` (sandbox lifecycle) reads it for the
+    idle partition and the pre-kill re-check.
+
     Returns the threshold (seconds) so tests can reason about boundary
     conditions without hard-coding magic numbers.
     """
     threshold = 60
     monkeypatch.setattr(tasks_module, "SANDBOX_IDLE_TIMEOUT_SECONDS", threshold)
+    monkeypatch.setattr(
+        sandbox_lifecycle_module, "SANDBOX_IDLE_TIMEOUT_SECONDS", threshold
+    )
     return threshold
 
 

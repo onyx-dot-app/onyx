@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { Route } from "next";
-import { requireAdminAuth } from "@/lib/auth/requireAuth";
+import { requireAdminAuth } from "@/lib/auth/svcSS";
 import AdminChrome from "@/layouts/chromes/AdminChrome";
 import { AnnouncementBanner } from "@/components/header/AnnouncementBanner";
 

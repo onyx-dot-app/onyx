@@ -1,16 +1,5 @@
 import { UserRole } from "@/lib/types";
-
-async function parseErrorDetail(
-  res: Response,
-  fallback: string
-): Promise<string> {
-  try {
-    const body = await res.json();
-    return body?.detail ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
+import { parseErrorDetail } from "@/lib/fetcher";
 
 export async function deactivateUser(email: string): Promise<void> {
   const res = await fetch("/api/manage/admin/deactivate-user", {

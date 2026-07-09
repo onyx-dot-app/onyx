@@ -312,7 +312,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "6"
+      onyx.app/nginx-config-version: "7"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -1536,6 +1536,8 @@ configMap:
   CONFLUENCE_CONNECTOR_LABELS_TO_SKIP: ""
   JIRA_CLOUD_API_VERSION: ""
   JIRA_SERVER_API_VERSION: ""
+  CANVAS_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Worker Parallelism

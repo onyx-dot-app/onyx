@@ -88,6 +88,31 @@ def test_local_nomic_embedding(local_nomic_embedding_model: EmbeddingModel) -> N
 
 
 @pytest.fixture
+def local_e5_small_embedding_model() -> EmbeddingModel:
+    # Unlike nomic (pre-baked into the image), e5-small is not in the image, so the
+    # first request forces the model server to download it from HuggingFace at
+    # runtime -- exercising the outbound-TLS path that the custom-CA bundle governs.
+    return EmbeddingModel(
+        server_host="localhost",
+        server_port=9000,
+        model_name="intfloat/e5-small-v2",
+        normalize=True,
+        query_prefix="query: ",
+        passage_prefix="passage: ",
+        api_key=None,
+        provider_type=None,
+        api_url=None,
+    )
+
+
+def test_local_download_embedding(
+    local_e5_small_embedding_model: EmbeddingModel,
+) -> None:
+    _run_embeddings(VALID_SAMPLE, local_e5_small_embedding_model, 384)
+    _run_embeddings(TOO_LONG_SAMPLE, local_e5_small_embedding_model, 384)
+
+
+@pytest.fixture
 def azure_embedding_model(test_secrets: dict[TestSecret, str]) -> EmbeddingModel:
     return EmbeddingModel(
         server_host="localhost",

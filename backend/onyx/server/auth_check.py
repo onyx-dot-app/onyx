@@ -72,10 +72,12 @@ PUBLIC_ENDPOINT_SPECS = [
     # oidc
     ("/auth/oidc/authorize", {"GET"}),
     ("/auth/oidc/callback", {"GET"}),
-    # saml
+    # saml (single router: legacy-compatible + parametric authorize, one
+    # issuer-resolved callback)
     ("/auth/saml/authorize", {"GET"}),
-    ("/auth/saml/callback", {"POST"}),
+    ("/auth/saml/{provider_name}/authorize", {"GET"}),
     ("/auth/saml/callback", {"GET"}),
+    ("/auth/saml/callback", {"POST"}),
     ("/auth/saml/logout", {"POST"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),

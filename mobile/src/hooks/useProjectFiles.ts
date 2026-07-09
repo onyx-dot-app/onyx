@@ -9,38 +9,22 @@ import {
 } from "@/api/files/files";
 import {
   generateTempId,
-  uploadProjectFile,
+  uploadUserFile,
   type NormalizedAsset,
 } from "@/api/files/upload";
 import { pickDocuments, pickImages } from "@/api/files/pickers";
 import { getErrorMessage } from "@/api/errors";
 import { useWorkspaceSettings } from "@/api/settings";
-import { ChatFileType } from "@/chat/interfaces";
 import {
   isProcessingStatus,
-  UserFileStatus,
   type ProjectDetails,
   type ProjectFile,
 } from "@/chat/contracts/projects";
+import { buildOptimisticFile, partitionBySize } from "@/lib/files";
 import { useProjectUploads, useUploadStore } from "@/state/uploadStore";
 import { useSession } from "@/state/session";
 
 const POLL_INTERVAL_MS = 3000;
-
-function optimisticFile(asset: NormalizedAsset, tempId: string): ProjectFile {
-  return {
-    id: tempId,
-    temp_id: tempId,
-    name: asset.name,
-    file_id: tempId,
-    status: UserFileStatus.UPLOADING,
-    chat_file_type: asset.mimeType?.startsWith("image/")
-      ? ChatFileType.IMAGE
-      : ChatFileType.DOCUMENT,
-    token_count: null,
-    created_at: new Date().toISOString(),
-  };
-}
 
 export interface UseProjectFiles {
   // Optimistic (uploading) entries first, then committed files.
@@ -101,18 +85,10 @@ export function useProjectFiles(
       if (projectId == null || assets.length === 0) return;
 
       // Size pre-check mirrors web's client-side guard.
-      const maxBytes =
-        maxUploadMb != null && maxUploadMb > 0
-          ? maxUploadMb * 1024 * 1024
-          : null;
-      const rejected: string[] = [];
-      const valid = assets.filter((asset) => {
-        if (maxBytes != null && asset.size != null && asset.size > maxBytes) {
-          rejected.push(`${asset.name} exceeds the ${maxUploadMb} MB limit`);
-          return false;
-        }
-        return true;
-      });
+      const { valid, rejections: rejected } = partitionBySize(
+        assets,
+        maxUploadMb,
+      );
 
       if (valid.length === 0) {
         setErrors(projectId, rejected);
@@ -122,7 +98,7 @@ export function useProjectFiles(
       const items = valid.map((asset) => ({ asset, tempId: generateTempId() }));
       begin(
         projectId,
-        items.map(({ asset, tempId }) => optimisticFile(asset, tempId)),
+        items.map(({ asset, tempId }) => buildOptimisticFile(asset, tempId)),
       );
       // begin() clears errors; re-surface size rejections now so they show while
       // the uploads are still in flight.
@@ -133,7 +109,7 @@ export function useProjectFiles(
         await Promise.all(
           items.map(async ({ asset, tempId }) => {
             try {
-              const result = await uploadProjectFile(
+              const result = await uploadUserFile(
                 asset,
                 projectId,
                 tempId,

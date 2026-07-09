@@ -14,7 +14,6 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.credentials import alter_credential
-from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import create_credential
 from onyx.db.credentials import CREDENTIAL_PERMISSIONS_TO_IGNORE
 from onyx.db.credentials import delete_credential
@@ -166,10 +165,6 @@ def create_credential_from_model(
             object_is_public=credential_info.curator_public,
         )
 
-    # Temporary fix for empty Google App credentials
-    if credential_info.source == DocumentSource.GMAIL:
-        cleanup_gmail_credentials(db_session=db_session)
-
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(
         AuditAction.CREDENTIAL_CREATE,
@@ -240,10 +235,6 @@ def create_credential_with_private_key(
             target_group_ids=groups,
             object_is_public=curator_public,
         )
-
-    # Temporary fix for empty Google App credentials
-    if DocumentSource(source) == DocumentSource.GMAIL:
-        cleanup_gmail_credentials(db_session=db_session)
 
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(

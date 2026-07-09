@@ -55,6 +55,8 @@ from onyx.server.features.build.scheduled_tasks.executor import (
     DEFAULT_EXECUTOR_BUDGET_SECONDS,
 )
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
+from onyx.server.features.build.utils import is_craft_enabled_for_user
+from onyx.server.settings.store import load_settings
 
 # --- Tunables -----------------------------------------------------------------
 
@@ -116,9 +118,31 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
         # if our transaction rolls back for some reason.
         to_enqueue: list[UUID] = []
 
+        # Owners for whom Craft is off — deployment gate, per-user override,
+        # or workspace default — get a visible SKIPPED row instead of a run;
+        # the schedule stays alive and resumes if they are re-enabled.
+        craft_default_enabled = load_settings().craft_default_enabled
+        owners_by_id = {task.user_id: task.user for task in claimed_tasks}
+        craft_disabled_owner_ids = {
+            user_id
+            for user_id, owner in owners_by_id.items()
+            if not is_craft_enabled_for_user(
+                owner, workspace_default=craft_default_enabled
+            )
+        }
+
         for task in claimed_tasks:
             try:
-                if has_in_flight_run_for_task(db_session=db_session, task_id=task.id):
+                if task.user_id in craft_disabled_owner_ids:
+                    insert_run(
+                        db_session=db_session,
+                        task_id=task.id,
+                        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+                        status=ScheduledTaskRunStatus.SKIPPED,
+                        skip_reason=ScheduledTaskSkipReason.OWNER_CRAFT_DISABLED,
+                    )
+                    skipped_count += 1
+                elif has_in_flight_run_for_task(db_session=db_session, task_id=task.id):
                     # SKIP_IF_RUNNING: a prior fire is still in flight.
                     # Write a skipped row so the user can see the miss,
                     # then advance next_run_at as if it had fired.

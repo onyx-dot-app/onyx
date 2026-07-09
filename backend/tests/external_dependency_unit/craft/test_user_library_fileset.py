@@ -106,7 +106,12 @@ class TestUserLibraryFileset:
         stub_sandbox_manager.write_files_to_sandbox_silent = True
         _patch_user_library_manager(monkeypatch, stub_sandbox_manager)
 
-        result = hydrate_user_library(sandbox_row.id, test_user.id, db_session)
+        result = hydrate_user_library(
+            sandbox_row.id,
+            test_user.id,
+            db_session,
+            sandbox_manager=stub_sandbox_manager,
+        )
 
         assert result.succeeded == 1
         assert stub_sandbox_manager.write_files_to_sandbox_count == 1
