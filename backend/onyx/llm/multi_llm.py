@@ -88,6 +88,8 @@ _ANTHROPIC_ADAPTIVE_THINKING_MODELS = (
     "claude-5-fable",
     "claude-mythos-5",
     "claude-5-mythos",
+    "claude-sonnet-5",
+    "claude-5-sonnet",
 )
 
 # Anthropic models that reject any non-default sampling parameter (temperature,
@@ -109,6 +111,8 @@ _ANTHROPIC_NO_SAMPLING_PARAMS_MODELS = (
     "claude-5-fable",
     "claude-mythos-5",
     "claude-5-mythos",
+    "claude-sonnet-5",
+    "claude-5-sonnet",
 )
 
 
