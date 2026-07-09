@@ -57,6 +57,7 @@ const colors = {
   },
 };
 
+/** @deprecated Use `Text` from `@opal/components` with string-enum `font` and `color` props instead. */
 export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   nowrap?: boolean;
 
@@ -97,6 +98,7 @@ export interface TextProps extends Omit<HTMLAttributes<HTMLElement>, "as"> {
   as?: "p" | "span" | "li";
 }
 
+/** @deprecated Use `Text` from `@opal/components` with string-enum `font` and `color` props instead. */
 export default function Text({
   nowrap,
   headingH1,

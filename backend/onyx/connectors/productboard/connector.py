@@ -6,7 +6,6 @@ from typing import cast
 import requests
 from bs4 import BeautifulSoup
 from dateutil import parser
-from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
@@ -20,6 +19,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -67,7 +67,7 @@ class ProductboardConnector(PollConnector):
     ) -> Generator[dict[str, Any], None, None]:
         headers = self._build_headers()
 
-        @retry(tries=3, delay=1, backoff=2)
+        @retry_builder(tries=3, delay=1, backoff=2)
         def fetch(link: str) -> dict[str, Any]:
             response = requests.get(
                 link, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS

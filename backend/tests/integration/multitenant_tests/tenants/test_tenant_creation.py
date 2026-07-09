@@ -1,12 +1,11 @@
 from http import HTTPStatus
 from uuid import uuid4
 
-import requests
-
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.models import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -113,7 +112,7 @@ def test_settings_access() -> None:
     """Calls to the enterprise settings endpoint without authentication should fail with
     403 (and not 500, which will lock the web UI into a "maintenance mode" page)"""
 
-    response = requests.get(url=f"{API_SERVER_URL}/enterprise-settings")
+    response = client.get(url=f"{API_SERVER_URL}/enterprise-settings")
     assert response.status_code == HTTPStatus.FORBIDDEN
 
 
@@ -131,15 +130,15 @@ def test_image_gen_config_created_on_tenant_provision(
     all_configs = ImageGenerationConfigManager.get_all(user_performing_action=test_user)
 
     # Should have at least one config created during provisioning
-    assert (
-        len(all_configs) > 0
-    ), "Image generation config should be created during tenant provisioning"
+    assert len(all_configs) > 0, (
+        "Image generation config should be created during tenant provisioning"
+    )
 
     # Verify a default config exists
     default_configs = [c for c in all_configs if c.is_default]
-    assert (
-        len(default_configs) == 1
-    ), "Exactly one default image generation config should exist"
+    assert len(default_configs) == 1, (
+        "Exactly one default image generation config should exist"
+    )
 
     # Verify expected properties
     default_config = default_configs[0]

@@ -18,7 +18,17 @@ jobs:
       - name: Check PR body for Linear link or override
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          IGNORED_AUTHORS: |
+            jmelahman
         run: |
+          normalized_author="$(printf '%s' "${PR_AUTHOR}" | tr '[:upper:]' '[:lower:]')"
+          normalized_ignored="$(printf '%s\n' "${IGNORED_AUTHORS}" | tr '[:upper:]' '[:lower:]')"
+          if printf '%s\n' "${normalized_ignored}" | grep -Fxq "${normalized_author}"; then
+            echo "PR author ${PR_AUTHOR} is on the ignorelist. Check passed."
+            exit 0
+          fi
+
           # Looking for "https://linear.app" in the body
           if echo "$PR_BODY" | grep -qE "https://linear\.app"; then
             echo "Found a Linear link. Check passed."

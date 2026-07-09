@@ -12,6 +12,7 @@ from ee.onyx.external_permissions.google_drive.folder_retrieval import (
 )
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.models import PermissionType
+from onyx.access.utils import build_domain_group_id
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.google_utils.resources import AdminService
@@ -279,6 +280,26 @@ def _drive_member_map_to_onyx_groups(
         )
 
 
+def _get_all_domain_users(
+    admin_service: AdminService,
+    google_domain: str,
+) -> list[str]:
+    """Every user Google lists in the Workspace domain. This is the real
+    membership behind an "everyone at <domain>" Drive share, so a user is only in
+    the domain group if Google actually places them in the Workspace, not because
+    their email string ends in the domain."""
+    user_emails: set[str] = set()
+    for user in execute_paginated_retrieval(
+        admin_service.users().list,  # ty: ignore[unresolved-attribute]
+        list_key="users",
+        domain=google_domain,
+        fields="users(primaryEmail),nextPageToken",
+    ):
+        if email := user.get("primaryEmail"):
+            user_emails.add(email)
+    return list(user_emails)
+
+
 def _get_all_google_groups(
     admin_service: AdminService,
     google_domain: str,
@@ -463,3 +484,15 @@ def gdrive_group_sync(
     )
     for folder in folder_info:
         yield _drive_folder_to_onyx_group(folder, group_email_to_member_emails_map)
+
+    # "Everyone at <domain>" Drive shares resolve to this group. Only this
+    # connector's own domain is enumerable here; a share to a partner domain is
+    # populated by that domain's own connector sync.
+    domain_users = _get_all_domain_users(
+        admin_service, google_drive_connector.google_domain
+    )
+    if domain_users:
+        yield ExternalUserGroup(
+            id=build_domain_group_id(google_drive_connector.google_domain),
+            user_emails=domain_users,
+        )

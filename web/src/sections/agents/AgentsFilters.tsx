@@ -29,14 +29,14 @@
 import { useMemo, useState } from "react";
 import { FilterButton, LineItemButton } from "@opal/components";
 import { SvgActions, SvgUser } from "@opal/icons";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { Popover, PopoverMenu } from "@opal/components";
+import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import useMcpServers from "@/hooks/useMcpServers";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useUsers from "@/hooks/useUsers";
 import { useUser } from "@/providers/UserProvider";
-import type { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import type { MinimalAgent } from "@/lib/agents/types";
 import {
   OPEN_URL_TOOL_ID,
   OPEN_URL_TOOL_NAME,
@@ -76,7 +76,7 @@ function isSystemTool(item: ActionFilterItem): boolean {
 // useAgentsFilters
 // ---------------------------------------------------------------------------
 
-interface UseAgentsFiltersReturn<T extends MinimalPersonaSnapshot> {
+interface UseAgentsFiltersReturn<T extends MinimalAgent> {
   /** The input agents with all active filters applied. */
   filtered: T[];
 
@@ -90,7 +90,7 @@ interface UseAgentsFiltersReturn<T extends MinimalPersonaSnapshot> {
  * Accepts an array of agents, derives the available creators and actions,
  * and returns the filtered agents plus a renderable `filterBar`.
  */
-export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
+export function useAgentsFilters<T extends MinimalAgent>(
   agents: T[]
 ): UseAgentsFiltersReturn<T> {
   const { user } = useUser();
@@ -299,7 +299,7 @@ export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
                 key="created-by"
                 placeholder="Created by..."
                 variant="internal"
-                leftSearchIcon
+                searchIcon
                 value={creatorFilter.query}
                 onChange={(e) => creatorFilter.setQuery(e.target.value)}
               />,
@@ -354,7 +354,7 @@ export function useAgentsFilters<T extends MinimalPersonaSnapshot>(
                 key="actions"
                 placeholder="Filter actions..."
                 variant="internal"
-                leftSearchIcon
+                searchIcon
                 value={actionsFilter.query}
                 onChange={(e) => actionsFilter.setQuery(e.target.value)}
               />,

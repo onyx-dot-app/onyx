@@ -14,7 +14,7 @@ import {
 export default function SharedAppInputBar() {
   return (
     <div className="relative w-full">
-      <div className="w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16">
+      <div className="w-full flex flex-col shadow-box-01 bg-background-neutral-00 rounded-16">
         {/* Textarea area */}
         <div className="flex flex-row items-center w-full">
           <Text text03 className="w-full px-3 pt-3 pb-2 select-none">
@@ -42,7 +42,7 @@ export default function SharedAppInputBar() {
       </div>
 
       {/* Fade overlay */}
-      <div className="absolute inset-0 rounded-16 backdrop-blur-sm bg-background-neutral-00/50" />
+      <div className="absolute inset-0 rounded-16 backdrop-blur-xs bg-background-neutral-00/50" />
 
       {/* CTA button */}
       <div className="absolute inset-0 flex items-center justify-center">

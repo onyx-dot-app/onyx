@@ -5,37 +5,35 @@ import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import { guardPortalClick } from "@opal/core/interactive/utils";
 import type { ButtonType, WithoutStyles } from "@opal/types";
+import type {
+  InteractiveContract,
+  InteractiveVariant,
+  InteractiveProminence,
+} from "@onyx-ai/shared/contracts";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type InteractiveStatelessVariant = "default" | "action" | "danger";
-type InteractiveStatelessProminence =
-  | "primary"
-  | "secondary"
-  | "tertiary"
-  | "internal";
+// `variant`/`prominence`/`disabled` come from the shared InteractiveContract. Opal
+// re-exports the unions under its `InteractiveStateless*` names so web code imports
+// the Interactive family from `@opal/core`, not `@onyx-ai/shared`. `interaction`
+// stays web-local — `hover` has no meaning on touch.
+type InteractiveStatelessVariant = InteractiveVariant;
+type InteractiveStatelessProminence = InteractiveProminence;
 type InteractiveStatelessInteraction = "rest" | "hover" | "active";
 
 /**
  * Props for {@link InteractiveStateless}.
+ *
+ * `variant`, `prominence`, and `disabled` come from the shared
+ * {@link InteractiveContract}; the rest are web-specific wiring.
  */
 interface InteractiveStatelessProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
+  extends
+    InteractiveContract,
+    WithoutStyles<React.HTMLAttributes<HTMLElement>> {
   ref?: React.Ref<HTMLElement>;
-
-  /**
-   * Visual variant controlling the color palette.
-   * @default "default"
-   */
-  variant?: InteractiveStatelessVariant;
-
-  /**
-   * Prominence level controlling background intensity.
-   * @default "primary"
-   */
-  prominence?: InteractiveStatelessProminence;
 
   /**
    * JS-controllable interaction state override.
@@ -69,11 +67,6 @@ interface InteractiveStatelessProps
    * Link target (e.g. `"_blank"`). Only used when `href` is provided.
    */
   target?: string;
-
-  /**
-   * Applies variant-specific disabled colors and suppresses clicks.
-   */
-  disabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +101,7 @@ function InteractiveStateless({
   // so Radix Slot-injected handlers don't bypass this guard.
   const classes = cn(
     "interactive",
-    !props.onClick && !href && !type && "!cursor-default !select-auto",
+    !props.onClick && !href && !type && "cursor-default! select-auto!",
     group
   );
 

@@ -9,8 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ContentComponentProps } from "./ExpandableContentWrapper";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { SvgAlertCircle } from "@opal/icons";
+import { SvgAlertCircle, SvgSimpleLoader } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 
@@ -96,7 +95,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
   if (isFetching) {
     return (
       <div className="flex items-center justify-center h-[300px]">
-        <SimpleLoader />
+        <SvgSimpleLoader />
       </div>
     );
   }

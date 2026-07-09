@@ -3,12 +3,12 @@ from datetime import datetime
 from typing import cast
 from uuid import uuid4
 
-import redis
 from celery import Celery
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import PRUNE_FAILURE_BACKOFF_SECONDS
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PRUNING_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
@@ -17,6 +17,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
 class RedisConnectorPrunePayload(BaseModel):
@@ -54,7 +55,16 @@ class RedisConnectorPrune:
     ACTIVE_PREFIX = PREFIX + "_active"
     ACTIVE_TTL = CELERY_PRUNING_LOCK_TIMEOUT * 2
 
-    def __init__(self, tenant_id: str, id: int, redis: redis.Redis) -> None:
+    # Set on prune failure; survives reset(). While present, the scheduled beat
+    # skips re-dispatching this cc_pair, so a failing prune can't re-fire and flood.
+    FAILURE_BACKOFF_PREFIX = PREFIX + "_failure_backoff"
+    FAILURE_BACKOFF_TTL = PRUNE_FAILURE_BACKOFF_SECONDS
+
+    # Set when the generator throws after fan-out (fence kept); the monitor reads
+    # it to record the prune FAILED instead of falsely advancing last_pruned.
+    GENERATOR_FAILED_PREFIX = PREFIX + "_generator_failed"
+
+    def __init__(self, tenant_id: str, id: int, redis: TenantRedisClient) -> None:
         self.tenant_id: str = tenant_id
         self.id = id
         self.redis = redis
@@ -68,6 +78,8 @@ class RedisConnectorPrune:
 
         self.subtask_prefix: str = f"{self.SUBTASK_PREFIX}_{id}"
         self.active_key = f"{self.ACTIVE_PREFIX}_{id}"
+        self.failure_backoff_key = f"{self.FAILURE_BACKOFF_PREFIX}_{id}"
+        self.generator_failed_key = f"{self.GENERATOR_FAILED_PREFIX}_{id}"
 
     def taskset_clear(self) -> None:
         self.redis.delete(self.taskset_key)
@@ -75,11 +87,11 @@ class RedisConnectorPrune:
     def generator_clear(self) -> None:
         self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
+        self.redis.delete(self.generator_failed_key)
 
     def get_remaining(self) -> int:
         # todo: move into fence
-        remaining = cast(int, self.redis.scard(self.taskset_key))
-        return remaining
+        return self.redis.scard(self.taskset_key)
 
     def get_active_task_count(self) -> int:
         """Count of active pruning tasks"""
@@ -131,6 +143,27 @@ class RedisConnectorPrune:
     def active(self) -> bool:
         return bool(self.redis.exists(self.active_key))
 
+    def set_failure_backoff(self) -> None:
+        """Record a prune failure so the beat skips re-dispatching this cc_pair
+        until it expires. Survives reset(); cleared by reset_all() on startup."""
+        self.redis.set(self.failure_backoff_key, 1, ex=self.FAILURE_BACKOFF_TTL)
+
+    @property
+    def in_failure_backoff(self) -> bool:
+        return bool(self.redis.exists(self.failure_backoff_key))
+
+    def clear_failure_backoff(self) -> None:
+        self.redis.delete(self.failure_backoff_key)
+
+    def set_generator_failed(self) -> None:
+        """Mark that the generator threw after fan-out so the monitor records the
+        finalized prune as FAILED instead of advancing last_pruned."""
+        self.redis.set(self.generator_failed_key, 1, ex=self.FENCE_TTL)
+
+    @property
+    def generator_failed(self) -> bool:
+        return bool(self.redis.exists(self.generator_failed_key))
+
     @property
     def generator_complete(self) -> int | None:
         """the fence payload is an int representing the starting number of
@@ -139,8 +172,7 @@ class RedisConnectorPrune:
         if fence_bytes is None:
             return None
 
-        fence_int = int(cast(bytes, fence_bytes))
-        return fence_int
+        return int(fence_bytes)
 
     @generator_complete.setter
     def generator_complete(self, payload: int | None) -> None:
@@ -211,17 +243,18 @@ class RedisConnectorPrune:
         self.redis.delete(self.active_key)
         self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
+        self.redis.delete(self.generator_failed_key)
         self.redis.delete(self.taskset_key)
         self.redis.delete(self.fence_key)
 
     @staticmethod
-    def remove_from_taskset(id: int, task_id: str, r: redis.Redis) -> None:
+    def remove_from_taskset(id: int, task_id: str, r: TenantRedisClient) -> None:
         taskset_key = f"{RedisConnectorPrune.TASKSET_PREFIX}_{id}"
         r.srem(taskset_key, task_id)
         return
 
     @staticmethod
-    def reset_all(r: redis.Redis) -> None:
+    def reset_all(r: TenantRedisClient) -> None:
         """Deletes all redis values for all connectors"""
         for key in r.scan_iter(RedisConnectorPrune.ACTIVE_PREFIX + "*"):
             r.delete(key)
@@ -236,4 +269,10 @@ class RedisConnectorPrune:
             r.delete(key)
 
         for key in r.scan_iter(RedisConnectorPrune.FENCE_PREFIX + "*"):
+            r.delete(key)
+
+        for key in r.scan_iter(RedisConnectorPrune.FAILURE_BACKOFF_PREFIX + "*"):
+            r.delete(key)
+
+        for key in r.scan_iter(RedisConnectorPrune.GENERATOR_FAILED_PREFIX + "*"):
             r.delete(key)

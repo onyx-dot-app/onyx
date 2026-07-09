@@ -18,6 +18,7 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
+from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.chat_configs import SKIP_DEEP_RESEARCH_CLARIFICATION
 from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -163,7 +164,7 @@ def generate_final_report(
             max_tokens=MAX_FINAL_REPORT_TOKENS,
             is_deep_research=True,
             pre_answer_processing_time=pre_answer_processing_time,
-            timeout_override=300,  # 5 minute read timeout for long report generation
+            timeout_override=DR_REPORT_LLM_TIMEOUT_S,
         )
 
         # Save citation mapping to state_container so citations are persisted
@@ -211,6 +212,7 @@ def run_deep_research_llm_loop(
         metadata={
             "tenant_id": get_current_tenant_id(),
             "chat_session_id": chat_session_id,
+            "user_id": user_identity.user_id if user_identity else None,
         },
     ):
         # Here for lazy load LiteLLM
@@ -426,9 +428,7 @@ def run_deep_research_llm_loop(
             reasoning_cycles = 0
             most_recent_reasoning: str | None = None
             citation_mapping: CitationMapping = {}
-            final_turn_index: int = (
-                orchestrator_start_turn_index  # Track the final turn_index for stop packet
-            )
+            final_turn_index: int = orchestrator_start_turn_index  # Track the final turn_index for stop packet
             for cycle in range(max_orchestrator_cycles):
                 # Check if we've exceeded the time limit or reached the last cycle
                 # - if so, skip LLM and generate final report
@@ -569,9 +569,7 @@ def run_deep_research_llm_loop(
                 special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
 
                 if special_tool_calls.generate_report_tool_call:
-                    report_turn_index = (
-                        special_tool_calls.generate_report_tool_call.placement.turn_index
-                    )
+                    report_turn_index = special_tool_calls.generate_report_tool_call.placement.turn_index
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
                         research_plan=research_plan,

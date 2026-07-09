@@ -2,7 +2,6 @@
 export {
   Content,
   type ContentProps,
-  type ContentColor,
   type SizePreset,
   type ContentVariant,
 } from "@opal/layouts/content/components";
@@ -37,3 +36,35 @@ export {
   IllustrationContent,
   type IllustrationContentProps,
 } from "@opal/layouts/illustration-content/components";
+
+/* Section (general layout primitive) */
+export {
+  Section,
+  widthClassmap,
+  heightClassmap,
+  type SectionProps,
+  type FlexDirection,
+  type JustifyContent,
+  type AlignItems,
+  type Length,
+} from "@opal/layouts/general/components";
+
+/* SettingsLayouts */
+export * as SettingsLayouts from "@opal/layouts/settings/components";
+export type { SettingsHeaderProps } from "@opal/layouts/settings/components";
+
+/* RootLayout */
+export * as RootLayout from "@opal/layouts/root/components";
+export {
+  useSidebarState,
+  SidebarStateProvider,
+  RootLayoutRightPanelSlotContext,
+} from "@opal/layouts/root/components";
+export type {
+  SidebarStateProviderProps,
+  RightPanelSlotSetter,
+} from "@opal/layouts/root/components";
+
+/* SidebarLayouts */
+export * as SidebarLayouts from "@opal/layouts/sidebar/components";
+export { type SidebarRootProps } from "@opal/layouts/sidebar/components";

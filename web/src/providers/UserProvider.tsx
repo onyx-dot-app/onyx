@@ -16,14 +16,15 @@ import {
   ThemePreference,
 } from "@/lib/types";
 import { usePostHog } from "posthog-js/react";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCurrentUser } from "@/lib/users/hooks";
+import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import {
-  useAuthTypeMetadata,
-  AuthTypeMetadata,
-} from "@/hooks/useAuthTypeMetadata";
-import { updateUserPersonalization as persistPersonalization } from "@/lib/userSettings";
+  updateUserPersonalization as persistPersonalization,
+  setUserDefaultModel,
+} from "@/lib/users/svc";
 import { useTheme } from "next-themes";
 
 interface UserContextType {
@@ -35,6 +36,7 @@ interface UserContextType {
   authTypeMetadata: AuthTypeMetadata;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
+  updateUserPasteAsTile: (enabled: boolean) => Promise<void>;
   toggleAgentPinnedStatus: (
     currentPinnedAgentIDs: number[],
     agentId: number,
@@ -63,12 +65,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser } = useCurrentUser();
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
-  const updatedSettings = useContext(SettingsContext);
+  const updatedSettingsData = useSettings();
   const posthog = usePostHog();
 
   // For auto_scroll and temperature_override_enabled:
   // - If user has a preference set, use that
   // - Otherwise, use the workspace setting if available
+  const wsAutoScroll = updatedSettingsData.auto_scroll;
+  const wsTemperatureOverride =
+    updatedSettingsData.temperature_override_enabled;
+
   const mergeUserPreferences = useCallback(
     (currentUser: User | null): User | null => {
       if (!currentUser) return null;
@@ -77,17 +83,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         preferences: {
           ...currentUser.preferences,
           auto_scroll:
-            currentUser.preferences?.auto_scroll ??
-            updatedSettings?.settings?.auto_scroll ??
-            false,
+            currentUser.preferences?.auto_scroll ?? wsAutoScroll ?? false,
           temperature_override_enabled:
             currentUser.preferences?.temperature_override_enabled ??
-            updatedSettings?.settings?.temperature_override_enabled ??
+            wsTemperatureOverride ??
             false,
         },
       };
     },
-    [updatedSettings]
+    [wsAutoScroll, wsTemperatureOverride]
   );
 
   const [upToDateUser, setUpToDateUser] = useState<User | null>(null);
@@ -218,6 +222,41 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Error updating user shortcut setting:", error);
+      throw error;
+    }
+  };
+
+  const updateUserPasteAsTile = async (enabled: boolean) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              paste_as_tile: enabled,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(
+        `/api/paste-as-tile?paste_as_tile=${enabled}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update paste tile setting");
+      }
+    } catch (error) {
+      console.error("Error updating paste tile setting:", error);
       throw error;
     }
   };
@@ -409,13 +448,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         return prevUser;
       });
 
-      const response = await fetch(`/api/user/default-model`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ default_model: defaultModel }),
-      });
+      const response = await setUserDefaultModel(defaultModel);
 
       if (!response.ok) {
         await refreshUser();
@@ -516,6 +549,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         authTypeMetadata,
         updateUserAutoScroll,
         updateUserShortcuts,
+        updateUserPasteAsTile,
         updateUserTemperatureOverrideEnabled,
         updateUserPersonalization,
         updateUserThemePreference,

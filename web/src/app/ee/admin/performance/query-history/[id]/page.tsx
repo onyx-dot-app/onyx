@@ -3,7 +3,7 @@ import { use } from "react";
 
 import { Divider, Text } from "@opal/components";
 import Title from "@/components/ui/title";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { ChatSessionSnapshot, MessageSnapshot } from "../../usage/types";
 import { FiBook } from "react-icons/fi";
 import { timestampToReadableDate } from "@/lib/dateUtils";
@@ -13,7 +13,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import CardSection from "@/components/admin/CardSection";
 
 function MessageDisplay({ message }: { message: MessageSnapshot }) {
@@ -77,7 +77,7 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
   );
 
   if (isLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (!chatSessionSnapshot || error) {

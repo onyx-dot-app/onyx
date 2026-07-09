@@ -4,9 +4,7 @@ import {
   ProjectsProvider,
   useProjectsContext,
 } from "@/providers/ProjectsContext";
-import { SettingsContext } from "@/providers/SettingsProvider";
-import { CombinedSettings } from "@/interfaces/settings";
-import type { ProjectFile } from "@/app/app/projects/projectsService";
+import type { ProjectFile } from "@/lib/projects/types";
 
 const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();
@@ -22,10 +20,21 @@ jest.mock("@/hooks/appNavigation", () => ({
   useAppRouter: () => jest.fn(),
 }));
 
-jest.mock("@/lib/hooks/useProjects", () => ({
+jest.mock("@/lib/projects/hooks", () => ({
   useProjects: () => ({
     projects: [],
     refreshProjects: jest.fn().mockResolvedValue([]),
+  }),
+}));
+
+jest.mock("@/lib/settings/hooks", () => ({
+  useSettings: () => ({
+    user_file_max_upload_size_mb: 1,
+    enterprise: null,
+    appName: "Onyx",
+    vectorDbEnabled: true,
+    isLoading: false,
+    error: undefined,
   }),
 }));
 
@@ -37,8 +46,8 @@ jest.mock("@/hooks/useToast", () => ({
   },
 }));
 
-jest.mock("@/app/app/projects/projectsService", () => {
-  const actual = jest.requireActual("@/app/app/projects/projectsService");
+jest.mock("@/lib/projects/svc", () => {
+  const actual = jest.requireActual("@/lib/projects/svc");
   return {
     ...actual,
     fetchProjects: jest.fn().mockResolvedValue([]),
@@ -59,22 +68,8 @@ jest.mock("@/app/app/projects/projectsService", () => {
   };
 });
 
-const settingsValue: CombinedSettings = {
-  settings: {
-    user_file_max_upload_size_mb: 1,
-  } as CombinedSettings["settings"],
-  enterpriseSettings: null,
-  customAnalyticsScript: null,
-  webVersion: null,
-  webDomain: null,
-  isSearchModeAvailable: true,
-  settingsLoading: false,
-};
-
 const wrapper = ({ children }: PropsWithChildren) => (
-  <SettingsContext.Provider value={settingsValue}>
-    <ProjectsProvider>{children}</ProjectsProvider>
-  </SettingsContext.Provider>
+  <ProjectsProvider>{children}</ProjectsProvider>
 );
 
 describe("ProjectsContext beginUpload size precheck", () => {

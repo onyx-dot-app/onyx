@@ -14,10 +14,7 @@ export async function GET(request: NextRequest) {
     const response = await fetch(backendUrl, {
       method: "GET",
       headers: request.headers,
-      body: request.body,
       signal: request.signal,
-      // @ts-ignore
-      duplex: "half",
     });
 
     const responseData = await response.json();

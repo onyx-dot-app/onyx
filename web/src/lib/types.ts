@@ -1,4 +1,4 @@
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 import { Credential } from "./connectors/credentials";
 import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
@@ -32,6 +32,8 @@ interface UserPreferences {
   theme_preference: ThemePreference | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
+  // Input preferences
+  paste_as_tile?: boolean;
   // Voice preferences
   voice_auto_send?: boolean;
   voice_auto_playback?: boolean;
@@ -112,9 +114,7 @@ export interface User {
   is_verified: boolean;
   role: UserRole;
   preferences: UserPreferences;
-  current_token_created_at?: Date;
-  current_token_expiry_length?: number;
-  oidc_expiry?: Date;
+  token_expires_at?: string;
   is_cloud_superuser?: boolean;
   team_name: string | null;
   is_anonymous_user?: boolean;
@@ -179,7 +179,7 @@ export type ValidStatuses =
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
 export type AccessType = "public" | "private" | "sync";
-export type ProcessingMode = "REGULAR" | "FILE_SYSTEM";
+export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 
 export interface DocumentBoostStatus {
@@ -233,9 +233,15 @@ export const INDEX_ATTEMPT_STAGES = [
   "CHUNKING",
   "CONTEXTUAL_RAG",
   "EMBEDDING",
+  "DOC_LOCK_ACQUIRE_WAIT",
+  "ENRICHMENT_PREP",
   "VECTOR_DB_WRITE",
   "POST_INDEX_DB_UPDATE",
+  "COORD_LOCK_ACQUIRE_WAIT",
   "COORDINATION_UPDATE",
+  "FINALIZATION",
+  "GC_COLLECT",
+  "BATCH_UNACCOUNTED",
   "BATCH_TOTAL",
 ] as const;
 
@@ -489,7 +495,7 @@ export interface SlackChannelConfig {
   id: number;
   slack_bot_id: number;
   persona_id: number | null;
-  persona: Persona | null;
+  persona: Agent | null;
   channel_config: ChannelConfig;
   enable_auto_filters: boolean;
   standard_answer_categories: StandardAnswerCategory[];
@@ -532,7 +538,7 @@ export interface UserGroup {
   curator_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
   document_sets: DocumentSetSummary[];
-  personas: Persona[];
+  personas: Agent[];
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
   is_default: boolean;
@@ -592,6 +598,7 @@ export enum ValidSources {
   Imap = "imap",
   Bitbucket = "bitbucket",
   TestRail = "testrail",
+  Braintrust = "braintrust",
 
   // Craft-specific sources
   CraftFile = "craft_file",

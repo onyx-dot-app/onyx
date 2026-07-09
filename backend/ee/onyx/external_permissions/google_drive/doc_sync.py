@@ -13,6 +13,7 @@ from onyx.access.models import DocExternalAccess
 from onyx.access.models import ElementExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.access.models import NodeExternalAccess
+from onyx.access.utils import build_domain_group_id
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -25,6 +26,34 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _domain_group_for_permission(
+    permission: GoogleDrivePermission,
+    own_domain: str | None,
+    entity_desc: str,
+) -> str | None:
+    """Map an "everyone at <domain>" permission to its domain group, or None when
+    the share grants searchable access to no one. Link-only shares
+    (allow_file_discovery=False) grant nothing: Google exposes them only to
+    domain users who already hold the link, not to domain-wide search. The Drive
+    group sync populates the domain group with that domain's real Workspace
+    members."""
+    if not permission.domain:
+        logger.warning(
+            "Domain permission without a domain for %s\n %s", entity_desc, permission
+        )
+        return None
+    if permission.allow_file_discovery is False:
+        return None
+    if permission.domain != own_domain:
+        # Cross-workspace share (e.g. shared to a partner company's whole domain).
+        logger.debug(
+            "Domain permission for %s scoped to external domain %s",
+            entity_desc,
+            permission.domain,
+        )
+    return build_domain_group_id(permission.domain)
 
 
 def _get_slim_doc_generator(
@@ -148,6 +177,7 @@ def get_external_access_for_raw_gdrive_file(
     folder_ids_to_inherit_permissions_from: set[str] = set()
     user_emails: set[str] = set()
     group_emails: set[str] = set()
+    domain_groups: set[str] = set()
     public = False
 
     for permission in permissions_list:
@@ -187,19 +217,18 @@ def get_external_access_for_raw_gdrive_file(
                     doc_id,
                     permission,
                 )
-        elif permission.type == PermissionType.DOMAIN and company_domain:
-            if permission.domain == company_domain:
-                public = True
-            else:
-                logger.warning(
-                    "Permission is type domain but does not match company domain:\n %s",
-                    permission,
-                )
+        elif permission.type == PermissionType.DOMAIN:
+            domain_group = _domain_group_for_permission(
+                permission, company_domain, f"document {doc_id}"
+            )
+            if domain_group:
+                domain_groups.add(domain_group)
         elif permission.type == PermissionType.ANYONE:
             public = True
 
     group_ids = (
         group_emails
+        | domain_groups
         | folder_ids_to_inherit_permissions_from
         | ({drive_id} if drive_id is not None else set())
     )
@@ -268,6 +297,7 @@ def get_external_access_for_folder(
 
     user_emails: set[str] = set()
     group_emails: set[str] = set()
+    domain_groups: set[str] = set()
     is_public = False
 
     for permission in permissions_list:
@@ -285,30 +315,22 @@ def get_external_access_for_folder(
                     "Group permission without email for folder %s", folder_id
                 )
         elif permission.type == PermissionType.DOMAIN:
-            # Domain permission - check if it matches company domain
-            if permission.domain == google_domain:
-                # Only public if discoverable (allowFileDiscovery is not False)
-                # If allowFileDiscovery is False, it's "link only" access
-                is_public = permission.allow_file_discovery is not False
-            else:
-                logger.debug(
-                    "Domain permission for %s does not match "
-                    "company domain %s for folder %s",
-                    permission.domain,
-                    google_domain,
-                    folder_id,
-                )
+            domain_group = _domain_group_for_permission(
+                permission, google_domain, f"folder {folder_id}"
+            )
+            if domain_group:
+                domain_groups.add(domain_group)
         elif permission.type == PermissionType.ANYONE:
             # Only public if discoverable (allowFileDiscovery is not False)
             # If allowFileDiscovery is False, it's "link only" access
             is_public = permission.allow_file_discovery is not False
 
     # Prefix group IDs with source type if requested (for indexing path)
-    group_ids: set[str] = group_emails
+    group_ids: set[str] = group_emails | domain_groups
     if add_prefix:
         group_ids = {
             build_ext_group_name_for_onyx(group_id, DocumentSource.GOOGLE_DRIVE)
-            for group_id in group_emails
+            for group_id in group_ids
         }
 
     return ExternalAccess(

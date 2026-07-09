@@ -9,7 +9,6 @@ from celery import Celery
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 from tenacity import RetryError
@@ -33,8 +32,10 @@ from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.db.document import document_has_indexable_cc_pair
 from onyx.db.document import get_document
 from onyx.db.document import mark_document_as_synced
+from onyx.db.document import mark_document_synced_secondary_pending
 from onyx.db.document_set import delete_document_set
 from onyx.db.document_set import fetch_document_sets
 from onyx.db.document_set import fetch_document_sets_for_document
@@ -45,18 +46,21 @@ from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import DocumentSet
 from onyx.db.models import UserGroup
+from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.sync_record import cleanup_sync_records
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces import VespaDocumentFields
+from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_usergroup import RedisUserGroup
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import (
@@ -212,7 +216,7 @@ def try_generate_document_set_sync_tasks(
     celery_app: Celery,
     document_set_id: int,
     db_session: Session,
-    r: Redis,
+    r: TenantRedisClient,
     lock_beat: RedisLock,
     tenant_id: str,
 ) -> int | None:
@@ -288,7 +292,7 @@ def try_generate_user_group_sync_tasks(
     celery_app: Celery,
     usergroup_id: int,
     db_session: Session,
-    r: Redis,
+    r: TenantRedisClient,
     lock_beat: RedisLock,
     tenant_id: str,
 ) -> int | None:
@@ -360,7 +364,7 @@ def try_generate_user_group_sync_tasks(
     return tasks_generated
 
 
-def monitor_document_sync_taskset(r: Redis) -> None:
+def monitor_document_sync_taskset(r: TenantRedisClient) -> None:
     initial_count = get_document_sync_payload(r)
     if initial_count is None:
         return
@@ -375,7 +379,7 @@ def monitor_document_sync_taskset(r: Redis) -> None:
 
 
 def monitor_document_set_taskset(
-    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: TenantRedisClient, db_session: Session
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     document_set_id_str = RedisDocumentSet.get_id_from_fence_key(fence_key)
@@ -393,7 +397,7 @@ def monitor_document_set_taskset(
     if initial_count is None:
         return
 
-    count = cast(int, r.scard(rds.taskset_key))
+    count = r.scard(rds.taskset_key)
     task_logger.info(
         f"Document set sync progress: document_set={document_set_id} remaining={count} initial={initial_count}"
     )
@@ -409,7 +413,11 @@ def monitor_document_set_taskset(
 
     document_set = cast(
         DocumentSet,
-        get_document_set_by_id(db_session=db_session, document_set_id=document_set_id),
+        get_document_set_by_id(
+            db_session=db_session,
+            document_set_id=document_set_id,
+            prefetch_relationships=True,
+        ),
     )  # casting since we "know" a document set with this ID exists
     if document_set:
         has_connector_pairs = bool(document_set.connector_credential_pairs)
@@ -454,7 +462,10 @@ def monitor_document_set_taskset(
     max_retries=3,
 )
 def document_index_metadata_sync_task(
-    self: Task, document_id: str, *, tenant_id: str
+    self: Task,
+    document_id: str,
+    *,
+    tenant_id: str,  # noqa: ARG001 — kept on the celery task signature
 ) -> bool:
     start = time.monotonic()
 
@@ -463,11 +474,21 @@ def document_index_metadata_sync_task(
     try:
         with get_session_with_current_tenant() as db_session:
             active_search_settings = get_active_search_settings(db_session)
+            # INSTANT reindex-port: the promoted primary is still backfilling. Flag it so
+            # an update to a not-yet-copied doc defers below instead of clearing needs_sync
+            # (which would let the create-only port reinstall a stale ACL). See update().
+            primary_backfill_in_progress = (
+                active_search_settings.primary.port_backfill_source_id is not None
+                and port_backfill_has_pending_work(
+                    db_session, active_search_settings.primary.id
+                )
+            )
             # This flow is for updates so we get all indices.
             document_indices = get_all_document_indices(
                 search_settings=active_search_settings.primary,
                 secondary_search_settings=active_search_settings.secondary,
                 httpx_client=HttpxPool.get("vespa"),
+                primary_backfill_in_progress=primary_backfill_in_progress,
             )
 
             retry_document_indices: list[RetryDocumentIndex] = [
@@ -492,30 +513,46 @@ def document_index_metadata_sync_task(
                     document_id=document_id, db_session=db_session
                 )
 
-                fields = VespaDocumentFields(
-                    document_sets=update_doc_sets,
+                update_request = MetadataUpdateRequest(
+                    document_ids=[document_id],
+                    doc_id_to_chunk_cnt={
+                        document_id: (
+                            doc.chunk_count if doc.chunk_count is not None else -1
+                        )
+                    },
                     access=doc_access,
+                    document_sets=update_doc_sets,
                     boost=doc.boost,
                     hidden=doc.hidden,
-                    # aggregated_boost_factor=doc.aggregated_boost_factor,
                 )
 
+                # Reindex-port: doc missing from a still-populating index (FUTURE, or the
+                # INSTANT-promoted primary) — defer rather than fail; the fully-populated
+                # index's write already committed in the pair.
+                port_index_missing = False
                 for retry_document_index in retry_document_indices:
-                    # TODO(andrei): Previously there was a comment here saying
-                    # it was ok if a doc did not exist in the document index. I
-                    # don't agree with that claim, so keep an eye on this task
-                    # to see if this raises.
-                    retry_document_index.update_single(
-                        document_id,
-                        tenant_id=tenant_id,
-                        chunk_count=doc.chunk_count,
-                        fields=fields,
-                        user_fields=None,
-                    )
+                    try:
+                        # TODO(andrei): Previously there was a comment here saying
+                        # it was ok if a doc did not exist in the document index. I
+                        # don't agree with that claim, so keep an eye on this task
+                        # to see if this raises.
+                        retry_document_index.update([update_request])
+                    except SecondaryIndexDocumentMissingError:
+                        task_logger.debug(
+                            f"doc={document_id} not in a still-porting index; deferring sync."
+                        )
+                        port_index_missing = True
 
                 # update db last. Worst case = we crash right before this and
-                # the sync might repeat again later
-                mark_document_as_synced(document_id, db_session)
+                # the sync might repeat again later.
+                # Defer only if the doc can still be ported; an INVALID/DELETING-only
+                # doc's flag would never clear -> swap deadlock, so mark it synced.
+                if port_index_missing and document_has_indexable_cc_pair(
+                    db_session, document_id
+                ):
+                    mark_document_synced_secondary_pending(document_id, db_session)
+                else:
+                    mark_document_as_synced(document_id, db_session)
 
                 elapsed = time.monotonic() - start
                 task_logger.info(f"doc={document_id} action=sync elapsed={elapsed:.2f}")

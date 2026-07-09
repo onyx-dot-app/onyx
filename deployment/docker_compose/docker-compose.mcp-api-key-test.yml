@@ -18,4 +18,16 @@ services:
       - "${MCP_API_KEY_TEST_PORT:-8005}:${MCP_API_KEY_TEST_PORT:-8005}"
     volumes:
       - ../..:/workspace:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ['MCP_API_KEY_TEST_PORT']}/healthz\")",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 

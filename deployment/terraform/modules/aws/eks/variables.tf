@@ -55,6 +55,12 @@ variable "vespa_node_subnet_ids" {
   default     = []
 }
 
+variable "main_node_subnet_ids" {
+  type        = list(string)
+  description = "Subnet IDs for the main node group. If not specified, uses all cluster subnets. Pin to private subnets to keep node egress on the NAT gateway IP across replacements."
+  default     = []
+}
+
 variable "eks_managed_node_groups" {
   type        = map(any)
   description = "EKS managed node groups with EBS volume configuration"
@@ -120,6 +126,47 @@ variable "tags" {
   default     = {}
 }
 
+variable "enable_craft" {
+  type        = bool
+  description = "Enable Craft infrastructure. Currently provisions a dedicated Craft sandbox node group (labeled onyx.app/workload=sandbox, tainted workload=sandbox:NoSchedule, IMDSv2 hop-limit 1)."
+  default     = false
+}
+
+variable "craft_sandbox_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the Craft sandbox node group."
+  default     = ["m5.large"]
+}
+
+variable "craft_sandbox_node_min_size" {
+  type        = number
+  description = "Min size of the Craft sandbox node group. Keep >= 1: cluster-autoscaler can only scale a group back up from zero with node-template label/taint ASG tags, which are not configured here, so a value of 0 would leave sandbox pods Pending after idle scale-down."
+  default     = 1
+}
+
+variable "craft_sandbox_node_max_size" {
+  type        = number
+  description = "Max size of the Craft sandbox node group (concurrency: each sandbox needs ~1 vCPU/2Gi)."
+  default     = 4
+}
+
+variable "craft_sandbox_node_desired_size" {
+  type        = number
+  description = "Desired size of the Craft sandbox node group."
+  default     = 1
+}
+
+variable "craft_sandbox_node_disk_size_gb" {
+  type        = number
+  description = "Root EBS volume (GiB) for Craft sandbox nodes. Size this relative to the instance's vCPU and the sandbox pod's ephemeral-storage request (default 5Gi/pod): a node fits min(vCPU/pod-cpu, disk/pod-eph) sandboxes, so a disk too small for the instance makes ephemeral-storage the binding dimension and caps the node far below its CPU capacity. The default suits the default m5.large; raise it if you use larger instances."
+  default     = 50
+
+  validation {
+    condition     = var.craft_sandbox_node_disk_size_gb >= 20
+    error_message = "craft_sandbox_node_disk_size_gb must be at least 20 GiB; the AL2023 AMI and OS overlay consume ~8 GiB, leaving too little ephemeral storage for even one sandbox pod (5Gi request) below that threshold."
+  }
+}
+
 variable "create_gp3_storage_class" {
   type        = bool
   description = "Whether to create the gp3 storage class. The gp3 storage class will be patched to make it default and allow volume expansion."
@@ -142,6 +189,12 @@ variable "irsa_service_account_name" {
   type        = string
   description = "Name of the IRSA-enabled Kubernetes service account for workload access (S3 + optional RDS)"
   default     = "onyx-workload-access"
+}
+
+variable "irsa_additional_service_account_names" {
+  type        = list(string)
+  description = "Additional service accounts in irsa_service_account_namespace that may assume the workload IRSA role. Use this for chart-created workloads, such as <release>-sandbox-proxy, that also need RDS IAM auth. The role is created when s3_bucket_names is non-empty or RDS IAM auth is enabled."
+  default     = []
 }
 
 variable "enable_rds_iam_for_service_account" {

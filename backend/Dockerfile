@@ -1,36 +1,21 @@
-FROM python:3.11-slim@sha256:6d85378d88a19cd4d76079817532d62232be95757cb45945a99fec8e8084b9c2
+####################################################################################################
+# Builder stage
+#
+# Installs the build toolchain and compiles/installs all Python dependencies. Only the resulting
+# site-packages + console scripts are copied into the runtime stage; the build toolchain never
+# reaches the shipped image.
+####################################################################################################
+# Registry prefix for base images. Defaults to Docker Hub; CI overrides this to the ECR
+# pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
+# Hub rate limits. Declared before the first FROM so it applies to every base image below.
+ARG BASE_IMAGE_REGISTRY=docker.io
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:b04b5d7233d2ad9c379e22ea8927cd1378cd15c60d4ef876c065b25ea8fb3bf3 AS builder
 
-LABEL com.danswer.maintainer="founders@onyx.app"
-LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
-contains code for both the Community and Enterprise editions of Onyx. If you do not \
-have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
-Edition features outside of personal development or testing purposes. Please reach out to \
-founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /bin/
 
-# Build argument for Craft support (disabled by default)
-# Use --build-arg ENABLE_CRAFT=true to include Node.js and opencode CLI
-ARG ENABLE_CRAFT=false
-
-# DO_NOT_TRACK is used to disable telemetry for Unstructured
-ENV ONYX_RUNNING_IN_DOCKER="true" \
-    DO_NOT_TRACK="true" \
-    PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
-
-# Create non-root user for security best practices
-RUN groupadd -g 1001 onyx && \
-    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
-    mkdir -p /var/log/onyx && \
-    chmod 755 /var/log/onyx && \
-    chown onyx:onyx /var/log/onyx
-
-COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
-
-# Install system dependencies
-# cmake needed for psycopg (postgres)
-# libpq-dev needed for psycopg (postgres)
-# curl included just for users' convenience
-# zip for Vespa step futher down
-# ca-certificates for HTTPS
+# System dependencies for compiling the Python wheels.
+# cmake/libxmlsec1-dev/pkg-config/gcc needed to compile native wheels (e.g. xmlsec)
+# ca-certificates for HTTPS when fetching from PyPI
 RUN apt-get update && \
     apt-get install -y \
         cmake \
@@ -45,69 +30,111 @@ RUN apt-get update && \
         libxmlsec1-dev \
         pkg-config \
         gcc \
-        nano \
-        vim \
-        # Install procps so kubernetes exec sessions can use ps aux for debugging
-        procps \
-        libjemalloc2 \
         && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
-# Conditionally install Node.js 20 for Craft (required for Next.js)
-# Only installed when ENABLE_CRAFT=true
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Installing Node.js 20 for Craft support..." && \
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-        apt-get install -y nodejs && \
-        rm -rf /var/lib/apt/lists/*; \
-    fi
-
-# Conditionally install opencode CLI for Craft agent functionality
-# Only installed when ENABLE_CRAFT=true
-# TODO: download a specific, versioned release of the opencode CLI
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Installing opencode CLI for Craft support..." && \
-        curl -fsSL https://opencode.ai/install | bash; \
-    fi
-ENV PATH="/root/.opencode/bin:${PATH}"
-
 # Install Python dependencies
-# Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-RUN uv pip install --system --no-cache-dir --upgrade \
+# requirements/*.txt are a complete, pre-resolved lock export, so --no-deps installs them as-is
+# without re-resolving. It is also required, not just an optimization: mitmproxy pins tight
+# transitive caps (e.g. hyperframe<=6.0.1) that are only loosened by [tool.uv] override-dependencies
+# in pyproject.toml, which is absent from this build context — a resolving install would fail.
+RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
-    pip uninstall -y py && \
+    # https://github.com/tornadoweb/tornado/issues/3107
+    rm -f /usr/local/lib/python3.13/site-packages/tornado/test/test.key && \
+    rm -rf ~/.cache/uv /tmp/*.txt
+
+
+####################################################################################################
+# Runtime stage
+#
+# The actual shipped image. Installs only runtime system libraries and copies the already-built
+# Python packages from the builder stage.
+####################################################################################################
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:b04b5d7233d2ad9c379e22ea8927cd1378cd15c60d4ef876c065b25ea8fb3bf3 AS runtime
+
+LABEL com.danswer.maintainer="founders@onyx.app"
+LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
+contains code for both the Community and Enterprise editions of Onyx. If you do not \
+have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
+Edition features outside of personal development or testing purposes. Please reach out to \
+founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+
+# DO_NOT_TRACK is used to disable telemetry for Unstructured
+ENV ONYX_RUNNING_IN_DOCKER="true" \
+    DO_NOT_TRACK="true" \
+    PLAYWRIGHT_BROWSERS_PATH="/app/.cache/ms-playwright"
+
+# Create non-root user for security best practices
+RUN groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
+    mkdir -p /var/log/onyx && \
+    chmod 755 /var/log/onyx && \
+    chown onyx:onyx /var/log/onyx
+
+# Install runtime system dependencies only (no build toolchain).
+# curl included just for users' convenience
+# zip for Vespa step further down
+# ca-certificates for HTTPS
+# libxmlsec1-openssl is the runtime counterpart to the build-time libxmlsec1-dev
+# postgresql-client for easy manual tests
+# procps so kubernetes exec sessions can use ps aux for debugging
+RUN apt-get update && \
+    apt-get install -y \
+        curl \
+        zip \
+        ca-certificates \
+        libgnutls30 \
+        libblkid1 \
+        libmount1 \
+        libsmartcols1 \
+        libuuid1 \
+        nano \
+        vim \
+        procps \
+        libjemalloc2 \
+        libxmlsec1-openssl \
+        && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+# Copy the compiled Python packages and only the console scripts our services launch (api server,
+# celery workers/beat, alembic migrations, supervisord, Playwright). Both stages share the same base
+# image digest, so paths and ABI match. Listing the scripts explicitly keeps the base interpreter
+# binaries and any build-stage executables out of the shipped /usr/local/bin.
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+COPY --from=builder \
+    /usr/local/bin/alembic \
+    /usr/local/bin/celery \
+    /usr/local/bin/uvicorn \
+    /usr/local/bin/supervisord \
+    /usr/local/bin/supervisorctl \
+    /usr/local/bin/playwright \
+    /usr/local/bin/
+
+# Install the Chromium browser used by Playwright and its OS-level runtime libraries. Must run after
+# the site-packages copy above so the playwright CLI is available.
+#
+# perl-base is part of the base Python Debian image but not needed for Onyx functionality; it is
+# removed for CVE surface reduction (requires --allow-remove-essential). It must be removed AFTER the
+# first `playwright install-deps`, because the font/X11 packages that install-deps pulls in run perl
+# scripts in their dpkg configure step. The second `playwright install-deps` then restores any
+# chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade.
+RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     playwright install chromium && \
     playwright install-deps chromium && \
-    chown -R onyx:onyx /app && \
-    ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
-    # Cleanup for CVEs and size reduction
-    # https://github.com/tornadoweb/tornado/issues/3107
-    # xserver-common and xvfb included by playwright installation but not needed after
-    # perl-base is part of the base Python Debian image but not needed for Onyx functionality
-    # perl-base could only be removed with --allow-remove-essential
-    apt-get update && \
-    apt-get remove -y --allow-remove-essential \
-        perl-base \
-        xserver-common \
-        xvfb \
-        cmake \
-        libldap-2.5-0 \
-        libxmlsec1-dev \
-        pkg-config \
-        gcc && \
-    # Install here to avoid some packages being cleaned up above
-    apt-get install -y \
-        libxmlsec1-openssl \
-        # Install postgresql-client for easy manual tests
-        postgresql-client && \
+    apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y && \
+    playwright install-deps chromium && \
+    # Re-install after autoremove: perl-base removal cascades through postgresql-client's
+    # perl dependency, sweeping it up. Install it here (post-autoremove) so it survives.
+    apt-get install -y postgresql-client && \
     rm -rf /var/lib/apt/lists/* && \
-    rm -rf ~/.cache/uv /tmp/*.txt && \
-    rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key
+    apt-get clean
 
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \
@@ -144,23 +171,10 @@ COPY --chown=onyx:onyx ./keys /app/keys
 COPY --chown=onyx:onyx ./scripts/debugging /app/scripts/debugging
 COPY --chown=onyx:onyx ./scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connector_by_id.py
 COPY --chown=onyx:onyx ./scripts/supervisord_entrypoint.sh /app/scripts/supervisord_entrypoint.sh
-COPY --chown=onyx:onyx ./scripts/setup_craft_templates.sh /app/scripts/setup_craft_templates.sh
 COPY --chown=onyx:onyx ./scripts/reencrypt_secrets.py /app/scripts/reencrypt_secrets.py
 COPY --chown=onyx:onyx ./scripts/rotate_llm_provider_keys.py /app/scripts/rotate_llm_provider_keys.py
 COPY --chown=onyx:onyx ./scripts/seed_dev_license.py /app/scripts/seed_dev_license.py
-RUN chmod +x /app/scripts/supervisord_entrypoint.sh /app/scripts/setup_craft_templates.sh
-
-# Run Craft template setup at build time when ENABLE_CRAFT=true
-# This pre-bakes demo data, Python venv, and npm dependencies into the image
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Running Craft template setup at build time..." && \
-        ENABLE_CRAFT=true /app/scripts/setup_craft_templates.sh; \
-    fi
-
-# Set Craft template paths to the in-image locations
-# These match the paths where setup_craft_templates.sh creates the templates
-ENV OUTPUTS_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs
-ENV VENV_TEMPLATE_PATH=/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv
+RUN chmod +x /app/scripts/supervisord_entrypoint.sh
 
 # Put logo in assets
 COPY --chown=onyx:onyx ./assets /app/assets

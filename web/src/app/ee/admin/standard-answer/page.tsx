@@ -1,9 +1,9 @@
 "use client";
 
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Divider } from "@opal/components";
 import {
@@ -17,7 +17,7 @@ import {
 import Link from "next/link";
 import type { Route } from "next";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { SvgSearch } from "@opal/icons";
 import { useState, JSX } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -27,10 +27,9 @@ import { FiTag } from "react-icons/fi";
 import { PageSelector } from "@/components/PageSelector";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { TableHeader } from "@/components/ui/table";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgEdit, SvgTrash } from "@opal/icons";
+import { SvgEdit, SvgPlusCircle, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 const NUM_RESULTS_PER_PAGE = 10;
@@ -238,10 +237,10 @@ const StandardAnswersTable = ({
   return (
     <div className="justify-center py-2">
       <div className="flex items-center w-full border-2 border-border rounded-lg px-4 py-2 focus-within:border-accent">
-        <MagnifyingGlass />
+        <SvgSearch className="w-4 h-4" />
         <textarea
           autoFocus
-          className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
+          className="grow ml-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"
           role="textarea"
           aria-multiline
           placeholder="Find standard answers by keyword/phrase..."
@@ -360,7 +359,7 @@ function Main() {
   } = useStandardAnswerCategories();
 
   if (standardAnswersIsLoading || standardAnswerCategoriesIsLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (standardAnswersError || !standardAnswers) {
@@ -403,9 +402,13 @@ function Main() {
       )}
       <div className="mb-2"></div>
 
-      <CreateButton href="/admin/standard-answer/new">
+      <Button
+        icon={SvgPlusCircle}
+        prominence="secondary"
+        href="/admin/standard-answer/new"
+      >
         New Standard Answer
-      </CreateButton>
+      </Button>
 
       <Divider />
 

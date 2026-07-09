@@ -8,13 +8,13 @@ from typing import Any
 from typing import cast
 from typing import IO
 from typing import NotRequired
+from typing import TYPE_CHECKING
 from typing import TypedDict
 
 import boto3
 import puremagic
 from botocore.config import Config
 from botocore.exceptions import ClientError
-from mypy_boto3_s3 import S3Client
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AWS_REGION_NAME
@@ -39,6 +39,11 @@ from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
+
+    from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 logger = setup_logger()
 
@@ -183,7 +188,7 @@ class S3BackedFileStore(FileStore):
         s3_prefix: str | None = None,
         s3_verify_ssl: bool = True,
     ) -> None:
-        self._s3_client: S3Client | None = None
+        self._s3_client: "S3Client | None" = None
         self._bucket_name = bucket_name
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
@@ -192,7 +197,7 @@ class S3BackedFileStore(FileStore):
         self._s3_prefix = s3_prefix or "onyx-files"
         self._s3_verify_ssl = s3_verify_ssl
 
-    def _get_s3_client(self) -> S3Client:
+    def _get_s3_client(self) -> "S3Client":
         """Initialize S3 client if not already done"""
         if self._s3_client is None:
             try:
@@ -511,54 +516,36 @@ class S3BackedFileStore(FileStore):
     def change_file_id(
         self, old_file_id: str, new_file_id: str, db_session: Session | None = None
     ) -> None:
+        """Rename a file by repointing its DB record at the existing object.
+
+        The object is not moved — only file_id changes — and reads resolve via
+        the stored object_key, so they still find it. The object keeps its
+        original key, so a file_id must not be reused for a new save_file after
+        it has been renamed (the new write would overwrite the renamed object).
+        """
+        if old_file_id == new_file_id:
+            return
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                # Get the existing file record
                 old_file_record = get_filerecord_by_file_id(
                     file_id=old_file_id, db_session=db_session
                 )
-
-                # Generate new S3 key for the new file ID
-                new_s3_key = self._get_s3_key(new_file_id)
-
-                # Copy S3 object to new key
-                s3_client = self._get_s3_client()
-                bucket_name = self._get_bucket_name()
-
-                copy_source = (
-                    f"{old_file_record.bucket_name}/{old_file_record.object_key}"
-                )
-
-                s3_client.copy_object(
-                    CopySource=copy_source,
-                    Bucket=bucket_name,
-                    Key=new_s3_key,
-                    MetadataDirective="COPY",
-                )
-
-                # Create new file record with new file_id
-                # Cast file_metadata to the expected type
                 file_metadata = cast(
                     dict[Any, Any] | None, old_file_record.file_metadata
                 )
 
+                # Reuse the old record's bucket/object_key — the object stays put.
                 upsert_filerecord(
                     file_id=new_file_id,
                     display_name=old_file_record.display_name,
                     file_origin=old_file_record.file_origin,
                     file_type=old_file_record.file_type,
-                    bucket_name=bucket_name,
-                    object_key=new_s3_key,
+                    bucket_name=old_file_record.bucket_name,
+                    object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
                 )
 
-                # Delete old S3 object
-                s3_client.delete_object(
-                    Bucket=old_file_record.bucket_name, Key=old_file_record.object_key
-                )
-
-                # Delete old file record
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
 
                 db_session.commit()
@@ -619,25 +606,57 @@ def get_s3_file_store() -> S3BackedFileStore:
     )
 
 
+def get_gcs_file_store() -> "GCSBackedFileStore":
+    """Returns the GCS file store implementation."""
+    from onyx.configs.app_configs import GCS_FILE_STORE_BUCKET_NAME
+    from onyx.configs.app_configs import GCS_FILE_STORE_PREFIX
+    from onyx.configs.app_configs import GCS_PROJECT_ID
+    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_JSON
+    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_PATH
+    from onyx.file_store.gcs_file_store import GCSBackedFileStore
+
+    bucket_name = GCS_FILE_STORE_BUCKET_NAME
+    if not bucket_name:
+        raise RuntimeError("GCS_FILE_STORE_BUCKET_NAME is required for GCS file store")
+
+    return GCSBackedFileStore(
+        bucket_name=bucket_name,
+        gcs_prefix=GCS_FILE_STORE_PREFIX,
+        project_id=GCS_PROJECT_ID,
+        service_account_key_path=GCS_SERVICE_ACCOUNT_KEY_PATH,
+        service_account_key_json=GCS_SERVICE_ACCOUNT_KEY_JSON,
+    )
+
+
 def get_default_file_store() -> FileStore:
     """
     Returns the configured file store implementation based on FILE_STORE_BACKEND.
 
-    When FILE_STORE_BACKEND=postgres (default):
+    When FILE_STORE_BACKEND=postgres:
     - Files are stored in PostgreSQL using Large Objects.
     - No external storage service (S3/MinIO) is required.
 
-    When FILE_STORE_BACKEND=s3:
+    When FILE_STORE_BACKEND=s3 (default):
     - Supports AWS S3, MinIO, and other S3-compatible storage.
     - Configuration via environment variables:
       - S3_FILE_STORE_BUCKET_NAME, S3_ENDPOINT_URL, S3_AWS_ACCESS_KEY_ID, etc.
+
+    When FILE_STORE_BACKEND=gcs:
+    - Uses Google Cloud Storage with ADC/Workload Identity or service account keys.
+    - Configuration via environment variables:
+      - GCS_FILE_STORE_BUCKET_NAME, GCS_PROJECT_ID, GCS_SERVICE_ACCOUNT_KEY_PATH, etc.
     """
     from onyx.configs.app_configs import FILE_STORE_BACKEND
     from onyx.configs.constants import FileStoreType
 
-    if FileStoreType(FILE_STORE_BACKEND) == FileStoreType.POSTGRES:
+    backend = FileStoreType(FILE_STORE_BACKEND)
+
+    if backend == FileStoreType.POSTGRES:
         from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 
         return PostgresBackedFileStore()
+
+    if backend == FileStoreType.GCS:
+        return get_gcs_file_store()
 
     return get_s3_file_store()

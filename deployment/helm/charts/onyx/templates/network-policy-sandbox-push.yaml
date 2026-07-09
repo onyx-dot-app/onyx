@@ -1,0 +1,75 @@
+{{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-push
+  namespace: {{ $sandboxNs }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sandbox
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: api-server
+        # The scheduled-tasks worker provisions + drives sandboxes headlessly
+        # (run_scheduled_task → ensure_sandbox_running), so it needs the same
+        # push / opencode-serve / dev-server connectivity as the api_server.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: celery-worker-scheduled-tasks
+        {{- if .Values.sandboxPushPolicy.allowTelepresenceAmbassador }}
+        # Local-dev only (enabled via values-localdev.yaml): when an api_server
+        # is intercepted by telepresence, outbound traffic from the developer's
+        # laptop enters the cluster as the traffic-manager pod in the
+        # ambassador namespace, not as the api_server pod. Allowing this source
+        # restores push connectivity for local dev. Prod overlays leave the
+        # default (false) and only api_server pods can push.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ambassador
+          podSelector:
+            matchLabels:
+              app: traffic-manager
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.sandboxPushDaemonPort" . }}
+        # opencode serve — driven by OpencodeServeClient.
+        - protocol: TCP
+          port: 4096
+        # Next.js dev servers, one per session. PORT_END is exclusive
+        # (Python range() — see build_session.py); k8s endPort is inclusive,
+        # hence sub 1.
+        - protocol: TCP
+          port: {{ .Values.configMap.SANDBOX_NEXTJS_PORT_START | default 3010 }}
+          endPort: {{ sub (int (.Values.configMap.SANDBOX_NEXTJS_PORT_END | default 3100)) 1 }}
+    # The heavy worker consumes the `sandbox` Celery queue (cleanup_idle_sandboxes
+    # → create_snapshot / create_opencode_history_snapshot), which only POSTs to
+    # the in-pod sidecar — it never drives opencode serve or the Next.js dev
+    # servers. Grant it the sidecar port ONLY (least privilege). Without this,
+    # on clusters that ENFORCE NetworkPolicy the heavy worker's snapshot-create
+    # requests are dropped → connect timeout → NO snapshots are created →
+    # reopened sessions restore nothing ("agent starts fresh"). Long-term, move
+    # the `sandbox` queue to a dedicated craft worker and grant that worker here
+    # instead of heavy (see docs/craft/infra/sandbox-worker-network-policy.md).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app: celery-worker-heavy
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.sandboxPushDaemonPort" . }}
+{{- end }}

@@ -17,7 +17,7 @@
   gap: 0.25rem;
   min-height: 2.25rem;
   padding: 0.5rem 0;
-  border-radius: var(--border-radius-08);
+  border-radius: var(--radius-08);
   width: 100%;
   min-width: 0;
 }

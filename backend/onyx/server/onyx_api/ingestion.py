@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID
-from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
@@ -89,10 +88,6 @@ def upsert_ingestion_doc(
 
     document = Document.from_base(doc_info.document)
 
-    # TODO once the frontend is updated with this enum, remove this logic
-    if document.source == DocumentSource.INGESTION_API:
-        document.source = DocumentSource.FILE
-
     cc_pair = get_connector_credential_pair_from_id(
         db_session=db_session,
         cc_pair_id=doc_info.cc_pair_id or DEFAULT_CC_PAIR_ID,
@@ -119,7 +114,6 @@ def upsert_ingestion_doc(
 
     # Build adapter for primary indexing
     adapter = DocumentIndexingBatchAdapter(
-        db_session=db_session,
         connector_id=cc_pair.connector_id,
         credential_id=cc_pair.credential_id,
         tenant_id=tenant_id,
@@ -163,6 +157,9 @@ def upsert_ingestion_doc(
             embedder=new_index_embedding_model,
             document_indices=sec_document_indices,
             ignore_time_skip=True,
+            # FUTURE write: skip content_hash dedup, else the primary run's hash
+            # suppresses this into a no-op.
+            index_to_secondary=True,
             db_session=db_session,
             tenant_id=tenant_id,
             document_batch=[document],
@@ -182,8 +179,6 @@ def delete_ingestion_doc(
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    tenant_id = get_current_tenant_id()
-
     # Verify the document exists and was created via the ingestion API
     document = get_document(document_id=document_id, db_session=db_session)
     if document is None:
@@ -203,9 +198,8 @@ def delete_ingestion_doc(
         None,
     )
     for document_index in document_indices:
-        document_index.delete_single(
-            doc_id=document_id,
-            tenant_id=tenant_id,
+        document_index.delete(
+            document_id,
             chunk_count=document.chunk_count,
         )
 

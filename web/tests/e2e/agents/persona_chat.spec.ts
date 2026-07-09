@@ -81,7 +81,7 @@ test.describe("Chatting with a custom persona", () => {
     const chat = new ChatPage(page);
 
     await page.goto(`/app?agentId=${agentId}`);
-    await chat.chatInputTextarea.waitFor({ state: "visible", timeout: 15000 });
+    await chat.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
 
     const nameDisplay = page.getByTestId("agent-name-display");
     await expect(nameDisplay).toBeVisible({ timeout: 10000 });
@@ -95,7 +95,7 @@ test.describe("Chatting with a custom persona", () => {
     const chat = new ChatPage(page);
 
     await page.goto(`/app?agentId=${agentId}`);
-    await chat.chatInputTextarea.waitFor({ state: "visible", timeout: 15000 });
+    await chat.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
     await mockChatEndpoint(page, buildMockStream(AI_RESPONSE));
 
     await sendMessage(page, USER_MESSAGE);

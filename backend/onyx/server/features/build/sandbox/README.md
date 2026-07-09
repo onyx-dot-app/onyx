@@ -2,6 +2,10 @@
 
 This directory contains the implementation of Onyx's sandbox system for running OpenCode agents in isolated environments.
 
+## Local Development
+
+Craft requires a local kind cluster — see [Local Kubernetes Development](/docs/craft/dev/local-kubernetes.md). One-shot setup: `make craft-up`.
+
 ## Overview
 
 The sandbox system provides isolated execution environments where OpenCode agents can build web applications, run code, and interact with knowledge files. Each sandbox includes:
@@ -15,21 +19,52 @@ The sandbox system provides isolated execution environments where OpenCode agent
 
 ### Deployment Modes
 
-1. **Local Mode** (`SANDBOX_BACKEND=local`)
-   - Sandboxes run as directories on the local filesystem
-   - No automatic cleanup or snapshots
-   - Suitable for development and testing
-
-2. **Kubernetes Mode** (`SANDBOX_BACKEND=kubernetes`)
-   - Sandboxes run as Kubernetes pods
-   - Automatic snapshots to S3
+1. **Kubernetes Mode** (`SANDBOX_BACKEND=kubernetes`) — default
+   - Sandboxes run as Kubernetes pods, one per user
+   - Each pod has one app container (`sandbox`) plus one native restartable init sidecar (`sidecar`) for push/snapshot control-plane work
+   - api_server talks to the Kubernetes API for pod lifecycle and `kubectl exec`
+   - Automatic snapshots stream through the in-pod sidecar to the api_server-owned `FileStore`
    - Auto-cleanup of idle sandboxes
-   - Production-ready with resource isolation
+   - Production-ready with resource isolation, security context, and NetworkPolicies
+   - Requires Kubernetes `>= 1.33` for native restartable init sidecar containers
+   - Used by Onyx's Helm chart / cloud deployment
+   - For local-cluster development, see [docs/craft/dev/local-kubernetes.md](/docs/craft/dev/local-kubernetes.md).
+
+2. **Docker Mode** (`SANDBOX_BACKEND=docker`)
+   - Sandboxes run as Docker containers on the same host as the rest of the compose stack, one per user
+   - api_server mounts `/var/run/docker.sock` and talks to the Docker Engine API for container lifecycle and `docker exec`
+   - Snapshots tar-streamed through api_server-owned `FileStore` — agent containers never receive S3/MinIO credentials
+   - Auto-cleanup of idle sandboxes (background worker uses the same Docker socket)
+   - For self-hosted `docker compose` deployments enabled by `install.sh --include-craft`
+   - Sandboxes join only the dedicated `onyx_craft_sandbox` bridge — `postgres` / `redis` / `minio` / model servers are not reachable by compose DNS
+
+#### Kubernetes → Docker mapping
+
+The Docker backend is intentionally the closest single-VM analogue of the Kubernetes backend:
+
+| Kubernetes                            | Docker compose                                              |
+| ------------------------------------- | ----------------------------------------------------------- |
+| Sandbox pod (`sandbox-<id>`)          | Sandbox container (`sandbox-<id8>`)                         |
+| Pod `emptyDir` workspace volume       | Named volume mounted at `/workspace/sessions`               |
+| `kubectl exec` for setup + file ops   | `docker exec` over the Docker Engine API                    |
+| Sidecar snapshot daemon, no storage credentials | api_server tar-streams via `docker exec` → `FileStore` |
+| `Service` + DNS for Next.js preview   | Container IP on `onyx_craft_sandbox` bridge, proxied        |
+| `NetworkPolicy` for egress isolation  | Dedicated bridge network + host `DOCKER-USER` iptables rule |
+| Per-pod resource requests/limits      | `SANDBOX_DOCKER_CPU_LIMIT` / `SANDBOX_DOCKER_MEMORY_LIMIT`  |
+
+#### Docker mode trust boundary
+
+`api_server` and `background` mount the host Docker socket so they can drive sandbox containers. Anything that can talk to that socket is effectively root on the host — only enable Craft on hosts you fully control. Sandbox containers themselves run unprivileged: `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`).
+
+`SANDBOX_API_SERVER_URL` must be the **public** HTTPS URL that the agent reaches Onyx through (same way any onyx-cli client would). Compose hostnames like `http://api_server:8080` do not resolve from inside the sandbox bridge.
+
+On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which can hand out IAM credentials. `install.sh --include-craft` installs a host-level `DOCKER-USER` iptables rule to drop sandbox→IMDS traffic when it has sudo/iptables access, and prints the manual command otherwise. There is no application-level fallback — fix this at the host firewall.
 
 ### Directory Structure
 
 ```
 /workspace/                          # Sandbox root (in container)
+├── managed/skills/                  # Skills pushed at session setup
 ├── outputs/                         # Working directory
 │   ├── web/                        # Lightweight Next.js app (shadcn/ui, Recharts)
 │   ├── slides/                     # Generated presentations
@@ -40,94 +75,22 @@ The sandbox system provides isolated execution environments where OpenCode agent
 ├── attachments/                    # User uploads
 ├── AGENTS.md                       # Agent instructions
 └── .opencode/
-    └── skills/                     # Agent skills
+    └── skills                      # Symlink → /workspace/managed/skills
 ```
 
 ## Setup
 
-### Running via Docker/Kubernetes (Zero Setup!) 🎉
+### Running via Docker/Kubernetes
 
-**No setup required!** Just build and deploy:
-
-```bash
-# Build backend image (includes both templates)
-cd backend
-docker build -f Dockerfile.sandbox-templates -t onyxdotapp/backend:latest .
-
-# Build sandbox container (lightweight runner)
-cd onyx/server/features/build/sandbox/kubernetes/docker
-docker build -t onyxdotapp/sandbox:latest .
-
-# Deploy with docker-compose or kubectl - sandboxes work immediately!
-```
+Deploy the normal Onyx application images with Craft enabled. The sandbox image
+is selected from the same application version by default, so app tag `vX.Y.Z`
+uses `onyxdotapp/sandbox:vX.Y.Z`.
 
 **How it works:**
 
-- **Backend image**: Contains both templates at build time:
-  - Web template at `/templates/outputs/web` (lightweight Next.js scaffold, ~2MB)
-  - Python venv template at `/templates/venv` (pre-installed packages, ~50MB)
-- **Init container** (Kubernetes only): Syncs knowledge files from S3
-- **Sandbox startup**: Runs `npm install` (for fresh dependency locks) + `next dev`
-
-### Running Backend Directly (Without Docker)
-
-**Only needed if you're running the Onyx backend outside of Docker.** Most developers use Docker and can skip this section.
-
-If you're running the backend Python process directly on your machine, you need templates at `/templates/`:
-
-#### Web Template
-
-The web template is a lightweight Next.js app (Next.js 16, React 19, shadcn/ui, Recharts) checked into the codebase at `backend/onyx/server/features/build/templates/outputs/web/`.
-
-For local development, create a symlink to this template:
-
-```bash
-sudo mkdir -p /templates/outputs
-sudo ln -s $(pwd)/backend/onyx/server/features/build/templates/outputs/web /templates/outputs/web
-```
-
-#### Python Venv Template
-
-If you don't have a venv template, create it:
-
-```bash
-# Use the utility script
-cd backend
-python -m onyx.server.features.build.sandbox.util.build_venv_template
-
-# Or manually
-python3 -m venv /templates/venv
-/templates/venv/bin/pip install -r backend/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
-```
-
-#### System Dependencies (for PPTX skill)
-
-The PPTX skill requires LibreOffice and Poppler for PDF conversion and thumbnail generation:
-
-**macOS:**
-
-```bash
-brew install poppler
-brew install --cask libreoffice
-```
-
-Ensure `soffice` is on your PATH:
-
-```bash
-export PATH="/Applications/LibreOffice.app/Contents/MacOS:$PATH"
-```
-
-**Linux (Debian/Ubuntu):**
-
-```bash
-sudo apt-get install libreoffice-impress poppler-utils
-```
-
-**That's it!** When sandboxes are created:
-
-1. Web template is copied from `/templates/outputs/web`
-2. Python venv is copied from `/templates/venv`
-3. `npm install` runs automatically to install fresh Next.js dependencies
+- **Sandbox image**: Published under the same tag as the app image and bakes in the web template (`/workspace/templates/outputs`) plus a pre-built Python venv (`/workspace/.venv`) from `initial-requirements.txt`
+- **Native init sidecar daemon** (Kubernetes only): Starts before the sandbox app container, stays running for the pod lifetime, and packages/restores session snapshots on the pod-local filesystem
+- **Sandbox startup**: Runs `bun install --frozen-lockfile` (hardlinks from the image's pre-warmed Bun cache) + `bun run dev`
 
 ## OpenCode Configuration
 
@@ -138,35 +101,35 @@ Each sandbox includes an OpenCode agent configured with:
 - **Tool permissions**: File operations, bash commands, web access
 - **Disabled tools**: Configurable via `OPENCODE_DISABLED_TOOLS` env var
 
-Configuration is generated dynamically in `templates/opencode_config.py`.
+Configuration is generated dynamically in `util/opencode_config.py`.
 
 ## Key Components
 
 ### Managers
 
 - **`base.py`** - Abstract base class defining the sandbox interface
-- **`local/manager.py`** - Filesystem-based sandbox manager for local development
-- **`kubernetes/manager.py`** - Kubernetes-based sandbox manager for production
+- **`kubernetes/kubernetes_sandbox_manager.py`** - Kubernetes-based sandbox manager for Helm/cloud
+- **`docker/docker_sandbox_manager.py`** - Docker Engine-based sandbox manager for docker-compose
 
 ### Managers (Shared)
 
-- **`manager/directory_manager.py`** - Creates sandbox directory structure and copies templates
 - **`manager/snapshot_manager.py`** - Handles snapshot creation and restoration
 
 ### Utilities
 
 - **`util/opencode_config.py`** - Generates OpenCode configuration with MCP support
 - **`util/agent_instructions.py`** - Generates agent instructions (AGENTS.md)
-- **`util/build_venv_template.py`** - Utility to build Python venv template for local development
 
 ### Templates
 
-- **`../templates/outputs/web/`** - Lightweight Next.js scaffold (shadcn/ui, Recharts) versioned with the backend code
+- **`image/templates/outputs/web/`** - Lightweight Next.js scaffold (shadcn/ui, Recharts) versioned with the backend code
 
-### Kubernetes Specific
+### Sandbox Image (shared by both backends)
 
-- **`kubernetes/docker/Dockerfile`** - Sandbox container image (runs Next.js + OpenCode)
-- **`kubernetes/docker/entrypoint.sh`** - Container startup script
+- **`image/Dockerfile`** - Sandbox container image (runs Next.js + OpenCode)
+- **`image/entrypoint.sh`** - Container startup script
+- **`image/sandbox_daemon/`** - In-pod push/snapshot daemon
+- Built-in skill sources live in `backend/onyx/skills/builtin/` (pushed at session setup, not baked in)
 
 ## Environment Variables
 
@@ -174,34 +137,59 @@ Configuration is generated dynamically in `templates/opencode_config.py`.
 
 ```bash
 # Sandbox backend mode
-SANDBOX_BACKEND=local|kubernetes           # Default: local
-
-# Template paths (local mode)
-OUTPUTS_TEMPLATE_PATH=/templates/outputs   # Default: /templates/outputs
-VENV_TEMPLATE_PATH=/templates/venv        # Default: /templates/venv
-
-# Sandbox base path (local mode)
-SANDBOX_BASE_PATH=/tmp/onyx-sandboxes     # Default: /tmp/onyx-sandboxes
+SANDBOX_BACKEND=kubernetes|docker          # Default: kubernetes
 
 # OpenCode configuration
-OPENCODE_DISABLED_TOOLS=question          # Comma-separated list, default: question
+OPENCODE_DISABLED_TOOLS=question           # Comma-separated list, default: question
 ```
 
 ### Kubernetes Settings
+
+Kubernetes Craft sandboxes require Kubernetes `>= 1.33` because sandbox pods
+use native restartable init sidecar containers (`initContainers[*].restartPolicy:
+Always`). Helm installs with `ENABLE_CRAFT=true` and `SANDBOX_BACKEND=kubernetes`
+fail during render/install on older clusters.
 
 ```bash
 # Kubernetes namespace
 SANDBOX_NAMESPACE=onyx-sandboxes          # Default: onyx-sandboxes
 
-# Container image
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:latest
+# Helm defaults the sandbox image to onyxdotapp/sandbox:${global.version}.
+# SANDBOX_CONTAINER_IMAGE is an internal override.
 
-# S3 bucket for snapshots and files
-SANDBOX_S3_BUCKET=onyx-sandbox-files      # Default: onyx-sandbox-files
+# Snapshots use the normal Onyx FileStore configuration
+FILE_STORE_BACKEND=s3|gcs|postgres
+S3_FILE_STORE_BUCKET_NAME=onyx-file-store # when FILE_STORE_BACKEND=s3
 
-# Service accounts
-SANDBOX_SERVICE_ACCOUNT_NAME=sandbox-runner          # No AWS access
-SANDBOX_FILE_SYNC_SERVICE_ACCOUNT=sandbox-file-sync  # Has S3 access via IRSA
+# Service account
+SANDBOX_SERVICE_ACCOUNT_NAME=sandbox      # No storage credentials required
+```
+
+### Docker Settings
+
+```bash
+
+# Public URL the sandbox agent uses to reach Onyx (HTTPS, externally resolvable —
+# compose hostnames like http://api_server:8080 will not resolve from inside the
+# sandbox bridge).
+SANDBOX_API_SERVER_URL=https://onyx.your-org.example
+
+# Host path of the Docker socket mounted into api_server/background
+SANDBOX_DOCKER_SOCKET=/var/run/docker.sock      # Default: /var/run/docker.sock
+
+# Dedicated bridge network. Pre-created by install.sh --include-craft (or run
+# `docker network create onyx_craft_sandbox` manually). Sandboxes join *only*
+# this network — compose services are not reachable by DNS from inside.
+SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox       # Default: onyx_craft_sandbox
+
+# Prefix for per-sandbox named volumes (mounted at /workspace/sessions).
+SANDBOX_DOCKER_VOLUME_PREFIX=onyx-sandbox       # Default: onyx-sandbox
+
+# Per-container resource limits. Defaults match K8s pod *requests* (1 CPU / 2Gi)
+# rather than limits, since single-VM compose deployments rarely have headroom
+# to over-commit every sandbox.
+SANDBOX_DOCKER_MEMORY_LIMIT=2g                  # Default: 2g
+SANDBOX_DOCKER_CPU_LIMIT=1.0                    # Default: 1.0
 ```
 
 ### Lifecycle Settings
@@ -212,10 +200,6 @@ SANDBOX_IDLE_TIMEOUT_SECONDS=900          # Default: 900 (15 minutes)
 
 # Max concurrent sandboxes per organization
 SANDBOX_MAX_CONCURRENT_PER_ORG=10         # Default: 10
-
-# Next.js port range (local mode)
-SANDBOX_NEXTJS_PORT_START=3010            # Default: 3010
-SANDBOX_NEXTJS_PORT_END=3100              # Default: 3100
 ```
 
 ## Testing
@@ -223,33 +207,22 @@ SANDBOX_NEXTJS_PORT_END=3100              # Default: 3100
 ### Integration Tests
 
 ```bash
-# Test local sandbox provisioning
-uv run pytest backend/tests/integration/sandbox/test_local_sandbox.py
-
-# Test Kubernetes sandbox provisioning (requires k8s cluster)
-uv run pytest backend/tests/integration/sandbox/test_kubernetes_sandbox.py
-```
-
-### Manual Testing
-
-```bash
-# Start a local sandbox session
-curl -X POST http://localhost:3000/api/build/session \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "user-123",
-    "file_system_path": "/path/to/files"
-  }'
-
-# Send a message to the agent
-curl -X POST http://localhost:3000/api/build/session/{session_id}/message \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Create a simple web page"
-  }'
+# Test Kubernetes sandbox provisioning (requires kind cluster — see make craft-up)
+uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.py
 ```
 
 ## Troubleshooting
+
+### Sandbox Stuck in PROVISIONING (Docker)
+
+**Symptoms**: Sandbox status never changes from `PROVISIONING` in `docker compose` deployments
+
+**Solutions**:
+
+- Confirm `api_server` actually has the Docker socket: `docker compose exec api_server ls -l /var/run/docker.sock`
+- Confirm the dedicated bridge exists: `docker network inspect onyx_craft_sandbox` (created by `install.sh --include-craft`, or run `docker network create onyx_craft_sandbox` manually)
+- Check sandbox logs: `docker logs sandbox-<id8>`
+- Confirm `SANDBOX_API_SERVER_URL` is a publicly resolvable HTTPS URL (the agent cannot reach `http://api_server:8080` from inside the sandbox bridge)
 
 ### Sandbox Stuck in PROVISIONING (Kubernetes)
 
@@ -258,9 +231,8 @@ curl -X POST http://localhost:3000/api/build/session/{session_id}/message \
 **Solutions**:
 
 - Check pod logs: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id}`
-- Check init container: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id} -c file-sync`
-- Verify init container completed: `kubectl describe pod -n onyx-sandboxes sandbox-{sandbox-id}`
-- Check S3 bucket access: Ensure init container service account has IRSA configured
+- Check sidecar logs: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id} -c sidecar`
+- Verify the sandbox proxy host/CA configuration and ServiceAccount exist in the sandbox namespace
 
 ### Next.js Server Won't Start
 
@@ -268,61 +240,33 @@ curl -X POST http://localhost:3000/api/build/session/{session_id}/message \
 
 **Solutions**:
 
-- **Local mode**: Check if port is already in use
-- **Docker/K8s**: Check container logs: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id}`
-- Verify npm install succeeded (check entrypoint.sh logs)
+- Check container logs: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id}`
+- Verify `bun install` succeeded (check entrypoint.sh logs)
 - Check that web template was copied: `kubectl exec -n onyx-sandboxes sandbox-{sandbox-id} -- ls /workspace/outputs/web`
-
-### Templates Not Found (Local Mode)
-
-**Symptoms**: `RuntimeError: Sandbox templates are missing`
-
-**Solution**: Set up templates as described in the "Local Development" section above:
-
-```bash
-# Symlink web template
-sudo ln -s $(pwd)/backend/onyx/server/features/build/templates/outputs/web /templates/outputs/web
-
-# Create Python venv
-python3 -m venv /templates/venv
-/templates/venv/bin/pip install -r backend/onyx/server/features/build/sandbox/kubernetes/docker/initial-requirements.txt
-```
-
-### Permission Denied
-
-**Symptoms**: `Permission denied` error accessing `/templates/`
-
-**Solution**: Either use sudo when creating symlinks, or use custom paths:
-
-```bash
-export OUTPUTS_TEMPLATE_PATH=$HOME/.onyx/templates/outputs
-export VENV_TEMPLATE_PATH=$HOME/.onyx/templates/venv
-
-# Then symlink to your home directory
-mkdir -p $HOME/.onyx/templates/outputs
-ln -s $(pwd)/backend/onyx/server/features/build/templates/outputs/web $HOME/.onyx/templates/outputs/web
-```
 
 ## Security Considerations
 
 ### Sandbox Isolation
 
 - **Kubernetes pods** run with restricted security context (non-root, no privilege escalation)
-- **Init containers** have S3 access for file sync, but main sandbox container does NOT
+- **Sandbox app containers and sidecar init containers** do not receive FileStore, S3, or MinIO credentials
 - **Network policies** can restrict sandbox egress traffic
 - **Resource limits** prevent resource exhaustion
+- **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`)
+- **Docker network isolation** is enforced by joining only the dedicated `onyx_craft_sandbox` bridge — compose's default network (postgres/redis/minio/model servers) is unreachable by DNS from inside a sandbox
+- **EC2 IMDS** must be blocked at the host firewall (`install.sh --include-craft` installs a `DOCKER-USER` iptables rule on EC2 when sudo is available) — there is no app-level fallback
 
 ### Credentials Management
 
 - LLM API keys are passed as environment variables (not stored in sandbox)
 - User file access is read-only via symlinks
-- Snapshots are isolated per tenant in S3
+- Snapshots are stored through the normal Onyx `FileStore` and isolated by tenant-scoped snapshot paths
 
 ## Development
 
 ### Adding New MCP Servers
 
-1. Add MCP configuration to `templates/opencode_config.py`:
+1. Add MCP configuration to `util/opencode_config.py`:
 
    ```python
    config["mcp"] = {
@@ -340,17 +284,17 @@ ln -s $(pwd)/backend/onyx/server/features/build/templates/outputs/web $HOME/.ony
 
 ### Modifying Agent Instructions
 
-Edit `AGENTS.template.md` in the build directory. This is populated with dynamic content by `templates/agent_instructions.py`.
+Edit `AGENTS.template.md` in the build directory. This is populated with dynamic content by `util/agent_instructions.py`.
 
 ### Adding New Tools/Permissions
 
-Update `templates/opencode_config.py` to add/remove tool permissions in the `permission` section.
+Update `util/opencode_config.py` to add/remove tool permissions in the `permission` section.
 
 ## Template Details
 
 ### Web Template
 
-The lightweight Next.js template (`backend/onyx/server/features/build/templates/outputs/web/`) includes:
+The lightweight Next.js template (`backend/onyx/server/features/build/sandbox/image/templates/outputs/web/`) includes:
 
 - **Framework**: Next.js 16.1.4 with React 19.2.3
 - **UI Library**: shadcn/ui components with Radix UI primitives
@@ -362,9 +306,9 @@ This template provides a modern development environment without the complexity o
 
 ### Python Venv Template
 
-The Python venv (`/templates/venv/`) includes packages from `initial-requirements.txt`:
+The Python venv (built into the sandbox image at `/workspace/.venv`) includes packages from `image/initial-requirements.txt`:
 
-- Data processing: pandas, numpy, polars
+- Data processing: pandas, numpy, matplotlib
 - HTTP clients: requests, httpx
 - Utilities: python-dotenv, pydantic
 

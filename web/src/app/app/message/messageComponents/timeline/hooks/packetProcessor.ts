@@ -149,6 +149,7 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
+  PacketType.CODING_AGENT_START,
 ]);
 
 function hasContentPackets(packets: Packet[]): boolean {

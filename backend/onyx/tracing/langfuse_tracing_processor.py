@@ -50,19 +50,19 @@ class LangfuseTracingProcessor(TracingProcessor):
         self._enable_masking = enable_masking
         self._lock = threading.Lock()  # Protects all dict access
         self._spans: dict[str, LangfuseObservationWrapper] = {}
-        self._trace_spans: dict[str, LangfuseObservationWrapper] = (
-            {}
-        )  # Root spans for traces
+        self._trace_spans: dict[
+            str, LangfuseObservationWrapper
+        ] = {}  # Root spans for traces
         self._first_input: dict[str, Any] = {}
         self._last_output: dict[str, Any] = {}
         self._trace_metadata: dict[str, dict[str, Any]] = {}
         # Langfuse IDs for thread-safe parent linking via trace_context
-        self._langfuse_trace_ids: dict[str, str] = (
-            {}
-        )  # framework_trace_id -> langfuse_trace_id
-        self._langfuse_span_ids: dict[str, str] = (
-            {}
-        )  # framework_span_id -> langfuse_span.id
+        self._langfuse_trace_ids: dict[
+            str, str
+        ] = {}  # framework_trace_id -> langfuse_trace_id
+        self._langfuse_span_ids: dict[
+            str, str
+        ] = {}  # framework_span_id -> langfuse_span.id
 
     def _get_client(self) -> Langfuse:
         """Get or create Langfuse client."""
@@ -122,12 +122,15 @@ class LangfuseTracingProcessor(TracingProcessor):
                 name=trace.name,
             )
 
-            # Always update the trace-level properties to set the trace name
-            # session_id is optional but name should always be set
+            # Promote first-class Langfuse fields out of metadata so they
+            # populate the dedicated UI facets (Sessions, Users) rather than
+            # only the metadata JSON blob.
             session_id = metadata.get("chat_session_id")
+            user_id = metadata.get("user_id")
             langfuse_span.update_trace(
                 name=trace.name,
                 session_id=session_id if session_id else None,
+                user_id=str(user_id) if user_id else None,
                 metadata=metadata if metadata else None,
             )
 
@@ -218,47 +221,39 @@ class LangfuseTracingProcessor(TracingProcessor):
             # Create spans using trace_context (thread-safe ID-based approach)
             # In Langfuse SDK v3, use start_observation with as_type parameter
             if isinstance(data, GenerationSpanData):
-                langfuse_span = (
-                    client.start_observation(  # ty: ignore[no-matching-overload]
-                        trace_context=trace_context,
-                        name=self._get_generation_name(data),
-                        as_type="generation",
-                        metadata=trace_metadata,
-                        model=data.model,
-                        model_parameters=self._get_model_parameters(data),
-                    )
+                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                    trace_context=trace_context,
+                    name=self._get_generation_name(data),
+                    as_type="generation",
+                    metadata=trace_metadata,
+                    model=data.model,
+                    model_parameters=self._get_model_parameters(data),
                 )
             elif isinstance(data, FunctionSpanData):
-                langfuse_span = (
-                    client.start_observation(  # ty: ignore[no-matching-overload]
-                        trace_context=trace_context,
-                        name=data.name,
-                        as_type="tool",
-                        metadata=trace_metadata,
-                    )
+                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                    trace_context=trace_context,
+                    name=data.name,
+                    as_type="tool",
+                    metadata=trace_metadata,
                 )
             elif isinstance(data, AgentSpanData):
-                langfuse_span = (
-                    client.start_observation(  # ty: ignore[no-matching-overload]
-                        trace_context=trace_context,
-                        name=data.name,
-                        as_type="agent",
-                        metadata={
-                            **(trace_metadata or {}),
-                            "tools": data.tools,
-                            "handoffs": data.handoffs,
-                            "output_type": data.output_type,
-                        },
-                    )
+                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                    trace_context=trace_context,
+                    name=data.name,
+                    as_type="agent",
+                    metadata={
+                        **(trace_metadata or {}),
+                        "tools": data.tools,
+                        "handoffs": data.handoffs,
+                        "output_type": data.output_type,
+                    },
                 )
             else:
-                langfuse_span = (
-                    client.start_observation(  # ty: ignore[no-matching-overload]
-                        trace_context=trace_context,
-                        name=data.type if hasattr(data, "type") else "unknown",
-                        as_type="span",
-                        metadata=trace_metadata,
-                    )
+                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                    trace_context=trace_context,
+                    name=data.type if hasattr(data, "type") else "unknown",
+                    as_type="span",
+                    metadata=trace_metadata,
                 )
 
             with self._lock:
@@ -296,8 +291,13 @@ class LangfuseTracingProcessor(TracingProcessor):
                     update_kwargs["usage_details"] = usage
                 if cost is not None:
                     update_kwargs["cost_details"] = {"total": cost}
+                generation_metadata: dict[str, Any] = {}
                 if data.reasoning:
-                    update_kwargs["metadata"] = {"reasoning": data.reasoning}
+                    generation_metadata["reasoning"] = data.reasoning
+                if data.tools:
+                    generation_metadata["tools"] = data.tools
+                if generation_metadata:
+                    update_kwargs["metadata"] = generation_metadata
                 if data.time_to_first_action_seconds is not None:
                     update_kwargs["completion_start_time"] = _timestamp_from_maybe_iso(
                         span.started_at

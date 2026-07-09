@@ -21,7 +21,13 @@ from tests.daily.connectors.google_drive.consts_and_utils import ACCESS_MAPPING
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_hierarchy_nodes_match_expected,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_resource_key_shortcut_target_in_retrieved_docs,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_FOLDER_ID,
@@ -88,7 +94,12 @@ def _build_connector(
 
 
 @pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
 def test_gdrive_perm_sync_with_real_data(
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
     enable_ee: None,  # noqa: ARG001
 ) -> None:
@@ -220,9 +231,9 @@ def test_gdrive_perm_sync_with_real_data(
 
         # Verify the permissions match
         if file_numeric_id in PUBLIC_RANGE:
-            assert (
-                doc_id in public_doc_ids
-            ), f"File {doc_id} (ID: {file_numeric_id}) should be public but is not in the public_doc_ids set"
+            assert doc_id in public_doc_ids, (
+                f"File {doc_id} (ID: {file_numeric_id}) should be public but is not in the public_doc_ids set"
+            )
         else:
             assert expected_users == emails_with_access, (
                 f"File {doc_id} (ID: {file_numeric_id}) should be accessible to users {expected_users} "
@@ -252,6 +263,7 @@ def test_gdrive_perm_sync_with_real_data(
     # Use include_permissions=True to populate external_access on hierarchy nodes
     hierarchy_connector = _build_connector(google_drive_service_acct_connector_factory)
     output = load_connector_outputs(hierarchy_connector, include_permissions=True)
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
@@ -277,6 +289,7 @@ def test_gdrive_perm_sync_with_real_data(
             TEST_USER_1_EXTRA_FOLDER_ID,
             EXTERNAL_SHARED_FOLDER_ID,
             FOLDER_3_ID,
+            *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
         )
     )
     assert_hierarchy_nodes_match_expected(
@@ -300,9 +313,9 @@ def test_gdrive_perm_sync_with_real_data(
 
     # Verify permissions on perm sync drive hierarchy nodes
     for node in perm_sync_drive_nodes:
-        assert (
-            node.external_access is not None
-        ), f"Hierarchy node {node.raw_node_id} has no external access"
+        assert node.external_access is not None, (
+            f"Hierarchy node {node.raw_node_id} has no external access"
+        )
         expected_emails = PERM_SYNC_DRIVE_ACCESS_MAPPING.get(node.raw_node_id, set())
         actual_emails = node.external_access.external_user_emails
         assert actual_emails == expected_emails, (

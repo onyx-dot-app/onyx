@@ -38,6 +38,12 @@ interface ContentLgProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  titleMaxLines?: number;
+
+  /** Clamp the description to N lines. Maps to Text's maxLines prop. */
+  descriptionMaxLines?: number;
+
   /** Enable inline editing of the title. */
   editable?: boolean;
 
@@ -81,6 +87,8 @@ function ContentLg({
   icon: Icon,
   title,
   description,
+  titleMaxLines,
+  descriptionMaxLines,
   editable,
   onTitleChange,
   ref,
@@ -153,7 +161,7 @@ function ContentLg({
             <Text
               font={config.titleFont}
               color="inherit"
-              maxLines={1}
+              maxLines={titleMaxLines}
               title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
             >
@@ -190,7 +198,12 @@ function ContentLg({
               : undefined
           }
         >
-          <Text font="secondary-body" color="text-03" as="p">
+          <Text
+            font="secondary-body"
+            color="text-03"
+            as="p"
+            maxLines={descriptionMaxLines}
+          >
             {description}
           </Text>
         </div>

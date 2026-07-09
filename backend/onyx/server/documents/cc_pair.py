@@ -15,13 +15,18 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.exceptions import ValidationError
+from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.factory import validate_ccpair_for_user
+from onyx.connectors.interfaces import Resolver
+from onyx.connectors.models import InputType
 from onyx.db.connector import delete_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
+from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
 )
@@ -38,6 +43,7 @@ from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import count_index_attempts_for_cc_pair
+from onyx.db.index_attempt import get_error_counts_for_index_attempts
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
@@ -53,6 +59,9 @@ from onyx.db.permission_sync_attempt import (
 from onyx.db.permission_sync_attempt import (
     get_recent_doc_permission_sync_attempts_for_cc_pair,
 )
+from onyx.db.permission_sync_attempt import (
+    get_relevant_external_group_sync_attempts_for_cc_pair,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
@@ -60,17 +69,25 @@ from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import CCPairFullInfo
+from onyx.server.documents.models import CCPairSyncAttemptsResponse
 from onyx.server.documents.models import CCPropertyUpdateRequest
 from onyx.server.documents.models import CCStatusUpdateRequest
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.documents.models import ConnectorCredentialPairMetadata
+from onyx.server.documents.models import DocPermissionSyncAttemptSnapshot
 from onyx.server.documents.models import DocumentSyncStatus
+from onyx.server.documents.models import ExternalGroupSyncAttemptSnapshot
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricsResponse
 from onyx.server.documents.models import PaginatedReturn
-from onyx.server.documents.models import PermissionSyncAttemptSnapshot
+from onyx.server.documents.models import synthesize_unaccounted
 from onyx.server.models import StatusResponse
+from onyx.server.security.store import get_security_settings
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
@@ -106,9 +123,16 @@ def get_cc_pair_index_attempts(
         page=page_num,
         page_size=page_size,
     )
+    error_counts = get_error_counts_for_index_attempts(
+        db_session=db_session,
+        index_attempt_ids=[index_attempt.id for index_attempt in index_attempts],
+    )
     return PaginatedReturn(
         items=[
-            IndexAttemptSnapshot.from_index_attempt_db_model(index_attempt)
+            IndexAttemptSnapshot.from_index_attempt_db_model(
+                index_attempt,
+                error_count=error_counts.get(index_attempt.id, 0),
+            )
             for index_attempt in index_attempts
         ],
         total_items=total_count,
@@ -150,10 +174,55 @@ def get_index_attempt_stage_metrics(
         db_session=db_session,
         index_attempt_id=index_attempt_id,
     )
+    stages = [IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics]
+    # Append the BATCH_UNACCOUNTED residual (frontend re-sorts, so order is fine).
+    unaccounted = synthesize_unaccounted(stages)
+    if unaccounted is not None:
+        stages.append(unaccounted)
     return IndexAttemptStageMetricsResponse(
         index_attempt_id=index_attempt_id,
-        stages=[IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics],
+        stages=stages,
     )
+
+
+# Cap on how many recent attempts the per-cc-pair sync-history endpoints
+# will scan when computing pagination. The frontend pages over this fixed
+# pool client-side; older attempts beyond the cap are not surfaced. Matches
+# the previous (pre-CCPairSyncAttemptsResponse) behavior.
+_SYNC_ATTEMPTS_HISTORY_LIMIT = 1000
+
+
+def _get_cc_pair_source_or_raise(
+    cc_pair_id: int,
+    user: User,
+    db_session: Session,
+) -> DocumentSource:
+    """Authorize ``user`` for ``cc_pair_id`` and return its source.
+
+    Raises ``OnyxError(NOT_FOUND)`` if the cc-pair doesn't exist or the user
+    can't see it. Co-located with the sync-history endpoints because both
+    routes need the same cc-pair lookup + auth + source resolution.
+    """
+    if not verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, get_editable=False
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user permissions",
+        )
+
+    cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=user,
+        get_editable=False,
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user permissions",
+        )
+    return cc_pair.connector.source
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/permission-sync-attempts")
@@ -163,33 +232,94 @@ def get_cc_pair_permission_sync_attempts(
     page_size: int = Query(10, ge=1, le=1000),
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> PaginatedReturn[PermissionSyncAttemptSnapshot]:
-    if user:
-        user_has_access = verify_user_has_access_to_cc_pair(
-            cc_pair_id, db_session, user, get_editable=False
-        )
-        if not user_has_access:
-            raise HTTPException(
-                status_code=400, detail="CC Pair not found for current user permissions"
-            )
+) -> CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot]:
+    """Recent doc-permission sync attempts for a cc-pair, paginated.
 
-    # Get all permission sync attempts for this cc pair
+    Returns ``applicable=False`` when the source does not run a separate
+    doc-permission sync job (e.g. Salesforce, where ACLs are pulled inline
+    during indexing). The frontend uses ``applicable`` to distinguish
+    "this kind of sync isn't applicable" from "no attempts yet".
+    """
+    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
+
+    source_requires_doc_sync = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "source_requires_doc_sync",
+        noop_return_value=False,
+    )
+    if not source_requires_doc_sync(source):
+        return CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot](
+            applicable=False,
+            items=[],
+            total_items=0,
+        )
+
     all_attempts = get_recent_doc_permission_sync_attempts_for_cc_pair(
         cc_pair_id=cc_pair_id,
-        limit=1000,
+        limit=_SYNC_ATTEMPTS_HISTORY_LIMIT,
         db_session=db_session,
     )
-
     start_idx = page_num * page_size
     end_idx = start_idx + page_size
-    paginated_attempts = all_attempts[start_idx:end_idx]
-    items = [
-        PermissionSyncAttemptSnapshot.from_permission_sync_attempt_db_model(attempt)
-        for attempt in paginated_attempts
-    ]
+    return CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot](
+        applicable=True,
+        items=[
+            DocPermissionSyncAttemptSnapshot.from_doc_permission_sync_attempt_db_model(
+                attempt
+            )
+            for attempt in all_attempts[start_idx:end_idx]
+        ],
+        total_items=len(all_attempts),
+    )
 
-    return PaginatedReturn(
-        items=items,
+
+@router.get("/admin/cc-pair/{cc_pair_id}/external-group-sync-attempts")
+def get_cc_pair_external_group_sync_attempts(
+    cc_pair_id: int,
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=1000),
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot]:
+    """Recent external-group sync attempts a viewer of this cc-pair would
+    expect to see, paginated.
+
+    Returns ``applicable=False`` when the source does not run a separate
+    external-group sync job. For sources whose group sync is logically
+    source-wide (Confluence, Jira), attempts triggered against any sibling
+    cc-pair sharing the source are included — see
+    ``get_relevant_external_group_sync_attempts_for_cc_pair``.
+    """
+    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
+
+    source_requires_external_group_sync = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "source_requires_external_group_sync",
+        noop_return_value=False,
+    )
+    if not source_requires_external_group_sync(source):
+        return CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot](
+            applicable=False,
+            items=[],
+            total_items=0,
+        )
+
+    all_attempts = get_relevant_external_group_sync_attempts_for_cc_pair(
+        cc_pair_id=cc_pair_id,
+        source=source,
+        limit=_SYNC_ATTEMPTS_HISTORY_LIMIT,
+        db_session=db_session,
+    )
+    start_idx = page_num * page_size
+    end_idx = start_idx + page_size
+    return CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot](
+        applicable=True,
+        items=[
+            ExternalGroupSyncAttemptSnapshot.from_external_group_sync_attempt_db_model(
+                attempt
+            )
+            for attempt in all_attempts[start_idx:end_idx]
+        ],
         total_items=len(all_attempts),
     )
 
@@ -253,6 +383,7 @@ def get_cc_pair_full_info(
 
     return CCPairFullInfo.from_models(
         cc_pair_model=cc_pair,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
         number_of_index_attempts=count_index_attempts_for_cc_pair(
             db_session=db_session,
             cc_pair_id=cc_pair_id,
@@ -294,7 +425,19 @@ def get_cc_pair_full_info(
             if latest_permission_sync_attempt
             else None
         ),
+        supports_targeted_reindex=_connector_supports_targeted_reindex(
+            cc_pair.connector.source, cc_pair.connector.input_type
+        ),
     )
+
+
+def _connector_supports_targeted_reindex(
+    source: DocumentSource, input_type: InputType
+) -> bool:
+    try:
+        return issubclass(identify_connector_class(source, input_type), Resolver)
+    except Exception:
+        return False
 
 
 @router.put("/admin/cc-pair/{cc_pair_id}/status", tags=PUBLIC_API_TAGS)
@@ -369,6 +512,15 @@ def update_cc_pair_status(
     )
 
     db_session.commit()
+
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={"status": status_update_request.status.value},
+    )
 
     # this speeds up the start of indexing by firing the check immediately
     client_app.send_task(
@@ -641,6 +793,17 @@ def associate_credential_to_connector(
             response.data,
         )
 
+        # response.data is the cc_pair id only when the association was actually
+        # created; a no-op (credential already linked) returns success=False.
+        if response.success:
+            emit_audit_event(
+                AuditAction.CC_PAIR_CREATE,
+                AuditOutcome.SUCCESS,
+                actor=actor_from_user(user),
+                resource_type="cc_pair",
+                resource_id=response.data,
+                extra={"connector_id": connector_id, "credential_id": credential_id},
+            )
         return response
     except ValidationError as e:
         # If validation fails, delete the connector and commit the changes
@@ -675,6 +838,30 @@ def dissociate_credential_from_connector(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    return remove_credential_from_connector(
+    # Capture the cc_pair id before removal — remove_credential_from_connector
+    # returns the connector_id (not the cc_pair id) in its StatusResponse.
+    cc_pair = get_connector_credential_pair_for_user(
+        db_session=db_session,
+        connector_id=connector_id,
+        credential_id=credential_id,
+        user=user,
+        get_editable=True,
+    )
+    cc_pair_id = cc_pair.id if cc_pair else None
+
+    result = remove_credential_from_connector(
         connector_id, credential_id, user, db_session
     )
+
+    # Only emit when something was actually dissociated (a no-op returns
+    # success=False without raising).
+    if result.success:
+        emit_audit_event(
+            AuditAction.CC_PAIR_DELETE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="cc_pair",
+            resource_id=cc_pair_id,
+            extra={"connector_id": connector_id, "credential_id": credential_id},
+        )
+    return result

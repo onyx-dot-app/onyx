@@ -22,6 +22,12 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolExecutionException
 from onyx.tools.models import ToolResponse
 from onyx.tools.models import WebSearchToolOverrideKwargs
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentToolOverrideKwargs,
+)
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryToolOverrideKwargs
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
@@ -341,6 +347,7 @@ def run_tool_calls(
             | OpenURLToolOverrideKwargs
             | PythonToolOverrideKwargs
             | MemoryToolOverrideKwargs
+            | CodingAgentToolOverrideKwargs
             | None
         ) = None
 
@@ -388,6 +395,8 @@ def run_tool_calls(
             override_kwargs = PythonToolOverrideKwargs(
                 chat_files=chat_files or [],
             )
+        elif isinstance(tool, CodingAgentTool):
+            override_kwargs = CodingAgentToolOverrideKwargs()
         elif isinstance(tool, MemoryTool):
             override_kwargs = MemoryToolOverrideKwargs(
                 user_name=(

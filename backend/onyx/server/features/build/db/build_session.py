@@ -8,22 +8,31 @@ from uuid import UUID
 from sqlalchemy import desc
 from sqlalchemy import exists
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
+from onyx.db.llm import can_user_access_llm_provider
+from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import Artifact
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Sandbox
+from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_json_like
 
 logger = setup_logger()
 
@@ -32,33 +41,31 @@ def create_build_session__no_commit(
     user_id: UUID,
     db_session: Session,
     name: str | None = None,
-    demo_data_enabled: bool = True,
+    origin: SessionOrigin = SessionOrigin.INTERACTIVE,
+    agent_provider: str | None = None,
+    agent_model: str | None = None,
 ) -> BuildSession:
-    """Create a new build session for the given user.
+    """``flush()`` only — caller commits.
 
-    NOTE: This function uses flush() instead of commit(). The caller is
-    responsible for committing the transaction when ready.
-
-    Args:
-        user_id: The user ID
-        db_session: Database session
-        name: Optional session name
-        demo_data_enabled: Whether this session uses demo data (default True)
+    ``agent_provider`` / ``agent_model`` are nullable for legacy rows;
+    the send-message path then falls back to opencode's startup default.
     """
     session = BuildSession(
         user_id=user_id,
         name=name,
         status=BuildSessionStatus.ACTIVE,
-        demo_data_enabled=demo_data_enabled,
+        origin=origin,
+        agent_provider=agent_provider,
+        agent_model=agent_model,
     )
     db_session.add(session)
     db_session.flush()
 
     logger.info(
-        "Created build session %s for user %s (demo_data=%s)",
+        "Created build session %s for user %s (origin=%s)",
         session.id,
         user_id,
-        demo_data_enabled,
+        origin.value,
     )
     return session
 
@@ -79,14 +86,49 @@ def get_build_session(
     )
 
 
+async def get_webapp_access_async(
+    db_session: AsyncSession,
+    session_id: UUID,
+) -> tuple[SharingScope, UUID] | None:
+    """(sharing_scope, owner_user_id) for the proxy access check; None if absent."""
+    row = (
+        await db_session.execute(
+            select(BuildSession.sharing_scope, BuildSession.user_id).where(
+                BuildSession.id == session_id
+            )
+        )
+    ).first()
+    return (row[0], row[1]) if row is not None else None
+
+
+async def get_webapp_target_async(
+    db_session: AsyncSession,
+    session_id: UUID,
+) -> tuple[UUID | None, int | None] | None:
+    """(sandbox_id, nextjs_port) in one round-trip; None if the session is absent."""
+    row = (
+        await db_session.execute(
+            select(Sandbox.id, BuildSession.nextjs_port)
+            .select_from(BuildSession)
+            .outerjoin(Sandbox, Sandbox.user_id == BuildSession.user_id)
+            .where(BuildSession.id == session_id)
+        )
+    ).first()
+    return (row[0], row[1]) if row is not None else None
+
+
 def get_user_build_sessions(
     user_id: UUID,
     db_session: Session,
     limit: int = 100,
 ) -> list[BuildSession]:
-    """Get all build sessions for a user that have at least one message.
+    """Get a user's interactive build sessions that have at least one message.
 
-    Excludes empty (pre-provisioned) sessions from the listing.
+    Sessions created by non-interactive callers (e.g. the scheduled-tasks
+    executor) are intentionally excluded from this listing so they don't
+    leak into the Craft sidebar. The covering composite index
+    ``ix_build_session_user_origin_created`` is built for this exact query
+    shape: ``(user_id, origin, created_at DESC)``.
     """
     # Subquery to check if session has any messages
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
@@ -95,6 +137,7 @@ def get_user_build_sessions(
         db_session.query(BuildSession)
         .filter(
             BuildSession.user_id == user_id,
+            BuildSession.origin == SessionOrigin.INTERACTIVE,
             has_messages,  # Only sessions with messages
         )
         .order_by(desc(BuildSession.created_at))
@@ -106,30 +149,21 @@ def get_user_build_sessions(
 def get_empty_session_for_user(
     user_id: UUID,
     db_session: Session,
-    demo_data_enabled: bool | None = None,
 ) -> BuildSession | None:
     """Get an empty (pre-provisioned) session for the user if one exists.
 
     Returns a session with no messages, or None if all sessions have messages.
-
-    Args:
-        user_id: The user ID
-        db_session: Database session
-        demo_data_enabled: Match sessions with this demo_data setting.
-                          If None, matches any session regardless of setting.
     """
-    # Subquery to check if session has any messages
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
 
-    query = db_session.query(BuildSession).filter(
-        BuildSession.user_id == user_id,
-        ~has_messages,  # Sessions with no messages only
+    return (
+        db_session.query(BuildSession)
+        .filter(
+            BuildSession.user_id == user_id,
+            ~has_messages,
+        )
+        .first()
     )
-
-    if demo_data_enabled is not None:
-        query = query.filter(BuildSession.demo_data_enabled == demo_data_enabled)
-
-    return query.first()
 
 
 def update_session_activity(
@@ -145,23 +179,6 @@ def update_session_activity(
     if session:
         session.last_activity_at = datetime.now(tz=timezone.utc)
         db_session.commit()
-
-
-def update_session_status(
-    session_id: UUID,
-    status: BuildSessionStatus,
-    db_session: Session,
-) -> None:
-    """Update the status of a build session."""
-    session = (
-        db_session.query(BuildSession)
-        .filter(BuildSession.id == session_id)
-        .one_or_none()
-    )
-    if session:
-        session.status = status
-        db_session.commit()
-        logger.info("Updated build session %s status to %s", session_id, status)
 
 
 def set_build_session_sharing_scope(
@@ -207,23 +224,6 @@ def delete_build_session__no_commit(
 # Sandbox operations
 # NOTE: Most sandbox operations have moved to sandbox.py
 # These remain here for convenience in session-related workflows
-
-
-def update_sandbox_status(
-    sandbox_id: UUID,
-    status: SandboxStatus,
-    db_session: Session,
-    container_id: str | None = None,
-) -> None:
-    """Update the status of a sandbox."""
-    sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
-    if sandbox:
-        sandbox.status = status
-        if container_id is not None:
-            sandbox.container_id = container_id
-        sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
-        db_session.commit()
-        logger.info("Updated sandbox %s status to %s", sandbox_id, status)
 
 
 def update_sandbox_heartbeat(
@@ -309,14 +309,15 @@ def create_message(
         session_id: Session UUID
         message_type: Type of message (USER, ASSISTANT, SYSTEM)
         turn_index: 0-indexed user message number this message belongs to
-        message_metadata: Required structured data (the raw ACP packet JSON)
+        message_metadata: Required structured data (the raw sandbox event packet JSON)
         db_session: Database session
     """
+    sanitized_metadata = sanitize_json_like(message_metadata)
     message = BuildMessage(
         session_id=session_id,
         turn_index=turn_index,
         type=message_type,
-        message_metadata=message_metadata,
+        message_metadata=sanitized_metadata,
     )
     db_session.add(message)
     db_session.commit()
@@ -328,9 +329,21 @@ def create_message(
         message.id,
         session_id,
         turn_index,
-        message_metadata.get("type"),
+        sanitized_metadata.get("type"),
     )
     return message
+
+
+def count_user_messages(session_id: UUID, db_session: Session) -> int:
+    """Count persisted user messages in a build session."""
+    return (
+        db_session.query(BuildMessage)
+        .filter(
+            BuildMessage.session_id == session_id,
+            BuildMessage.type == MessageType.USER,
+        )
+        .count()
+    )
 
 
 def update_message(
@@ -356,12 +369,15 @@ def update_message(
     if message is None:
         return None
 
-    message.message_metadata = message_metadata
+    sanitized_metadata = sanitize_json_like(message_metadata)
+    message.message_metadata = sanitized_metadata
     db_session.commit()
     db_session.refresh(message)
 
     logger.info(
-        "Updated message %s metadata type=%s", message_id, message_metadata.get("type")
+        "Updated message %s metadata type=%s",
+        message_id,
+        sanitized_metadata.get("type"),
     )
     return message
 
@@ -406,7 +422,8 @@ def upsert_agent_plan(
     )
 
     if existing_plan:
-        existing_plan.message_metadata = plan_metadata
+        sanitized_metadata = sanitize_json_like(plan_metadata)
+        existing_plan.message_metadata = sanitized_metadata
         db_session.commit()
         db_session.refresh(existing_plan)
         logger.info(
@@ -453,7 +470,7 @@ def _is_port_available(port: int) -> bool:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("0.0.0.0", port))
+            sock.bind(("0.0.0.0", port))  # noqa: S104 — port availability probe; binds wildcard to detect any listener
             logger.debug("Port %s IPv4 wildcard bind successful", port)
     except OSError as e:
         logger.debug("Port %s IPv4 wildcard not available: %s", port, e)
@@ -488,7 +505,7 @@ def allocate_nextjs_port(db_session: Session) -> int:
         An available port number
 
     Raises:
-        RuntimeError: If no ports are available in the configured range
+        OnyxError: If no ports are available in the configured range
     """
     from onyx.db.models import BuildSession
 
@@ -505,8 +522,9 @@ def allocate_nextjs_port(db_session: Session) -> int:
         if port not in allocated_ports and _is_port_available(port):
             return port
 
-    raise RuntimeError(
-        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})"
+    raise OnyxError(
+        OnyxErrorCode.SERVICE_UNAVAILABLE,
+        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})",
     )
 
 
@@ -561,42 +579,29 @@ def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
     return result
 
 
-def fetch_llm_provider_by_type_for_build_mode(
-    db_session: Session, provider_type: str
-) -> LLMProviderView | None:
-    """Fetch an LLM provider by its provider type (e.g., "anthropic", "openai").
-
-    Resolution priority:
-    1. First try to find a provider named "build-mode-{type}" (e.g., "build-mode-anthropic")
-    2. If not found, fall back to any provider that matches the type
-
-    Args:
-        db_session: Database session
-        provider_type: The provider type (e.g., "anthropic", "openai", "openrouter")
-
-    Returns:
-        LLMProviderView if found, None otherwise
-    """
-    from onyx.db.llm import fetch_existing_llm_provider
-
-    # First try to find a "build-mode-{type}" provider
-    build_mode_name = f"build-mode-{provider_type}"
-    provider_model = fetch_existing_llm_provider(
-        name=build_mode_name, db_session=db_session
-    )
-
-    # If not found, fall back to any provider that matches the type
-    if not provider_model:
-        provider_model = db_session.scalar(
-            select(LLMProviderModel)
-            .where(LLMProviderModel.provider == provider_type)
-            .options(
-                selectinload(LLMProviderModel.model_configurations),
-                selectinload(LLMProviderModel.groups),
-                selectinload(LLMProviderModel.personas),
-            )
+def fetch_all_supported_build_llm_providers(
+    db_session: Session, user: User
+) -> list[LLMProviderView]:
+    """Every provider of a Craft-supported type (anthropic, openai, openrouter)
+    that the ``user`` can access. Respects is_public / group restrictions so a
+    user never gets a sandbox keyed with a provider they can't use."""
+    provider_models = db_session.scalars(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.provider.in_(BUILD_MODE_ALLOWED_PROVIDER_TYPES))
+        .options(
+            selectinload(LLMProviderModel.model_configurations),
+            selectinload(LLMProviderModel.groups),
+            selectinload(LLMProviderModel.personas),
         )
-
-    if not provider_model:
-        return None
-    return LLMProviderView.from_model(provider_model)
+    )
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
+    # persona=None: Craft has no persona context, so a provider restricted to
+    # specific personas is intentionally excluded even when otherwise public.
+    return [
+        LLMProviderView.from_model(p)
+        for p in provider_models
+        if can_user_access_llm_provider(
+            p, user_group_ids, persona=None, is_admin=is_admin
+        )
+    ]

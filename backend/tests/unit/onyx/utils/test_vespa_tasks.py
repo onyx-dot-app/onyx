@@ -38,7 +38,7 @@ def _setup_common_patches(monkeypatch: Any, document_set: Any) -> dict[str, bool
     monkeypatch.setattr(
         vespa_tasks,
         "get_document_set_by_id",
-        lambda db_session, document_set_id: document_set,  # noqa: ARG005
+        lambda db_session, document_set_id, prefetch_relationships=False: document_set,  # noqa: ARG005
     )
 
     def _delete(document_set_row: Any, db_session: Any) -> None:  # noqa: ARG001

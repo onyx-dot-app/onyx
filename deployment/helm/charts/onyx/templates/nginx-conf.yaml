@@ -40,6 +40,13 @@ data:
         server_name $$DOMAIN;
 
         client_max_body_size 5G;
+
+        # First-party health probe served directly by nginx (no upstreams),
+        # used by the container healthcheck.
+        location = /nginx-health {
+            access_log off;
+            return 200 "ok\n";
+        }
         {{- if .Values.mcpServer.enabled }}
 
         # OAuth callback page must be served by the web server (Next.js),
@@ -78,6 +85,25 @@ data:
             proxy_pass http://mcp_server;
         }
         {{- end }}
+
+        # SAML lives at the root path (no /api prefix), so proxy it straight
+        # through to the API. Without this, /auth/saml/* falls through to the
+        # web server catch-all below and returns an HTML 404.
+        location ~ ^/auth/saml(/.*)?$ {
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header Host $host;
+            proxy_http_version 1.1;
+            proxy_buffering off;
+            proxy_redirect off;
+            # timeout settings
+            proxy_connect_timeout {{ .Values.nginx.timeouts.connect }}s;
+            proxy_send_timeout {{ .Values.nginx.timeouts.send }}s;
+            proxy_read_timeout {{ .Values.nginx.timeouts.read }}s;
+            proxy_pass http://api_server;
+        }
 
         location ~ ^/scim(/.*)?$ {
             proxy_set_header X-Real-IP $remote_addr;

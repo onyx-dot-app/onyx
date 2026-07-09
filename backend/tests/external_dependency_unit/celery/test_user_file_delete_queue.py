@@ -51,8 +51,8 @@ from onyx.configs.constants import USER_FILE_DELETE_MAX_QUEUE_DEPTH
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
 from onyx.redis.redis_pool import get_redis_client
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -131,7 +131,9 @@ class TestDeleteQueueDepthBackpressure:
             _patch_task_app(check_for_user_file_delete, mock_app),
             patch(_PATCH_QUEUE_LEN, return_value=USER_FILE_DELETE_MAX_QUEUE_DEPTH + 1),
         ):
-            check_for_user_file_delete.run(tenant_id=TEST_TENANT_ID)
+            check_for_user_file_delete.run(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            )
 
         mock_app.send_task.assert_not_called()
 
@@ -148,7 +150,9 @@ class TestDeletePerFileGuardKey:
         user = create_test_user(db_session, "del_guard_user")
         uf = _create_deleting_user_file(db_session, user.id)
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         guard_key = _user_file_delete_queued_key(uf.id)
         redis_client.setex(guard_key, CELERY_USER_FILE_DELETE_TASK_EXPIRES, 1)
 
@@ -159,14 +163,16 @@ class TestDeletePerFileGuardKey:
                 _patch_task_app(check_for_user_file_delete, mock_app),
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
-                check_for_user_file_delete.run(tenant_id=TEST_TENANT_ID)
+                check_for_user_file_delete.run(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                )
 
             # send_task must not have been called with this specific file's ID
             for call in mock_app.send_task.call_args_list:
                 kwargs = call.kwargs.get("kwargs", {})
-                assert kwargs.get("user_file_id") != str(
-                    uf.id
-                ), f"File {uf.id} should have been skipped because its guard key exists"
+                assert kwargs.get("user_file_id") != str(uf.id), (
+                    f"File {uf.id} should have been skipped because its guard key exists"
+                )
         finally:
             redis_client.delete(guard_key)
 
@@ -179,7 +185,9 @@ class TestDeletePerFileGuardKey:
         user = create_test_user(db_session, "del_guard_set_user")
         uf = _create_deleting_user_file(db_session, user.id)
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         guard_key = _user_file_delete_queued_key(uf.id)
         redis_client.delete(guard_key)  # clean slate
 
@@ -190,15 +198,17 @@ class TestDeletePerFileGuardKey:
                 _patch_task_app(check_for_user_file_delete, mock_app),
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
-                check_for_user_file_delete.run(tenant_id=TEST_TENANT_ID)
+                check_for_user_file_delete.run(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                )
 
-            assert redis_client.exists(
-                guard_key
-            ), "Guard key should be set in Redis after enqueue"
-            ttl = int(redis_client.ttl(guard_key))  # ty: ignore[invalid-argument-type]
-            assert (
-                0 < ttl <= CELERY_USER_FILE_DELETE_TASK_EXPIRES
-            ), f"Guard key TTL {ttl}s is outside the expected range (0, {CELERY_USER_FILE_DELETE_TASK_EXPIRES}]"
+            assert redis_client.exists(guard_key), (
+                "Guard key should be set in Redis after enqueue"
+            )
+            ttl = int(redis_client.ttl(guard_key))
+            assert 0 < ttl <= CELERY_USER_FILE_DELETE_TASK_EXPIRES, (
+                f"Guard key TTL {ttl}s is outside the expected range (0, {CELERY_USER_FILE_DELETE_TASK_EXPIRES}]"
+            )
         finally:
             redis_client.delete(guard_key)
 
@@ -215,7 +225,9 @@ class TestDeleteTaskExpiry:
         user = create_test_user(db_session, "del_expires_user")
         uf = _create_deleting_user_file(db_session, user.id)
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         guard_key = _user_file_delete_queued_key(uf.id)
         redis_client.delete(guard_key)
 
@@ -226,12 +238,14 @@ class TestDeleteTaskExpiry:
                 _patch_task_app(check_for_user_file_delete, mock_app),
                 patch(_PATCH_QUEUE_LEN, return_value=0),
             ):
-                check_for_user_file_delete.run(tenant_id=TEST_TENANT_ID)
+                check_for_user_file_delete.run(
+                    tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                )
 
             # At least one task should have been submitted (for our file)
-            assert (
-                mock_app.send_task.call_count >= 1
-            ), "Expected at least one task to be submitted"
+            assert mock_app.send_task.call_count >= 1, (
+                "Expected at least one task to be submitted"
+            )
 
             # Every submitted task must carry expires
             for call in mock_app.send_task.call_args_list:
@@ -239,7 +253,9 @@ class TestDeleteTaskExpiry:
                 assert call.kwargs.get("queue") == OnyxCeleryQueues.USER_FILE_DELETE
                 assert (
                     call.kwargs.get("expires") == CELERY_USER_FILE_DELETE_TASK_EXPIRES
-                ), "Task must be submitted with the correct expires value to prevent stale task accumulation"
+                ), (
+                    "Task must be submitted with the correct expires value to prevent stale task accumulation"
+                )
         finally:
             redis_client.delete(guard_key)
 
@@ -258,7 +274,9 @@ class TestDeleteWorkerClearsGuardKey:
         """
         user_file_id = str(uuid4())
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         guard_key = _user_file_delete_queued_key(user_file_id)
 
         # Simulate the guard key set when the beat enqueued the task
@@ -275,12 +293,12 @@ class TestDeleteWorkerClearsGuardKey:
         try:
             process_single_user_file_delete.run(
                 user_file_id=user_file_id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
         finally:
             if delete_lock.owned():
                 delete_lock.release()
 
-        assert not redis_client.exists(
-            guard_key
-        ), "Guard key should be deleted when the worker picks up the task"
+        assert not redis_client.exists(guard_key), (
+            "Guard key should be deleted when the worker picks up the task"
+        )

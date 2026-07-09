@@ -34,6 +34,7 @@ from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.jira.access import get_project_permissions
 from onyx.connectors.jira.utils import best_effort_basic_expert_info
@@ -432,9 +433,7 @@ def process_jira_issue(
         basic_expert_info := best_effort_basic_expert_info(creator)
     ):
         people.add(basic_expert_info)  # ty: ignore[possibly-unresolved-reference]
-        metadata_dict[_FIELD_REPORTER] = (
-            basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
-        )
+        metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
         if (
             email := basic_expert_info.get_email()  # ty: ignore[possibly-unresolved-reference]
         ):
@@ -445,9 +444,7 @@ def process_jira_issue(
         basic_expert_info := best_effort_basic_expert_info(assignee)
     ):
         people.add(basic_expert_info)  # ty: ignore[possibly-unresolved-reference]
-        metadata_dict[_FIELD_ASSIGNEE] = (
-            basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
-        )
+        metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()  # ty: ignore[possibly-unresolved-reference]
         if (
             email := basic_expert_info.get_email()  # ty: ignore[possibly-unresolved-reference]
         ):
@@ -513,6 +510,7 @@ class JiraConnectorCheckpoint(ConnectorCheckpoint):
 
 class JiraConnector(
     CheckpointedConnectorWithPermSync[JiraConnectorCheckpoint],
+    SlimConnector,
     SlimConnectorWithPermSync,
 ):
     def __init__(
@@ -886,11 +884,35 @@ class JiraConnector(
             # if we didn't retrieve a full batch, we're done
             checkpoint.has_more = current_offset - starting_offset == page_size
 
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        # ID-only path (e.g. pruning): pruning diffs document IDs and never consumes
+        # permission data, so skip the admin-gated per-project permission resolution.
+        yield from self._retrieve_all_slim_docs(
+            start=start, end=end, callback=callback, include_permissions=False
+        )
+
     def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        yield from self._retrieve_all_slim_docs(
+            start=start, end=end, callback=callback, include_permissions=True
+        )
+
+    def _retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+        *,
+        include_permissions: bool,
     ) -> GenerateSlimDocumentOutput:
         one_day = timedelta(hours=24).total_seconds()
 
@@ -958,8 +980,10 @@ class JiraConnector(
                     SlimDocument(
                         id=doc_id,
                         # Permission sync path - don't prefix, upsert_document_external_perms handles it
-                        external_access=self._get_project_permissions(
-                            project_key, add_prefix=False
+                        external_access=(
+                            self._get_project_permissions(project_key, add_prefix=False)
+                            if include_permissions
+                            else None
                         ),
                         parent_hierarchy_raw_node_id=(
                             self._get_parent_hierarchy_raw_node_id(issue, project_key)

@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import SearchSettings
@@ -35,6 +36,8 @@ class SearchSettingsCreationRequest(IndexingSetting):
 class SavedSearchSettings(IndexingSetting):
     # Previously this contained also Inference time settings. Keeping this wrapper class around
     # as there may again be inference time settings that may get added.
+    use_port_flow: bool | None = None
+
     @classmethod
     def from_db_model(cls, search_settings: SearchSettings) -> "SavedSearchSettings":
         return cls(
@@ -50,9 +53,9 @@ class SavedSearchSettings(IndexingSetting):
             embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
             switchover_type=search_settings.switchover_type,
+            use_port_flow=search_settings.use_port_flow,
             enable_contextual_rag=search_settings.enable_contextual_rag,
-            contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
-            contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
+            contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         )
 
 
@@ -65,6 +68,7 @@ class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None
     document_set: list[str] | None = None
     time_cutoff: datetime | None = None
+    time_cutoff_upper: datetime | None = None
     tags: list[Tag] | None = None
 
 
@@ -332,7 +336,8 @@ class SearchDoc(BaseModel):
         self, *args: list, **kwargs: dict[str, Any]
     ) -> dict[str, Any]:
         initial_dict = super().model_dump(
-            *args, **kwargs  # ty: ignore[invalid-argument-type]
+            *args,
+            **kwargs,  # ty: ignore[invalid-argument-type]
         )
         initial_dict["updated_at"] = (
             self.updated_at.isoformat() if self.updated_at else None
@@ -350,6 +355,14 @@ class SearchDocsResponse(BaseModel):
     # For cases where the frontend only needs to display a subset of the search docs
     # The whole list is typically still needed for later steps but this set should be saved separately
     displayed_docs: list[SearchDoc] | None = None
+
+    @field_validator("displayed_docs", mode="before")
+    @classmethod
+    def normalize_empty_displayed_docs(
+        cls,
+        value: list[SearchDoc] | None,
+    ) -> list[SearchDoc] | None:
+        return value or None
 
 
 class SavedSearchDoc(SearchDoc):

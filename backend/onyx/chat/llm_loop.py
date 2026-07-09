@@ -12,6 +12,7 @@ from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
+from onyx.chat.llm_step import _looks_like_xml_tool_call_payload
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
@@ -27,6 +28,7 @@ from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
+from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -58,11 +60,13 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
+from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tracing.framework.create import trace
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -131,18 +135,6 @@ def _build_empty_llm_response_error(
             "completed. No text or tool calls were received from the upstream "
             "provider."
         ),
-    )
-
-
-def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
-    """Detect XML-style marshaled tool calls emitted as plain text."""
-    if not text:
-        return False
-    lowered = text.lower()
-    return (
-        "<function_calls" in lowered
-        and "<invoke" in lowered
-        and "<parameter" in lowered
     )
 
 
@@ -485,16 +477,6 @@ def construct_message_history(
                         forgotten_meta, token_counter
                     )
 
-    # Attach project images to the last user message
-    if context_files and context_files.image_files:
-        existing_images = last_user_message.image_files or []
-        last_user_message = ChatMessageSimple(
-            message=last_user_message.message,
-            token_count=last_user_message.token_count,
-            message_type=last_user_message.message_type,
-            image_files=existing_images + context_files.image_files,
-        )
-
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [context_files],
     # [forgotten_files], [last_user_message], [messages_after_last_user], [reminder]
@@ -623,6 +605,34 @@ def _create_context_files_message(
     )
 
 
+def select_reminder_text(
+    *,
+    ran_image_gen: bool,
+    just_ran_web_search: bool,
+    has_open_url_tool: bool,
+    out_of_cycles: bool,
+    persona_task_prompt: str | None,
+    include_citation_reminder: bool,
+    include_file_reminder: bool,
+) -> str | None:
+    """Choose the reminder appended after a tool cycle.
+
+    The open_url nudge is gated on the tool actually being available; otherwise
+    the model is told to call a tool it doesn't have and leaks confusing
+    "open_url is not available" replies.
+    """
+    if ran_image_gen:
+        return IMAGE_GEN_REMINDER
+    if just_ran_web_search and has_open_url_tool and not out_of_cycles:
+        return OPEN_URL_REMINDER
+    return build_reminder_message(
+        reminder_text=persona_task_prompt,
+        include_citation_reminder=include_citation_reminder,
+        include_file_reminder=include_file_reminder,
+        is_last_cycle=out_of_cycles,
+    )
+
+
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -648,6 +658,7 @@ def run_llm_loop(
         metadata={
             "tenant_id": get_current_tenant_id(),
             "chat_session_id": chat_session_id,
+            "user_id": user_identity.user_id if user_identity else None,
         },
     ):
         # Fix some LiteLLM issues,
@@ -689,8 +700,11 @@ def run_llm_loop(
             raw_answer=None,
         )
 
-        # Pass the total budget to construct_message_history, which will handle token allocation
-        available_tokens = llm.config.max_input_tokens
+        # Hold back a margin below max_input_tokens: our tiktoken estimate can
+        # undercount the provider's tokenizer and overflow the context window.
+        available_tokens = int(
+            llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
+        )
         tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
         # Initialize gathered_documents with project files if present
         gathered_documents: list[SearchDoc] | None = (
@@ -706,6 +720,7 @@ def run_llm_loop(
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
+        has_open_url_tool: bool = any(isinstance(tool, OpenURLTool) for tool in tools)
         has_called_search_tool: bool = False
         code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
@@ -801,26 +816,18 @@ def run_llm_loop(
                     )
                     custom_agent_prompt_msg = None
 
-            reminder_message_text: str | None
-            if ran_image_gen:
-                # Some models are trained to give back images to the user for some similar tool
-                # This is to prevent it generating things like:
-                # [Cute Cat](attachment://a_cute_cat_sitting_playfully.png)
-                reminder_message_text = IMAGE_GEN_REMINDER
-            elif just_ran_web_search and not out_of_cycles:
-                reminder_message_text = OPEN_URL_REMINDER
-            else:
-                # This is the default case, the LLM at this point may answer so it is important
-                # to include the reminder. Potentially this should also mention citation
-                reminder_message_text = build_reminder_message(
-                    reminder_text=(
-                        persona.task_prompt if persona and persona.task_prompt else None
-                    ),
-                    include_citation_reminder=should_cite_documents
-                    or always_cite_documents,
-                    include_file_reminder=code_interpreter_file_generated,
-                    is_last_cycle=out_of_cycles,
-                )
+            reminder_message_text = select_reminder_text(
+                ran_image_gen=ran_image_gen,
+                just_ran_web_search=just_ran_web_search,
+                has_open_url_tool=has_open_url_tool,
+                out_of_cycles=out_of_cycles,
+                persona_task_prompt=(
+                    persona.task_prompt if persona and persona.task_prompt else None
+                ),
+                include_citation_reminder=should_cite_documents
+                or always_cite_documents,
+                include_file_reminder=code_interpreter_file_generated,
+            )
 
             reminder_msg = (
                 ChatMessageSimple(
@@ -832,13 +839,14 @@ def run_llm_loop(
                 else None
             )
 
+            tool_token_budget = compute_all_tool_tokens(final_tools, token_counter)
             truncated_message_history = construct_message_history(
                 system_prompt=system_prompt,
                 custom_agent_prompt=custom_agent_prompt_msg,
                 simple_chat_history=simple_chat_history,
                 reminder_message=reminder_msg,
                 context_files=context_files,
-                available_tokens=available_tokens,
+                available_tokens=max(0, available_tokens - tool_token_budget),
                 token_counter=token_counter,
                 all_injected_file_metadata=all_injected_file_metadata,
             )
@@ -970,7 +978,6 @@ def run_llm_loop(
                     except (json.JSONDecodeError, AttributeError):
                         pass
 
-                # Build a mapping of tool names to tool objects for getting tool_id
                 tools_by_name = {tool.name: tool for tool in final_tools}
 
                 # Add the results to the chat history. Even though tools may run in parallel,

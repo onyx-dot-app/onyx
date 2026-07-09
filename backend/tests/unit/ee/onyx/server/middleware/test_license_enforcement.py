@@ -10,11 +10,9 @@ import pytest
 from starlette.requests import Request
 from starlette.responses import Response
 
-from ee.onyx.configs.license_enforcement_config import EE_ONLY_PATH_PREFIXES
 from ee.onyx.configs.license_enforcement_config import (
     LICENSE_ENFORCEMENT_ALLOWED_PREFIXES,
 )
-from ee.onyx.server.middleware.license_enforcement import _is_ee_only_path
 from ee.onyx.server.middleware.license_enforcement import _is_path_allowed
 from onyx.server.settings.models import ApplicationStatus
 
@@ -41,7 +39,10 @@ class TestPathAllowlist:
     as the source of truth to ensure tests stay in sync with production code.
     """
 
-    @pytest.mark.parametrize("path", list(LICENSE_ENFORCEMENT_ALLOWED_PREFIXES))
+    # Sorted so the parametrization order is deterministic across pytest-xdist
+    # workers; iterating the frozenset directly varies with per-process hash
+    # randomization, which makes xdist abort on a collection mismatch.
+    @pytest.mark.parametrize("path", sorted(LICENSE_ENFORCEMENT_ALLOWED_PREFIXES))
     def test_allowed_paths_are_allowed(self, path: str) -> None:
         """All paths in LICENSE_ENFORCEMENT_ALLOWED_PREFIXES should be allowed."""
         assert _is_path_allowed(path) is True
@@ -55,32 +56,6 @@ class TestPathAllowlist:
     def test_blocked_paths_are_blocked(self, path: str) -> None:
         """Core functionality paths should be blocked when license is gated."""
         assert _is_path_allowed(path) is False
-
-
-class TestEEOnlyPaths:
-    """Tests for EE-only path detection.
-
-    Uses EE_ONLY_PATH_PREFIXES from the constants module as the source of truth
-    to ensure tests stay in sync with production code.
-    """
-
-    @pytest.mark.parametrize("path", list(EE_ONLY_PATH_PREFIXES))
-    def test_ee_only_paths_are_detected(self, path: str) -> None:
-        """All paths in EE_ONLY_PATH_PREFIXES should be detected as EE-only."""
-        assert _is_ee_only_path(path) is True
-
-    @pytest.mark.parametrize(
-        "path",
-        [
-            "/chat",
-            "/search",
-            "/connector",
-            "/persona",
-        ],
-    )
-    def test_community_paths_are_not_ee_only(self, path: str) -> None:
-        """Community features should not be detected as EE-only."""
-        assert _is_ee_only_path(path) is False
 
 
 class TestLicenseEnforcementMiddleware:
@@ -170,37 +145,6 @@ class TestLicenseEnforcementMiddleware:
 
         response = await middleware(mock_request, call_next)
         assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    @patch(
-        "ee.onyx.server.middleware.license_enforcement.LICENSE_ENFORCEMENT_ENABLED",
-        True,
-    )
-    @patch(
-        "ee.onyx.server.middleware.license_enforcement.get_session_with_current_tenant"
-    )
-    @patch("ee.onyx.server.middleware.license_enforcement.refresh_license_cache")
-    @patch("ee.onyx.server.middleware.license_enforcement.get_current_tenant_id")
-    @patch("ee.onyx.server.middleware.license_enforcement.get_cached_license_metadata")
-    async def test_no_license_blocks_ee_only_paths(
-        self,
-        mock_get_metadata: MagicMock,
-        mock_get_tenant: MagicMock,
-        mock_refresh: MagicMock,
-        mock_get_session: MagicMock,  # noqa: ARG002
-        middleware_harness: MiddlewareHarness,
-    ) -> None:
-        """No license blocks EE-only paths with 402."""
-        mock_get_tenant.return_value = "default"
-        mock_get_metadata.return_value = None
-        mock_refresh.return_value = None  # Still no license after DB check
-
-        middleware, call_next = middleware_harness
-        mock_request = MagicMock()
-        mock_request.url.path = "/api/analytics"  # EE-only path
-
-        response = await middleware(mock_request, call_next)
-        assert response.status_code == 402
 
     @pytest.mark.asyncio
     @patch(

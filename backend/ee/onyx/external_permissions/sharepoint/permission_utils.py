@@ -26,6 +26,7 @@ from onyx.connectors.sharepoint.connector import GRAPH_API_RETRYABLE_STATUSES
 from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP_REVERSE
 from onyx.connectors.sharepoint.connector import sleep_and_retry
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -71,7 +72,15 @@ def _graph_api_get(
                 resp.status_code in GRAPH_API_RETRYABLE_STATUSES
                 and attempt < GRAPH_API_MAX_RETRIES
             ):
-                wait = min(int(resp.headers.get("Retry-After", str(2**attempt))), 60)
+                parsed_retry_after = parse_retry_after_seconds(
+                    resp.headers.get("Retry-After")
+                )
+                wait = min(
+                    parsed_retry_after
+                    if parsed_retry_after is not None
+                    else float(2**attempt),
+                    60,
+                )
                 logger.warning(
                     "Graph API %s on attempt %s, retrying in %ss: %s",
                     resp.status_code,
@@ -154,7 +163,6 @@ def _get_azuread_group_guid_by_name(
 
 
 def _extract_guid_from_claims_token(claims_token: str) -> str | None:
-
     try:
         # Pattern to match GUID in claims token
         # Claims tokens often have format: c:0o.c|provider|GUID_suffix
@@ -239,7 +247,6 @@ def _get_security_group_owners(graph_client: GraphClient, group_id: str) -> list
 
 
 def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
-
     try:
         # First try to get the list item directly from the drive item
         if hasattr(drive_item, "listItem"):
@@ -320,7 +327,6 @@ def _get_group_name_with_suffix(
 def _get_sharepoint_groups(
     client_context: ClientContext, group_name: str, graph_client: GraphClient
 ) -> tuple[set[SharepointGroup], set[str]]:
-
     groups: set[SharepointGroup] = set()
     user_emails: set[str] = set()
 
@@ -373,7 +379,6 @@ def _get_sharepoint_groups(
 def _get_azuread_groups(
     graph_client: GraphClient, group_name: str
 ) -> tuple[set[SharepointGroup], set[str]]:
-
     group_id = _get_group_guid_from_identifier(graph_client, group_name)
     if not group_id:
         logger.error("Failed to get Azure AD group GUID for name %s", group_name)
@@ -742,7 +747,6 @@ def get_sharepoint_external_groups(
     get_access_token: Callable[[], str] | None = None,
     enumerate_all_ad_groups: bool = False,
 ) -> list[ExternalUserGroup]:
-
     groups: set[SharepointGroup] = set()
 
     def add_group_to_sets(role_assignments: RoleAssignmentCollection) -> None:

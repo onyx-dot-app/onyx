@@ -69,12 +69,21 @@ def _make_user_file(
     return uf
 
 
+def _mock_session(uf: MagicMock, mock_get_session: MagicMock) -> MagicMock:
+    """Wire a session mock so db_session.get(...) returns uf."""
+    session = MagicMock()
+    session.get.return_value = uf
+    mock_get_session.return_value.__enter__.return_value = session
+    return session
+
+
 # ------------------------------------------------------------------
 # _process_user_file_without_vector_db — direct tests
 # ------------------------------------------------------------------
 
 
 class TestProcessUserFileWithoutVectorDb:
+    @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
     @patch(f"{TASKS_MODULE}.store_user_file_plaintext")
     @patch(f"{LLM_FACTORY_MODULE}.get_llm_tokenizer_encode_func")
     @patch(f"{LLM_FACTORY_MODULE}.get_default_llm")
@@ -83,20 +92,22 @@ class TestProcessUserFileWithoutVectorDb:
         mock_get_llm: MagicMock,  # noqa: ARG002
         mock_get_encode: MagicMock,
         mock_store_plaintext: MagicMock,
+        mock_get_session: MagicMock,
     ) -> None:
         mock_encode = MagicMock(return_value=[1, 2, 3, 4, 5])
         mock_get_encode.return_value = mock_encode
 
         uf = _make_user_file()
         docs = _make_documents(["hello world", "foo bar"])
-        db_session = MagicMock()
+        _mock_session(uf, mock_get_session)
 
-        _process_user_file_without_vector_db(uf, docs, db_session)
+        _process_user_file_without_vector_db(user_file_id=uf.id, documents=docs)
 
         stored_text = mock_store_plaintext.call_args.kwargs["plaintext_content"]
         assert "hello world" in stored_text
         assert "foo bar" in stored_text
 
+    @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
     @patch(f"{TASKS_MODULE}.store_user_file_plaintext")
     @patch(f"{LLM_FACTORY_MODULE}.get_llm_tokenizer_encode_func")
     @patch(f"{LLM_FACTORY_MODULE}.get_default_llm")
@@ -105,18 +116,20 @@ class TestProcessUserFileWithoutVectorDb:
         mock_get_llm: MagicMock,  # noqa: ARG002
         mock_get_encode: MagicMock,
         mock_store_plaintext: MagicMock,  # noqa: ARG002
+        mock_get_session: MagicMock,
     ) -> None:
         mock_encode = MagicMock(return_value=list(range(42)))
         mock_get_encode.return_value = mock_encode
 
         uf = _make_user_file()
         docs = _make_documents(["some text content"])
-        db_session = MagicMock()
+        _mock_session(uf, mock_get_session)
 
-        _process_user_file_without_vector_db(uf, docs, db_session)
+        _process_user_file_without_vector_db(user_file_id=uf.id, documents=docs)
 
         assert uf.token_count == 42
 
+    @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
     @patch(f"{TASKS_MODULE}.store_user_file_plaintext")
     @patch(f"{LLM_FACTORY_MODULE}.get_llm_tokenizer_encode_func")
     @patch(f"{LLM_FACTORY_MODULE}.get_default_llm")
@@ -125,17 +138,19 @@ class TestProcessUserFileWithoutVectorDb:
         mock_get_llm: MagicMock,
         mock_get_encode: MagicMock,  # noqa: ARG002
         mock_store_plaintext: MagicMock,  # noqa: ARG002
+        mock_get_session: MagicMock,
     ) -> None:
         mock_get_llm.side_effect = RuntimeError("No LLM configured")
 
         uf = _make_user_file()
         docs = _make_documents(["text"])
-        db_session = MagicMock()
+        _mock_session(uf, mock_get_session)
 
-        _process_user_file_without_vector_db(uf, docs, db_session)
+        _process_user_file_without_vector_db(user_file_id=uf.id, documents=docs)
 
         assert uf.token_count is None
 
+    @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
     @patch(f"{TASKS_MODULE}.store_user_file_plaintext")
     @patch(f"{LLM_FACTORY_MODULE}.get_llm_tokenizer_encode_func")
     @patch(f"{LLM_FACTORY_MODULE}.get_default_llm")
@@ -144,20 +159,22 @@ class TestProcessUserFileWithoutVectorDb:
         mock_get_llm: MagicMock,  # noqa: ARG002
         mock_get_encode: MagicMock,
         mock_store_plaintext: MagicMock,
+        mock_get_session: MagicMock,
     ) -> None:
         mock_get_encode.return_value = MagicMock(return_value=[1])
 
         uf = _make_user_file()
         docs = _make_documents(["content to store"])
-        db_session = MagicMock()
+        _mock_session(uf, mock_get_session)
 
-        _process_user_file_without_vector_db(uf, docs, db_session)
+        _process_user_file_without_vector_db(user_file_id=uf.id, documents=docs)
 
         mock_store_plaintext.assert_called_once_with(
             user_file_id=uf.id,
             plaintext_content="content to store",
         )
 
+    @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
     @patch(f"{TASKS_MODULE}.store_user_file_plaintext")
     @patch(f"{LLM_FACTORY_MODULE}.get_llm_tokenizer_encode_func")
     @patch(f"{LLM_FACTORY_MODULE}.get_default_llm")
@@ -166,21 +183,23 @@ class TestProcessUserFileWithoutVectorDb:
         mock_get_llm: MagicMock,  # noqa: ARG002
         mock_get_encode: MagicMock,
         mock_store_plaintext: MagicMock,  # noqa: ARG002
+        mock_get_session: MagicMock,
     ) -> None:
         mock_get_encode.return_value = MagicMock(return_value=[1])
 
         uf = _make_user_file()
         docs = _make_documents(["text"])
-        db_session = MagicMock()
+        session = _mock_session(uf, mock_get_session)
 
-        _process_user_file_without_vector_db(uf, docs, db_session)
+        _process_user_file_without_vector_db(user_file_id=uf.id, documents=docs)
 
         assert uf.status == UserFileStatus.COMPLETED
         assert uf.chunk_count == 0
         assert uf.last_project_sync_at is not None
-        db_session.add.assert_called_once_with(uf)
-        db_session.commit.assert_called_once()
+        session.add.assert_called_once_with(uf)
+        session.commit.assert_called_once()
 
+    @patch(f"{TASKS_MODULE}.get_session_with_current_tenant")
     @patch(f"{TASKS_MODULE}.store_user_file_plaintext")
     @patch(f"{LLM_FACTORY_MODULE}.get_llm_tokenizer_encode_func")
     @patch(f"{LLM_FACTORY_MODULE}.get_default_llm")
@@ -189,14 +208,15 @@ class TestProcessUserFileWithoutVectorDb:
         mock_get_llm: MagicMock,  # noqa: ARG002
         mock_get_encode: MagicMock,
         mock_store_plaintext: MagicMock,  # noqa: ARG002
+        mock_get_session: MagicMock,
     ) -> None:
         mock_get_encode.return_value = MagicMock(return_value=[1])
 
         uf = _make_user_file(status=UserFileStatus.DELETING)
         docs = _make_documents(["text"])
-        db_session = MagicMock()
+        _mock_session(uf, mock_get_session)
 
-        _process_user_file_without_vector_db(uf, docs, db_session)
+        _process_user_file_without_vector_db(user_file_id=uf.id, documents=docs)
 
         assert uf.status == UserFileStatus.DELETING
         assert uf.chunk_count == 0
@@ -379,6 +399,7 @@ class TestProjectSyncImplNoVectorDb:
     ) -> None:
         uf = _make_user_file(status=UserFileStatus.COMPLETED)
         session = MagicMock()
+        session.get.return_value = uf
         mock_get_session.return_value.__enter__.return_value = session
 
         with (
@@ -408,6 +429,7 @@ class TestProjectSyncImplNoVectorDb:
     ) -> None:
         uf = _make_user_file(status=UserFileStatus.COMPLETED)
         session = MagicMock()
+        session.get.return_value = uf
         mock_get_session.return_value.__enter__.return_value = session
 
         with patch(

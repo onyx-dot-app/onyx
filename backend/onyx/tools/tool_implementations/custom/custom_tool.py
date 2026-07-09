@@ -100,7 +100,9 @@ class CustomTool(Tool[None]):
 
     @property
     def display_name(self) -> str:
-        return self._name
+        # Show the original operationId in the UI, not the LLM-sanitized form
+        # (e.g. "ServiceNow.GetIncident" vs "ServiceNow_GetIncident").
+        return self._method_spec.raw_name
 
     def tool_definition(self) -> dict:
         return self._tool_definition

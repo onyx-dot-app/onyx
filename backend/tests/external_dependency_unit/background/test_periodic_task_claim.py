@@ -27,8 +27,8 @@ from onyx.background.periodic_poller import PERIODIC_TASK_KV_PREFIX
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.models import KVStore
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 _TEST_LOCK_BASE = 90_000
 
@@ -182,7 +182,7 @@ class TestClaimConcurrency:
         lock_id = _TEST_LOCK_BASE + 20
 
         def claim() -> bool:
-            CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+            CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
             return _try_claim_task(
                 _PeriodicTaskDef(
                     name=task_name,
@@ -209,7 +209,7 @@ class TestClaimConcurrency:
         counter = MagicMock()
 
         def run() -> None:
-            CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+            CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
             _try_run_periodic_task(
                 _PeriodicTaskDef(
                     name=task_name,
@@ -224,9 +224,9 @@ class TestClaimConcurrency:
             for future in as_completed(futures):
                 future.result()
 
-        assert (
-            counter.call_count == 1
-        ), f"Expected run_fn called once, got {counter.call_count}"
+        assert counter.call_count == 1, (
+            f"Expected run_fn called once, got {counter.call_count}"
+        )
 
     def test_no_errors_under_contention(self) -> None:
         """All threads complete without exceptions under high contention."""
@@ -236,7 +236,7 @@ class TestClaimConcurrency:
         errors: list[Exception] = []
 
         def claim() -> bool:
-            CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+            CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
             return _try_claim_task(
                 _PeriodicTaskDef(
                     name=task_name,

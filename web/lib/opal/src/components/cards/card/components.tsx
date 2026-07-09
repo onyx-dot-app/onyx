@@ -1,8 +1,11 @@
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/card/styles.css";
 import type {
+  BackgroundVariants,
+  BorderVariants,
   PaddingVariants,
   RoundingVariants,
+  ShadowVariants,
   SizeVariants,
   StatusVariants,
 } from "@opal/types";
@@ -17,9 +20,6 @@ import { cn } from "@opal/utils";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type BackgroundVariant = "none" | "light" | "heavy";
-type BorderVariant = "none" | "dashed" | "solid";
 
 /**
  * Props shared by both plain and expandable Card modes.
@@ -54,6 +54,7 @@ type CardBaseProps = {
    * | `"sm"` | `rounded-08` |
    * | `"md"` | `rounded-12` |
    * | `"lg"` | `rounded-16` |
+   * | `"xl"` | `rounded-20` |
    *
    * In expandable mode when expanded, rounding applies only to the header's
    * top corners and the expandedContent's bottom corners so the two join seamlessly.
@@ -71,7 +72,7 @@ type CardBaseProps = {
    *
    * @default "light"
    */
-  background?: BackgroundVariant;
+  background?: BackgroundVariants;
 
   /**
    * Border style.
@@ -81,7 +82,7 @@ type CardBaseProps = {
    *
    * @default "none"
    */
-  border?: BorderVariant;
+  border?: BorderVariants;
 
   /**
    * Border color, drawn from the same status palette as {@link MessageCard}.
@@ -90,6 +91,20 @@ type CardBaseProps = {
    * @default "default"
    */
   borderColor?: StatusVariants;
+
+  /**
+   * Drop-shadow depth.
+   *
+   * | Value    | Effect                           |
+   * |----------|----------------------------------|
+   * | `"none"` | No shadow                        |
+   * | `"sm"`   | Subtle lift (`--shadow-01`)      |
+   * | `"md"`   | Medium elevation (`--shadow-02`) |
+   * | `"lg"`   | Strong elevation (`--shadow-03`) |
+   *
+   * @default "none"
+   */
+  shadow?: ShadowVariants;
 
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
@@ -192,6 +207,7 @@ function Card(props: CardProps) {
     background = "light",
     border = "none",
     borderColor = "default",
+    shadow = "none",
     ref,
     children,
   } = props;
@@ -207,6 +223,7 @@ function Card(props: CardProps) {
         data-background={background}
         data-border={border}
         data-opal-status-border={borderColor}
+        data-shadow={shadow}
       >
         {children}
       </div>
@@ -225,7 +242,7 @@ function Card(props: CardProps) {
     : cardRoundingVariants[roundingProp];
 
   return (
-    <div ref={ref} className="opal-card-expandable">
+    <div ref={ref} className="opal-card-expandable" data-shadow={shadow}>
       <div
         className={cn("opal-card-expandable-header", padding, headerRounding)}
         data-background={background}
@@ -262,4 +279,4 @@ function Card(props: CardProps) {
 // Exports
 // ---------------------------------------------------------------------------
 
-export { Card, type CardProps, type BackgroundVariant, type BorderVariant };
+export { Card, type CardProps };

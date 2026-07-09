@@ -55,10 +55,15 @@ export {
   type TextFont,
   type TextColor,
 } from "@opal/components/text/components";
+export {
+  default as CompactMarkdown,
+  type CompactMarkdownProps,
+} from "@opal/components/text/CompactMarkdown";
 
 /* Tag */
 export {
   Tag,
+  TAG_COLORS,
   type TagProps,
   type TagColor,
 } from "@opal/components/tag/components";
@@ -70,12 +75,7 @@ export {
 } from "@opal/components/divider/components";
 
 /* Card */
-export {
-  Card,
-  type CardProps,
-  type BackgroundVariant,
-  type BorderVariant,
-} from "@opal/components/cards/card/components";
+export { Card, type CardProps } from "@opal/components/cards/card/components";
 
 /* SelectCard */
 export {
@@ -112,3 +112,54 @@ export {
 export { Table } from "@opal/components/table/components";
 export { createTableColumns } from "@opal/components/table/columns";
 export type { DataTableProps } from "@opal/components/table/components";
+
+/* ShadowDiv */
+export {
+  ShadowDiv,
+  type ShadowDivProps,
+} from "@opal/components/shadow-div/components";
+
+/* Popover */
+export {
+  Popover,
+  PopoverMenu,
+  type PopoverMenuProps,
+} from "@opal/components/popover/components";
+
+/* InputTypeIn */
+export {
+  default as InputTypeIn,
+  type InputTypeInProps,
+} from "@opal/components/inputs/input-type-in/components";
+
+/* Spacer */
+export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
+
+/* Switch */
+export {
+  Switch,
+  type SwitchProps,
+} from "@opal/components/inputs/switch/components";
+
+/* CopyButton */
+export {
+  CopyButton,
+  type CopyButtonProps,
+} from "@opal/components/buttons/copy-button/components";
+
+/* Code */
+export { Code } from "@opal/components/code/components";
+
+/* Tabs */
+export {
+  Tabs,
+  type TabsRootProps,
+  type TabsListProps,
+  type TabsTriggerProps,
+} from "@opal/components/tabs/components";
+
+/* EndOfList */
+export {
+  EndOfList,
+  type EndOfListProps,
+} from "@opal/components/end-of-list/components";

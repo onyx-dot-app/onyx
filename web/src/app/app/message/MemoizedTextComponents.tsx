@@ -1,18 +1,14 @@
-import {
-  QuestionCardProps,
-  DocumentCardProps,
-} from "@/components/search/results/Citation";
+import React, { memo, JSX, useMemo, useCallback } from "react";
+import { SourceIcon } from "@/components/SourceIcon";
+import { WebResultIcon } from "@/components/WebResultIcon";
 import {
   LoadedOnyxDocument,
   MinimalOnyxDocument,
   OnyxDocument,
 } from "@/lib/search/interfaces";
-import React, { memo, JSX, useMemo, useCallback } from "react";
-import { SourceIcon } from "@/components/SourceIcon";
-import { WebResultIcon } from "@/components/WebResultIcon";
 import { SubQuestionDetail, CitationMap } from "../interfaces";
 import { ValidSources } from "@/lib/types";
-import { ProjectFile } from "../projects/projectsService";
+import { ProjectFile } from "@/lib/projects/types";
 import { BlinkingBar } from "./BlinkingBar";
 import Text from "@/refresh-components/texts/Text";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
@@ -23,6 +19,16 @@ import {
 } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { openDocument } from "@/lib/search/utils";
 import { ensureHrefProtocol } from "@/lib/utils";
+
+interface DocumentCardProps {
+  document: LoadedOnyxDocument;
+  updatePresentingDocument: (document: MinimalOnyxDocument) => void;
+  url?: string;
+}
+interface QuestionCardProps {
+  question: SubQuestionDetail;
+  openQuestion: (question: SubQuestionDetail) => void;
+}
 
 export const MemoizedAnchor = memo(
   ({

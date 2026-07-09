@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import { cn } from "@opal/utils";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import type { IconProps } from "@opal/types";

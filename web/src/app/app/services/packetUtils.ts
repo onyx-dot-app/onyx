@@ -13,6 +13,7 @@ export function isToolPacket(
   let toolPacketTypes = [
     PacketType.SEARCH_TOOL_START,
     PacketType.SEARCH_TOOL_QUERIES_DELTA,
+    PacketType.SEARCH_TOOL_FILTER_DELTA,
     PacketType.SEARCH_TOOL_DOCUMENTS_DELTA,
     PacketType.PYTHON_TOOL_START,
     PacketType.PYTHON_TOOL_DELTA,
@@ -36,6 +37,11 @@ export function isToolPacket(
     PacketType.INTERMEDIATE_REPORT_START,
     PacketType.INTERMEDIATE_REPORT_DELTA,
     PacketType.INTERMEDIATE_REPORT_CITED_DOCS,
+    PacketType.CODING_AGENT_START,
+    PacketType.CODING_AGENT_THINKING_DELTA,
+    PacketType.CODING_AGENT_FINAL,
+    PacketType.BASH_TOOL_START,
+    PacketType.BASH_TOOL_DELTA,
   ];
   if (includeSectionEnd) {
     toolPacketTypes.push(PacketType.SECTION_END);
@@ -68,6 +74,7 @@ export function isSearchToolPacket(packet: Packet): boolean {
   return (
     packet.obj.type === PacketType.SEARCH_TOOL_START ||
     packet.obj.type === PacketType.SEARCH_TOOL_QUERIES_DELTA ||
+    packet.obj.type === PacketType.SEARCH_TOOL_FILTER_DELTA ||
     packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
   );
 }

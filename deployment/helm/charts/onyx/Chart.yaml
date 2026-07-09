@@ -1,11 +1,11 @@
 apiVersion: v2
 name: onyx
-description: A Helm chart for Kubernetes
+description: Onyx application and Craft sandbox deployment chart
 home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.4.48
+version: 0.6.10
 appVersion: latest
 annotations:
   category: Productivity
@@ -15,20 +15,36 @@ annotations:
       image: docker.io/onyxdotapp/onyx-web-server:latest
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
-    - name: vespa
-      image: vespaengine/vespa:8.609.39
+  artifacthub.io/changes: |
+    - kind: fixed
+      description: Support clusters running their own cluster-managed CloudNativePG operator.
+        New postgresqlOperator.enabled toggle (mirrors redisOperator.enabled) skips the bundled
+        CNPG operator and its CRDs while keeping the Cluster CR for the external operator to
+        reconcile; the CRDs move byte-for-byte into a condition-gated CRDs-only subchart
+        (onyx-cnpg-crds) with postgresql.installCRDs as an independent override. Default
+        behavior is unchanged; CRDs also no longer install when postgresql.enabled is false.
 dependencies:
+  # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
+  # is unset by default, so this falls through to `postgresql.enabled`. Set it
+  # false to skip the bundled CNPG operator (and, via the fallback below, its
+  # CRDs) and reuse an existing cluster-managed one (see values.yaml). Mirrors
+  # the redis-operator toggle.
   - name: cloudnative-pg
     version: 0.26.0
     repository: https://cloudnative-pg.github.io/charts
-    condition: postgresql.enabled
+    condition: postgresqlOperator.enabled,postgresql.enabled
     alias: postgresql
-  - name: vespa
-    version: 0.2.25
-    repository: https://onyx-dot-app.github.io/vespa-helm-charts
-    condition: vespa.enabled
+  # CRDs-only subchart: Helm pre-installs a subchart's crds/ before building the
+  # main manifest (so the CNPG Cluster CR validates on fresh installs), and prunes
+  # it entirely when the condition is false. Follows the operator toggle by
+  # default — an external operator owns its own CRDs — but
+  # `postgresql.installCRDs` can override independently.
+  - name: onyx-cnpg-crds
+    version: 0.1.0
+    repository: file://../onyx-cnpg-crds
+    condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
   - name: opensearch
-    version: 3.4.0
+    version: 3.6.0
     repository: https://opensearch-project.github.io/helm-charts
     condition: opensearch.enabled
   - name: ingress-nginx
@@ -36,6 +52,13 @@ dependencies:
     repository: https://kubernetes.github.io/ingress-nginx
     condition: nginx.enabled
     alias: nginx
+  # Helm uses the first condition path that exists: `redisOperator.enabled` is
+  # unset by default, so this falls through to `redis.enabled`. Set it false to
+  # skip the bundled operator and reuse an existing one (see values.yaml).
+  - name: redis-operator
+    version: 0.24.0
+    repository: https://ot-container-kit.github.io/helm-charts
+    condition: redisOperator.enabled,redis.enabled
   - name: redis
     version: 0.16.6
     repository: https://ot-container-kit.github.io/helm-charts
@@ -45,6 +68,6 @@ dependencies:
     repository: https://charts.min.io/
     condition: minio.enabled
   - name: code-interpreter
-    version: 0.3.3
+    version: 0.4.3
     repository: https://onyx-dot-app.github.io/python-sandbox/
     condition: codeInterpreter.enabled

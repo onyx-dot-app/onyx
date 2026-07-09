@@ -12,9 +12,8 @@ Covers the admin token API and SCIM bearer-token authentication:
 
 import time
 
-import requests
-
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -94,7 +93,7 @@ def test_non_admin_cannot_create_token(
     """Non-admin users get 403 when trying to create a SCIM token."""
     basic_user = UserManager.create(name="scim_basic_user")
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/enterprise-settings/scim/token",
         json={"name": "Should Fail"},
         headers=basic_user.headers,
@@ -109,7 +108,7 @@ def test_non_admin_cannot_get_token(
     """Non-admin users get 403 when trying to retrieve SCIM token metadata."""
     basic_user = UserManager.create(name="scim_basic_user2")
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/enterprise-settings/scim/token",
         headers=basic_user.headers,
         timeout=60,
@@ -117,19 +116,20 @@ def test_non_admin_cannot_get_token(
     assert response.status_code == 403
 
 
-def test_no_active_token_returns_404(new_admin_user: DATestUser) -> None:
-    """GET active token returns 404 when no token exists."""
+def test_no_active_token_returns_null(new_admin_user: DATestUser) -> None:
+    """GET active token returns 200 with null body when no token exists."""
     # new_admin_user depends on the reset fixture, ensuring a clean DB
     # with no active SCIM tokens.
     active = ScimTokenManager.get_active(user_performing_action=new_admin_user)
     assert active is None
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/enterprise-settings/scim/token",
         headers=new_admin_user.headers,
         timeout=60,
     )
-    assert response.status_code == 404
+    assert response.status_code == 200
+    assert response.json() is None
 
 
 def test_service_discovery_no_auth_required(

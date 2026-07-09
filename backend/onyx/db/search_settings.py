@@ -1,5 +1,6 @@
 from sqlalchemy import and_
 from sqlalchemy import delete
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,11 @@ from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
 
+# search_settings columns that are NOT NULL but whose Pydantic source fields are
+# typed str | None. Registry-less cloud providers (e.g. Bedrock/LiteLLM/Azure)
+# can arrive without prefixes; coerce None -> "" to avoid a NotNullViolation.
+_NOT_NULL_STR_FIELDS = {"query_prefix", "passage_prefix"}
+
 
 class ActiveSearchSettings:
     primary: SearchSettings
@@ -36,13 +42,21 @@ def create_search_settings(
     search_settings: SavedSearchSettings,
     db_session: Session,
     status: IndexModelStatus = IndexModelStatus.FUTURE,
+    # Default used only when the saved model omits use_port_flow (None). The reindex
+    # request never carries the flag (not a request field), so the endpoint opts in
+    # via this param; an explicit value on the saved model wins (e.g. a round-trip).
+    use_port_flow: bool = False,
+    # False flushes instead of committing, so the caller can commit this row
+    # atomically with its port seeds (a seedless FUTURE makes workers re-scan).
+    commit: bool = True,
 ) -> SearchSettings:
     embedding_model = SearchSettings(
         model_name=search_settings.model_name,
         model_dim=search_settings.model_dim,
         normalize=search_settings.normalize,
-        query_prefix=search_settings.query_prefix,
-        passage_prefix=search_settings.passage_prefix,
+        # See _NOT_NULL_STR_FIELDS: coerce None -> "" to avoid a NotNullViolation.
+        query_prefix=search_settings.query_prefix or "",
+        passage_prefix=search_settings.passage_prefix or "",
         status=status,
         index_name=search_settings.index_name,
         provider_type=search_settings.provider_type,
@@ -50,13 +64,20 @@ def create_search_settings(
         embedding_precision=search_settings.embedding_precision,
         reduced_dimension=search_settings.reduced_dimension,
         enable_contextual_rag=search_settings.enable_contextual_rag,
-        contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
-        contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
+        contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         switchover_type=search_settings.switchover_type,
+        use_port_flow=(
+            search_settings.use_port_flow
+            if search_settings.use_port_flow is not None
+            else use_port_flow
+        ),
     )
 
     db_session.add(embedding_model)
-    db_session.commit()
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()  # populate id without committing
 
     return embedding_model
 
@@ -94,10 +115,19 @@ def get_current_db_embedding_provider(
 
 
 def delete_search_settings(db_session: Session, search_settings_id: int) -> None:
+    from onyx.db.port_attempt import is_active_port_backfill_source
+
     current_settings = get_current_search_settings(db_session)
 
     if current_settings.id == search_settings_id:
         raise ValueError("Cannot delete currently active search settings")
+
+    # A promoted index may still be backfilling its port from this one; deleting it
+    # would strand that port (SET NULL drops the source out from under it).
+    if is_active_port_backfill_source(db_session, search_settings_id):
+        raise ValueError(
+            "Cannot delete search settings: a reindex port is still backfilling from it"
+        )
 
     # First, delete associated index attempts
     index_attempts_query = delete(IndexAttempt).where(
@@ -143,6 +173,12 @@ def get_secondary_search_settings(db_session: Session) -> SearchSettings | None:
     return latest_settings
 
 
+def get_search_settings_by_id(
+    db_session: Session, search_settings_id: int
+) -> SearchSettings | None:
+    return db_session.get(SearchSettings, search_settings_id)
+
+
 def get_active_search_settings(db_session: Session) -> ActiveSearchSettings:
     """Returns active search settings. Secondary search settings may be None."""
 
@@ -180,8 +216,13 @@ def update_search_settings(
     updated_settings: SavedSearchSettings,
     preserved_fields: list[str],
 ) -> None:
+    mapped_columns = {c.key for c in sa_inspect(SearchSettings).mapper.columns}
     for field, value in updated_settings.model_dump().items():
-        if field not in preserved_fields:
+        if field not in preserved_fields and field in mapped_columns:
+            # A client that explicitly sends null for a NOT NULL prefix column
+            # must not write NULL (NotNullViolation). See _NOT_NULL_STR_FIELDS.
+            if value is None and field in _NOT_NULL_STR_FIELDS:
+                value = ""
             setattr(current_settings, field, value)
 
 

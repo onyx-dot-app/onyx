@@ -12,7 +12,7 @@ from onyx.db.image_generation import get_all_image_generation_configs
 from onyx.db.image_generation import get_image_generation_config
 from onyx.db.image_generation import set_default_image_generation_config
 from onyx.db.image_generation import unset_default_image_generation_config
-from onyx.db.llm import remove_llm_provider__no_commit
+from onyx.db.llm import remove_llm_provider
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration
 from onyx.db.models import User
@@ -29,6 +29,7 @@ from onyx.server.manage.image_generation.models import TestImageGenerationReques
 from onyx.server.manage.llm.api import _validate_llm_provider_change
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -40,15 +41,12 @@ def _get_test_quality_for_model(model_name: str) -> str | None:
     """Returns the fastest quality setting for credential testing.
 
     - gpt-image-*: 'low' (fastest)
-    - dall-e-3: 'standard' (faster than 'hd')
     - Other models: None (use API default)
     """
     model_lower = model_name.lower()
 
     if "gpt-image-" in model_lower:
         return "low"
-    elif "dall-e-3" in model_lower or "dalle-3" in model_lower:
-        return "standard"
     return None
 
 
@@ -344,6 +342,7 @@ def create_config(
             is_default=config_create.is_default,
         )
         db_session.commit()
+        invalidate_provider_listing_cache()
         db_session.refresh(config)
         return ImageGenerationConfigView.from_model(config)
     except HTTPException:
@@ -467,9 +466,10 @@ def update_config(
         existing_config.model_configuration_id = new_model_config_id
 
         # 5. Delete old LLM provider (safe now - nothing references it)
-        remove_llm_provider__no_commit(db_session, old_llm_provider_id)
+        remove_llm_provider(db_session, old_llm_provider_id, commit=False)
 
         db_session.commit()
+        invalidate_provider_listing_cache()
         db_session.refresh(existing_config)
         return ImageGenerationConfigView.from_model(existing_config)
 
@@ -501,9 +501,10 @@ def delete_config(
         delete_image_generation_config__no_commit(db_session, image_provider_id)
 
         # Clean up the orphaned LLM provider (it was exclusively for image gen)
-        remove_llm_provider__no_commit(db_session, llm_provider_id)
+        remove_llm_provider(db_session, llm_provider_id, commit=False)
 
         db_session.commit()
+        invalidate_provider_listing_cache()
     except HTTPException:
         raise
     except ValueError as e:

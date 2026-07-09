@@ -6,8 +6,10 @@ These tests verify CRUD operations for Discord bot models.
 from collections.abc import Generator
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import get_effective_permissions
 from onyx.db.discord_bot import bulk_create_channel_configs
 from onyx.db.discord_bot import create_discord_bot_config
 from onyx.db.discord_bot import create_guild_config
@@ -24,7 +26,9 @@ from onyx.db.discord_bot import get_or_create_discord_service_api_key
 from onyx.db.discord_bot import sync_channel_configs
 from onyx.db.discord_bot import update_discord_channel_config
 from onyx.db.discord_bot import update_guild_config
+from onyx.db.enums import Permission
 from onyx.db.models import Persona
+from onyx.db.models import User
 from onyx.db.utils import DiscordChannelView
 from onyx.server.manage.discord_bot.utils import generate_discord_registration_key
 
@@ -622,6 +626,28 @@ class TestServiceApiKeyAPI:
         assert stored_key is not None
 
         # Cleanup
+        delete_discord_service_api_key(db_session)
+        db_session.commit()
+
+    def test_service_account_has_chat_scope(self, db_session: Session) -> None:
+        """The Discord service account must hold the scopes the chat surface
+        requires (send-chat-message needs write:chat, which implies read:chat),
+        otherwise require_permission denies the bot."""
+        delete_discord_service_api_key(db_session)
+        db_session.commit()
+
+        get_or_create_discord_service_api_key(db_session, "public")
+        db_session.commit()
+
+        stored_key = get_discord_service_api_key(db_session)
+        assert stored_key is not None
+        service_user = db_session.scalar(
+            select(User).where(User.id == stored_key.user_id)  # ty: ignore[invalid-argument-type]
+        )
+        assert service_user is not None
+        perms = get_effective_permissions(service_user)
+        assert {Permission.READ_CHAT, Permission.WRITE_CHAT} <= perms
+
         delete_discord_service_api_key(db_session)
         db_session.commit()
 

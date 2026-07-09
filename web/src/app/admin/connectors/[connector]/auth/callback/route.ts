@@ -4,9 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
   CRAFT_OAUTH_COOKIE_NAME,
-  CRAFT_CONFIGURE_PATH,
+  CRAFT_APPS_PATH,
 } from "@/app/craft/v1/constants";
-import { processCookies } from "@/lib/userSS";
+import { processCookies } from "@/lib/users/svcSS";
 
 export const GET = async (request: NextRequest) => {
   const requestCookies = await cookies();
@@ -31,12 +31,12 @@ export const GET = async (request: NextRequest) => {
     );
   }
 
-  // Check for build mode OAuth flag (redirects to build admin panel)
+  // Check for build mode OAuth flag (redirects back into Craft's Apps page)
   const isBuildMode =
     requestCookies.get(CRAFT_OAUTH_COOKIE_NAME)?.value === "true";
   if (isBuildMode) {
     const redirectResponse = NextResponse.redirect(
-      new URL(CRAFT_CONFIGURE_PATH, getDomain(request))
+      new URL(CRAFT_APPS_PATH, getDomain(request))
     );
     redirectResponse.cookies.delete(CRAFT_OAUTH_COOKIE_NAME);
     return redirectResponse;

@@ -236,7 +236,6 @@ def _get_answer_with_tools(
             packets = handle_stream_message_objects(
                 new_msg_req=request,
                 user=user,
-                db_session=db_session,
                 external_state_container=state_container,
             )
             full = gather_stream_full(packets, state_container)
@@ -249,8 +248,7 @@ def _get_answer_with_tools(
             )
 
             logger.info(
-                "Eval completed. Tools called: %s.\n"
-                "Assertion passed: %s. Details: %s",
+                "Eval completed. Tools called: %s.\nAssertion passed: %s. Details: %s",
                 result.tools_called,
                 assertion_passed,
                 assertion_details,
@@ -396,7 +394,6 @@ def _get_multi_turn_answer_with_tools(
                 packets = handle_stream_message_objects(
                     new_msg_req=request,
                     user=user,
-                    db_session=db_session,
                     external_state_container=state_container,
                 )
                 full = gather_stream_full(packets, state_container)

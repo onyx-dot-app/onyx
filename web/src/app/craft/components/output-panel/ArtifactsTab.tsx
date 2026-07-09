@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Text, Button } from "@opal/components";
 import {
   SvgGlobe,
   SvgDownloadCloud,
@@ -15,7 +14,10 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { Artifact } from "@/app/craft/hooks/useBuildSessionStore";
-import { useFilesNeedsRefresh } from "@/app/craft/hooks/useBuildSessionStore";
+import {
+  useFilesNeedsRefresh,
+  useBuildSessionStore,
+} from "@/app/craft/hooks/useBuildSessionStore";
 import {
   fetchDirectoryListing,
   downloadArtifactFile,
@@ -23,7 +25,6 @@ import {
 } from "@/app/craft/services/apiServices";
 import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
 import { getFileIcon } from "@/lib/utils";
-import { cn } from "@opal/utils";
 
 interface ArtifactsTabProps {
   artifacts: Artifact[];
@@ -36,6 +37,24 @@ export default function ArtifactsTab({
 }: ArtifactsTabProps) {
   const webappArtifacts = artifacts.filter(
     (a) => a.type === "nextjs_app" || a.type === "web_app"
+  );
+
+  const setActiveOutputTab = useBuildSessionStore(
+    (state) => state.setActiveOutputTab
+  );
+  const openFilePreview = useBuildSessionStore(
+    (state) => state.openFilePreview
+  );
+
+  const handleWebappOpen = useCallback(() => {
+    if (sessionId) setActiveOutputTab(sessionId, "preview");
+  }, [sessionId, setActiveOutputTab]);
+
+  const handleFileOpen = useCallback(
+    (path: string, fileName: string) => {
+      if (sessionId) openFilePreview(sessionId, path, fileName);
+    },
+    [sessionId, openFilePreview]
   );
 
   const filesNeedsRefresh = useFilesNeedsRefresh();
@@ -127,10 +146,10 @@ export default function ArtifactsTab({
         padding={2}
       >
         <SvgFiles size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
+        <Text font="heading-h3" color="text-03">
           No artifacts yet
         </Text>
-        <Text secondaryBody text02>
+        <Text font="secondary-body" color="text-02">
           Output files and web apps will appear here
         </Text>
       </Section>
@@ -145,15 +164,19 @@ export default function ArtifactsTab({
           {webappArtifacts.map((artifact) => (
             <div
               key={artifact.id}
-              className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors"
+              className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
+              style={{ paddingLeft: 12 }}
+              onClick={handleWebappOpen}
             >
-              <SvgGlobe size={24} className="stroke-text-02 flex-shrink-0" />
+              <div className="w-4 shrink-0" />
+
+              <SvgGlobe size={20} className="stroke-text-02 shrink-0" />
 
               <div className="flex-1 min-w-0 flex items-center gap-2">
-                <Text secondaryBody text04 className="truncate">
+                <Text font="secondary-body" color="text-04" maxLines={1}>
                   {artifact.name}
                 </Text>
-                <Text secondaryBody text02>
+                <Text font="secondary-body" color="text-02">
                   Next.js Application
                 </Text>
               </div>
@@ -163,7 +186,10 @@ export default function ArtifactsTab({
                   variant="action"
                   prominence="tertiary"
                   icon={SvgDownloadCloud}
-                  onClick={handleWebappDownload}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleWebappDownload();
+                  }}
                 >
                   Download
                 </Button>
@@ -179,6 +205,7 @@ export default function ArtifactsTab({
               sessionId={sessionId!}
               depth={0}
               onDownload={handleOutputDownload}
+              onFileOpen={handleFileOpen}
             />
           ))}
         </div>
@@ -192,6 +219,7 @@ interface OutputEntryRowProps {
   sessionId: string;
   depth: number;
   onDownload: (path: string, isDirectory: boolean) => void;
+  onFileOpen: (path: string, fileName: string) => void;
 }
 
 function OutputEntryRow({
@@ -199,6 +227,7 @@ function OutputEntryRow({
   sessionId,
   depth,
   onDownload,
+  onFileOpen,
 }: OutputEntryRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<FileSystemEntry[]>([]);
@@ -223,37 +252,32 @@ function OutputEntryRow({
   return (
     <>
       <div
-        className={cn(
-          "flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors",
-          entry.is_directory && "cursor-pointer"
-        )}
+        className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
         style={{ paddingLeft: 12 + paddingLeft }}
-        onClick={entry.is_directory ? toggleExpand : undefined}
+        onClick={
+          entry.is_directory
+            ? toggleExpand
+            : () => onFileOpen(entry.path, entry.name)
+        }
       >
         {entry.is_directory ? (
           expanded ? (
-            <SvgChevronDown
-              size={16}
-              className="stroke-text-03 flex-shrink-0"
-            />
+            <SvgChevronDown size={16} className="stroke-text-03 shrink-0" />
           ) : (
-            <SvgChevronRight
-              size={16}
-              className="stroke-text-03 flex-shrink-0"
-            />
+            <SvgChevronRight size={16} className="stroke-text-03 shrink-0" />
           )
         ) : (
-          <div className="w-4 flex-shrink-0" />
+          <div className="w-4 shrink-0" />
         )}
 
-        <FileIcon size={20} className="stroke-text-02 flex-shrink-0" />
+        <FileIcon size={20} className="stroke-text-02 shrink-0" />
 
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <Text secondaryBody text04 className="truncate">
+          <Text font="secondary-body" color="text-04" maxLines={1}>
             {entry.name}
           </Text>
           {!entry.is_directory && entry.size !== null ? (
-            <Text secondaryBody text02>
+            <Text font="secondary-body" color="text-02">
               {formatFileSize(entry.size)}
             </Text>
           ) : null}
@@ -282,6 +306,7 @@ function OutputEntryRow({
             sessionId={sessionId}
             depth={depth + 1}
             onDownload={onDownload}
+            onFileOpen={onFileOpen}
           />
         ))}
     </>

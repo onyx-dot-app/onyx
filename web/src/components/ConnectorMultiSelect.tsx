@@ -6,7 +6,7 @@ import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { Label } from "@opal/layouts";
 import { ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { Button } from "@opal/components";
 
@@ -123,7 +123,7 @@ export const ConnectorMultiSelect = ({
       <div className="relative">
         <InputTypeIn
           ref={inputRef}
-          leftSearchIcon
+          searchIcon
           placeholder={effectivePlaceholder}
           value={searchQuery}
           variant={isInputDisabled ? "disabled" : undefined}
@@ -137,7 +137,6 @@ export const ConnectorMultiSelect = ({
             setOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          className="rounded-12"
         />
 
         {open && (
@@ -196,7 +195,7 @@ export const ConnectorMultiSelect = ({
                 className="flex items-center bg-background-neutral-00 rounded-12 border border-border-02 transition-all px-2 py-1 max-w-full group text-xs"
               >
                 <div className="flex items-center overflow-hidden">
-                  <div className="flex-shrink-0 text-xs">
+                  <div className="shrink-0 text-xs">
                     <ConnectorTitle
                       connector={connector.connector}
                       ccPairId={connector.cc_pair_id}

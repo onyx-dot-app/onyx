@@ -24,13 +24,13 @@ jest.mock("@/components/chat/ProviderContext", () => ({
   useProviderStatus: () => mockProviderStatus,
 }));
 
-jest.mock("@/hooks/useLLMProviders", () => ({
+jest.mock("@/lib/languageModels/hooks", () => ({
   useLLMProviders: () => ({
     refetch: jest.fn(),
   }),
 }));
 
-jest.mock("@/lib/userSettings", () => ({
+jest.mock("@/lib/users/svc", () => ({
   updateUserPersonalization: jest.fn(),
 }));
 

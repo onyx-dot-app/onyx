@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { EmptyMessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -19,7 +19,7 @@ import {
 } from "@/app/admin/discord-bot/types";
 import { SvgHash, SvgBubbleText, SvgLock } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 
 function getChannelIcon(
   channelType: DiscordChannelType,
@@ -40,7 +40,7 @@ function getChannelIcon(
 
 interface Props {
   channels: DiscordChannelConfig[];
-  personas: Persona[];
+  personas: Agent[];
   onChannelUpdate: (
     channelId: number,
     field:

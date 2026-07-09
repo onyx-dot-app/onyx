@@ -1,5 +1,6 @@
 from typing import Any
 from onyx.db.engine.iam_auth import get_iam_auth_token
+from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PORT
@@ -31,6 +32,11 @@ from celery.backends.database.session import (  # ty: ignore[unresolved-import]
     ResultModelBase,
 )
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+
+# Match the app processes' edition so migrations that use versioned
+# implementations (e.g. encrypt_string_to_bytes) resolve the EE variants.
+set_is_ee_based_on_env_variable()
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)
@@ -105,9 +111,9 @@ def filter_tenants_by_range(
     return filtered_tenants
 
 
-def get_schema_options() -> (
-    tuple[bool, bool, bool, int | None, int | None, list[str] | None]
-):
+def get_schema_options() -> tuple[
+    bool, bool, bool, int | None, int | None, list[str] | None
+]:
     x_args_raw = context.get_x_argument()
     x_args = {}
     for arg in x_args_raw:
@@ -270,6 +276,7 @@ async def run_async_migrations() -> None:
     engine = create_async_engine(
         build_connection_string(),
         poolclass=pool.NullPool,
+        connect_args={"ssl": create_pg_ssl_context()},
     )
 
     if USE_IAM_AUTH:

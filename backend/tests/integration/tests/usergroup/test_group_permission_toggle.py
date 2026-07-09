@@ -58,9 +58,9 @@ def test_revoke_permission_via_toggle(reset: None) -> None:  # noqa: ARG001
 
     # Verify removed from group
     group_perms = UserGroupManager.get_permissions(group, admin_user)
-    assert (
-        "manage:llms" not in group_perms
-    ), f"manage:llms should be gone: {group_perms}"
+    assert "manage:llms" not in group_perms, (
+        f"manage:llms should be gone: {group_perms}"
+    )
 
     # Verify removed from user
     user_perms = UserManager.get_permissions(basic_user)
@@ -86,9 +86,9 @@ def test_idempotent_grant(reset: None) -> None:  # noqa: ARG001
     ).raise_for_status()
 
     group_perms = UserGroupManager.get_permissions(group, admin_user)
-    assert (
-        group_perms.count("manage:llms") == 1
-    ), f"manage:llms should appear exactly once: {group_perms}"
+    assert group_perms.count("manage:llms") == 1, (
+        f"manage:llms should appear exactly once: {group_perms}"
+    )
 
 
 @ENTERPRISE_SKIP

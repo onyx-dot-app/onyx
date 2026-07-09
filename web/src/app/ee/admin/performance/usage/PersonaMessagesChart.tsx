@@ -1,4 +1,4 @@
-import { ThreeDotsLoader } from "@/components/Loading";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { X, Search } from "lucide-react";
 import {
   getDatesList,
@@ -18,13 +18,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useState, useMemo, useEffect } from "react";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 
 export function PersonaMessagesChart({
   availablePersonas,
   timeRange,
 }: {
-  availablePersonas: Persona[];
+  availablePersonas: Agent[];
   timeRange: DateRangePickerValue;
 }) {
   const [selectedPersonaId, setSelectedPersonaId] = useState<
@@ -139,8 +139,8 @@ export function PersonaMessagesChart({
   let content;
   if (isLoading) {
     content = (
-      <div className="h-80 flex flex-col">
-        <ThreeDotsLoader />
+      <div className="h-80 flex flex-col items-center justify-center">
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   } else if (!availablePersonas || hasError) {
@@ -197,7 +197,7 @@ export function PersonaMessagesChart({
               <div className="flex items-center px-2 pb-2 sticky top-0 bg-background border-b">
                 <Search className="h-4 w-4 mr-2 shrink-0 opacity-50" />
                 <input
-                  className="flex h-8 w-full rounded-sm bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-8 w-full rounded-xs bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   placeholder="Search agents..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}

@@ -2,6 +2,21 @@ import json
 
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.utils import sandbox_filename_for_document
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+def truncate_output(output: str, max_length: int, label: str = "output") -> str:
+    """Truncate to ``max_length`` and append a footer noting how many chars were elided. ``label`` is only used in the debug log."""
+    truncated = output[:max_length]
+    if len(output) > max_length:
+        truncated += (
+            f"\n... [output truncated, {len(output) - max_length} characters omitted]"
+        )
+        logger.debug("Truncated %s: %s", label, truncated)
+    return truncated
+
 
 FILE_ASSOCIATED_GUIDANCE = (
     "Only a short excerpt from this document is shown below. The complete "
@@ -18,6 +33,7 @@ def convert_inference_sections_to_llm_string(
     include_source_type: bool = True,
     include_link: bool = False,
     include_document_id: bool = False,
+    note: str | None = None,
 ) -> tuple[str, dict[int, str]]:
     """Convert InferenceSection objects to a JSON string for LLM.
 
@@ -98,7 +114,12 @@ def convert_inference_sections_to_llm_string(
             result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
         results.append(result)
 
+    payload: dict[str, object] = {}
+    payload["results"] = results
+    if note:
+        payload["note"] = note
+
     return (
-        json.dumps({"results": results}, indent=2, ensure_ascii=False),
+        json.dumps(payload, indent=2, ensure_ascii=False),
         citation_mapping,
     )

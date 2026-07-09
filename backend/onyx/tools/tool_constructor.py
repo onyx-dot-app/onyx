@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import cast
 from uuid import UUID
 
@@ -30,6 +31,9 @@ from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import SearchToolUsage
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -47,6 +51,13 @@ from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _disambiguate_mcp_tool_names(tools: list[Tool]) -> None:
+    tool_name_counts = Counter(tool.name for tool in tools)
+    for tool in tools:
+        if isinstance(tool, MCPTool) and tool_name_counts[tool.name] > 1:
+            tool.use_disambiguated_name()
 
 
 class SearchToolConfig(BaseModel):
@@ -295,6 +306,16 @@ def _construct_tools_impl(
                     PythonTool(tool_id=db_tool_model.id, emitter=emitter)
                 ]
 
+            # Handle Coding Agent Tool
+            elif tool_cls.__name__ == CodingAgentTool.__name__:
+                tool_dict[db_tool_model.id] = [
+                    CodingAgentTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        llm=llm,
+                    )
+                ]
+
             # Handle File Reader Tool
             elif tool_cls.__name__ == FileReaderTool.__name__:
                 cfg = file_reader_tool_config or FileReaderToolConfig()
@@ -496,5 +517,6 @@ def _construct_tools_impl(
     tools: list[Tool] = []
     for tool_list in tool_dict.values():
         tools.extend(tool_list)
+    _disambiguate_mcp_tool_names(tools)
 
     return tool_dict

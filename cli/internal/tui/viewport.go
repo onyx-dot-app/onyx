@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // entryKind is the type of chat entry.
@@ -25,10 +25,9 @@ const (
 
 // chatEntry is a single rendered entry in the chat history.
 type chatEntry struct {
-	kind      entryKind
-	content   string   // raw content (for agent: the markdown source)
-	rendered  string   // pre-rendered output
-	citations []string // citation lines (for citation entries)
+	kind     entryKind
+	content  string // raw content (for agent: the markdown source)
+	rendered string // pre-rendered output
 }
 
 // pickerKind distinguishes what the picker is selecting.
@@ -231,14 +230,11 @@ func (v *viewport) addCitations(citations map[int]string) {
 		parts = append(parts, fmt.Sprintf("[%d] %s", num, citations[num]))
 	}
 	text := fmt.Sprintf("Sources (%d): %s", len(citations), strings.Join(parts, "  "))
-	var citLines []string
-	citLines = append(citLines, text)
 
 	v.entries = append(v.entries, chatEntry{
-		kind:      entryCitation,
-		content:   text,
-		rendered:  citationStyle.Render("● "+text),
-		citations: citLines,
+		kind:     entryCitation,
+		content:  text,
+		rendered: citationStyle.Render("● " + text),
 	})
 }
 
@@ -475,4 +471,3 @@ func (v *viewport) view(height int) string {
 
 	return strings.Join(contentLines, "\n")
 }
-

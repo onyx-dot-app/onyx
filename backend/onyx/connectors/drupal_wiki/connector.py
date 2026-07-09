@@ -284,11 +284,18 @@ class DrupalWikiConnector(
             # Tabular attachments (xlsx, csv, tsv) — produce
             # TabularSections instead of a flat TextSection.
             if is_tabular_file(file_name):
+                if self.raw_file_callback is None:
+                    logger.warning(
+                        "Skipping tabular attachment %s because raw_file_callback is not set",
+                        file_name,
+                    )
+                    return [], f"No content extracted from tabular file {file_name}"
                 try:
                     sections.extend(
                         tabular_file_to_sections(
                             BytesIO(raw_bytes),
                             file_name=file_name,
+                            stage=self.raw_file_callback,
                             link=download_url,
                         )
                     )

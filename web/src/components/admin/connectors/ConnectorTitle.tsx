@@ -85,6 +85,20 @@ export const ConnectorTitle = ({
     if (typedConnector.connector_specific_config.channel_regex_enabled) {
       additionalMetadata.set("Channel Regex Enabled", "True");
     }
+    if (
+      typedConnector.connector_specific_config?.exclude_channels &&
+      typedConnector.connector_specific_config.exclude_channels.length > 0
+    ) {
+      additionalMetadata.set(
+        "Excluded Channels",
+        typedConnector.connector_specific_config.exclude_channels.join(", ")
+      );
+    }
+    if (
+      typedConnector.connector_specific_config.exclude_channel_regex_enabled
+    ) {
+      additionalMetadata.set("Exclude Channel Regex Enabled", "True");
+    }
     if (typedConnector.connector_specific_config.include_bot_messages) {
       additionalMetadata.set("Include Bot Messages", "True");
     }

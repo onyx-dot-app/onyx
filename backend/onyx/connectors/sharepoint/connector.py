@@ -4,9 +4,11 @@ import fnmatch
 import html
 import io
 import os
+import random
 import re
 import time
 from collections import deque
+from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
 from datetime import datetime
@@ -46,14 +48,12 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
 )
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    tabular_file_to_sections,
-)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import IndexingHeartbeatInterface
+from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
@@ -81,6 +81,7 @@ from onyx.file_processing.image_utils import make_image_callback
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.url import SSRFException
 from onyx.utils.url import validate_outbound_http_url
@@ -235,6 +236,23 @@ class SiteDescriptor(BaseModel):
     folder_path: str | None
 
 
+class SiteDrive(BaseModel):
+    """A drive (document library) of a site, as listed from Graph."""
+
+    drive_id: str
+    name: str
+    web_url: str | None
+
+
+class ResolvedDriveItem(BaseModel):
+    """The result of mapping a failed item's link back to a fetchable item."""
+
+    driveitem: DriveItemData
+    drive_name: str  # display name (SHARED_DOCUMENTS_MAP-mapped)
+    drive_web_url: str | None
+    site_url: str
+
+
 class CertificateData(BaseModel):
     """Data class for storing certificate information loaded from PFX file."""
 
@@ -265,29 +283,67 @@ def _site_page_in_time_window(
 # problem rather than an HTTP error. These can occur both as bare exceptions
 # (older office365 SDK paths that don't wrap them) and as the underlying
 # cause of a ClientRequestException with no response (newer SDK wrapping in
-# `execute_query`'s `except requests.exceptions.RequestException`). Note
-# `ChunkedEncodingError` is a subclass of `requests.ConnectionError`, so
-# `ConnectionError` covers it.
+# `execute_query`'s `except requests.exceptions.RequestException`).
+#
+# Note: `requests.exceptions.ChunkedEncodingError` and `ContentDecodingError`
+# are NOT subclasses of `requests.exceptions.ConnectionError` — they're
+# siblings under `RequestException`. They have to be listed explicitly to be
+# treated as retryable mid-stream connection drops.
 TRANSIENT_TRANSPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
     requests.exceptions.ConnectionError,
     requests.exceptions.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+    requests.exceptions.ContentDecodingError,
 )
 
 # HTTP statuses we treat as transient and worth retrying.
 RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
 
+# `GET /sites/getAllSites` returns the tenant-wide directory of every site
+# collection, not just sites the app principal can read. Per-site content
+# access is gated separately, so some listed sites will always reject reads.
+# 403/404/410 cover "no permission / removed / gone"; 423 ("notAllowed")
+# covers admin-locked or M365-archived sites (e.g. `Set-SPOSiteArchiveState
+# -ArchiveState Archived`). All four are per-site conditions — skip the
+# site and continue the run rather than aborting the whole tenant index.
+PER_SITE_GRAPH_FAILURE_STATUSES: frozenset[int] = frozenset({403, 404, 410, 423})
 
-def _backoff_seconds(attempt: int, retry_after: str | None) -> int:
-    """Honor a numeric Retry-After header when the server provides one,
-    otherwise fall back to capped exponential backoff (5s, 10s, 20s, …,
-    max 30s). The HTTP-date form of Retry-After is rare from SharePoint /
-    Graph in practice and falls through to exponential backoff."""
-    if retry_after:
-        try:
-            return int(retry_after)
-        except ValueError:
-            pass
-    return min(30, (2**attempt) * 5)
+
+def _is_per_site_graph_failure(e: ClientRequestException | HTTPError) -> bool:
+    # response=None means a wrapped transport error; the retry layer owns it.
+    if e.response is None:
+        return False
+    return e.response.status_code in PER_SITE_GRAPH_FAILURE_STATUSES
+
+
+def _graph_error_code(response: requests.Response | None) -> str:
+    if response is None:
+        return "<no response>"
+    try:
+        return response.json().get("error", {}).get("code") or "<no code>"
+    except Exception:
+        logger.debug(
+            "Failed to parse Graph error code from response body", exc_info=True
+        )
+        return "<no code>"
+
+
+def _backoff_seconds(attempt: int, retry_after: str | None) -> float:
+    """Honor a server-provided Retry-After header (numeric seconds or HTTP-date)
+    when present, otherwise fall back to capped exponential backoff with equal
+    jitter.
+
+    Base sequence is 5s, 10s, 20s, capped at 30s. The actual sleep is drawn
+    from ``[base/2, base]`` so that many documents failing at the same instant
+    (e.g. during a Graph throttling window) don't all retry on the same tick
+    and re-create the thundering herd. Server-provided Retry-After values are
+    used verbatim — those are an explicit instruction, not a guess.
+    """
+    parsed = parse_retry_after_seconds(retry_after)
+    if parsed is not None:
+        return parsed
+    base = min(30, (2**attempt) * 5)
+    return base / 2 + random.uniform(0, base / 2)
 
 
 def sleep_and_retry(
@@ -314,7 +370,7 @@ def sleep_and_retry(
             sleep_time = _backoff_seconds(attempt, retry_after=None)
             logger.warning(
                 "Transport error on %s, attempt %s/%s: %s: %s. "
-                "Sleeping %ss before retry.",
+                "Sleeping %.1fs before retry.",
                 method_name,
                 attempt + 1,
                 max_retries + 1,
@@ -345,7 +401,7 @@ def sleep_and_retry(
                 sleep_time = _backoff_seconds(attempt, retry_after)
                 logger.warning(
                     "Retryable error on %s, attempt %s/%s: status=%s. "
-                    "Sleeping %ss before retry.",
+                    "Sleeping %.1fs before retry.",
                     method_name,
                     attempt + 1,
                     max_retries + 1,
@@ -449,7 +505,7 @@ def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData
 
         return CertificateData(
             private_key=key_pem,
-            thumbprint=certificate.fingerprint(hashes.SHA1()).hex(),
+            thumbprint=certificate.fingerprint(hashes.SHA1()).hex(),  # noqa: S303 — MSAL certificate auth requires the SHA1 thumbprint per RFC 5280
         )
     except Exception as e:
         logger.error("Error loading certificate: %s", e)
@@ -560,44 +616,132 @@ def _probe_remote_size(url: str, timeout: int) -> int | None:
     return None
 
 
+# Number of retries (in addition to the initial attempt) for streaming
+# downloads that fail with a transient transport-level error such as
+# ChunkedEncodingError / IncompleteRead. SharePoint and the Graph API
+# occasionally close the connection mid-body, especially under throttling.
+STREAM_DOWNLOAD_MAX_RETRIES = 3
+STREAM_CHUNK_SIZE = 64 * 1024
+
+
+def _redact_url_for_logging(url: str, max_len: int = 120) -> str:
+    """Return a log-safe identifier for a URL.
+
+    Microsoft's ``@microsoft.graph.downloadUrl`` is a pre-authenticated link
+    whose query string carries a ``tempauth=`` JWT (and similar credential
+    parameters). Logging the raw URL — even truncated — can leak a working
+    download credential into log aggregators. Strip query and fragment, keep
+    just ``scheme://host/path`` truncated to ``max_len`` for grep-ability.
+    """
+    parts = urlsplit(url)
+    safe = f"{parts.scheme}://{parts.netloc}{parts.path}"
+    if len(safe) > max_len:
+        safe = safe[:max_len] + "..."
+    return safe
+
+
+def _stream_response_to_buffer_with_cap(
+    request_factory: Callable[[], requests.Response],
+    cap: int,
+    description: str,
+    max_retries: int = STREAM_DOWNLOAD_MAX_RETRIES,
+) -> bytes:
+    """Stream a GET response into memory with a byte cap, retrying on transient
+    transport-level failures.
+
+    SharePoint / Graph occasionally drop the TCP connection mid-body (surfaces
+    as `ChunkedEncodingError: IncompleteRead`). Each retry calls
+    ``request_factory`` again to obtain a fresh ``Response`` -- this also
+    avoids reusing a stale socket from urllib3's connection pool.
+
+    Args:
+        request_factory: Zero-arg callable that issues a streaming GET and
+            returns the ``requests.Response``. Called once per attempt.
+        cap: Maximum number of bytes to read before raising ``SizeCapExceeded``.
+        description: Short label used in log messages.
+        max_retries: Number of retries beyond the initial attempt.
+
+    Raises:
+        SizeCapExceeded: when ``cap`` is exceeded (never retried).
+        requests.RequestException: when retries are exhausted; HTTPError from
+            ``raise_for_status`` is not retried here.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            with request_factory() as resp:
+                _log_and_raise_for_status(resp)
+
+                cl_header = resp.headers.get("Content-Length")
+                if cl_header and cl_header.isdigit() and int(cl_header) > cap:
+                    logger.warning(
+                        "Content-Length %s exceeds cap %s for %s; skipping download.",
+                        cl_header,
+                        cap,
+                        description,
+                    )
+                    raise SizeCapExceeded("pre_download")
+
+                buf = io.BytesIO()
+                for chunk in resp.iter_content(STREAM_CHUNK_SIZE):
+                    if not chunk:
+                        continue
+                    buf.write(chunk)
+                    if buf.tell() > cap:
+                        logger.warning(
+                            "Streaming download for %s exceeded cap %s bytes; "
+                            "aborting early.",
+                            description,
+                            cap,
+                        )
+                        raise SizeCapExceeded("during_download")
+                return buf.getvalue()
+        except TRANSIENT_TRANSPORT_EXCEPTIONS as e:
+            if attempt >= max_retries:
+                logger.warning(
+                    "Streaming download for %s failed after %s attempts: %s: %s",
+                    description,
+                    max_retries + 1,
+                    type(e).__name__,
+                    e,
+                )
+                raise
+            sleep_time = _backoff_seconds(attempt, retry_after=None)
+            logger.warning(
+                "Streaming download for %s hit transport error on attempt %s/%s: "
+                "%s: %s. Sleeping %.1fs before retry.",
+                description,
+                attempt + 1,
+                max_retries + 1,
+                type(e).__name__,
+                e,
+                sleep_time,
+            )
+            time.sleep(sleep_time)
+
+    # Defensive: the loop either returns or re-raises on the final attempt.
+    raise RuntimeError(
+        f"Unreachable: streaming download retry loop exited without resolution "
+        f"for {description}"
+    )
+
+
 def _download_with_cap(url: str, timeout: int, cap: int) -> bytes:
     """Stream download content with an upper bound on bytes read.
 
     Behavior:
     - Checks `Content-Length` first and aborts early if it exceeds `cap`.
     - Otherwise streams the body in chunks and stops once `cap` is surpassed.
+    - Retries on transient transport errors (e.g. mid-stream connection drops).
     - Raises `SizeCapExceeded` when the cap would be exceeded.
     - Returns the full bytes if the content fits within `cap`.
     """
-    with requests.get(url, stream=True, timeout=timeout) as resp:
-        _log_and_raise_for_status(resp)
 
-        # If the server provides Content-Length, prefer an early decision.
-        cl_header = resp.headers.get("Content-Length")
-        if cl_header and cl_header.isdigit():
-            content_len = int(cl_header)
-            if content_len > cap:
-                logger.warning(
-                    "Content-Length %s exceeds cap %s; skipping download.",
-                    content_len,
-                    cap,
-                )
-                raise SizeCapExceeded("pre_download")
+    def _factory() -> requests.Response:
+        return requests.get(url, stream=True, timeout=timeout)
 
-        buf = io.BytesIO()
-        # Stream in 64KB chunks; adjust if needed for slower networks.
-        for chunk in resp.iter_content(64 * 1024):
-            if not chunk:
-                continue
-            buf.write(chunk)
-            if buf.tell() > cap:
-                # Avoid keeping a large partial buffer; close and signal caller to skip.
-                logger.warning(
-                    "Streaming download exceeded cap %s bytes; aborting early.", cap
-                )
-                raise SizeCapExceeded("during_download")
-
-        return buf.getvalue()
+    return _stream_response_to_buffer_with_cap(
+        _factory, cap, description=f"downloadUrl:{_redact_url_for_logging(url)}"
+    )
 
 
 def _download_via_graph_api(
@@ -609,22 +753,22 @@ def _download_via_graph_api(
 ) -> bytes:
     """Download a drive item via the Graph API /content endpoint with a byte cap.
 
-    Raises SizeCapExceeded if the cap is exceeded.
+    Retries on transient transport errors. Raises SizeCapExceeded if the cap is
+    exceeded.
     """
     url = f"{graph_api_base}/drives/{drive_id}/items/{item_id}/content"
     headers = {"Authorization": f"Bearer {access_token}"}
-    with requests.get(
-        url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
-    ) as resp:
-        _log_and_raise_for_status(resp)
-        buf = io.BytesIO()
-        for chunk in resp.iter_content(64 * 1024):
-            if not chunk:
-                continue
-            buf.write(chunk)
-            if buf.tell() > bytes_allowed:
-                raise SizeCapExceeded("during_graph_api_download")
-        return buf.getvalue()
+
+    def _factory() -> requests.Response:
+        return requests.get(
+            url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
+        )
+
+    return _stream_response_to_buffer_with_cap(
+        _factory,
+        bytes_allowed,
+        description=f"graph_api(drive={drive_id},item={item_id})",
+    )
 
 
 def _convert_driveitem_to_document_with_permissions(
@@ -639,7 +783,6 @@ def _convert_driveitem_to_document_with_permissions(
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
 ) -> Document | ConnectorFailure | None:
-
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
 
@@ -736,28 +879,29 @@ def _convert_driveitem_to_document_with_permissions(
         image_section.link = driveitem.web_url
         sections.append(image_section)
     elif is_tabular_file(driveitem.name):
+        # Tabular content is always staged via the callback; without it we can't
+        # produce the section, so fail the item rather than emit an empty-section
+        # Document that could overwrite indexed content.
+        if raw_file_callback is None:
+            return _create_document_failure(
+                driveitem,
+                f"raw_file_callback not set; cannot stage tabular file {driveitem.name}",
+            )
         try:
-            if raw_file_callback is not None:
-                result = extract_and_stage_tabular_file(
-                    file=io.BytesIO(content_bytes),
-                    file_name=driveitem.name,
-                    content_type=mime_type or "application/octet-stream",
-                    raw_file_callback=raw_file_callback,
-                    link=driveitem.web_url or "",
-                )
-                sections.extend(result.sections)
-                staged_file_id = result.staged_file_id
-            else:
-                sections.extend(
-                    tabular_file_to_sections(
-                        file=io.BytesIO(content_bytes),
-                        file_name=driveitem.name,
-                        link=driveitem.web_url or "",
-                    )
-                )
+            result = extract_and_stage_tabular_file(
+                file=io.BytesIO(content_bytes),
+                file_name=driveitem.name,
+                content_type=mime_type or "application/octet-stream",
+                raw_file_callback=raw_file_callback,
+                link=driveitem.web_url or "",
+            )
+            sections.extend(result.sections)
+            staged_file_id = result.staged_file_id
         except Exception as e:
-            logger.warning(
-                "Failed to extract tabular sections for '%s': %s", driveitem.name, e
+            return _create_document_failure(
+                driveitem,
+                f"Failed to extract tabular sections for {driveitem.name}: {e}",
+                e,
             )
     else:
         extraction_result = extract_text_and_images(
@@ -1029,6 +1173,7 @@ class SharepointConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[SharepointConnectorCheckpoint],
+    Resolver,
 ):
     def __init__(
         self,
@@ -1705,6 +1850,20 @@ class SharepointConnector(
                 return fallback_page
             raise
 
+    def _fetch_single_site_page(self, site_id: str, page_id: str) -> dict[str, Any]:
+        """Fetch one site page by id with canvasLayout expanded.
+
+        Fetches metadata first so ``_try_expand_single_page`` has a valid
+        fallback if expansion 400s on a corrupt page. Mirrors a single iteration
+        of ``_fetch_site_pages`` for the targeted-reindex path.
+        """
+        pages_collection = f"{self.graph_api_base}/sites/{site_id}/pages"
+        site_pages_base = f"{pages_collection}/microsoft.graph.sitePage"
+        metadata = self._graph_api_get_json(
+            f"{pages_collection}/{page_id}/microsoft.graph.sitePage"
+        )
+        return self._try_expand_single_page(site_pages_base, page_id, metadata)
+
     def _acquire_token(self) -> dict[str, Any]:
         """
         Acquire token via MSAL
@@ -1743,8 +1902,13 @@ class SharepointConnector(
                 )
                 if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
                     if attempt < GRAPH_API_MAX_RETRIES:
-                        retry_after = int(
-                            response.headers.get("Retry-After", str(2**attempt))
+                        parsed_retry_after = parse_retry_after_seconds(
+                            response.headers.get("Retry-After")
+                        )
+                        retry_after = (
+                            parsed_retry_after
+                            if parsed_retry_after is not None
+                            else float(2**attempt)
                         )
                         wait = min(retry_after, 60)
                         logger.warning(
@@ -1854,7 +2018,7 @@ class SharepointConnector(
 
         initial_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta"
         if use_timestamp_token:
-            assert start is not None  # mypy
+            assert start is not None  # for type-checking
             token = quote(start.isoformat(timespec="seconds"))
             initial_url += f"?token={token}"
 
@@ -2102,46 +2266,73 @@ class SharepointConnector(
 
             # Process site pages if flag is True
             if self.include_site_pages:
-                site_pages = self._fetch_site_pages(
-                    site_descriptor, start=start, end=end
-                )
-                for site_page in site_pages:
-                    logger.debug(
-                        "Processing site page: %s",
-                        site_page.get("webUrl", site_page.get("name", "Unknown")),
+                try:
+                    site_pages = self._fetch_site_pages(
+                        site_descriptor, start=start, end=end
                     )
-                    try:
-                        if include_permissions:
-                            ctx = self._create_rest_client_context(site_descriptor.url)
-                            doc_batch.append(
-                                _convert_sitepage_to_slim_document(
-                                    site_page,
-                                    ctx,
-                                    self.graph_client,
-                                    parent_hierarchy_raw_node_id=site_descriptor.url,
-                                    treat_sharing_link_as_public=self.treat_sharing_link_as_public,
-                                )
-                            )
-                        else:
-                            page_id = site_page.get("id")
-                            if page_id is None:
-                                raise ValueError("Site page ID is required")
-                            doc_batch.append(
-                                SlimDocument(
-                                    id=page_id,
-                                    external_access=ExternalAccess.empty(),
-                                    parent_hierarchy_raw_node_id=site_descriptor.url,
-                                )
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to process site page %s: %s",
+                    for site_page in site_pages:
+                        logger.debug(
+                            "Processing site page: %s",
                             site_page.get("webUrl", site_page.get("name", "Unknown")),
-                            e,
                         )
-                    if len(doc_batch) >= SLIM_BATCH_SIZE:
-                        yield doc_batch
-                        doc_batch = []
+                        try:
+                            if include_permissions:
+                                ctx = self._create_rest_client_context(
+                                    site_descriptor.url
+                                )
+                                doc_batch.append(
+                                    _convert_sitepage_to_slim_document(
+                                        site_page,
+                                        ctx,
+                                        self.graph_client,
+                                        parent_hierarchy_raw_node_id=site_descriptor.url,
+                                        treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                                    )
+                                )
+                            else:
+                                page_id = site_page.get("id")
+                                if page_id is None:
+                                    raise ValueError("Site page ID is required")
+                                doc_batch.append(
+                                    SlimDocument(
+                                        id=page_id,
+                                        external_access=ExternalAccess.empty(),
+                                        parent_hierarchy_raw_node_id=site_descriptor.url,
+                                    )
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to process site page %s: %s",
+                                site_page.get(
+                                    "webUrl", site_page.get("name", "Unknown")
+                                ),
+                                e,
+                            )
+                        if len(doc_batch) >= SLIM_BATCH_SIZE:
+                            yield doc_batch
+                            doc_batch = []
+                except Exception as e:
+                    # Broadened from per-site Graph 4xx to any Exception.
+                    # Slim retrieval can't yield ConnectorFailure, so
+                    # log-and-skip to keep perm sync alive for other sites.
+                    if (
+                        isinstance(e, (ClientRequestException, HTTPError))
+                        and e.response is not None
+                    ):
+                        logger.warning(
+                            "Skipping slim site pages for %s: Graph returned %s (%s)",
+                            site_descriptor.url,
+                            e.response.status_code,
+                            _graph_error_code(e.response),
+                            exc_info=True,
+                        )
+                    else:
+                        logger.warning(
+                            "Skipping slim site pages for %s: %s",
+                            site_descriptor.url,
+                            e,
+                            exc_info=True,
+                        )
         yield doc_batch
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -2389,6 +2580,141 @@ class SharepointConnector(
         # Document is at drive root
         return drive_web_url
 
+    def _process_drive_item(
+        self,
+        driveitem: DriveItemData,
+        drive_name: str,
+        drive_web_url: str | None,
+        site_url: str,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+        is_targeted_reindex: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Process a single drive item into a Document (plus ancestor folder
+        nodes), or a ConnectorFailure on error.
+
+        Shared by the normal crawl (Phase 3b) and the targeted-reindex
+        ``reindex`` path. ``checkpoint`` is used purely as a dedup container
+        (``seen_document_ids`` / ``seen_hierarchy_node_raw_ids``); reindex passes
+        a throwaway checkpoint.
+
+        When ``is_targeted_reindex`` is True, the branches that the crawl skips
+        silently (denylist, unsupported type, empty non-PDF/image, non-indexable
+        conversion) instead yield an informative ConnectorFailure: the admin
+        explicitly requested the document, so it must end as a Document or a
+        ConnectorFailure rather than silently reporting as still-failing with the
+        stale original message. The duplicate-skip stays silent in both paths —
+        a duplicate target has already been yielded as a Document in this call,
+        so failing it would wrongly mark a landed doc as failed.
+        """
+        if self._is_driveitem_excluded(driveitem):
+            logger.debug("Excluding by path denylist: %s", driveitem.web_url)
+            if is_targeted_reindex:
+                yield _create_document_failure(driveitem, "excluded by path denylist")
+            return
+
+        if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
+            logger.debug(
+                "Skipping duplicate document %s (%s)",
+                driveitem.id,
+                driveitem.name,
+            )
+            return
+
+        driveitem_extension = get_file_ext(driveitem.name)
+        if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+            logger.warning(
+                "Skipping %s as it is not a supported file type",
+                driveitem.web_url,
+            )
+            if is_targeted_reindex:
+                yield _create_document_failure(
+                    driveitem,
+                    f"unsupported file type '{driveitem_extension}'",
+                )
+            return
+
+        should_yield_if_empty = (
+            driveitem_extension in OnyxFileExtensions.IMAGE_EXTENSIONS
+            or driveitem_extension == ".pdf"
+        )
+
+        folder_path = self._extract_folder_path_from_parent_reference(
+            driveitem.parent_reference_path
+        )
+        if folder_path and drive_web_url:
+            yield from self._yield_folder_hierarchy_nodes(
+                site_url,
+                drive_web_url,
+                drive_name,
+                folder_path,
+                checkpoint,
+            )
+
+        parent_hierarchy_url: str | None = None
+        if drive_web_url:
+            parent_hierarchy_url = self._get_parent_hierarchy_url(
+                site_url,
+                drive_web_url,
+                drive_name,
+                driveitem,
+            )
+
+        try:
+            ctx: ClientContext | None = None
+            if include_permissions:
+                ctx = self._create_rest_client_context(site_url)
+
+            access_token = self._get_graph_access_token()
+            doc_or_failure = _convert_driveitem_to_document_with_permissions(
+                driveitem,
+                drive_name,
+                ctx,
+                self.graph_client,
+                include_permissions=include_permissions,
+                parent_hierarchy_raw_node_id=parent_hierarchy_url,
+                graph_api_base=self.graph_api_base,
+                access_token=access_token,
+                treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                raw_file_callback=self.raw_file_callback,
+            )
+
+            if isinstance(doc_or_failure, Document):
+                if doc_or_failure.sections:
+                    checkpoint.seen_document_ids.add(doc_or_failure.id)
+                    yield doc_or_failure
+                elif should_yield_if_empty:
+                    doc_or_failure.sections = [
+                        TextSection(link=driveitem.web_url, text="")
+                    ]
+                    checkpoint.seen_document_ids.add(doc_or_failure.id)
+                    yield doc_or_failure
+                else:
+                    logger.warning(
+                        "Skipping %s as it is empty and not a PDF or image",
+                        driveitem.web_url,
+                    )
+                    if is_targeted_reindex:
+                        yield _create_document_failure(
+                            driveitem, "document is empty and not a PDF or image"
+                        )
+            elif isinstance(doc_or_failure, ConnectorFailure):
+                yield doc_or_failure
+            elif is_targeted_reindex:
+                # Converter returned None: excluded/malformed content type or
+                # over the size threshold (it logs the specifics).
+                yield _create_document_failure(
+                    driveitem,
+                    "not indexable (excluded content type or over size limit)",
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to process driveitem %s: %s",
+                driveitem.web_url,
+                e,
+            )
+            yield _create_document_failure(driveitem, f"Failed to process: {str(e)}", e)
+
     def _load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
@@ -2396,7 +2722,6 @@ class SharepointConnector(
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool = False,
     ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
-
         if self._graph_client is None:
             raise ConnectorMissingCredentialError("Sharepoint")
 
@@ -2643,98 +2968,34 @@ class SharepointConnector(
                 )
 
             item_count = 0
-            for driveitem in driveitems:
-                item_count += 1
-
-                if self._is_driveitem_excluded(driveitem):
-                    logger.debug("Excluding by path denylist: %s", driveitem.web_url)
-                    continue
-
-                if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
-                    logger.debug(
-                        "Skipping duplicate document %s (%s)",
-                        driveitem.id,
-                        driveitem.name,
-                    )
-                    continue
-
-                driveitem_extension = get_file_ext(driveitem.name)
-                if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
-                    logger.warning(
-                        "Skipping %s as it is not a supported file type",
-                        driveitem.web_url,
-                    )
-                    continue
-
-                should_yield_if_empty = (
-                    driveitem_extension in OnyxFileExtensions.IMAGE_EXTENSIONS
-                    or driveitem_extension == ".pdf"
-                )
-
-                folder_path = self._extract_folder_path_from_parent_reference(
-                    driveitem.parent_reference_path
-                )
-                if folder_path and drive_web_url:
-                    yield from self._yield_folder_hierarchy_nodes(
-                        site_descriptor.url,
-                        drive_web_url,
+            # Outer try catches BFS-generator failures mid-iteration;
+            # per-item errors are still caught by the inner try below.
+            try:
+                for driveitem in driveitems:
+                    item_count += 1
+                    yield from self._process_drive_item(
+                        driveitem,
                         current_drive_name,
-                        folder_path,
+                        drive_web_url,
+                        site_descriptor.url,
                         checkpoint,
+                        include_permissions,
                     )
-
-                parent_hierarchy_url: str | None = None
-                if drive_web_url:
-                    parent_hierarchy_url = self._get_parent_hierarchy_url(
-                        site_descriptor.url,
-                        drive_web_url,
-                        current_drive_name,
-                        driveitem,
-                    )
-
-                try:
-                    ctx: ClientContext | None = None
-                    if include_permissions:
-                        ctx = self._create_rest_client_context(site_descriptor.url)
-
-                    access_token = self._get_graph_access_token()
-                    doc_or_failure = _convert_driveitem_to_document_with_permissions(
-                        driveitem,
-                        current_drive_name,
-                        ctx,
-                        self.graph_client,
-                        include_permissions=include_permissions,
-                        parent_hierarchy_raw_node_id=parent_hierarchy_url,
-                        graph_api_base=self.graph_api_base,
-                        access_token=access_token,
-                        treat_sharing_link_as_public=self.treat_sharing_link_as_public,
-                        raw_file_callback=self.raw_file_callback,
-                    )
-
-                    if isinstance(doc_or_failure, Document):
-                        if doc_or_failure.sections:
-                            checkpoint.seen_document_ids.add(doc_or_failure.id)
-                            yield doc_or_failure
-                        elif should_yield_if_empty:
-                            doc_or_failure.sections = [
-                                TextSection(link=driveitem.web_url, text="")
-                            ]
-                            checkpoint.seen_document_ids.add(doc_or_failure.id)
-                            yield doc_or_failure
-                        else:
-                            logger.warning(
-                                "Skipping %s as it is empty and not a PDF or image",
-                                driveitem.web_url,
-                            )
-                    elif isinstance(doc_or_failure, ConnectorFailure):
-                        yield doc_or_failure
-                except Exception as e:
-                    logger.warning(
-                        "Failed to process driveitem %s: %s", driveitem.web_url, e
-                    )
-                    yield _create_document_failure(
-                        driveitem, f"Failed to process: {str(e)}", e
-                    )
+            except Exception as e:
+                logger.exception(
+                    "Failed mid-iteration for drive '%s' in site '%s'",
+                    current_drive_name,
+                    site_descriptor.url,
+                )
+                yield _create_entity_failure(
+                    f"{site_descriptor.url}|{current_drive_name}|bfs_iter",
+                    f"Failed to iterate drive items after {item_count}: {e}",
+                    (start_dt, end_dt),
+                    e,
+                )
+                # Clear drive state to avoid resuming on the same broken drive.
+                self._clear_drive_checkpoint_state(checkpoint)
+                return checkpoint
 
             logger.info(
                 "Processed %s items in drive '%s'", item_count, current_drive_name
@@ -2775,32 +3036,99 @@ class SharepointConnector(
             site_descriptor = checkpoint.current_site_descriptor
             start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
             end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
-            site_pages = self._fetch_site_pages(
-                site_descriptor, start=start_dt, end=end_dt
-            )
-            for site_page in site_pages:
-                logger.debug(
-                    "Processing site page: %s",
-                    site_page.get("webUrl", site_page.get("name", "Unknown")),
+            try:
+                site_pages = self._fetch_site_pages(
+                    site_descriptor, start=start_dt, end=end_dt
                 )
-                client_ctx: ClientContext | None = None
-                if include_permissions:
-                    client_ctx = self._create_rest_client_context(site_descriptor.url)
-                yield (
-                    _convert_sitepage_to_document(
-                        site_page,
-                        site_descriptor.drive_name,
-                        client_ctx,
-                        self.graph_client,
-                        include_permissions=include_permissions,
-                        # Site pages have the site as their parent
-                        parent_hierarchy_raw_node_id=site_descriptor.url,
-                        treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                for site_page in site_pages:
+                    page_id = site_page.get("id")
+                    page_label = site_page.get(
+                        "webUrl", site_page.get("name", "Unknown")
                     )
+                    # Skip a single broken page instead of aborting the
+                    # rest of the site (perm-sync error, malformed field,
+                    # token refresh blip, etc.).
+                    try:
+                        logger.debug("Processing site page: %s", page_label)
+                        client_ctx: ClientContext | None = None
+                        if include_permissions:
+                            client_ctx = self._create_rest_client_context(
+                                site_descriptor.url
+                            )
+                        yield (
+                            _convert_sitepage_to_document(
+                                site_page,
+                                site_descriptor.drive_name,
+                                client_ctx,
+                                self.graph_client,
+                                include_permissions=include_permissions,
+                                # Site pages have the site as their parent
+                                parent_hierarchy_raw_node_id=site_descriptor.url,
+                                treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to process site page '%s' in site %s: %s",
+                            page_label,
+                            site_descriptor.url,
+                            e,
+                            exc_info=True,
+                        )
+                        if page_id:
+                            page_link = (
+                                page_label if isinstance(page_label, str) else None
+                            )
+                            yield ConnectorFailure(
+                                failed_document=DocumentFailure(
+                                    document_id=page_id,
+                                    document_link=page_link,
+                                ),
+                                failure_message=(
+                                    f"SharePoint site page '{page_label}': {e}"
+                                ),
+                                exception=e,
+                            )
+                        else:
+                            yield _create_entity_failure(
+                                f"{site_descriptor.url}|site_page|{page_label}",
+                                f"Failed to process site page '{page_label}': {e}",
+                                (start_dt, end_dt),
+                                e,
+                            )
+                logger.info(
+                    "Finished processing site pages for site: %s",
+                    site_descriptor.url,
                 )
-            logger.info(
-                "Finished processing site pages for site: %s", site_descriptor.url
-            )
+            except Exception as e:
+                # Broadened from per-site Graph 4xx to any Exception:
+                # _fetch_site_pages failures skip the site-pages stage
+                # instead of failing the attempt. Per-page errors are
+                # caught above.
+                if (
+                    isinstance(e, (ClientRequestException, HTTPError))
+                    and e.response is not None
+                ):
+                    logger.warning(
+                        "Skipping site pages for %s: Graph returned %s (%s)",
+                        site_descriptor.url,
+                        e.response.status_code,
+                        _graph_error_code(e.response),
+                        exc_info=True,
+                    )
+                else:
+                    logger.warning(
+                        "Skipping site pages for %s: %s",
+                        site_descriptor.url,
+                        e,
+                        exc_info=True,
+                    )
+                yield _create_entity_failure(
+                    site_descriptor.url,
+                    f"Failed to fetch site pages: {e}",
+                    (start_dt, end_dt),
+                    e,
+                )
 
         # If no more drives, move to next site if available
         if (
@@ -2863,6 +3191,203 @@ class SharepointConnector(
         return self._load_from_checkpoint(
             start, end, checkpoint, include_permissions=True
         )
+
+    def _list_site_drives(
+        self,
+        site_url: str,
+        site_drives_cache: dict[str, list[SiteDrive]],
+    ) -> list[SiteDrive]:
+        """List the drives (document libraries) of a site, memoized."""
+        if site_url not in site_drives_cache:
+            site = self.graph_client.sites.get_by_url(site_url)
+            drives = site.drives.get().execute_query()
+            site_drives_cache[site_url] = [
+                SiteDrive(
+                    drive_id=cast(str, d.id), name=d.name or "", web_url=d.web_url
+                )
+                for d in drives
+            ]
+        return site_drives_cache[site_url]
+
+    def _resolve_driveitem_by_link(
+        self,
+        document_id: str,
+        document_link: str,
+        site_drives_cache: dict[str, list[SiteDrive]],
+    ) -> ResolvedDriveItem:
+        """Resolve a failed drive item's web URL to what's needed to re-fetch it.
+
+        The recorded link only reliably yields the *site*: Graph returns the
+        ``_layouts/15/Doc.aspx`` form as ``webUrl`` for Office documents, so the
+        library/folder is not recoverable from the URL. We parse the site via
+        ``_extract_site_and_drive_info``, list its drives, and probe each by item
+        id until one resolves — all under the existing ``Sites.Read.All`` grant.
+        ``site_drives_cache`` memoizes the per-site drive listing since targets
+        cluster heavily by site. Raises ``ValueError`` if no drive resolves it.
+        """
+        descriptors = self._extract_site_and_drive_info([document_link])
+        if not descriptors:
+            raise ValueError(f"Could not parse a site from link '{document_link}'")
+        site_url = descriptors[0].url
+
+        for drive in self._list_site_drives(site_url, site_drives_cache):
+            item_url = (
+                f"{self.graph_api_base}/drives/{drive.drive_id}/items/{document_id}"
+            )
+            try:
+                item_json = self._graph_api_get_json(item_url)
+            except HTTPError as e:
+                if e.response is not None and e.response.status_code == 404:
+                    continue
+                raise
+            return ResolvedDriveItem(
+                driveitem=DriveItemData.from_graph_json(item_json),
+                drive_name=SHARED_DOCUMENTS_MAP.get(drive.name, drive.name),
+                drive_web_url=drive.web_url,
+                site_url=site_url,
+            )
+
+        raise ValueError(
+            f"Item '{document_id}' not found in any library of site '{site_url}'"
+        )
+
+    def _reindex_drive_item(
+        self,
+        document_id: str,
+        document_link: str,
+        dedup: SharepointConnectorCheckpoint,
+        site_drives_cache: dict[str, list[SiteDrive]],
+        include_permissions: bool,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        resolved = self._resolve_driveitem_by_link(
+            document_id, document_link, site_drives_cache
+        )
+        # Emit the ancestor chain (site -> drive). The crawl yields these outside
+        # the per-item loop, so the shared helper only emits folder nodes.
+        yield from self._yield_site_hierarchy_node(
+            SiteDescriptor(url=resolved.site_url, drive_name=None, folder_path=None),
+            dedup,
+        )
+        if resolved.drive_web_url:
+            yield from self._yield_drive_hierarchy_node(
+                resolved.site_url, resolved.drive_web_url, resolved.drive_name, dedup
+            )
+        yield from self._process_drive_item(
+            resolved.driveitem,
+            resolved.drive_name,
+            resolved.drive_web_url,
+            resolved.site_url,
+            dedup,
+            include_permissions,
+            is_targeted_reindex=True,
+        )
+
+    def _reindex_site_page(
+        self,
+        document_id: str,
+        document_link: str,
+        dedup: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        descriptors = self._extract_site_and_drive_info([document_link])
+        if not descriptors:
+            raise ValueError(
+                f"Could not parse a site from site-page link '{document_link}'"
+            )
+        site_descriptor = SiteDescriptor(
+            url=descriptors[0].url, drive_name=None, folder_path=None
+        )
+        site = self.graph_client.sites.get_by_url(site_descriptor.url)
+        site.execute_query()
+
+        page = self._fetch_single_site_page(cast(str, site.id), document_id)
+
+        yield from self._yield_site_hierarchy_node(site_descriptor, dedup)
+
+        ctx: ClientContext | None = None
+        if include_permissions:
+            ctx = self._create_rest_client_context(site_descriptor.url)
+        yield _convert_sitepage_to_document(
+            page,
+            site_descriptor.drive_name,
+            ctx,
+            self.graph_client,
+            include_permissions=include_permissions,
+            parent_hierarchy_raw_node_id=site_descriptor.url,
+            treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+        )
+
+    @override
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Re-fetch and re-index individual failed documents (Resolver).
+
+        SharePoint doc ids are bare Graph driveItem/page ids that can't be fetched
+        without their drive/site, so resolution is driven off each failure's
+        recorded web URL (``document_link``). Targets with no usable link (e.g.
+        admin-typed targets) yield an informative ConnectorFailure.
+        """
+        if self._graph_client is None:
+            raise ConnectorMissingCredentialError("Sharepoint")
+
+        # Throwaway checkpoint used purely as a dedup container for the shared
+        # helpers (seen_document_ids / seen_hierarchy_node_raw_ids).
+        dedup = self.build_dummy_checkpoint()
+        site_drives_cache: dict[str, list[SiteDrive]] = {}
+        # TODO(evan): Resolver.reindex is one-call-per-job and resolves targets
+        # sequentially. If the interface grows batch semantics, Graph $batch
+        # (20 sub-requests) could cut round trips on the per-item fetches.
+
+        for error in errors:
+            failed = error.failed_document
+            if failed is None:
+                continue
+            document_id = failed.document_id
+            document_link = failed.document_link
+            if not document_link:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=document_id,
+                        document_link=None,
+                    ),
+                    failure_message=(
+                        "SharePoint targeted reindex needs the document's web URL "
+                        "to locate it; none was recorded for this target."
+                    ),
+                )
+                continue
+
+            try:
+                if "/sitepages/" in document_link.lower():
+                    yield from self._reindex_site_page(
+                        document_id, document_link, dedup, include_permissions
+                    )
+                else:
+                    yield from self._reindex_drive_item(
+                        document_id,
+                        document_link,
+                        dedup,
+                        site_drives_cache,
+                        include_permissions,
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Failed to resolve SharePoint target %s (%s): %s",
+                    document_id,
+                    document_link,
+                    e,
+                )
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=document_id,
+                        document_link=document_link,
+                    ),
+                    failure_message=f"Failed to resolve during targeted reindex: {e}",
+                    exception=e,
+                )
 
     def build_dummy_checkpoint(self) -> SharepointConnectorCheckpoint:
         return SharepointConnectorCheckpoint(has_more=True)

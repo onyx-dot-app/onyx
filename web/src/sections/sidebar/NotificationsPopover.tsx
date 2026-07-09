@@ -1,22 +1,26 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
 import { NotificationType } from "@/lib/notifications/interfaces";
 import { getNotificationIcon } from "@/lib/notifications";
-import { timeAgo } from "@/lib/time";
+import {
+  dismissAllNotifications,
+  dismissNotification,
+} from "@/lib/notifications/api";
+import { timeAgo } from "@opal/time";
 import useNotifications from "@/hooks/useNotifications";
 import {
   SvgCheckAll,
   SvgNotificationBubble,
   SvgCheckSquare,
   SvgChevronLeft,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import { Button, Divider, LineItemButton, Text } from "@opal/components";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Section } from "@/layouts/general-layouts";
 import { IllustrationContent } from "@opal/layouts";
 import { SvgEmpty } from "@opal/illustrations";
@@ -109,8 +113,16 @@ export default function NotificationsPopover({
     notifications,
     undismissedCount,
     isLoading,
-    refresh: mutate,
+    refresh,
+    hasMore,
+    isLoadingMore,
+    loadMore,
   } = useNotifications();
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef(loadMore);
+  const lastLoadScrollTopRef = useRef<number | null>(null);
+  loadMoreRef.current = loadMore;
 
   // Track IDs dismissed during this session (before popover closes)
   const [sessionDismissedIds, setSessionDismissedIds] = useState<Set<number>>(
@@ -120,23 +132,18 @@ export default function NotificationsPopover({
   const handleDismiss = useCallback(
     async (notificationId: number) => {
       try {
-        const response = await fetch(
-          `/api/notifications/${notificationId}/dismiss`,
-          { method: "POST" }
-        );
-        if (response.ok) {
-          setSessionDismissedIds((prev) => {
-            const next = new Set(prev);
-            next.add(notificationId);
-            return next;
-          });
-          mutate();
-        }
+        await dismissNotification(notificationId);
+        setSessionDismissedIds((prev) => {
+          const next = new Set(prev);
+          next.add(notificationId);
+          return next;
+        });
+        void refresh();
       } catch (error) {
         console.error("Error dismissing notification:", error);
       }
     },
-    [mutate]
+    [refresh]
   );
 
   const handleNotificationClick = useCallback(
@@ -168,6 +175,9 @@ export default function NotificationsPopover({
         return;
       }
 
+      if (!notification.dismissed) {
+        handleDismiss(notification.id);
+      }
       onNavigate();
       router.push(link as Route);
     },
@@ -193,13 +203,62 @@ export default function NotificationsPopover({
   );
 
   const handleDismissAll = useCallback(async () => {
-    for (const n of newNotifications) {
-      await handleDismiss(n.id);
+    try {
+      await dismissAllNotifications();
+      setSessionDismissedIds((prev) => {
+        const next = new Set(prev);
+        newNotifications.forEach((notification) => {
+          next.add(notification.id);
+        });
+        return next;
+      });
+      void refresh();
+    } catch (error) {
+      console.error("Error dismissing notifications:", error);
     }
-  }, [newNotifications, handleDismiss]);
+  }, [refresh, newNotifications]);
+
+  useEffect(() => {
+    if (!hasMore || isLoadingMore) return;
+
+    const scrollContainer = scrollContainerRef.current;
+    const sentinel = sentinelRef.current;
+    if (!scrollContainer || !sentinel) return;
+    lastLoadScrollTopRef.current ??= Math.round(scrollContainer.scrollTop);
+
+    let didRequestLoad = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !didRequestLoad) {
+          const currentScrollTop = Math.round(scrollContainer.scrollTop);
+          const isScrollable =
+            scrollContainer.scrollHeight > scrollContainer.clientHeight + 1;
+          if (
+            isScrollable &&
+            lastLoadScrollTopRef.current === currentScrollTop
+          ) {
+            return;
+          }
+
+          lastLoadScrollTopRef.current = currentScrollTop;
+          didRequestLoad = true;
+          observer.disconnect();
+          loadMoreRef.current();
+        }
+      },
+      {
+        root: scrollContainer,
+        rootMargin: "64px 0px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore]);
 
   return (
-    <Section gap={0}>
+    <Section gap={0} justifyContent="start" alignItems="stretch">
       <Section flexDirection="row" padding={0.325}>
         <Section flexDirection="row" gap={0.25} justifyContent="start">
           <Button
@@ -229,13 +288,13 @@ export default function NotificationsPopover({
       </Section>
 
       {isLoading ? (
-        <div className="h-[var(--notifications-popover)]">
+        <div className="h-(--notifications-popover)">
           <Section>
-            <SimpleLoader />
+            <SvgSimpleLoader />
           </Section>
         </div>
       ) : !notifications || notifications.length === 0 ? (
-        <div className="h-[var(--notifications-popover)]">
+        <div className="h-(--notifications-popover)">
           <Section>
             <IllustrationContent
               title="No notifications"
@@ -244,7 +303,10 @@ export default function NotificationsPopover({
           </Section>
         </div>
       ) : (
-        <div className="max-h-[var(--notifications-popover)] overflow-y-auto flex flex-col gap-1">
+        <div
+          ref={scrollContainerRef}
+          className="h-(--notifications-popover) w-full min-w-0 overflow-y-auto [overflow-anchor:none] [scrollbar-gutter:stable] flex flex-col gap-1"
+        >
           {newNotifications.length > 0 && (
             <>
               <Divider title="New" />
@@ -277,6 +339,17 @@ export default function NotificationsPopover({
                 ))}
               </div>
             </>
+          )}
+
+          {hasMore && (
+            <div
+              ref={sentinelRef}
+              className="h-8 flex items-center justify-center transition-opacity duration-300"
+            >
+              <SvgSimpleLoader
+                className={isLoadingMore ? "opacity-100" : "opacity-40"}
+              />
+            </div>
           )}
         </div>
       )}

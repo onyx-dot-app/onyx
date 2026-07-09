@@ -22,7 +22,12 @@ from httpx import HTTPError
 from requests import JSONDecodeError
 from requests import RequestException
 from requests import Response
-from retry import retry
+from tenacity import retry
+from tenacity import retry_if_exception_type
+from tenacity import stop_after_attempt
+from tenacity import wait_exponential
+from tenacity import wait_fixed
+from tenacity import wait_random
 
 from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
@@ -72,9 +77,12 @@ from shared_configs.utils import batch_list
 
 logger = setup_logger()
 
-# If we are not only indexing, dont want retry very long
-_RETRY_DELAY = 10 if INDEXING_ONLY else 0.1
-_RETRY_TRIES = 10 if INDEXING_ONLY else 2
+# If we are not only indexing, dont want retry very long.
+# Indexing path: wait_exponential(multiplier=1, max=60) gives waits of
+# 1, 2, 4, 8, 16, 32, 60s before the cap repeats. With 8 attempts (7 waits)
+# we hit the 60s cap exactly once, totaling ~123s before giving up.
+_RETRY_DELAY = 1 if INDEXING_ONLY else 0.1
+_RETRY_TRIES = 8 if INDEXING_ONLY else 2
 
 # OpenAI only allows 2048 embeddings to be computed at once
 _OPENAI_MAX_INPUT_LEN = 2048
@@ -220,6 +228,40 @@ def is_authentication_error(error: Exception) -> bool:
     )
 
 
+_GEMINI_EMBEDDING_2_MODEL_PREFIX = "gemini-embedding-2"
+
+# Gemini embedding-2 ignores task_type entirely; instead the documented way
+# to differentiate query vs. document is to wrap the input in Google's task
+# instruction format. The exact templates come from
+# https://ai.google.dev/gemini-api/docs/embeddings (Gemini Embedding 2 section).
+_GEMINI_EMBEDDING_2_PROMPT_TEMPLATES = {
+    "RETRIEVAL_QUERY": "task: search result | query: {text}",
+    "RETRIEVAL_DOCUMENT": "title: none | text: {text}",
+}
+
+
+def _is_gemini_embedding_2_model(model: str) -> bool:
+    return (
+        model.split("/")[-1]
+        .strip()
+        .lower()
+        .startswith(_GEMINI_EMBEDDING_2_MODEL_PREFIX)
+    )
+
+
+def _format_vertex_embedding_text(text: str, model: str, embedding_type: str) -> str:
+    if not _is_gemini_embedding_2_model(model):
+        return text
+
+    template = _GEMINI_EMBEDDING_2_PROMPT_TEMPLATES.get(embedding_type)
+    if template is None:
+        raise RuntimeError(
+            f"Unsupported Gemini embedding-2 task type: {embedding_type}"
+        )
+
+    return template.format(text=text)
+
+
 def format_embedding_error(
     error: Exception,
     service_name: str,
@@ -240,6 +282,25 @@ def format_embedding_error(
         f"API Key: {sanitized_api_key} "
         f"Exception: {error}"
     )
+
+
+def _extract_cohere_embeddings(response_embeddings: Any) -> list[Embedding]:
+    """Normalize Cohere's embed response across SDK versions.
+
+    v3 models return ``response.embeddings`` as a flat ``list[list[float]]``.
+    v4 models return an ``EmbedByTypeResponseEmbeddings`` object that carries
+    the embeddings under ``float_`` (and possibly other per-type buckets when
+    ``embedding_types`` is set). We always read the float bucket here since
+    we never request alternate types.
+    """
+    if isinstance(response_embeddings, list):
+        return cast(list[Embedding], response_embeddings)
+
+    float_embeddings = getattr(response_embeddings, "float_", None)
+    if isinstance(float_embeddings, list):
+        return cast(list[Embedding], float_embeddings)
+
+    raise RuntimeError("Unsupported Cohere embedding response format.")
 
 
 # Custom exception for authentication errors
@@ -313,8 +374,12 @@ class CloudEmbedding:
                 model=model,
                 input_type=embedding_type,
                 truncate="END",
+                # Explicit float request — guarantees .float_ is populated
+                # on Cohere's typed v4 response and keeps the contract
+                # explicit on the older v3 endpoint too.
+                embedding_types=["float"],
             )
-            final_embeddings.extend(cast(list[Embedding], response.embeddings))
+            final_embeddings.extend(_extract_cohere_embeddings(response.embeddings))
         return final_embeddings
 
     async def _embed_voyage(
@@ -361,8 +426,7 @@ class CloudEmbedding:
         from google import genai
         from google.genai import types as genai_types
 
-        if not model:
-            model = DEFAULT_VERTEX_MODEL
+        resolved_model = model or DEFAULT_VERTEX_MODEL
 
         service_account_info = json.loads(self.api_key)
         credentials = service_account.Credentials.from_service_account_info(
@@ -383,19 +447,38 @@ class CloudEmbedding:
             credentials=credentials,
         )
 
-        embed_config = genai_types.EmbedContentConfig(
-            task_type=embedding_type,
-            output_dimensionality=reduced_dimension,
-            auto_truncate=True,
-        )
+        # gemini-embedding-2 rejects task_type; embedding intent is conveyed
+        # via the instruction-formatted text instead. Older models continue
+        # to use task_type.
+        if _is_gemini_embedding_2_model(resolved_model):
+            embed_config = genai_types.EmbedContentConfig(
+                output_dimensionality=reduced_dimension,
+                auto_truncate=True,
+            )
+        else:
+            embed_config = genai_types.EmbedContentConfig(
+                task_type=embedding_type,
+                output_dimensionality=reduced_dimension,
+                auto_truncate=True,
+            )
 
         async def _embed_batch(batch_texts: list[str]) -> list[Embedding]:
             content_requests: list[Any] = [
-                genai_types.Content(parts=[genai_types.Part(text=text)])
+                genai_types.Content(
+                    parts=[
+                        genai_types.Part(
+                            text=_format_vertex_embedding_text(
+                                text=text,
+                                model=resolved_model,
+                                embedding_type=embedding_type,
+                            )
+                        )
+                    ]
+                )
                 for text in batch_texts
             ]
             response = await client.aio.models.embed_content(
-                model=model,
+                model=resolved_model,
                 contents=content_requests,
                 config=embed_config,
             )
@@ -481,7 +564,12 @@ class CloudEmbedding:
         result = response.json()
         return [embedding["embedding"] for embedding in result["data"]]
 
-    @retry(tries=_RETRY_TRIES, delay=_RETRY_DELAY)
+    @retry(
+        retry=retry_if_exception_type(RuntimeError),
+        stop=stop_after_attempt(_RETRY_TRIES),
+        wait=wait_exponential(multiplier=_RETRY_DELAY, max=60) + wait_random(0, 2),
+        reraise=True,
+    )
     async def embed(
         self,
         *,
@@ -792,7 +880,7 @@ class EmbeddingModel:
         if self.embed_server_endpoint is None:
             raise ValueError("Model server endpoint is not configured for local models")
 
-        # Store the endpoint in a local variable to help mypy understand it's not None
+        # Store the endpoint in a local variable to help the type-checker understand it's not None
         endpoint = self.embed_server_endpoint
 
         def _make_request() -> Response:
@@ -821,13 +909,19 @@ class EmbeddingModel:
         # retries + handling for rate limiting
         if embed_request.text_type == EmbedTextType.PASSAGE:
             final_make_request_func = retry(
-                tries=3,
-                delay=5,
-                exceptions=(RequestException, ValueError, JSONDecodeError),
+                retry=retry_if_exception_type(
+                    (RequestException, ValueError, JSONDecodeError)
+                ),
+                stop=stop_after_attempt(3),
+                wait=wait_fixed(5),
+                reraise=True,
             )(final_make_request_func)
             # use 10 second delay as per Azure suggestion
             final_make_request_func = retry(
-                tries=10, delay=10, exceptions=ModelServerRateLimitError
+                retry=retry_if_exception_type(ModelServerRateLimitError),
+                stop=stop_after_attempt(10),
+                wait=wait_fixed(10),
+                reraise=True,
             )(final_make_request_func)
 
         response: Response | None = None

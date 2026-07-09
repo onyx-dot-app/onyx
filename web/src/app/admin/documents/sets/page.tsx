@@ -1,8 +1,8 @@
 "use client";
 
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { PageSelector } from "@/components/PageSelector";
-import { SvgInfo } from "@opal/icons";
+import { SvgInfo, SvgPlusCircle } from "@opal/icons";
 import {
   Table,
   TableHead,
@@ -10,9 +10,9 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
-import { Divider, Text } from "@opal/components";
+import { Button, Divider, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import Title from "@/components/ui/title";
 import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
@@ -20,7 +20,7 @@ import { useDocumentSets } from "./hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { toast } from "@/hooks/useToast";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   FiAlertTriangle,
@@ -35,7 +35,6 @@ import { useRouter } from "next/navigation";
 import { TableHeader } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@opal/components";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 
@@ -137,7 +136,7 @@ const EditRow = ({
             }
           }}
         >
-          <FiEdit2 className="mr-2 flex-shrink-0" />
+          <FiEdit2 className="mr-2 shrink-0" />
           <span className="font-medium">{documentSet.name}</span>
         </div>
       </Tooltip>
@@ -367,7 +366,7 @@ function Main() {
   if (isDocumentSetsLoading || isEditableDocumentSetsLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
-        <ThreeDotsLoader />
+        <PageLoader />
       </div>
     );
   }
@@ -392,9 +391,13 @@ function Main() {
       <div className="mb-3"></div>
 
       <div className="flex mb-6">
-        <CreateButton href="/admin/documents/sets/new">
+        <Button
+          icon={SvgPlusCircle}
+          prominence="secondary"
+          href="/admin/documents/sets/new"
+        >
           New Document Set
-        </CreateButton>
+        </Button>
       </div>
 
       {documentSets.length > 0 && (

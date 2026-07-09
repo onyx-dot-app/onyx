@@ -5,11 +5,10 @@ export type ComboBoxOption = {
   disabled?: boolean;
 };
 
-export interface InputComboBoxProps
-  extends Omit<
-    React.InputHTMLAttributes<HTMLInputElement>,
-    "onChange" | "value"
-  > {
+export interface InputComboBoxProps extends Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "onChange" | "value"
+> {
   /** Current value */
   value: string;
   /** Change handler (React event style) - Called on every keystroke */
@@ -35,9 +34,9 @@ export interface InputComboBoxProps
   /** Optional name for the field (for accessibility) */
   name?: string;
   /** Left search icon */
-  leftSearchIcon?: boolean;
-  /** Right section for custom UI elements (e.g., refresh button) */
-  rightSection?: React.ReactNode;
+  searchIcon?: boolean;
+  /** Right content slot for custom UI elements (e.g., refresh button) */
+  rightChildren?: React.ReactNode;
   /** Label for the separator between matched and unmatched options */
   separatorLabel?: string;
   /** Prefix shown before the typed value in the create option (e.g., "Use", "Add"). When omitted, the raw value is shown without a prefix. */

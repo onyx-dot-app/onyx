@@ -113,7 +113,7 @@ def get_or_create_discord_service_api_key(
     logger.info("Creating Discord service API key for tenant %s", tenant_id)
     api_key_args = APIKeyArgs(
         name=DISCORD_SERVICE_API_KEY_NAME,
-        role=UserRole.LIMITED,  # Limited role is sufficient for chat requests
+        role=UserRole.LIMITED,  # insert_api_key grants LIMITED keys chat scope
     )
     api_key_descriptor = insert_api_key(
         db_session=db_session,

@@ -22,6 +22,7 @@ from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from ee.onyx.server.tenants.user_mapping import user_owns_a_tenant
 from onyx.auth.users import exceptions
 from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
+from onyx.configs.app_configs import AUTO_PROVISION_DEFAULT_LLM_PROVIDERS
 from onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.configs.app_configs import DEV_MODE
@@ -32,7 +33,8 @@ from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
-from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
+from onyx.db.llm import fetch_existing_llm_provider_by_type_nameless
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_cloud_embedding_provider
 from onyx.db.llm import upsert_llm_provider
@@ -98,7 +100,7 @@ async def get_or_provision_tenant(
         if tenant_id:
             # Run migrations to ensure the pre-provisioned tenant schema is current.
             # Pool tenants may have been created before a new migration was deployed.
-            # Capture as a non-optional local so mypy can type the lambda correctly.
+            # Capture as a non-optional local so type-checking can type the lambda correctly.
             _tenant_id: str = tenant_id
             loop = asyncio.get_running_loop()
             try:
@@ -329,9 +331,16 @@ def configure_default_api_keys(db_session: Session) -> None:
     def _upsert(request: LLMProviderUpsertRequest, default_model: str) -> None:
         nonlocal has_set_default_provider
         try:
-            existing = fetch_existing_llm_provider(
-                name=request.name, db_session=db_session
-            )
+            if request.name:
+                existing = fetch_existing_llm_provider_by_name_and_type(
+                    name=request.name,
+                    provider_type=request.provider,
+                    db_session=db_session,
+                )
+            else:
+                existing = fetch_existing_llm_provider_by_type_nameless(
+                    provider_type=request.provider, db_session=db_session
+                )
             if existing:
                 request.id = existing.id
             provider = upsert_llm_provider(request, db_session)
@@ -342,7 +351,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             logger.error("Failed to configure %s provider: %s", request.provider, e)
 
     # Configure OpenAI provider
-    if OPENAI_DEFAULT_API_KEY:
+    if OPENAI_DEFAULT_API_KEY and AUTO_PROVISION_DEFAULT_LLM_PROVIDERS:
         default_model = recommendations.get_default_model(OPENAI_PROVIDER_NAME)
         if default_model is None:
             logger.error(
@@ -371,11 +380,12 @@ def configure_default_api_keys(db_session: Session) -> None:
             logger.error("Failed to create default image gen config: %s", e)
     else:
         logger.info(
-            "OPENAI_DEFAULT_API_KEY not set, skipping OpenAI provider configuration"
+            "Skipping OpenAI default provider configuration "
+            "(OPENAI_DEFAULT_API_KEY unset or AUTO_PROVISION_DEFAULT_LLM_PROVIDERS=false)"
         )
 
     # Configure Anthropic provider
-    if ANTHROPIC_DEFAULT_API_KEY:
+    if ANTHROPIC_DEFAULT_API_KEY and AUTO_PROVISION_DEFAULT_LLM_PROVIDERS:
         default_model = recommendations.get_default_model(ANTHROPIC_PROVIDER_NAME)
         if default_model is None:
             logger.error(
@@ -399,7 +409,8 @@ def configure_default_api_keys(db_session: Session) -> None:
         _upsert(anthropic_provider, default_model_name)
     else:
         logger.info(
-            "ANTHROPIC_DEFAULT_API_KEY not set, skipping Anthropic provider configuration"
+            "Skipping Anthropic default provider configuration "
+            "(ANTHROPIC_DEFAULT_API_KEY unset or AUTO_PROVISION_DEFAULT_LLM_PROVIDERS=false)"
         )
 
     # Configure Vertex AI provider
@@ -435,7 +446,7 @@ def configure_default_api_keys(db_session: Session) -> None:
         )
 
     # Configure OpenRouter provider
-    if OPENROUTER_DEFAULT_API_KEY:
+    if OPENROUTER_DEFAULT_API_KEY and AUTO_PROVISION_DEFAULT_LLM_PROVIDERS:
         default_model = recommendations.get_default_model(OPENROUTER_PROVIDER_NAME)
         if default_model is None:
             logger.error(
@@ -468,7 +479,8 @@ def configure_default_api_keys(db_session: Session) -> None:
         _upsert(openrouter_provider, default_model_name)
     else:
         logger.info(
-            "OPENROUTER_DEFAULT_API_KEY not set, skipping OpenRouter provider configuration"
+            "Skipping OpenRouter default provider configuration "
+            "(OPENROUTER_DEFAULT_API_KEY unset or AUTO_PROVISION_DEFAULT_LLM_PROVIDERS=false)"
         )
 
     # Configure Cohere embedding provider

@@ -2,7 +2,7 @@ import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
-import { requireAuth } from "@/lib/auth/requireAuth";
+import { requireAuth } from "@/lib/auth/svcSS";
 import { AgentStats } from "./AgentStats";
 import BackButton from "@/refresh-components/buttons/BackButton";
 
@@ -28,7 +28,7 @@ export default async function GalleryPage(props: {
       <div className="w-full py-8">
         <div className="px-32">
           <InstantSSRAutoRefresh />
-          <div className="max-w-4xl mx-auto !border-none !bg-transparent !ring-none">
+          <div className="max-w-4xl mx-auto border-none! bg-transparent! !ring-none">
             <AgentStats agentId={parseInt(params.id)} />
           </div>
         </div>

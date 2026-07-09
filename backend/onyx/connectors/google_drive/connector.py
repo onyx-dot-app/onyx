@@ -86,6 +86,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import parallel_yield
@@ -99,7 +100,9 @@ logger = setup_logger()
 
 BATCHES_PER_CHECKPOINT = 1
 
-DRIVE_BATCH_SIZE = 80
+# Documents converted per sub-batch. At up to CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
+# (~10 MB) each, 50 caps resident docs near ~500 MB regardless of drive size.
+DRIVE_CONVERSION_BATCH_SIZE = 50
 
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
@@ -516,12 +519,21 @@ class GoogleDriveConnector(
         new ancestors.
 
         The function tracks two separate sets:
-        - seen_hierarchy_node_raw_ids: Nodes we've already yielded (to avoid duplicates)
+        - seen_hierarchy_node_raw_ids: Nodes we've already yielded (used to dedupe
+          emissions from walks that did NOT reach a verified terminal).
         - fully_walked_hierarchy_node_raw_ids: Nodes where we've successfully walked
           to a terminal root. Only skip walking from a node if it's in this set.
 
         This separation ensures that if User A can access folder C but not its parent B,
         a later User B who has access to both can still complete the walk to the root.
+
+        Cross-yield healing: when a walk *does* reach a verified terminal, every node
+        encountered along that walk is re-emitted (regardless of `seen`). The downstream
+        upsert is idempotent and keys on `raw_node_id`, so any node that was previously
+        emitted with an unresolvable parent (and therefore parented to SOURCE) gets its
+        `parent_id` corrected once the full chain becomes known. Walks that *don't*
+        reach a terminal keep the seen-based dedup so we don't churn upserts for
+        chains we still can't fully resolve.
 
         Args:
             files: List of retrieved drive files to get ancestors for
@@ -558,8 +570,12 @@ class GoogleDriveConnector(
             if parent_id in fully_walked_hierarchy_node_raw_ids:
                 continue
 
-            # Walk up the parent chain
+            # Walk up the parent chain.
+            # `walk_nodes` collects every node we build during this walk (no dedup).
+            # `ancestors_to_add` collects only nodes that are new to the seen-set.
+            # Which one we ultimately emit depends on whether we reach a terminal.
             ancestors_to_add: list[HierarchyNode] = []
+            walk_nodes: list[HierarchyNode] = []
             node_ids_in_walk: list[str] = []
             current_id: str | None = parent_id
             reached_terminal = False
@@ -622,6 +638,10 @@ class GoogleDriveConnector(
                     external_access=external_access,
                 )
 
+                # Always remember the node we built; if this walk reaches a verified
+                # terminal we re-emit it below to heal any prior incomplete walk.
+                walk_nodes.append(node)
+
                 # Now atomically check and add - only append if we're the first thread
                 # to successfully create this node
                 already_seen = seen_hierarchy_node_raw_ids.check_and_add(current_id)
@@ -660,11 +680,17 @@ class GoogleDriveConnector(
                 current_id = folder_parent_id
 
             # If we successfully reached a terminal node (or a fully-walked node),
-            # mark all nodes in this walk as fully walked
+            # mark all nodes in this walk as fully walked AND re-emit every node
+            # we touched. The downstream upsert is idempotent, so any node
+            # previously emitted with an unresolvable parent (parented to SOURCE)
+            # gets corrected once the chain can be fully resolved.
+            # Otherwise fall back to the seen-deduped subset to avoid churning
+            # upserts for chains we still can't fully resolve.
             if reached_terminal:
                 fully_walked_hierarchy_node_raw_ids.update(set(node_ids_in_walk))
-
-            new_nodes += ancestors_to_add
+                new_nodes += walk_nodes[::-1]  # locally parent-first
+            else:
+                new_nodes += ancestors_to_add[::-1]  # locally parent-first
 
         return new_nodes
 
@@ -888,9 +914,9 @@ class GoogleDriveConnector(
                 ):
                     if isinstance(file_or_token, str):
                         logger.debug("Done with max num pages for user %s", user_email)
-                        checkpoint.completion_map[user_email].next_page_token = (
-                            file_or_token
-                        )
+                        checkpoint.completion_map[
+                            user_email
+                        ].next_page_token = file_or_token
                         return  # done with the max num pages, return checkpoint
                     yield file_or_token
 
@@ -930,9 +956,9 @@ class GoogleDriveConnector(
                     resume_start = curr_stage.completed_until
                     for file_or_token in _yield_from_drive(drive_id, resume_start):
                         if isinstance(file_or_token, str):
-                            checkpoint.completion_map[user_email].next_page_token = (
-                                file_or_token
-                            )
+                            checkpoint.completion_map[
+                                user_email
+                            ].next_page_token = file_or_token
                             return  # done with the max num pages, return checkpoint
                         yield file_or_token
 
@@ -948,9 +974,9 @@ class GoogleDriveConnector(
                 curr_stage.current_folder_or_drive_id = drive_id
                 for file_or_token in _yield_from_drive(drive_id, start):
                     if isinstance(file_or_token, str):
-                        checkpoint.completion_map[user_email].next_page_token = (
-                            file_or_token
-                        )
+                        checkpoint.completion_map[
+                            user_email
+                        ].next_page_token = file_or_token
                         return  # done with the max num pages, return checkpoint
                     yield file_or_token
                 curr_stage.current_folder_or_drive_id = None
@@ -1238,7 +1264,14 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         next_stage: DriveRetrievalStage,
     ) -> tuple[list[str], list[str]]:
-        all_drive_ids = self.get_all_drive_ids()
+        needs_all_drive_ids = (
+            bool(self._requested_shared_drive_ids)
+            or bool(self._requested_folder_ids)
+            or self.include_shared_drives
+        )
+        all_drive_ids: set[str] = (
+            self.get_all_drive_ids() if needs_all_drive_ids else set()
+        )
         sorted_drive_ids: list[str] = []
         sorted_folder_ids: list[str] = []
         if checkpoint.completion_stage == DriveRetrievalStage.DRIVE_IDS:
@@ -1429,7 +1462,8 @@ class GoogleDriveConnector(
                 self.primary_admin_email
             ].completed_until
             yield from _yield_from_folder_crawl(
-                folder_id, resume_start  # ty: ignore[possibly-unresolved-reference]
+                folder_id,  # ty: ignore[possibly-unresolved-reference]
+                resume_start,
             )
 
         # the times stored in the completion_map aren't used due to the crawling behavior
@@ -1646,60 +1680,138 @@ class GoogleDriveConnector(
         )
 
         files_batch: list[RetrievedDriveFile] = []
+        # Files awaiting their parent folder's node, keyed by folder raw id
+        # (lightweight metadata, never documents). Released when the node is
+        # emitted; whatever never resolves falls back to the source root.
+        pending_by_folder: dict[str, list[RetrievedDriveFile]] = {}
         for retrieved_file in drive_files_iter:
             if self.exclude_domain_link_only and has_link_only_permission(
                 retrieved_file.drive_file
             ):
                 continue
-            if retrieved_file.error is None:
-                files_batch.append(retrieved_file)
+            if retrieved_file.error is not None:
+                failure_stage = retrieved_file.completion_stage.value
+                logger.error(
+                    "retrieval failure during stage: %s, user: %s, "
+                    "parent drive/folder: %s, error: %s",
+                    failure_stage,
+                    retrieved_file.user_email,
+                    retrieved_file.parent_id,
+                    retrieved_file.error,
+                )
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=retrieved_file.drive_file.get("id", failure_stage),
+                    ),
+                    failure_message=(
+                        f"retrieval failure during stage: {failure_stage}, "
+                        f"user: {retrieved_file.user_email}, "
+                        f"parent drive/folder: {retrieved_file.parent_id}, "
+                        f"error: {retrieved_file.error}"
+                    ),
+                    exception=retrieved_file.error,
+                )
                 continue
 
-            failure_stage = retrieved_file.completion_stage.value
-            failure_message = f"retrieval failure during stage: {failure_stage},"
-            failure_message += f"user: {retrieved_file.user_email},"
-            failure_message += f"parent drive/folder: {retrieved_file.parent_id},"
-            failure_message += f"error: {retrieved_file.error}"
-            logger.error(failure_message)
-            yield ConnectorFailure(
-                failed_entity=EntityFailure(
-                    entity_id=retrieved_file.drive_file.get("id", failure_stage),
-                ),
-                failure_message=failure_message,
-                exception=retrieved_file.error,
+            files_batch.append(retrieved_file)
+            # Flush in bounded sub-batches so resident converted documents stay
+            # capped (pending metadata is bounded by one checkpoint's fetch).
+            if len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
+                yield from self._convert_files_sub_batch(
+                    files_batch,
+                    checkpoint,
+                    permission_sync_context,
+                    pending_by_folder,
+                )
+                files_batch = []
+
+        if files_batch or pending_by_folder:
+            yield from self._convert_files_sub_batch(
+                files_batch,
+                checkpoint,
+                permission_sync_context,
+                pending_by_folder,
+                force_flush=True,
             )
 
-        new_ancestors = self._get_new_ancestors_for_files(
-            files=files_batch,
-            seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
-            fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
-            failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
-            permission_sync_context=permission_sync_context,
-            add_prefix=True,
+    def _convert_files_sub_batch(
+        self,
+        files_batch: list[RetrievedDriveFile],
+        checkpoint: GoogleDriveCheckpoint,
+        permission_sync_context: PermissionSyncContext | None,
+        pending_by_folder: dict[str, list[RetrievedDriveFile]],
+        force_flush: bool = False,
+    ) -> Iterator[Document | ConnectorFailure | HierarchyNode]:
+        """Emit this sub-batch's new ancestor nodes, then convert the files whose
+        parent node is now in `seen`. Resolution fetches each parent folder by id
+        (file's user + admin), so a parent normally resolves in the file's own
+        sub-batch; parking is only the cross-user case — a folder reachable solely
+        by a later sub-batch's user — held in `pending_by_folder` until its node is
+        emitted. `force_flush` roots whatever never resolves."""
+        new_ancestors = (
+            self._get_new_ancestors_for_files(
+                files=files_batch,
+                seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
+                fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+                failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
+                permission_sync_context=permission_sync_context,
+                add_prefix=True,
+            )
+            if files_batch
+            else []
         )
         if new_ancestors:
             logger.debug("Yielding %s new hierarchy nodes", len(new_ancestors))
             yield from new_ancestors
 
-        func_with_args = [
-            (
-                self._convert_retrieved_file_to_document,
-                (retrieved_file, permission_sync_context),
+        # A folder enters `seen` only when its node is emitted (atomically, in
+        # _get_new_ancestors_for_files), so a parked file is always released the
+        # first time its folder appears below — no "seen but unemitted" stranding.
+        newly_ready: list[RetrievedDriveFile] = []
+        for retrieved_file in files_batch:
+            parent_id = _get_parent_id_from_file(retrieved_file.drive_file)
+            if not parent_id or parent_id in checkpoint.seen_hierarchy_node_raw_ids:
+                newly_ready.append(retrieved_file)
+            else:
+                pending_by_folder.setdefault(parent_id, []).append(retrieved_file)
+
+        # Release parked files whose folder node was just emitted (they came
+        # earlier in the stream), then this sub-batch's own ready files.
+        ready_files: list[RetrievedDriveFile] = []
+        for node in new_ancestors:
+            ready_files.extend(pending_by_folder.pop(node.raw_node_id, []))
+        if force_flush and pending_by_folder:
+            rooted = sum(len(waiters) for waiters in pending_by_folder.values())
+            # Surfaces hierarchy degradation: these files' folders never resolved,
+            # so they index under the source root instead of their real parent.
+            logger.warning(
+                "Rooting %s files under %s folders whose ancestor never resolved",
+                rooted,
+                len(pending_by_folder),
             )
-            for retrieved_file in files_batch
-        ]
-        raw_results = cast(
-            list[Document | ConnectorFailure | None],
-            run_functions_tuples_in_parallel(func_with_args, max_workers=8),
-        )
+            for waiters in pending_by_folder.values():
+                ready_files.extend(waiters)
+            pending_by_folder.clear()
+        ready_files.extend(newly_ready)
 
-        results: list[Document | ConnectorFailure] = [
-            r for r in raw_results if r is not None
-        ]
-        logger.debug("batch has %s docs or failures", len(results))
-        yield from results
-
-        checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
+        # Chunk so resident documents never exceed one chunk, however many resolved.
+        for chunk in batch_generator(ready_files, DRIVE_CONVERSION_BATCH_SIZE):
+            func_with_args = [
+                (
+                    self._convert_retrieved_file_to_document,
+                    (retrieved_file, permission_sync_context),
+                )
+                for retrieved_file in chunk
+            ]
+            raw_results = cast(
+                list[Document | ConnectorFailure | None],
+                run_functions_tuples_in_parallel(func_with_args, max_workers=8),
+            )
+            results: list[Document | ConnectorFailure] = [
+                r for r in raw_results if r is not None
+            ]
+            logger.debug("sub-batch has %s docs or failures", len(results))
+            yield from results
 
     def _convert_retrieved_file_to_document(
         self,
@@ -1809,7 +1921,7 @@ class GoogleDriveConnector(
         )
 
     @override
-    def resolve_errors(
+    def reindex(
         self,
         errors: list[ConnectorFailure],
         include_permissions: bool = False,
@@ -1819,7 +1931,7 @@ class GoogleDriveConnector(
                 "Credentials missing, should not call this method before calling load_credentials"
             )
 
-        logger.info("Resolving %s errors", len(errors))
+        logger.info("Reindexing %s docs from errors", len(errors))
         doc_ids = [
             failure.failed_document.document_id
             for failure in errors
@@ -2052,6 +2164,47 @@ class GoogleDriveConnector(
                 )
             raise ConnectorValidationError(
                 f"Unexpected error during Google Drive validation: {e}"
+            )
+
+    def probe_directory_admin_permission(self) -> None:
+        """Verify the configured primary admin can call the Workspace directory API.
+
+        Required for permission sync, which calls
+        `admin.directory.users.get` to enumerate Workspace users and groups.
+        A 403 here predicts the same 403 in `_get_drive_members` mid-sync, so
+        misconfigured connectors fail at creation time instead of generating a
+        steady stream of `PermissionError` log lines on every group-sync tick.
+        """
+        admin_service = get_admin_service(
+            creds=self.creds,
+            user_email=self.primary_admin_email,
+        )
+        try:
+            admin_service.users().get(  # ty: ignore[unresolved-attribute]
+                userKey=self.primary_admin_email
+            ).execute()
+        except HttpError as e:
+            status_code = e.resp.status if e.resp else None
+            if status_code == 403:
+                raise InsufficientPermissionsError(
+                    f"Primary admin {self.primary_admin_email} is not authorized "
+                    "on the Google Workspace directory API. Reconnect the connector "
+                    "with an account that has admin directory access."
+                )
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Invalid or expired Google Drive credentials (401)."
+                )
+            raise ConnectorValidationError(
+                f"Unexpected Google Workspace directory API error (status={status_code}): {e}"
+            )
+        except Exception as e:
+            if MISSING_SCOPES_ERROR_STR in str(e):
+                raise InsufficientPermissionsError(
+                    f"Google Drive credentials are missing required scopes. {ONYX_SCOPE_INSTRUCTIONS} Full error: {e}"
+                )
+            raise ConnectorValidationError(
+                f"Unexpected error during Google Workspace directory API probe: {e}"
             )
 
     @override

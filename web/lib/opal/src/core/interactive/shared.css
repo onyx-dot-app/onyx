@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 /* Interactive — shared base classes for stateless + stateful primitives */
 
 /* Register --interactive-foreground as a <color> so the browser can
@@ -38,7 +40,7 @@
 
 /* Container — structural box */
 .interactive-container {
-  @apply flex items-center justify-center overflow-clip;
+  @apply flex shrink-0 items-center justify-center overflow-clip;
 }
 .interactive-container[data-border="true"] {
   @apply border;

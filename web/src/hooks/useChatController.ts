@@ -6,7 +6,7 @@ import {
   nameChatSession,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
-import { getMaxSelectedDocumentTokens } from "@/app/app/projects/projectsService";
+import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/interfaces";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +20,7 @@ import {
   buildImmediateMessages,
   buildEmptyMessage,
 } from "@/app/app/services/messageTree";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -46,7 +46,7 @@ import {
   getFinalLLM,
   modelSupportsImageInput,
   structureValue,
-} from "@/lib/llmConfig/utils";
+} from "@/lib/languageModels/utils";
 import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
@@ -59,10 +59,10 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
-import { usePinnedAgents } from "@/hooks/useAgents";
+import { usePinnedAgents } from "@/lib/agents/hooks";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -70,12 +70,12 @@ import {
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
-import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
-import useAgentPreferences from "@/hooks/useAgentPreferences";
+import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
+import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
-import { projectFilesToFileDescriptors } from "@/app/app/services/fileUtils";
+import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -109,8 +109,8 @@ interface RegenerationRequest {
 interface UseChatControllerProps {
   filterManager: FilterManager;
   llmManager: LlmManager;
-  liveAgent: MinimalPersonaSnapshot | undefined;
-  availableAgents: MinimalPersonaSnapshot[];
+  liveAgent: MinimalAgent | undefined;
+  availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
@@ -161,6 +161,9 @@ export default function useChatController({
   // Store actions - these don't cause re-renders
   const updateChatStateAction = useChatSessionStore(
     (state) => state.updateChatState
+  );
+  const setLatestMessageRenderComplete = useChatSessionStore(
+    (state) => state.setLatestMessageRenderComplete
   );
   const updateRegenerationStateAction = useChatSessionStore(
     (state) => state.updateRegenerationState
@@ -360,6 +363,8 @@ export default function useChatController({
     // The stream will close naturally when the backend sends the STOP packet
     setStreamingStartTime(currentSession, null);
     updateChatStateAction(currentSession, "input");
+    // On stop nothing else flips the queue gate, so release it here or queued follow-ups never auto-send.
+    setLatestMessageRenderComplete(currentSession, true);
   }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(
@@ -584,10 +589,11 @@ export default function useChatController({
       // (and its files), so merging here would send duplicates.
       const effectiveFileDescriptors = [
         ...projectFilesToFileDescriptors(currentMessageFiles),
-        ...(!regenerationRequest ? messageToResend?.files ?? [] : []),
+        ...(!regenerationRequest ? (messageToResend?.files ?? []) : []),
       ];
 
       updateChatStateAction(frozenSessionId, "loading");
+      setLatestMessageRenderComplete(frozenSessionId, false);
 
       // find the parent
       const currMessageHistory =
@@ -675,7 +681,7 @@ export default function useChatController({
           ? RetrievalType.SelectedDocs
           : RetrievalType.None;
       let documents: OnyxDocument[] = selectedDocuments;
-      let citations: CitationMap | null = null;
+      let citations: CitationMap = {};
       let aiMessageImages: FileDescriptor[] | null = null;
       let error: string | null = null;
       let stackTrace: string | null = null;
@@ -703,13 +709,13 @@ export default function useChatController({
       const documentsPerModel: OnyxDocument[][] = isMultiModel
         ? Array.from({ length: numModels }, () => [])
         : [];
-      const citationsPerModel: (CitationMap | null)[] = isMultiModel
-        ? Array(numModels).fill(null)
+      const citationsPerModel: CitationMap[] = isMultiModel
+        ? Array.from({ length: numModels }, () => ({}))
         : [];
       // Track which models have errored so the bottom-of-loop upsert skips them
       const erroredModelIndices = new Set<number>();
       let modelDisplayNames: string[] = isMultiModel
-        ? selectedModels?.map((m) => m.displayName) ?? []
+        ? (selectedModels?.map((m) => m.displayName) ?? [])
         : [];
 
       // rAF-batched flush state. One Zustand write per frame instead of
@@ -770,7 +776,7 @@ export default function useChatController({
         pendingFlush = false;
 
         parentMessage =
-          parentMessage || currentMessageTreeLocal?.get(SYSTEM_NODE_ID)!;
+          parentMessage || currentMessageTreeLocal!.get(SYSTEM_NODE_ID)!;
 
         let messagesToUpsert: Message[];
 
@@ -885,7 +891,7 @@ export default function useChatController({
         // 1. If forceSearch is true, use the search tool's numeric ID
         // 2. Otherwise, use the first forced tool ID from the forcedToolIds array
         const effectiveForcedToolId = forceSearch
-          ? searchToolNumericId ?? null
+          ? (searchToolNumericId ?? null)
           : forcedToolIds.length > 0
             ? forcedToolIds[0]
             : null;
@@ -1166,7 +1172,7 @@ export default function useChatController({
                       document_id: string;
                     };
                     citationsPerModel[modelIndex] = {
-                      ...(citationsPerModel[modelIndex] || {}),
+                      ...citationsPerModel[modelIndex],
                       [citationInfo.citation_number]: citationInfo.document_id,
                     };
                   } else if (packetObj.type === "message_start") {
@@ -1196,7 +1202,7 @@ export default function useChatController({
                     document_id: string;
                   };
                   citations = {
-                    ...(citations || {}),
+                    ...citations,
                     [citationInfo.citation_number]: citationInfo.document_id,
                   };
                 } else if (packetObj.type === "message_start") {
@@ -1297,6 +1303,13 @@ export default function useChatController({
       resetRegenerationState(frozenSessionId);
       setStreamingStartTime(frozenSessionId, null);
       updateChatStateAction(frozenSessionId, "input");
+      // Error paths replace the streaming node with an empty-packets error
+      // node, so MessageTextRenderer never fires streamFullyDisplayed and
+      // never flips the queue gate back to true. Reset it here so queued
+      // follow-ups aren't silently dropped after a stream failure.
+      if (!streamSucceeded) {
+        setLatestMessageRenderComplete(frozenSessionId, true);
+      }
 
       // Name the chat now that we have the first AI response (navigation already happened before streaming)
       if (shouldAutoNameChatSessionAfterResponse) {

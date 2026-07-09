@@ -1,3 +1,5 @@
+import hashlib
+import json
 import sys
 from collections.abc import Sequence
 from datetime import datetime
@@ -52,6 +54,11 @@ class Section(BaseModel):
     image_file_id: str | None = None
     heading: str | None = None
 
+    def materialize_text(self) -> str:
+        """This section's content as text. Subclasses with non-inline content
+        (e.g. file-backed tabular data) override this to fetch it on demand."""
+        return self.text or ""
+
 
 class TextSection(Section):
     """Section containing text content"""
@@ -74,15 +81,27 @@ class ImageSection(Section):
 
 
 class TabularSection(Section):
-    """Section containing tabular data (csv/tsv content, or one sheet of
-    an xlsx workbook rendered as CSV)."""
+    """Tabular data — a csv/tsv file or one xlsx sheet rendered as CSV. The CSV is
+    always staged in the file store (`csv_file_id`) and streamed a row at a time
+    at chunk time, so a large sheet never sits on the worker heap."""
 
     type: Literal[SectionType.TABULAR] = SectionType.TABULAR
-    text: str  # CSV representation in a string
+    csv_file_id: str  # file store id of the staged CSV
     link: str
 
     def __sizeof__(self) -> int:
-        return sys.getsizeof(self.text) + sys.getsizeof(self.link)
+        return sys.getsizeof(self.csv_file_id) + sys.getsizeof(self.link)
+
+    def materialize_text(self) -> str:
+        """Read the staged CSV from the file store on demand. The indexing path
+        streams the CSV row by row at chunk time and does not call this; only
+        non-streaming consumers (the no-vector-db plaintext path) do."""
+        from onyx.file_store.file_store import get_default_file_store
+
+        with get_default_file_store().read_file(
+            self.csv_file_id, use_tempfile=True
+        ) as raw:
+            return raw.read().decode("utf-8", errors="replace")
 
 
 class BasicExpertInfo(BaseModel):
@@ -280,6 +299,39 @@ class DocumentBase(BaseModel):
 
     def get_text_content(self) -> str:
         return " ".join([section.text for section in self.sections if section.text])
+
+    def content_hash(self) -> str:
+        """MD5 fingerprint of indexable content.
+
+        Used as a fallback dedup gate for connectors that don't supply doc_updated_at
+        (e.g. web connector). Computed before image summarization runs, so LLM-generated
+        image summaries are intentionally excluded — they are non-deterministic and
+        unavailable at this point in the pipeline.
+
+        Covers: title, text section bodies, image_file_ids (connector-assigned, stable),
+        doc_metadata (sorted keys), primary and secondary owners (sorted by email).
+        Excludes: semantic_identifier (deterministically derived from other fields).
+        """
+        parts = []
+        for s in self.sections:
+            if isinstance(s, TextSection) and s.text:
+                parts.append(s.text)
+            elif isinstance(s, ImageSection) and s.image_file_id:
+                parts.append(f"[img:{s.image_file_id}]")
+
+        def _owner_key(o: BasicExpertInfo) -> str:
+            return o.email or o.display_name or o.first_name or ""
+
+        owners = json.dumps(
+            [o.model_dump() for o in sorted(self.primary_owners or [], key=_owner_key)]
+            + [
+                o.model_dump()
+                for o in sorted(self.secondary_owners or [], key=_owner_key)
+            ]
+        )
+        meta = json.dumps(self.doc_metadata or {}, sort_keys=True)
+        raw = f"{self.title or ''}||{' '.join(parts)}||{meta}||{owners}"
+        return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
 
 
 def convert_metadata_dict_to_list_of_strings(

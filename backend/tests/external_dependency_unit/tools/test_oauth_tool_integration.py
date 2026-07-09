@@ -103,16 +103,16 @@ def _get_authorization_header(headers: dict[str, str]) -> str | None:
 
 def _assert_has_authorization_header(headers: dict[str, str]) -> None:
     """Assert that headers contain an authorization header (any case)."""
-    assert (
-        "authorization" in headers or "Authorization" in headers
-    ), "Expected authorization header to be present"
+    assert "authorization" in headers or "Authorization" in headers, (
+        "Expected authorization header to be present"
+    )
 
 
 def _assert_no_authorization_header(headers: dict[str, str]) -> None:
     """Assert that headers do NOT contain an authorization header."""
-    assert (
-        "authorization" not in headers and "Authorization" not in headers
-    ), "Expected no authorization header"
+    assert "authorization" not in headers and "Authorization" not in headers, (
+        "Expected no authorization header"
+    )
 
 
 class TestOAuthToolIntegrationPriority:

@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { Button } from "@opal/components";
+import { SvgSimpleLoader } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
 import mime from "mime";
@@ -70,26 +71,46 @@ export default function PreviewModal({
     const fileIdLocal =
       presentingDocument.document_id.split("__")[1] ||
       presentingDocument.document_id;
+    const originalFileName =
+      presentingDocument.semantic_identifier || "document";
+    // Direct raw-file URL — usable for downloads without materializing a blob.
+    const rawFileUrl = `/api/chat/file/${encodeURIComponent(fileIdLocal)}`;
 
-    try {
-      const response = await fetchChatFile(fileIdLocal);
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+    const updateFileUrl = (url: string) =>
       setFileUrl((prev) => {
-        if (prev) window.URL.revokeObjectURL(prev);
+        if (prev.startsWith("blob:")) window.URL.revokeObjectURL(prev);
         return url;
       });
 
-      const originalFileName =
-        presentingDocument.semantic_identifier || "document";
+    try {
       setFileName(originalFileName);
 
+      // Variants that render from backend-parsed content (spreadsheets) don't
+      // need the raw binary blob — skip downloading the full workbook and let
+      // the download button point at the raw URL directly.
+      const preResolved = resolveVariant(
+        presentingDocument.semantic_identifier,
+        "application/octet-stream"
+      );
+      if (preResolved.needsParsedContent) {
+        updateFileUrl(rawFileUrl);
+        setMimeType(
+          mime.getType(originalFileName) ?? "application/octet-stream"
+        );
+        const parsedResponse = await fetchChatFile(fileIdLocal, true);
+        setFileContent(await parsedResponse.text());
+        return;
+      }
+
+      const response = await fetchChatFile(fileIdLocal);
+
+      // Re-resolve using the stored MIME from the response headers, which is
+      // authoritative, BEFORE materializing the body as a blob.
       const rawContentType =
         response.headers.get("Content-Type") || "application/octet-stream";
       const resolvedMime =
         rawContentType === "application/octet-stream"
-          ? mime.getType(originalFileName) ?? rawContentType
+          ? (mime.getType(originalFileName) ?? rawContentType)
           : rawContentType;
       setMimeType(resolvedMime);
 
@@ -97,10 +118,31 @@ export default function PreviewModal({
         presentingDocument.semantic_identifier,
         resolvedMime
       );
+      if (resolved.needsParsedContent) {
+        // Name alone didn't identify a spreadsheet, but the stored MIME did
+        // (e.g. an xlsx with a renamed/missing display name). Discard the raw
+        // workbook body and render from the parsed payload instead.
+        await response.body?.cancel();
+        updateFileUrl(rawFileUrl);
+        const parsedResponse = await fetchChatFile(fileIdLocal, true);
+        setFileContent(await parsedResponse.text());
+        return;
+      }
+
+      const blob = await response.blob();
+      updateFileUrl(window.URL.createObjectURL(blob));
+
       if (resolved.needsTextContent) {
         setFileContent(await blob.text());
       }
-    } catch {
+    } catch (error) {
+      console.error(
+        `Failed to load preview for chat file ${fileIdLocal}:`,
+        error
+      );
+      // Keep a usable download link for the CURRENT file even when the
+      // preview itself failed (a stale previous-file URL must never win).
+      updateFileUrl(rawFileUrl);
       setLoadError("Failed to load document.");
     } finally {
       setIsLoading(false);
@@ -113,7 +155,7 @@ export default function PreviewModal({
 
   useEffect(() => {
     return () => {
-      if (fileUrl) window.URL.revokeObjectURL(fileUrl);
+      if (fileUrl.startsWith("blob:")) window.URL.revokeObjectURL(fileUrl);
     };
   }, [fileUrl]);
 
@@ -176,13 +218,18 @@ export default function PreviewModal({
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden w-full bg-background-tint-01">
           {isLoading ? (
             <Section>
-              <SimpleLoader className="h-8 w-8" />
+              <SvgSimpleLoader className="h-8 w-8" />
             </Section>
           ) : loadError ? (
             <Section padding={1}>
               <Text text03 mainUiBody>
                 {loadError}
               </Text>
+              {fileUrl && (
+                <a href={fileUrl} download={fileName}>
+                  <Button>Download File</Button>
+                </a>
+              )}
             </Section>
           ) : (
             variant.renderContent(ctx)

@@ -130,6 +130,23 @@ def get_latest_access_token_for_user(
         return None
 
 
+def update_users_craft_enabled(
+    user_ids: list[UUID],
+    craft_enabled: bool | None,
+    db_session: Session,
+) -> None:
+    """Admin-controlled per-user Craft override; None clears the override
+    (follow the workspace default)."""
+    if not user_ids:
+        return
+    db_session.execute(
+        update(User)
+        .where(User.id.in_(user_ids))  # ty: ignore[unresolved-attribute]
+        .values(craft_enabled=craft_enabled)
+    )
+    db_session.commit()
+
+
 def update_user_temperature_override_enabled(
     user_id: UUID,
     temperature_override_enabled: bool,
@@ -154,6 +171,20 @@ def update_user_shortcut_enabled(
         update(User)
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(shortcut_enabled=shortcut_enabled)
+    )
+    db_session.commit()
+
+
+def update_user_paste_as_tile(
+    user_id: UUID,
+    paste_as_tile: bool,
+    db_session: Session,
+) -> None:
+    """Update user's paste-as-tile setting."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(paste_as_tile=paste_as_tile)
     )
     db_session.commit()
 
@@ -196,6 +227,20 @@ def update_user_theme_preference(
         update(User)
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(theme_preference=theme_preference)
+    )
+    db_session.commit()
+
+
+def update_user_language(
+    user_id: UUID,
+    language: str,
+    db_session: Session,
+) -> None:
+    """Update user's language setting."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(language=language)
     )
     db_session.commit()
 

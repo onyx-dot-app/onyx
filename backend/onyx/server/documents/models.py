@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
-from onyx.configs.app_configs import MASK_CREDENTIAL_PREFIX
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
@@ -27,12 +26,16 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import DocPermissionSyncAttempt
 from onyx.db.models import Document as DbDocument
+from onyx.db.models import ExternalGroupPermissionSyncAttempt
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptStageMetric
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
 from onyx.server.federated.models import FederatedConnectorStatus
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+
+logger = setup_logger()
 
 
 class DocumentSyncStatus(BaseModel):
@@ -147,17 +150,18 @@ class CredentialSnapshot(CredentialBase):
     time_updated: datetime
 
     @classmethod
-    def from_credential_db_model(cls, credential: Credential) -> "CredentialSnapshot":
+    def from_credential_db_model(
+        cls,
+        credential: Credential,
+        *,
+        mask_credential_prefix: bool,
+    ) -> "CredentialSnapshot":
         # Get the credential_json value with appropriate masking
         if credential.credential_json is None:
             credential_json_value: dict[str, Any] = {}
-        elif MASK_CREDENTIAL_PREFIX:
-            credential_json_value = credential.credential_json.get_value(
-                apply_mask=True
-            )
         else:
             credential_json_value = credential.credential_json.get_value(
-                apply_mask=False
+                apply_mask=mask_credential_prefix
             )
 
         return CredentialSnapshot(
@@ -191,7 +195,7 @@ class IndexAttemptSnapshot(BaseModel):
 
     @classmethod
     def from_index_attempt_db_model(
-        cls, index_attempt: IndexAttempt
+        cls, index_attempt: IndexAttempt, error_count: int
     ) -> "IndexAttemptSnapshot":
         return IndexAttemptSnapshot(
             id=index_attempt.id,
@@ -201,7 +205,7 @@ class IndexAttemptSnapshot(BaseModel):
             total_docs_indexed=index_attempt.total_docs_indexed or 0,
             docs_removed_from_index=index_attempt.docs_removed_from_index or 0,
             error_msg=index_attempt.error_msg,
-            error_count=len(index_attempt.error_rows),
+            error_count=error_count,
             full_exception_trace=index_attempt.full_exception_trace,
             time_started=(
                 index_attempt.time_started.isoformat()
@@ -266,16 +270,77 @@ class IndexAttemptStageMetricSnapshot(BaseModel):
 
 
 class IndexAttemptStageMetricsResponse(BaseModel):
-    """Response payload for the per-attempt stage-metrics endpoint.
-
-    ``stages`` is returned in the canonical pipeline order (the declaration
-    order of ``IndexAttemptStage``); the frontend renders that order
-    verbatim for the default "Pipeline order" sort and re-sorts client-side
-    for the "Time taken" sort.
+    """Per-attempt stage rows (pipeline order) plus the BATCH_UNACCOUNTED residual
+    appended last; the frontend re-sorts, so array order isn't load-bearing.
     """
 
     index_attempt_id: int
     stages: list[IndexAttemptStageMetricSnapshot]
+
+
+# In-span stages for the residual (BATCH_TOTAL - sum). Excludes pre-span
+# stages (QUEUE_WAIT/SETUP/BATCH_LOAD), docfetching, and the aggregates.
+_BATCH_TOTAL_COMPONENT_STAGES: frozenset[IndexAttemptStage] = frozenset(
+    {
+        IndexAttemptStage.DOC_DB_PREPARE,
+        IndexAttemptStage.IMAGE_PROCESSING,
+        IndexAttemptStage.CHUNKING,
+        IndexAttemptStage.CONTEXTUAL_RAG,
+        IndexAttemptStage.EMBEDDING,
+        IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT,
+        IndexAttemptStage.ENRICHMENT_PREP,
+        IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT,
+        IndexAttemptStage.VECTOR_DB_WRITE,
+        IndexAttemptStage.POST_INDEX_DB_UPDATE,
+        IndexAttemptStage.COORDINATION_UPDATE,
+        IndexAttemptStage.FINALIZATION,
+        IndexAttemptStage.GC_COLLECT,
+    }
+)
+
+
+def synthesize_unaccounted(
+    snapshots: list[IndexAttemptStageMetricSnapshot],
+) -> IndexAttemptStageMetricSnapshot | None:
+    """Residual = BATCH_TOTAL minus in-span component totals, clamped at 0.
+
+    None if BATCH_TOTAL is absent. Uses totals (not averages).
+    """
+    batch_total = next(
+        (s for s in snapshots if s.stage == IndexAttemptStage.BATCH_TOTAL),
+        None,
+    )
+    if batch_total is None:
+        return None
+
+    component_total = sum(
+        s.total_duration_ms
+        for s in snapshots
+        if s.stage in _BATCH_TOTAL_COMPONENT_STAGES
+    )
+    if component_total > batch_total.total_duration_ms:
+        # Components > total = double-counting or failed-batch skew; clamp to 0.
+        logger.warning(
+            "Stage components (%d ms) exceed BATCH_TOTAL (%d ms) for an index "
+            "attempt; clamping BATCH_UNACCOUNTED to 0.",
+            component_total,
+            batch_total.total_duration_ms,
+        )
+    residual_total = max(0, batch_total.total_duration_ms - component_total)
+    event_count = batch_total.event_count
+    avg = residual_total / event_count if event_count > 0 else None
+    return IndexAttemptStageMetricSnapshot(
+        stage=IndexAttemptStage.BATCH_UNACCOUNTED,
+        scope=STAGE_SCOPE[IndexAttemptStage.BATCH_UNACCOUNTED],
+        event_count=event_count,
+        total_duration_ms=residual_total,
+        avg_duration_ms=avg,
+        std_dev_duration_ms=None,
+        min_duration_ms=None,
+        max_duration_ms=None,
+        time_first_event=batch_total.time_first_event,
+        time_last_event=batch_total.time_last_event,
+    )
 
 
 # These are the types currently supported by the pagination hook
@@ -283,10 +348,11 @@ class IndexAttemptStageMetricsResponse(BaseModel):
 PaginatedType = TypeVar("PaginatedType", bound=BaseModel)
 
 
-class PermissionSyncAttemptSnapshot(BaseModel):
+class DocPermissionSyncAttemptSnapshot(BaseModel):
     id: int
     status: PermissionSyncStatus
     error_message: str | None
+    full_exception_trace: str | None
     total_docs_synced: int
     docs_with_permission_errors: int
     time_created: str
@@ -294,13 +360,14 @@ class PermissionSyncAttemptSnapshot(BaseModel):
     time_finished: str | None
 
     @classmethod
-    def from_permission_sync_attempt_db_model(
+    def from_doc_permission_sync_attempt_db_model(
         cls, attempt: DocPermissionSyncAttempt
-    ) -> "PermissionSyncAttemptSnapshot":
-        return PermissionSyncAttemptSnapshot(
+    ) -> "DocPermissionSyncAttemptSnapshot":
+        return DocPermissionSyncAttemptSnapshot(
             id=attempt.id,
             status=attempt.status,
             error_message=attempt.error_message,
+            full_exception_trace=attempt.full_exception_trace,
             total_docs_synced=attempt.total_docs_synced or 0,
             docs_with_permission_errors=attempt.docs_with_permission_errors or 0,
             time_created=attempt.time_created.isoformat(),
@@ -313,7 +380,58 @@ class PermissionSyncAttemptSnapshot(BaseModel):
         )
 
 
+class ExternalGroupSyncAttemptSnapshot(BaseModel):
+    id: int
+    status: PermissionSyncStatus
+    error_message: str | None
+    full_exception_trace: str | None
+    total_users_processed: int
+    total_groups_processed: int
+    total_group_memberships_synced: int
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_external_group_sync_attempt_db_model(
+        cls, attempt: ExternalGroupPermissionSyncAttempt
+    ) -> "ExternalGroupSyncAttemptSnapshot":
+        return ExternalGroupSyncAttemptSnapshot(
+            id=attempt.id,
+            status=attempt.status,
+            error_message=attempt.error_message,
+            full_exception_trace=attempt.full_exception_trace,
+            total_users_processed=attempt.total_users_processed or 0,
+            total_groups_processed=attempt.total_groups_processed or 0,
+            total_group_memberships_synced=attempt.total_group_memberships_synced or 0,
+            time_created=attempt.time_created.isoformat(),
+            time_started=(
+                attempt.time_started.isoformat() if attempt.time_started else None
+            ),
+            time_finished=(
+                attempt.time_finished.isoformat() if attempt.time_finished else None
+            ),
+        )
+
+
 class PaginatedReturn(BaseModel, Generic[PaginatedType]):
+    items: list[PaginatedType]
+    total_items: int
+
+
+class CCPairSyncAttemptsResponse(BaseModel, Generic[PaginatedType]):
+    """Paginated response for the per-cc-pair sync-attempt history endpoints.
+
+    ``applicable`` is False when the cc-pair's source does not run the kind
+    of sync this endpoint reports on (e.g. Slack has no group sync; Salesforce
+    has neither doc sync nor group sync). The frontend uses this to render an
+    explanatory message instead of an empty-state — the two are distinct
+    states: ``applicable=True, items=[], total_items=0`` legitimately means
+    "no attempts yet" and must not be confused with "this kind of sync isn't
+    applicable for this source".
+    """
+
+    applicable: bool
     items: list[PaginatedType]
     total_items: int
 
@@ -349,6 +467,10 @@ class CCPairFullInfo(BaseModel):
     permission_syncing: bool
     last_permission_sync_attempt_finished: datetime | None
     last_permission_sync_attempt_error_message: str | None
+
+    # True if this connector's class implements `Resolver.reindex`. The FE
+    # uses this to route Resolve-All to targeted reindex vs full reindex.
+    supports_targeted_reindex: bool
 
     @classmethod
     def _get_last_full_permission_sync(
@@ -398,11 +520,14 @@ class CCPairFullInfo(BaseModel):
         num_docs_indexed: int,  # not ideal, but this must be computed separately
         is_editable_for_current_user: bool,
         indexing: bool,
+        *,
+        mask_credential_prefix: bool,
         last_successful_index_time: datetime | None = None,
         last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
         permission_syncing: bool = False,
         last_permission_sync_attempt_finished: datetime | None = None,
         last_permission_sync_attempt_error_message: str | None = None,
+        supports_targeted_reindex: bool = False,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -438,7 +563,8 @@ class CCPairFullInfo(BaseModel):
                 credential_ids=[cc_pair_model.credential_id],
             ),
             credential=CredentialSnapshot.from_credential_db_model(
-                cc_pair_model.credential
+                cc_pair_model.credential,
+                mask_credential_prefix=mask_credential_prefix,
             ),
             number_of_index_attempts=number_of_index_attempts,
             last_index_attempt_status=last_indexing_status,
@@ -460,6 +586,7 @@ class CCPairFullInfo(BaseModel):
             permission_syncing=permission_syncing,
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
+            supports_targeted_reindex=supports_targeted_reindex,
         )
 
 
@@ -643,6 +770,7 @@ class GoogleServiceAccountKey(BaseModel):
 
 class GoogleServiceAccountCredentialRequest(BaseModel):
     google_primary_admin: str | None = None  # email of user to impersonate
+    service_account_key: GoogleServiceAccountKey
 
 
 class FileUploadResponse(BaseModel):

@@ -254,6 +254,60 @@ func ResolvePRToMergeCommit(prNumber string) (string, error) {
 	return sha, nil
 }
 
+// ResolveCommitToPR resolves a commit SHA to the number of the PR that
+// introduced it (best-effort; the GitHub API returns associated PRs for a
+// commit). Returns an error if no associated PR is found.
+func ResolveCommitToPR(commitSHA string) (string, error) {
+	cmd := exec.Command("gh", "api", fmt.Sprintf("repos/{owner}/{repo}/commits/%s/pulls", commitSHA), "--jq", ".[0].number")
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("gh api commits/pulls failed: %w: %s", err, string(exitErr.Stderr))
+		}
+		return "", fmt.Errorf("gh api commits/pulls failed: %w", err)
+	}
+	prNumber := strings.TrimSpace(string(output))
+	if prNumber == "" || prNumber == "null" {
+		return "", fmt.Errorf("no associated PR found for commit %s", commitSHA)
+	}
+	return prNumber, nil
+}
+
+// cherryPickWorkflowFile is the workflow file name dispatched by --dispatch.
+const cherryPickWorkflowFile = "post-merge-beta-cherry-pick.yml"
+
+// DispatchCherryPickWorkflow triggers the post-merge beta cherry-pick workflow
+// via `gh workflow run`. mergeCommitSHA is required; prNumber and release are
+// optional (empty values are omitted). When dryRun is true the gh command is
+// logged but not executed.
+func DispatchCherryPickWorkflow(mergeCommitSHA, prNumber, release string, dryRun bool) error {
+	args := []string{
+		"workflow", "run", cherryPickWorkflowFile,
+		"-f", fmt.Sprintf("merge_commit_sha=%s", mergeCommitSHA),
+	}
+	if prNumber != "" {
+		args = append(args, "-f", fmt.Sprintf("pr_number=%s", prNumber))
+	}
+	if release != "" {
+		args = append(args, "-f", fmt.Sprintf("release=%s", release))
+	}
+
+	if dryRun {
+		log.Warnf("[DRY RUN] Would run: gh %s", strings.Join(args, " "))
+		return nil
+	}
+
+	cmd := exec.Command("gh", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if len(output) > 0 {
+			return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+		}
+		return err
+	}
+	return nil
+}
+
 // RunCherryPickContinue runs git cherry-pick --continue --no-edit
 func RunCherryPickContinue() error {
 	return RunCommandVerboseOnError("cherry-pick", "--continue", "--no-edit")

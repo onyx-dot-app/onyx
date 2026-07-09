@@ -9,9 +9,15 @@ export function getNotificationIcon(
     case NotificationType.PERSONA_SHARED:
     case NotificationType.REINDEX:
     case NotificationType.ASSISTANT_FILES_READY:
+    case NotificationType.CONNECTOR_REPEATED_ERRORS:
+    case NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION:
+    case NotificationType.APPROVAL_REQUESTED:
       return SvgAlertCircle;
 
     case NotificationType.TRIAL_ENDS_TWO_DAYS:
+    case NotificationType.LICENSE_EXPIRY_WARNING:
+    case NotificationType.SCHEDULED_TASK_FAILED:
+    case NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL:
       return SvgAlertTriangle;
 
     case NotificationType.RELEASE_NOTES:

@@ -1,11 +1,10 @@
 from typing import Any
 from uuid import uuid4
 
-import requests
-
 from onyx.server.documents.models import CredentialSnapshot
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestCredential
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -32,7 +31,7 @@ class CredentialManager:
             "groups": groups or [],
         }
 
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/manage/credential",
             json=credential_request,
             headers=user_performing_action.headers,
@@ -55,7 +54,7 @@ class CredentialManager:
         user_performing_action: DATestUser,
     ) -> None:
         request = credential.model_dump(include={"name", "credential_json"})
-        response = requests.put(
+        response = client.put(
             url=f"{API_SERVER_URL}/manage/admin/credential/{credential.id}",
             json=request,
             headers=user_performing_action.headers,
@@ -67,7 +66,7 @@ class CredentialManager:
         credential: DATestCredential,
         user_performing_action: DATestUser,
     ) -> None:
-        response = requests.delete(
+        response = client.delete(
             url=f"{API_SERVER_URL}/manage/credential/{credential.id}",
             headers=user_performing_action.headers,
         )
@@ -78,7 +77,7 @@ class CredentialManager:
         credential_id: int,
         user_performing_action: DATestUser,
     ) -> CredentialSnapshot:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/credential/{credential_id}",
             headers=user_performing_action.headers,
         )
@@ -89,7 +88,7 @@ class CredentialManager:
     def get_all(
         user_performing_action: DATestUser,
     ) -> list[CredentialSnapshot]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/manage/credential",
             headers=user_performing_action.headers,
         )

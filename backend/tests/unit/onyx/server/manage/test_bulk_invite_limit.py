@@ -1,7 +1,10 @@
 """Test bulk invite limit for free trial tenants."""
 
+import json
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -46,7 +49,7 @@ def _make_shared_session_mock(next_total: int) -> MagicMock:
 @patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
 @patch("onyx.server.manage.users.get_invited_users", return_value=[])
 @patch("onyx.server.manage.users.get_all_users", return_value=[])
-@patch("onyx.server.manage.users.enforce_seat_limit")
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
 @patch("onyx.server.manage.users.NUM_FREE_TRIAL_USER_INVITES", 5)
 def test_trial_tenant_cannot_exceed_invite_limit(*_mocks: None) -> None:
     """Post-upsert total of 6 exceeds cap=5 — must raise OnyxError."""
@@ -73,7 +76,7 @@ def test_trial_tenant_cannot_exceed_invite_limit(*_mocks: None) -> None:
 @patch("onyx.server.manage.users.get_invited_users", return_value=[])
 @patch("onyx.server.manage.users.get_all_users", return_value=[])
 @patch("onyx.server.manage.users.write_invited_users", return_value=3)
-@patch("onyx.server.manage.users.enforce_seat_limit")
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
 @patch("onyx.server.manage.users.NUM_FREE_TRIAL_USER_INVITES", 5)
 @patch(
     "onyx.server.manage.users.fetch_ee_implementation_or_noop",
@@ -99,7 +102,7 @@ def test_trial_tenant_can_invite_within_limit(*_mocks: None) -> None:
 @patch("onyx.server.manage.users.get_invited_users", return_value=[])
 @patch("onyx.server.manage.users.get_all_users", return_value=[])
 @patch("onyx.server.manage.users.write_invited_users", return_value=3)
-@patch("onyx.server.manage.users.enforce_seat_limit")
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
 @patch(
     "onyx.server.manage.users.fetch_ee_implementation_or_noop",
     return_value=lambda *_args: None,
@@ -132,7 +135,7 @@ _COMMON_PATCHES = [
     patch("onyx.server.manage.users.get_invited_users", return_value=[]),
     patch("onyx.server.manage.users.get_all_users", return_value=[]),
     patch("onyx.server.manage.users.write_invited_users", return_value=1),
-    patch("onyx.server.manage.users.enforce_seat_limit"),
+    patch("onyx.server.manage.users.enforce_seat_limit_locked"),
     patch("onyx.server.manage.users.enforce_invite_rate_limit"),
 ]
 
@@ -141,6 +144,62 @@ def _with_common_patches(fn: object) -> object:
     for p in reversed(_COMMON_PATCHES):
         fn = p(fn)  # ty: ignore[no-matching-overload]
     return fn
+
+
+@_with_common_patches
+@patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
+def test_bulk_invite_emits_user_create(
+    _rate_limit: MagicMock,
+    _seat_limit: MagicMock,
+    _write_invited: MagicMock,
+    _get_all_users: MagicMock,
+    _get_invited_users: MagicMock,
+    _get_tenant_id: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    admin = MagicMock(id="admin-1", email="admin@example.com")
+
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        bulk_invite_users(emails=["new@example.com"], current_user=admin)
+
+    events: list[dict[str, Any]] = [
+        json.loads(r.getMessage())
+        for r in caplog.records
+        if r.name.startswith("onyx.audit")
+    ]
+    assert len(events) == 1
+    assert events[0]["action"] == "user.create"
+    assert events[0]["outcome"] == "success"
+    assert events[0]["actor"]["email"] == "admin@example.com"
+    assert events[0]["extra"]["invited_emails"] == ["new@example.com"]
+
+
+# Explicit patches (not _with_common_patches): this case needs
+# get_invited_users to report the email as already-invited, which the helper
+# hardcodes to [] and re-patching from inside the stack doesn't override.
+@patch("onyx.server.manage.users.MULTI_TENANT", False)
+@patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
+@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
+@patch("onyx.server.manage.users.get_invited_users", return_value=["known@example.com"])
+@patch("onyx.server.manage.users.get_all_users", return_value=[])
+@patch("onyx.server.manage.users.write_invited_users", return_value=1)
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
+@patch("onyx.server.manage.users.enforce_invite_rate_limit")
+def test_bulk_invite_reinvite_emits_nothing(
+    _rate_limit: MagicMock,
+    _seat_limit: MagicMock,
+    _write_invited: MagicMock,
+    _get_all_users: MagicMock,
+    _get_invited_users: MagicMock,
+    _get_tenant_id: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Re-inviting an already-invited email provisions no new access -> no event.
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        bulk_invite_users(emails=["known@example.com"], current_user=MagicMock())
+
+    events = [r for r in caplog.records if r.name.startswith("onyx.audit")]
+    assert events == []
 
 
 @_with_common_patches
@@ -244,3 +303,68 @@ def test_trial_tenant_hits_remove_invited_rate_limit(
         db_session=MagicMock(),
     )
     mock_rate_limit.assert_called_once()
+
+
+# --- seat-lock placement tests (cloud self-deadlock regression) ---
+
+
+@patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
+@patch("onyx.server.manage.users.DEV_MODE", True)
+@patch("onyx.server.manage.users.MULTI_TENANT", True)
+@patch("onyx.server.manage.users.is_tenant_on_trial_fn", return_value=False)
+@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
+@patch("onyx.server.manage.users.get_invited_users", return_value=[])
+@patch("onyx.server.manage.users.get_all_users", return_value=[])
+@patch("onyx.server.manage.users.write_invited_users", return_value=1)
+@patch(
+    "onyx.server.manage.users.fetch_ee_implementation_or_noop",
+    return_value=lambda *_args: None,
+)
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
+def test_cloud_invite_skips_request_session_seat_lock(
+    mock_enforce: MagicMock, *_mocks: MagicMock
+) -> None:
+    """Cloud must not take the seat advisory lock on the request session —
+    enforcement lives in add_users_to_tenant. A second acquisition here
+    self-deadlocks the request (two connections, one tenant lock key)."""
+    bulk_invite_users(emails=["new@example.com"], current_user=MagicMock())
+
+    mock_enforce.assert_not_called()
+
+
+@patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
+@patch("onyx.server.manage.users.MULTI_TENANT", False)
+@patch("onyx.server.manage.users.get_invited_users", return_value=[])
+@patch("onyx.server.manage.users.get_all_users", return_value=[])
+@patch("onyx.server.manage.users.write_invited_users", return_value=1)
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
+def test_self_hosted_invite_still_enforces_seat_limit(
+    mock_enforce: MagicMock, *_mocks: MagicMock
+) -> None:
+    """Self-hosted license seats are still enforced on the request session."""
+    bulk_invite_users(emails=["new@example.com"], current_user=MagicMock())
+
+    mock_enforce.assert_called_once()
+
+
+@patch("onyx.server.manage.users.MULTI_TENANT", True)
+@patch("onyx.server.manage.users.is_tenant_on_trial_fn", return_value=False)
+@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
+@patch("onyx.server.manage.users.get_invited_users", return_value=[])
+@patch("onyx.server.manage.users.get_all_users", return_value=[])
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
+def test_cloud_seat_decline_propagates_from_add_users(*_mocks: MagicMock) -> None:
+    """A seat/billing decline raised inside add_users_to_tenant must reach
+    the caller as OnyxError — the generic except must not swallow it."""
+
+    def _declining_add_users(*_args: object) -> None:
+        raise OnyxError(OnyxErrorCode.SEAT_LIMIT_EXCEEDED, "card declined")
+
+    with patch(
+        "onyx.server.manage.users.fetch_ee_implementation_or_noop",
+        return_value=_declining_add_users,
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            bulk_invite_users(emails=["new@example.com"], current_user=MagicMock())
+
+    assert exc_info.value.error_code == OnyxErrorCode.SEAT_LIMIT_EXCEEDED

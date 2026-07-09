@@ -1,4 +1,3 @@
-import logging
 import random
 import re
 import string
@@ -10,7 +9,6 @@ from contextlib import contextmanager
 from typing import Any
 from typing import cast
 
-from retry import retry
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models.blocks import Block
@@ -34,15 +32,15 @@ from onyx.onyxbot.slack.constants import FeedbackVisibility
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.onyxbot.slack.models import ThreadMessage
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
-from onyx.utils.text_processing import replace_whitespaces_w_space
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
-slack_token_user_ids: dict[str, str | None] = {}
-slack_token_bot_ids: dict[str, str | None] = {}
+slack_token_user_ids: dict[tuple[str, int], str | None] = {}
+slack_token_bot_ids: dict[tuple[str, int], str | None] = {}
 slack_token_lock = threading.Lock()
 
 _ONYX_BOT_MESSAGE_COUNT: int = 0
@@ -50,9 +48,14 @@ _ONYX_BOT_COUNT_START_TIME: float = time.time()
 
 
 def get_onyx_bot_auth_ids(
-    tenant_id: str, web_client: WebClient
+    tenant_id: str, slack_bot_id: int, web_client: WebClient
 ) -> tuple[str | None, str | None]:
-    """Returns a tuple of user_id and bot_id."""
+    """Returns a tuple of user_id and bot_id for the given (tenant, slack_bot).
+
+    The cache must be keyed by (tenant_id, slack_bot_id) — multiple Slack apps
+    in the same tenant have distinct user/bot IDs and previously collided on
+    a tenant-only key.
+    """
 
     user_id: str | None
     bot_id: str | None
@@ -60,17 +63,23 @@ def get_onyx_bot_auth_ids(
     global slack_token_user_ids
     global slack_token_bot_ids
 
+    cache_key = (tenant_id, slack_bot_id)
+
     with slack_token_lock:
-        user_id = slack_token_user_ids.get(tenant_id)
-        bot_id = slack_token_bot_ids.get(tenant_id)
+        user_id = slack_token_user_ids.get(cache_key)
+        bot_id = slack_token_bot_ids.get(cache_key)
 
     if user_id is None or bot_id is None:
+        # Network I/O happens outside the lock so that an in-flight or slow
+        # auth_test() for one (tenant, bot) does not block cache reads for
+        # other keys. A rare duplicate auth_test() on cold-start for the
+        # same key returns identical values and is harmless.
         response = web_client.auth_test()
         user_id = response.get("user_id")
         bot_id = response.get("bot_id")
         with slack_token_lock:
-            slack_token_user_ids[tenant_id] = user_id
-            slack_token_bot_ids[tenant_id] = bot_id
+            slack_token_user_ids[cache_key] = user_id
+            slack_token_bot_ids[cache_key] = bot_id
 
     return user_id, bot_id
 
@@ -178,8 +187,12 @@ def update_emote_react(
     return
 
 
-def remove_onyx_bot_tag(tenant_id: str, message_str: str, client: WebClient) -> str:
-    bot_token_user_id, _ = get_onyx_bot_auth_ids(tenant_id, web_client=client)
+def remove_onyx_bot_tag(
+    tenant_id: str, slack_bot_id: int, message_str: str, client: WebClient
+) -> str:
+    bot_token_user_id, _ = get_onyx_bot_auth_ids(
+        tenant_id, slack_bot_id, web_client=client
+    )
     return re.sub(rf"<@{bot_token_user_id}>\s*", "", message_str)
 
 
@@ -217,11 +230,10 @@ def _build_error_block(error_message: str) -> Block:
     return SectionBlock(text=display_text)
 
 
-@retry(
+@retry_builder(
     tries=ONYX_BOT_NUM_RETRIES,
     delay=0.25,
     backoff=2,
-    logger=cast(logging.Logger, logger),
 )
 def respond_in_thread_or_channel(
     client: WebClient,
@@ -400,28 +412,6 @@ def get_view_values(state_values: dict[str, Any]) -> dict[str, str]:
     return view_values
 
 
-def translate_vespa_highlight_to_slack(match_strs: list[str], used_chars: int) -> str:
-    def _replace_highlight(s: str) -> str:
-        s = re.sub(r"(?<=[^\s])<hi>(.*?)</hi>", r"\1", s)
-        s = s.replace("</hi>", "*").replace("<hi>", "*")
-        return s
-
-    final_matches = [
-        replace_whitespaces_w_space(_replace_highlight(match_str)).strip()
-        for match_str in match_strs
-        if match_str
-    ]
-    combined = "... ".join(final_matches)
-
-    # Slack introduces "Show More" after 300 on desktop which is ugly
-    # But don't trim the message if there is still a highlight after 300 chars
-    remaining = 300 - used_chars
-    if len(combined) > remaining and "*" not in combined[remaining:]:
-        combined = combined[: remaining - 3] + "..."
-
-    return combined
-
-
 def remove_slack_text_interactions(slack_str: str) -> str:
     slack_str = SlackTextCleaner.replace_tags_basic(slack_str)
     slack_str = SlackTextCleaner.replace_channels_basic(slack_str)
@@ -556,7 +546,11 @@ def fetch_user_semantic_id_from_id(
 
 
 def read_slack_thread(
-    tenant_id: str, channel: str, thread: str, client: WebClient
+    tenant_id: str,
+    slack_bot_id: int,
+    channel: str,
+    thread: str,
+    client: WebClient,
 ) -> list[ThreadMessage]:
     thread_messages: list[ThreadMessage] = []
     response = client.conversations_replies(channel=channel, ts=thread)
@@ -577,7 +571,7 @@ def read_slack_thread(
             reply_bot_id = reply.get("bot_id")
 
             self_slack_bot_user_id, self_slack_bot_bot_id = get_onyx_bot_auth_ids(
-                tenant_id, client
+                tenant_id, slack_bot_id, client
             )
             if reply_user is not None and reply_user == self_slack_bot_user_id:
                 is_onyx_bot_response = True
@@ -631,7 +625,7 @@ def read_slack_thread(
                 logger.warning("Skipping Slack thread message, no text found")
                 continue
 
-        message = remove_onyx_bot_tag(tenant_id, message, client=client)
+        message = remove_onyx_bot_tag(tenant_id, slack_bot_id, message, client=client)
         thread_messages.append(
             ThreadMessage(message=message, sender=user_sem_id, role=message_type)
         )

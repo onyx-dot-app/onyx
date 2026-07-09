@@ -1,13 +1,12 @@
 import { fetchSS } from "@/lib/utilsSS";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
-import { requireAuth } from "@/lib/auth/requireAuth";
+import { requireAuth } from "@/lib/auth/svcSS";
 import SharedChatDisplay from "@/app/app/shared/[chatId]/SharedChatDisplay";
-import * as AppLayouts from "@/layouts/app-layouts";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 
 // This is used for rendering a persona in the shared chat display
-export function constructMiniFiedPersona(name: string, id: number): Persona {
+export function constructMiniFiedPersona(name: string, id: number): Agent {
   return {
     id,
     name,
@@ -18,6 +17,8 @@ export function constructMiniFiedPersona(name: string, id: number): Persona {
     document_sets: [],
     tools: [],
     owner: null,
+    owner_group: null,
+    user_permission: null,
     starter_messages: null,
     builtin_persona: false,
     is_featured: false,
@@ -57,14 +58,10 @@ export default async function Page(props: PageProps) {
   // Allows render instead of throwing an exception and crashing
   const chatSession = await getSharedChat(params.chatId).catch(() => null);
 
-  const persona: Persona = constructMiniFiedPersona(
+  const persona: Agent = constructMiniFiedPersona(
     chatSession?.persona_name ?? "",
     chatSession?.persona_id ?? 0
   );
 
-  return (
-    <AppLayouts.Root>
-      <SharedChatDisplay chatSession={chatSession} persona={persona} />
-    </AppLayouts.Root>
-  );
+  return <SharedChatDisplay chatSession={chatSession} persona={persona} />;
 }

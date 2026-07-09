@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 )
 
 // slashCommand defines a slash command with its description.
@@ -35,11 +35,13 @@ var argCommands = map[string]bool{
 
 // inputModel manages the text input and slash command menu.
 type inputModel struct {
-	textInput    textinput.Model
-	menuVisible  bool
-	menuItems    []slashCommand
-	menuIndex    int
+	textInput     textinput.Model
+	menuVisible   bool
+	menuItems     []slashCommand
+	menuIndex     int
 	attachedFiles []string
+	customPrompt  string
+	suppressMenu  bool
 }
 
 func newInputModel() inputModel {
@@ -56,9 +58,8 @@ func newInputModel() inputModel {
 }
 
 func (m inputModel) update(msg tea.Msg) (inputModel, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		return m.handleKey(msg)
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+		return m.handleKey(keyMsg)
 	}
 
 	var cmd tea.Cmd
@@ -67,19 +68,19 @@ func (m inputModel) update(msg tea.Msg) (inputModel, tea.Cmd) {
 	return m, cmd
 }
 
-func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyUp:
+func (m inputModel) handleKey(msg tea.KeyPressMsg) (inputModel, tea.Cmd) {
+	switch msg.String() {
+	case "up":
 		if m.menuVisible && m.menuIndex > 0 {
 			m.menuIndex--
 			return m, nil
 		}
-	case tea.KeyDown:
+	case "down":
 		if m.menuVisible && m.menuIndex < len(m.menuItems)-1 {
 			m.menuIndex++
 			return m, nil
 		}
-	case tea.KeyTab:
+	case "tab":
 		if m.menuVisible && len(m.menuItems) > 0 {
 			cmd := m.menuItems[m.menuIndex].command
 			if argCommands[cmd] {
@@ -92,7 +93,7 @@ func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
 			m.menuVisible = false
 			return m, nil
 		}
-	case tea.KeyEnter:
+	case "enter":
 		if m.menuVisible && len(m.menuItems) > 0 {
 			cmd := m.menuItems[m.menuIndex].command
 			if argCommands[cmd] {
@@ -122,7 +123,7 @@ func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
 		m.menuVisible = false
 		return m, func() tea.Msg { return submitMsg{text: text} }
 
-	case tea.KeyEscape:
+	case "esc":
 		if m.menuVisible {
 			m.menuVisible = false
 			return m, nil
@@ -136,6 +137,10 @@ func (m inputModel) handleKey(msg tea.KeyMsg) (inputModel, tea.Cmd) {
 }
 
 func (m inputModel) updateMenu() inputModel {
+	if m.suppressMenu {
+		m.menuVisible = false
+		return m
+	}
 	val := strings.TrimSpace(m.textInput.Value())
 	if strings.HasPrefix(val, "/") && !strings.Contains(val, " ") {
 		needle := strings.ToLower(val)
@@ -166,6 +171,26 @@ func (m *inputModel) addFile(name string) {
 
 func (m *inputModel) clearFiles() {
 	m.attachedFiles = nil
+}
+
+func (m *inputModel) setForConfigure(prompt string, placeholder string, echo textinput.EchoMode) {
+	m.customPrompt = prompt
+	m.suppressMenu = true
+	m.textInput.Placeholder = placeholder
+	m.textInput.EchoMode = echo
+	m.textInput.SetValue("")
+}
+
+func (m *inputModel) setCustomPrompt(prompt string) {
+	m.customPrompt = prompt
+}
+
+func (m *inputModel) resetForChat() {
+	m.customPrompt = ""
+	m.suppressMenu = false
+	m.textInput.EchoMode = textinput.EchoNormal
+	m.textInput.Placeholder = "Send a message…"
+	m.textInput.SetValue("")
 }
 
 // submitMsg is sent when user submits text.
@@ -237,6 +262,10 @@ func (m inputModel) viewInput() string {
 		parts = append(parts, statusMsgStyle.Render("Attached: ["+badges+"]"))
 	}
 
-	parts = append(parts, inputPrompt+m.textInput.View())
+	prompt := inputPrompt
+	if m.customPrompt != "" {
+		prompt = m.customPrompt
+	}
+	parts = append(parts, prompt+m.textInput.View())
 	return strings.Join(parts, "\n")
 }

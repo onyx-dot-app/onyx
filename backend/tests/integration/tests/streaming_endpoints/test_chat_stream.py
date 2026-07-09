@@ -36,9 +36,9 @@ def test_send_two_messages(basic_user: DATestUser) -> None:
         chat_session=test_chat_session,
         user_performing_action=basic_user,
     )
-    assert (
-        len(chat_history) == 3
-    ), "Chat session should have 1 system message, 1 user message, and 1 assistant message"
+    assert len(chat_history) == 3, (
+        "Chat session should have 1 system message, 1 user message, and 1 assistant message"
+    )
 
     response2 = ChatSessionManager.send_message(
         chat_session_id=test_chat_session.id,
@@ -55,13 +55,12 @@ def test_send_two_messages(basic_user: DATestUser) -> None:
         chat_session=test_chat_session,
         user_performing_action=basic_user,
     )
-    assert (
-        len(chat_history2) == 5
-    ), "Chat session should have 1 system message, 2 user messages, and 2 assistant messages"
+    assert len(chat_history2) == 5, (
+        "Chat session should have 1 system message, 2 user messages, and 2 assistant messages"
+    )
 
 
 def test_send_message_simple_with_history(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     LLMProviderManager.create(user_performing_action=admin_user)
@@ -99,8 +98,12 @@ def test_send_message__basic_searches(
     )
     assert response.error is None, "Chat response should not have an error"
     assert response.top_documents is not None
-    assert len(response.top_documents) == 1
-    assert response.top_documents[0].document_id == short_doc.id
+    # Other tests in this directory upload user files that get indexed into
+    # OpenSearch; OpenSearch is intentionally NOT reset between tests, so
+    # we filter to the doc we seeded rather than asserting on raw count.
+    doc_ids = [d.document_id for d in response.top_documents]
+    assert short_doc.id in doc_ids, doc_ids
+    assert doc_ids[0] == short_doc.id
 
     # make sure this doc is really long so that it will be split into multiple chunks
     long_doc = document_builder([LONG_DOC_CONTENT])[0]
@@ -114,14 +117,14 @@ def test_send_message__basic_searches(
     )
     assert response.error is None, "Chat response should not have an error"
     assert response.top_documents is not None
-    assert len(response.top_documents) == 2
-    # short doc should be more relevant and thus first
-    assert response.top_documents[0].document_id == short_doc.id
-    assert response.top_documents[1].document_id == long_doc.id
+    doc_ids = [d.document_id for d in response.top_documents]
+    assert short_doc.id in doc_ids, doc_ids
+    assert long_doc.id in doc_ids, doc_ids
+    # short doc should be more relevant than long doc
+    assert doc_ids.index(short_doc.id) < doc_ids.index(long_doc.id)
 
 
 def test_send_message_disconnect_and_cleanup(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """
@@ -171,6 +174,6 @@ def test_send_message_disconnect_and_cleanup(
         if msg != TERMINATED_RESPONSE_MESSAGE and msg != LOADING_RESPONSE_MESSAGE:
             break
 
-    assert (
-        msg != TERMINATED_RESPONSE_MESSAGE and msg != LOADING_RESPONSE_MESSAGE
-    ), f"Assistant message should no longer be the terminated response message after cleanup, got: {msg}"
+    assert msg != TERMINATED_RESPONSE_MESSAGE and msg != LOADING_RESPONSE_MESSAGE, (
+        f"Assistant message should no longer be the terminated response message after cleanup, got: {msg}"
+    )

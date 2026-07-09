@@ -31,6 +31,7 @@ class MessageOrigin(str, Enum):
     SLACKBOT = "slackbot"
     WIDGET = "widget"
     DISCORDBOT = "discordbot"
+    MOBILE = "mobile"
     UNKNOWN = "unknown"
     UNSET = "unset"
 
@@ -235,7 +236,9 @@ class ChatMessageDetail(BaseModel):
         self, *args: list, **kwargs: dict[str, Any]
     ) -> dict[str, Any]:
         initial_dict = super().model_dump(
-            mode="json", *args, **kwargs  # ty: ignore[invalid-argument-type]
+            mode="json",
+            *args,
+            **kwargs,  # ty: ignore[invalid-argument-type]
         )
         initial_dict["time_sent"] = self.time_sent.isoformat()
         return initial_dict
@@ -244,6 +247,12 @@ class ChatMessageDetail(BaseModel):
 class SetPreferredResponseRequest(BaseModel):
     user_message_id: int
     preferred_response_id: int
+
+
+class CurrentRunInfo(BaseModel):
+    """In-flight run whose stream buffer can be replayed/tailed."""
+
+    run_id: int
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -260,6 +269,9 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
+    # Set while a run is in flight and resumable: cursor-0 replay+tail is
+    # available at /chat-session/{id}/resume-stream.
+    current_run: CurrentRunInfo | None = None
 
 
 class AdminSearchRequest(BaseModel):

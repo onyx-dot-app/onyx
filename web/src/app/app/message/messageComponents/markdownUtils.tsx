@@ -3,6 +3,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
+import type { LanguageFn } from "highlight.js";
+import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import "@/app/app/message/custom-code-styles.css";
@@ -24,8 +26,7 @@ import { InMessageImage } from "@/app/app/components/files/images/InMessageImage
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 
 /** Table wrapper that detects horizontal overflow and shows a fade + scrollbar. */
-interface ScrollableTableProps
-  extends React.TableHTMLAttributes<HTMLTableElement> {
+interface ScrollableTableProps extends React.TableHTMLAttributes<HTMLTableElement> {
   children: React.ReactNode;
 }
 
@@ -72,7 +73,7 @@ export function ScrollableTable({
           ref={tableRef}
           className={cn(
             className,
-            "min-w-full !my-0 [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
+            "min-w-full my-0! [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
           )}
           {...props}
         >
@@ -234,7 +235,8 @@ export const useMarkdownComponents = (
 export const renderMarkdown = (
   content: string,
   markdownComponents: any,
-  textSize: string = "text-base"
+  textSize: string = "text-base",
+  languages: Record<string, LanguageFn> | null = null
 ): JSX.Element => {
   return (
     <div dir="auto">
@@ -245,7 +247,11 @@ export const renderMarkdown = (
           remarkGfm,
           [remarkMath, { singleDollarTextMath: true }],
         ]}
-        rehypePlugins={[rehypeHighlight, rehypeKatex]}
+        rehypePlugins={
+          languages
+            ? [[rehypeHighlight, { languages }], rehypeKatex]
+            : [rehypeKatex]
+        }
         urlTransform={transformLinkUri}
       >
         {content}
@@ -268,10 +274,17 @@ export const useMarkdownRenderer = (
     processedContent,
     textSize
   );
+  const highlightLanguages = useHighlightLanguages();
 
   const renderedContent = useMemo(
-    () => renderMarkdown(processedContent, markdownComponents, textSize),
-    [processedContent, markdownComponents, textSize]
+    () =>
+      renderMarkdown(
+        processedContent,
+        markdownComponents,
+        textSize,
+        highlightLanguages
+      ),
+    [processedContent, markdownComponents, textSize, highlightLanguages]
   );
 
   return {

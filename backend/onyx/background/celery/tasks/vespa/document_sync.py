@@ -3,19 +3,24 @@ from typing import cast
 from uuid import uuid4
 
 from celery import Celery
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
+from onyx.configs.constants import CELERY_DOCUMENT_SYNC_TASK_EXPIRES
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
-from onyx.db.document import construct_document_id_select_by_needs_sync
-from onyx.db.document import count_documents_by_needs_sync
+from onyx.db.document import (
+    construct_document_id_select_by_needs_sync_or_secondary_pending,
+)
+from onyx.db.document import count_documents_by_needs_sync_or_secondary_pending
+from onyx.db.document import count_secondary_only_sync_pending_documents
+from onyx.db.port_attempt import any_future_port_in_progress
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 # Redis keys for document sync tracking
@@ -28,12 +33,12 @@ TASKSET_TTL = FENCE_TTL
 logger = setup_logger()
 
 
-def is_document_sync_fenced(r: Redis) -> bool:
+def is_document_sync_fenced(r: TenantRedisClient) -> bool:
     """Check if document sync tasks are currently in progress."""
     return bool(r.exists(DOCUMENT_SYNC_FENCE_KEY))
 
 
-def get_document_sync_payload(r: Redis) -> int | None:
+def get_document_sync_payload(r: TenantRedisClient) -> int | None:
     """Get the initial number of tasks that were created."""
     bytes_result = r.get(DOCUMENT_SYNC_FENCE_KEY)
     if bytes_result is None:
@@ -41,12 +46,12 @@ def get_document_sync_payload(r: Redis) -> int | None:
     return int(cast(int, bytes_result))
 
 
-def get_document_sync_remaining(r: Redis) -> int:
+def get_document_sync_remaining(r: TenantRedisClient) -> int:
     """Get the number of tasks still pending completion."""
-    return cast(int, r.scard(DOCUMENT_SYNC_TASKSET_KEY))
+    return r.scard(DOCUMENT_SYNC_TASKSET_KEY)
 
 
-def set_document_sync_fence(r: Redis, payload: int | None) -> None:
+def set_document_sync_fence(r: TenantRedisClient, payload: int | None) -> None:
     """Set up the fence and register with active fences."""
     if payload is None:
         r.srem(OnyxRedisConstants.ACTIVE_FENCES, DOCUMENT_SYNC_FENCE_KEY)
@@ -57,12 +62,12 @@ def set_document_sync_fence(r: Redis, payload: int | None) -> None:
     r.sadd(OnyxRedisConstants.ACTIVE_FENCES, DOCUMENT_SYNC_FENCE_KEY)
 
 
-def delete_document_sync_taskset(r: Redis) -> None:
+def delete_document_sync_taskset(r: TenantRedisClient) -> None:
     """Clear the document sync taskset."""
     r.delete(DOCUMENT_SYNC_TASKSET_KEY)
 
 
-def reset_document_sync(r: Redis) -> None:
+def reset_document_sync(r: TenantRedisClient) -> None:
     """Reset all document sync tracking data."""
     r.srem(OnyxRedisConstants.ACTIVE_FENCES, DOCUMENT_SYNC_FENCE_KEY)
     r.delete(DOCUMENT_SYNC_TASKSET_KEY)
@@ -70,7 +75,7 @@ def reset_document_sync(r: Redis) -> None:
 
 
 def generate_document_sync_tasks(
-    r: Redis,
+    r: TenantRedisClient,
     max_tasks: int,
     celery_app: Celery,
     db_session: Session,
@@ -94,10 +99,17 @@ def generate_document_sync_tasks(
     num_tasks_sent = 0
     num_docs = 0
 
-    # Get all documents that need syncing
-    stmt = construct_document_id_select_by_needs_sync()
+    stmt = construct_document_id_select_by_needs_sync_or_secondary_pending()
+    port_running = any_future_port_in_progress(db_session)
+    # The backlog>0 guard keeps "no active port" from also matching normal steady
+    # state, which would wrongly demote every needs_sync to LOW.
+    draining_for_flip = (
+        not port_running and count_secondary_only_sync_pending_documents(db_session) > 0
+    )
 
-    for doc_id in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
+    for doc_id, is_secondary_pending in db_session.execute(stmt).yield_per(
+        DB_YIELD_PER_DEFAULT
+    ):
         doc_id = cast(str, doc_id)
         current_time = time.monotonic()
 
@@ -115,13 +127,26 @@ def generate_document_sync_tasks(
         r.sadd(DOCUMENT_SYNC_TASKSET_KEY, custom_task_id)
         r.expire(DOCUMENT_SYNC_TASKSET_KEY, TASKSET_TTL)
 
+        # Deferred FUTURE sync: LOW mid-port (may not be in FUTURE yet; don't
+        # starve needs_sync), HIGH post-port since that drain gates the flip —
+        # which is also why needs_sync yields to LOW during it.
+        if is_secondary_pending:
+            priority = (
+                OnyxCeleryPriority.LOW if port_running else OnyxCeleryPriority.HIGH
+            )
+        elif draining_for_flip:
+            priority = OnyxCeleryPriority.LOW
+        else:
+            priority = OnyxCeleryPriority.MEDIUM
+
         # Create the Celery task
         celery_app.send_task(
             OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
             kwargs=dict(document_id=doc_id, tenant_id=tenant_id),
             queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,
             task_id=custom_task_id,
-            priority=OnyxCeleryPriority.MEDIUM,
+            priority=priority,
+            expires=CELERY_DOCUMENT_SYNC_TASK_EXPIRES,
             ignore_result=True,
         )
 
@@ -137,7 +162,7 @@ def try_generate_stale_document_sync_tasks(
     celery_app: Celery,
     max_tasks: int,
     db_session: Session,
-    r: Redis,
+    r: TenantRedisClient,
     lock_beat: RedisLock,
     tenant_id: str,
 ) -> int | None:
@@ -146,7 +171,7 @@ def try_generate_stale_document_sync_tasks(
         return None
 
     # add tasks to celery and build up the task set to monitor in redis
-    stale_doc_count = count_documents_by_needs_sync(db_session)
+    stale_doc_count = count_documents_by_needs_sync_or_secondary_pending(db_session)
     if stale_doc_count == 0:
         logger.info("No stale documents found. Skipping sync tasks generation.")
         return None

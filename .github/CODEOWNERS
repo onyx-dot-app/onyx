@@ -5,9 +5,10 @@
 # Web standards updates
 /web/STANDARDS.md @raunakab @Weves
 
-# Agent context files
-/CLAUDE.md @Weves
-/AGENTS.md @Weves
-
 # Beta cherry-pick workflow owners
 /.github/workflows/post-merge-beta-cherry-pick.yml @justin-tahara @jmelahman
+
+# Enterprise Edition code owners
+/backend/ee/ @evan-onyx @Weves @jmelahman @justin-tahara
+/web/src/ee/ @evan-onyx @Weves @jmelahman @justin-tahara
+/web/src/app/ee/ @evan-onyx @Weves @jmelahman @justin-tahara

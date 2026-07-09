@@ -19,7 +19,7 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "../interfaces";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { WEB_SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
@@ -194,6 +194,40 @@ export async function* sendMessage({
     body,
     signal,
   });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
+  }
+
+  yield* withoutHeartbeats(handleSSEStream<PacketType>(response, signal));
+}
+
+// Drops keepalive heartbeats so stream consumers only ever see run state.
+async function* withoutHeartbeats(
+  stream: AsyncGenerator<PacketType, void, unknown>
+): AsyncGenerator<PacketType, void, unknown> {
+  for await (const packet of stream) {
+    if ("obj" in packet && packet.obj.type === "chat_heartbeat") {
+      continue;
+    }
+    yield packet;
+  }
+}
+
+// Replays an in-flight run's buffered stream from `cursor`, then tails it live.
+// 404 means there is nothing to resume — callers fall back to the persisted
+// session state. Heartbeats pass through: the consumer uses them as liveness
+// ticks to re-check session focus during quiet phases.
+export async function* resumeStream(
+  chatSessionId: string,
+  cursor: number,
+  signal?: AbortSignal
+): AsyncGenerator<PacketType, void, unknown> {
+  const response = await fetch(
+    `/api/chat/chat-session/${chatSessionId}/resume-stream?cursor=${cursor}`,
+    { signal }
+  );
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
@@ -417,9 +451,7 @@ export function processRawChatHistory(
   return messages;
 }
 
-export function personaIncludesRetrieval(
-  selectedPersona: MinimalPersonaSnapshot
-) {
+export function personaIncludesRetrieval(selectedPersona: MinimalAgent) {
   return selectedPersona.tools.some(
     (tool) =>
       tool.in_code_tool_id &&

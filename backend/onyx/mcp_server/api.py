@@ -20,6 +20,7 @@ from onyx.mcp_server.auth import OnyxTokenVerifier
 from onyx.mcp_server.utils import shutdown_http_client
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+from shared_configs.configs import cors_allow_credentials
 
 logger = setup_logger()
 
@@ -101,7 +102,7 @@ def create_mcp_fastapi_app() -> FastAPI:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=MCP_SERVER_CORS_ORIGINS,
-            allow_credentials=True,
+            allow_credentials=cors_allow_credentials(MCP_SERVER_CORS_ORIGINS),
             allow_methods=["*"],
             allow_headers=["*"],
         )

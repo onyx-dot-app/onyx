@@ -141,6 +141,22 @@ def test_build_vertex_provider_with_missing_project_id() -> None:
         get_image_generation_provider("vertex_ai", credentials)
 
 
+def test_vertex_malformed_json_does_not_escape_validate_credentials() -> None:
+    """Malformed vertex_credentials JSON must surface as a clean
+    ImageProviderCredentialsError / False, not a raw JSONDecodeError — otherwise
+    is_image_generation_configured can't gate gracefully and the skills listing
+    500s."""
+    credentials = _get_default_image_gen_creds()
+    credentials.custom_config = {
+        "vertex_credentials": "{not valid json",
+        "vertex_location": "global",
+    }
+
+    assert VertexImageGenerationProvider.validate_credentials(credentials) is False
+    with pytest.raises(ImageProviderCredentialsError):
+        get_image_generation_provider("vertex_ai", credentials)
+
+
 def test_openai_provider_uses_image_generation_without_reference_images() -> None:
     provider = OpenAIImageGenerationProvider(
         api_key="test-key",
@@ -204,29 +220,10 @@ def test_openai_provider_rejects_reference_images_for_unsupported_model() -> Non
     with pytest.raises(ValueError):
         provider.generate_image(
             prompt="edit this image",
-            model="dall-e-3",
+            model="unsupported-model",
             size="1024x1024",
             n=1,
             reference_images=[ReferenceImage(data=b"image-1", mime_type="image/png")],
-        )
-
-
-def test_openai_provider_rejects_multiple_reference_images_for_dalle3() -> None:
-    provider = OpenAIImageGenerationProvider(api_key="test-key")
-
-    with pytest.raises(
-        ValueError,
-        match="does not support image edits with reference images",
-    ):
-        provider.generate_image(
-            prompt="edit this image",
-            model="dall-e-3",
-            size="1024x1024",
-            n=1,
-            reference_images=[
-                ReferenceImage(data=b"image-1", mime_type="image/png"),
-                ReferenceImage(data=b"image-2", mime_type="image/png"),
-            ],
         )
 
 
@@ -303,31 +300,8 @@ def test_azure_provider_rejects_reference_images_for_unsupported_model() -> None
     with pytest.raises(ValueError):
         provider.generate_image(
             prompt="edit this image",
-            model="dall-e-3",
+            model="unsupported-model",
             size="1024x1024",
             n=1,
             reference_images=[ReferenceImage(data=b"image-1", mime_type="image/png")],
-        )
-
-
-def test_azure_provider_rejects_multiple_reference_images_for_dalle3() -> None:
-    provider = AzureImageGenerationProvider(
-        api_key="test-key",
-        api_base="https://azure.example.com",
-        api_version="2024-05-01-preview",
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="does not support image edits with reference images",
-    ):
-        provider.generate_image(
-            prompt="edit this image",
-            model="dall-e-3",
-            size="1024x1024",
-            n=1,
-            reference_images=[
-                ReferenceImage(data=b"image-1", mime_type="image/png"),
-                ReferenceImage(data=b"image-2", mime_type="image/png"),
-            ],
         )

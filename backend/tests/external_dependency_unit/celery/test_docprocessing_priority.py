@@ -30,7 +30,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 def _create_test_connector(db_session: Session, name: str) -> Connector:
@@ -288,7 +288,7 @@ class TestDocprocessingPriorityInDocumentExtraction:
                 index_attempt_id=index_attempt.id,
                 cc_pair_id=cc_pair.id,
                 search_settings_id=search_settings.id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 callback=None,
             )
 
@@ -296,9 +296,9 @@ class TestDocprocessingPriorityInDocumentExtraction:
             assert mock_celery_app.send_task.called, "send_task should have been called"
             call_kwargs = mock_celery_app.send_task.call_args
             actual_priority = call_kwargs.kwargs["priority"]
-            assert (
-                actual_priority == expected_priority
-            ), f"Expected priority {expected_priority} for has_successful_index={has_successful_index}, but got {actual_priority}"
+            assert actual_priority == expected_priority, (
+                f"Expected priority {expected_priority} for has_successful_index={has_successful_index}, but got {actual_priority}"
+            )
         finally:
             # Drop rows in FK-safe order so the test doesn't pollute a shared
             # database. Important: the seeded SearchSettings carries

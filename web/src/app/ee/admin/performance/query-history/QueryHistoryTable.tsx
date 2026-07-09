@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/table";
 import Text from "@/refresh-components/texts/Text";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { ThreeDotsLoader } from "@/components/Loading";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
 import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
@@ -38,7 +38,7 @@ import {
   PAGES_PER_BATCH,
   PREVIOUS_CSV_TASK_BUTTON_NAME,
 } from "@/app/ee/admin/performance/query-history/constants";
-import { humanReadableFormatWithTime } from "@/lib/time";
+import { humanReadableFormatWithTime } from "@opal/time";
 import Modal from "@/refresh-components/Modal";
 import { Button, Divider } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
@@ -345,7 +345,9 @@ export function QueryHistoryTable() {
               <TableBody>
                 <TableRow>
                   <TableCell colSpan={6} className="text-center">
-                    <ThreeDotsLoader />
+                    <div className="flex justify-center">
+                      <SvgSimpleLoader className="h-6 w-6" />
+                    </div>
                   </TableCell>
                 </TableRow>
               </TableBody>

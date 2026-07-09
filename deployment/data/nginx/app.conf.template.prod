@@ -1,3 +1,6 @@
+# Don't expose the nginx version in the Server header or on error pages
+server_tokens off;
+
 # Log format to include request latency
 log_format custom_main '$remote_addr - $remote_user [$time_local] "$request" '
                 '$status $body_bytes_sent "$http_referer" '
@@ -36,8 +39,31 @@ server {
 
     access_log /var/log/nginx/access.log custom_main;
 
-    # Conditionally include MCP location configuration 
+    # Conditionally include MCP location configuration
     include /etc/nginx/conf.d/mcp.conf.inc;
+
+    # First-party health probe served directly by nginx (no upstreams),
+    # used by the container healthcheck.
+    location = /nginx-health {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    # SAML login and IdP callbacks are backend routes under /auth/saml (legacy
+    # single-config and the DB-backed multi-provider router). Proxy them to the
+    # API like /scim, otherwise the IdP POST falls through to the web server.
+    location ~ ^/auth/saml(/.*)?$ {
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header Host $host;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_redirect off;
+        proxy_pass http://api_server;
+    }
 
     location ~ ^/scim(/.*)?$ {
         proxy_set_header X-Real-IP $remote_addr;

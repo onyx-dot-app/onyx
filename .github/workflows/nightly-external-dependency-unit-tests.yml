@@ -10,6 +10,8 @@ on:
     - cron: "30 10 * * *"
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   nightly-external-dependency-unit-tests:
     # Runs every test under backend/tests/external_dependency_unit marked
@@ -25,10 +27,10 @@ jobs:
       contents: read
       id-token: write # Required for OIDC-based AWS credential exchange
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
 
@@ -41,7 +43,7 @@ jobs:
             backend/requirements/ee.txt
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -59,9 +61,11 @@ jobs:
     runs-on: ubuntu-slim
     environment: ci-protected
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
 
@@ -69,6 +73,11 @@ jobs:
         uses: ./.github/actions/slack-notify
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          failed-jobs: nightly-external-dependency-unit-tests
+          details: |
+            *Failed jobs:*
+            nightly-external-dependency-unit-tests
+
+            *To reproduce locally:*
+            `uv run pytest -m nightly backend/tests/external_dependency_unit`
           title: "🚨 Nightly External Dependency Unit Tests failed!"
           ref-name: ${{ github.ref_name }}

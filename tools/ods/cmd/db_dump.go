@@ -54,8 +54,8 @@ Examples:
 }
 
 func runDBDump(opts *DBDumpOptions) {
-	// Find PostgreSQL container
-	container, err := docker.FindPostgresContainer()
+	// Find PostgreSQL container.
+	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
 		log.Fatalf("Failed to find PostgreSQL container: %v", err)
 	}
@@ -63,10 +63,10 @@ func runDBDump(opts *DBDumpOptions) {
 
 	config := postgres.NewConfigFromEnv()
 
-	// Determine output file path
+	// Determine output file path.
 	outputPath := determineOutputPath(opts.Output, opts.Format)
 
-	// Ensure output directory exists
+	// Ensure output directory exists.
 	outputDir := filepath.Dir(outputPath)
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		log.Fatalf("Failed to create output directory: %v", err)
@@ -74,32 +74,32 @@ func runDBDump(opts *DBDumpOptions) {
 
 	log.Infof("Dumping database '%s' to: %s", config.Database, outputPath)
 
-	// Build pg_dump arguments
+	// Build pg_dump arguments.
 	args := config.PgDumpArgs(opts.Format)
 	if opts.Schema != "" {
 		args = append(args, "-n", opts.Schema)
 	}
 
-	// Create a temporary file in the container
+	// Create a temporary file in the container.
 	containerTmpFile := "/tmp/onyx_dump_tmp"
 	args = append(args, "-f", containerTmpFile)
 
-	// Run pg_dump in container
+	// Run pg_dump in container.
 	env := config.Env()
 	pgDumpArgs := append([]string{"pg_dump"}, args...)
 	if err := docker.ExecWithEnv(container, env, pgDumpArgs...); err != nil {
 		log.Fatalf("Failed to run pg_dump: %v", err)
 	}
 
-	// Copy the dump file from container to host
+	// Copy the dump file from container to host.
 	if err := docker.CopyFromContainer(container, containerTmpFile, outputPath); err != nil {
 		log.Fatalf("Failed to copy dump file: %v", err)
 	}
 
-	// Clean up temporary file in container
+	// Clean up temporary file in container.
 	_ = docker.Exec(container, "rm", "-f", containerTmpFile)
 
-	// Get file size for info
+	// Get file size for info.
 	if info, err := os.Stat(outputPath); err == nil {
 		log.Infof("Dump completed successfully (%s)", humanizeBytes(info.Size()))
 	} else {
@@ -115,13 +115,13 @@ func determineOutputPath(output string, format string) string {
 	}
 
 	if output == "" {
-		// Generate default filename with timestamp
+		// Generate default filename with timestamp.
 		timestamp := time.Now().Format("20060102_150405")
 		filename := fmt.Sprintf("onyx_%s%s", timestamp, ext)
 		return filepath.Join(paths.SnapshotsDir(), filename)
 	}
 
-	// Check if output is just a filename (no directory)
+	// Check if output is just a filename (no directory).
 	if filepath.Dir(output) == "." {
 		return filepath.Join(paths.SnapshotsDir(), output)
 	}

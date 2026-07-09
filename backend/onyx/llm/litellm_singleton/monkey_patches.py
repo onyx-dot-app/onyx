@@ -3,7 +3,7 @@ LiteLLM Monkey Patches
 
 This module addresses the following issues in LiteLLM:
 
-Status checked against LiteLLM v1.83.0 (2026-03-31):
+Status checked against LiteLLM v1.85.1 (2026-05-26):
 
 1. Ollama Streaming Reasoning Content (_patch_ollama_chunk_parser):
    - LiteLLM's chunk_parser doesn't properly handle reasoning content in streaming
@@ -11,9 +11,10 @@ Status checked against LiteLLM v1.83.0 (2026-03-31):
    - Processes native "thinking" field from Ollama responses
    - Also handles <think>...</think> tags in content for models that use that format
    - Tracks reasoning state to properly separate thinking from regular content
-   STATUS: STILL NEEDED - Upstream uses `is not None` for thinking field checks, but
-           Ollama sends thinking="" (empty string) as a transition signal. Our truthy
-           check correctly treats empty string as end-of-reasoning.
+   STATUS: STILL NEEDED - Upstream v1.85.1 adopted the truthy check on thinking and the
+           elif→if fix for simultaneous thinking+content chunks, but still does not track
+           <think>...</think> tag boundaries within content. Our `_in_think_tag_block`
+           state is required to correctly classify content that crosses a </think> boundary.
 
 2. Reasoning Summary Newlines (_patch_responses_reasoning_summary_newlines):
    - LiteLLM passes through reasoning_summary_text.delta content as-is without
@@ -52,9 +53,10 @@ Status checked against LiteLLM v1.83.0 (2026-03-31):
      completion format and sets it as a dict on ResponsesAPIResponse.usage
    - This replaces the proper ResponseAPIUsage object with a dict, causing Pydantic
      serialization warnings
-   STATUS: STILL NEEDED - Our patch creates a deep copy before modification.
-         Handles ResponseCompletedEvent, ResponseIncompleteEvent, and
-         ResponseFailedEvent (matching upstream behavior in v1.83.0).
+   STATUS: STILL NEEDED - Upstream still mutates result.response.usage in place via
+         setattr in v1.85.1. Our patch rebuilds the response via model_construct so the
+         original ResponseAPIUsage object is preserved. Handles ResponseCompletedEvent,
+         ResponseIncompleteEvent, and ResponseFailedEvent (matching upstream).
 """
 
 import time
@@ -187,7 +189,12 @@ def _patch_ollama_chunk_parser() -> None:
                 tool_calls=tool_calls,
             )
             if chunk["done"] is True:
-                finish_reason = chunk.get("done_reason", "stop")
+                finish_reason = chunk.get("done_reason") or "stop"
+                # Mirror upstream's fix for BerriAI/litellm#18922: when tool
+                # calls are present, override done_reason to "tool_calls" so
+                # downstream consumers branch correctly.
+                if tool_calls:
+                    finish_reason = "tool_calls"
                 choices = [
                     StreamingChoices(
                         delta=delta,
@@ -308,7 +315,6 @@ def _patch_openai_responses_transform_response() -> None:
     Patches LiteLLMResponsesTransformationHandler.transform_response to properly
     concatenate multiple reasoning summary parts with newlines in non-streaming responses.
     """
-    # Store the original method
     original_transform_response = (
         LiteLLMResponsesTransformationHandler.transform_response
     )
@@ -337,34 +343,9 @@ def _patch_openai_responses_transform_response() -> None:
         api_key: Optional[str] = None,
         json_mode: Optional[bool] = None,
     ) -> Any:
-        """
-        Patched transform_response that properly concatenates reasoning summary parts
-        with newlines.
-        """
-        from openai.types.responses.response import Response as ResponsesAPIResponse
+        from litellm.types.llms.openai import ResponsesAPIResponse
         from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 
-        # Check if raw_response has reasoning items that need concatenation
-        if isinstance(raw_response, ResponsesAPIResponse) and raw_response.output:
-            for item in raw_response.output:
-                if isinstance(item, ResponseReasoningItem) and item.summary:
-                    # Concatenate summary texts with double newlines
-                    summary_texts = []
-                    for summary_item in item.summary:
-                        text = getattr(summary_item, "text", "")
-                        if text:
-                            summary_texts.append(text)
-
-                    if len(summary_texts) > 1:
-                        # Modify the first summary item to contain all concatenated text
-                        combined_text = "\n\n".join(summary_texts)
-                        if hasattr(item.summary[0], "text"):
-                            # Create a modified copy of the response with concatenated text
-                            # Since OpenAI types are typically frozen, we need to work around this
-                            # by modifying the object after the fact or using the result
-                            pass  # The fix is applied in the result processing below
-
-        # Call the original method
         result = original_transform_response(
             self,
             model,
@@ -380,28 +361,26 @@ def _patch_openai_responses_transform_response() -> None:
             json_mode,
         )
 
-        # Post-process: If there are multiple summary items, fix the reasoning_content
+        combined_text: str | None = None
         if isinstance(raw_response, ResponsesAPIResponse) and raw_response.output:
             for item in raw_response.output:
-                if isinstance(item, ResponseReasoningItem) and item.summary:
-                    if len(item.summary) > 1:
-                        # Concatenate all summary texts with double newlines
-                        summary_texts = []
-                        for summary_item in item.summary:
-                            text = getattr(summary_item, "text", "")
-                            if text:
-                                summary_texts.append(text)
+                if not isinstance(item, ResponseReasoningItem) or not item.summary:
+                    continue
 
-                        if summary_texts:
-                            combined_text = "\n\n".join(summary_texts)
-                            # Update the reasoning_content in the result choices
-                            if hasattr(result, "choices"):
-                                for choice in result.choices:
-                                    if hasattr(choice, "message") and hasattr(
-                                        choice.message, "reasoning_content"
-                                    ):
-                                        choice.message.reasoning_content = combined_text
-                    break  # Only process the first reasoning item
+                summary_texts = [
+                    text
+                    for summary_item in item.summary
+                    if (text := getattr(summary_item, "text", ""))
+                ]
+                if len(summary_texts) > 1:
+                    combined_text = "\n\n".join(summary_texts)
+                break
+
+        if combined_text and hasattr(result, "choices"):
+            for choice in result.choices:
+                message = getattr(choice, "message", None)
+                if message is not None and getattr(message, "reasoning_content", None):
+                    message.reasoning_content = combined_text
 
         return result
 
@@ -460,11 +439,11 @@ def _patch_responses_api_usage_format() -> None:
     This patch wraps model_construct to transform usage before construction, ensuring
     the correct type regardless of which code path calls model_construct.
 
-    Affected locations in LiteLLM:
-    - litellm/llms/openai/responses/transformation.py (lines 183, 563)
-    - litellm/llms/chatgpt/responses/transformation.py (line 153)
-    - litellm/llms/manus/responses/transformation.py (lines 243, 334)
-    - litellm/llms/volcengine/responses/transformation.py (line 280)
+    Affected locations in LiteLLM v1.85.1:
+    - litellm/llms/openai/responses/transformation.py (lines 215, 574)
+    - litellm/llms/chatgpt/responses/transformation.py (line 147)
+    - litellm/llms/manus/responses/transformation.py (lines 157, 224)
+    - litellm/llms/volcengine/responses/transformation.py (lines 225, 277)
     - litellm/completion_extras/litellm_responses_transformation/handler.py (line 51)
     """
     from litellm.types.llms.openai import ResponseAPIUsage
@@ -499,11 +478,17 @@ def _patch_responses_api_usage_format() -> None:
                             total_tokens=usage.get("total_tokens", 0),
                         )
                     elif "input_tokens" in usage or "output_tokens" in usage:
-                        # Already in Responses API format, just convert to proper type
+                        # Already in Responses API format, just convert to proper type.
+                        # List every field explicitly so a new field added upstream
+                        # surfaces here (and in the audit header) instead of being
+                        # silently dropped or silently absorbed.
                         values["usage"] = ResponseAPIUsage(
                             input_tokens=usage.get("input_tokens", 0),
+                            input_tokens_details=usage.get("input_tokens_details"),
                             output_tokens=usage.get("output_tokens", 0),
+                            output_tokens_details=usage.get("output_tokens_details"),
                             total_tokens=usage.get("total_tokens", 0),
+                            cost=usage.get("cost"),
                         )
 
         # Call original model_construct (need to call it as unbound method)
@@ -544,7 +529,7 @@ def _patch_logging_assembled_streaming_response() -> None:
         return
 
     def _patched_get_assembled_streaming_response(
-        self: Any,  # noqa: ARG001
+        self: Any,
         result: Any,
         start_time: Any,  # noqa: ARG001
         end_time: Any,  # noqa: ARG001
@@ -559,6 +544,8 @@ def _patch_logging_assembled_streaming_response() -> None:
         This patch uses model_construct to rebuild the response with the transformed
         usage, ensuring proper typing.
         """
+        if self.stream is not True:
+            return None
         if isinstance(result, ModelResponse):
             return result
         elif isinstance(result, TextCompletionResponse):

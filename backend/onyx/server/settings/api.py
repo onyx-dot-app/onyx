@@ -11,6 +11,8 @@ from onyx.auth.users import is_user_admin
 from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
+from onyx.configs.app_configs import POSTHOG_API_KEY
+from onyx.configs.app_configs import POSTHOG_HOST
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session
@@ -23,17 +25,25 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.server.features.build.utils import is_onyx_craft_enabled
+from onyx.server.features.build.utils import is_craft_available_for_deployment
+from onyx.server.features.build.utils import is_craft_enabled_for_user
+from onyx.server.features.notifications.models import NotificationResponse
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
 )
 from onyx.server.settings.models import DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
-from onyx.server.settings.models import Notification
 from onyx.server.settings.models import Settings
+from onyx.server.settings.models import Tier
 from onyx.server.settings.models import UserSettings
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
+from onyx.server.settings.tier_order import tier_at_least
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
+from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
@@ -49,7 +59,9 @@ basic_router = APIRouter(prefix="/settings")
 @admin_router.put("")
 def admin_put_settings(
     settings: Settings,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
 ) -> None:
     if (
         settings.user_file_max_upload_size_mb is not None
@@ -61,20 +73,48 @@ def admin_put_settings(
             f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
         )
 
-    if not global_version.is_ee_version():
-        existing = load_settings()
-        if settings.maximum_chat_retention_days != existing.maximum_chat_retention_days:
-            raise OnyxError(
-                OnyxErrorCode.EE_REQUIRED,
-                "Chat history retention is an Enterprise Plan feature.",
-            )
-        if settings.search_ui_enabled != existing.search_ui_enabled:
-            raise OnyxError(
-                OnyxErrorCode.EE_REQUIRED,
-                "Search Mode is an Enterprise Plan feature.",
-            )
+    if global_version.is_ee_version():
+        from ee.onyx.utils.tier import get_tier
+
+        current_tier = get_tier()
+    else:
+        current_tier = Tier.COMMUNITY
+    existing = load_settings()
+
+    # craft_default_enabled is access control: a PUT that omits it (e.g. an
+    # older client) must not silently reset it to the pydantic default.
+    if "craft_default_enabled" not in settings.model_fields_set:
+        settings.craft_default_enabled = existing.craft_default_enabled
+    # Search Mode is Business+; Chat Retention is Enterprise-only.
+    # Use the same error code (FEATURE_NOT_AVAILABLE / 402) the tier_gate
+    # middleware uses, so the FE has one shape to handle for tier-rejected
+    # writes.
+    if settings.search_ui_enabled != existing.search_ui_enabled and not tier_at_least(
+        current_tier, Tier.BUSINESS
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Search Mode requires the Business or Enterprise plan.",
+        )
+    if (
+        settings.maximum_chat_retention_days != existing.maximum_chat_retention_days
+        and not tier_at_least(current_tier, Tier.ENTERPRISE)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Chat history retention requires the Enterprise plan.",
+        )
 
     store_settings(settings)
+
+    if settings.craft_default_enabled != existing.craft_default_enabled:
+        emit_audit_event(
+            AuditAction.CRAFT_DEFAULT_CHANGE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(current_user),
+            resource_type="settings",
+            extra={"craft_default_enabled": settings.craft_default_enabled},
+        )
 
 
 def apply_license_status_to_settings(settings: Settings) -> Settings:
@@ -84,7 +124,9 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
 
 @basic_router.get("")
 def fetch_settings(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.BASIC_ACCESS, allow_anonymous=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> UserSettings:
     """Settings and notifications are stuffed into this single endpoint to reduce number of
@@ -105,14 +147,31 @@ def fetch_settings(
     )
     general_settings = apply_fn(general_settings)
 
-    # Check if Onyx Craft is enabled for this user (used for server-side redirects)
-    onyx_craft_enabled_for_user = is_onyx_craft_enabled(user) if user else False
+    # Check if Onyx Craft is enabled for this user (used for server-side
+    # redirects). The deployment gate and already-loaded settings are shared.
+    onyx_craft_available = is_craft_available_for_deployment(user) if user else False
+    onyx_craft_enabled_for_user = (
+        is_craft_enabled_for_user(
+            user,
+            deployment_available=onyx_craft_available,
+            workspace_default=general_settings.craft_default_enabled,
+        )
+        if user
+        else False
+    )
+
+    # Dev/debug flag: tail-the-pod-logs button gated by an env var. Same
+    # check happens on the SSE endpoint so flipping the env var off
+    # immediately closes the surface, not just the UI.
+    from onyx.server.features.build.configs import ENABLE_OPENCODE_DEBUGGING
 
     return UserSettings(
         **general_settings.model_dump(),
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,
+        onyx_craft_available=onyx_craft_available,
+        opencode_debugging_enabled=ENABLE_OPENCODE_DEBUGGING,
         vector_db_enabled=not DISABLE_VECTOR_DB,
         hooks_enabled=not MULTI_TENANT,
         version=onyx_version,
@@ -126,10 +185,15 @@ def fetch_settings(
             if DISABLE_VECTOR_DB
             else DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
         ),
+        is_containerized=is_running_in_container(),
+        posthog_key=POSTHOG_API_KEY,
+        posthog_host=POSTHOG_HOST,
     )
 
 
-def get_settings_notifications(user: User, db_session: Session) -> list[Notification]:
+def get_settings_notifications(
+    user: User, db_session: Session
+) -> list[NotificationResponse]:
     """Get notifications for settings page, including product gating and reindex notifications"""
     # Check for product gating notification
     product_notif = get_notifications(
@@ -137,7 +201,9 @@ def get_settings_notifications(user: User, db_session: Session) -> list[Notifica
         notif_type=NotificationType.TRIAL_ENDS_TWO_DAYS,
         db_session=db_session,
     )
-    notifications = [Notification.from_model(product_notif[0])] if product_notif else []
+    notifications = (
+        [NotificationResponse.model_validate(product_notif[0])] if product_notif else []
+    )
 
     # Only show reindex notifications to admins
     if not is_user_admin(user):
@@ -175,7 +241,7 @@ def get_settings_notifications(user: User, db_session: Session) -> list[Notifica
         )
 
         db_session.commit()
-        notifications.append(Notification.from_model(reindex_notif))
+        notifications.append(NotificationResponse.model_validate(reindex_notif))
         return notifications
     except SQLAlchemyError:
         logger.exception("Error while processing notifications")

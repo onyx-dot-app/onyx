@@ -7,8 +7,9 @@ import type { RichStr, WithoutStyles } from "@opal/types";
 // Types
 // ---------------------------------------------------------------------------
 
-interface DisabledProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface DisabledProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   ref?: React.Ref<HTMLDivElement>;
 
   /**
@@ -75,7 +76,6 @@ function Disabled({
   const wrapper = (
     <div
       ref={ref}
-      className="opal-disabled"
       {...rest}
       aria-disabled={disabled || undefined}
       data-opal-disabled={disabled || undefined}

@@ -1,13 +1,14 @@
 "use client";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
+import { Button } from "@opal/components";
+import { SvgPlusCircle } from "@opal/icons";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 
 const route = ADMIN_ROUTES.SLACK_BOTS;
@@ -20,7 +21,7 @@ function Main() {
   } = useSlackBots();
 
   if (isSlackBotsLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (slackBotsError || !slackBots) {
@@ -69,7 +70,13 @@ function Main() {
         found in the Onyx documentation to get started!
       </p>
 
-      <CreateButton href="/admin/bots/new">New Slack Bot</CreateButton>
+      <Button
+        icon={SvgPlusCircle}
+        prominence="secondary"
+        href="/admin/bots/new"
+      >
+        New Slack Bot
+      </Button>
 
       <SlackBotTable slackBots={slackBots} />
     </div>

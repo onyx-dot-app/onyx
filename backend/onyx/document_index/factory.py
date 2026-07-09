@@ -7,13 +7,102 @@ from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.db.models import SearchSettings
 from onyx.db.opensearch_migration import get_opensearch_retrieval_state
 from onyx.document_index.disabled import DisabledDocumentIndex
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
-    OpenSearchOldDocumentIndex,
+    OpenSearchDocumentIndex,
 )
-from onyx.document_index.vespa.index import VespaIndex
+from onyx.document_index.opensearch.opensearch_document_index import OpenSearchIndexPair
+from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
+from onyx.document_index.vespa.vespa_document_index import VespaIndexPair
 from onyx.indexing.models import IndexingSetting
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
+
+
+def _build_tenant_state() -> TenantState:
+    return TenantState(tenant_id=get_current_tenant_id(), multitenant=MULTI_TENANT)
+
+
+def build_opensearch_document_index(
+    search_settings: SearchSettings,
+) -> OpenSearchDocumentIndex:
+    """A single OpenSearch index handle for one search settings.
+
+    The reindex port needs the lone index (to scan a PIT / call index_raw_chunks),
+    not the primary+secondary pair `get_default_document_index` returns. Shared
+    with `_build_opensearch_pair` so the construction lives in one place.
+    """
+    indexing_setting = IndexingSetting.from_db_model(search_settings)
+    return OpenSearchDocumentIndex(
+        tenant_state=_build_tenant_state(),
+        index_name=search_settings.index_name,
+        embedding_dim=indexing_setting.final_embedding_dim,
+        embedding_precision=indexing_setting.embedding_precision,
+    )
+
+
+def _build_opensearch_pair(
+    search_settings: SearchSettings,
+    secondary_search_settings: SearchSettings | None,
+    primary_backfill_in_progress: bool = False,
+) -> OpenSearchIndexPair:
+    primary = build_opensearch_document_index(search_settings)
+    if secondary_search_settings is None:
+        return OpenSearchIndexPair(
+            primary=primary,
+            secondary=None,
+            primary_backfill_in_progress=primary_backfill_in_progress,
+        )
+    secondary_indexing_setting = IndexingSetting.from_db_model(
+        secondary_search_settings
+    )
+    secondary = build_opensearch_document_index(secondary_search_settings)
+    return OpenSearchIndexPair(
+        primary=primary,
+        secondary=secondary,
+        secondary_embedding_dim=secondary_indexing_setting.final_embedding_dim,
+        secondary_embedding_precision=secondary_indexing_setting.embedding_precision,
+        primary_backfill_in_progress=primary_backfill_in_progress,
+    )
+
+
+def _build_vespa_pair(
+    search_settings: SearchSettings,
+    secondary_search_settings: SearchSettings | None,
+    httpx_client: httpx.Client | None,
+) -> VespaIndexPair:
+    tenant_state = _build_tenant_state()
+    primary = VespaDocumentIndex(
+        index_name=search_settings.index_name,
+        tenant_state=tenant_state,
+        large_chunks_enabled=search_settings.large_chunks_enabled,
+        httpx_client=httpx_client,
+    )
+    if secondary_search_settings is None:
+        return VespaIndexPair(
+            primary=primary,
+            secondary=None,
+            secondary_index_name=None,
+            secondary_embedding_dim=None,
+            secondary_embedding_precision=None,
+        )
+    secondary_indexing_setting = IndexingSetting.from_db_model(
+        secondary_search_settings
+    )
+    secondary = VespaDocumentIndex(
+        index_name=secondary_search_settings.index_name,
+        tenant_state=tenant_state,
+        large_chunks_enabled=secondary_search_settings.large_chunks_enabled,
+        httpx_client=httpx_client,
+    )
+    return VespaIndexPair(
+        primary=primary,
+        secondary=secondary,
+        secondary_index_name=secondary_search_settings.index_name,
+        secondary_embedding_dim=secondary_indexing_setting.final_embedding_dim,
+        secondary_embedding_precision=secondary_indexing_setting.embedding_precision,
+    )
 
 
 def get_default_document_index(
@@ -22,170 +111,61 @@ def get_default_document_index(
     db_session: Session,
     httpx_client: httpx.Client | None = None,
 ) -> DocumentIndex:
-    """Gets the default document index from env vars.
+    """Gets the default document index for retrieval.
 
-    To be used for retrieval only. Indexing should be done through both indices
-    until Vespa is deprecated.
-
-    Primary index is the index that is used for querying/updating etc. Secondary
-    index is for when both the currently used index and the upcoming index both
-    need to be updated. Updates are applied to both indices.
-    WARNING: In that case, get_all_document_indices should be used.
+    Returns one DocumentIndex (the primary+secondary pair, with secondary None
+    when no second search settings exist). For indexing flows that need to write
+    to *all* configured backends, use `get_all_document_indices`.
     """
     if DISABLE_VECTOR_DB:
-        return DisabledDocumentIndex(
-            index_name=search_settings.index_name,
-            secondary_index_name=(
-                secondary_search_settings.index_name
-                if secondary_search_settings
-                else None
-            ),
-        )
-
-    secondary_index_name: str | None = None
-    secondary_large_chunks_enabled: bool | None = None
-    if secondary_search_settings:
-        secondary_index_name = secondary_search_settings.index_name
-        secondary_large_chunks_enabled = secondary_search_settings.large_chunks_enabled
+        return DisabledDocumentIndex()
 
     opensearch_retrieval_enabled = get_opensearch_retrieval_state(db_session)
-    if ONYX_DISABLE_VESPA:
-        if not opensearch_retrieval_enabled:
-            raise ValueError(
-                "BUG: ONYX_DISABLE_VESPA is set but opensearch_retrieval_enabled is not set."
-            )
+    if ONYX_DISABLE_VESPA and not opensearch_retrieval_enabled:
+        raise ValueError(
+            "Bug: ONYX_DISABLE_VESPA is set but opensearch_retrieval_enabled is not set."
+        )
+
     if opensearch_retrieval_enabled:
-        indexing_setting = IndexingSetting.from_db_model(search_settings)
-        secondary_indexing_setting = (
-            IndexingSetting.from_db_model(secondary_search_settings)
-            if secondary_search_settings
-            else None
-        )
-        return OpenSearchOldDocumentIndex(
-            index_name=search_settings.index_name,
-            embedding_dim=indexing_setting.final_embedding_dim,
-            embedding_precision=indexing_setting.embedding_precision,
-            secondary_index_name=secondary_index_name,
-            secondary_embedding_dim=(
-                secondary_indexing_setting.final_embedding_dim
-                if secondary_indexing_setting
-                else None
-            ),
-            secondary_embedding_precision=(
-                secondary_indexing_setting.embedding_precision
-                if secondary_indexing_setting
-                else None
-            ),
-            large_chunks_enabled=search_settings.large_chunks_enabled,
-            secondary_large_chunks_enabled=secondary_large_chunks_enabled,
-            multitenant=MULTI_TENANT,
-            httpx_client=httpx_client,
-        )
-    else:
-        return VespaIndex(
-            index_name=search_settings.index_name,
-            secondary_index_name=secondary_index_name,
-            large_chunks_enabled=search_settings.large_chunks_enabled,
-            secondary_large_chunks_enabled=secondary_large_chunks_enabled,
-            multitenant=MULTI_TENANT,
-            httpx_client=httpx_client,
-        )
+        return _build_opensearch_pair(search_settings, secondary_search_settings)
+    return _build_vespa_pair(search_settings, secondary_search_settings, httpx_client)
 
 
 def get_all_document_indices(
     search_settings: SearchSettings,
     secondary_search_settings: SearchSettings | None,
     httpx_client: httpx.Client | None = None,
+    primary_backfill_in_progress: bool = False,
 ) -> list[DocumentIndex]:
-    """Gets all document indices.
-
-    NOTE: Will only return an OpenSearch index interface if
-    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX is True. This is so we don't break flows
-    where we know it won't be enabled.
-
-    Used for indexing only. Until Vespa is deprecated we will index into both
-    document indices. Retrieval is done through only one index however.
-
-    Large chunks are not currently supported so we hardcode appropriate values.
+    """Gets every document index that should be written to.
 
     NOTE: Make sure the Vespa index object is returned first. In the rare event
     that there is some conflict between indexing and the migration task, it is
     assumed that the state of Vespa is more up-to-date than the state of
     OpenSearch.
+
+    ``primary_backfill_in_progress`` marks the OpenSearch primary as an INSTANT
+    reindex-port target still backfilling (see OpenSearchIndexPair.update).
     """
     if DISABLE_VECTOR_DB:
-        return [
-            DisabledDocumentIndex(
-                index_name=search_settings.index_name,
-                secondary_index_name=(
-                    secondary_search_settings.index_name
-                    if secondary_search_settings
-                    else None
-                ),
-            )
-        ]
+        return [DisabledDocumentIndex()]
+
+    if ONYX_DISABLE_VESPA and not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+        raise ValueError(
+            "Bug: ONYX_DISABLE_VESPA is set but ENABLE_OPENSEARCH_INDEXING_FOR_ONYX is not set."
+        )
 
     result: list[DocumentIndex] = []
-
-    if ONYX_DISABLE_VESPA:
-        if not ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
-            raise ValueError(
-                "ONYX_DISABLE_VESPA is set but ENABLE_OPENSEARCH_INDEXING_FOR_ONYX is not set."
-            )
-    else:
-        vespa_document_index = VespaIndex(
-            index_name=search_settings.index_name,
-            secondary_index_name=(
-                secondary_search_settings.index_name
-                if secondary_search_settings
-                else None
-            ),
-            large_chunks_enabled=search_settings.large_chunks_enabled,
-            secondary_large_chunks_enabled=(
-                secondary_search_settings.large_chunks_enabled
-                if secondary_search_settings
-                else None
-            ),
-            multitenant=MULTI_TENANT,
-            httpx_client=httpx_client,
+    if not ONYX_DISABLE_VESPA:
+        result.append(
+            _build_vespa_pair(search_settings, secondary_search_settings, httpx_client)
         )
-        result.append(vespa_document_index)
-
     if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
-        indexing_setting = IndexingSetting.from_db_model(search_settings)
-        secondary_indexing_setting = (
-            IndexingSetting.from_db_model(secondary_search_settings)
-            if secondary_search_settings
-            else None
+        result.append(
+            _build_opensearch_pair(
+                search_settings,
+                secondary_search_settings,
+                primary_backfill_in_progress=primary_backfill_in_progress,
+            )
         )
-        opensearch_document_index = OpenSearchOldDocumentIndex(
-            index_name=search_settings.index_name,
-            embedding_dim=indexing_setting.final_embedding_dim,
-            embedding_precision=indexing_setting.embedding_precision,
-            secondary_index_name=(
-                secondary_search_settings.index_name
-                if secondary_search_settings
-                else None
-            ),
-            secondary_embedding_dim=(
-                secondary_indexing_setting.final_embedding_dim
-                if secondary_indexing_setting
-                else None
-            ),
-            secondary_embedding_precision=(
-                secondary_indexing_setting.embedding_precision
-                if secondary_indexing_setting
-                else None
-            ),
-            large_chunks_enabled=search_settings.large_chunks_enabled,
-            secondary_large_chunks_enabled=(
-                secondary_search_settings.large_chunks_enabled
-                if secondary_search_settings
-                else None
-            ),
-            multitenant=MULTI_TENANT,
-            httpx_client=httpx_client,
-        )
-        result.append(opensearch_document_index)
-
     return result

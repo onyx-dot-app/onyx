@@ -73,6 +73,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         input_sample_rate: int = 24000,
         target_sample_rate: int = 16000,
     ):
+        self._logger = setup_logger()
         self.api_key = api_key
         self.region = region
         self.endpoint = endpoint
@@ -136,7 +137,15 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
                 )
 
         def on_recognized(evt: Any) -> None:
-            if evt.result.text and transcriber._loop and not transcriber._closed:
+            if not evt.result.text:
+                # Azure finished a segment but matched no speech. Log the reason
+                # so this isn't a silent empty transcript.
+                transcriber._logger.info(
+                    "Azure STT: no speech recognized in segment (reason=%s)",
+                    getattr(evt.result, "reason", None),
+                )
+                return
+            if transcriber._loop and not transcriber._closed:
                 if transcriber._accumulated_transcript:
                     transcriber._accumulated_transcript += " " + evt.result.text
                 else:
@@ -148,8 +157,34 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
                     ),
                 )
 
+        def on_canceled(evt: Any) -> None:
+            # Surfaces Azure-side failures that were previously swallowed:
+            # auth errors, region/endpoint mismatch, quota, blocked outbound
+            # connection to Azure, or bad audio format. The diagnostic fields
+            # live on evt.cancellation_details (code is a CancellationErrorCode),
+            # not on evt itself.
+            details = getattr(evt, "cancellation_details", None)
+            transcriber._logger.error(
+                "Azure STT canceled: reason=%s code=%s details=%s",
+                getattr(details, "reason", None),
+                getattr(details, "code", None),
+                getattr(details, "error_details", None),
+            )
+            # A cancel is terminal — no more transcripts will arrive. Signal
+            # end-of-stream so the consumer loop stops polling instead of
+            # spinning on empty results forever.
+            if transcriber._loop and not transcriber._closed:
+                transcriber._loop.call_soon_threadsafe(
+                    transcriber._transcript_queue.put_nowait, None
+                )
+
+        def on_session_stopped(_evt: Any) -> None:
+            transcriber._logger.info("Azure STT: session stopped")
+
         self._recognizer.recognizing.connect(on_recognizing)
         self._recognizer.recognized.connect(on_recognized)
+        self._recognizer.canceled.connect(on_canceled)
+        self._recognizer.session_stopped.connect(on_session_stopped)
         self._recognizer.start_continuous_recognition_async()
 
     async def send_audio(self, chunk: bytes) -> None:

@@ -11,7 +11,8 @@
 #
 # 1. SECURITY HARDENING:
 #    - Remove all port exposures except nginx (80/443)
-#    - Comment out ports for: api_server, relational_db, index, cache, minio
+#    - Comment out ports for: api_server, relational_db, cache, minio
+#    - Set strong MinIO/S3 credentials (MINIO_ROOT_* + S3_AWS_*), not minioadmin
 #
 # 2. SSL/TLS SETUP:
 #    - Uncomment the certbot service (see below)
@@ -42,8 +43,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-      args:
-        - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
@@ -55,11 +54,8 @@ services:
     depends_on:
       relational_db:
         condition: service_started
-      index:
-        condition: service_started
       opensearch:
         condition: service_started
-        required: false
       cache:
         condition: service_started
       inference_model_server:
@@ -78,10 +74,8 @@ services:
       - AUTH_TYPE=${AUTH_TYPE:-basic}
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
-      - VESPA_HOST=${VESPA_HOST:-index}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - CODE_INTERPRETER_BASE_URL=${CODE_INTERPRETER_BASE_URL:-http://code-interpreter:8000}
@@ -91,10 +85,6 @@ services:
       # Onyx Craft configuration (disabled by default, set ENABLE_CRAFT=true in .env to enable)
       # Use --include-craft with install script, or manually set in .env file
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
-      - OUTPUTS_TEMPLATE_PATH=${OUTPUTS_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs}
-      - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
-      - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
-      - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -116,7 +106,11 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
-      start_period: 25s
+      # Generous start_period so that `docker compose up --wait` does not flag
+      # the container unhealthy while alembic migrations run on a fresh DB.
+      # Healthy is reported as soon as /health responds, so this does not slow
+      # down fast boots.
+      start_period: 600s
     # Optional, only for debugging purposes
     volumes:
       - api_server_logs:/var/log/onyx
@@ -128,13 +122,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-      args:
-        - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "
-      if [ -f /app/scripts/setup_craft_templates.sh ]; then
-        /app/scripts/setup_craft_templates.sh;
-      fi &&
       if [ -f /etc/ssl/certs/custom-ca.crt ]; then
         update-ca-certificates;
       fi &&
@@ -145,11 +134,8 @@ services:
     depends_on:
       relational_db:
         condition: service_started
-      index:
-        condition: service_started
       opensearch:
         condition: service_started
-        required: false
       cache:
         condition: service_started
       inference_model_server:
@@ -160,10 +146,8 @@ services:
     environment:
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
-      - VESPA_HOST=${VESPA_HOST:-index}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=${REDIS_HOST:-cache}
       - MODEL_SERVER_HOST=${MODEL_SERVER_HOST:-inference_model_server}
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
@@ -177,10 +161,6 @@ services:
       - API_SERVER_HOST=${API_SERVER_HOST:-api_server}
       # Onyx Craft configuration (set up automatically on container startup)
       - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
-      - OUTPUTS_TEMPLATE_PATH=${OUTPUTS_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs}
-      - VENV_TEMPLATE_PATH=${VENV_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/venv}
-      - WEB_TEMPLATE_PATH=${WEB_TEMPLATE_PATH:-/app/onyx/server/features/build/sandbox/kubernetes/docker/templates/outputs/web}
-      - PERSISTENT_DOCUMENT_STORAGE_PATH=${PERSISTENT_DOCUMENT_STORAGE_PATH:-/app/file-system}
     # PRODUCTION: Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -227,6 +207,18 @@ services:
     restart: unless-stopped
     environment:
       - INTERNAL_URL=${INTERNAL_URL:-http://api_server:8080}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000/', (r) => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # Uncomment the block below to enable the MCP server for Onyx.
   # mcp_server:
@@ -282,13 +274,6 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
-    command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
-        echo 'Skipping service...';
-        exit 0;
-      else
-        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
-      fi"
     env_file:
       - path: .env
         required: false
@@ -314,6 +299,9 @@ services:
       interval: 20s
       timeout: 5s
       retries: 3
+      # Generous start_period to absorb HuggingFace model downloads on first
+      # boot. Healthy is reported as soon as /api/health responds.
+      start_period: 600s
 
   indexing_model_server:
     image: ${ONYX_MODEL_SERVER_IMAGE:-onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}}
@@ -329,13 +317,6 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
-    command: >
-      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-}\" = \"True\" ] || [ \"${DISABLE_MODEL_SERVER:-}\" = \"true\" ]; then
-        echo 'Skipping service...';
-        exit 0;
-      else
-        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
-      fi"
     env_file:
       - path: .env
         required: false
@@ -363,9 +344,12 @@ services:
       interval: 20s
       timeout: 5s
       retries: 3
+      # Generous start_period to absorb HuggingFace model downloads on first
+      # boot. Healthy is reported as soon as /api/health responds.
+      start_period: 600s
 
   relational_db:
-    image: postgres:15.2-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/postgres:15.2-alpine
     shm_size: 1g
     command: -c 'max_connections=250'
     env_file:
@@ -389,41 +373,13 @@ services:
     volumes:
       - db_volume:/var/lib/postgresql/data
 
-  # This container name cannot have an underscore in it due to Vespa expectations of the URL
-  index:
-    image: vespaengine/vespa:8.609.39
-    restart: unless-stopped
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      - VESPA_SKIP_UPGRADE_CHECK=${VESPA_SKIP_UPGRADE_CHECK:-true}
-    # DEV: To expose ports, either:
-    # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
-    # 2. Uncomment the ports below
-    # ports:
-    #   - "19071:19071"
-    #   - "8081:8081"
-    volumes:
-      - vespa_volume:/opt/vespa/var
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "6"
-
   opensearch:
-    image: opensearchproject/opensearch:3.4.0
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/opensearchproject/opensearch:3.6.0
     restart: unless-stopped
-    # Controls whether this service runs. In order to enable it, add
-    # opensearch-enabled to COMPOSE_PROFILES in the environment for this
-    # docker-compose.
-    # NOTE: Now enabled on by default. To explicitly disable this service,
-    # uncomment this profile and ensure COMPOSE_PROFILES in your env does not
-    # list the profile, or when running docker compose, include all desired
-    # service names but this one. Additionally set
-    # OPENSEARCH_FOR_ONYX_ENABLED=false in your env.
-    # profiles: ["opensearch-enabled"]
+    # OpenSearch is the search backend and is enabled by default. To run against
+    # an external OpenSearch instance, set OPENSEARCH_HOST in your env and
+    # remove this service from the compose file (or skip it via the service list
+    # when running `docker compose up`).
     environment:
       # We need discovery.type=single-node so that OpenSearch doesn't try
       # forming a cluster and waiting for other nodes to become live.
@@ -457,13 +413,15 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.25.5-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
     depends_on:
-      - api_server
-      - web_server
+      api_server:
+        condition: service_healthy
+      web_server:
+        condition: service_healthy
     env_file:
       - path: .env
         required: false
@@ -499,9 +457,23 @@ services:
       && sed 's/\r$//' /etc/nginx/conf.d/run-nginx.sh > /tmp/run-nginx.sh
       && chmod +x /tmp/run-nginx.sh
       && /tmp/run-nginx.sh app.conf.template"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1/nginx-health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   cache:
-    image: redis:7.4-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/redis:7.4-alpine
     restart: unless-stopped
     # DEV: To expose ports, either:
     # 1. Use docker-compose.dev.yml: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
@@ -519,7 +491,7 @@ services:
       - /data
 
   minio:
-    image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     profiles: ["s3-filestore"]
     restart: unless-stopped
     # DEV: To expose ports, either:
@@ -579,7 +551,6 @@ services:
 volumes:
   # Necessary for persisting data for use
   db_volume:
-  vespa_volume: # Created by the container itself
   minio_data:
   # Caches to prevent re-downloading models, not strictly necessary
   model_cache_huggingface:

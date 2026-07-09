@@ -67,7 +67,8 @@ class TestUnsupportedMimeTypeLogging:
         ).UnsupportedImageFormatError("unsupported"),
     )
     def test_logs_magic_bytes_and_size(
-        self, mock_pipeline: MagicMock  # noqa: ARG002
+        self,
+        mock_pipeline: MagicMock,  # noqa: ARG002
     ) -> None:
         """The info log should include magic bytes hex and image size."""
         mock_llm = MagicMock()

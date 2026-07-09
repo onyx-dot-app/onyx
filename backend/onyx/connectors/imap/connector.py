@@ -405,7 +405,7 @@ def _parse_email_body(
             body = raw_payload.decode(charset)
             break
         except (UnicodeDecodeError, LookupError) as e:
-            print(f"Warning: Could not decode part with charset {charset}. Error: {e}")
+            logger.warning("Could not decode part with charset %s: %s", charset, e)
             continue
 
     if not body:

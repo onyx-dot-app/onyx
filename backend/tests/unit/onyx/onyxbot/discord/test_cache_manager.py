@@ -4,12 +4,14 @@ Tests for DiscordCacheManager class functionality.
 """
 
 import asyncio
+import time
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
 
 from onyx.onyxbot.discord.cache import DiscordCacheManager
+from onyx.onyxbot.discord.cache import TenantDiscordData
 
 
 class TestCacheInitialization:
@@ -239,12 +241,12 @@ class TestThreadSafety:
 
         call_count = 0
 
-        async def slow_refresh() -> tuple[list[int], str]:
+        def slow_refresh(tenant_id: str, cached_key: str | None) -> TenantDiscordData:  # noqa: ARG001
             nonlocal call_count
             call_count += 1
-            # Simulate slow operation
-            await asyncio.sleep(0.01)
-            return ([111111], "api_key")
+            # Simulate slow operation (sync: runs in the refresh thread pool)
+            time.sleep(0.01)
+            return TenantDiscordData([111111], "api_key")
 
         with (
             patch(
@@ -495,12 +497,12 @@ class TestCacheErrorHandling:
 
         call_count = 0
 
-        async def mock_load(tenant_id: str) -> tuple[list[int], str]:
+        def mock_load(tenant_id: str, cached_key: str | None) -> TenantDiscordData:  # noqa: ARG001
             nonlocal call_count
             call_count += 1
             if tenant_id == "tenant1":
                 raise Exception("Tenant 1 error")
-            return ([222222], "api_key")
+            return TenantDiscordData([222222], "api_key")
 
         with (
             patch(

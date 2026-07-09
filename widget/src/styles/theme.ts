@@ -10,8 +10,9 @@ export const theme = css`
 
   :host {
     /* Typography - Hanken Grotesk */
-    --onyx-font-family: "Hanken Grotesk", -apple-system, BlinkMacSystemFont,
-      "Segoe UI", sans-serif;
+    --onyx-font-family:
+      "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+      sans-serif;
     --onyx-font-family-mono: "DM Mono", "Monaco", "Menlo", monospace;
 
     /* Font Sizes */

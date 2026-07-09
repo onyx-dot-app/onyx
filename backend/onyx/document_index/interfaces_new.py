@@ -152,6 +152,18 @@ class MetadataUpdateRequest(BaseModel):
     persona_ids: set[int] | None = None
 
 
+class SecondaryIndexDocumentMissingError(Exception):
+    """A metadata update applied to the primary index but the doc isn't in the
+    secondary (FUTURE) index yet (e.g. mid reindex port). Carries the doc ids so
+    the caller can defer the secondary sync instead of failing."""
+
+    def __init__(self, document_ids: list[str]) -> None:
+        self.document_ids = document_ids
+        super().__init__(
+            f"{len(document_ids)} document(s) missing from the secondary index."
+        )
+
+
 class IndexRetrievalFilters(BaseModel):
     """
     Filters for retrieving chunks from the index.
@@ -388,6 +400,7 @@ class HybridCapable(abc.ABC):
         query: str,
         filters: IndexFilters,
         num_to_retrieve: int,
+        include_hidden: bool = False,
     ) -> list[InferenceChunk]:
         """Runs keyword-only search and returns a list of inference chunks.
 
@@ -396,6 +409,10 @@ class HybridCapable(abc.ABC):
             filters: Filters for things like permissions, source type, time,
                 etc.
             num_to_retrieve: Number of highest matching chunks to return.
+            include_hidden: When True, surface chunks belonging to documents
+                marked hidden. Defaults to False (user-facing search). The admin
+                search UI passes True so admins can inspect/unhide documents
+                that ordinary users cannot see.
 
         Returns:
             Score-ranked (highest first) list of highest matching chunks.

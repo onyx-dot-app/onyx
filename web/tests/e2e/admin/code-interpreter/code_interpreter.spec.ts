@@ -19,7 +19,12 @@ const API_HEALTH_URL = "**/api/admin/code-interpreter/health";
  */
 async function mockCodeInterpreterApi(
   page: Page,
-  opts: { enabled: boolean; healthy: boolean; putStatus?: number }
+  opts: {
+    enabled: boolean;
+    connected: boolean;
+    error?: string;
+    putStatus?: number;
+  }
 ) {
   const putStatus = opts.putStatus ?? 200;
 
@@ -27,7 +32,10 @@ async function mockCodeInterpreterApi(
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ healthy: opts.healthy }),
+      body: JSON.stringify({
+        connected: opts.connected,
+        error: opts.error ?? "",
+      }),
     });
   });
 
@@ -52,14 +60,18 @@ async function mockCodeInterpreterApi(
 }
 
 /**
- * The disconnect icon button is an icon-only opal Button whose tooltip text
- * is not exposed as an accessible name. Locate it by finding the first
- * icon-only button (no label span) inside the card area.
+ * The disconnect icon button is an icon-only opal Button hidden inside a
+ * `Hoverable.Item` (opacity: 0 at rest). Hover over the card first to reveal
+ * it, then click it.
  */
-function getDisconnectIconButton(page: Page) {
-  return page
+async function clickDisconnectIconButton(page: Page) {
+  // The disconnect button is inside a Hoverable.Item (opacity: 0 at rest).
+  // Scope to the card and use force: true to bypass the opacity-0 visibility check.
+  await page
+    .locator('[data-hover-group="code-interpreter/Card"]')
     .locator("button:has(.interactive-foreground-icon):not(:has(span))")
-    .first();
+    .first()
+    .click({ force: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +85,7 @@ test.describe("Code Interpreter Admin Page", () => {
   });
 
   test("page loads with header and description", async ({ page }) => {
-    await mockCodeInterpreterApi(page, { enabled: true, healthy: true });
+    await mockCodeInterpreterApi(page, { enabled: true, connected: true });
     await page.goto(CODE_INTERPRETER_URL);
 
     await expect(page.locator('[aria-label="admin-page-title"]')).toHaveText(
@@ -85,14 +97,14 @@ test.describe("Code Interpreter Admin Page", () => {
   });
 
   test("shows Connected status when enabled and healthy", async ({ page }) => {
-    await mockCodeInterpreterApi(page, { enabled: true, healthy: true });
+    await mockCodeInterpreterApi(page, { enabled: true, connected: true });
     await page.goto(CODE_INTERPRETER_URL);
 
     await expect(page.getByText("Connected")).toBeVisible({ timeout: 10000 });
   });
 
   test("shows Connection Lost when enabled but unhealthy", async ({ page }) => {
-    await mockCodeInterpreterApi(page, { enabled: true, healthy: false });
+    await mockCodeInterpreterApi(page, { enabled: true, connected: false });
     await page.goto(CODE_INTERPRETER_URL);
 
     await expect(page.getByText("Connection Lost")).toBeVisible({
@@ -101,7 +113,7 @@ test.describe("Code Interpreter Admin Page", () => {
   });
 
   test("shows Reconnect button when disabled", async ({ page }) => {
-    await mockCodeInterpreterApi(page, { enabled: false, healthy: false });
+    await mockCodeInterpreterApi(page, { enabled: false, connected: false });
     await page.goto(CODE_INTERPRETER_URL);
 
     await expect(page.getByRole("button", { name: "Reconnect" })).toBeVisible({
@@ -113,13 +125,13 @@ test.describe("Code Interpreter Admin Page", () => {
   test("disconnect flow opens modal and sends PUT request", async ({
     page,
   }) => {
-    await mockCodeInterpreterApi(page, { enabled: true, healthy: true });
+    await mockCodeInterpreterApi(page, { enabled: true, connected: true });
     await page.goto(CODE_INTERPRETER_URL);
 
     await expect(page.getByText("Connected")).toBeVisible({ timeout: 10000 });
 
     // Click the disconnect icon button
-    await getDisconnectIconButton(page).click();
+    await clickDisconnectIconButton(page);
 
     // Modal should appear
     await expect(page.getByText("Disconnect Code Interpreter")).toBeVisible();
@@ -140,13 +152,13 @@ test.describe("Code Interpreter Admin Page", () => {
   test("disconnect modal can be closed without disconnecting", async ({
     page,
   }) => {
-    await mockCodeInterpreterApi(page, { enabled: true, healthy: true });
+    await mockCodeInterpreterApi(page, { enabled: true, connected: true });
     await page.goto(CODE_INTERPRETER_URL);
 
     await expect(page.getByText("Connected")).toBeVisible({ timeout: 10000 });
 
     // Open modal
-    await getDisconnectIconButton(page).click();
+    await clickDisconnectIconButton(page);
     await expect(page.getByText("Disconnect Code Interpreter")).toBeVisible();
 
     // Close modal via Cancel button
@@ -161,7 +173,7 @@ test.describe("Code Interpreter Admin Page", () => {
   });
 
   test("reconnect flow sends PUT with enabled=true", async ({ page }) => {
-    await mockCodeInterpreterApi(page, { enabled: false, healthy: false });
+    await mockCodeInterpreterApi(page, { enabled: false, connected: false });
     await page.goto(CODE_INTERPRETER_URL);
 
     await expect(page.getByRole("button", { name: "Reconnect" })).toBeVisible({
@@ -187,7 +199,7 @@ test.describe("Code Interpreter Admin Page", () => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ healthy: false }),
+        body: JSON.stringify({ connected: false, error: "" }),
       });
     });
 
@@ -223,7 +235,7 @@ test.describe("Code Interpreter Admin Page", () => {
   test("shows error toast when disconnect fails", async ({ page }) => {
     await mockCodeInterpreterApi(page, {
       enabled: true,
-      healthy: true,
+      connected: true,
       putStatus: 500,
     });
     await page.goto(CODE_INTERPRETER_URL);
@@ -231,7 +243,7 @@ test.describe("Code Interpreter Admin Page", () => {
     await expect(page.getByText("Connected")).toBeVisible({ timeout: 10000 });
 
     // Open modal and click disconnect
-    await getDisconnectIconButton(page).click();
+    await clickDisconnectIconButton(page);
     const modal = page.getByRole("dialog");
     await modal.getByRole("button", { name: "Disconnect" }).click();
 
@@ -244,7 +256,7 @@ test.describe("Code Interpreter Admin Page", () => {
   test("shows error toast when reconnect fails", async ({ page }) => {
     await mockCodeInterpreterApi(page, {
       enabled: false,
-      healthy: false,
+      connected: false,
       putStatus: 500,
     });
     await page.goto(CODE_INTERPRETER_URL);
@@ -264,5 +276,90 @@ test.describe("Code Interpreter Admin Page", () => {
     await expect(page.getByRole("button", { name: "Reconnect" })).toBeVisible({
       timeout: 5000,
     });
+  });
+
+  test("shows error popover on hover over unhealthy status icon", async ({
+    page,
+  }) => {
+    const errorMessage = "Sandbox runtime crashed unexpectedly";
+    await mockCodeInterpreterApi(page, {
+      enabled: true,
+      connected: true,
+      error: errorMessage,
+    });
+    await page.goto(CODE_INTERPRETER_URL);
+
+    // Wait for the Unhealthy status to render
+    const statusText = page.getByText("Unhealthy");
+    await expect(statusText).toBeVisible({ timeout: 10000 });
+
+    // Error popover should not be visible initially
+    await expect(page.getByText("Code Interpreter Error")).not.toBeVisible();
+
+    // Hover over the status icon — sibling of the status label
+    const statusIcon = statusText.locator("..").locator(".cursor-pointer");
+    await statusIcon.hover();
+
+    // Error popover should appear with the title and error description
+    await expect(page.getByText("Code Interpreter Error")).toBeVisible({
+      timeout: 3000,
+    });
+    await expect(page.getByText(errorMessage)).toBeVisible();
+
+    // Move mouse away — error popover should disappear
+    await page.mouse.move(0, 0);
+    await expect(page.getByText("Code Interpreter Error")).not.toBeVisible({
+      timeout: 3000,
+    });
+  });
+
+  test("shows error popover on hover over connection lost status icon", async ({
+    page,
+  }) => {
+    const errorMessage = "Failed to reach code interpreter service";
+    await mockCodeInterpreterApi(page, {
+      enabled: true,
+      connected: false,
+      error: errorMessage,
+    });
+    await page.goto(CODE_INTERPRETER_URL);
+
+    // Wait for the Connection Lost status to render
+    const statusText = page.getByText("Connection Lost");
+    await expect(statusText).toBeVisible({ timeout: 10000 });
+
+    // Hover over the status icon — sibling of the status label
+    const statusIcon = statusText.locator("..").locator(".cursor-pointer");
+    await statusIcon.hover();
+
+    // Error popover should show the connection lost title and error
+    await expect(page.getByText("Connection Lost Error")).toBeVisible({
+      timeout: 3000,
+    });
+    await expect(page.getByText(errorMessage)).toBeVisible();
+
+    // Move mouse away — error popover should disappear
+    await page.mouse.move(0, 0);
+    await expect(page.getByText("Connection Lost Error")).not.toBeVisible({
+      timeout: 3000,
+    });
+  });
+
+  test("does not show error popover on hover when healthy", async ({
+    page,
+  }) => {
+    await mockCodeInterpreterApi(page, {
+      enabled: true,
+      connected: true,
+    });
+    await page.goto(CODE_INTERPRETER_URL);
+
+    const statusText = page.getByText("Connected");
+    await expect(statusText).toBeVisible({ timeout: 10000 });
+
+    // The status icon wrapper should not have cursor-pointer when healthy
+    await expect(
+      statusText.locator("..").locator(".cursor-pointer")
+    ).toHaveCount(0);
   });
 });

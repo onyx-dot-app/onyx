@@ -9,10 +9,9 @@ response body verbatim. This test pins the contract:
   match keeps working.
 """
 
-import requests
-
 from onyx.llm.constants import LlmProviderNames
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 
 _BEDROCK_MODEL = "us.amazon.nova-2-lite-v1:0"
@@ -23,7 +22,7 @@ def test_bedrock_test_endpoint_rejects_invalid_credentials(
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/llm/test",
         headers=admin_user.headers,
         json={
@@ -48,6 +47,5 @@ def test_bedrock_test_endpoint_rejects_invalid_credentials(
         f"Response: {response.text}"
     )
     assert "Authentication failed" in response.text, (
-        f"Expected error message about invalid credentials, but got: "
-        f"{response.text}"
+        f"Expected error message about invalid credentials, but got: {response.text}"
     )

@@ -350,9 +350,11 @@ celery_app.autodiscover_tasks(
         [
             "onyx.background.celery.tasks.connector_deletion",
             "onyx.background.celery.tasks.docprocessing",
+            "onyx.background.celery.tasks.port",
             "onyx.background.celery.tasks.evals",
             "onyx.background.celery.tasks.hierarchyfetching",
             "onyx.background.celery.tasks.pruning",
+            "onyx.background.celery.tasks.scheduled_tasks",
             "onyx.background.celery.tasks.shared",
             "onyx.background.celery.tasks.vespa",
             "onyx.background.celery.tasks.llm_model_update",

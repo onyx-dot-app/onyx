@@ -1,10 +1,13 @@
 """Database and cache operations for the license table."""
 
+import hashlib
+import struct
 from datetime import datetime
 from typing import NamedTuple
 
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.license.models import LicenseMetadata
@@ -24,6 +27,36 @@ logger = setup_logger()
 
 LICENSE_METADATA_KEY = "license:metadata"
 LICENSE_CACHE_TTL_SECONDS = 86400  # 24 hours
+
+# Namespaced + tenant-hashed so unrelated tenants don't block each other
+# and the lock id can't collide with other advisory locks in the codebase.
+_SEAT_LOCK_NAMESPACE = "onyx_seat_lock"
+
+
+def seat_lock_id_for_tenant(tenant_id: str) -> int:
+    digest = hashlib.sha256(f"{_SEAT_LOCK_NAMESPACE}:{tenant_id}".encode()).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    return struct.unpack("q", digest[:8])[0]
+
+
+def acquire_seat_lock(db_session: Session, tenant_id: str | None = None) -> None:
+    """Tenant-scoped advisory lock; released on the caller's commit/rollback.
+
+    Caller must run the seat check AND the seat-consuming write in the
+    same transaction.
+    """
+    lock_id = seat_lock_id_for_tenant(tenant_id or get_current_tenant_id())
+    # Bounded wait: a double-acquisition bug or wedged holder should fail
+    # fast with lock_not_available, not hang until the idle-in-transaction
+    # reaper kills the session (observed as 10-minute invite freezes).
+    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+    db_session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": lock_id},
+    )
+    # Restore the session default so the caller's later row-lock waits
+    # aren't capped by the advisory-acquisition bound.
+    db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))
 
 
 class SeatAvailabilityResult(NamedTuple):
@@ -103,18 +136,29 @@ def delete_license(db_session: Session) -> bool:
 # -----------------------------------------------------------------------------
 
 
+def user_counts_toward_seats(user: User) -> bool:
+    """Per-user predicate matching ``get_used_seats``'s SQL filter below.
+
+    Self-hosted only — cloud counts ``UserTenantMapping`` rows instead.
+    Keep in sync with ``get_used_seats``.
+    """
+    return (
+        bool(user.is_active)
+        and user.role != UserRole.EXT_PERM_USER
+        and user.email != ANONYMOUS_USER_EMAIL
+        and user.account_type != AccountType.SERVICE_ACCOUNT
+    )
+
+
 def get_used_seats(tenant_id: str | None = None) -> int:
     """
     Get current seat usage directly from database.
 
-    For multi-tenant: counts users in UserTenantMapping for this tenant.
-    For self-hosted: counts all active users.
+    Multi-tenant: counts active UserTenantMapping rows. Self-hosted:
+    counts active users excluding SERVICE_ACCOUNT, EXT_PERM_USER, and
+    the anonymous user. BOT is counted (real humans).
 
-    Only human accounts count toward seat limits.
-    SERVICE_ACCOUNT (API key dummy users), EXT_PERM_USER, and the
-    anonymous system user are excluded. BOT (Slack users) ARE counted
-    because they represent real humans and get upgraded to STANDARD
-    when they log in via web.
+    Per-user predicate ``user_counts_toward_seats`` mirrors this filter.
     """
     if MULTI_TENANT:
         from ee.onyx.server.tenants.user_mapping import get_tenant_count
@@ -128,9 +172,9 @@ def get_used_seats(tenant_id: str | None = None) -> int:
                 select(func.count())
                 .select_from(User)
                 .where(
-                    User.is_active == True,  # noqa: E712
+                    User.is_active == True,  # noqa: E712  # ty: ignore[invalid-argument-type]
                     User.role != UserRole.EXT_PERM_USER,
-                    User.email != ANONYMOUS_USER_EMAIL,
+                    User.email != ANONYMOUS_USER_EMAIL,  # ty: ignore[invalid-argument-type]
                     User.account_type != AccountType.SERVICE_ACCOUNT,
                 )
             )
@@ -207,12 +251,19 @@ def update_license_cache(
         The cached LicenseMetadata
     """
     from ee.onyx.utils.license import get_license_status
+    from ee.onyx.utils.license_expiry import get_expiry_warning_stage
+    from ee.onyx.utils.license_expiry import get_grace_period_end
 
     tenant = tenant_id or get_current_tenant_id()
     cache = get_cache_backend(tenant_id=tenant_id)
 
     used_seats = get_used_seats(tenant)
-    status = get_license_status(payload, grace_period_end)
+    # Default the grace window to 14 days past expires_at so the license-
+    # enforcement middleware returns GRACE_PERIOD (not GATED_ACCESS) during
+    # that window — matching the banner copy and daily admin emails.
+    effective_grace_end = grace_period_end or get_grace_period_end(payload.expires_at)
+    status = get_license_status(payload, effective_grace_end)
+    warning_stage = get_expiry_warning_stage(payload.expires_at)
 
     metadata = LicenseMetadata(
         tenant_id=payload.tenant_id,
@@ -222,10 +273,12 @@ def update_license_cache(
         plan_type=payload.plan_type,
         issued_at=payload.issued_at,
         expires_at=payload.expires_at,
-        grace_period_end=grace_period_end,
+        grace_period_end=effective_grace_end,
         status=status,
+        expiry_warning_stage=warning_stage,
         source=source,
         stripe_subscription_id=payload.stripe_subscription_id,
+        customer_tier=payload.customer_tier,
     )
 
     cache.set(

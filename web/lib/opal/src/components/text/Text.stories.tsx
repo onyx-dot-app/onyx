@@ -42,7 +42,7 @@ export const AsParagraph: Story = {
 
 export const Nowrap: Story = {
   render: () => (
-    <div className="w-48 border border-border-02 rounded p-2">
+    <div className="w-48 border border-border-02 rounded-sm p-2">
       <Text font="main-ui-body" color="text-05" nowrap>
         This text will not wrap even though the container is narrow
       </Text>
@@ -112,6 +112,15 @@ const INVERTED_COLORS: TextColor[] = [
   "text-inverted-05",
 ];
 
+const STATUS_COLORS: TextColor[] = [
+  "status-error-01",
+  "status-error-02",
+  "status-error-05",
+  "status-success-01",
+  "status-success-02",
+  "status-success-05",
+];
+
 export const AllColors: Story = {
   render: () => (
     <div className="space-y-2">
@@ -138,6 +147,23 @@ export const InvertedColors: Story = {
             className="w-56 shrink-0 font-secondary-body"
             style={{ color: "rgba(255,255,255,0.5)" }}
           >
+            {color}
+          </span>
+          <Text font="main-ui-body" color={color}>
+            The quick brown fox
+          </Text>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+export const StatusColors: Story = {
+  render: () => (
+    <div className="space-y-2">
+      {STATUS_COLORS.map((color) => (
+        <div key={color} className="flex items-baseline gap-4">
+          <span className="w-56 shrink-0 font-secondary-body text-text-03">
             {color}
           </span>
           <Text font="main-ui-body" color={color}>

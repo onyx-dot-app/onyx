@@ -1,7 +1,6 @@
 "use client";
 
 import { adminSearch } from "./lib";
-import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useState, useEffect, useCallback } from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
@@ -18,8 +17,8 @@ import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { InputTypeIn } from "@opal/components";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 
 const DocumentDisplay = ({
   document,
@@ -50,7 +49,7 @@ const DocumentDisplay = ({
         </a>
       </div>
       <div className="flex flex-wrap gap-x-2 mt-1 text-xs">
-        <div className="px-1 py-0.5 bg-accent-background-hovered rounded flex">
+        <div className="px-1 py-0.5 bg-accent-background-hovered rounded-sm flex">
           <p className="mr-1 my-auto">Boost:</p>
           <ScoreSection
             documentId={document.document_id}
@@ -73,7 +72,7 @@ const DocumentDisplay = ({
               );
             }
           }}
-          className="px-1 py-0.5 bg-accent-background-hovered hover:bg-accent-background rounded flex cursor-pointer select-none"
+          className="px-1 py-0.5 bg-accent-background-hovered hover:bg-accent-background rounded-sm flex cursor-pointer select-none"
         >
           <div className="my-auto">
             {document.hidden ? (
@@ -92,7 +91,7 @@ const DocumentDisplay = ({
           <DocumentUpdatedAtBadge updatedAt={document.updated_at} />
         </div>
       )}
-      <p className="pl-1 pt-2 pb-3 break-words">
+      <p className="pl-1 pt-2 pb-3 wrap-break-word">
         {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
       </p>
     </div>
@@ -207,7 +206,11 @@ export function Explorer({
           })}
         </div>
       )}
-      {isLoading && <ThreeDotsLoader />}
+      {isLoading && (
+        <div className="flex justify-center py-12">
+          <SvgSimpleLoader className="h-6 w-6" />
+        </div>
+      )}
     </div>
   );
 }

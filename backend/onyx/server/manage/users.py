@@ -32,8 +32,9 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import enforce_seat_limit
+from onyx.auth.users import enforce_seat_limit_locked
 from onyx.auth.users import optional_user
+from onyx.auth.users import scope_exempt
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
@@ -44,8 +45,6 @@ from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import USER_DIRECTORY_ADMIN_ONLY
-from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.api_key import is_api_key_email_address
@@ -70,12 +69,15 @@ from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_chat_background
 from onyx.db.user_preferences import update_user_default_app_mode
 from onyx.db.user_preferences import update_user_default_model
+from onyx.db.user_preferences import update_user_language
+from onyx.db.user_preferences import update_user_paste_as_tile
 from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
 from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
 from onyx.db.user_preferences import update_user_temperature_override_enabled
 from onyx.db.user_preferences import update_user_theme_preference
+from onyx.db.user_preferences import update_users_craft_enabled
 from onyx.db.users import batch_get_user_groups
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_accepted_users
@@ -100,12 +102,14 @@ from onyx.server.manage.models import BulkInviteResponse
 from onyx.server.manage.models import ChatBackgroundRequest
 from onyx.server.manage.models import DefaultAppModeRequest
 from onyx.server.manage.models import EmailInviteStatus
+from onyx.server.manage.models import LanguageRequest
 from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
 from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
+from onyx.server.manage.models import UserCraftAccessUpdateRequest
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
 from onyx.server.manage.models import UserRoleResponse
@@ -116,8 +120,14 @@ from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.server.models import UserGroupInfo
+from onyx.server.security.store import get_security_settings
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
+from onyx.utils.csv_utils import sanitize_csv_cell
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import (
@@ -172,6 +182,59 @@ def set_user_role(
         )(db_session, user_to_update)
 
     update_user_role(user_to_update, requested_role, db_session)
+
+    emit_audit_event(
+        AuditAction.USER_ROLE_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(user_to_update.id),
+        extra={
+            "target_email": user_to_update.email,
+            "old_role": current_role.value,
+            "new_role": requested_role.value,
+        },
+    )
+
+
+@router.patch("/manage/admin/users/craft-enabled")
+def set_user_craft_access(
+    craft_access_update_request: UserCraftAccessUpdateRequest,
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
+    db_session: Session = Depends(get_session),
+) -> None:
+    users_to_update: list[User] = []
+    missing_emails: list[str] = []
+    for email in craft_access_update_request.user_emails:
+        target = get_user_by_email(email=email, db_session=db_session)
+        if target:
+            users_to_update.append(target)
+        else:
+            missing_emails.append(email)
+    if missing_emails:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Users not found: {', '.join(missing_emails)}",
+        )
+
+    update_users_craft_enabled(
+        user_ids=[target.id for target in users_to_update],
+        craft_enabled=craft_access_update_request.craft_enabled,
+        db_session=db_session,
+    )
+
+    emit_audit_event(
+        AuditAction.USER_CRAFT_ACCESS_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        extra={
+            "target_emails": [target.email for target in users_to_update],
+            "craft_enabled": craft_access_update_request.craft_enabled,
+        },
+    )
 
 
 class TestUpsertRequest(BaseModel):
@@ -383,8 +446,7 @@ def list_all_users(
             accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
         ],
         slack_users=[FullUserSnapshot.from_user_model(user) for user in slack_users][
-            slack_users_page
-            * USERS_PAGE_SIZE : (slack_users_page + 1)
+            slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
             * USERS_PAGE_SIZE
         ],
         invited=[InvitedUserSnapshot(email=email) for email in invited_emails][
@@ -412,11 +474,13 @@ def download_users_csv(
     # Write CSV header
     writer.writerow(["Email", "Role", "Status"])
 
-    # Write user data
+    # Write user data. Emails are user-supplied (a local part can legally
+    # start with a formula trigger like `=`), so sanitize to prevent
+    # CSV/formula injection against the admin opening the export.
     for user in users:
         writer.writerow(
             [
-                user.email,
+                sanitize_csv_cell(user.email),
                 user.role.value if user.role else "",
                 "Active" if user.is_active else "Inactive",
             ]
@@ -469,10 +533,13 @@ def bulk_invite_users(
         if e not in existing_users and e not in already_invited
     ]
 
-    # Check seat availability for new users. Must run before the counter
-    # reservation below — a seat-limit failure must not burn trial quota.
-    if emails_needing_seats:
-        enforce_seat_limit(db_session, seats_needed=len(emails_needing_seats))
+    # Must run before the trial counter reservation — a seat-limit
+    # failure must not burn trial quota. Self-hosted only: the cloud
+    # check runs inside add_users_to_tenant, atomic with the mapping
+    # insert. Locking here too re-acquires the tenant advisory lock on
+    # a second connection and self-deadlocks (#10900).
+    if emails_needing_seats and not MULTI_TENANT:
+        enforce_seat_limit_locked(db_session, seats_needed=len(emails_needing_seats))
 
     # Enforce the trial invite cap via the monotonic `tenant_invite_counter`.
     # The UPSERT holds a row-level lock on `tenant_id` during the UPDATE, so
@@ -506,7 +573,10 @@ def bulk_invite_users(
             fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.provisioning", "add_users_to_tenant", None
             )(new_invited_emails, tenant_id)
-
+        except OnyxError:
+            # Seat-limit / billing declines from the cloud check must reach
+            # the caller now that this is the only enforcement point.
+            raise
         except Exception as e:
             logger.error("Failed to add users to tenant %s: %s", tenant_id, str(e))
 
@@ -590,6 +660,17 @@ def bulk_invite_users(
                         )
             raise e
 
+    # Genuinely-new invites (not existing or already-invited) are the accounts
+    # an admin is provisioning access for; re-invites of known emails are no-ops.
+    if emails_needing_seats:
+        emit_audit_event(
+            AuditAction.USER_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(current_user),
+            resource_type="user",
+            extra={"invited_emails": emails_needing_seats},
+        )
+
     return BulkInviteResponse(
         invited_count=number_of_invited_users,
         email_invite_status=email_invite_status,
@@ -654,6 +735,15 @@ def deactivate_user_api(
 
     deactivate_user(user_to_deactivate, db_session)
 
+    emit_audit_event(
+        AuditAction.USER_DEACTIVATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(user_to_deactivate.id),
+        extra={"target_email": user_to_deactivate.email},
+    )
+
     # Invalidate license cache so used_seats reflects the new count
     # Only for self-hosted (non-multi-tenant) deployments
     if not MULTI_TENANT:
@@ -665,7 +755,9 @@ def deactivate_user_api(
 @router.delete("/manage/admin/delete-user", tags=PUBLIC_API_TAGS)
 async def delete_user(
     user_email: UserByEmail,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_delete = get_user_by_email(
@@ -680,6 +772,10 @@ async def delete_user(
             status_code=400, detail="User must be deactivated before deleting"
         )
 
+    # Capture identifiers before the row is detached/deleted below.
+    deleted_user_id = str(user_to_delete.id)
+    deleted_user_email = user_to_delete.email
+
     # Detach the user from the current session
     db_session.expunge(user_to_delete)
 
@@ -690,6 +786,15 @@ async def delete_user(
         )([user_email.user_email], tenant_id)
         delete_user_from_db(user_to_delete, db_session)
         logger.info("Deleted user %s", user_to_delete.email)
+
+        emit_audit_event(
+            AuditAction.USER_DELETE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(current_user),
+            resource_type="user",
+            resource_id=deleted_user_id,
+            extra={"target_email": deleted_user_email},
+        )
 
         # Invalidate license cache so used_seats reflects the new count
         # Only for self-hosted (non-multi-tenant) deployments
@@ -707,7 +812,9 @@ async def delete_user(
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
 def activate_user_api(
     user_email: UserByEmail,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_activate = get_user_by_email(
@@ -720,11 +827,18 @@ def activate_user_api(
         logger.warning("%s is already activated", user_to_activate.email)
         return
 
-    # Check seat availability before activating
-    # Only for self-hosted (non-multi-tenant) deployments
-    enforce_seat_limit(db_session)
+    enforce_seat_limit_locked(db_session)
 
     activate_user(user_to_activate, db_session)
+
+    emit_audit_event(
+        AuditAction.USER_REACTIVATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(user_to_activate.id),
+        extra={"target_email": user_to_activate.email},
+    )
 
     # Invalidate license cache so used_seats reflects the new count
     # Only for self-hosted (non-multi-tenant) deployments
@@ -738,7 +852,7 @@ def activate_user_api(
 def get_valid_domains(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[str]:
-    return VALID_EMAIL_DOMAINS
+    return list(get_security_settings().valid_email_domains)
 
 
 """Endpoints for all"""
@@ -751,7 +865,7 @@ def list_all_users_basic_info(
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
     if (
-        USER_DIRECTORY_ADMIN_ONLY
+        get_security_settings().user_directory_admin_only
         and Permission.READ_USERS not in get_effective_permissions(user)
     ):
         raise OnyxError(
@@ -875,7 +989,7 @@ def get_current_user_permissions(
     return sorted(p.value for p in get_effective_permissions(user))
 
 
-@router.get("/me", tags=PUBLIC_API_TAGS)
+@router.get("/me", tags=PUBLIC_API_TAGS, dependencies=[Depends(scope_exempt)])
 def verify_user_logged_in(
     request: Request,
     user: User | None = Depends(optional_user),
@@ -898,6 +1012,23 @@ def verify_user_logged_in(
         )
 
     token_created_at = _get_token_created_at(user, request, db_session)
+
+    token_expires_at: datetime | None = None
+    if token_created_at is not None:
+        token_expires_at = token_created_at + timedelta(
+            seconds=SESSION_EXPIRE_TIME_SECONDS
+        )
+    track_oidc = get_security_settings().track_external_idp_expiry
+    # When OIDC tracking is enabled, cap expiry at the IdP token's lifetime.
+    # Guard against stale oidc_expiry from a previous OIDC session (same comment
+    # as the old track_external_idp_expiry guard in UserInfo.from_model).
+    oidc_expiry = user.oidc_expiry if track_oidc else None
+    if oidc_expiry is not None:
+        token_expires_at = (
+            min(token_expires_at, oidc_expiry)
+            if token_expires_at is not None
+            else oidc_expiry
+        )
 
     team_name = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
@@ -932,8 +1063,7 @@ def verify_user_logged_in(
 
     user_info = UserInfo.from_model(
         user,
-        current_token_created_at=token_created_at,
-        expiry_length=SESSION_EXPIRE_TIME_SECONDS,
+        token_expires_at=token_expires_at,
         is_cloud_superuser=user.email in super_users_list,
         team_name=team_name,
         tenant_info=TenantInfo(
@@ -973,6 +1103,15 @@ def update_user_shortcut_enabled_api(
     update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
 
 
+@router.patch("/paste-as-tile")
+def update_user_paste_as_tile_api(
+    paste_as_tile: bool,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_paste_as_tile(user.id, paste_as_tile, db_session)
+
+
 @router.patch("/auto-scroll")
 def update_user_auto_scroll_api(
     request: AutoScrollRequest,
@@ -989,6 +1128,15 @@ def update_user_theme_preference_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_theme_preference(user.id, request.theme_preference, db_session)
+
+
+@router.patch("/user/language")
+def update_user_language_api(
+    request: LanguageRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_language(user.id, request.language.value, db_session)
 
 
 @router.patch("/user/chat-background")

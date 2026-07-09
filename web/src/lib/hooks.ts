@@ -13,32 +13,33 @@ import {
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import { parseLlmDescriptor } from "./llmConfig/utils";
+import {
+  getProviderOverrideForAgent,
+  parseLlmDescriptor,
+} from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
+import { MinimalAgent } from "@/lib/agents/types";
 import {
-  MinimalPersonaSnapshot,
-  PersonaLabel,
-} from "@/app/admin/agents/interfaces";
-import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
-import { isAnthropic } from "@/lib/llmConfig/svc";
+  DefaultModel,
+  LLMProviderDescriptor,
+} from "@/lib/languageModels/types";
+import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
-import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
+import {
+  AuthType,
+  DEFAULT_AGENT_ID,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+} from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
-import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const usePublicCredentials = () => {
@@ -250,85 +251,6 @@ export const useFederatedConnectors = () => {
   };
 };
 
-export const useLabels = () => {
-  const { mutate } = useSWRConfig();
-  const { data: labels, error } = useSWR<PersonaLabel[]>(
-    SWR_KEYS.personaLabels,
-    errorHandlingFetcher
-  );
-
-  const refreshLabels = async () => {
-    return mutate(SWR_KEYS.personaLabels);
-  };
-
-  const createLabel = async (name: string): Promise<PersonaLabel | null> => {
-    const response = await fetch(SWR_KEYS.personaLabels, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const newLabel: PersonaLabel = await response.json();
-    mutate(
-      SWR_KEYS.personaLabels,
-      (currentLabels: PersonaLabel[] | undefined) => [
-        ...(currentLabels || []),
-        newLabel,
-      ],
-      false
-    );
-    return newLabel;
-  };
-
-  const updateLabel = async (id: number, name: string) => {
-    const response = await fetch(`/api/admin/persona/label/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label_name: name }),
-    });
-
-    if (response.ok) {
-      mutate(
-        SWR_KEYS.personaLabels,
-        labels?.map((label) => (label.id === id ? { ...label, name } : label)),
-        false
-      );
-    }
-
-    return response;
-  };
-
-  const deleteLabel = async (id: number) => {
-    const response = await fetch(`/api/admin/persona/label/${id}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (response.ok) {
-      mutate(
-        SWR_KEYS.personaLabels,
-        labels?.filter((label) => label.id !== id),
-        false
-      );
-    }
-
-    return response;
-  };
-
-  return {
-    labels,
-    error,
-    refreshLabels,
-    createLabel,
-    updateLabel,
-    deleteLabel,
-  };
-};
-
 export const useTimeRange = (initialValue?: DateRangePickerValue) => {
   return useState<DateRangePickerValue | null>(null);
 };
@@ -488,7 +410,7 @@ export interface LlmManager {
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
-  liveAgent: MinimalPersonaSnapshot | null;
+  liveAgent: MinimalAgent | null;
   maxTemperature: number;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
@@ -544,7 +466,7 @@ export function getDefaultLlmDescriptor(
     const provider = llmProviders.find((p) => p.id === defaultText.provider_id);
     if (provider) {
       return {
-        name: provider.name,
+        name: provider.name ?? "",
         provider: provider.provider,
         modelName: defaultText.model_name,
       };
@@ -559,7 +481,7 @@ export function getDefaultLlmDescriptor(
       (m) => m.is_visible
     );
     return {
-      name: firstLlmProvider.name,
+      name: firstLlmProvider.name ?? "",
       provider: firstLlmProvider.provider,
       modelName: firstModel?.name ?? "",
     };
@@ -569,7 +491,8 @@ export function getDefaultLlmDescriptor(
 
 export function getValidLlmDescriptorForProviders(
   modelName: string | null | undefined,
-  llmProviders: LLMProviderDescriptor[] | undefined | null
+  llmProviders: LLMProviderDescriptor[] | undefined | null,
+  defaultText?: DefaultModel | null
 ): LlmDescriptor {
   // Return early if providers haven't loaded yet (undefined/null)
   // Empty arrays are valid (user has no provider access for this assistant)
@@ -589,7 +512,7 @@ export function getValidLlmDescriptorForProviders(
       if (provider) {
         return {
           modelName: modelName,
-          name: provider.name,
+          name: provider.name ?? "",
           provider: provider.provider,
         };
       }
@@ -612,7 +535,7 @@ export function getValidLlmDescriptorForProviders(
       if (matchingProvider) {
         return {
           ...model,
-          name: matchingProvider.name,
+          name: matchingProvider.name ?? "",
           provider: matchingProvider.provider,
         };
       }
@@ -626,14 +549,21 @@ export function getValidLlmDescriptorForProviders(
       );
 
       if (provider) {
-        return { ...model, provider: provider.provider, name: provider.name };
+        return {
+          ...model,
+          provider: provider.provider,
+          name: provider.name ?? "",
+        };
       }
     }
   }
 
-  // Model not found in available providers - fall back to default model
+  // Model not found in available providers - fall back to the admin-configured
+  // global default before resorting to the first provider with visible models.
+  // Without this, a stale personal default (e.g. its provider was deleted)
+  // would silently land on an arbitrary provider instead of the global default.
   return (
-    getDefaultLlmDescriptor(llmProviders) ?? {
+    getDefaultLlmDescriptor(llmProviders, defaultText) ?? {
       name: "",
       provider: "",
       modelName: "",
@@ -643,7 +573,7 @@ export function getValidLlmDescriptorForProviders(
 
 export function useLlmManager(
   currentChatSession?: ChatSession,
-  liveAgent?: MinimalPersonaSnapshot
+  liveAgent?: MinimalAgent
 ): LlmManager {
   const { user } = useUser();
 
@@ -716,7 +646,11 @@ export function useLlmManager(
   function getValidLlmDescriptor(
     modelName: string | null | undefined
   ): LlmDescriptor {
-    return getValidLlmDescriptorForProviders(modelName, llmProviders);
+    return getValidLlmDescriptorForProviders(
+      modelName,
+      llmProviders,
+      defaultText
+    );
   }
 
   // Compute the resolved LLM synchronously so it's never one render behind.
@@ -741,17 +675,26 @@ export function useLlmManager(
     } else if (currentChatSession?.current_alternate_model) {
       resolved = getValidLlmDescriptorForProviders(
         currentChatSession.current_alternate_model,
+        llmProviders,
+        defaultText
+      );
+    } else if (liveAgent && liveAgent.id !== DEFAULT_AGENT_ID) {
+      // Custom agent — its configured default takes precedence. When the agent
+      // has no explicit default, fall to the global system default. The user's
+      // personal preference is irrelevant in an agent-scoped chat.
+      const agentOverride = getProviderOverrideForAgent(
+        liveAgent,
         llmProviders
       );
-    } else if (liveAgent?.llm_model_version_override) {
-      resolved = getValidLlmDescriptorForProviders(
-        liveAgent.llm_model_version_override,
-        llmProviders
-      );
+      resolved =
+        agentOverride ??
+        getDefaultLlmDescriptor(llmProviders, defaultText) ??
+        manualLlm;
     } else if (user?.preferences?.default_model) {
       resolved = getValidLlmDescriptorForProviders(
         user.preferences.default_model,
-        llmProviders
+        llmProviders,
+        defaultText
       );
     } else {
       resolved =
@@ -772,9 +715,9 @@ export function useLlmManager(
     llmProviders,
     defaultText,
     currentChatSession,
-    liveAgent?.llm_model_version_override,
     userHasManuallyOverriddenLLM,
     manualLlm,
+    liveAgent?.default_model_configuration_id,
     user?.preferences?.default_model,
   ]);
 
@@ -819,7 +762,9 @@ export function useLlmManager(
         currentChatSession.current_temperature_override,
         isAnthropicModel ? 1.0 : 2.0
       );
-    } else if (liveAgent?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)) {
+    } else if (
+      liveAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
+    ) {
       return 0;
     }
     return 0.5;
@@ -864,7 +809,9 @@ export function useLlmManager(
 
     if (currentChatSession?.current_temperature_override) {
       setTemperature(currentChatSession.current_temperature_override);
-    } else if (liveAgent?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)) {
+    } else if (
+      liveAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
+    ) {
       setTemperature(0);
     } else {
       setTemperature(0.5);
@@ -910,20 +857,20 @@ export function useLlmManager(
 }
 
 export function useAuthType(): AuthType | null {
-  const { data, error } = useSWR<{ auth_type: AuthType }>(
-    SWR_KEYS.authType,
-    errorHandlingFetcher
-  );
+  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
+  // camelCase-mapped shape — a raw fetcher here would poison the cache for
+  // every other consumer of the key.
+  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
 
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
     return AuthType.CLOUD;
   }
 
-  if (error || !data) {
+  if (error || isLoading) {
     return null;
   }
 
-  return data.auth_type;
+  return authTypeMetadata.authType;
 }
 
 /*
@@ -936,12 +883,10 @@ export const useUserGroups = (): {
   error: string;
   refreshUserGroups: () => void;
 } => {
-  const combinedSettings = useContext(SettingsContext);
-  const isLoading = combinedSettings?.settingsLoading ?? false;
+  const settings = useSettings();
+  const isLoading = settings.isLoading;
   const isPaidEnterpriseFeaturesEnabled =
-    !isLoading &&
-    combinedSettings &&
-    combinedSettings.enterpriseSettings !== null;
+    !isLoading && settings.enterprise !== null;
 
   const swrResponse = useSWR<UserGroup[]>(
     isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,

@@ -1,8 +1,7 @@
-import requests
-
 from ee.onyx.server.query_and_chat.models import SearchFullResponse
 from ee.onyx.server.query_and_chat.models import SendSearchQueryRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -27,7 +26,7 @@ class DocumentSearchManager:
             filters=None,
             stream=False,
         )
-        result = requests.post(
+        result = client.post(
             url=f"{API_SERVER_URL}/search/send-search-message",
             json=search_request.model_dump(),
             headers=user_performing_action.headers,

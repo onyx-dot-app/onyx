@@ -5,21 +5,20 @@ container isolation. Each sandbox runs in its own pod with dedicated resources.
 
 Key features:
 - Pod-based isolation (not process-level)
-- S3-based snapshots via init containers
+- FileStore-backed snapshots streamed through the sidecar filesystem API
 - Cluster-native service discovery
 - RBAC-controlled resource management
 - User-shared sandbox model with per-session workspaces
 
 Architecture Note (User-Shared Sandbox Model):
 - One pod per user (shared across all user's sessions)
-- provision() creates the pod with shared files/ directory
+- provision() creates the pod
 - setup_session_workspace() creates per-session workspace via kubectl exec
 - cleanup_session_workspace() removes session workspace via kubectl exec
 - terminate() destroys the entire pod (all sessions)
 
 Directory Structure (inside pod):
     /workspace/
-    ├── files/                     # SHARED - synced from S3
     └── sessions/
         ├── $session_id_1/         # Per-session workspace
         │   ├── outputs/
@@ -28,55 +27,112 @@ Directory Structure (inside pod):
         └── $session_id_2/
             └── ...
 
-IMPORTANT: This manager does NOT interface with the database directly.
-All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
+IMPORTANT: This manager does NOT interface with the database directly. All
+database operations should be handled by the caller (SessionManager, Celery
+tasks, etc.).
 
 Use get_sandbox_manager() from base.py to get the appropriate implementation.
 """
 
 import base64
 import binascii
+import copy
+import hashlib
 import io
+import ipaddress
 import json
-import mimetypes
 import os
 import re
+import secrets
 import shlex
 import tarfile
+import tempfile
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import cast
 from uuid import UUID
-from uuid import uuid4
 
-from acp.schema import PromptResponse
 from kubernetes import client
-from kubernetes import config
+from kubernetes import watch
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream as k8s_stream
 
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.enums import SandboxStatus
-from onyx.server.features.build.api.packet_logger import get_packet_logger
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
+from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
+from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
+from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
-from onyx.server.features.build.configs import SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
-from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
+from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
+from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
+from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
+from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
+from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPEvent,
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    PUSH_DAEMON_PORT,
 )
-from onyx.server.features.build.sandbox.kubernetes.internal.acp_exec_client import (
-    ACPExecClient,
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
 )
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_SNAPSHOT_CREATE_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    sidecar_snapshot_restore_path,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SnapshotCreateRequest,
+)
+from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
+from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
+    get_push_key_pair,
+)
+from onyx.server.features.build.sandbox.kubernetes.sidecar_client import SidecarClient
+from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
+    SidecarRequestError,
+)
+from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
+    SidecarStatusError,
+)
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT_SANDBOX
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
+from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
+from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
+from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
+from onyx.server.features.build.sandbox.models import FatalWriteError
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
+from onyx.server.features.build.sandbox.serve_transport import (
+    OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
+)
+from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
+from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
 )
@@ -84,219 +140,152 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_opencode_config,
-)
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    generate_user_identity_content,
-)
-from onyx.server.features.build.sandbox.util.persona_mapping import get_persona_info
-from onyx.server.features.build.sandbox.util.persona_mapping import ORG_INFO_AGENTS_MD
-from onyx.server.features.build.sandbox.util.persona_mapping import (
-    ORGANIZATION_STRUCTURE,
+    build_multi_provider_opencode_config,
 )
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# API server pod hostname — used to identify which replica is handling a request.
-# In K8s, HOSTNAME is set to the pod name (e.g., "api-server-dpgg7").
+# API server pod hostname — used to identify which replica is handling a
+# request. In K8s, HOSTNAME is set to the pod name (e.g., "api-server-dpgg7").
 _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
-# Constants for pod configuration
-# Note: Next.js ports are dynamically allocated from SANDBOX_NEXTJS_PORT_START to
-# SANDBOX_NEXTJS_PORT_END range, with one port per session.
-AGENT_PORT = 8081
-POD_READY_TIMEOUT_SECONDS = 120
-POD_READY_POLL_INTERVAL_SECONDS = 2
+POD_READY_TIMEOUT_SECONDS = 30
+
+# Shared deadline for IP assignment (scheduling + image pull) and the restore.
+OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 60.0
+POD_IP_POLL_INTERVAL_SECONDS = 0.5
 
 # Resource deletion timeout and polling interval
-# Kubernetes deletes are async - we need to wait for resources to actually be gone
+# Kubernetes deletes are async - we need to wait for resources to actually be
+# gone.
 RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 
-
-def _build_nextjs_start_script(
-    session_path: str,
-    nextjs_port: int,
-    check_node_modules: bool = False,
-) -> str:
-    """Build shell script to start the NextJS dev server.
-
-    Args:
-        session_path: Path to the session directory (should be shell-safe)
-        nextjs_port: Port number for the NextJS dev server
-        check_node_modules: If True, check for node_modules and run npm install if missing
-
-    Returns:
-        Shell script string to start the NextJS server
-    """
-    npm_install_check = ""
-    if check_node_modules:
-        npm_install_check = """
-# Check if npm dependencies are installed
-if [ ! -d "node_modules" ]; then
-    echo "Installing npm dependencies..."
-    npm install
-fi
-"""
-
-    return f"""
-set -e
-cd {session_path}/outputs/web
-{npm_install_check}
-# Start npm run dev in background
-echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup npm run dev -- -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
-NEXTJS_PID=$!
-echo "Next.js server started with PID $NEXTJS_PID"
-echo $NEXTJS_PID > {session_path}/nextjs.pid
-"""
+# Lock TTL and waiter blocking timeout; the sum of every bounded wait a holder
+# can spend inside the lock (incl. a terminating-Service deletion wait in
+# _ensure_service_exists). Expiry falls open to provision()'s 409/pod-exists
+# fallbacks.
+PROVISION_LOCK_TIMEOUT_SECONDS = (
+    OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+    + POD_READY_TIMEOUT_SECONDS
+    + OPENCODE_SERVE_READY_TIMEOUT_SECONDS
+    + RESOURCE_DELETION_TIMEOUT_SECONDS
+)
 
 
-def _get_local_aws_credential_env_vars() -> list[client.V1EnvVar]:
-    """Get AWS credential environment variables from local environment.
+# Pinned to the proxy IP via pod hostAliases — the iptables lockdown blocks DNS,
+# so the sandbox can't resolve it on its own.
+_PROXY_ALIAS = "sandbox-proxy"
+_SANDBOX_CONTAINER_NAME = "sandbox"
+_SIDECAR_CONTAINER_NAME = "sidecar"
 
-    Checks for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally
-    AWS_SESSION_TOKEN and AWS_DEFAULT_REGION in the local environment.
-    If credentials are found, returns V1EnvVar objects to pass them to containers.
+# Helm-rendered PodTemplate carrying the static sandbox pod shape.
+_PODTEMPLATE_NAME = "sandbox-pod"
 
-    This allows using local AWS credentials for development/testing while
-    IRSA (IAM Roles for Service Accounts) handles credentials in production EKS.
+# Per-session egress tagging plugin, baked into the sandbox image (see
+# docker/Dockerfile). Path must match the COPY destination there.
+_OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+# Surfaces the no-op `connect_app` tool; always on. Its "ask" permission is what
+# the api-server intercepts to drive the connect-app OAuth flow.
+_OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
 
-    Returns:
-        List of V1EnvVar objects for AWS credentials, empty if not set locally.
-    """
-    env_vars: list[client.V1EnvVar] = []
 
-    aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
-    aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+_PROXY_RESOLVE_RETRY_ATTEMPTS = 5
+_PROXY_RESOLVE_RETRY_BACKOFF_S = 0.5
 
-    # Only add credentials if both required values are present
-    if aws_access_key and aws_secret_key:
-        env_vars.append(client.V1EnvVar(name="AWS_ACCESS_KEY_ID", value=aws_access_key))
-        env_vars.append(
-            client.V1EnvVar(name="AWS_SECRET_ACCESS_KEY", value=aws_secret_key)
+
+def _provisioning_lock_key(sandbox_id: UUID) -> str:
+    return f"sandbox_provision_{sandbox_id}"
+
+
+@contextmanager
+def _provisioning_lock(sandbox_id: UUID, tenant_id: str) -> Iterator[None]:
+    """Serialize pod creation + startup restore for one sandbox across
+    api-server replicas; losers block, then reuse the ready pod via the
+    pod-exists check in provision(). Fails open on cache outages."""
+    try:
+        lock = get_cache_backend(tenant_id=tenant_id).lock(
+            _provisioning_lock_key(sandbox_id),
+            timeout=PROVISION_LOCK_TIMEOUT_SECONDS,
         )
+        acquired = lock.acquire(
+            blocking=True,
+            blocking_timeout=PROVISION_LOCK_TIMEOUT_SECONDS,
+        )
+    except CACHE_TRANSIENT_ERRORS as e:
+        logger.warning(
+            "Provisioning lock unavailable for sandbox %s (%s); "
+            "proceeding without cross-replica serialization",
+            sandbox_id,
+            e,
+        )
+        yield
+        return
 
-        # Optional: session token for temporary credentials
-        aws_session_token = os.environ.get("AWS_SESSION_TOKEN")
-        if aws_session_token:
-            env_vars.append(
-                client.V1EnvVar(name="AWS_SESSION_TOKEN", value=aws_session_token)
+    if not acquired:
+        raise RuntimeError(
+            f"Timed out waiting for a concurrent provisioner of sandbox {sandbox_id}"
+        )
+    try:
+        yield
+    finally:
+        try:
+            if lock.owned():
+                lock.release()
+        except CACHE_TRANSIENT_ERRORS:
+            logger.warning(
+                "Provisioning lock release failed for sandbox %s; relying on TTL",
+                sandbox_id,
+                exc_info=True,
             )
 
-        # Optional: default region
-        aws_region = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get(
-            "AWS_REGION"
-        )
-        if aws_region:
-            env_vars.append(
-                client.V1EnvVar(name="AWS_DEFAULT_REGION", value=aws_region)
-            )
 
-        logger.info("Using local AWS credentials for sandbox init container")
-
-    return env_vars
-
-
-def _build_filtered_symlink_script(
-    session_path: str,
-    excluded_user_library_paths: list[str],
-) -> str:
-    """Build a shell script that creates filtered symlinks for user_library.
-
-    Creates symlinks for all top-level directories in /workspace/files/,
-    then selectively symlinks user_library files, excluding disabled paths.
-
-    TODO: Replace this inline shell script with a standalone Python script
-    that gets copied onto the pod and invoked with arguments. This would
-    be easier to test and maintain.
-
-    Args:
-        session_path: The session directory path in the pod
-        excluded_user_library_paths: Paths to exclude from symlinks
+def _placeholder_llm_configs(
+    configs: list[LLMProviderConfig],
+) -> list[LLMProviderConfig]:
     """
-    excluded_paths_lines = "\n".join(p.lstrip("/") for p in excluded_user_library_paths)
-    heredoc_delim = f"_EXCL_{uuid4().hex[:12]}_"
-    return f"""
-# Create filtered files directory with exclusions
-mkdir -p {session_path}/files
+    Swaps real LLM keys for the proxy placeholder before the opencode config
+    reaches the pod; provider/model/api_base stay so routing is unchanged.
+    """
+    return [
+        c.model_copy(update={"api_key": SANDBOX_PROXY_INJECTED_PLACEHOLDER})
+        if c.api_key
+        else c
+        for c in configs
+    ]
 
-# Symlink all top-level directories except user_library
-for item in /workspace/files/*; do
-    [ -e "$item" ] || continue
-    name=$(basename "$item")
-    if [ "$name" != "user_library" ]; then
-        ln -sf "$item" {session_path}/files/"$name"
-    fi
-done
 
-# Write excluded paths to a temp file (one per line, via heredoc for safety)
-EXCL_FILE=$(mktemp)
-cat > "$EXCL_FILE" << '{heredoc_delim}'
-{excluded_paths_lines}
-{heredoc_delim}
+_MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MiB
 
-# Check if a relative path is excluded (exact match or child of excluded dir)
-is_excluded() {{
-    local rel_path="$1"
-    while IFS= read -r excl || [ -n "$excl" ]; do
-        [ -z "$excl" ] && continue
-        if [ "$rel_path" = "$excl" ]; then
-            return 0
-        fi
-        case "$rel_path" in
-            "$excl"/*) return 0 ;;
-        esac
-    done < "$EXCL_FILE"
-    return 1
-}}
 
-# Recursively create symlinks for non-excluded files
-create_filtered_symlinks() {{
-    src_dir="$1"
-    dst_dir="$2"
-    rel_base="$3"
-
-    for item in "$src_dir"/*; do
-        [ -e "$item" ] || continue
-        name=$(basename "$item")
-        if [ -n "$rel_base" ]; then
-            rel_path="$rel_base/$name"
-        else
-            rel_path="$name"
-        fi
-
-        if is_excluded "$rel_path"; then
-            continue
-        fi
-
-        if [ -d "$item" ]; then
-            mkdir -p "$dst_dir/$name"
-            create_filtered_symlinks "$item" "$dst_dir/$name" "$rel_path"
-            rmdir "$dst_dir/$name" 2>/dev/null || true
-        else
-            ln -sf "$item" "$dst_dir/$name"
-        fi
-    done
-}}
-
-if [ -d "/workspace/files/user_library" ]; then
-    mkdir -p {session_path}/files/user_library
-    create_filtered_symlinks /workspace/files/user_library {session_path}/files/user_library ""
-    rmdir {session_path}/files/user_library 2>/dev/null || true
-fi
-
-rm -f "$EXCL_FILE"
-"""
+def _build_targz(files: FileSet) -> tuple[bytes, str]:
+    total = sum(len(v) for v in files.values())
+    if total > _MAX_BUNDLE_BYTES:
+        raise FatalWriteError(
+            f"Bundle size {total} exceeds {_MAX_BUNDLE_BYTES} byte limit"
+        )
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=6) as tar:
+        for name in sorted(files):
+            data = files[name]
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            info.mtime = 0
+            info.uid = 0
+            info.gid = 0
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(data))
+    raw = buf.getvalue()
+    return raw, hashlib.sha256(raw).hexdigest()
 
 
 class KubernetesSandboxManager(SandboxManager):
     """Kubernetes-based sandbox manager for production deployments.
 
     Manages sandboxes as Kubernetes pods with:
-    - Init containers for S3 file sync (snapshots, knowledge files, uploads)
     - Main sandbox container running Next.js + opencode agent
+    - FileStore-backed snapshots via sidecar HTTP streaming
     - ClusterIP services for network access
 
     IMPORTANT: This manager does NOT interface with the database directly.
@@ -304,6 +293,8 @@ class KubernetesSandboxManager(SandboxManager):
 
     This is a singleton class - use get_sandbox_manager() to get the instance.
     """
+
+    supports_opencode_history_persistence = True
 
     _instance: "KubernetesSandboxManager | None" = None
     _lock = threading.Lock()
@@ -318,18 +309,7 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _initialize(self) -> None:
         """Initialize Kubernetes client and configuration."""
-        # Load Kubernetes config (in-cluster or kubeconfig)
-        try:
-            config.load_incluster_config()
-            logger.info("Loaded in-cluster Kubernetes configuration")
-        except config.ConfigException:
-            try:
-                config.load_kube_config()
-                logger.info("Loaded kubeconfig from default location")
-            except config.ConfigException as e:
-                raise RuntimeError(
-                    f"Failed to load Kubernetes configuration: {e}"
-                ) from e
+        load_kube_config()
 
         # IMPORTANT: We use separate ApiClient instances for REST vs streaming operations.
         # The kubernetes.stream.stream function monkey-patches the ApiClient's request
@@ -349,14 +329,19 @@ class KubernetesSandboxManager(SandboxManager):
 
         self._namespace = SANDBOX_NAMESPACE
         self._image = SANDBOX_CONTAINER_IMAGE
-        self._s3_bucket = SANDBOX_S3_BUCKET
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
-        self._file_sync_service_account = SANDBOX_FILE_SYNC_SERVICE_ACCOUNT
+        self._snapshot_manager = SnapshotManager(get_default_file_store())
+        self._sidecar_client = SidecarClient(
+            host=lambda sandbox_id: (
+                f"{self._get_pod_name(sandbox_id)}.{self._namespace}.svc.cluster.local"
+            )
+        )
+
+        self._init_serve_state()
 
         # Load AGENTS.md template path
         build_dir = Path(__file__).parent.parent.parent  # /onyx/server/features/build/
         self._agent_instructions_template_path = build_dir / "AGENTS.template.md"
-        self._skills_path = Path(__file__).parent / "docker" / "skills"
 
         logger.info(
             "KubernetesSandboxManager initialized: namespace=%s, image=%s",
@@ -364,13 +349,113 @@ class KubernetesSandboxManager(SandboxManager):
             self._image,
         )
 
-    def _get_pod_name(self, sandbox_id: str) -> str:
+    def _get_pod_name(self, sandbox_id: str | UUID) -> str:
         """Generate pod name from sandbox ID."""
         return f"sandbox-{str(sandbox_id)[:8]}"
 
-    def _get_service_name(self, sandbox_id: str) -> str:
-        """Generate service name from sandbox ID."""
-        return self._get_pod_name(sandbox_id)
+    def _get_opencode_secret_name(self, sandbox_id: str | UUID) -> str:
+        """Per-pod K8s Secret holding OPENCODE_SERVER_PASSWORD."""
+        return f"{self._get_pod_name(sandbox_id)}-opencode-auth"
+
+    _OPENCODE_PASSWORD_SECRET_KEY = "password"
+    _OPENCODE_CONFIG_SECRET_KEY = "config"
+
+    def _provision_opencode_secret(self, sandbox_id: str, config_json: str) -> None:
+        """Per-pod Secret with ``password`` (HTTP Basic) + ``config``
+        (full opencode.json, surfaced as ``OPENCODE_CONFIG_CONTENT``).
+
+        Without ``config``, opencode-serve loads no provider config and
+        falls back to its built-in ``opencode/big-pickle`` default.
+        """
+        secret_name = self._get_opencode_secret_name(sandbox_id)
+
+        def _build_secret(password: str) -> "client.V1Secret":
+            return client.V1Secret(
+                metadata=client.V1ObjectMeta(
+                    name=secret_name,
+                    namespace=self._namespace,
+                    labels={
+                        "app.kubernetes.io/component": "sandbox-opencode-auth",
+                        "onyx.app/sandbox-id": str(sandbox_id),
+                    },
+                ),
+                type="Opaque",
+                string_data={
+                    self._OPENCODE_PASSWORD_SECRET_KEY: password,
+                    self._OPENCODE_CONFIG_SECRET_KEY: config_json,
+                },
+            )
+
+        existing_password = self._read_opencode_password(sandbox_id)
+        password = existing_password or secrets.token_urlsafe(32)
+        try:
+            self._core_api.create_namespaced_secret(
+                namespace=self._namespace, body=_build_secret(password)
+            )
+            logger.info("Created opencode secret %s", secret_name)
+        except ApiException as e:
+            if e.status != 409:
+                raise
+            # Re-read after 409: the winner's password is the one already
+            # bound into the racing pod's env (K8s does not propagate
+            # Secret updates to running container env vars), so we must
+            # NOT overwrite with our locally-generated value.
+            winner_password = self._read_opencode_password(sandbox_id)
+            if winner_password is None:
+                logger.warning(
+                    "opencode secret %s 409'd on create but read None on "
+                    "follow-up — Secret may have been deleted mid-flight",
+                    secret_name,
+                )
+                raise
+            self._core_api.replace_namespaced_secret(
+                name=secret_name,
+                namespace=self._namespace,
+                body=_build_secret(winner_password),
+            )
+            logger.info(
+                "Replaced opencode secret %s (preserved winner password)",
+                secret_name,
+            )
+            return
+
+    def _read_opencode_password(self, sandbox_id: str | UUID) -> str | None:
+        """Fetch the cleartext OPENCODE_SERVER_PASSWORD from the per-pod Secret.
+
+        Returns ``None`` if the Secret doesn't exist (e.g. legacy pod
+        provisioned before this code landed). Callers should fall back
+        to no-auth in that case.
+        """
+        secret_name = self._get_opencode_secret_name(sandbox_id)
+        try:
+            secret = self._core_api.read_namespaced_secret(
+                name=secret_name, namespace=self._namespace
+            )
+        except ApiException as e:
+            if e.status == 404:
+                return None
+            raise
+        data = secret.data or {}
+        raw = data.get(self._OPENCODE_PASSWORD_SECRET_KEY)
+        if not raw:
+            return None
+        return base64.b64decode(raw).decode("utf-8")
+
+    def _delete_opencode_password_secret(self, sandbox_id: str | UUID) -> None:
+        """Delete the per-pod opencode-serve auth Secret. Idempotent."""
+        secret_name = self._get_opencode_secret_name(sandbox_id)
+        try:
+            self._core_api.delete_namespaced_secret(
+                name=secret_name, namespace=self._namespace
+            )
+            logger.info("Deleted opencode auth secret %s", secret_name)
+        except ApiException as e:
+            if e.status not in (404, 410):
+                logger.warning(
+                    "Failed to delete opencode auth secret %s: %s",
+                    secret_name,
+                    e,
+                )
 
     def _get_nextjs_url(self, sandbox_id: str, port: int) -> str:
         """Get the internal cluster URL for a session's Next.js server.
@@ -382,230 +467,56 @@ class KubernetesSandboxManager(SandboxManager):
         Returns:
             Internal cluster URL for the Next.js server on the specified port
         """
-        service_name = self._get_service_name(sandbox_id)
+        service_name = self._get_pod_name(sandbox_id)
         return f"http://{service_name}.{self._namespace}.svc.cluster.local:{port}"
 
     def _load_agent_instructions(
         self,
-        files_path: Path | None = None,
+        skills_section: str,
+        connectable_apps_section: str,
         provider: str | None = None,
         model_name: str | None = None,
         nextjs_port: int | None = None,
         disabled_tools: list[str] | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
-        use_demo_data: bool = False,
-        include_org_info: bool = False,
     ) -> str:
-        """Load and populate agent instructions from template file.
-
-
-        Args:
-            files_path: Path to the files directory (symlink to knowledge sources)
-            provider: LLM provider type
-            model_name: Model name
-            nextjs_port: Next.js port
-            disabled_tools: List of disabled tools
-            user_name: User's name for personalization
-            user_role: User's role/title for personalization
-            use_demo_data: If True, exclude user context from AGENTS.md
-            include_org_info: Whether to include the org_info section (demo data mode)
-
-        Returns:
-            Populated agent instructions content
-
-        Note:
-            In Kubernetes mode, files_path refers to paths inside the pod.
-            Since the backend cannot access the pod filesystem, these are passed as None
-            to leave placeholders intact for the container script to resolve at runtime.
-        """
+        """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
-            skills_path=self._skills_path,
-            files_path=files_path,
+            skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=provider,
             model_name=model_name,
             nextjs_port=nextjs_port,
             disabled_tools=disabled_tools,
             user_name=user_name,
-            user_role=user_role,
-            use_demo_data=use_demo_data,
-            include_org_info=include_org_info,
         )
 
     def _create_sandbox_pod(
         self,
         sandbox_id: str,
-        user_id: str,
         tenant_id: str,
     ) -> client.V1Pod:
-        """Create Pod specification for sandbox (user-level).
-
-        Creates pod with:
-        - files/ directory synced from S3 (shared across sessions)
-        - sessions/ directory for per-session workspaces
-
-        NOTE: Session-specific setup is done via setup_session_workspace().
-        """
+        """Build the sandbox Pod from the Helm PodTemplate, overlaying the
+        dynamic fields the template can't carry."""
         pod_name = self._get_pod_name(sandbox_id)
 
-        # File-sync sidecar container for S3 file sync (knowledge files only)
-        # Runs as sidecar (not init container) so we can trigger incremental syncs
-        # via kubectl exec after new documents are indexed
-        file_sync_container = client.V1Container(
-            name="file-sync",
-            image="peakcom/s5cmd:v2.3.0",
-            env=_get_local_aws_credential_env_vars(),
-            command=["/bin/sh", "-c"],
-            args=[f"""
-# Handle signals for graceful container termination
-trap 'echo "Shutting down"; exit 0' TERM INT
-
-echo "Starting initial file sync"
-echo "S3: s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*"
-echo "Local: /workspace/files/"
-
-# s5cmd sync (default 256 workers)
-# Exit codes: 0=success, 1=success with warnings
-sync_exit_code=0
-/s5cmd --stat sync \
-    "s3://{self._s3_bucket}/{tenant_id}/knowledge/{user_id}/*" \
-    /workspace/files/ 2>&1 || sync_exit_code=$?
-
-echo "=== Initial sync finished (exit code: $sync_exit_code) ==="
-
-# Handle result
-if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
-    file_count=$(find /workspace/files -type f 2>/dev/null | wc -l)
-    echo "Files synced: $file_count"
-    echo "Sidecar ready for incremental syncs"
-else
-    echo "ERROR: Initial sync failed (exit code: $sync_exit_code)"
-    exit $sync_exit_code
-fi
-
-# Stay alive for incremental syncs via kubectl exec
-while true; do
-    sleep 30 &
-    wait $!
-done
-"""],
-            volume_mounts=[
-                client.V1VolumeMount(name="files", mount_path="/workspace/files"),
-                # Mount sessions directory so file-sync can create snapshots
-                client.V1VolumeMount(
-                    name="workspace", mount_path="/workspace/sessions"
-                ),
-            ],
-            resources=client.V1ResourceRequirements(
-                # Reduced resources since sidecar is mostly idle (sleeping)
-                requests={"cpu": "250m", "memory": "256Mi"},
-                limits={"cpu": "4000m", "memory": "8Gi"},
-            ),
-        )
-
-        # Main sandbox container
-        # Note: Container ports are informational only in K8s. Each session's Next.js
-        # server binds to its allocated port from the SANDBOX_NEXTJS_PORT_START-END range.
-        # We declare all ports for documentation, tooling, and network policies.
-        container_ports = [
-            client.V1ContainerPort(name="agent", container_port=AGENT_PORT),
-        ]
-        # Add ports for session Next.js servers (one port per potential session)
-        for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
-            container_ports.append(
-                client.V1ContainerPort(
-                    name=f"nextjs-{port}",
-                    container_port=port,
-                )
+        try:
+            pod_template = self._core_api.read_namespaced_pod_template(
+                name=_PODTEMPLATE_NAME, namespace=self._namespace
             )
+        except ApiException as e:
+            if e.status == 404:
+                raise RuntimeError(
+                    f"Sandbox PodTemplate '{_PODTEMPLATE_NAME}' not found in "
+                    f"namespace '{self._namespace}'. It must be applied to the "
+                    f"cluster (by the deploy tooling when Craft is enabled) "
+                    f"before sandboxes can be provisioned."
+                ) from e
+            raise
 
-        sandbox_container = client.V1Container(
-            name="sandbox",
-            image=self._image,
-            image_pull_policy="IfNotPresent",
-            ports=container_ports,
-            volume_mounts=[
-                client.V1VolumeMount(
-                    name="files", mount_path="/workspace/files", read_only=True
-                ),
-                # Mount sessions directory (shared with file-sync for snapshots)
-                client.V1VolumeMount(
-                    name="workspace", mount_path="/workspace/sessions"
-                ),
-            ],
-            resources=client.V1ResourceRequirements(
-                requests={"cpu": "1000m", "memory": "2Gi"},
-                limits={"cpu": "2000m", "memory": "10Gi"},
-            ),
-            # TODO: Re-enable probes when sandbox container runs actual services.
-            # Note: Next.js ports are now per-session (dynamic), so container-level
-            # probes would need to check the agent port or use a different approach.
-            # liveness_probe=client.V1Probe(
-            #     http_get=client.V1HTTPGetAction(path="/global/health", port=AGENT_PORT),
-            #     initial_delay_seconds=30,
-            #     period_seconds=30,
-            #     timeout_seconds=5,
-            #     failure_threshold=3,
-            # ),
-            security_context=client.V1SecurityContext(
-                allow_privilege_escalation=False,
-                read_only_root_filesystem=False,
-                privileged=False,
-                capabilities=client.V1Capabilities(drop=["ALL"]),
-            ),
-        )
-
-        # Volumes - workspace holds sessions/, files is shared read-only
-        volumes = [
-            client.V1Volume(
-                name="workspace",
-                # Increased size: holds sessions/ directory with per-session outputs
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="50Gi"),
-            ),
-            client.V1Volume(
-                name="files",
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="5Gi"),
-            ),
-        ]
-
-        # Pod spec
-        # Note: file_sync_container runs as sidecar (not init container) so we can
-        # trigger incremental S3 syncs via kubectl exec after new documents are indexed
-        pod_spec = client.V1PodSpec(
-            service_account_name=self._file_sync_service_account,
-            containers=[sandbox_container, file_sync_container],
-            volumes=volumes,
-            restart_policy="Never",
-            termination_grace_period_seconds=10,  # Fast pod termination
-            # CRITICAL: Disable service environment variable injection
-            # Without this, Kubernetes injects env vars for ALL services in the namespace,
-            # which can exceed ARG_MAX (2.6MB) when there are many sandbox pods.
-            # With 40+ sandboxes × 100 ports × 4 env vars each = ~16k env vars (~2.2MB)
-            # This causes "exec /bin/sh: argument list too long" errors.
-            enable_service_links=False,
-            # Node selection for sandbox nodes
-            node_selector={"onyx.app/workload": "sandbox"},
-            tolerations=[
-                client.V1Toleration(
-                    key="workload",
-                    operator="Equal",
-                    value="sandbox",
-                    effect="NoSchedule",
-                ),
-            ],
-            # Security context for pod
-            security_context=client.V1PodSecurityContext(
-                run_as_non_root=True,
-                run_as_user=1000,
-                fs_group=1000,
-                seccomp_profile=client.V1SeccompProfile(type="RuntimeDefault"),
-            ),
-            # Disable host access
-            host_network=False,
-            host_pid=False,
-            host_ipc=False,
-        )
+        spec: client.V1PodSpec = copy.deepcopy(pod_template.template.spec)
+        self._overlay_dynamic_fields(spec, sandbox_id)
 
         return client.V1Pod(
             api_version="v1",
@@ -614,14 +525,77 @@ done
                 name=pod_name,
                 namespace=self._namespace,
                 labels={
-                    "app.kubernetes.io/component": "sandbox",
-                    "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/sandbox-id": sandbox_id,
-                    "onyx.app/tenant-id": tenant_id,
-                    "admission.datadoghq.com/enabled": "false",
+                    **(pod_template.template.metadata.labels or {}),
+                    LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
+                    LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+                    LABEL_SANDBOX_ID: sandbox_id,
+                    LABEL_TENANT_ID: tenant_id,
                 },
             ),
-            spec=pod_spec,
+            spec=spec,
+        )
+
+    def _overlay_dynamic_fields(self, spec: client.V1PodSpec, sandbox_id: str) -> None:
+        """Inject the per-pod values the deploy-time PodTemplate can't carry.
+
+        These are the *only* parts of the pod spec set from Python:
+        - hostAliases pinning the proxy ClusterIP (resolved at runtime; the
+          firewall blocks DNS so the pod can't resolve it itself)
+        - the opencode-auth secretKeyRef env (the Secret name is per-pod)
+        - the push public key on the sidecar (derived from the api-server's
+          private key, so it's never in the chart; sidecar only)
+        """
+        spec.host_aliases = [
+            client.V1HostAlias(ip=self._resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+        ]
+
+        secret_name = self._get_opencode_secret_name(sandbox_id)
+        sandbox_container = self._require_container(spec, _SANDBOX_CONTAINER_NAME)
+        sandbox_container.env = list(sandbox_container.env or []) + [
+            client.V1EnvVar(
+                name=OPENCODE_SERVER_PASSWORD,
+                value_from=client.V1EnvVarSource(
+                    secret_key_ref=client.V1SecretKeySelector(
+                        name=secret_name,
+                        key=self._OPENCODE_PASSWORD_SECRET_KEY,
+                    )
+                ),
+            ),
+            client.V1EnvVar(
+                name="OPENCODE_CONFIG_CONTENT",
+                value_from=client.V1EnvVarSource(
+                    secret_key_ref=client.V1SecretKeySelector(
+                        name=secret_name,
+                        key=self._OPENCODE_CONFIG_SECRET_KEY,
+                    )
+                ),
+            ),
+        ]
+
+        _, push_public_key_b64 = get_push_key_pair()
+        sidecar_container = self._require_container(spec, _SIDECAR_CONTAINER_NAME)
+        sidecar_container.env = list(sidecar_container.env or []) + [
+            client.V1EnvVar(
+                name=SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
+                value=push_public_key_b64,
+            ),
+        ]
+
+    @staticmethod
+    def _require_container(spec: client.V1PodSpec, name: str) -> client.V1Container:
+        """Find a container in the PodTemplate by name, or raise a clear error.
+
+        A bare ``next()`` would surface a PodTemplate/version skew (template
+        missing the expected container) as an opaque ``StopIteration``; this
+        names the container and the fix, matching the 404 PodTemplate error.
+        """
+        for container in list(spec.containers or []) + list(spec.init_containers or []):
+            if container.name == name:
+                return container
+        raise RuntimeError(
+            f"PodTemplate '{_PODTEMPLATE_NAME}' has no '{name}' container. "
+            f"The PodTemplate and api-server versions are likely out of sync — "
+            f"apply the matching sandbox PodTemplate."
         )
 
     def _create_sandbox_service(
@@ -638,11 +612,19 @@ done
         sandbox_id_str: str = str(sandbox_id)
         tenant_id_str: str = str(tenant_id)
 
-        service_name = self._get_service_name(sandbox_id_str)
+        service_name = self._get_pod_name(sandbox_id_str)
 
-        # Build port list: agent port + all session Next.js ports
         ports = [
-            client.V1ServicePort(name="agent", port=AGENT_PORT, target_port=AGENT_PORT),
+            client.V1ServicePort(
+                name="opencode",
+                port=OPENCODE_SERVE_PORT,
+                target_port=OPENCODE_SERVE_PORT,
+            ),
+            client.V1ServicePort(
+                name="push-daemon",
+                port=PUSH_DAEMON_PORT,
+                target_port=PUSH_DAEMON_PORT,
+            ),
         ]
 
         # Add ports for session Next.js servers (one port per potential session)
@@ -662,16 +644,17 @@ done
                 name=service_name,
                 namespace=self._namespace,
                 labels={
-                    "app.kubernetes.io/component": "sandbox",
-                    "app.kubernetes.io/managed-by": "onyx",
-                    "onyx.app/sandbox-id": sandbox_id_str,
-                    "onyx.app/tenant-id": tenant_id_str,
+                    LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
+                    LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
+                    LABEL_SANDBOX_ID: sandbox_id_str,
+                    LABEL_TENANT_ID: tenant_id_str,
                 },
             ),
             spec=client.V1ServiceSpec(
                 type="ClusterIP",
-                selector={"onyx.app/sandbox-id": sandbox_id_str},
+                selector={LABEL_SANDBOX_ID: sandbox_id_str},
                 ports=ports,
+                publish_not_ready_addresses=True,
             ),
         )
 
@@ -687,7 +670,7 @@ done
         This prevents a race condition where provision reuses an existing pod
         but the old service is still being deleted.
         """
-        service_name = self._get_service_name(str(sandbox_id))
+        service_name = self._get_pod_name(str(sandbox_id))
 
         try:
             svc = self._core_api.read_namespaced_service(
@@ -729,6 +712,59 @@ done
             else:
                 raise
 
+    def stream_pod_logs(
+        self,
+        sandbox_id: UUID,
+        *,
+        container: str = _SANDBOX_CONTAINER_NAME,
+        tail_lines: int = 200,
+    ) -> Iterator[str]:
+        """Yield log lines from a sandbox pod's container as they arrive.
+
+        Dev/debug surface — gated by ``ENABLE_OPENCODE_DEBUGGING`` in the
+        API layer. Uses ``read_namespaced_pod_log(follow=True)``, which
+        returns an iterable of bytes chunks; we decode and split into
+        lines ourselves so the consumer sees one log line per yield.
+        """
+        pod_name = self._get_pod_name(sandbox_id)
+        try:
+            stream = self._core_api.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=self._namespace,
+                container=container,
+                follow=True,
+                tail_lines=tail_lines,
+                _preload_content=False,  # required for streaming response
+            )
+        except ApiException as e:
+            logger.warning(
+                "stream_pod_logs: read_namespaced_pod_log failed for %s/%s: %s",
+                pod_name,
+                container,
+                e,
+            )
+            return
+
+        buf = ""
+        try:
+            for chunk in stream.stream(decode_content=True):
+                if not chunk:
+                    continue
+                buf += chunk.decode("utf-8", errors="replace")
+                while "\n" in buf:
+                    line, buf = buf.split("\n", 1)
+                    yield line
+        finally:
+            # No `yield buf` here even if a partial line is in flight —
+            # PEP 342 forbids yielding while a generator is closing via
+            # GeneratorExit (raises RuntimeError). Losing the last
+            # unterminated chunk on client disconnect is acceptable; it
+            # would be incomplete anyway.
+            try:
+                stream.close()
+            except Exception:  # noqa: BLE001
+                pass
+
     def _get_init_container_logs(self, pod_name: str, container_name: str) -> str:
         """Get logs from an init container.
 
@@ -759,117 +795,191 @@ done
         Returns:
             Error message if an init container failed, None otherwise
         """
-        if not pod.status.init_container_statuses:
+        init_statuses = pod.status.init_container_statuses or []
+        if not init_statuses:
             return None
 
-        for init_status in pod.status.init_container_statuses:
-            if init_status.state:
-                # Check for terminated state with non-zero exit code
-                if init_status.state.terminated:
-                    if init_status.state.terminated.exit_code != 0:
-                        container_name = init_status.name
-                        logs = self._get_init_container_logs(
-                            pod.metadata.name, container_name
-                        )
-                        return (
-                            f"Init container '{container_name}' failed with exit code "
-                            f"{init_status.state.terminated.exit_code}. "
-                            f"Logs:\n{logs}"
-                        )
-                # Check for waiting state with error reason
-                elif init_status.state.waiting:
-                    if init_status.state.waiting.reason in [
-                        "Error",
-                        "CrashLoopBackOff",
-                    ]:
-                        container_name = init_status.name
-                        reason = init_status.state.waiting.reason
-                        message = init_status.state.waiting.message or ""
-                        return f"Init container '{container_name}' is in '{reason}' state. Message: {message}"
+        restartable_init_container_names = {
+            init_container.name
+            for init_container in pod.spec.init_containers or []
+            if init_container.name and init_container.restart_policy == "Always"
+        }
+
+        for init_status in init_statuses:
+            state = init_status.state
+            if state is None:
+                continue
+
+            waiting = state.waiting
+            if waiting and waiting.reason in ["Error", "CrashLoopBackOff"]:
+                message = waiting.message or ""
+                return (
+                    f"Init container '{init_status.name}' is in "
+                    f"'{waiting.reason}' state. Message: {message}"
+                )
+
+            terminated = state.terminated
+            if terminated is None or terminated.exit_code == 0:
+                continue
+            if init_status.name in restartable_init_container_names:
+                continue
+
+            logs = self._get_init_container_logs(pod.metadata.name, init_status.name)
+            return (
+                f"Init container '{init_status.name}' failed with exit code "
+                f"{terminated.exit_code}. Logs:\n{logs}"
+            )
 
         return None
+
+    def _evaluate_pod_readiness(self, pod: client.V1Pod, pod_name: str) -> bool | None:
+        """Inspect one pod snapshot for readiness/failure.
+
+        Returns ``True`` if Ready, ``False`` if still progressing, and raises
+        ``RuntimeError`` on a terminal failure (init failure, Failed phase,
+        Succeeded phase).
+        """
+        init_error = self._check_init_container_status(pod)
+        if init_error:
+            raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
+
+        phase = pod.status.phase
+        if phase == "Failed":
+            raise RuntimeError(f"Pod {pod_name} failed to start")
+        if phase == "Succeeded":
+            raise RuntimeError(
+                f"Pod {pod_name} completed unexpectedly "
+                f"(sandbox pods should run indefinitely)"
+            )
+        if phase == "Running":
+            for condition in pod.status.conditions or []:
+                if condition.type == "Ready" and condition.status == "True":
+                    return True
+        return False
+
+    @staticmethod
+    def _sandbox_container_is_ready(pod: client.V1Pod) -> bool:
+        """Return True only when the agent container itself is running/ready."""
+        for status in pod.status.container_statuses or []:
+            if status.name != _SANDBOX_CONTAINER_NAME:
+                continue
+            state = status.state
+            return bool(
+                status.ready and state is not None and state.running is not None
+            )
+        return False
 
     def _wait_for_pod_ready(
         self,
         pod_name: str,
         timeout: float = POD_READY_TIMEOUT_SECONDS,
     ) -> bool:
-        """Wait for pod to become ready.
+        """Block on a single-pod watch until Ready or timeout.
 
-        Args:
-            pod_name: Name of the pod to wait for
-            timeout: Maximum time to wait in seconds
-
-        Returns:
-            True if pod is ready, False if timeout
-
-        Raises:
-            RuntimeError: If pod fails or is deleted
+        Watching beats polling: the apiserver pushes status transitions as
+        they happen, so we catch ``Ready`` within ~100ms instead of waiting
+        for the next poll tick. A bounded retry loop covers ``410 Gone``
+        (resource version aged out under us) by re-listing and resuming.
         """
         start_time = time.time()
+        field_selector = f"metadata.name={pod_name}"
 
-        while time.time() - start_time < timeout:
+        try:
+            initial = self._core_api.read_namespaced_pod(
+                name=pod_name, namespace=self._namespace
+            )
+            if self._evaluate_pod_readiness(initial, pod_name):
+                logger.info("Pod %s is ready", pod_name)
+                return True
+            resource_version = initial.metadata.resource_version
+        except ApiException as e:
+            if e.status == 404:
+                raise RuntimeError(f"Pod {pod_name} was deleted")
+            raise
+
+        while True:
+            remaining = timeout - (time.time() - start_time)
+            if remaining <= 0:
+                break
+
+            w = watch.Watch()
             try:
-                pod = self._core_api.read_namespaced_pod(
-                    name=pod_name,
+                stream = w.stream(
+                    self._core_api.list_namespaced_pod,
                     namespace=self._namespace,
+                    field_selector=field_selector,
+                    resource_version=resource_version,
+                    timeout_seconds=int(remaining),
                 )
-
-                # Check init container status first (they run before main container)
-                init_error = self._check_init_container_status(pod)
-                if init_error:
-                    raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
-
-                phase = pod.status.phase
-
-                # Check for failure conditions
-                if phase == "Failed":
-                    # Try to get more details about the failure
-                    init_error = self._check_init_container_status(pod)
-                    error_msg = f"Pod {pod_name} failed to start"
-                    if init_error:
-                        error_msg += f": {init_error}"
-                    raise RuntimeError(error_msg)
-
-                if phase == "Succeeded":
-                    raise RuntimeError(
-                        f"Pod {pod_name} completed unexpectedly (sandbox pods should run indefinitely)"
+                for event in stream:
+                    event_type = event.get("type")
+                    obj = event.get("object")
+                    if event_type == "DELETED":
+                        raise RuntimeError(f"Pod {pod_name} was deleted")
+                    if not isinstance(obj, client.V1Pod):
+                        continue
+                    resource_version = obj.metadata.resource_version
+                    if self._evaluate_pod_readiness(obj, pod_name):
+                        logger.info("Pod %s is ready", pod_name)
+                        return True
+            except ApiException as e:
+                # 410 Gone: resource_version aged out — re-list, check the
+                # snapshot for Ready (the pod may have flipped while the
+                # watch was expiring), then resume from the list's RV.
+                if e.status == 410:
+                    listing = self._core_api.list_namespaced_pod(
+                        namespace=self._namespace, field_selector=field_selector
                     )
-
-                # Check if running and ready
-                if phase == "Running":
-                    conditions = pod.status.conditions or []
-                    for condition in conditions:
-                        if condition.type == "Ready" and condition.status == "True":
+                    for pod in listing.items or []:
+                        if self._evaluate_pod_readiness(pod, pod_name):
                             logger.info("Pod %s is ready", pod_name)
                             return True
+                    resource_version = listing.metadata.resource_version
+                    continue
+                raise
+            finally:
+                w.stop()
 
-                logger.debug("Pod %s status: %s, waiting...", pod_name, phase)
-
-            except ApiException as e:
-                if e.status == 404:
-                    raise RuntimeError(f"Pod {pod_name} was deleted")
-                logger.warning("Error checking pod status: %s", e)
-
-            time.sleep(POD_READY_POLL_INTERVAL_SECONDS)
-
-        # On timeout, check one more time for init container failures
+        # On timeout, re-check init container status one more time.
         try:
             pod = self._core_api.read_namespaced_pod(
-                name=pod_name,
-                namespace=self._namespace,
+                name=pod_name, namespace=self._namespace
             )
             init_error = self._check_init_container_status(pod)
             if init_error:
                 raise RuntimeError(f"Pod {pod_name} failed to start: {init_error}")
         except ApiException:
-            pass  # Pod might be deleted, ignore
+            pass
 
         logger.warning("Timeout waiting for pod %s to become ready", pod_name)
         return False
 
+    def _wait_for_pod_ip(self, pod_name: str, deadline: float) -> bool:
+        """Poll until the pod is assigned an IP, or the monotonic deadline.
+
+        Waits for IP assignment only, never readiness: the init sidecar serves
+        the restore endpoint while its startup probe stays blocked, so waiting
+        for readiness here would deadlock the restore handshake.
+        """
+        while time.monotonic() < deadline:
+            try:
+                pod = self._core_api.read_namespaced_pod(
+                    name=pod_name, namespace=self._namespace
+                )
+            except ApiException as e:
+                if e.status == 404:
+                    raise RuntimeError(f"Pod {pod_name} was deleted")
+                raise
+            if pod.status.pod_ip:
+                logger.info("Pod %s assigned IP %s", pod_name, pod.status.pod_ip)
+                return True
+            time.sleep(POD_IP_POLL_INTERVAL_SECONDS)
+
+        logger.warning("Timeout waiting for pod %s to be assigned an IP", pod_name)
+        return False
+
     def _pod_exists_and_healthy(self, pod_name: str) -> bool:
-        """Check if a pod exists and is in a healthy/running state.
+        """Check if a pod exists and the sandbox app container is ready.
 
         Args:
             pod_name: Name of the pod to check
@@ -888,12 +998,12 @@ done
             if phase == "Running":
                 conditions = pod.status.conditions or []
                 for condition in conditions:
-                    if condition.type == "Ready" and condition.status == "True":
+                    if (
+                        condition.type == "Ready"
+                        and condition.status == "True"
+                        and self._sandbox_container_is_ready(pod)
+                    ):
                         return True
-
-            # Pending is OK too - pod is being created by another request
-            if phase == "Pending":
-                return True
 
             return False
         except ApiException as e:
@@ -906,18 +1016,20 @@ done
         sandbox_id: UUID,
         user_id: UUID,
         tenant_id: str,
-        llm_config: LLMProviderConfig,  # noqa: ARG002
+        llm_config: LLMProviderConfig,
+        onyx_pat: str | None = None,
+        *,
+        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
         This method is idempotent - if a pod already exists and is healthy,
-        it will be reused. This prevents race conditions when multiple requests
-        try to provision the same sandbox concurrently.
+        it will be reused. Concurrent provisioners are serialized by a
+        per-sandbox lock; losers reuse the pod the winner created.
 
         Creates pod with:
-        1. Init container syncs files/ from S3
-        2. Creates sessions/ directory for per-session workspaces
-        3. Main container runs the sandbox environment
+        1. Sessions/ directory for per-session workspaces
+        2. Main container runs the sandbox environment
 
         NOTE: This does NOT set up session-specific workspaces.
         Call setup_session_workspace() to create session workspaces.
@@ -927,6 +1039,9 @@ done
             user_id: User identifier who owns this sandbox
             tenant_id: Tenant identifier for multi-tenant isolation
             llm_config: LLM provider configuration
+            onyx_pat: Required by the interface and the Docker backend; on K8s
+                the pod ships a placeholder and the proxy injects the real PAT,
+                so this is only checked as a provisioning precondition.
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -941,111 +1056,198 @@ done
             tenant_id,
         )
 
-        pod_name = self._get_pod_name(str(sandbox_id))
-
-        # Check if pod already exists and is healthy (idempotency check)
-        if self._pod_exists_and_healthy(pod_name):
-            logger.info(
-                "Pod %s already exists and is healthy, reusing existing pod", pod_name
+        if not onyx_pat:
+            raise ValueError("onyx_pat is required for Kubernetes sandbox provisioning")
+        if not SANDBOX_API_SERVER_URL:
+            raise ValueError(
+                "SANDBOX_API_SERVER_URL must be set for Kubernetes sandbox provisioning"
             )
-            # Ensure service exists and is not terminating
-            self._ensure_service_exists(sandbox_id, tenant_id)
-
-            # Wait for pod to be ready if it's still pending
-            logger.info("Waiting for existing pod %s to become ready...", pod_name)
-            if not self._wait_for_pod_ready(pod_name):
-                raise RuntimeError(
-                    f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
-                )
-
-            logger.info(
-                "Reusing existing Kubernetes sandbox %s, pod: %s", sandbox_id, pod_name
-            )
-            return SandboxInfo(
-                sandbox_id=sandbox_id,
-                directory_path=f"k8s://{self._namespace}/{pod_name}",
-                status=SandboxStatus.RUNNING,
-                last_heartbeat=None,
+        if not SANDBOX_PROXY_HOST:
+            raise ValueError(
+                "SANDBOX_PROXY_HOST must be set for Kubernetes sandbox provisioning"
             )
 
-        try:
-            # 1. Create Pod (user-level only, no session setup)
-            logger.debug("Creating Pod %s", pod_name)
-            pod = self._create_sandbox_pod(
-                sandbox_id=str(sandbox_id),
-                user_id=str(user_id),
-                tenant_id=tenant_id,
-            )
-            try:
-                self._core_api.create_namespaced_pod(
-                    namespace=self._namespace,
-                    body=pod,
-                )
-            except ApiException as e:
-                if e.status == 409:
-                    # Pod was created by another concurrent request
-                    # Check if it's healthy and reuse it
-                    logger.warning(
-                        "Pod %s already exists (409 conflict, this shouldn't normally happen), checking if it's healthy...",
-                        pod_name,
-                    )
-                    if self._pod_exists_and_healthy(pod_name):
-                        logger.warning(
-                            "During provisioning, discovered that pod %s already exists. Reusing",
-                            pod_name,
-                        )
-                        # Continue to ensure service exists and wait for ready
-                    else:
-                        # Pod exists but is not healthy - this shouldn't happen often
-                        # but could occur if a previous provision failed mid-way
-                        logger.warning(
-                            "Pod %s exists but is not healthy, waiting for it to become ready or fail",
-                            pod_name,
-                        )
-                else:
-                    raise
+        with _provisioning_lock(sandbox_id, tenant_id):
+            pod_name = self._get_pod_name(str(sandbox_id))
 
-            # 2. Create Service (handles terminating services)
-            self._ensure_service_exists(sandbox_id, tenant_id)
-
-            # 3. Wait for pod to be ready
-            logger.info("Waiting for pod %s to become ready...", pod_name)
-            if not self._wait_for_pod_ready(pod_name):
-                raise RuntimeError(
-                    f"Timeout waiting for sandbox pod {pod_name} to become ready"
-                )
-
-            logger.info(
-                "Provisioned Kubernetes sandbox %s, pod: %s (no sessions yet)",
-                sandbox_id,
-                pod_name,
-            )
-
-            return SandboxInfo(
-                sandbox_id=sandbox_id,
-                directory_path=f"k8s://{self._namespace}/{pod_name}",
-                status=SandboxStatus.RUNNING,
-                last_heartbeat=None,
-            )
-
-        except Exception as e:
-            # Only cleanup if we're sure the pod is not being used by another request
-            # Check if pod is healthy - if so, don't clean up (another request may own it)
+            # Idempotency check; also the lock-loser path (the pod the winner
+            # just provisioned is found here and reused).
             if self._pod_exists_and_healthy(pod_name):
-                logger.warning(
-                    "Kubernetes sandbox provisioning failed for sandbox %s: %s, but pod is healthy (likely owned by concurrent request), not cleaning up",
-                    sandbox_id,
-                    e,
+                logger.info(
+                    "Pod %s already exists and is healthy, reusing existing pod",
+                    pod_name,
                 )
-            else:
-                logger.error(
-                    "Kubernetes sandbox provisioning failed for sandbox %s: %s",
+                # Ensure service exists and is not terminating
+                self._ensure_service_exists(sandbox_id, tenant_id)
+
+                # Wait for pod to be ready if it's still pending
+                logger.info("Waiting for existing pod %s to become ready...", pod_name)
+                if not self._wait_for_pod_ready(pod_name):
+                    raise RuntimeError(
+                        f"Timeout waiting for existing sandbox pod {pod_name} to become ready"
+                    )
+
+                # Reusing a live pod: clear any stale tombstone so event-bus
+                # creation can attach. A stale password heals via the 401 path in
+                # the readiness probe below.
+                with self._event_buses_lock:
+                    self._terminated_sandboxes.discard(sandbox_id)
+
+                if not self._wait_for_opencode_serve_ready(sandbox_id):
+                    raise RuntimeError(
+                        f"opencode-serve never became ready in existing sandbox pod {pod_name}"
+                    )
+
+                logger.info(
+                    "Reusing existing Kubernetes sandbox %s, pod: %s",
                     sandbox_id,
-                    e,
-                    exc_info=True,
+                    pod_name,
                 )
-                self._cleanup_kubernetes_resources(str(sandbox_id))
-            raise
+                return SandboxInfo(
+                    sandbox_id=sandbox_id,
+                    directory_path=f"k8s://{self._namespace}/{pod_name}",
+                    status=SandboxStatus.RUNNING,
+                    last_heartbeat=None,
+                )
+
+            created_pod = False
+
+            try:
+                # Re-provision: clear tombstone + cached info so subscribes
+                # build a fresh bus with the new Secret's password.
+                with self._event_buses_lock:
+                    self._terminated_sandboxes.discard(sandbox_id)
+                self._invalidate_serve_connection_info(sandbox_id)
+
+                # Secret must exist before the Pod (secretKeyRef). Pre-load every
+                # provider for cross-provider model overrides; keys are swapped for
+                # the proxy placeholder so the pod never holds them.
+                providers = _placeholder_llm_configs(all_llm_configs or [llm_config])
+                opencode_config_json = json.dumps(
+                    build_multi_provider_opencode_config(
+                        providers=providers,
+                        default_provider=llm_config.provider,
+                        default_model=llm_config.model_name,
+                        disabled_tools=OPENCODE_DISABLED_TOOLS,
+                        plugins=[
+                            _OPENCODE_CONNECT_APP_PLUGIN_PATH,
+                            _OPENCODE_SESSION_TAG_PLUGIN_PATH,
+                        ],
+                    )
+                )
+                self._provision_opencode_secret(str(sandbox_id), opencode_config_json)
+
+                # 1. Create Pod (user-level only, no session setup)
+                logger.debug("Creating Pod %s", pod_name)
+                startup_restore_required = True
+                pod = self._create_sandbox_pod(
+                    sandbox_id=str(sandbox_id),
+                    tenant_id=tenant_id,
+                )
+                try:
+                    self._core_api.create_namespaced_pod(
+                        namespace=self._namespace,
+                        body=pod,
+                    )
+                    created_pod = True
+                except ApiException as e:
+                    if e.status == 409:
+                        logger.warning(
+                            "Pod %s already exists (409 conflict; the provisioning "
+                            "lock should prevent this), checking if it's healthy...",
+                            pod_name,
+                        )
+                        if self._pod_exists_and_healthy(pod_name):
+                            # Another provisioner completed startup restore while this
+                            # request was creating the pod. Reuse the live pod instead
+                            # of sending a redundant restore request.
+                            logger.warning(
+                                "During provisioning, discovered that pod %s already exists. Reusing",
+                                pod_name,
+                            )
+                            startup_restore_required = False
+                        else:
+                            logger.warning(
+                                "Pod %s exists but is not ready; running startup restore "
+                                "handshake without cleanup ownership",
+                                pod_name,
+                            )
+                    else:
+                        raise
+
+                # 2. Create Service (handles terminating services)
+                self._ensure_service_exists(sandbox_id, tenant_id)
+
+                # 3. Restore opencode history before the sandbox app container starts;
+                # the init sidecar serves the restore endpoint while its startup probe
+                # stays blocked, so opencode-serve can't open an empty DB first. The IP
+                # wait and the restore draw from one deadline so slow scheduling leaves
+                # less budget for the restore rather than stacking two full timeouts.
+                if startup_restore_required:
+                    restore_deadline = (
+                        time.monotonic() + OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+                    )
+                    if not self._wait_for_pod_ip(pod_name, restore_deadline):
+                        raise RuntimeError(
+                            f"Timeout waiting for sandbox pod {pod_name} to be assigned an IP"
+                        )
+                    self.restore_opencode_history_snapshot(
+                        sandbox_id,
+                        tenant_id,
+                        timeout_seconds=restore_deadline - time.monotonic(),
+                    )
+
+                # 4. Wait for pod to be ready
+                logger.info("Waiting for pod %s to become ready...", pod_name)
+                if not self._wait_for_pod_ready(pod_name):
+                    raise RuntimeError(
+                        f"Timeout waiting for sandbox pod {pod_name} to become ready"
+                    )
+
+                # 5. Wait for opencode-serve to bind :4096 .
+                if not self._wait_for_opencode_serve_ready(sandbox_id):
+                    raise RuntimeError(
+                        f"opencode-serve never became ready in sandbox pod {pod_name}"
+                    )
+
+                logger.info(
+                    "Provisioned Kubernetes sandbox %s, pod: %s (no sessions yet)",
+                    sandbox_id,
+                    pod_name,
+                )
+
+                return SandboxInfo(
+                    sandbox_id=sandbox_id,
+                    directory_path=f"k8s://{self._namespace}/{pod_name}",
+                    status=SandboxStatus.RUNNING,
+                    last_heartbeat=None,
+                )
+
+            except Exception as e:
+                # Only clean up resources created by this provision call. If a
+                # concurrent provisioner finished successfully, leave the live pod alone.
+                if self._pod_exists_and_healthy(pod_name):
+                    logger.warning(
+                        "Kubernetes sandbox provisioning failed for sandbox %s: %s, but pod is healthy (likely owned by concurrent request), not cleaning up",
+                        sandbox_id,
+                        e,
+                    )
+                else:
+                    logger.error(
+                        "Kubernetes sandbox provisioning failed for sandbox %s: %s",
+                        sandbox_id,
+                        e,
+                        exc_info=True,
+                    )
+                    if created_pod:
+                        self._cleanup_kubernetes_resources(str(sandbox_id))
+                    else:
+                        logger.warning(
+                            "Not cleaning up sandbox %s after provisioning failure "
+                            "because this provisioner did not create the pod",
+                            sandbox_id,
+                        )
+                raise
 
     def _wait_for_resource_deletion(
         self,
@@ -1126,7 +1328,7 @@ done
         sandbox_id = str(sandbox_id)
 
         pod_name = self._get_pod_name(sandbox_id)
-        service_name = self._get_service_name(sandbox_id)
+        service_name = self._get_pod_name(sandbox_id)
 
         # Delete in reverse order of creation
         service_deleted = False
@@ -1161,6 +1363,11 @@ done
                 logger.error("Error deleting Pod %s: %s", pod_name, e)
                 raise
 
+        # Delete the per-pod opencode-serve auth Secret. Idempotent.
+        # Done after the Pod is being torn down so no live container is
+        # still trying to resolve the secretKeyRef.
+        self._delete_opencode_password_secret(sandbox_id)
+
         # Wait for resources to be fully deleted to prevent 409 conflicts
         # on immediate re-provisioning
         if wait_for_deletion:
@@ -1170,18 +1377,9 @@ done
                 self._wait_for_resource_deletion("pod", pod_name)
 
     def terminate(self, sandbox_id: UUID) -> None:
-        """Terminate a sandbox and clean up Kubernetes resources.
-
-        Removes session mappings for this sandbox, then deletes the
-        Service and Pod. ACP clients are ephemeral (created per message),
-        so there's nothing to stop here.
-
-        Args:
-            sandbox_id: The sandbox ID to terminate
-        """
-        # Clean up Kubernetes resources (needs string for pod/service names)
+        """Tear down event buses, then delete Service + Pod."""
+        self._close_all_sandbox_buses(sandbox_id)
         self._cleanup_kubernetes_resources(str(sandbox_id))
-
         logger.info("Terminated Kubernetes sandbox %s", sandbox_id)
 
     def setup_session_workspace(
@@ -1189,156 +1387,83 @@ done
         sandbox_id: UUID,
         session_id: UUID,
         llm_config: LLMProviderConfig,
-        nextjs_port: int,
-        file_system_path: str | None = None,  # noqa: ARG002
-        snapshot_path: str | None = None,
+        nextjs_port: int | None,
+        skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
-        user_role: str | None = None,
-        user_work_area: str | None = None,
-        user_level: str | None = None,
-        use_demo_data: bool = False,
-        excluded_user_library_paths: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
         Executes kubectl exec to:
         1. Create sessions/$session_id/ directory
-        2. Create files/ symlink (to demo data or S3-synced user files)
-        3. Copy outputs template from local templates (downloaded during init)
-        4. Write AGENTS.md
-        5. Write opencode.json with LLM config
-        6. Create org_info/ directory with user identity file (if demo data enabled)
-        7. Start Next.js dev server
-
-        Note: Snapshot restoration is not supported in Kubernetes mode since the
-        main container doesn't have S3 access. Snapshots would need to be
-        pre-downloaded during pod provisioning if needed.
+        2. Copy outputs template from local templates (downloaded during init)
+        3. Write AGENTS.md
+        4. Write opencode.json with LLM config
+        5. Start Next.js dev server (skipped when ``nextjs_port`` is None,
+           e.g. for headless scheduled-task fires that don't need a preview).
 
         Args:
             sandbox_id: The sandbox ID (must be provisioned)
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration for opencode.json
-            file_system_path: Path to user's S3-synced knowledge files (/workspace/files)
-            snapshot_path: Optional S3 path - logged but ignored (no S3 access)
             user_name: User's name for personalization in AGENTS.md
-            user_role: User's role/title for personalization in AGENTS.md
-            user_work_area: User's work area for demo persona (e.g., "engineering")
-            user_level: User's level for demo persona (e.g., "ic", "manager")
-            use_demo_data: If True, symlink files/ to /workspace/demo_data;
-                          else to /workspace/files (S3-synced user files)
-            excluded_user_library_paths: List of paths within user_library/ to exclude
-                (e.g., ["/data/file.xlsx"]). These files won't be accessible in the session.
 
         Raises:
             RuntimeError: If workspace setup fails
         """
-        if snapshot_path:
-            logger.warning(
-                "Snapshot restoration requested but not supported in Kubernetes mode. Snapshot path %s will be ignored. Session %s will start with fresh outputs template.",
-                snapshot_path,
-                session_id,
-            )
-
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
         # Paths inside the pod (created during workspace setup below):
-        # - {session_path}/files: symlink to knowledge sources
         # - {session_path}/attachments: user-uploaded files
         #
-        # Note: files_path=None leaves {{KNOWLEDGE_SOURCES_SECTION}} placeholder intact
-        # for generate_agents_md.py to resolve at container runtime by scanning /workspace/files.
         # Attachments section is injected dynamically when first file is uploaded.
         agent_instructions = self._load_agent_instructions(
-            files_path=None,  # Container script handles this at runtime
+            skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
-            user_role=user_role,
-            use_demo_data=use_demo_data,
-            include_org_info=use_demo_data,
         )
 
-        # Build opencode config JSON using shared config builder
-        opencode_config = build_opencode_config(
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
-            api_key=llm_config.api_key if llm_config.api_key else None,
-            api_base=llm_config.api_base,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
-        )
-
-        opencode_json = json.dumps(opencode_config)
-        # Escape for shell
-        opencode_json_escaped = opencode_json.replace("'", "'\\''")
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
-
-        # Build org_info setup script if persona is set
-        # Uses shared constants from persona_mapping module as single source of truth
-        org_info_setup = ""
-        if user_work_area:
-            persona = get_persona_info(user_work_area, user_level)
-            if persona:
-                # Escape content for shell (single quotes)
-                agents_md_escaped = ORG_INFO_AGENTS_MD.replace("'", "'\\''")
-                identity_escaped = generate_user_identity_content(persona).replace(
-                    "'", "'\\''"
-                )
-                org_structure_escaped = json.dumps(
-                    ORGANIZATION_STRUCTURE, indent=2
-                ).replace("'", "'\\''")
-
-                org_info_setup = f"""
-# Create org_info directory with all files
-mkdir -p {session_path}/org_info
-printf '%s' '{agents_md_escaped}' > {session_path}/org_info/AGENTS.md
-printf '%s' '{identity_escaped}' > {session_path}/org_info/user_identity_profile.txt
-printf '%s' '{org_structure_escaped}' > {session_path}/org_info/organization_structure.json
-"""
-
-        # Build files symlink setup
-        # Choose between demo data (baked in image) or user's S3-synced files
-        if use_demo_data:
-            # Demo mode: symlink to demo data baked into the container image
-            symlink_target = "/workspace/demo_data"
-            files_symlink_setup = f"""
-# Create files symlink to demo data (baked into image)
-echo "Creating files symlink to demo data: {symlink_target}"
-ln -sf {symlink_target} {session_path}/files
-"""
-        elif excluded_user_library_paths:
-            files_symlink_setup = _build_filtered_symlink_script(
-                session_path, excluded_user_library_paths
-            )
-        else:
-            # Normal mode: symlink to user's S3-synced knowledge files
-            symlink_target = "/workspace/files"
-            files_symlink_setup = f"""
-# Create files symlink to user's knowledge files (synced from S3)
-echo "Creating files symlink to user files: {symlink_target}"
-ln -sf {symlink_target} {session_path}/files
-"""
 
         # Copy outputs template from baked-in location and install npm dependencies
         outputs_setup = f"""
-# Copy outputs template (baked into image at build time)
 echo "Copying outputs template"
 if [ -d /workspace/templates/outputs ]; then
     cp -r /workspace/templates/outputs/* {session_path}/outputs/
-    # Install npm dependencies
-    echo "Installing npm dependencies..."
-    cd {session_path}/outputs/web && npm install
+    # flock+sentinel: serialize concurrent session setups; .ready guards
+    # against a partial cp from a previous interrupted run.
+    (
+        flock -x 9
+        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
+            echo "Bootstrapping bun cache on workspace volume..."
+            rm -rf {BUN_CACHE_DIR}
+            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
+                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
+            touch {BUN_CACHE_DIR}/.ready
+        fi
+    ) 9>{BUN_CACHE_DIR}.lock
+    cd {session_path}/outputs/web && \\
+        BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
+        bun install --frozen-lockfile --backend=hardlink
 else
     echo "Warning: outputs template not found at /workspace/templates/outputs"
     mkdir -p {session_path}/outputs/web
 fi
 """
 
-        # Build NextJS startup script (npm install already done in outputs_setup)
-        nextjs_start_script = _build_nextjs_start_script(
-            session_path, nextjs_port, check_node_modules=False
+        # Headless callers (scheduled tasks) pass nextjs_port=None — the
+        # agent's tools work without a dev server.
+        nextjs_start_script = (
+            build_nextjs_start_script(
+                session_path, nextjs_port, check_node_modules=False
+            )
+            if nextjs_port is not None
+            else ""
         )
 
         setup_script = f"""
@@ -1348,28 +1473,24 @@ set -e
 echo "Creating session directory: {session_path}"
 mkdir -p {session_path}/outputs
 mkdir -p {session_path}/attachments
-{files_symlink_setup}
+
 # Setup outputs
 {outputs_setup}
 
-# Symlink skills (baked into image at /workspace/skills/)
-if [ -d /workspace/skills ]; then
-    mkdir -p {session_path}/.opencode
-    ln -sf /workspace/skills {session_path}/.opencode/skills
-    echo "Linked skills to /workspace/skills"
-fi
+# DO NOT mkdir /workspace/managed/skills or /workspace/managed/user_library
+# here — the push daemon swaps these paths via os.rename(symlink, mount),
+# which fails if the mount is a real directory. Dangling until the first
+# push lands is fine; nothing reads these during the rest of setup.
+mkdir -p {session_path}/.opencode
+ln -sf /workspace/managed/skills {session_path}/.opencode/skills
+echo "Linked skills to /workspace/managed/skills"
+ln -sf /workspace/managed/user_library {session_path}/user_library
+echo "Linked user_library to /workspace/managed/user_library"
 
 # Write agent instructions
 echo "Writing AGENTS.md"
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 
-# Populate knowledge sources by scanning the files directory
-python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
-
-# Write opencode config
-echo "Writing opencode.json"
-printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
-{org_info_setup}
 # Start Next.js dev server
 {nextjs_start_script}
 
@@ -1387,7 +1508,7 @@ echo "Session workspace setup complete"
                 name=pod_name,
                 namespace=self._namespace,
                 command=["/bin/sh", "-c", setup_script],
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 stderr=True,
                 stdin=False,
                 stdout=True,
@@ -1415,19 +1536,16 @@ echo "Session workspace setup complete"
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
-        """Clean up a session workspace (on session delete).
-
-        Removes the ACP session mapping and executes kubectl exec to remove
-        the session directory. The shared ACP client persists for other sessions.
+        """Clean up a session workspace (on session delete). Executes
+        kubectl exec to remove the session directory.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to clean up
-            nextjs_port: Optional port where Next.js server is running (unused in K8s,
-                        we use PID file instead)
         """
+        self._close_session_buses(sandbox_id, session_id)
+
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"/workspace/sessions/{session_id}"
 
@@ -1456,7 +1574,7 @@ echo "Session cleanup complete"
                 name=pod_name,
                 namespace=self._namespace,
                 command=["/bin/sh", "-c", cleanup_script],
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 stderr=True,
                 stdin=False,
                 stdout=True,
@@ -1485,98 +1603,140 @@ echo "Session cleanup complete"
         session_id: UUID,
         tenant_id: str,
     ) -> SnapshotResult | None:
-        """Create a snapshot of a session's outputs and attachments directories.
+        """Create a FileStore-backed snapshot via the sidecar filesystem API.
 
-        For Kubernetes backend, we exec into the file-sync container to create
-        the snapshot and upload to S3. Captures:
-        - sessions/$session_id/outputs/ (generated artifacts, web apps)
-        - sessions/$session_id/attachments/ (user uploaded files)
-        - sessions/$session_id/.opencode-data/ (opencode session data for resumption)
+        Captures:
+        - sessions/$session_id/outputs/
+        - sessions/$session_id/attachments/
 
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID to snapshot
-            tenant_id: Tenant identifier for storage path
-
-        Returns:
-            SnapshotResult with storage path and size, or None if nothing to snapshot
-
-        Raises:
-            RuntimeError: If snapshot creation fails
+        Returns None if there are no outputs to snapshot.
         """
-        sandbox_id_str = str(sandbox_id)
-        session_id_str = str(session_id)
-        pod_name = self._get_pod_name(sandbox_id_str)
-        snapshot_id = str(uuid4())
+        body = SnapshotCreateRequest(session_id=session_id).model_dump_json().encode()
 
-        # Use shlex.quote for safety (UUIDs are safe but good practice)
-        safe_session_path = shlex.quote(f"/workspace/sessions/{session_id_str}")
-        s3_path = f"s3://{self._s3_bucket}/{tenant_id}/snapshots/{session_id_str}/{snapshot_id}.tar.gz"
-
-        # Create tar and upload to S3 via file-sync container.
-        # .opencode-data/ is already on the shared workspace volume because we set
-        # XDG_DATA_HOME to the session directory when starting opencode (see
-        # ACPExecClient.start()). No cross-container copy needed.
-        exec_command = [
-            "/bin/sh",
-            "-c",
-            f"""
-set -eo pipefail
-cd {safe_session_path}
-if [ ! -d outputs ]; then
-    echo "EMPTY_SNAPSHOT"
-    exit 0
-fi
-dirs="outputs"
-[ -d attachments ] && [ "$(ls -A attachments 2>/dev/null)" ] && dirs="$dirs attachments"
-[ -d .opencode-data ] && [ "$(ls -A .opencode-data 2>/dev/null)" ] && dirs="$dirs .opencode-data"
-tar -czf - $dirs | /s5cmd pipe {s3_path}
-echo "SNAPSHOT_CREATED"
-""",
-        ]
-
-        try:
-            # Use exec to run snapshot command in file-sync container (has s5cmd)
-            resp = k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container="file-sync",
-                command=exec_command,
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
-            )
-
-            logger.debug("Snapshot exec output: %s", resp)
-
-            # Check if nothing was snapshotted
-            if "EMPTY_SNAPSHOT" in resp:
-                logger.info(
-                    "No outputs or attachments to snapshot for session %s", session_id
-                )
+        with self._sidecar_client.request_and_stream_new_snapshot(
+            sandbox_id=sandbox_id,
+            endpoint_path=SIDECAR_SNAPSHOT_CREATE_PATH,
+            body=body,
+            content_type="application/json",
+            operation_label="Snapshot create",
+            timeout_seconds=300.0,
+        ) as snapshot_stream:
+            if snapshot_stream is None:
+                logger.info("No outputs to snapshot for session %s", session_id)
                 return None
 
-            # Verify upload succeeded
-            if "SNAPSHOT_CREATED" not in resp:
-                raise RuntimeError(f"Snapshot upload may have failed. Output: {resp}")
+            _, storage_path, size_bytes = (
+                self._snapshot_manager.persist_snapshot_from_stream(
+                    stream=snapshot_stream,
+                    sandbox_id=str(sandbox_id),
+                    tenant_id=tenant_id,
+                )
+            )
 
-        except ApiException as e:
-            raise RuntimeError(f"Failed to create snapshot: {e}") from e
-
-        # Estimate size (we can't easily get exact size from streamed tar)
-        # In production, you might want to query S3 for the actual size
-        size_bytes = 0
-
-        # Storage path must match the S3 upload path (without s3://bucket/ prefix)
-        storage_path = f"{tenant_id}/snapshots/{session_id_str}/{snapshot_id}.tar.gz"
-
-        logger.info("Created snapshot for session %s", session_id)
-
+        logger.info(
+            "Created snapshot for sandbox %s session %s (size=%s bytes).",
+            sandbox_id,
+            session_id,
+            size_bytes,
+        )
         return SnapshotResult(
             storage_path=storage_path,
             size_bytes=size_bytes,
+        )
+
+    def create_opencode_history_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,
+    ) -> bool:
+        with self._sidecar_client.request_and_stream_new_snapshot(
+            sandbox_id=sandbox_id,
+            endpoint_path=SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
+            body=b"",
+            content_type="application/octet-stream",
+            operation_label="opencode history snapshot",
+            timeout_seconds=timeout_seconds,
+        ) as snapshot_stream:
+            if snapshot_stream is None:
+                logger.info(
+                    "No opencode history to snapshot for sandbox %s", sandbox_id
+                )
+                return False
+
+            storage_path, size_bytes = (
+                self._snapshot_manager.persist_opencode_snapshot_from_stream(
+                    stream=snapshot_stream,
+                    sandbox_id=str(sandbox_id),
+                    tenant_id=tenant_id,
+                )
+            )
+
+        logger.info(
+            "Created opencode history snapshot for sandbox %s (path=%s size=%s bytes)",
+            sandbox_id,
+            storage_path,
+            size_bytes,
+        )
+        return True
+
+    def restore_opencode_history_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
+    ) -> bool:
+        if not self._snapshot_manager.has_opencode_history_snapshot(
+            tenant_id, str(sandbox_id)
+        ):
+            logger.info("No opencode history snapshot found for sandbox %s", sandbox_id)
+            self._mark_opencode_history_restored(
+                sandbox_id=sandbox_id,
+                timeout_seconds=timeout_seconds,
+            )
+            return False
+
+        try:
+            with tempfile.NamedTemporaryFile(mode="w+b", suffix=".tar.gz") as tmp_file:
+                storage_path = SnapshotManager.opencode_history_storage_path(
+                    tenant_id, str(sandbox_id)
+                )
+                self._snapshot_manager.restore_snapshot_to_stream(
+                    storage_path,
+                    tmp_file,
+                )
+                tmp_file.flush()
+                tmp_file.file.seek(0)
+                sha256_hex = hashlib.file_digest(
+                    cast(io.BufferedRandom, tmp_file.file), "sha256"
+                ).hexdigest()
+                tmp_file.file.seek(0)
+                self._sidecar_client.post_archive(
+                    sandbox_id=sandbox_id,
+                    endpoint_path=SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
+                    archive_file=tmp_file,
+                    sha256_hex=sha256_hex,
+                    operation_label="opencode history restore",
+                    timeout_seconds=timeout_seconds,
+                )
+            logger.info("Restored opencode history snapshot for sandbox %s", sandbox_id)
+            return True
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to restore opencode history snapshot: {e}"
+            ) from e
+
+    def _mark_opencode_history_restored(
+        self,
+        *,
+        sandbox_id: UUID,
+        timeout_seconds: float = OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
+    ) -> None:
+        self._sidecar_client.post_empty(
+            sandbox_id=sandbox_id,
+            endpoint_path=SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
+            operation_label="opencode history restore marker",
+            timeout_seconds=timeout_seconds,
         )
 
     def session_workspace_exists(
@@ -1610,7 +1770,7 @@ echo "SNAPSHOT_CREATED"
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stderr=True,
                 stdin=False,
@@ -1634,38 +1794,77 @@ echo "SNAPSHOT_CREATED"
             )
             return False
 
+    def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
+        """List UUID session directories under /workspace/sessions/ in the pod.
+
+        Used by idle cleanup to discover sessions that need snapshotting.
+        Non-UUID directory names are silently filtered out.
+        """
+        pod_name = self._get_pod_name(str(sandbox_id))
+
+        exec_command = [
+            "/bin/sh",
+            "-c",
+            'ls -1 /workspace/sessions/ 2>/dev/null || echo ""',
+        ]
+
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container=_SANDBOX_CONTAINER_NAME,
+                command=exec_command,
+                stderr=True,
+                stdin=False,
+                stdout=True,
+                tty=False,
+            )
+        except ApiException as e:
+            logger.warning(
+                "Failed to list session directories for sandbox %s: %s",
+                sandbox_id,
+                e,
+            )
+            return []
+
+        result: list[UUID] = []
+        for raw_line in resp.strip().split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                result.append(UUID(line))
+            except ValueError:
+                continue
+        return result
+
     def restore_snapshot(
         self,
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,  # noqa: ARG002
-        nextjs_port: int,
+        nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        use_demo_data: bool = False,
+        skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
-        """Download snapshot from S3 via s5cmd, extract, regenerate config, and start NextJS.
-
-        Uses the file-sync sidecar container (which has s5cmd + S3 credentials
-        via IRSA) to stream the snapshot directly from S3 into the session
-        directory. This avoids downloading to the backend server and the
-        base64 encoding overhead of piping through kubectl exec.
+        """Restore a FileStore-backed snapshot through the sidecar filesystem API.
 
         Steps:
-        1. Exec s5cmd cat in file-sync container to stream snapshot from S3
-        2. Pipe directly to tar for extraction in the shared workspace volume
-           (.opencode-data/ is restored automatically since XDG_DATA_HOME points here)
-        3. Regenerate configuration files (AGENTS.md, opencode.json, files symlink)
-        4. Start the NextJS dev server
+        1. Read the snapshot from Onyx FileStore in the api-server
+        2. Stream it to the sidecar, which extracts it in the session workspace
+        3. Regenerate configuration files (AGENTS.md, opencode.json)
+        4. Start the NextJS dev server (skipped when ``nextjs_port`` is None,
+           e.g. for headless scheduled-task fires that don't attach a preview).
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
-            snapshot_storage_path: Path to the snapshot in S3 (relative path)
-            tenant_id: Tenant identifier for storage access
-            nextjs_port: Port number for the NextJS dev server
+            snapshot_storage_path: FileStore file id for the snapshot archive
+            nextjs_port: Port number for the NextJS dev server, or None to
+                skip starting it.
             llm_config: LLM provider configuration for opencode.json
-            use_demo_data: If True, symlink files/ to demo data; else to user files
 
         Raises:
             RuntimeError: If snapshot restoration fails
@@ -1674,62 +1873,50 @@ echo "SNAPSHOT_CREATED"
         session_path = f"/workspace/sessions/{session_id}"
         safe_session_path = shlex.quote(session_path)
 
-        s3_path = f"s3://{self._s3_bucket}/{snapshot_storage_path}"
-
-        # Stream snapshot directly from S3 via s5cmd in file-sync container.
-        # Mirrors the upload pattern: upload uses `tar | s5cmd pipe`,
-        # restore uses `s5cmd cat | tar`. Both run in file-sync container
-        # which has s5cmd and S3 credentials (IRSA). The shared workspace
-        # volume makes extracted files immediately visible to the sandbox
-        # container.
-        restore_script = f"""
-set -eo pipefail
-mkdir -p {safe_session_path}
-/s5cmd cat {s3_path} | tar -xzf - -C {safe_session_path}
-echo "SNAPSHOT_RESTORED"
-"""
-
         try:
-            resp = k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container="file-sync",
-                command=["/bin/sh", "-c", restore_script],
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
-            )
+            with tempfile.NamedTemporaryFile(mode="w+b", suffix=".tar.gz") as tmp_file:
+                self._snapshot_manager.restore_snapshot_to_stream(
+                    snapshot_storage_path, tmp_file
+                )
+                tmp_file.flush()
+                tmp_file.file.seek(0)
+                sha256_hex = hashlib.file_digest(
+                    cast(io.BufferedRandom, tmp_file.file), "sha256"
+                ).hexdigest()
+                tmp_file.file.seek(0)
+                self._sidecar_client.post_archive(
+                    sandbox_id=sandbox_id,
+                    endpoint_path=sidecar_snapshot_restore_path(session_id),
+                    archive_file=tmp_file,
+                    sha256_hex=sha256_hex,
+                    operation_label="Snapshot restore",
+                )
 
-            if "SNAPSHOT_RESTORED" not in resp:
-                raise RuntimeError(f"Snapshot restore may have failed. Output: {resp}")
-
-            # Regenerate configuration files that aren't in the snapshot
-            # These are regenerated to ensure they match the current system state
+            # Regenerate configuration files that aren't in the snapshot.
             self._regenerate_session_config(
                 pod_name=pod_name,
                 session_path=safe_session_path,
                 llm_config=llm_config,
                 nextjs_port=nextjs_port,
-                use_demo_data=use_demo_data,
+                skills_section=skills_section,
+                connectable_apps_section=connectable_apps_section,
             )
 
-            # Start NextJS dev server (check node_modules since restoring from snapshot)
-            start_script = _build_nextjs_start_script(
-                safe_session_path, nextjs_port, check_node_modules=True
-            )
-            k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container="sandbox",
-                command=["/bin/sh", "-c", start_script],
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
-            )
+            if nextjs_port is not None:
+                start_script = build_nextjs_start_script(
+                    safe_session_path, nextjs_port, check_node_modules=True
+                )
+                k8s_stream(
+                    self._stream_core_api.connect_get_namespaced_pod_exec,
+                    name=pod_name,
+                    namespace=self._namespace,
+                    container=_SANDBOX_CONTAINER_NAME,
+                    command=["/bin/sh", "-c", start_script],
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False,
+                )
         except ApiException as e:
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 
@@ -1738,75 +1925,41 @@ echo "SNAPSHOT_RESTORED"
         pod_name: str,
         session_path: str,
         llm_config: LLMProviderConfig,
-        nextjs_port: int,
-        use_demo_data: bool,
+        nextjs_port: int | None,
+        skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         """Regenerate session configuration files after snapshot restore.
 
         Creates:
         - AGENTS.md (agent instructions)
         - opencode.json (LLM configuration)
-        - files symlink (to demo data or user files)
 
         Args:
             pod_name: The pod name to exec into
             session_path: Path to the session directory (already shlex.quoted)
             llm_config: LLM provider configuration
-            nextjs_port: Port for NextJS (used in AGENTS.md)
-            use_demo_data: Whether to use demo data or user files
+            nextjs_port: Port for NextJS (used in AGENTS.md). None when the
+                dev server is intentionally skipped — the template renders
+                "Unknown" in that case.
         """
-        # Generate AGENTS.md content
         agent_instructions = self._load_agent_instructions(
-            files_path=None,  # Container script handles this at runtime
+            skills_section=skills_section,
+            connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
-            user_name=None,  # Not stored, regenerate without personalization
-            user_role=None,
-            use_demo_data=use_demo_data,
-            include_org_info=False,  # Don't include org_info for restored sessions
+            user_name=None,
         )
 
-        # Generate opencode.json
-        opencode_config = build_opencode_config(
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
-            api_key=llm_config.api_key if llm_config.api_key else None,
-            api_base=llm_config.api_base,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
-        )
-        opencode_json = json.dumps(opencode_config)
-
-        # Escape for shell (single quotes)
-        opencode_json_escaped = opencode_json.replace("'", "'\\''")
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
-
-        # Build files symlink setup
-        if use_demo_data:
-            symlink_target = "/workspace/demo_data"
-        else:
-            symlink_target = "/workspace/files"
-
         config_script = f"""
 set -e
-
-# Create files symlink
-echo "Creating files symlink to {symlink_target}"
-ln -sf {symlink_target} {session_path}/files
-
-# Write agent instructions
-echo "Writing AGENTS.md"
+mkdir -p {session_path}/.opencode
+ln -sfn /workspace/managed/skills {session_path}/.opencode/skills
+ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
-
-# Populate knowledge sources by scanning the files directory
-python3 /usr/local/bin/generate_agents_md.py {session_path}/AGENTS.md {session_path}/files || true
-
-# Write opencode config
-echo "Writing opencode.json"
-printf '%s' '{opencode_json_escaped}' > {session_path}/opencode.json
-
-echo "Session config regeneration complete"
 """
 
         logger.info("Regenerating session configuration files")
@@ -1814,7 +1967,7 @@ echo "Session config regeneration complete"
             self._stream_core_api.connect_get_namespaced_pod_exec,
             name=pod_name,
             namespace=self._namespace,
-            container="sandbox",
+            container=_SANDBOX_CONTAINER_NAME,
             command=["/bin/sh", "-c", config_script],
             stderr=True,
             stdin=False,
@@ -1824,200 +1977,51 @@ echo "Session config regeneration complete"
         logger.info("Session configuration files regenerated")
 
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
-        """Check if the sandbox pod is healthy (can exec into it).
-
-        Args:
-            sandbox_id: The sandbox ID to check
-            timeout: Health check timeout in seconds
-
-        Returns:
-            True if sandbox is healthy, False otherwise
-        """
+        """Check whether the agent container and sidecar are both healthy."""
         pod_name = self._get_pod_name(str(sandbox_id))
-        exec_client = ACPExecClient(
-            pod_name=pod_name,
-            namespace=self._namespace,
-            container="sandbox",
-        )
-        return exec_client.health_check(timeout=timeout)
-
-    def _create_ephemeral_acp_client(
-        self, sandbox_id: UUID, session_path: str
-    ) -> ACPExecClient:
-        """Create a new ephemeral ACP client for a single message exchange.
-
-        Each call starts a fresh `opencode acp` process in the sandbox pod.
-        The process is short-lived — stopped after the message completes.
-        This prevents the bug where multiple long-lived processes (one per
-        API replica) operate on the same session's flat file storage
-        concurrently, causing the JSON-RPC response to be silently lost.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_path: Working directory for the session (e.g. /workspace/sessions/{id}).
-                XDG_DATA_HOME is set relative to this so opencode's session data
-                lives inside the snapshot directory.
-
-        Returns:
-            A running ACPExecClient (caller must stop it when done)
-        """
-        pod_name = self._get_pod_name(str(sandbox_id))
-        acp_client = ACPExecClient(
-            pod_name=pod_name,
-            namespace=self._namespace,
-            container="sandbox",
-        )
-        acp_client.start(cwd=session_path)
-
-        logger.info(
-            "[SANDBOX-ACP] Created ephemeral ACP client: sandbox=%s pod=%s api_pod=%s",
-            sandbox_id,
-            pod_name,
-            _API_SERVER_HOSTNAME,
-        )
-        return acp_client
-
-    def send_message(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        message: str,
-    ) -> Generator[ACPEvent, None, None]:
-        """Send a message to the CLI agent and stream ACP events.
-
-        Creates an ephemeral `opencode acp` process for each message.
-        The process resumes the session from opencode's on-disk storage,
-        handles the prompt, then is stopped. This ensures only one process
-        operates on a session's flat files at a time, preventing the bug
-        where multiple long-lived processes (one per API replica) corrupt
-        each other's in-memory state.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID (determines workspace directory)
-            message: The message content to send
-
-        Yields:
-            Typed ACP schema event objects
-        """
-        packet_logger = get_packet_logger()
-        session_path = f"/workspace/sessions/{session_id}"
-
-        # Create an ephemeral ACP client for this message
-        acp_client = self._create_ephemeral_acp_client(sandbox_id, session_path)
-
         try:
-            # Resume (or create) the ACP session from opencode's on-disk storage
-            acp_session_id = acp_client.resume_or_create_session(cwd=session_path)
-
-            logger.info(
-                "[SANDBOX-ACP] Sending message: session=%s acp_session=%s api_pod=%s",
-                session_id,
-                acp_session_id,
-                _API_SERVER_HOSTNAME,
+            pod = self._core_api.read_namespaced_pod(
+                name=pod_name,
+                namespace=self._namespace,
             )
+        except ApiException as e:
+            if e.status == 404:
+                return False
+            raise
+        if not self._sandbox_container_is_ready(pod):
+            return False
 
-            # Log the send_message call at sandbox manager level
-            packet_logger.log_session_start(session_id, sandbox_id, message)
+        return self._sidecar_client.is_healthy(
+            sandbox_id=sandbox_id,
+            timeout_seconds=timeout,
+        )
 
-            events_count = 0
-            got_prompt_response = False
-            try:
-                for event in acp_client.send_message(
-                    message, session_id=acp_session_id
-                ):
-                    events_count += 1
-                    if isinstance(event, PromptResponse):
-                        got_prompt_response = True
-                    yield event
-
-                logger.info(
-                    "[SANDBOX-ACP] send_message completed: session=%s events=%s got_prompt_response=%s",
-                    session_id,
-                    events_count,
-                    got_prompt_response,
-                )
-                packet_logger.log_session_end(
-                    session_id, success=True, events_count=events_count
-                )
-            except GeneratorExit:
-                logger.warning(
-                    "[SANDBOX-ACP] GeneratorExit: session=%s events=%s, sending session/cancel",
-                    session_id,
-                    events_count,
-                )
-                try:
-                    acp_client.cancel(session_id=acp_session_id)
-                except Exception as cancel_err:
-                    logger.warning(
-                        "[SANDBOX-ACP] session/cancel failed on GeneratorExit: %s",
-                        cancel_err,
-                    )
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error="GeneratorExit: Client disconnected or stream closed by consumer",
-                    events_count=events_count,
-                )
-                raise
-            except Exception as e:
-                logger.error(
-                    "[SANDBOX-ACP] Exception: session=%s events=%s error=%s, sending session/cancel",
-                    session_id,
-                    events_count,
-                    e,
-                )
-                try:
-                    acp_client.cancel(session_id=acp_session_id)
-                except Exception as cancel_err:
-                    logger.warning(
-                        "[SANDBOX-ACP] session/cancel failed on Exception: %s",
-                        cancel_err,
-                    )
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error=f"Exception: {str(e)}",
-                    events_count=events_count,
-                )
-                raise
-            except BaseException as e:
-                logger.error(
-                    "[SANDBOX-ACP] %s: session=%s error=%s",
-                    type(e).__name__,
-                    session_id,
-                    e,
-                )
-                packet_logger.log_session_end(
-                    session_id,
-                    success=False,
-                    error=f"{type(e).__name__}: {str(e) if str(e) else 'System-level interruption'}",
-                    events_count=events_count,
-                )
-                raise
-        finally:
-            # Always stop the ephemeral ACP client to kill the opencode process.
-            # This ensures no stale processes linger in the sandbox container.
-            try:
-                acp_client.stop()
-            except Exception as e:
-                logger.warning(
-                    "[SANDBOX-ACP] Failed to stop ephemeral ACP client: session=%s error=%s",
-                    session_id,
-                    e,
-                )
+    def _load_serve_connection_info(
+        self, sandbox_id: UUID
+    ) -> ServeConnectionInfo | None:
+        """Build serve connection info from the per-pod Secret. URL uses
+        the Service DNS (not pod IP) so telepresence dev paths work."""
+        service_name = self._get_pod_name(str(sandbox_id))
+        return ServeConnectionInfo(
+            base_url=(
+                f"http://{service_name}.{self._namespace}.svc.cluster.local"
+                f":{OPENCODE_SERVE_PORT}"
+            ),
+            password=self._read_opencode_password(sandbox_id),
+        )
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
     ) -> list[FilesystemEntry]:
-        """List contents of a directory in the session's outputs directory.
+        """List contents of a directory in the session workspace.
 
-        For Kubernetes backend, we exec into the pod to list files.
+        For Kubernetes backend, the sandbox sidecar owns pod-local filesystem
+        access and returns structured entries.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
-            path: Relative path within sessions/$session_id/outputs/
+            path: Relative path within sessions/$session_id/
 
         Returns:
             List of FilesystemEntry objects sorted by directory first, then name
@@ -2025,121 +2029,25 @@ echo "Session config regeneration complete"
         Raises:
             ValueError: If path traversal attempted or path is not a directory
         """
-        # _get_pod_name needs string
-        pod_name = self._get_pod_name(str(sandbox_id))
-
-        # Security: sanitize path by removing '..' components individually
-        path_obj = Path(path.lstrip("/"))
-        clean_parts = [p for p in path_obj.parts if p != ".."]
-        clean_path = str(Path(*clean_parts)) if clean_parts else "."
-        target_path = f"/workspace/sessions/{session_id}/{clean_path}"
-        # Use shlex.quote to prevent command injection
-        quoted_path = shlex.quote(target_path)
-
-        logger.info("Listing directory %s in pod %s", target_path, pod_name)
-
-        # Use exec to list directory
-        # -L follows symlinks (important for files/ -> /workspace/demo_data)
-        exec_command = [
-            "/bin/sh",
-            "-c",
-            f"ls -laL --time-style=+%s {quoted_path} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
-        ]
-
         try:
-            resp = k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container="sandbox",
-                command=exec_command,
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
+            return self._sidecar_client.list_directory(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                path=path,
             )
-
-            if "ERROR_NOT_FOUND" in resp:
-                raise ValueError(f"Path not found or not a directory: {path}")
-
-            entries = self._parse_ls_output(resp, clean_path)
-            return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
-
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list directory: {e}") from e
-
-    def _parse_ls_output(self, ls_output: str, base_path: str) -> list[FilesystemEntry]:
-        """Parse ls -la output into FilesystemEntry objects.
-
-        Handles regular files, directories, and symlinks. Symlinks to directories
-        are treated as directories for navigation purposes.
-        """
-        entries = []
-        lines = ls_output.strip().split("\n")
-
-        logger.debug("Parsing %s lines of ls output for %s", len(lines), base_path)
-
-        for line in lines:
-            logger.debug("Parsing line: %s", line)
-
-            # Skip header line and . / .. entries
-            if line.startswith("total") or not line:
-                continue
-
-            parts = line.split()
-            # ls -la --time-style=+%s format: perms links owner group size timestamp name
-            # Minimum 7 parts for a simple filename
-            if len(parts) < 7:
-                continue
-
-            # Handle symlinks: format is "name -> target"
-            # For symlinks, parts[-1] is the target, not the name
-            is_symlink = line.startswith("l")
-            if is_symlink and " -> " in line:
-                # Extract name from the "name -> target" portion
-                # Filename starts at index 6 (after perms, links, owner, group, size, timestamp)
-                try:
-                    # Rejoin from index 6 onwards to handle names with spaces
-                    name_and_target = " ".join(parts[6:])
-                    if " -> " in name_and_target:
-                        name = name_and_target.split(" -> ")[0]
-                    else:
-                        name = parts[-1]
-                except (IndexError, ValueError):
-                    name = parts[-1]
-            else:
-                # For regular files/directories, name is at index 6 or later (with spaces)
-                name = " ".join(parts[6:])
-
-            if name in (".", ".."):
-                continue
-
-            # Directories start with 'd', symlinks start with 'l'
-            # Treat symlinks as directories (they typically point to directories
-            # in our sandbox setup, like files/ -> /workspace/demo_data)
-            is_directory = line.startswith("d") or is_symlink
-            size_str = parts[4]
-
+        except SidecarStatusError as e:
             try:
-                size = int(size_str) if not is_directory else None
-            except ValueError:
-                size = None
+                detail = json.loads(e.body).get("detail", "")
+            except (TypeError, ValueError):
+                detail = ""
 
-            # Guess MIME type for files based on extension
-            mime_type = mimetypes.guess_type(name)[0] if not is_directory else None
-
-            entry_path = f"{base_path}/{name}".lstrip("/")
-            entries.append(
-                FilesystemEntry(
-                    name=name,
-                    path=entry_path,
-                    is_directory=is_directory,
-                    size=size,
-                    mime_type=mime_type,
-                )
-            )
-
-        return entries
+            if e.status_code == 400 and detail == "path traversal is not allowed":
+                raise ValueError(f"path traversal attempted: {path}") from e
+            if e.status_code == 404 and detail == "path not found or not a directory":
+                raise ValueError(f"Path not found or not a directory: {path}") from e
+            raise RuntimeError(f"Failed to list directory: {e}") from e
+        except SidecarRequestError as e:
+            raise RuntimeError(f"Failed to list directory: {e}") from e
 
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
         """Read a file from the session's workspace.
@@ -2181,7 +2089,7 @@ echo "Session config regeneration complete"
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stderr=True,
                 stdin=False,
@@ -2249,7 +2157,7 @@ echo "Session config regeneration complete"
 
         exec_command = [
             "python",
-            "/workspace/skills/pptx/scripts/preview.py",
+            "/workspace/managed/skills/pptx/scripts/preview.py",
             pptx_abs,
             cache_abs,
         ]
@@ -2259,7 +2167,7 @@ echo "Session config regeneration complete"
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stderr=True,
                 stdin=False,
@@ -2295,112 +2203,6 @@ echo "Session config regeneration complete"
 
         except ApiException as e:
             raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
-
-    def sync_files(
-        self,
-        sandbox_id: UUID,
-        user_id: UUID,
-        tenant_id: str,
-        source: str | None = None,
-    ) -> bool:
-        """Sync files from S3 to the running pod via the file-sync sidecar.
-
-        Executes `s5cmd sync` in the file-sync sidecar container to download
-        any new or changed files from S3 to /workspace/files/.
-
-        This is safe to call multiple times - s5cmd sync is idempotent.
-
-        Note: For user_library source, --delete is NOT used since deletions
-        are handled explicitly by the delete_file API endpoint. File visibility
-        in sessions is controlled via filtered symlinks in setup_session_workspace().
-
-        Args:
-            sandbox_id: The sandbox UUID
-            user_id: The user ID (for S3 path construction)
-            tenant_id: The tenant ID (for S3 path construction)
-            source: Optional source type (e.g., "gmail", "google_drive").
-                    If None, syncs all sources. If specified, only syncs
-                    that source's directory.
-
-        Returns:
-            True if sync was successful, False otherwise.
-        """
-        pod_name = self._get_pod_name(str(sandbox_id))
-
-        # Build S3 path based on whether source is specified
-        if source:
-            # Sync only the specific source directory
-            s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/{source}/*"
-            local_path = f"/workspace/files/{source}/"
-        else:
-            # Sync all sources (original behavior)
-            s3_path = f"s3://{self._s3_bucket}/{tenant_id}/knowledge/{str(user_id)}/*"
-            local_path = "/workspace/files/"
-
-        # s5cmd sync with --delete for external connectors only.
-        # timeout: prevent zombie processes from kubectl exec disconnections
-        # trap: kill child processes on exit/disconnect
-        source_info = f" (source={source})" if source else ""
-
-        # Sources where --delete is explicitly forbidden (deletions handled via API)
-        NO_DELETE_SOURCES = {"user_library"}
-        use_delete = source is not None and source not in NO_DELETE_SOURCES
-        delete_flag = " --delete" if use_delete else ""
-
-        sync_script = f"""
-# Kill child processes on exit/disconnect to prevent zombie s5cmd workers
-cleanup() {{ pkill -P $$ 2>/dev/null || true; }}
-trap cleanup EXIT INT TERM
-
-echo "Starting incremental file sync{source_info}"
-echo "S3: {s3_path}"
-echo "Local: {local_path}"
-
-# Ensure destination exists (needed for source-specific syncs)
-mkdir -p "{local_path}"
-
-# Run s5cmd with 5-minute timeout (SIGKILL after 10s if SIGTERM ignored)
-# Exit codes: 0=success, 1=success with warnings, 124=timeout
-sync_exit_code=0
-timeout --signal=TERM --kill-after=10s 5m \
-    /s5cmd --stat sync{delete_flag} "{s3_path}" "{local_path}" 2>&1 || sync_exit_code=$?
-
-echo "=== Sync finished (exit code: $sync_exit_code) ==="
-
-# Handle result
-if [ $sync_exit_code -eq 0 ] || [ $sync_exit_code -eq 1 ]; then
-    file_count=$(find "{local_path}" -type f 2>/dev/null | wc -l)
-    echo "Files in {local_path}: $file_count"
-    echo "SYNC_SUCCESS"
-elif [ $sync_exit_code -eq 124 ]; then
-    echo "ERROR: Sync timed out after 5 minutes"
-    echo "SYNC_FAILED"
-    exit 1
-else
-    echo "ERROR: Sync failed (exit code: $sync_exit_code)"
-    echo "SYNC_FAILED"
-    exit $sync_exit_code
-fi
-"""
-        sync_command = ["/bin/sh", "-c", sync_script]
-        resp = k8s_stream(
-            self._stream_core_api.connect_get_namespaced_pod_exec,
-            pod_name,
-            self._namespace,
-            container="file-sync",  # Execute in sidecar, not sandbox container
-            command=sync_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        logger.debug("File sync response: %s", resp)
-
-        # Check if sync succeeded based on output markers
-        if "SYNC_FAILED" in resp:
-            logger.warning("File sync failed for sandbox %s", sandbox_id)
-            return False
-        return True
 
     def _ensure_agents_md_attachments_section(
         self, sandbox_id: UUID, session_id: UUID
@@ -2453,7 +2255,7 @@ fi
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=["/bin/sh", "-c", script],
                 stderr=True,
                 stdin=False,
@@ -2551,7 +2353,7 @@ echo "$base"
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=["/bin/sh", "-c", script],
                 stdin=True,
                 stdout=True,
@@ -2656,7 +2458,7 @@ echo "$base"
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stdin=False,
                 stdout=True,
@@ -2676,6 +2478,45 @@ echo "$base"
 
         except ApiException as e:
             raise RuntimeError(f"Failed to delete file: {e}") from e
+
+    def write_sandbox_file(
+        self,
+        sandbox_id: UUID,
+        path: str,
+        content: str,
+    ) -> None:
+        if (
+            ".." in path
+            or path.startswith("/")
+            or not re.match(r"^[a-zA-Z0-9_][a-zA-Z0-9_\-./]*$", path)
+        ):
+            raise ValueError(f"Invalid sandbox file path: {path}")
+
+        pod_name = self._get_pod_name(str(sandbox_id))
+        safe_path = shlex.quote(f"/workspace/{path}")
+        safe_dir = shlex.quote(f"/workspace/{path}".rsplit("/", 1)[0])
+        escaped = content.replace("'", "'\\''")
+
+        script = f"""set -e
+mkdir -p {safe_dir}
+printf '%s' '{escaped}' > {safe_path}
+echo WRITE_OK"""
+        try:
+            resp = k8s_stream(
+                self._stream_core_api.connect_get_namespaced_pod_exec,
+                name=pod_name,
+                namespace=self._namespace,
+                container=_SANDBOX_CONTAINER_NAME,
+                command=["/bin/sh", "-c", script],
+                stdin=False,
+                stdout=True,
+                stderr=True,
+                tty=False,
+            )
+            if "WRITE_OK" not in resp:
+                raise RuntimeError(f"write_sandbox_file failed for {path}: {resp}")
+        except ApiException as e:
+            raise RuntimeError(f"Failed to write sandbox file {path}: {e}") from e
 
     def get_upload_stats(
         self,
@@ -2717,7 +2558,7 @@ fi
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
-                container="sandbox",
+                container=_SANDBOX_CONTAINER_NAME,
                 command=exec_command,
                 stdin=False,
                 stdout=True,
@@ -2742,3 +2583,63 @@ fi
         except ApiException as e:
             logger.warning("Failed to get upload stats: %s", e)
             return 0, 0
+
+    def _resolve_proxy_ip(self) -> str:
+        """Resolve SANDBOX_PROXY_HOST to a pod-routable IP for the egress
+        hostAlias. Reads the Service ClusterIP from the k8s API, not the
+        api-server's OS resolver, so it stays correct under telepresence (whose
+        resolver returns a synthetic, pod-unroutable IP). A numeric host (CI
+        passes the ClusterIP directly) is returned unchanged."""
+        host = SANDBOX_PROXY_HOST
+        try:
+            ipaddress.ip_address(host)
+            return host
+        except ValueError:
+            pass
+        name, _, rest = host.partition(".")
+        namespace = rest.partition(".")[0] or SANDBOX_PROXY_NAMESPACE
+        last_err: Exception | None = None
+        for attempt in range(_PROXY_RESOLVE_RETRY_ATTEMPTS):
+            try:
+                cluster_ip = self._core_api.read_namespaced_service(
+                    name=name, namespace=namespace
+                ).spec.cluster_ip
+                if cluster_ip and cluster_ip != "None":
+                    return cluster_ip
+                last_err = RuntimeError(f"Service {name} has no ClusterIP")
+            except ApiException as e:
+                last_err = e
+            if attempt < _PROXY_RESOLVE_RETRY_ATTEMPTS - 1:
+                time.sleep(_PROXY_RESOLVE_RETRY_BACKOFF_S * (2**attempt))
+        raise RuntimeError(
+            f"failed to resolve proxy ClusterIP for SANDBOX_PROXY_HOST={host!r} "
+            f"after {_PROXY_RESOLVE_RETRY_ATTEMPTS} attempts: {last_err}"
+        )
+
+    def write_files_to_sandbox(
+        self,
+        *,
+        sandbox_id: UUID,
+        mount_path: str,
+        files: FileSet,
+    ) -> None:
+        """Build tar.gz, POST to the in-pod daemon."""
+        pod_name = self._get_pod_name(sandbox_id)
+        tar_bytes, sha256_hex = _build_targz(files)
+
+        try:
+            self._sidecar_client.push_archive(
+                sandbox_id=sandbox_id,
+                mount_path=mount_path,
+                archive=tar_bytes,
+                sha256_hex=sha256_hex,
+                operation_label=pod_name,
+                timeout_seconds=30.0,
+            )
+        except SidecarRequestError as e:
+            raise RetriableWriteError(f"Push to {pod_name} failed: {e}") from e
+        except SidecarStatusError as e:
+            err = f"{pod_name}: {e.status_code} {e.body}"
+            if e.status_code >= 500:
+                raise RetriableWriteError(err) from e
+            raise FatalWriteError(err) from e

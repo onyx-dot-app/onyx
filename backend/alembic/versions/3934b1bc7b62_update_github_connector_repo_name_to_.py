@@ -25,11 +25,13 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # First get all GitHub connectors
-    github_connectors = conn.execute(sa.text("""
+    github_connectors = conn.execute(
+        sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = 'GITHUB'
-            """)).fetchall()
+            """)
+    ).fetchall()
 
     # Update each connector's config
     updated_count = 0
@@ -73,11 +75,13 @@ def downgrade() -> None:
         "Starting rollback of GitHub connectors from repositories to repo_name"
     )
 
-    github_connectors = conn.execute(sa.text("""
+    github_connectors = conn.execute(
+        sa.text("""
             SELECT id, connector_specific_config
             FROM connector
             WHERE source = 'GITHUB'
-            """)).fetchall()
+            """)
+    ).fetchall()
 
     logger.debug("Found %s GitHub connectors to rollback", len(github_connectors))
 

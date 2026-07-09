@@ -1,4 +1,5 @@
 import datetime
+import re
 from enum import Enum
 from typing import Any
 from typing import List
@@ -13,8 +14,42 @@ from pydantic import model_validator
 
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
+
+# Matches `{placeholder_name}` inside header value templates.
+_PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
+
+
+def _build_auto_substitution_map(*, user_email: str) -> dict[str, str]:
+    """Single source of truth for placeholders the backend fills in
+    automatically when rendering an ``MCPAuthTemplate`` into final headers.
+
+    Both the substitution call site (``apply_auto_substitutions``) and the
+    "which fields must the user supply" derivation
+    (``MCPAuthTemplate.derive_required_fields``) read from this map, so adding
+    a new auto-filled placeholder is a one-line change here.
+    """
+    return {"user_email": user_email}
+
+
+# Names of placeholders the backend auto-substitutes; never surfaced to the
+# user as fields they must fill in. Derived from the substitution map so the
+# two can never drift.
+AUTO_SUBSTITUTED_PLACEHOLDER_KEYS: frozenset[str] = frozenset(
+    _build_auto_substitution_map(user_email="").keys()
+)
+
+
+def apply_auto_substitutions(value: str, *, user_email: str) -> str:
+    """Substitute every backend-managed placeholder in ``value`` (e.g.
+    ``{user_email}``). User-provided substitutions are handled separately at
+    the call site that has access to the user's credential map."""
+    subst = _build_auto_substitution_map(user_email=user_email)
+    for key, replacement in subst.items():
+        value = value.replace(f"{{{key}}}", replacement)
+    return value
 
 
 # This should be updated along with MCPConnectionData
@@ -24,6 +59,9 @@ class MCPOAuthKeys(str, Enum):
     CLIENT_INFO = "client_info"
     TOKENS = "tokens"
     METADATA = "metadata"
+    # Absolute unix expiry for the stored token. `OAuthToken` only carries the
+    # relative `expires_in`, which is meaningless once reloaded from storage.
+    TOKEN_EXPIRES_AT = "token_expires_at"
 
 
 class MCPConnectionData(TypedDict):
@@ -32,6 +70,11 @@ class MCPConnectionData(TypedDict):
 
     headers: dict[str, str]
     header_substitutions: NotRequired[dict[str, str]]
+    # Names of fields the user must supply for header substitution. Persisted
+    # only on the per-user template config (the admin's connection config that
+    # serves as the template); empty/absent on regular per-user configs and on
+    # admin-credential configs.
+    required_fields: NotRequired[list[str]]
 
     # For OAuth only
     # Note: Update MCPOAuthKeys if necessary when modifying these
@@ -40,6 +83,7 @@ class MCPConnectionData(TypedDict):
     client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
     tokens: NotRequired[dict[str, Any]]  # OAuthToken
     metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
+    token_expires_at: NotRequired[float]  # absolute unix expiry for `tokens`
 
     # the actual models are defined in mcp.shared.auth
     # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
@@ -61,6 +105,20 @@ class MCPAuthTemplate(BaseModel):
         description="List of required field names that users must provide",
     )
 
+    @staticmethod
+    def derive_required_fields(headers: dict[str, str]) -> list[str]:
+        """Extract the set of `{placeholder}` field names referenced by
+        ``headers`` values, excluding placeholders the backend fills in
+        automatically (see ``AUTO_SUBSTITUTED_PLACEHOLDER_KEYS``).
+        """
+        seen: set[str] = set()
+        for value in headers.values():
+            for match in _PLACEHOLDER_RE.findall(value):
+                if match in AUTO_SUBSTITUTED_PLACEHOLDER_KEYS:
+                    continue
+                seen.add(match)
+        return list(seen)
+
 
 class MCPToolCreateRequest(BaseModel):
     name: str = Field(..., description="Name of the MCP tool")
@@ -75,6 +133,25 @@ class MCPToolCreateRequest(BaseModel):
     )
     oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
     oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
+    oauth_provider_mode: MCPOAuthProviderMode = Field(
+        default=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        description=(
+            "OAuth provider bootstrap mode. AUTO_DISCOVERY uses SDK challenge/"
+            "metadata discovery; KNOWN_PROVIDER uses admin-configured endpoints."
+        ),
+    )
+    oauth_authorization_endpoint: Optional[str] = Field(
+        None, description="Known-provider OAuth authorization endpoint URL"
+    )
+    oauth_token_endpoint: Optional[str] = Field(
+        None, description="Known-provider OAuth token endpoint URL"
+    )
+    oauth_scopes_override: Optional[list[str]] = Field(
+        None, description="Optional scope override for known-provider OAuth"
+    )
+    oauth_additional_auth_params: Optional[dict[str, str]] = Field(
+        None, description="Optional extra query parameters for the authorization URL"
+    )
     oauth_client_id_changed: bool = Field(
         default=False,
         description=(
@@ -101,6 +178,12 @@ class MCPToolCreateRequest(BaseModel):
     admin_credentials: Optional[dict[str, str]] = Field(
         None,
         description="Admin's credential key-value pairs for template substitution and storage",
+    )
+    admin_credentials_changed: dict[str, bool] = Field(
+        default_factory=dict,
+        description=(
+            "Per-field flags marking which `admin_credentials` were edited"
+        ),  # True = use value from request, False = use stored value
     )
     existing_server_id: Optional[int] = Field(
         None, description="ID of existing server to update (for editing)"
@@ -146,6 +229,29 @@ class MCPToolCreateRequest(BaseModel):
         # OAuth client ID/secret are optional. If provided, they will seed the
         # OAuth client info; otherwise, the MCP client will attempt dynamic
         # client registration.
+        if self.auth_type != MCPAuthenticationType.OAUTH:
+            self.oauth_provider_mode = MCPOAuthProviderMode.AUTO_DISCOVERY
+            self.oauth_authorization_endpoint = None
+            self.oauth_token_endpoint = None
+            self.oauth_scopes_override = None
+            self.oauth_additional_auth_params = None
+            return self
+
+        if self.oauth_provider_mode == MCPOAuthProviderMode.KNOWN_PROVIDER:
+            if not self.oauth_authorization_endpoint:
+                raise ValueError(
+                    "oauth_authorization_endpoint is required for known-provider OAuth mode"
+                )
+            if not self.oauth_token_endpoint:
+                raise ValueError(
+                    "oauth_token_endpoint is required for known-provider OAuth mode"
+                )
+        else:
+            # AUTO_DISCOVERY: clear fields that only apply to KNOWN_PROVIDER
+            self.oauth_authorization_endpoint = None
+            self.oauth_token_endpoint = None
+            self.oauth_scopes_override = None
+            self.oauth_additional_auth_params = None
 
         return self
 
@@ -327,6 +433,11 @@ class MCPServer(BaseModel):
     transport: Optional[MCPTransport] = None
     auth_type: Optional[MCPAuthenticationType] = None
     auth_performer: Optional[MCPAuthenticationPerformer] = None
+    oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    oauth_authorization_endpoint: Optional[str] = None
+    oauth_token_endpoint: Optional[str] = None
+    oauth_scopes_override: Optional[list[str]] = None
+    oauth_additional_auth_params: Optional[dict[str, str]] = None
     is_authenticated: bool
     user_authenticated: Optional[bool] = None
     status: MCPServerStatus
@@ -359,6 +470,11 @@ class MCPServerCreateResponse(BaseModel):
     server_url: str
     auth_type: str
     auth_performer: Optional[str]
+    oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
+    oauth_authorization_endpoint: Optional[str] = None
+    oauth_token_endpoint: Optional[str] = None
+    oauth_scopes_override: Optional[list[str]] = None
+    oauth_additional_auth_params: Optional[dict[str, str]] = None
     is_authenticated: bool
 
 

@@ -53,7 +53,7 @@
  *   options={modelOptions}
  *   placeholder="Select model"
  *   isError={!!error}
- *   rightSection={<RefreshButton />}
+ *   rightChildren={<RefreshButton />}
  * />
  * ```
  *
@@ -93,7 +93,7 @@ import {
 } from "@floating-ui/react-dom";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import InputTypeIn from "../InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { FieldContext } from "../../form/FieldContext";
 import { Button } from "@opal/components";
 import { FieldMessage } from "../../messages/FieldMessage";
@@ -127,8 +127,8 @@ const InputComboBox = ({
   isError: externalIsError,
   onValidationError,
   name,
-  leftSearchIcon = false,
-  rightSection,
+  searchIcon = false,
+  rightChildren,
   separatorLabel = "Other options",
   createPrefix,
   showOtherOptions = false,
@@ -384,11 +384,10 @@ const InputComboBox = ({
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           variant={disabled ? "disabled" : !isValid ? "error" : undefined}
-          leftSearchIcon={leftSearchIcon}
-          showClearButton={false}
-          rightSection={
+          searchIcon={searchIcon}
+          rightChildren={
             <>
-              {rightSection && (
+              {rightChildren && (
                 <div
                   className="flex items-center"
                   onPointerDown={(e) => {
@@ -398,7 +397,7 @@ const InputComboBox = ({
                     e.stopPropagation();
                   }}
                 >
-                  {rightSection}
+                  {rightChildren}
                 </div>
               )}
               {hasOptions && (

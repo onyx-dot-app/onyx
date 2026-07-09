@@ -9,12 +9,13 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Button, Divider as OpalDivider } from "@opal/components";
+import { Button, CopyButton, Divider as OpalDivider } from "@opal/components";
+import { Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { Checkbox } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Popover from "@/refresh-components/Popover";
+import { InputTypeIn } from "@opal/components";
+import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import Divider from "@/refresh-components/Divider";
@@ -26,6 +27,7 @@ import {
   SvgXCircle,
   SvgCheck,
   SvgArrowUpDown,
+  SvgFilter,
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
@@ -43,9 +45,21 @@ import {
   fetchHierarchyNodes,
   fetchHierarchyNodeDocuments,
 } from "@/lib/hierarchy/svc";
-import { AttachedDocumentSnapshot } from "@/app/admin/agents/interfaces";
-import { timeAgo } from "@/lib/time";
-import Spacer from "@/refresh-components/Spacer";
+import { AgentAttachedDocument } from "@/lib/agents/types";
+import { timeAgo } from "@opal/time";
+import { Spacer } from "@opal/components";
+
+// Compact, human-readable form of a node/document link, used as a secondary
+// label so siblings that share a display name (common for orphaned nodes that
+// fall back to the source root) remain distinguishable.
+function formatLinkSubtitle(link: string | null): string | null {
+  if (!link) return null;
+  const stripped = link
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/\/+$/, "");
+  return stripped || null;
+}
 
 // ============================================================================
 // HIERARCHY BREADCRUMB - Navigation path for folder hierarchy
@@ -127,6 +141,18 @@ function HierarchyBreadcrumb({
 // SOURCE HIERARCHY BROWSER - Browsable folder/document hierarchy for a source
 // ============================================================================
 
+function buildPathToNode(
+  targetId: number,
+  nodes: HierarchyNodeSummary[]
+): HierarchyNodeSummary[] | null {
+  const node = nodes.find((n) => n.id === targetId);
+  if (!node) return null;
+  if (node.parent_id === null) return [node];
+  const parentPath = buildPathToNode(node.parent_id, nodes);
+  if (!parentPath) return null;
+  return [...parentPath, node];
+}
+
 export interface SourceHierarchyBrowserProps {
   source: ValidSources;
   selectedDocumentIds: string[];
@@ -137,9 +163,11 @@ export interface SourceHierarchyBrowserProps {
   onSetFolderIds: (ids: number[]) => void;
   onDeselectAllDocuments: () => void;
   onDeselectAllFolders: () => void;
-  initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  initialAttachedDocuments?: AgentAttachedDocument[];
   // Callback to report selection count changes for this source
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
+  // When set, automatically navigate to this node after hierarchy loads
+  initialNodeId?: number;
 }
 
 export default function SourceHierarchyBrowser({
@@ -154,6 +182,7 @@ export default function SourceHierarchyBrowser({
   onDeselectAllFolders,
   initialAttachedDocuments,
   onSelectionCountChange,
+  initialNodeId,
 }: SourceHierarchyBrowserProps) {
   // State for hierarchy nodes (loaded once per source)
   const [allNodes, setAllNodes] = useState<HierarchyNodeSummary[]>([]);
@@ -224,6 +253,25 @@ export default function SourceHierarchyBrowser({
 
     loadNodes();
   }, [source]);
+
+  // Track the last initialNodeId we navigated to, so a new value (even to a
+  // previously-visited node) re-triggers navigation instead of being skipped
+  const lastNavigatedNodeIdRef = useRef<number | null>(null);
+
+  // Navigate to initialNodeId whenever it changes to a new value and allNodes are available
+  useEffect(() => {
+    if (
+      !initialNodeId ||
+      allNodes.length === 0 ||
+      lastNavigatedNodeIdRef.current === initialNodeId
+    )
+      return;
+    const pathToNode = buildPathToNode(initialNodeId, allNodes);
+    if (pathToNode) {
+      setPath(pathToNode);
+      lastNavigatedNodeIdRef.current = initialNodeId;
+    }
+  }, [initialNodeId, allNodes]);
 
   // Load documents when current path or sort options change
   useEffect(() => {
@@ -683,11 +731,13 @@ export default function SourceHierarchyBrowser({
       >
         <GeneralLayouts.Section height="auto" width="fit">
           <InputTypeIn
-            leftSearchIcon
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Search..."
+            placeholder="Filter..."
             variant="internal"
+            rightChildren={
+              <SvgFilter className="w-4 h-4 stroke-text-02 shrink-0" />
+            }
           />
         </GeneralLayouts.Section>
       </GeneralLayouts.Section>
@@ -831,7 +881,7 @@ export default function SourceHierarchyBrowser({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="overflow-y-auto max-h-[20rem]"
+        className="overflow-y-auto max-h-80"
       >
         {filteredItems.length === 0 && !isLoadingDocuments ? (
           <GeneralLayouts.Section height="auto" padding={1}>
@@ -849,6 +899,7 @@ export default function SourceHierarchyBrowser({
               const isSelected = isFolder
                 ? selectedFolderIds.includes(item.data.id as number)
                 : selectedDocumentIds.includes(item.data.id as string);
+              const subtitle = formatLinkSubtitle(item.data.link);
 
               return (
                 <TableLayouts.TableRow
@@ -860,29 +911,56 @@ export default function SourceHierarchyBrowser({
                     {getItemIcon(item, isSelected)}
                   </TableLayouts.CheckboxCell>
                   <TableLayouts.TableCell flex>
-                    <GeneralLayouts.Section
-                      flexDirection="row"
-                      justifyContent="start"
-                      alignItems="center"
-                      gap={0.25}
-                      height="auto"
-                      width="fit"
-                    >
-                      <Truncated>{item.data.title}</Truncated>
-                      {isFolder && (
-                        <Button
-                          icon={SvgChevronRight}
-                          prominence="tertiary"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleClickIntoFolder(
-                              item.data as HierarchyNodeSummary
-                            );
-                          }}
-                        />
-                      )}
-                    </GeneralLayouts.Section>
+                    <Hoverable.Root group="hierarchy-row" width="full">
+                      <GeneralLayouts.Section
+                        flexDirection="row"
+                        justifyContent="start"
+                        alignItems="center"
+                        gap={0.25}
+                        height="auto"
+                      >
+                        <GeneralLayouts.Section
+                          flexDirection="column"
+                          justifyContent="start"
+                          alignItems="start"
+                          gap={0}
+                          height="auto"
+                          className="min-w-0 grow"
+                        >
+                          <Truncated>{item.data.title}</Truncated>
+                          {subtitle && (
+                            <Truncated text03 secondaryBody>
+                              {subtitle}
+                            </Truncated>
+                          )}
+                        </GeneralLayouts.Section>
+                        {item.data.link && (
+                          <Hoverable.Item
+                            group="hierarchy-row"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <CopyButton
+                              size="sm"
+                              getCopyText={() => item.data.link ?? ""}
+                              tooltip="Copy link"
+                            />
+                          </Hoverable.Item>
+                        )}
+                        {isFolder && (
+                          <Button
+                            icon={SvgChevronRight}
+                            prominence="tertiary"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleClickIntoFolder(
+                                item.data as HierarchyNodeSummary
+                              );
+                            }}
+                          />
+                        )}
+                      </GeneralLayouts.Section>
+                    </Hoverable.Root>
                   </TableLayouts.TableCell>
                   <TableLayouts.TableCell width={8}>
                     <Text text03 secondaryBody>

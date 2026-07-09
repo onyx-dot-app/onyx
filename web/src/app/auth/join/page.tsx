@@ -1,10 +1,7 @@
 import { User } from "@/lib/types";
-import {
-  getCurrentUserSS,
-  getAuthTypeMetadataSS,
-  AuthTypeMetadata,
-  getAuthUrlSS,
-} from "@/lib/userSS";
+import { getCurrentUserSS } from "@/lib/users/svcSS";
+import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import { redirect } from "next/navigation";
 import EmailPasswordForm from "../login/EmailPasswordForm";
 import SignInButton from "@/app/auth/login/SignInButton";
@@ -77,9 +74,9 @@ const Page = async (props: {
             <div className="w-full justify-center">
               <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
               <div className="flex items-center w-full my-4">
-                <div className="flex-grow border-t border-background-300"></div>
+                <div className="grow border-t border-background-300"></div>
                 <span className="px-4 text-text-500">or</span>
-                <div className="flex-grow border-t border-background-300"></div>
+                <div className="grow border-t border-background-300"></div>
               </div>
             </div>
           )}

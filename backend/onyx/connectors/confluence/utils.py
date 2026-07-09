@@ -30,6 +30,7 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 if TYPE_CHECKING:
     from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
@@ -82,11 +83,12 @@ class AttachmentProcessingResult(BaseModel):
 def _make_attachment_link(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
-    parent_content_id: str | None = None,
+    parent_content_id: str | None,
+    is_cloud: bool,
 ) -> str | None:
     download_link = ""
 
-    if "api.atlassian.com" in confluence_client.url:
+    if is_cloud:
         # https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content---attachments/#api-wiki-rest-api-content-id-child-attachment-attachmentid-download-get
         if not parent_content_id:
             logger.warning(
@@ -109,6 +111,7 @@ def process_attachment(
     attachment: dict[str, Any],
     parent_content_id: str | None,
     allow_images: bool,
+    is_cloud: bool,
 ) -> AttachmentProcessingResult:
     """
     Processes a Confluence attachment. If it's a document, extracts text,
@@ -126,7 +129,7 @@ def process_attachment(
             )
 
         attachment_link = _make_attachment_link(
-            confluence_client, attachment, parent_content_id
+            confluence_client, attachment, parent_content_id, is_cloud
         )
         if not attachment_link:
             return AttachmentProcessingResult(
@@ -247,6 +250,7 @@ def convert_attachment_to_content(
     attachment: dict[str, Any],
     page_id: str,
     allow_images: bool,
+    is_cloud: bool,
 ) -> tuple[str | None, str | None] | None:
     """
     Facade function which:
@@ -264,7 +268,9 @@ def convert_attachment_to_content(
         )
         return None
 
-    result = process_attachment(confluence_client, attachment, page_id, allow_images)
+    result = process_attachment(
+        confluence_client, attachment, page_id, allow_images, is_cloud
+    )
     if result.error is not None:
         logger.warning(
             "Attachment %s encountered error: %s", attachment["title"], result.error
@@ -438,23 +444,17 @@ def _handle_http_error(e: requests.HTTPError, attempt: int, max_retries: int) ->
     ):
         raise e
 
-    retry_after = None
-
-    retry_after_header = e.response.headers.get("Retry-After")
-    if retry_after_header is not None:
-        try:
-            retry_after = int(retry_after_header)
-            if retry_after > MAX_DELAY:
-                logger.warning(
-                    "Clamping retry_after from %s to %s seconds...",
-                    retry_after,
-                    MAX_DELAY,
-                )
-                retry_after = MAX_DELAY
-            if retry_after < MIN_DELAY:
-                retry_after = MIN_DELAY
-        except ValueError:
-            pass
+    retry_after = parse_retry_after_seconds(e.response.headers.get("Retry-After"))
+    if retry_after is not None:
+        if retry_after > MAX_DELAY:
+            logger.warning(
+                "Clamping retry_after from %s to %s seconds...",
+                retry_after,
+                MAX_DELAY,
+            )
+            retry_after = MAX_DELAY
+        if retry_after < MIN_DELAY:
+            retry_after = MIN_DELAY
 
     if retry_after is not None:
         logger.warning(

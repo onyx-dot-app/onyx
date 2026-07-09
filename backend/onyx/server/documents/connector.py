@@ -41,14 +41,8 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import build_service_account_creds
-from onyx.connectors.google_utils.google_kv import delete_google_app_cred
-from onyx.connectors.google_utils.google_kv import delete_service_account_key
 from onyx.connectors.google_utils.google_kv import get_auth_url
-from onyx.connectors.google_utils.google_kv import get_google_app_cred
-from onyx.connectors.google_utils.google_kv import get_service_account_key
 from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
-from onyx.connectors.google_utils.google_kv import upsert_google_app_cred
-from onyx.connectors.google_utils.google_kv import upsert_service_account_key
 from onyx.connectors.google_utils.google_kv import verify_csrf
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
@@ -73,10 +67,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user_parallel,
 )
 from onyx.db.connector_credential_pair import verify_user_has_access_to_cc_pair
-from onyx.db.credentials import cleanup_gmail_credentials
-from onyx.db.credentials import cleanup_google_drive_credentials
 from onyx.db.credentials import create_credential
-from onyx.db.credentials import delete_service_account_credentials
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_all_cc_pairs
@@ -97,11 +88,8 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserRole
-from onyx.file_processing.file_types import PLAIN_TEXT_MIME_TYPE
-from onyx.file_processing.file_types import WORD_PROCESSING_MIME_TYPE
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
-from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import AuthStatus
@@ -123,9 +111,7 @@ from onyx.server.documents.models import FailedConnectorIndexingStatus
 from onyx.server.documents.models import FileUploadResponse
 from onyx.server.documents.models import GDriveCallback
 from onyx.server.documents.models import GmailCallback
-from onyx.server.documents.models import GoogleAppCredentials
 from onyx.server.documents.models import GoogleServiceAccountCredentialRequest
-from onyx.server.documents.models import GoogleServiceAccountKey
 from onyx.server.documents.models import IndexedSourcesResponse
 from onyx.server.documents.models import IndexingStatusRequest
 from onyx.server.documents.models import ObjectCreationIdResponse
@@ -133,7 +119,12 @@ from onyx.server.documents.models import RunConnectorRequest
 from onyx.server.documents.models import SourceSummary
 from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
+from onyx.server.security.store import get_security_settings
 from onyx.server.utils_vector_db import require_vector_db
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.threadpool_concurrency import CallableProtocol
@@ -156,205 +147,20 @@ router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 """Admin only API endpoints"""
 
 
-@router.get("/admin/connector/gmail/app-credential")
-def check_google_app_gmail_credentials_exist(
-    _: User = Depends(current_curator_or_admin_user),
-) -> dict[str, str]:
-    try:
-        return {"client_id": get_google_app_cred(DocumentSource.GMAIL).web.client_id}
-    except KvKeyNotFoundError:
-        raise HTTPException(status_code=404, detail="Google App Credentials not found")
-
-
-@router.put("/admin/connector/gmail/app-credential")
-def upsert_google_app_gmail_credentials(
-    app_credentials: GoogleAppCredentials,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> StatusResponse:
-    try:
-        upsert_google_app_cred(app_credentials, DocumentSource.GMAIL)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully saved Google App Credentials"
-    )
-
-
-@router.delete("/admin/connector/gmail/app-credential")
-def delete_google_app_gmail_credentials(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> StatusResponse:
-    try:
-        delete_google_app_cred(DocumentSource.GMAIL)
-        cleanup_gmail_credentials(db_session=db_session)
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully deleted Google App Credentials"
-    )
-
-
-@router.get("/admin/connector/google-drive/app-credential")
-def check_google_app_credentials_exist(
-    _: User = Depends(current_curator_or_admin_user),
-) -> dict[str, str]:
-    try:
-        return {
-            "client_id": get_google_app_cred(DocumentSource.GOOGLE_DRIVE).web.client_id
-        }
-    except KvKeyNotFoundError:
-        raise HTTPException(status_code=404, detail="Google App Credentials not found")
-
-
-@router.put("/admin/connector/google-drive/app-credential")
-def upsert_google_app_credentials(
-    app_credentials: GoogleAppCredentials,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> StatusResponse:
-    try:
-        upsert_google_app_cred(app_credentials, DocumentSource.GOOGLE_DRIVE)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully saved Google App Credentials"
-    )
-
-
-@router.delete("/admin/connector/google-drive/app-credential")
-def delete_google_app_credentials(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> StatusResponse:
-    try:
-        delete_google_app_cred(DocumentSource.GOOGLE_DRIVE)
-        cleanup_google_drive_credentials(db_session=db_session)
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully deleted Google App Credentials"
-    )
-
-
-@router.get("/admin/connector/gmail/service-account-key")
-def check_google_service_gmail_account_key_exist(
-    _: User = Depends(current_curator_or_admin_user),
-) -> dict[str, str]:
-    try:
-        return {
-            "service_account_email": get_service_account_key(
-                DocumentSource.GMAIL
-            ).client_email
-        }
-    except KvKeyNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Google Service Account Key not found"
-        )
-
-
-@router.put("/admin/connector/gmail/service-account-key")
-def upsert_google_service_gmail_account_key(
-    service_account_key: GoogleServiceAccountKey,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> StatusResponse:
-    try:
-        upsert_service_account_key(service_account_key, DocumentSource.GMAIL)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully saved Google Service Account Key"
-    )
-
-
-@router.delete("/admin/connector/gmail/service-account-key")
-def delete_google_service_gmail_account_key(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> StatusResponse:
-    try:
-        delete_service_account_key(DocumentSource.GMAIL)
-        cleanup_gmail_credentials(db_session=db_session)
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully deleted Google Service Account Key"
-    )
-
-
-@router.get("/admin/connector/google-drive/service-account-key")
-def check_google_service_account_key_exist(
-    _: User = Depends(current_curator_or_admin_user),
-) -> dict[str, str]:
-    try:
-        return {
-            "service_account_email": get_service_account_key(
-                DocumentSource.GOOGLE_DRIVE
-            ).client_email
-        }
-    except KvKeyNotFoundError:
-        raise HTTPException(
-            status_code=404, detail="Google Service Account Key not found"
-        )
-
-
-@router.put("/admin/connector/google-drive/service-account-key")
-def upsert_google_service_account_key(
-    service_account_key: GoogleServiceAccountKey,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> StatusResponse:
-    try:
-        upsert_service_account_key(service_account_key, DocumentSource.GOOGLE_DRIVE)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully saved Google Service Account Key"
-    )
-
-
-@router.delete("/admin/connector/google-drive/service-account-key")
-def delete_google_service_account_key(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> StatusResponse:
-    try:
-        delete_service_account_key(DocumentSource.GOOGLE_DRIVE)
-        cleanup_google_drive_credentials(db_session=db_session)
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return StatusResponse(
-        success=True, message="Successfully deleted Google Service Account Key"
-    )
-
-
 @router.put("/admin/connector/google-drive/service-account-credential")
 def upsert_service_account_credential(
     service_account_credential_request: GoogleServiceAccountCredentialRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    """Special API which allows the creation of a credential for a service account.
-    Combines the input with the saved service account key to create an entry in the
-    `Credential` table."""
-    try:
-        credential_base = build_service_account_creds(
-            DocumentSource.GOOGLE_DRIVE,
-            primary_admin_email=service_account_credential_request.google_primary_admin,
-            name="Service Account (uploaded)",
-        )
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # first delete all existing service account credentials
-    delete_service_account_credentials(user, db_session, DocumentSource.GOOGLE_DRIVE)
-    # `user=None` since this credential is not a personal credential
+    """Create a credential from an uploaded service account key. Each call creates a new
+    credential, so an instance can hold multiple service accounts."""
+    credential_base = build_service_account_creds(
+        DocumentSource.GOOGLE_DRIVE,
+        service_account_key=service_account_credential_request.service_account_key,
+        primary_admin_email=service_account_credential_request.google_primary_admin,
+        name="Service Account (uploaded)",
+    )
     credential = create_credential(
         credential_data=credential_base, user=user, db_session=db_session
     )
@@ -367,20 +173,13 @@ def upsert_gmail_service_account_credential(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    """Special API which allows the creation of a credential for a service account.
-    Combines the input with the saved service account key to create an entry in the
-    `Credential` table."""
-    try:
-        credential_base = build_service_account_creds(
-            DocumentSource.GMAIL,
-            primary_admin_email=service_account_credential_request.google_primary_admin,
-        )
-    except KvKeyNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # first delete all existing service account credentials
-    delete_service_account_credentials(user, db_session, DocumentSource.GMAIL)
-    # `user=None` since this credential is not a personal credential
+    """Create a credential from an uploaded service account key. Each call creates a new
+    credential, so an instance can hold multiple service accounts."""
+    credential_base = build_service_account_creds(
+        DocumentSource.GMAIL,
+        service_account_key=service_account_credential_request.service_account_key,
+        primary_admin_email=service_account_credential_request.google_primary_admin,
+    )
     credential = create_credential(
         credential_data=credential_base, user=user, db_session=db_session
     )
@@ -470,7 +269,6 @@ def upload_files(
     file_origin: FileOrigin = FileOrigin.CONNECTOR,
     unzip: bool = True,
 ) -> FileUploadResponse:
-
     # Skip directories and known macOS metadata entries
     def should_process_file(file_path: str) -> bool:
         normalized_path = os.path.normpath(file_path)
@@ -533,27 +331,12 @@ def upload_files(
                 deduped_file_names.append(file.filename)
                 continue
 
-            # Since we can't render docx files in the UI,
-            # we store them in the file store as plain text
-            if file.content_type == WORD_PROCESSING_MIME_TYPE:
-                # Lazy load to avoid importing markitdown when not needed
-                from onyx.file_processing.extract_file_text import read_docx_file
-
-                text, _ = read_docx_file(file.file, file.filename)
-                file_id = file_store.save_file(
-                    content=BytesIO(text.encode("utf-8")),
-                    display_name=file.filename,
-                    file_origin=file_origin,
-                    file_type=PLAIN_TEXT_MIME_TYPE,
-                )
-
-            else:
-                file_id = file_store.save_file(
-                    content=file.file,
-                    display_name=file.filename,
-                    file_origin=file_origin,
-                    file_type=file.content_type or "text/plain",
-                )
+            file_id = file_store.save_file(
+                content=file.file,
+                display_name=file.filename,
+                file_origin=file_origin,
+                file_type=file.content_type or "text/plain",
+            )
             deduped_file_paths.append(file_id)
             deduped_file_names.append(file.filename)
 
@@ -1066,6 +849,7 @@ def get_connector_status(
             cc_pair.credential_id
         )
 
+    mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
         ConnectorStatus(
             cc_pair_id=cc_pair.id,
@@ -1076,7 +860,10 @@ def get_connector_status(
                     cc_pair.connector_id, []
                 ),
             ),
-            credential=CredentialSnapshot.from_credential_db_model(cc_pair.credential),
+            credential=CredentialSnapshot.from_credential_db_model(
+                cc_pair.credential,
+                mask_credential_prefix=mask_credential_prefix,
+            ),
             access_type=cc_pair.access_type,
             groups=group_cc_pair_relationships_dict.get(cc_pair.id, []),
         )
@@ -1564,6 +1351,14 @@ def create_connector_from_model(
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
 
+        emit_audit_event(
+            AuditAction.CONNECTOR_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="connector",
+            resource_id=connector_response.id,
+            extra={"source": connector_data.source.value},
+        )
         return connector_response
     except ValueError as e:
         logger.error("Error creating connector: %s", e)
@@ -1686,6 +1481,14 @@ def update_connector_from_model(
             status_code=404, detail=f"Connector {connector_id} does not exist"
         )
 
+    emit_audit_event(
+        AuditAction.CONNECTOR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="connector",
+        resource_id=updated_connector.id,
+    )
+
     return ConnectorSnapshot(
         id=updated_connector.id,
         name=updated_connector.name,
@@ -1710,17 +1513,26 @@ def update_connector_from_model(
 )
 def delete_connector_by_id(
     connector_id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     try:
         with db_session.begin():
-            return delete_connector(
+            result = delete_connector(
                 db_session=db_session,
                 connector_id=connector_id,
             )
     except AssertionError:
         raise HTTPException(status_code=400, detail="Connector is not deletable")
+
+    emit_audit_event(
+        AuditAction.CONNECTOR_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="connector",
+        resource_id=connector_id,
+    )
+    return result
 
 
 @router.post("/admin/connector/run-once", tags=PUBLIC_API_TAGS)
@@ -1790,7 +1602,8 @@ def connector_run_once(
 def gmail_auth(
     response: Response,
     credential_id: str,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> AuthUrl:
     # set a cookie that we can read in the callback (used for `verify_csrf`)
     response.set_cookie(
@@ -1799,14 +1612,19 @@ def gmail_auth(
         httponly=True,
         max_age=600,
     )
-    return AuthUrl(auth_url=get_auth_url(int(credential_id), DocumentSource.GMAIL))
+    return AuthUrl(
+        auth_url=get_auth_url(
+            int(credential_id), DocumentSource.GMAIL, user, db_session
+        )
+    )
 
 
 @router.get("/connector/google-drive/authorize/{credential_id}")
 def google_drive_auth(
     response: Response,
     credential_id: str,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> AuthUrl:
     # set a cookie that we can read in the callback (used for `verify_csrf`)
     response.set_cookie(
@@ -1816,7 +1634,9 @@ def google_drive_auth(
         max_age=600,
     )
     return AuthUrl(
-        auth_url=get_auth_url(int(credential_id), DocumentSource.GOOGLE_DRIVE)
+        auth_url=get_auth_url(
+            int(credential_id), DocumentSource.GOOGLE_DRIVE, user, db_session
+        )
     )
 
 
@@ -1864,7 +1684,6 @@ def google_drive_callback(
         )
     credential_id = int(credential_id_cookie)
     verify_csrf(credential_id, callback.state)
-
     credentials: Credentials | None = update_credential_access_tokens(
         callback.code,
         credential_id,
@@ -1883,7 +1702,7 @@ def google_drive_callback(
 
 @router.get("/connector", tags=PUBLIC_API_TAGS)
 def get_connectors(
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorSnapshot]:
     connectors = fetch_connectors(db_session)
@@ -1910,7 +1729,7 @@ def get_indexed_sources(
 @router.get("/connector/{connector_id}", tags=PUBLIC_API_TAGS)
 def get_connector_by_id(
     connector_id: int,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)

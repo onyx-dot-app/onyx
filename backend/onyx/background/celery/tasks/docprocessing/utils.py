@@ -2,7 +2,6 @@ import time
 from datetime import datetime
 from datetime import timezone
 
-from redis import Redis
 from redis.exceptions import LockError
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
@@ -21,6 +20,7 @@ from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -36,7 +36,7 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
         parent_pid: int,
         redis_connector: RedisConnector,
         redis_lock: RedisLock,
-        redis_client: Redis,
+        redis_client: TenantRedisClient,
         timeout_seconds: int | None = None,
     ):
         super().__init__()
@@ -221,8 +221,14 @@ def should_index(
             # )
             return False
 
-    # When switching over models, always index at least once
-    if search_settings_instance.status == IndexModelStatus.FUTURE:
+    # Legacy FUTURE reindex indexes once, then stops so the swap can fire. A
+    # port-flow FUTURE polls continuously like PRESENT (its synthetic seed primes
+    # the cursor), so skip this block and fall through.
+    # TODO(subash): drop this branch once all FUTUREs use the port flow.
+    if (
+        search_settings_instance.status == IndexModelStatus.FUTURE
+        and not search_settings_instance.use_port_flow
+    ):
         if last_index_attempt:
             # No new index if the last index attempt succeeded
             # Once is enough. The model will never be able to swap otherwise.

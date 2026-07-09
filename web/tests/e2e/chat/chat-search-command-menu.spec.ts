@@ -8,6 +8,11 @@ const TEST_PREFIX = "E2E-CMD";
 let chatSessionIds: string[] = [];
 let projectIds: number[] = [];
 
+// Chat/project rows render a relative timestamp (e.g. "3 seconds ago") whose
+// value depends on the wall clock, making screenshots non-deterministic. Mask
+// it so visual-regression diffs ignore the timestamp cells.
+const TIMESTAMP_MASK = '[data-testid="command-menu-timestamp"]';
+
 /**
  * Helper to get the command menu dialog locator (using the content wrapper)
  */
@@ -90,7 +95,10 @@ test.describe("Chat Search Command Menu", () => {
       dialog.locator('[data-command-item="new-session"]')
     ).toBeVisible();
 
-    await expectScreenshot(page, { name: "command-menu-default-open" });
+    await expectScreenshot(page, {
+      name: "command-menu-default-open",
+      mask: [TIMESTAMP_MASK],
+    });
   });
 
   // -- Preview limits --
@@ -156,7 +164,10 @@ test.describe("Chat Search Command Menu", () => {
       ).toBeVisible();
     }
 
-    await expectScreenshot(page, { name: "command-menu-projects-filter" });
+    await expectScreenshot(page, {
+      name: "command-menu-projects-filter",
+      mask: [TIMESTAMP_MASK],
+    });
   });
 
   test("Filter chip X removes filter and returns to all", async ({ page }) => {
@@ -206,7 +217,10 @@ test.describe("Chat Search Command Menu", () => {
       dialog.locator(`[data-command-item="chat-${chatSessionIds[2]}"]`)
     ).toBeVisible();
 
-    await expectScreenshot(page, { name: "command-menu-search-results" });
+    await expectScreenshot(page, {
+      name: "command-menu-search-results",
+      mask: [TIMESTAMP_MASK],
+    });
   });
 
   test("Search finds matching project", async ({ page }) => {

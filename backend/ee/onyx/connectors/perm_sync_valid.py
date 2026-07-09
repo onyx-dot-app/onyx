@@ -1,19 +1,38 @@
+from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
 
 
+def validate_canvas_perm_sync(connector: CanvasConnector) -> None:
+    connector.probe_course_user_email_visibility()
+    connector.probe_account_user_listing_permission()
+
+
 def validate_confluence_perm_sync(connector: ConfluenceConnector) -> None:
     """
     Validate that the connector is configured correctly for permissions syncing.
+
+    For Confluence Data Center 9.1+, the REST space-permissions endpoint
+    returns HTTP 500 (rather than 403) for non-admin callers
+    (CONFSERVER-99908). Probe it once during validation so a missing-admin
+    misconfiguration surfaces at connector creation time -- with an
+    actionable InsufficientPermissionsError -- instead of as a
+    per-space-per-sync HTTP 500 with no clear remediation.
     """
+    connector.probe_rest_space_permissions_admin_access()
 
 
 def validate_drive_perm_sync(connector: GoogleDriveConnector) -> None:
     """
     Validate that the connector is configured correctly for permissions syncing.
+
+    Group sync calls `admin.directory.users.get` for the configured primary
+    admin. Probe it here so a misconfigured primary admin (403) fails at
+    connector creation instead of every external-group-sync tick.
     """
+    connector.probe_directory_admin_permission()
 
 
 def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
@@ -39,7 +58,9 @@ def validate_perm_sync(connector: BaseConnector) -> None:
 
     Default is a no-op (always successful).
     """
-    if isinstance(connector, ConfluenceConnector):
+    if isinstance(connector, CanvasConnector):
+        validate_canvas_perm_sync(connector)
+    elif isinstance(connector, ConfluenceConnector):
         validate_confluence_perm_sync(connector)
     elif isinstance(connector, GoogleDriveConnector):
         validate_drive_perm_sync(connector)

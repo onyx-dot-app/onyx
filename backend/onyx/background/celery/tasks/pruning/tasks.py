@@ -73,6 +73,7 @@ from onyx.redis.redis_hierarchy import HierarchyNodeCacheEntry
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.pruning_metrics import observe_pruning_diff_duration
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
@@ -129,7 +130,7 @@ class PruneCallback(IndexingCallbackBase):
 
 def _resolve_and_update_document_parents(
     db_session: Session,
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     source: DocumentSource,
     raw_id_to_parent: dict[str, str | None],
 ) -> None:
@@ -245,6 +246,14 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
                         logger.info("CC pair not due for pruning: %s", cc_pair_id)
                         continue
 
+                    # Skip auto-scheduling during a prune failure backoff; a manual
+                    # prune (API) bypasses this path and can still force a run.
+                    if RedisConnector(tenant_id, cc_pair_id).prune.in_failure_backoff:
+                        logger.info(
+                            "CC pair in pruning failure backoff: %s", cc_pair_id
+                        )
+                        continue
+
                     payload_id = try_creating_prune_generator_task(
                         self.app, cc_pair, db_session, r, tenant_id
                     )
@@ -318,7 +327,7 @@ def try_creating_prune_generator_task(
     celery_app: Celery,
     cc_pair: ConnectorCredentialPair,
     db_session: Session,
-    r: Redis,
+    r: TenantRedisClient,
     tenant_id: str,
 ) -> str | None:
     """Checks for any conditions that should block the pruning generator task from being
@@ -743,7 +752,19 @@ def connector_pruning_generator_task(
             f"Pruning exceptioned: cc_pair={cc_pair_id} connector={connector_id} payload_id={payload_id}"
         )
 
-        redis_connector.prune.reset()
+        # Back off so a failing prune isn't re-dispatched on the next beat.
+        redis_connector.prune.set_failure_backoff()
+
+        # Only reset (clears the fence + taskset) if cleanup tasks were never
+        # fanned out. If they were, reset would orphan them (it doesn't revoke
+        # them) and the next beat would re-enumerate and re-queue the whole set;
+        # keeping the fence lets the monitor finalize the in-flight taskset, and
+        # generator_failed makes it record a FAILED prune instead of a false success.
+        if redis_connector.prune.generator_complete is None:
+            redis_connector.prune.reset()
+        else:
+            redis_connector.prune.set_generator_failed()
+
         raise e
     finally:
         if lock.owned():
@@ -760,7 +781,7 @@ def connector_pruning_generator_task(
 def monitor_ccpair_pruning_taskset(
     tenant_id: str,
     key_bytes: bytes,
-    r: Redis,  # noqa: ARG001
+    r: TenantRedisClient,
     db_session: Session,
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
@@ -781,23 +802,35 @@ def monitor_ccpair_pruning_taskset(
     if initial is None:
         return
 
-    remaining = redis_connector.prune.get_remaining()
-    task_logger.info(
-        f"Connector pruning progress: cc_pair={cc_pair_id} remaining={remaining} initial={initial}"
-    )
-    if remaining > 0:
+    # Check if the taskset still exists in Redis without reading its size.
+    # redis.exists() is O(1) and very cheap, whereas scard() on a large taskset
+    # (1M+ items during a big pruning fan-out) was OOMKilling the monitoring
+    # pod. Mirrors the deletion-side fix in #11155.
+    if r.exists(redis_connector.prune.taskset_key):
+        task_logger.info(
+            f"Connector pruning progress: cc_pair={cc_pair_id} initial={initial}"
+        )
         return
 
-    mark_ccpair_as_pruned(int(cc_pair_id), db_session)
-    task_logger.info(
-        f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
-    )
+    # A generator that threw after fan-out still drains its tasks; record FAILED
+    # so the prune retries after the backoff instead of advancing last_pruned.
+    failed = redis_connector.prune.generator_failed
+    if failed:
+        task_logger.warning(
+            f"Connector pruning failed after fan-out: cc_pair={cc_pair_id} num_pruned={initial}"
+        )
+    else:
+        mark_ccpair_as_pruned(int(cc_pair_id), db_session)
+        redis_connector.prune.clear_failure_backoff()
+        task_logger.info(
+            f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
+        )
 
     update_sync_record_status(
         db_session=db_session,
         entity_id=cc_pair_id,
         sync_type=SyncType.PRUNING,
-        sync_status=SyncStatus.SUCCESS,
+        sync_status=SyncStatus.FAILED if failed else SyncStatus.SUCCESS,
         num_docs_synced=initial,
     )
 
@@ -810,8 +843,8 @@ def monitor_ccpair_pruning_taskset(
 
 def validate_pruning_fences(
     tenant_id: str,
-    r: Redis,
-    r_replica: Redis,
+    r: TenantRedisClient,
+    r_replica: TenantRedisClient,
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:
@@ -861,7 +894,7 @@ def validate_pruning_fence(
     key_bytes: bytes,
     reserved_tasks: set[str],
     queued_tasks: set[str],
-    r: Redis,
+    r: TenantRedisClient,
     r_celery: Redis,
 ) -> None:
     """See validate_indexing_fence for an overall idea of validation flows.
@@ -944,8 +977,7 @@ def validate_pruning_fence(
     for member in r.sscan_iter(redis_connector.prune.taskset_key):
         tasks_scanned += 1
 
-        member_bytes = cast(bytes, member)
-        member_str = member_bytes.decode("utf-8")
+        member_str = member.decode("utf-8")
         if member_str in queued_tasks:
             continue
 

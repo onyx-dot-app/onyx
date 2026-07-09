@@ -1,12 +1,16 @@
 from sqlalchemy import and_
+from sqlalchemy import cast
 from sqlalchemy import select
+from sqlalchemy import String
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import FileType
+from onyx.db.enums import IndexingStatus
 from onyx.db.models import FileRecord
+from onyx.db.models import IndexAttempt
 
 
 def get_query_history_export_files(
@@ -32,6 +36,15 @@ def get_filerecord_by_file_id_optional(
     return db_session.query(FileRecord).filter_by(file_id=file_id).first()
 
 
+class FileRecordNotFoundError(RuntimeError):
+    """Raised when a file record does not exist (e.g. the file was deleted).
+
+    Subclasses RuntimeError so existing `except RuntimeError` call sites keep
+    working; callers that need to distinguish "file is gone" from transient
+    infrastructure failures can catch this type specifically.
+    """
+
+
 def get_filerecord_by_file_id(
     file_id: str,
     db_session: Session,
@@ -39,7 +52,9 @@ def get_filerecord_by_file_id(
     filestore = db_session.query(FileRecord).filter_by(file_id=file_id).first()
 
     if not filestore:
-        raise RuntimeError(f"File by id {file_id} does not exist or was deleted")
+        raise FileRecordNotFoundError(
+            f"File by id {file_id} does not exist or was deleted"
+        )
 
     return filestore
 
@@ -100,10 +115,22 @@ def get_staged_file_ids_for_cc_pair_excluding_attempt(
     excluding_attempt_id: int,
     db_session: Session,
 ) -> list[str]:
-    """Return `INDEXING_STAGING` file_ids for this cc_pair owned by any
-    attempt OTHER than `excluding_attempt_id`. Used for the start-of-run
-    orphan sweep — anything matching is by definition left over from a
-    previous attempt on the same cc_pair."""
+    """Return `INDEXING_STAGING` file_ids for this cc_pair eligible for
+    the start-of-run orphan sweep — anything tagged with a different
+    `index_attempt_id` whose owning attempt is NOT still running.
+
+    Files belonging to a non-terminal attempt (e.g. a concurrent
+    targeted reindex on the same cc_pair) are kept; their binaries are
+    still being consumed and must not be wiped. Files whose owning
+    attempt no longer exists in the DB at all (deleted by retention,
+    test fixtures with synthetic IDs, etc.) are still reaped, since
+    nothing is going to consume them.
+    """
+    non_terminal_statuses = [s for s in IndexingStatus if not s.is_terminal()]
+    non_terminal_cc_pair_attempt_ids_subq = select(cast(IndexAttempt.id, String)).where(
+        IndexAttempt.connector_credential_pair_id == cc_pair_id,
+        IndexAttempt.status.in_(non_terminal_statuses),
+    )
     return list(
         db_session.scalars(
             select(FileRecord.file_id)
@@ -115,6 +142,11 @@ def get_staged_file_ids_for_cc_pair_excluding_attempt(
             .where(
                 FileRecord.file_metadata["index_attempt_id"].as_string()
                 != str(excluding_attempt_id)
+            )
+            .where(
+                FileRecord.file_metadata["index_attempt_id"]
+                .as_string()
+                .notin_(non_terminal_cc_pair_attempt_ids_subq)
             )
         ).all()
     )

@@ -14,7 +14,6 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.credentials import alter_credential
-from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import create_credential
 from onyx.db.credentials import CREDENTIAL_PERMISSIONS_TO_IGNORE
 from onyx.db.credentials import delete_credential
@@ -37,6 +36,11 @@ from onyx.server.documents.private_key_types import FILE_TYPE_TO_FILE_PROCESSOR
 from onyx.server.documents.private_key_types import PrivateKeyFileTypes
 from onyx.server.documents.private_key_types import ProcessPrivateKeyFileProtocol
 from onyx.server.models import StatusResponse
+from onyx.server.security.store import get_security_settings
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -64,8 +68,11 @@ def list_credentials_admin(
         user=user,
         get_editable=False,
     )
+    mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
-        CredentialSnapshot.from_credential_db_model(credential)
+        CredentialSnapshot.from_credential_db_model(
+            credential, mask_credential_prefix=mask_credential_prefix
+        )
         for credential in credentials
     ]
 
@@ -86,8 +93,11 @@ def get_cc_source_full_info(
         get_editable=get_editable,
     )
 
+    mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
-        CredentialSnapshot.from_credential_db_model(credential)
+        CredentialSnapshot.from_credential_db_model(
+            credential, mask_credential_prefix=mask_credential_prefix
+        )
         for credential in credentials
     ]
 
@@ -95,11 +105,18 @@ def get_cc_source_full_info(
 @router.delete("/admin/credential/{credential_id}")
 def delete_credential_by_id_admin(
     credential_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     """Same as the user endpoint, but can delete any credential (not just the user's own)"""
     delete_credential(db_session=db_session, credential_id=credential_id)
+    emit_audit_event(
+        AuditAction.CREDENTIAL_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="credential",
+        resource_id=credential_id,
+    )
     return StatusResponse(
         success=True, message="Credential deleted successfully", data=credential_id
     )
@@ -148,14 +165,21 @@ def create_credential_from_model(
             object_is_public=credential_info.curator_public,
         )
 
-    # Temporary fix for empty Google App credentials
-    if credential_info.source == DocumentSource.GMAIL:
-        cleanup_gmail_credentials(db_session=db_session)
-
     credential = create_credential(credential_info, user, db_session)
+    emit_audit_event(
+        AuditAction.CREDENTIAL_CREATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="credential",
+        resource_id=credential.id,
+        extra={"source": credential_info.source.value},
+    )
     return ObjectCreationIdResponse(
         id=credential.id,
-        credential=CredentialSnapshot.from_credential_db_model(credential),
+        credential=CredentialSnapshot.from_credential_db_model(
+            credential,
+            mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        ),
     )
 
 
@@ -212,14 +236,21 @@ def create_credential_with_private_key(
             object_is_public=curator_public,
         )
 
-    # Temporary fix for empty Google App credentials
-    if DocumentSource(source) == DocumentSource.GMAIL:
-        cleanup_gmail_credentials(db_session=db_session)
-
     credential = create_credential(credential_info, user, db_session)
+    emit_audit_event(
+        AuditAction.CREDENTIAL_CREATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="credential",
+        resource_id=credential.id,
+        extra={"source": credential_info.source.value},
+    )
     return ObjectCreationIdResponse(
         id=credential.id,
-        credential=CredentialSnapshot.from_credential_db_model(credential),
+        credential=CredentialSnapshot.from_credential_db_model(
+            credential,
+            mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        ),
     )
 
 
@@ -232,8 +263,11 @@ def list_credentials(
     db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
     credentials = fetch_credentials_for_user(db_session=db_session, user=user)
+    mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
-        CredentialSnapshot.from_credential_db_model(credential)
+        CredentialSnapshot.from_credential_db_model(
+            credential, mask_credential_prefix=mask_credential_prefix
+        )
         for credential in credentials
     ]
 
@@ -256,7 +290,10 @@ def get_credential_by_id(
             detail=f"Credential {credential_id} does not exist or does not belong to user",
         )
 
-    return CredentialSnapshot.from_credential_db_model(credential)
+    return CredentialSnapshot.from_credential_db_model(
+        credential,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    )
 
 
 @router.put("/admin/credential/{credential_id}")
@@ -280,7 +317,10 @@ def update_credential_data(
             detail=f"Credential {credential_id} does not exist or does not belong to user",
         )
 
-    return CredentialSnapshot.from_credential_db_model(credential)
+    return CredentialSnapshot.from_credential_db_model(
+        credential,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    )
 
 
 @router.put("/admin/credential/private-key/{credential_id}")
@@ -327,7 +367,10 @@ def update_credential_private_key(
             detail=f"Credential {credential_id} does not exist or does not belong to user",
         )
 
-    return CredentialSnapshot.from_credential_db_model(credential)
+    return CredentialSnapshot.from_credential_db_model(
+        credential,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    )
 
 
 @router.patch("/credential/{credential_id}")
@@ -346,9 +389,17 @@ def update_credential_from_model(
             detail=f"Credential {credential_id} does not exist or does not belong to user",
         )
 
-    # Get credential_json value - use masking for API responses
+    emit_audit_event(
+        AuditAction.CREDENTIAL_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="credential",
+        resource_id=credential_id,
+    )
+
+    mask_credential_prefix = get_security_settings().mask_credential_prefix
     credential_json_value = (
-        updated_credential.credential_json.get_value(apply_mask=True)
+        updated_credential.credential_json.get_value(apply_mask=mask_credential_prefix)
         if updated_credential.credential_json
         else {}
     )
@@ -378,6 +429,14 @@ def delete_credential_by_id(
         db_session,
     )
 
+    emit_audit_event(
+        AuditAction.CREDENTIAL_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="credential",
+        resource_id=credential_id,
+    )
+
     return StatusResponse(
         success=True, message="Credential deleted successfully", data=credential_id
     )
@@ -390,6 +449,14 @@ def force_delete_credential_by_id(
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     delete_credential_for_user(credential_id, user, db_session, True)
+
+    emit_audit_event(
+        AuditAction.CREDENTIAL_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="credential",
+        resource_id=credential_id,
+    )
 
     return StatusResponse(
         success=True, message="Credential deleted successfully", data=credential_id

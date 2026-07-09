@@ -48,6 +48,32 @@ export function getPacketObjectsByType(
     );
 }
 
+/** Read a packet object's `tool_name` field, if present. */
+export function getToolName(packetObject: ChatStreamObject): string | null {
+  const value = packetObject.tool_name;
+  return typeof value === "string" ? value : null;
+}
+
+/**
+ * Count the tool-invocation packets (start / delta / debug) emitted for a
+ * specific tool. Used to assert whether an MCP tool actually ran.
+ */
+export function getToolPacketCounts(
+  packets: ChatStreamPacket[],
+  toolName: string
+): { start: number; delta: number; debug: number } {
+  const countOfType = (packetType: string): number =>
+    getPacketObjectsByType(packets, packetType).filter(
+      (packetObject) => getToolName(packetObject) === toolName
+    ).length;
+
+  return {
+    start: countOfType("custom_tool_start"),
+    delta: countOfType("custom_tool_delta"),
+    debug: countOfType("tool_call_debug"),
+  };
+}
+
 export async function sendMessageAndCaptureStreamPackets(
   page: Page,
   message: string,
@@ -112,8 +138,8 @@ export async function sendMessageAndCaptureStreamPackets(
     if (waitForAiMessage) {
       await sendMessage(page, message);
     } else {
-      await page.locator("#onyx-chat-input-textarea").click();
-      await page.locator("#onyx-chat-input-textarea").fill(message);
+      await page.locator("#onyx-chat-input-textbox").click();
+      await page.locator("#onyx-chat-input-textbox").fill(message);
       await page.locator("#onyx-chat-input-send-button").click();
       await page
         .waitForFunction(() => window.location.href.includes("chatId="), null, {

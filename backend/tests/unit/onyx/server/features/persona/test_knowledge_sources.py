@@ -36,8 +36,7 @@ def _make_persona(**overrides: object) -> MagicMock:
     p.hierarchy_nodes = []
     p.attached_documents = []
     p.user_files = []
-    p.llm_model_version_override = None
-    p.llm_model_provider_override = None
+    p.default_model_configuration_id = None
     p.uploaded_image_id = None
     p.icon_name = None
     p.is_public = True
@@ -47,6 +46,10 @@ def _make_persona(**overrides: object) -> MagicMock:
     p.builtin_persona = False
     p.labels = []
     p.user = None
+    p.owner_group = None
+    p.owner_group_id = None
+    p.user_shares = []
+    p.group_shares = []
 
     for k, v in overrides.items():
         setattr(p, k, v)
