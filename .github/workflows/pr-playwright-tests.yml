@@ -171,7 +171,7 @@ jobs:
       # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
       # Docker account credentials (the account must have access to the DHI catalog).
       - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           registry: dhi.io
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -305,7 +305,7 @@ jobs:
       # authenticated with the same Docker account credentials (the account must
       # have access to the DHI catalog).
       - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
         with:
           registry: dhi.io
           username: ${{ secrets.DOCKER_USERNAME }}
