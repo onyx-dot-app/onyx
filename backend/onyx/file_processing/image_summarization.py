@@ -100,6 +100,20 @@ def summarize_image_with_error_handling(
             len(image_data),
         )
         return None
+    except Exception:
+        # Image summarization is best-effort enrichment. A transient vision-model
+        # failure (e.g. provider throttling/timeouts) must not fail the whole file:
+        # otherwise the enclosing indexing task raises, the file is re-enqueued
+        # forever, and the retries pile up as memory/cost pressure. Degrade by
+        # indexing the file without an image summary instead.
+        logger.warning(
+            "Image summarization failed for %s (size=%d bytes); "
+            "indexing without a summary",
+            context_name,
+            len(image_data),
+            exc_info=True,
+        )
+        return None
 
 
 def _summarize_image(

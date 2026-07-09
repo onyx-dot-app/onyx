@@ -26,6 +26,7 @@ from PIL import Image
 
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_XLSX_CELLS_PER_SHEET
+from onyx.configs.app_configs import PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -36,6 +37,8 @@ from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.utils.logger import setup_logger
+from onyx.utils.process_isolation import IsolatedProcessError
+from onyx.utils.process_isolation import run_in_isolated_process
 
 if TYPE_CHECKING:
     from markitdown import MarkItDown
@@ -269,6 +272,33 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     return text
 
 
+def _extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
+    """Extract all text from a PDF via pypdfium2 (PDFium/C).
+
+    PDFium releases the GIL while parsing, so a large or complex PDF can't pin
+    a worker thread or stall the indexing heartbeat during text extraction.
+    """
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(file_bytes, password=password)
+    try:
+        page_texts: list[str] = []
+        for page in pdf:
+            # Per-page try/finally so a get_textpage() failure still closes the
+            # native page handle instead of leaking it until GC.
+            try:
+                textpage = page.get_textpage()
+                try:
+                    page_texts.append(textpage.get_text_range())
+                finally:
+                    textpage.close()
+            finally:
+                page.close()
+        return TEXT_SECTION_SEPARATOR.join(page_texts)
+    finally:
+        pdf.close()
+
+
 def read_pdf_file(
     file: IO[Any],
     pdf_pass: str | None = None,
@@ -280,12 +310,16 @@ def read_pdf_file(
     """
     from pypdf import PdfReader
     from pypdf.errors import PdfStreamError
+    from pypdfium2 import PdfiumError
 
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
     try:
-        pdf_reader = PdfReader(file)
+        # Read once: the text extractor and the metadata/image reader share these bytes.
+        file_bytes = file.read()
+        pdf_reader = PdfReader(io.BytesIO(file_bytes))
 
+        decrypt_password: str | None = None
         if pdf_reader.is_encrypted:
             # Try the explicit password first, then fall back to an empty
             # string.  Owner-password-only PDFs (permission restrictions but
@@ -297,6 +331,7 @@ def read_pdf_file(
                 try:
                     if pdf_reader.decrypt(pw) != 0:
                         decrypt_success = True
+                        decrypt_password = pw
                         break
                 except Exception:
                     pass
@@ -318,9 +353,23 @@ def read_pdf_file(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        text = TEXT_SECTION_SEPARATOR.join(
-            page.extract_text() for page in pdf_reader.pages
-        )
+        # PDFium can hard-abort or hang on a malformed PDF (uncatchable in-process),
+        # so run it isolated; a crash, timeout, or PdfiumError falls back to pypdf.
+        try:
+            text = run_in_isolated_process(
+                _extract_pdf_text_pdfium,
+                file_bytes,
+                decrypt_password,
+                timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
+            )
+        except (PdfiumError, IsolatedProcessError) as pdfium_err:
+            logger.warning(
+                "PDFium text extraction failed (%s); falling back to pypdf",
+                pdfium_err,
+            )
+            text = TEXT_SECTION_SEPARATOR.join(
+                page.extract_text() for page in pdf_reader.pages
+            )
 
         if extract_images:
             image_cap = MAX_EMBEDDED_IMAGES_PER_FILE

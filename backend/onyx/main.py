@@ -9,6 +9,7 @@ from typing import cast
 
 import sentry_sdk
 import uvicorn
+from anyio import to_thread
 from fastapi import APIRouter
 from fastapi import FastAPI
 from fastapi import HTTPException
@@ -33,6 +34,7 @@ from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
 from onyx.cache.interface import CacheBackendType
+from onyx.configs.app_configs import API_SERVER_THREADPOOL_SIZE
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
@@ -59,6 +61,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.async_sql_engine import get_sqlalchemy_async_engine
+from onyx.db.engine.async_sql_engine import reset_sqlalchemy_async_engine
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
@@ -321,6 +324,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         sys.setrecursionlimit(SYSTEM_RECURSION_LIMIT)
         logger.notice("System recursion limit set to %s", SYSTEM_RECURSION_LIMIT)
 
+    # Size the anyio threadpool that serves sync endpoints (incl. the streaming
+    # chat generator). Must run inside the event loop, as the limiter is per-loop.
+    if API_SERVER_THREADPOOL_SIZE > 0:
+        to_thread.current_default_thread_limiter().total_tokens = (
+            API_SERVER_THREADPOOL_SIZE
+        )
+        logger.notice(
+            "API server threadpool size set to %s", API_SERVER_THREADPOOL_SIZE
+        )
+
     SqlEngine.set_app_name(POSTGRES_WEB_APP_NAME)
 
     SqlEngine.init_engine(
@@ -406,7 +419,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
         stop_periodic_poller()
 
-    SqlEngine.reset_engine()
+    # Dispose every Postgres connection pool we opened in startup. Order:
+    # async first (its disposal is awaitable and can block), then the two
+    # sync engines. Each dispose() is wrapped so one failure cannot leak the
+    # remaining pools — this path runs on every uvicorn ``--reload`` worker
+    # shutdown, and any leaked pool accumulates until PG hits max_connections.
+    try:
+        await reset_sqlalchemy_async_engine()
+    except Exception:
+        logger.exception("Failed to dispose async SQLAlchemy engine on shutdown")
+    try:
+        SqlEngine.reset_engine()
+    except Exception:
+        logger.exception("Failed to dispose sync SQLAlchemy engine on shutdown")
+    try:
+        SqlEngine.reset_readonly_engine()
+    except Exception:
+        logger.exception("Failed to dispose readonly SQLAlchemy engine on shutdown")
 
     if AUTH_RATE_LIMITING_ENABLED:
         await close_auth_limiter()

@@ -789,6 +789,15 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
+# Cap the total text retained per file across a connector's extracted sections,
+# bounding worker memory when a source can't be size-checked before fetch —
+# e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
+# bypass GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD. Content past the cap is dropped
+# with a warning. 0 disables the cap.
+CONNECTOR_MAX_EXTRACTED_TEXT_CHARS = int(
+    os.environ.get("CONNECTOR_MAX_EXTRACTED_TEXT_CHARS") or 10_000_000
+)
+
 # Default size threshold for Drupal Wiki attachments (10MB)
 DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD = int(
     os.environ.get("DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
@@ -940,6 +949,23 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Documents exceeding this limit will surface a visible error rather than being silently dropped.
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
+
+# Max RSS (in MB) for a spawned indexing worker process. When exceeded, the
+# docfetching watchdog terminates the worker and fails the attempt with a clear
+# error, pre-empting a kernel OOM kill of the whole pod — which would also kill
+# the attempt heartbeat (surfacing as an opaque "No heartbeat received" failure)
+# and any other tenants' tasks running on the pod. 0 disables the check.
+INDEXING_WORKER_MEMORY_LIMIT_MB = int(
+    os.environ.get("INDEXING_WORKER_MEMORY_LIMIT_MB") or 0
+)
+
+# Enable tracemalloc in spawned indexing workers so the near-limit memory report
+# (see INDEXING_WORKER_MEMORY_LIMIT_MB) includes allocation sites. Adds meaningful
+# per-allocation CPU/memory overhead — enable only while chasing a leak.
+INDEXING_WORKER_TRACEMALLOC = (
+    os.environ.get("INDEXING_WORKER_TRACEMALLOC", "").lower() == "true"
+)
+
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
@@ -974,6 +1000,12 @@ MAX_EMBEDDED_IMAGES_PER_UPLOAD = max(
 # Peak Memory ~= 100 B * MAX_CELLS
 MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
+)
+
+# PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
+# or hang); this is the timeout before the subprocess is killed and pypdf runs.
+PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS = float(
+    os.environ.get("PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS") or 120
 )
 
 # Use document summary for contextual rag
@@ -1128,6 +1160,11 @@ VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT = os.environ.get(
 )
 
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
+
+# Size of the api-server anyio threadpool that runs sync endpoints, including the
+# streaming chat generator (each long request holds one thread for its duration).
+# 0 keeps the anyio default (40). Set via the api.threadpoolSize Helm value.
+API_SERVER_THREADPOOL_SIZE = int(os.environ.get("ONYX_API_THREADPOOL_SIZE") or "0")
 
 PARSE_WITH_TRAFILATURA = os.environ.get("PARSE_WITH_TRAFILATURA", "").lower() == "true"
 
