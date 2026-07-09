@@ -17,7 +17,7 @@ import {
   linkFileToProject,
   unlinkFileFromProject,
 } from "@/api/files/files";
-import { uploadProjectFile } from "@/api/files/upload";
+import { uploadUserFile } from "@/api/files/upload";
 import { pickDocuments, pickImages } from "@/api/files/pickers";
 import {
   UserFileStatus,
@@ -39,7 +39,7 @@ jest.mock("@/api/files/pickers", () => ({
 jest.mock("@/api/files/upload", () => {
   let counter = 0;
   return {
-    uploadProjectFile: jest.fn(),
+    uploadUserFile: jest.fn(),
     generateTempId: () => `tmp-${++counter}`,
   };
 });
@@ -67,7 +67,7 @@ const pickDocumentsMock = pickDocuments as unknown as Mock<
 const pickImagesMock = pickImages as unknown as Mock<
   () => Promise<{ uri: string; name: string; size?: number }[]>
 >;
-const uploadMock = uploadProjectFile as unknown as Mock<
+const uploadMock = uploadUserFile as unknown as Mock<
   (...args: unknown[]) => Promise<CategorizedFiles>
 >;
 const statusesMock = getUserFileStatuses as unknown as Mock<

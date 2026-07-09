@@ -5,7 +5,7 @@ import { File } from "expo-file-system";
 import { getToken } from "@/api/auth/tokenStore";
 import {
   buildFileKey,
-  uploadProjectFile,
+  uploadUserFile,
   type NormalizedAsset,
 } from "@/api/files/upload";
 
@@ -61,7 +61,7 @@ describe("buildFileKey", () => {
   });
 });
 
-describe("uploadProjectFile", () => {
+describe("uploadUserFile", () => {
   beforeEach(() => {
     FileMock.mockReset();
     getTokenMock.mockReset();
@@ -78,7 +78,7 @@ describe("uploadProjectFile", () => {
       headers: {},
     });
 
-    const result = await uploadProjectFile(asset, 5, "tmp-1");
+    const result = await uploadUserFile(asset, 5, "tmp-1");
 
     expect(FileMock).toHaveBeenCalledWith("file:///tmp/a.pdf");
     const call = upload.mock.calls[0] as [string, Record<string, unknown>];
@@ -107,7 +107,7 @@ describe("uploadProjectFile", () => {
       headers: {},
     });
 
-    await uploadProjectFile(asset, 5, "tmp-1");
+    await uploadUserFile(asset, 5, "tmp-1");
 
     const options = (
       upload.mock.calls[0] as [string, { headers?: unknown }]
@@ -115,25 +115,44 @@ describe("uploadProjectFile", () => {
     expect(options.headers).toBeUndefined();
   });
 
+  it("omits project_id for a per-message attachment (projectId null)", async () => {
+    getTokenMock.mockResolvedValue("tok");
+    const upload = mockUpload({
+      status: 200,
+      body: JSON.stringify({ user_files: [], rejected_files: [] }),
+      headers: {},
+    });
+
+    await uploadUserFile(asset, null, "tmp-1");
+
+    const options = (
+      upload.mock.calls[0] as [string, { parameters: Record<string, string> }]
+    )[1];
+    expect("project_id" in options.parameters).toBe(false);
+    expect(JSON.parse(options.parameters.temp_id_map)).toEqual({
+      "10|a.pdf": "tmp-1",
+    });
+  });
+
   it("throws on a non-2xx upload (it resolves, so status is checked)", async () => {
     getTokenMock.mockResolvedValue("tok");
     mockUpload({ status: 500, body: "boom", headers: {} });
 
-    await expect(uploadProjectFile(asset, 5, "tmp-1")).rejects.toThrow();
+    await expect(uploadUserFile(asset, 5, "tmp-1")).rejects.toThrow();
   });
 
   it("throws when a 2xx body is valid JSON but the wrong shape", async () => {
     getTokenMock.mockResolvedValue("tok");
     mockUpload({ status: 200, body: JSON.stringify({}), headers: {} });
 
-    await expect(uploadProjectFile(asset, 5, "tmp-1")).rejects.toThrow();
+    await expect(uploadUserFile(asset, 5, "tmp-1")).rejects.toThrow();
   });
 
   it("throws an ApiError (not a raw SyntaxError) when a 2xx body isn't JSON", async () => {
     getTokenMock.mockResolvedValue("tok");
     mockUpload({ status: 200, body: "<html>nope</html>", headers: {} });
 
-    await expect(uploadProjectFile(asset, 5, "tmp-1")).rejects.toMatchObject({
+    await expect(uploadUserFile(asset, 5, "tmp-1")).rejects.toMatchObject({
       name: "ApiError",
       status: 200,
     });

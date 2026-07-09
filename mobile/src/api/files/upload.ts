@@ -30,25 +30,28 @@ export function buildFileKey(asset: NormalizedAsset): string {
 
 // Native multipart uploader: streams from disk (no FormData memory spike) and
 // reports byte progress. Bypasses apiFetch, so the bearer is attached manually;
-// it resolves for non-2xx, so status is checked.
-export async function uploadProjectFile(
+// it resolves for non-2xx, so status is checked. `projectId` null → an unlinked
+// user file (per-message attachment); the backend's project_id Form default is None.
+export async function uploadUserFile(
   asset: NormalizedAsset,
-  projectId: number,
+  projectId: number | null,
   tempId: string,
   onProgress?: (ratio: number) => void,
 ): Promise<CategorizedFiles> {
   const token = await getToken();
   const url = `${getBaseUrl()}/user/projects/file/upload`;
 
+  const parameters: Record<string, string> = {
+    temp_id_map: JSON.stringify({ [buildFileKey(asset)]: tempId }),
+  };
+  if (projectId != null) parameters.project_id = String(projectId);
+
   const result = await new File(asset.uri).upload(url, {
     httpMethod: "POST",
     uploadType: UploadType.MULTIPART,
     fieldName: "files",
     mimeType: asset.mimeType,
-    parameters: {
-      project_id: String(projectId),
-      temp_id_map: JSON.stringify({ [buildFileKey(asset)]: tempId }),
-    },
+    parameters,
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     onProgress: ({ bytesSent, totalBytes }) => {
       if (totalBytes > 0) onProgress?.(bytesSent / totalBytes);

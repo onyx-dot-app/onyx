@@ -111,14 +111,14 @@ export function ProjectContextPanel({
             </Text>
           </View>
         ) : (
-          <View className="gap-8">
+          <View className="flex-row flex-wrap gap-8">
             {files.map((file) => (
               <FileCard
                 key={file.id}
                 file={file}
                 progress={progressById.get(file.id)}
-                onRemove={() => {
-                  void removeFile(file.id);
+                onRemove={(id) => {
+                  void removeFile(id);
                 }}
               />
             ))}

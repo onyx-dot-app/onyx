@@ -22,12 +22,13 @@ import { deriveFocus, type ChatFocus } from "@/chat/chatFocus";
 import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionController } from "@/hooks/useChatSessionController";
 import { useLiveAgent } from "@/hooks/useLiveAgent";
+import { useMessageAttachments } from "@/hooks/useMessageAttachments";
 
 const TRANSITION_MS = 150;
 
 // Persistent chat surface: one absolute overlay mounted in (app)/_layout, morphed in place
 // by route → focus so the header/composer never remount. null on non-chat routes (the Stack
-// screen shows through). See docs/mobile-chat/06-unified-chat-surface.md.
+// screen shows through).
 export function ChatSurface() {
   const pathname = usePathname();
   const focus = deriveFocus(pathname);
@@ -75,6 +76,12 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   // re-attaches to an in-flight run when opened cold
   useChatSessionController(sessionId);
 
+  // Per-message attachment draft. Self-resets on `[sessionId, projectId]` (see the hook)
+  // so it can't leak across the persistent composer.
+  const attachments = useMessageAttachments(
+    `${sessionId ?? "new"}:${projectId ?? ""}`,
+  );
+
   // The composer is one persistent instance across every focus; clear any unsent draft
   // when the target conversation changes so it can't be sent into the wrong session.
   useEffect(() => {
@@ -93,16 +100,22 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
         : UNNAMED_CHAT
       : undefined;
 
+  // Capture descriptors before clearing; submit reads its `files` arg, not the live draft,
+  // so the clear can't race the send. Shared by the composer and the empty-state starters.
+  const sendWithAttachments = (message?: string) => {
+    void submit(message, attachments.descriptors);
+    attachments.clear();
+  };
+
   const composer = (
     <Animated.View layout={LinearTransition.duration(TRANSITION_MS)}>
       <InputBar
         value={input}
         onChangeText={setInput}
-        onSend={() => {
-          void submit();
-        }}
+        onSend={() => sendWithAttachments()}
         onStop={stop}
         chatState={chatState}
+        attachments={attachments}
       />
     </Animated.View>
   );
@@ -161,9 +174,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
           <ChatEmptyState
             agent={liveAgent}
             isDefaultAgent={isDefaultAgent}
-            onStarterSelect={(message) => {
-              void submit(message);
-            }}
+            onStarterSelect={sendWithAttachments}
           />
         </Animated.View>
       ) : (
