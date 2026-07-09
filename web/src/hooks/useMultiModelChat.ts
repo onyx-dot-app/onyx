@@ -27,11 +27,14 @@ export interface UseMultiModelChatReturn {
   /**
    * Restore multi-model selection from model version strings (e.g. from chat history).
    * Matches against available llmOptions to reconstruct full SelectedModel objects.
+   * History stores only name strings, so when two providers expose a model with the
+   * same name this resolves to the first match.
    */
   restoreFromModelNames: (modelNames: string[]) => void;
   /**
    * Switch to a single model by name (after user picks a preferred response).
-   * Matches against llmOptions to find the full SelectedModel.
+   * Matches against llmOptions to find the full SelectedModel. Name-only, so
+   * same-named models across providers resolve to the first match.
    */
   selectSingleModel: (modelName: string) => void;
 }
