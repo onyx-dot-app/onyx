@@ -45,3 +45,53 @@ export const AllColorsWithIcon: Story = {
     </div>
   ),
 };
+
+export const Editable: Story = {
+  args: {
+    title: "Label",
+    onRemove: () => {},
+  },
+};
+
+export const EditableMd: Story = {
+  render: () => (
+    <div className="flex items-center gap-2">
+      <Tag title="Default" size="md" onRemove={() => {}} />
+      <Tag
+        title="With icon"
+        size="md"
+        icon={SvgAlertCircle}
+        onRemove={() => {}}
+      />
+      <Tag title="Label" size="md" value="Value" onRemove={() => {}} />
+      <Tag
+        title="A very long label that gets capped at 160px"
+        size="md"
+        onRemove={() => {}}
+      />
+      <Tag title="Error" size="md" error onRemove={() => {}} />
+      <Tag title="Disabled" size="md" disabled onRemove={() => {}} />
+    </div>
+  ),
+};
+
+export const EditableSm: Story = {
+  render: () => (
+    <div className="flex items-center gap-2">
+      <Tag title="Default" onRemove={() => {}} />
+      <Tag title="With icon" icon={SvgAlertCircle} onRemove={() => {}} />
+      <Tag
+        title="A very long label that gets capped at 120px"
+        onRemove={() => {}}
+      />
+      <Tag title="Disabled" disabled onRemove={() => {}} />
+    </div>
+  ),
+};
+
+export const TruncatedWithTooltip: Story = {
+  args: {
+    title: "A very long metadata label that gets capped",
+    truncate: true,
+  },
+};
