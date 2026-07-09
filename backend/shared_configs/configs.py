@@ -61,6 +61,14 @@ DISABLE_RERANK_FOR_STREAMING = (
 # model. If torch finds more threads on its own, this value is not used.
 MIN_THREADS_ML_MODELS = int(os.environ.get("MIN_THREADS_ML_MODELS") or 1)
 
+# Caps concurrent local-model embedding forward passes in the model server.
+# Concurrent encode() calls share torch's intra-op thread pool, so on CPU extra
+# concurrency adds memory pressure without adding throughput. Unset/0 -> sized
+# by device: 4 on CPU, unlimited on GPU.
+LOCAL_EMBEDDING_MAX_CONCURRENCY = int(
+    os.environ.get("LOCAL_EMBEDDING_MAX_CONCURRENCY") or 0
+)
+
 # Model server that has indexing only set will throw exception if used for reranking
 # or intent classification
 INDEXING_ONLY = os.environ.get("INDEXING_ONLY", "").lower() == "true"

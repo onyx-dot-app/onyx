@@ -1523,6 +1523,9 @@ configMap:
   DISABLE_RERANK_FOR_STREAMING: ""
   MODEL_SERVER_PORT: ""
   MIN_THREADS_ML_MODELS: ""
+  # Max concurrent local-model embedding forward passes in the model server.
+  # "" defaults to 4 on CPU (bounds memory under indexing fan-in), unlimited on GPU.
+  LOCAL_EMBEDDING_MAX_CONCURRENCY: ""
   # Indexing Configs
   NUM_INDEXING_WORKERS: ""
   # Fail an indexing attempt when its worker exceeds this RSS (MB) instead of

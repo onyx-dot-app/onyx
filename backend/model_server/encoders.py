@@ -1,5 +1,6 @@
 import asyncio
 import time
+from contextlib import AsyncExitStack
 from typing import Any
 from typing import TYPE_CHECKING
 
@@ -7,8 +8,10 @@ from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
 
+from model_server.constants import GPUStatus
 from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import LOCAL_EMBEDDING_MAX_CONCURRENCY
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding
 from shared_configs.model_server_models import EmbedRequest
@@ -23,6 +26,42 @@ router = APIRouter(prefix="/encoder")
 
 
 _GLOBAL_MODELS_DICT: dict[str, "SentenceTransformer"] = {}
+
+_embed_semaphore: asyncio.Semaphore | None = None
+_embed_semaphore_initialized = False
+
+# On CPU, all concurrent encode() calls share torch's fixed intra-op thread pool, so
+# in-flight requests beyond a handful add no throughput -- they only hold decoded
+# batches in memory and inflate tail latency. 4 matches unbounded throughput while
+# roughly halving peak RSS under a 32-request fan-in (see benchmark in PR).
+_CPU_DEFAULT_EMBED_CONCURRENCY = 4
+
+
+def _get_embed_semaphore(gpu_type: str) -> asyncio.Semaphore | None:
+    """Limiter for concurrent local-model encode() calls, None if unlimited.
+
+    The indexing pipeline fans out up to CELERY_WORKER_DOCPROCESSING_CONCURRENCY x
+    INDEXING_EMBEDDING_MODEL_NUM_THREADS concurrent embed requests, all of which
+    contend for torch's shared intra-op thread pool on CPU. Capping server-side
+    concurrency bounds peak memory and keeps torch from stacking dozens of
+    in-progress batches. GPU inference serializes on the device anyway, so it stays
+    unlimited unless LOCAL_EMBEDDING_MAX_CONCURRENCY is set.
+    """
+    global _embed_semaphore, _embed_semaphore_initialized
+    if not _embed_semaphore_initialized:
+        max_concurrency = LOCAL_EMBEDDING_MAX_CONCURRENCY or (
+            _CPU_DEFAULT_EMBED_CONCURRENCY if gpu_type == GPUStatus.NONE else 0
+        )
+        _embed_semaphore = (
+            asyncio.Semaphore(max_concurrency) if max_concurrency else None
+        )
+        _embed_semaphore_initialized = True
+        logger.notice(
+            "Local embedding max concurrency: %s (gpu_type=%s)",
+            max_concurrency or "unlimited",
+            gpu_type,
+        )
+    return _embed_semaphore
 
 
 def get_embedding_model(
@@ -138,13 +177,18 @@ async def embed_text(
         local_model = get_embedding_model(
             model_name=model_name, max_context_length=max_context_length
         )
-        # Run CPU-bound embedding in a thread pool
-        embeddings_vectors = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: _concurrent_embedding(
-                prefixed_texts, local_model, normalize_embeddings
-            ),
-        )
+        # Run CPU-bound embedding in a thread pool, gated so concurrent requests
+        # don't oversubscribe torch's shared thread pool (see _get_embed_semaphore)
+        semaphore = _get_embed_semaphore(gpu_type)
+        async with AsyncExitStack() as stack:
+            if semaphore is not None:
+                await stack.enter_async_context(semaphore)
+            embeddings_vectors = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: _concurrent_embedding(
+                    prefixed_texts, local_model, normalize_embeddings
+                ),
+            )
         embeddings = [
             embedding if isinstance(embedding, list) else embedding.tolist()
             for embedding in embeddings_vectors
