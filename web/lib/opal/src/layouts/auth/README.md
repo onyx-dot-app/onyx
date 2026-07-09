@@ -33,7 +33,7 @@ email/password form.
 
 No props.
 
-### FormFields
+### Fields
 
 Flex-column container for form inputs with a consistent `0.75rem` gap between fields.
 
@@ -47,8 +47,10 @@ Full-width submit button. Thin wrapper around `Button` with `type="submit"` and 
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `children` | `string` | **(required)** | Button label |
-| `disabled` | `boolean` | `false` | Disabled state — pass `isSubmitting` from Formik |
+| `label` | `SubmitLabel` | **(required)** | Button label key (`"sign-in"`, `"sign-up"`, etc.) |
+| `isSubmitting` | `boolean` | — | Disables + shows spinner while submitting |
+| `isValid` | `boolean` | — | When provided, disables if `false` |
+| `dirty` | `boolean` | — | When provided, disables if `false` |
 
 ## Usage Example
 
@@ -68,11 +70,11 @@ import { markdown } from "@opal/utils";
     <Formik ...>
       {({ isSubmitting }) => (
         <Form className="flex flex-col gap-6">
-          <AuthLayouts.FormFields>
+          <AuthLayouts.Fields>
             <TextFormField name="email" label="Email" type="email" />
             <TextFormField name="password" label="Password" type="password" />
-          </AuthLayouts.FormFields>
-          <AuthLayouts.Submit disabled={isSubmitting}>Sign in</AuthLayouts.Submit>
+          </AuthLayouts.Fields>
+          <AuthLayouts.Submit label="sign-in" isSubmitting={isSubmitting} isValid={isValid} dirty={dirty} />
         </Form>
       )}
     </Formik>
