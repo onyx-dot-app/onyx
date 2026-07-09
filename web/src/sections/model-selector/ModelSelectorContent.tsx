@@ -17,6 +17,7 @@ import {
   LLMOption,
   buildLlmOptions,
   groupLlmOptions,
+  llmOptionKey,
 } from "@/lib/languageModels/options";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import {
@@ -131,10 +132,7 @@ export default function ModelSelectorContent({
       capabilities.length > 0 ? capabilities.join(", ") : undefined;
 
     return (
-      <Disabled
-        key={`${option.provider}:${option.modelName}`}
-        disabled={disabled}
-      >
+      <Disabled key={llmOptionKey(option)} disabled={disabled}>
         <LineItemButton
           selectVariant="select-heavy"
           state={selected ? "selected" : "empty"}
