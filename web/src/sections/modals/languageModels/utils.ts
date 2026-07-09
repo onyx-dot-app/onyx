@@ -111,6 +111,8 @@ export function buildValidationSchema(
 
 /** Base form values that all provider forms share. */
 export interface BaseLLMFormValues {
+  /** Provider type (e.g. "anthropic") — set by every form's initial values. */
+  provider?: string;
   name?: string;
   api_key?: string;
   api_base?: string;

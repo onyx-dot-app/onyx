@@ -100,11 +100,11 @@ class TestAutoModeSyncFeature:
     ) -> None:
         """
         Test that when a provider is uploaded with auto mode enabled and no model
-        configurations, the models from fetch_llm_recommendations_from_github()
+        configurations, the models from fetch_llm_recommendations()
         are synced to the provider.
 
         Steps:
-        1. Mock fetch_llm_recommendations_from_github to return a known config
+        1. Mock fetch_llm_recommendations to return a known config
         2. Upload provider with is_auto_mode=True and no model_configurations
         3. Fetch the provider and verify all recommended models are present
         4. Set the provider as default
@@ -124,12 +124,10 @@ class TestAutoModeSyncFeature:
 
         try:
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=mock_recommendations,
             ):
                 # Step 1-2: Upload provider with auto mode on and no model configs
-                # NOTE: We need to provide a default_model_name for the initial upsert,
-                # but auto mode will override it with the GitHub config's default
                 put_llm_provider(
                     llm_provider_upsert_request=LLMProviderUpsertRequest(
                         name=provider_name,
@@ -223,7 +221,7 @@ class TestAutoModeSyncFeature:
 
         try:
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=mock_recommendations,
             ):
                 # Upload an OpenAI provider with auto mode
@@ -333,7 +331,7 @@ class TestAutoModeSyncFeature:
 
             # Step 2: Update provider to enable auto mode
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=mock_recommendations,
             ):
                 put_llm_provider(
@@ -412,7 +410,7 @@ class TestAutoModeSyncFeature:
 
         try:
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=mock_recommendations,
             ):
                 # Upload an OpenAI provider (not in config)
@@ -519,7 +517,7 @@ class TestAutoModeSyncFeature:
 
         try:
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=mock_recommendations,
             ):
                 # Step 1: Create provider 1 (OpenAI) with auto mode
@@ -546,7 +544,7 @@ class TestAutoModeSyncFeature:
             update_default_provider(provider_1.id, provider_1_default_model, db_session)
 
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=mock_recommendations,
             ):
                 # Step 2: Create provider 2 (Anthropic) with auto mode
@@ -703,14 +701,16 @@ class TestAutoModeTransitionsAndResync:
         provider_name: str,
     ) -> None:
         """When the default provider transitions from manual to auto mode,
-        the global default should be preserved (set to the recommended model).
+        the admin-chosen global default must be preserved as long as that
+        model is still present in the GitHub config — even when it differs
+        from the config's recommended default.
 
         Steps:
         1. Create a manual-mode provider with models, set it as global default.
         2. Transition to auto mode (model_configurations=[] triggers cascade
            delete of old ModelConfigurations and their LLMModelFlow rows).
-        3. Verify the provider is still the global default, now using the
-           recommended default model from the GitHub config.
+        3. Verify the provider is still the global default, still using the
+           admin-chosen model (not the config's recommended default).
         """
         initial_models = [
             ModelConfigurationUpsertRequest(name="gpt-4o", is_visible=True),
@@ -753,7 +753,7 @@ class TestAutoModeTransitionsAndResync:
 
             # Step 2: Transition to auto mode
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=auto_config,
             ):
                 put_llm_provider(
@@ -781,8 +781,9 @@ class TestAutoModeTransitionsAndResync:
             assert default_after.llm_provider_id == provider.id, (
                 "Default should still belong to the same provider after transition"
             )
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to the recommended model 'gpt-4o-mini', got '{default_after.name}'"
+            assert default_after.name == "gpt-4o", (
+                "Default should remain the admin-chosen 'gpt-4o' since it is "
+                f"still in the GitHub config, got '{default_after.name}'"
             )
 
         finally:
@@ -814,7 +815,7 @@ class TestAutoModeTransitionsAndResync:
         try:
             # Step 1: Create in auto mode
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=initial_config,
             ):
                 put_llm_provider(
@@ -912,7 +913,7 @@ class TestAutoModeTransitionsAndResync:
         try:
             # Step 1: Create with config v1
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=config_v1,
             ):
                 put_llm_provider(
@@ -981,7 +982,7 @@ class TestAutoModeTransitionsAndResync:
 
         try:
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=config,
             ):
                 put_llm_provider(
@@ -1048,21 +1049,115 @@ class TestAutoModeTransitionsAndResync:
             db_session.rollback()
             _cleanup_provider(db_session, provider_name)
 
-    def test_default_model_hidden_when_removed_from_config(
+    def test_transition_to_auto_mode_preserves_default_not_in_config(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """Enabling auto mode must preserve the admin-chosen default model
+        even when that model does not appear in the GitHub config at all
+        (e.g. the curated list lags behind newly released models).
+
+        Regression test: an Anthropic provider with claude-sonnet-5 as the
+        global default flipped to the config's recommended claude-opus-4-8 on
+        save, because the sync hid the default and reassigned it.
+        """
+        admin_default = "claude-sonnet-5"
+
+        # Config recommends opus and does NOT contain sonnet-5
+        mock_recommendations = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.ANTHROPIC,
+            default_model_name="claude-opus-4-8",
+            additional_models=["claude-haiku-4-5"],
+        )
+
+        try:
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    name=provider_name,
+                    provider=LlmProviderNames.ANTHROPIC,
+                    api_key="sk-test-key-00000000000000000000000000000000000",
+                    api_key_changed=True,
+                    is_auto_mode=False,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name=admin_default, is_visible=True
+                        ),
+                    ],
+                ),
+                is_creation=True,
+                user=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_provider(provider.id, admin_default, db_session)
+
+            # Enable auto mode via the API, like the admin modal does
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
+                return_value=mock_recommendations,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        id=provider.id,
+                        name=provider_name,
+                        provider=LlmProviderNames.ANTHROPIC,
+                        api_key=None,
+                        api_key_changed=False,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=False,
+                    user=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            default_after = fetch_default_llm_model(db_session)
+            assert default_after is not None
+            assert default_after.name == admin_default, (
+                f"Default must remain '{admin_default}' after enabling auto "
+                f"mode, got '{default_after.name}'"
+            )
+            assert default_after.is_visible is True, (
+                "The default model must stay visible even though it is not "
+                "in the GitHub config"
+            )
+
+            # Config models were still added and made visible
+            provider_after = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider_after is not None
+            visibility = {
+                mc.name: mc.is_visible for mc in provider_after.model_configurations
+            }
+            assert visibility.get("claude-opus-4-8") is True
+            assert visibility.get("claude-haiku-4-5") is True
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_default_model_kept_when_removed_from_config(
         self,
         db_session: Session,
         provider_name: str,
     ) -> None:
         """When the current default model is removed from the config, sync
-        should hide it. The default model flow row should still exist (it
-        points at the ModelConfiguration), but the model is no longer visible.
+        must keep it visible and keep it as the default — Auto mode curates
+        the model list but never pulls the admin-chosen default out from
+        under the org.
 
         Steps:
         1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
         2. Set gpt-4o as the global default.
         3. Re-sync with config: default=gpt-4o-mini (gpt-4o removed entirely).
-        4. Verify gpt-4o is hidden, gpt-4o-mini is visible, and
-           fetch_default_llm_model still returns a result (the flow row persists).
+        4. Verify gpt-4o stays visible and remains the global default.
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
@@ -1077,7 +1172,7 @@ class TestAutoModeTransitionsAndResync:
 
         try:
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=config_v1,
             ):
                 put_llm_provider(
@@ -1113,12 +1208,11 @@ class TestAutoModeTransitionsAndResync:
             )
             assert provider is not None
 
-            changes = sync_auto_mode_models(
+            sync_auto_mode_models(
                 db_session=db_session,
                 provider=provider,
                 llm_recommendations=config_v2,
             )
-            assert changes > 0
 
             # Step 4: Verify visibility
             db_session.expire_all()
@@ -1130,40 +1224,41 @@ class TestAutoModeTransitionsAndResync:
             visibility = {
                 mc.name: mc.is_visible for mc in provider.model_configurations
             }
-            assert visibility["gpt-4o"] is False, "Removed default should be hidden"
-            assert visibility["gpt-4o-mini"] is True, "New default should be visible"
+            assert visibility["gpt-4o"] is True, (
+                "The default model must stay visible even when removed from the config"
+            )
+            assert visibility["gpt-4o-mini"] is True, (
+                "Recommended default should be visible"
+            )
 
-            # The old default (gpt-4o) is now hidden. sync_auto_mode_models
-            # should update the global default to the new recommended default
-            # (gpt-4o-mini) so that it is not silently lost.
             db_session.expire_all()
             default_after = fetch_default_llm_model(db_session)
-            assert default_after is not None, (
-                "Default model should not be None — sync should set the new recommended default when the old one is hidden"
-            )
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to the new recommended model 'gpt-4o-mini', but got '{default_after.name}'"
+            assert default_after is not None
+            assert default_after.name == "gpt-4o", (
+                "The admin-chosen default must survive the sync even when "
+                f"removed from the config, got '{default_after.name}'"
             )
 
         finally:
             db_session.rollback()
             _cleanup_provider(db_session, provider_name)
 
-    def test_sync_updates_default_when_recommended_default_changes(
+    def test_sync_preserves_default_when_recommended_default_changes(
         self,
         db_session: Session,
         provider_name: str,
     ) -> None:
         """When the provider owns the CHAT default and a sync arrives with a
-        different recommended default model (both models still in config),
-        the global default should be updated to the new recommendation.
+        different recommended default model, the current default must be kept
+        as long as it is still in the config — the recommendation only applies
+        when the current default is removed.
 
         Steps:
         1. Create auto-mode provider with config v1: default=gpt-4o.
         2. Set gpt-4o as the global CHAT default.
         3. Re-sync with config v2: default=gpt-4o-mini (gpt-4o still present).
-        4. Verify the CHAT default switched to gpt-4o-mini and both models
-           remain visible.
+        4. Verify the CHAT default is still gpt-4o and both models remain
+           visible.
         """
         config_v1 = _create_mock_llm_recommendations(
             provider=LlmProviderNames.OPENAI,
@@ -1178,7 +1273,7 @@ class TestAutoModeTransitionsAndResync:
 
         try:
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=config_v1,
             ):
                 put_llm_provider(
@@ -1219,7 +1314,10 @@ class TestAutoModeTransitionsAndResync:
                 provider=provider,
                 llm_recommendations=config_v2,
             )
-            assert changes > 0, "Sync should report changes when default switches"
+            assert changes == 0, (
+                "Sync should be a no-op when the current default is still in "
+                f"the config, got {changes} changes"
+            )
 
             # Both models should remain visible
             db_session.expire_all()
@@ -1233,11 +1331,183 @@ class TestAutoModeTransitionsAndResync:
             assert visibility["gpt-4o"] is True
             assert visibility["gpt-4o-mini"] is True
 
-            # The CHAT default should now be gpt-4o-mini
+            # The CHAT default should still be the admin-chosen gpt-4o
             default_after = fetch_default_llm_model(db_session)
             assert default_after is not None
-            assert default_after.name == "gpt-4o-mini", (
-                f"Default should be updated to 'gpt-4o-mini', got '{default_after.name}'"
+            assert default_after.name == "gpt-4o", (
+                f"Default should remain 'gpt-4o', got '{default_after.name}'"
+            )
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_sync_preserves_admin_hidden_config_model(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """A model the admin deselected stays hidden across syncs even though
+        the GitHub config lists it — auto mode decides what is offered, the
+        admin decides what is enabled.
+        """
+        config = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
+                return_value=config,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    user=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_provider(provider.id, "gpt-4o", db_session)
+
+            # Admin deselects gpt-4o-mini while staying in auto mode (a
+            # regular save, not a transition, so no sync runs here)
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    id=provider.id,
+                    name=provider_name,
+                    provider=LlmProviderNames.OPENAI,
+                    api_key=None,
+                    api_key_changed=False,
+                    is_auto_mode=True,
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-4o", is_visible=True, display_name="GPT-4O"
+                        ),
+                        ModelConfigurationUpsertRequest(
+                            name="gpt-4o-mini",
+                            is_visible=False,
+                            display_name="GPT-4O-MINI",
+                        ),
+                    ],
+                ),
+                is_creation=False,
+                user=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+            # A background sync with the unchanged config must not re-enable it
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config,
+            )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            visibility = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+            assert visibility["gpt-4o-mini"] is False, (
+                "Sync must not re-enable a model the admin deselected"
+            )
+            assert visibility["gpt-4o"] is True
+
+            default_model = fetch_default_llm_model(db_session)
+            assert default_model is not None
+            assert default_model.name == "gpt-4o"
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
+
+    def test_sync_repairs_default_pointing_at_hidden_model(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """Safety net: if the global CHAT default somehow points at a hidden
+        model (state no normal path produces), the sync moves it to the
+        recommended default and makes that model visible.
+        """
+        config = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
+                return_value=config,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    user=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_provider(provider.id, "gpt-4o-mini", db_session)
+
+            # Manufacture the broken state directly: hide every model,
+            # including the current default
+            for mc in provider.model_configurations:
+                mc.is_visible = False
+            db_session.commit()
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config,
+            )
+
+            db_session.expire_all()
+            default_model = fetch_default_llm_model(db_session)
+            assert default_model is not None
+            assert default_model.name == "gpt-4o", (
+                "Safety net should move a hidden default to the recommended model"
+            )
+            assert default_model.is_visible is True, (
+                "The repaired default must be made visible"
             )
 
         finally:
@@ -1263,7 +1533,7 @@ class TestAutoModeTransitionsAndResync:
 
         try:
             with patch(
-                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                "onyx.server.manage.llm.api.fetch_llm_recommendations",
                 return_value=config,
             ):
                 put_llm_provider(

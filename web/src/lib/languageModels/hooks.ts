@@ -252,6 +252,62 @@ export function useWellKnownLLMProvider(providerName: LLMProviderName) {
   };
 }
 
+// Raw shape of GET /api/admin/llm/auto-config (LLMRecommendations.model_dump()).
+interface AutoModeModelRef {
+  name: string;
+  display_name?: string | null;
+}
+
+interface AutoModeProviderRecommendation {
+  default_model: AutoModeModelRef;
+  additional_visible_models: AutoModeModelRef[];
+}
+
+interface AutoModeRecommendations {
+  version: string;
+  updated_at: string;
+  providers: Record<string, AutoModeProviderRecommendation>;
+}
+
+/**
+ * Fetches the Auto mode model recommendations (the GitHub-hosted config that
+ * drives auto-updating providers) and exposes the model names offered for a
+ * given provider type.
+ *
+ * Hits `GET /api/admin/llm/auto-config`.
+ *
+ * @param providerName - The provider type (e.g. "anthropic"). Pass `null`
+ *   to suppress the request (e.g. when the auto-update toggle is hidden).
+ *
+ * @returns
+ * - `autoModelNames` — Set of model names the config offers for this
+ *    provider, or `null` while loading / on error / when the provider has
+ *    no auto config.
+ */
+export function useAutoModeConfig(providerName: string | null | undefined) {
+  const { data, error, isLoading } = useSWR<AutoModeRecommendations>(
+    providerName ? SWR_KEYS.llmAutoConfig : null,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateIfStale: false,
+      dedupingInterval: 60000,
+    }
+  );
+
+  const autoModelNames = useMemo(() => {
+    if (!data || !providerName) return null;
+    const recommendation = data.providers[providerName];
+    if (!recommendation) return null;
+    return new Set([
+      recommendation.default_model.name,
+      ...recommendation.additional_visible_models.map((m) => m.name),
+    ]);
+  }, [data, providerName]);
+
+  return { autoModelNames, isLoading, error };
+}
+
 export interface CustomProviderOption {
   value: string;
   label: string;

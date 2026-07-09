@@ -843,7 +843,14 @@ def sync_auto_mode_models(
 ) -> int:
     """Sync models from GitHub config to a provider in Auto mode.
 
-    In Auto mode, the model list and default are controlled by GitHub config.
+    In Auto mode, the GitHub config decides which models are *offered*:
+    newly recommended models are added (visible), and models dropped from
+    the config are hidden. Admin choices win within that list:
+    - A model the admin deselected (hid) stays hidden even though the config
+      lists it.
+    - A model that is currently a default for some flow (global chat default,
+      vision default, ...) is never hidden and the default is never
+      reassigned, even when that model is not in the config.
     The schema has:
     - default_model: The default model config (always visible)
     - additional_visible_models: List of additional visible models
@@ -879,28 +886,43 @@ def sync_auto_mode_models(
         ).all()
     }
 
+    # Models that are a default for some flow must survive the sync visible,
+    # even when the GitHub config drops them (e.g. an admin-chosen default
+    # that the curated list doesn't carry).
+    default_flow_model_ids = set(
+        db_session.scalars(
+            select(LLMModelFlow.model_configuration_id)
+            .join(ModelConfiguration)
+            .where(
+                LLMModelFlow.is_default.is_(True),
+                ModelConfiguration.llm_provider_id == provider.id,
+            )
+        ).all()
+    )
+
     # Mark models that are no longer in GitHub config as not visible
     for model_name, model in existing_models.items():
         if model_name not in recommended_visible_model_names:
-            if model.is_visible:
+            if model.is_visible and model.id in default_flow_model_ids:
+                logger.info(
+                    "Auto mode sync keeping default model '%s' visible on "
+                    "provider '%s' even though it is not in the config",
+                    model_name,
+                    provider.name or provider.provider,
+                )
+            elif model.is_visible:
                 model.is_visible = False
                 changes += 1
 
     # Add or update models from GitHub config
     for model_config in recommended_visible_models:
         if model_config.name in existing_models:
-            # Update existing model
+            # Update existing model. Visibility is deliberately left alone:
+            # a model the admin deselected stays hidden even though the
+            # config lists it.
             existing = existing_models[model_config.name]
-            # Check each field for changes
-            updated = False
             if existing.display_name != model_config.display_name:
                 existing.display_name = model_config.display_name
-                updated = True
-            # All models in the config are visible
-            if not existing.is_visible:
-                existing.is_visible = True
-                updated = True
-            if updated:
                 changes += 1
         else:
             # Add new model - all models from GitHub config are visible
@@ -915,7 +937,10 @@ def sync_auto_mode_models(
             )
             changes += 1
 
-    # Update the default if this provider currently holds the global CHAT default.
+    # Safety net: the sync never hides the CHAT default (see above), so this
+    # only fires if some other path left the global default pointing at a
+    # hidden model — repair it to the recommended default rather than letting
+    # chat run on an invisible model.
     # We flush (but don't commit) so that _update_default_model can see the new
     # model rows, then commit everything atomically to avoid a window where the
     # old default is invisible but still pointed-to.
@@ -929,7 +954,19 @@ def sync_auto_mode_models(
             current_default
             and current_default.llm_provider_id == provider.id
             and current_default.name != recommended_default.name
+            and not current_default.is_visible
         ):
+            # The recommended default may itself have been deselected by the
+            # admin — it must be visible to serve as the default.
+            recommended_row = db_session.scalar(
+                select(ModelConfiguration).where(
+                    ModelConfiguration.llm_provider_id == provider.id,
+                    ModelConfiguration.name == recommended_default.name,
+                )
+            )
+            if recommended_row and not recommended_row.is_visible:
+                recommended_row.is_visible = True
+                changes += 1
             _update_default_model__no_commit(
                 db_session=db_session,
                 provider_id=provider.id,

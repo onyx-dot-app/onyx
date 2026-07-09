@@ -9,8 +9,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from onyx.llm.well_known_providers.llm_provider_options import (
-    _load_bundled_recommendations,
+from onyx.llm.well_known_providers.auto_update_service import (
+    load_bundled_recommendations,
 )
 from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
 
@@ -32,7 +32,8 @@ def test_frontend_and_backend_craft_provider_types_match() -> None:
 
 
 def test_recommended_config_covers_allowed_provider_types() -> None:
-    recommendations = _load_bundled_recommendations()
+    recommendations = load_bundled_recommendations()
+    assert recommendations is not None
     for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES:
         assert recommendations.get_default_model(provider_type) is not None, (
             f"recommended-models.json has no default_model for Craft provider "

@@ -1,5 +1,3 @@
-import json
-import pathlib
 import threading
 import time
 
@@ -9,9 +7,7 @@ from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
-from onyx.llm.well_known_providers.auto_update_service import (
-    fetch_llm_recommendations_from_github,
-)
+from onyx.llm.well_known_providers.auto_update_service import fetch_llm_recommendations
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
@@ -58,13 +54,6 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
     }
 
 
-def _load_bundled_recommendations() -> LLMRecommendations:
-    json_path = pathlib.Path(__file__).parent / "recommended-models.json"
-    with open(json_path, "r") as f:
-        json_config = json.load(f)
-    return LLMRecommendations.model_validate(json_config)
-
-
 def get_recommendations() -> LLMRecommendations:
     """Get the recommendations, with an in-memory cache to avoid
     hitting GitHub on every API request."""
@@ -86,8 +75,11 @@ def get_recommendations() -> LLMRecommendations:
         ):
             return _cached_recommendations
 
-        recommendations_from_github = fetch_llm_recommendations_from_github()
-        result = recommendations_from_github or _load_bundled_recommendations()
+        result = fetch_llm_recommendations()
+        if result is None:
+            raise RuntimeError(
+                "Failed to load LLM recommendations (remote and bundled)"
+            )
 
         _cached_recommendations = result
         _cached_recommendations_time = time.monotonic()

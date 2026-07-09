@@ -55,9 +55,7 @@ from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import is_sensitive_custom_config_key
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import test_llm
-from onyx.llm.well_known_providers.auto_update_service import (
-    fetch_llm_recommendations_from_github,
-)
+from onyx.llm.well_known_providers.auto_update_service import fetch_llm_recommendations
 from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
 from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_SERVICE_ACCOUNT
@@ -621,9 +619,10 @@ def put_llm_provider(
     # When transitioning to auto mode, preserve existing model configurations
     # so the upsert doesn't try to delete them (which would trip the default
     # model protection guard). sync_auto_mode_models will handle the model
-    # lifecycle afterward — adding new models, hiding removed ones, and
-    # updating the default. This is safe even if sync fails: the provider
-    # keeps its old models and default rather than losing them.
+    # lifecycle afterward — adding new models and hiding removed ones, while
+    # keeping default models visible and untouched. This is safe even if sync
+    # fails: the provider keeps its old models and default rather than losing
+    # them.
     if transitioning_to_auto_mode and existing_provider:
         llm_provider_upsert_request.model_configurations = [
             ModelConfigurationUpsertRequest.from_model(mc)
@@ -640,7 +639,7 @@ def put_llm_provider(
         if transitioning_to_auto_mode:
             from onyx.db.llm import sync_auto_mode_models
 
-            config = fetch_llm_recommendations_from_github()
+            config = fetch_llm_recommendations()
             if config and llm_provider_upsert_request.provider in config.providers:
                 updated_provider = fetch_existing_llm_provider_by_id(
                     id=result.id, db_session=db_session
@@ -738,16 +737,17 @@ def set_provider_as_default_vision(
 def get_auto_config(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> dict:
-    """Get the current Auto mode configuration from GitHub.
+    """Get the current Auto mode configuration.
 
     Returns the available models and default configurations for each
-    supported provider type when using Auto mode.
+    supported provider type when using Auto mode (from the GitHub-hosted
+    config or the newer bundled copy).
     """
-    config = fetch_llm_recommendations_from_github()
+    config = fetch_llm_recommendations()
     if not config:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            "Failed to fetch configuration from GitHub",
+            "Failed to resolve Auto mode configuration",
         )
     return config.model_dump()
 
