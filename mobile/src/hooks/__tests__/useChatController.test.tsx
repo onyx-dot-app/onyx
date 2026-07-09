@@ -12,6 +12,7 @@ import {
   stopChatSession,
 } from "@/api/chat/sessions";
 import { streamChatMessage, type StreamEvent } from "@/api/chat/stream";
+import { ChatFileType, type FileDescriptor } from "@/chat/interfaces";
 import { PacketType } from "@/chat/streamingModels";
 import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/state/chatSessionStore";
@@ -143,6 +144,34 @@ describe("useChatController", () => {
       (body as unknown as { parent_message_id: number | null })
         .parent_message_id,
     ).toBeNull();
+  });
+
+  it("threads attachment descriptors into the send body and the optimistic user node", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+
+    const files: FileDescriptor[] = [
+      {
+        id: "blob-1",
+        type: ChatFileType.IMAGE,
+        name: "pic.png",
+        user_file_id: "u1",
+      },
+    ];
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    act(() => result.current.setInput("look at this"));
+    await act(async () => {
+      await result.current.submit(undefined, files);
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    const body = streamMock.mock.calls[0]![0] as unknown as {
+      file_descriptors: FileDescriptor[];
+    };
+    expect(body.file_descriptors).toEqual(files);
+    expect(result.current.messages[0]!.files).toEqual(files);
   });
 
   it("creates a session on the first message of a new chat", async () => {

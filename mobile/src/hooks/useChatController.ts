@@ -20,7 +20,7 @@ import {
 import { DEFAULT_AGENT_ID } from "@/chat/agents";
 import { FLUSH_INTERVAL_MS } from "@/chat/constants";
 import { processRawChatHistory } from "@/chat/chatHistory";
-import { ChatState } from "@/chat/interfaces";
+import { ChatState, FileDescriptor } from "@/chat/interfaces";
 import {
   buildImmediateMessages,
   getLastSuccessfulMessageId,
@@ -149,8 +149,8 @@ export interface ChatController {
   input: string;
   setInput: (value: string) => void;
   // `overrideMessage` sends a specific string (e.g. a tapped starter prompt) instead of
-  // the composer's current input.
-  submit: (overrideMessage?: string) => void;
+  // the composer's current input. `files` are the message's attachment descriptors.
+  submit: (overrideMessage?: string, files?: FileDescriptor[]) => void;
   stop: () => void;
   isHydrating: boolean;
 }
@@ -206,9 +206,10 @@ export function useChatController(
   const chatState: ChatState = sessionData?.chatState ?? "input";
 
   const submit = useCallback(
-    async (overrideMessage?: string) => {
+    async (overrideMessage?: string, files?: FileDescriptor[]) => {
       const text = (overrideMessage ?? input).trim();
       if (!text) return;
+      const fileDescriptors = files ?? [];
       if (submittingRef.current) return;
       submittingRef.current = true;
       try {
@@ -250,7 +251,7 @@ export function useChatController(
         const { initialUserNode, initialAgentNode } = buildImmediateMessages(
           parentNodeId,
           text,
-          [],
+          fileDescriptors,
         );
         store.updateSessionTree(
           activeId,
@@ -266,7 +267,7 @@ export function useChatController(
           message: text,
           chat_session_id: activeId,
           parent_message_id: parentMessageId,
-          file_descriptors: [],
+          file_descriptors: fileDescriptors,
           deep_research: false,
           origin: "mobile",
         };
