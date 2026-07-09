@@ -27,12 +27,12 @@ import httpx
 
 from onyx.cache.factory import get_cache_backend
 from onyx.server.features.build import connect_app
+from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.packets import CompactionPacket
 from onyx.server.features.build.packets import ContextUsagePacket
@@ -1317,7 +1317,7 @@ class OpencodeServeClient:
         directory: str,
         model_provider: str | None = None,
         model_id: str | None = None,
-        timeout: float = SANDBOX_TURN_TIMEOUT_SECONDS,
+        timeout: float = OPENCODE_PROMPT_TIMEOUT_SECONDS,
         should_interrupt: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream one turn of SandboxEvents via the shared per-pod bus.

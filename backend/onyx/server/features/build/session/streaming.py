@@ -33,11 +33,11 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
+from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import PROMPT_SLOT_LEASE_SECONDS
 from onyx.server.features.build.configs import (
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
 )
-from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import update_session_activity
@@ -486,6 +486,7 @@ def yield_sandbox_events(
     agent_provider: str | None,
     agent_model: str | None,
     should_interrupt: Callable[[], bool] | None = None,
+    should_abort_on_teardown: Callable[[], bool] | None = None,
 ) -> Generator[Any, None, None]:
     """Drive the agent to completion, yielding raw sandbox events.
 
@@ -519,6 +520,7 @@ def yield_sandbox_events(
         agent_model=agent_model,
         on_opencode_session_resolved=_persist_resolved_id,
         should_interrupt=should_interrupt,
+        should_abort_on_teardown=should_abort_on_teardown,
     )
     try:
         for sandbox_event in event_stream:
@@ -853,7 +855,7 @@ def stream_subagent_turn(
             daemon=True,
             args=(
                 slot_renewal_stop,
-                SANDBOX_TURN_TIMEOUT_SECONDS - PROMPT_SLOT_LEASE_SECONDS,
+                OPENCODE_PROMPT_TIMEOUT_SECONDS - PROMPT_SLOT_LEASE_SECONDS,
             ),
         )
 

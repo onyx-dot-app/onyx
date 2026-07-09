@@ -38,7 +38,7 @@ def slot_env(
 ) -> None:
     """Tenant context + the Redis backend forced on, so the cross-replica
     lock is real. Short acquire timeouts are passed per call site —
-    ``PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS`` binds at import, so patching it
+    ``PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS`` binds at import, so patching it
     here would be a no-op."""
     monkeypatch.setattr(factory, "CACHE_BACKEND", CacheBackendType.REDIS)
 

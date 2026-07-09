@@ -56,10 +56,10 @@ OPENCODE_SERVE_READY_TIMEOUT_SECONDS = 30
 OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.25
 
 # How long a new turn waits for the previous turn's slot before giving up.
-PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS = 10.0
+PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS = 10.0
 
 # Must exceed the lease so a reclaimed turn can wait out a dead holder's slot.
-PROMPT_SLOT_RECLAIM_ACQUIRE_TIMEOUT_SECONDS = PROMPT_SLOT_LEASE_SECONDS + 10.0
+PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS = PROMPT_SLOT_LEASE_SECONDS + 10.0
 
 # Live attach streams are UI-facing. Coalesce adjacent text deltas just long
 # enough to avoid one React update per tiny opencode token burst, while keeping
@@ -205,7 +205,7 @@ class _ServeMixin:
         self,
         sandbox_id: UUID,
         build_session_id: UUID,
-        acquire_timeout: float = PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+        acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     ) -> Generator[PromptSlot, None, None]:
         """Serialize turns for a build session across replicas via the cache.
 
@@ -531,6 +531,7 @@ class _ServeMixin:
         *,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream sandbox events via the in-sandbox ``opencode serve``. Preflight
         ``opencode_session_id`` via :meth:`ensure_opencode_session` to avoid
@@ -593,15 +594,18 @@ class _ServeMixin:
                     got_prompt_response,
                 )
             except GeneratorExit:
-                self._abort_and_log_turn_failure(
-                    client=client,
-                    session_id=session_id,
-                    resolved_session_id=resolved_session_id,
-                    session_path=session_path,
-                    events_count=events_count,
-                    error="GeneratorExit",
-                    log_level=logging.WARNING,
-                )
+                # A runner that lost turn ownership must not abort — its
+                # successor is (or will be) driving this opencode session.
+                if should_abort_on_teardown is None or should_abort_on_teardown():
+                    self._abort_and_log_turn_failure(
+                        client=client,
+                        session_id=session_id,
+                        resolved_session_id=resolved_session_id,
+                        session_path=session_path,
+                        events_count=events_count,
+                        error="GeneratorExit",
+                        log_level=logging.WARNING,
+                    )
                 raise
             except Exception as e:
                 self._abort_and_log_turn_failure(
@@ -616,6 +620,34 @@ class _ServeMixin:
                 raise
         finally:
             client.close()
+
+    def abort_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> None:
+        """Best-effort abort of the in-flight opencode prompt. Lock-agnostic
+        by design: any API process may stop running work (abort is
+        idempotent); only *starting* work is serialized by the prompt slot."""
+        session_path = self._session_directory(session_id)
+        try:
+            client = self._build_serve_client(
+                sandbox_id,
+                session_path,
+                with_event_bus=False,
+            )
+            try:
+                client.abort(opencode_session_id, directory=session_path)
+            finally:
+                client.close()
+        except Exception:
+            logger.warning(
+                "[SANDBOX-SERVE] abort failed for sandbox=%s session=%s",
+                sandbox_id,
+                session_id,
+                exc_info=True,
+            )
 
     def delete_opencode_session(
         self,

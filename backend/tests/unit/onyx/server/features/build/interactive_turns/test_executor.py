@@ -23,10 +23,10 @@ from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCE
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.serve_transport import (
-    PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
 )
 from onyx.server.features.build.sandbox.serve_transport import (
-    PROMPT_SLOT_RECLAIM_ACQUIRE_TIMEOUT_SECONDS,
+    PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
 )
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.unit.fakes import FakeCache
@@ -97,6 +97,7 @@ def _run_turn_with_events(
     prompt_slot = prompt_slot if prompt_slot is not None else _FakePromptSlot()
     persisted: list[object] = []
     finalized: list[UUID] = []
+    captured_should_abort_on_teardown: list[Callable[[], bool]] = []
 
     turn = create_interactive_turn(
         cache=cache,
@@ -119,7 +120,7 @@ def _run_turn_with_events(
             self,
             sandbox_id_arg: UUID,
             session_id_arg: UUID,
-            acquire_timeout: float = PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+            acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
         ) -> _FakePromptSlot:
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
@@ -133,11 +134,13 @@ def _run_turn_with_events(
             prompt: str,
             *,
             should_interrupt: object,
+            should_abort_on_teardown: Callable[[], bool],
         ) -> Iterator[object]:
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
             assert prompt == "hello"
             assert should_interrupt is not None
+            captured_should_abort_on_teardown.append(should_abort_on_teardown)
             yield from events
 
         def merge_events_with_announces(
@@ -184,6 +187,11 @@ def _run_turn_with_events(
         persisted=persisted,
         prompt_slot=prompt_slot,
         session_id=session_id,
+        should_abort_on_teardown=(
+            captured_should_abort_on_teardown[0]
+            if captured_should_abort_on_teardown
+            else None
+        ),
         turn=turn,
         user_id=user_id,
     )
@@ -359,7 +367,7 @@ def test_ownership_recheck_after_slot_acquire(
             self,
             sandbox_id_arg: UUID,
             session_id_arg: UUID,
-            acquire_timeout: float = PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+            acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
         ) -> _FakePromptSlot:
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
@@ -373,12 +381,14 @@ def test_ownership_recheck_after_slot_acquire(
             prompt: str,
             *,
             should_interrupt: object,
+            should_abort_on_teardown: Callable[[], bool],
         ) -> Iterator[object]:
             nonlocal yield_sandbox_events_called
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
             assert prompt == "hello"
             assert should_interrupt is not None
+            assert should_abort_on_teardown() is True
             yield_sandbox_events_called = True
             yield object()
 
@@ -413,13 +423,13 @@ def test_prompt_slot_acquire_timeout_reflects_reclaimed(
     prompt_response = PromptResponse.model_validate({"stopReason": "end_turn"})
 
     fresh = _run_turn_with_events(monkeypatch, [prompt_response], reclaimed=False)
-    assert fresh.prompt_slot.acquire_timeouts == [PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS]
+    assert fresh.prompt_slot.acquire_timeouts == [PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS]
 
     reclaimed_result = _run_turn_with_events(
         monkeypatch, [prompt_response], reclaimed=True
     )
     assert reclaimed_result.prompt_slot.acquire_timeouts == [
-        PROMPT_SLOT_RECLAIM_ACQUIRE_TIMEOUT_SECONDS
+        PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS
     ]
 
 
@@ -467,7 +477,7 @@ def test_prompt_slot_busy_does_not_finish_reclaimed_turn(
             self,
             sandbox_id_arg: UUID,
             session_id_arg: UUID,
-            acquire_timeout: float = PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+            acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
         ) -> _FakePromptSlot:
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
@@ -506,6 +516,7 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
     prompt_slot = _FakePromptSlot()
     reclaimed: InteractiveTurn | None = None
     clear_calls: list[UUID] = []
+    captured_should_abort_on_teardown: list[Callable[[], bool]] = []
 
     turn = create_interactive_turn(
         cache=cache,
@@ -530,7 +541,7 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
             self,
             sandbox_id_arg: UUID,
             session_id_arg: UUID,
-            acquire_timeout: float = PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+            acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
         ) -> _FakePromptSlot:
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
@@ -544,12 +555,14 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
             prompt: str,
             *,
             should_interrupt: object,
+            should_abort_on_teardown: Callable[[], bool],
         ) -> Iterator[object]:
             nonlocal reclaimed
             assert sandbox_id_arg == sandbox_id
             assert session_id_arg == session_id
             assert prompt == "hello"
             assert should_interrupt is not None
+            captured_should_abort_on_teardown.append(should_abort_on_teardown)
             reclaimed = claim_turn_for_runner(
                 cache=cache,
                 turn_id=turn.turn_id,
@@ -585,6 +598,35 @@ def test_lost_runner_does_not_clear_reclaimed_turn_interrupt(
     assert active.runner_id == reclaimed.runner_id
     assert clear_calls == []
     assert prompt_slot.exited
+    assert captured_should_abort_on_teardown[0]() is False
+
+
+def test_teardown_abort_allowed_after_successful_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompt_response = PromptResponse.model_validate({"stopReason": "end_turn"})
+
+    result = _run_turn_with_events(monkeypatch, [prompt_response])
+
+    assert result.should_abort_on_teardown is not None
+    assert result.should_abort_on_teardown() is True
+
+
+def test_teardown_abort_suppressed_after_lost_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompt_slot = _FakePromptSlot(lost_after_extends=1)
+    non_terminal_event = object()
+    second_event = object()
+
+    result = _run_turn_with_events(
+        monkeypatch,
+        [non_terminal_event, second_event],
+        prompt_slot=prompt_slot,
+    )
+
+    assert result.should_abort_on_teardown is not None
+    assert result.should_abort_on_teardown() is False
 
 
 def test_start_interactive_turn_runner_preserves_tenant_context(

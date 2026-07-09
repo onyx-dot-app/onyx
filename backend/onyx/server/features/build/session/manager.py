@@ -57,7 +57,7 @@ from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.serve_transport import (
-    PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
 )
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
@@ -75,6 +75,7 @@ from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -735,18 +736,28 @@ class SessionManager:
     def interrupt_message(self, session_id: UUID, user_id: UUID) -> bool:
         """Interrupt the in-flight agent turn for a session.
 
-        Sets the interrupt fence and returns. The active stream's consume loop
-        polls the fence (~1/s) and self-terminates — aborting opencode and
-        emitting its own ``PromptResponse`` rather than waiting on a
-        ``session.idle`` that may never arrive after an abort. A flag-based
-        approach (vs. a direct abort) is safe to call at any point in the turn
-        lifecycle, including before the stream has started consuming events.
+        Two complementary signals: the interrupt fence covers the whole turn
+        lifecycle (a turn that hasn't POSTed its prompt yet cancels at the
+        fence check; the runner's consume loop polls it ~1/s and records the
+        turn CANCELLED), and a direct best-effort abort to opencode stops the
+        sandbox-side work even when no live runner is polling the fence
+        (dead/blocked runner, other replica).
         """
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
 
         request_interrupt(session_id, get_cache_backend())
+
+        if session.opencode_session_id:
+            sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+            if sandbox is not None and sandbox.status.is_active():
+                start_thread_with_context(
+                    target=self._sandbox_manager.abort_opencode_session,
+                    name=f"interrupt-abort-{session_id}",
+                    daemon=True,
+                    args=(sandbox.id, session_id, session.opencode_session_id),
+                )
         return True
 
     def subscribe_to_existing_session_events(
@@ -811,7 +822,7 @@ class SessionManager:
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        acquire_timeout: float = PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+        acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     ) -> AbstractContextManager[PromptSlot]:
         return self._sandbox_manager.prompt_slot(
             sandbox_id, session_id, acquire_timeout=acquire_timeout
@@ -823,6 +834,7 @@ class SessionManager:
         session_id: UUID,
         user_message_content: str,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
     ) -> Generator[Any, None, None]:
         build_session = _streaming.load_turn_session(
             self._db_session, self._sandbox_manager, sandbox_id, session_id
@@ -839,6 +851,7 @@ class SessionManager:
             agent_provider=build_session.agent_provider,
             agent_model=build_session.agent_model,
             should_interrupt=should_interrupt,
+            should_abort_on_teardown=should_abort_on_teardown,
         )
 
     def merge_events_with_announces(

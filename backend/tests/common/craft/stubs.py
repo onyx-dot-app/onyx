@@ -238,6 +238,7 @@ class StubSandboxManager(SandboxManager):
         self.last_get_webapp_url_payload: dict[str, Any] | None = None
         self.last_generate_pptx_preview_payload: dict[str, Any] | None = None
         self.last_prompt_slot: RecordingPromptSlot | None = None
+        self.abort_calls: list[tuple[UUID, UUID, str]] = []
 
     # ------------------------------------------------------------------
     # send_message_events property: snapshot iterables on assignment so
@@ -473,6 +474,7 @@ class StubSandboxManager(SandboxManager):
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         self.send_message_count += 1
         self.last_send_message_payload = {
@@ -484,11 +486,20 @@ class StubSandboxManager(SandboxManager):
             "agent_model": agent_model,
             "on_opencode_session_resolved": on_opencode_session_resolved,
             "should_interrupt": should_interrupt,
+            "should_abort_on_teardown": should_abort_on_teardown,
         }
         if self._send_message_events is None:
             raise _not_configured("send_message")
         # Iterate over the snapshot — re-driveable across calls.
         yield from self._send_message_events
+
+    def abort_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> None:
+        self.abort_calls.append((sandbox_id, session_id, opencode_session_id))
 
     def subscribe_to_opencode_session(
         self,

@@ -22,10 +22,10 @@ from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCE
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.serve_transport import (
-    PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
 )
 from onyx.server.features.build.sandbox.serve_transport import (
-    PROMPT_SLOT_RECLAIM_ACQUIRE_TIMEOUT_SECONDS,
+    PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
 )
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.interrupt_signal import clear_interrupt
@@ -174,9 +174,9 @@ def _drive_interactive_turn(
             sandbox.id,
             session_id,
             acquire_timeout=(
-                PROMPT_SLOT_RECLAIM_ACQUIRE_TIMEOUT_SECONDS
+                PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS
                 if reclaimed
-                else PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS
+                else PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS
             ),
         )
         slot = prompt_slot_cm.__enter__()
@@ -212,11 +212,14 @@ def _drive_interactive_turn(
                 )
                 return
 
+            ownership_lost = False
+
             event_stream = session_manager.yield_sandbox_events(
                 sandbox.id,
                 session_id,
                 prompt,
                 should_interrupt=interrupt_requested,
+                should_abort_on_teardown=lambda: not ownership_lost,
             )
 
             for sandbox_event in event_stream:
@@ -227,9 +230,11 @@ def _drive_interactive_turn(
 
                 if not touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):
                     logger.info("Interactive turn %s runner ownership lost", turn_id)
+                    ownership_lost = True
                     return
                 slot.extend()
                 if slot.lost:
+                    ownership_lost = True
                     session_manager.finalize_persist(session_id, state)
                     db_session.commit()
                     finish_turn(
