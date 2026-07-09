@@ -101,12 +101,10 @@ export default function BuildChatPanel({
   const toggleOutputPanel = useToggleOutputPanel();
   const onWakeIntent = useWakeOnIntent();
 
-  const { llmProviders, isLoading: isLoadingProviders } = useLLMProviders();
-  // Sessions can outlive the org's supported providers; gate the composer
-  // like the welcome page until one exists (the model picker stays enabled so
-  // admins can connect from its popover).
-  const needsProvider =
-    !isLoadingProviders && !hasSupportedCraftProvider(llmProviders);
+  const { llmProviders } = useLLMProviders();
+  // Sessions can outlive the org's supported providers — gate sends until one
+  // exists (the model picker stays enabled so admins can connect from it).
+  const hasProvider = hasSupportedCraftProvider(llmProviders);
   // Picker shows the session's stored model unless the user picks another.
   // The pick is keyed by session so it can't leak across sessions.
   const sessionModel = useMemo<BuildLlmSelection | null>(() => {
@@ -807,16 +805,14 @@ export default function BuildChatPanel({
                       scheduledRunInFlight ? undefined : handleInterrupt
                     }
                     disabled={
-                      isViewingSubagent || scheduledRunInFlight || needsProvider
+                      isViewingSubagent || scheduledRunInFlight || !hasProvider
                     }
                     placeholder={
                       isViewingSubagent
                         ? "Switch to the main agent to send a message"
                         : scheduledRunInFlight
                           ? "Scheduled run in progress..."
-                          : needsProvider
-                            ? "Connect a model provider to continue..."
-                            : "Continue the conversation..."
+                          : "Continue the conversation..."
                     }
                     queuedMessages={queuedMessages}
                     onQueueMessage={handleQueueMessage}

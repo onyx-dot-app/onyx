@@ -47,15 +47,11 @@ export function useOnboardingModal(): OnboardingModalController {
     setHasInitialized(true);
   }, [hasInitialized, user]);
 
-  // Complete onboarding callback — fired when the intro is done
+  // Complete onboarding callback — fired when the intro is done. Kicks off
+  // pre-provisioning early — unless no provider exists yet, where session
+  // create would just fail (the connect success path triggers it instead).
   const completeOnboarding = useCallback(async () => {
     setCraftOnboardingSeen();
-
-    // Trigger pre-provisioning now that onboarding is complete so the sandbox
-    // starts provisioning immediately rather than waiting for the controller.
-    // With no supported provider, session create would fail and the resulting
-    // backoff would delay the sandbox after a provider is finally connected —
-    // the connect success path kicks provisioning off instead.
     if (hasAnyProvider) {
       ensurePreProvisionedSession();
     }
