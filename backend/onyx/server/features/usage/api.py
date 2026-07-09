@@ -39,7 +39,6 @@ from onyx.llm.cost_overrides import upsert_override
 from onyx.server.features.usage.models import CostOverride
 from onyx.server.features.usage.models import CostOverrideUpsertRequest
 from onyx.server.features.usage.models import ModelPrice
-from onyx.server.features.usage.models import UsageDayModel
 from onyx.server.features.usage.models import UsageExportRecord
 from onyx.server.features.usage.models import UsageExportResponse
 from onyx.server.features.usage.models import UsageExportTotals
@@ -157,12 +156,9 @@ def get_my_usage(
     since = now - timedelta(days=days) if days else window_start
     user_id = str(user.id)
 
-    per_day = [
-        UsageDayModel.model_validate(row)
-        for row in get_user_usage_by_day_and_model(
-            db_session, user_id, since=since, until=now
-        )
-    ]
+    per_day = get_user_usage_by_day_and_model(
+        db_session, user_id, since=since, until=now
+    )
     window_cost_cents = get_user_cost_cents_in_window(db_session, user_id, window_start)
 
     # Price tenant default chat model (no per-user model selection yet).
@@ -218,8 +214,8 @@ def export_usage(
 
     records_by_email: dict[str, list[UsageExportRecord]] = defaultdict(list)
     for row in rows:
-        records_by_email[str(row["email"])].append(
-            UsageExportRecord.model_validate(row)
+        records_by_email[row.email].append(
+            UsageExportRecord.model_validate(row.model_dump(exclude={"email"}))
         )
 
     users = [

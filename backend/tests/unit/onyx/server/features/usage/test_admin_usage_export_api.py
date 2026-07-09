@@ -24,6 +24,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import UserUsage
 from onyx.db.user_usage import get_usage_export
+from onyx.db.user_usage import UsageExportRow
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.features.usage.api import admin_usage_router
 
@@ -138,42 +139,42 @@ class TestGetUsageExportHelper:
             end=datetime.datetime(2026, 6, 15, tzinfo=datetime.timezone.utc),
         )
         assert rows == [
-            {
-                "email": "alice@example.com",
-                "model": "model-a",
-                "day": "2026-06-01",
-                "input_tokens": 100,
-                "output_tokens": 50,
-                "cache_read_tokens": 5,
-                "cost_cents": 1.0,
-            },
-            {
-                "email": "alice@example.com",
-                "model": "model-b",
-                "day": "2026-06-01",
-                "input_tokens": 200,
-                "output_tokens": 60,
-                "cache_read_tokens": 0,
-                "cost_cents": 2.0,
-            },
-            {
-                "email": "alice@example.com",
-                "model": "model-a",
-                "day": "2026-06-08",
-                "input_tokens": 300,
-                "output_tokens": 70,
-                "cache_read_tokens": 0,
-                "cost_cents": 3.0,
-            },
-            {
-                "email": "bob@example.com",
-                "model": "model-a",
-                "day": "2026-06-08",
-                "input_tokens": 400,
-                "output_tokens": 80,
-                "cache_read_tokens": 0,
-                "cost_cents": 4.0,
-            },
+            UsageExportRow(
+                email="alice@example.com",
+                model="model-a",
+                day="2026-06-01",
+                input_tokens=100,
+                output_tokens=50,
+                cache_read_tokens=5,
+                cost_cents=1.0,
+            ),
+            UsageExportRow(
+                email="alice@example.com",
+                model="model-b",
+                day="2026-06-01",
+                input_tokens=200,
+                output_tokens=60,
+                cache_read_tokens=0,
+                cost_cents=2.0,
+            ),
+            UsageExportRow(
+                email="alice@example.com",
+                model="model-a",
+                day="2026-06-08",
+                input_tokens=300,
+                output_tokens=70,
+                cache_read_tokens=0,
+                cost_cents=3.0,
+            ),
+            UsageExportRow(
+                email="bob@example.com",
+                model="model-a",
+                day="2026-06-08",
+                input_tokens=400,
+                output_tokens=80,
+                cache_read_tokens=0,
+                cost_cents=4.0,
+            ),
         ]
 
     def test_model_filter_narrows(self, db_session: Session) -> None:
@@ -185,14 +186,14 @@ class TestGetUsageExportHelper:
             model="model-b",
         )
         assert len(rows) == 1
-        assert rows[0]["model"] == "model-b"
-        assert rows[0]["email"] == "alice@example.com"
+        assert rows[0].model == "model-b"
+        assert rows[0].email == "alice@example.com"
 
     def test_date_range_bounds_half_open(self, db_session: Session) -> None:
         _seed_two_users(db_session)
         # [W1, W2) excludes everything in W2.
         rows = get_usage_export(db_session, start=_W1, end=_W2)
-        days = {r["day"] for r in rows}
+        days = {r.day for r in rows}
         assert days == {"2026-06-01"}
 
 

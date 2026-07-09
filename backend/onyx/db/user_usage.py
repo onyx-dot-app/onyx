@@ -6,6 +6,7 @@ model, flow, provider), not an append-only per-call ledger."""
 from collections import defaultdict
 from datetime import datetime
 
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -20,6 +21,29 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
+
+
+class UserUsageByDay(BaseModel):
+    """Per-user usage aggregated by UTC calendar day and model."""
+
+    day: str  # YYYY-MM-DD
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cost_cents: float
+
+
+class UsageExportRow(BaseModel):
+    """Tenant-wide usage row: email + model + window-start day."""
+
+    email: str
+    model: str
+    day: str  # YYYY-MM-DD — window start day, not call calendar day
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cost_cents: float
 
 
 def record_user_usage(
@@ -68,7 +92,7 @@ def get_user_usage_by_day_and_model(
     user_id: str,
     since: datetime,
     until: datetime,
-) -> list[dict[str, object]]:
+) -> list[UserUsageByDay]:
     """Sum usage by UTC day and model over [since, until)."""
     rows = db_session.execute(
         select(
@@ -89,14 +113,14 @@ def get_user_usage_by_day_and_model(
     ).all()
 
     return [
-        {
-            "day": str(day),
-            "model": model,
-            "input_tokens": int(in_tok or 0),
-            "output_tokens": int(out_tok or 0),
-            "cache_read_tokens": int(cache_tok or 0),
-            "cost_cents": float(cost or 0.0),
-        }
+        UserUsageByDay(
+            day=str(day),
+            model=model,
+            input_tokens=int(in_tok or 0),
+            output_tokens=int(out_tok or 0),
+            cache_read_tokens=int(cache_tok or 0),
+            cost_cents=float(cost or 0.0),
+        )
         for day, model, in_tok, out_tok, cache_tok, cost in rows
     ]
 
@@ -106,7 +130,7 @@ def get_usage_export(
     start: datetime,
     end: datetime,
     model: str | None = None,
-) -> list[dict[str, object]]:
+) -> list[UsageExportRow]:
     """Tenant-wide usage by email/model/window-day.
     day = window start (weekly grid), not call calendar day."""
     query = (
@@ -135,15 +159,15 @@ def get_usage_export(
     rows = db_session.execute(query).all()
 
     return [
-        {
-            "email": email,
-            "model": mdl,
-            "day": str(day),
-            "input_tokens": int(in_tok or 0),
-            "output_tokens": int(out_tok or 0),
-            "cache_read_tokens": int(cache_tok or 0),
-            "cost_cents": float(cost or 0.0),
-        }
+        UsageExportRow(
+            email=str(email),
+            model=mdl,
+            day=str(day),
+            input_tokens=int(in_tok or 0),
+            output_tokens=int(out_tok or 0),
+            cache_read_tokens=int(cache_tok or 0),
+            cost_cents=float(cost or 0.0),
+        )
         for email, mdl, day, in_tok, out_tok, cache_tok, cost in rows
     ]
 

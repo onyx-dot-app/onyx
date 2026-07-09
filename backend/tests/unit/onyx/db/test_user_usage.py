@@ -28,6 +28,7 @@ from onyx.db.user_usage import get_user_cost_cents_in_window
 from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.db.user_usage import get_user_usage_by_day_and_model
 from onyx.db.user_usage import record_user_usage
+from onyx.db.user_usage import UserUsageByDay
 
 
 @compiles(PGUUID, "sqlite")
@@ -152,30 +153,30 @@ class TestAggregation:
             until=datetime.datetime(2026, 6, 3, tzinfo=datetime.timezone.utc),
         )
         assert result == [
-            {
-                "day": "2026-06-01",
-                "model": "model-a",
-                "input_tokens": 100,
-                "output_tokens": 50,
-                "cache_read_tokens": 0,
-                "cost_cents": 1.0,
-            },
-            {
-                "day": "2026-06-01",
-                "model": "model-b",
-                "input_tokens": 200,
-                "output_tokens": 60,
-                "cache_read_tokens": 0,
-                "cost_cents": 2.0,
-            },
-            {
-                "day": "2026-06-02",
-                "model": "model-a",
-                "input_tokens": 300,
-                "output_tokens": 70,
-                "cache_read_tokens": 0,
-                "cost_cents": 3.0,
-            },
+            UserUsageByDay(
+                day="2026-06-01",
+                model="model-a",
+                input_tokens=100,
+                output_tokens=50,
+                cache_read_tokens=0,
+                cost_cents=1.0,
+            ),
+            UserUsageByDay(
+                day="2026-06-01",
+                model="model-b",
+                input_tokens=200,
+                output_tokens=60,
+                cache_read_tokens=0,
+                cost_cents=2.0,
+            ),
+            UserUsageByDay(
+                day="2026-06-02",
+                model="model-a",
+                input_tokens=300,
+                output_tokens=70,
+                cache_read_tokens=0,
+                cost_cents=3.0,
+            ),
         ]
 
     def test_aggregation_excludes_other_users(self, db_session: Session) -> None:
@@ -195,7 +196,7 @@ class TestAggregation:
             until=datetime.datetime(2026, 6, 2, tzinfo=datetime.timezone.utc),
         )
         assert len(result) == 1
-        assert result[0]["input_tokens"] == 100
+        assert result[0].input_tokens == 100
 
 
 class TestCostInWindow:

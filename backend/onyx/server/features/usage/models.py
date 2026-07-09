@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.db.models import ModelCostOverride
+from onyx.db.user_usage import UserUsageByDay as UsageDayModel
 
 
 class CostOverrideUpsertRequest(BaseModel):
@@ -36,15 +37,6 @@ class CostOverride(BaseModel):
             cache_read_cost_per_mtok=row.cache_read_cost_per_mtok,
             updated_at=row.updated_at,
         )
-
-
-class UsageDayModel(BaseModel):
-    day: str  # YYYY-MM-DD (UTC)
-    model: str
-    input_tokens: int
-    output_tokens: int
-    cache_read_tokens: int
-    cost_cents: float
 
 
 class UsageExportRecord(BaseModel):
