@@ -226,3 +226,25 @@ def test_keep_alive_renews_without_loop_progress(
 
     with replica_b.prompt_slot(sandbox_id, build_session_id) as after_release:
         assert after_release.acquired is True
+
+
+@pytest.mark.usefixtures("slot_env")
+def test_keep_alive_marks_slot_lost_when_window_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(serve_transport, "PROMPT_SLOT_LEASE_SECONDS", 0.4)
+    sandbox_id = uuid4()
+    build_session_id = uuid4()
+    replica = _make_replica()
+
+    holder_cm = replica.prompt_slot(sandbox_id, build_session_id)
+    holder_slot = holder_cm.__enter__()
+    assert holder_slot.acquired is True
+
+    try:
+        stop = threading.Event()
+        holder_slot.keep_alive(stop, max_seconds=0.05)
+        assert holder_slot.lost is True
+    finally:
+        with contextlib.suppress(Exception):
+            holder_cm.__exit__(None, None, None)

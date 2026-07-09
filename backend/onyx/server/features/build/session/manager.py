@@ -4,9 +4,11 @@ SessionManager is the main entry point for build session lifecycle management.
 It orchestrates session CRUD, message handling, artifact management, and file system access.
 """
 
+import contextlib
 import hashlib
 import io
 import mimetypes
+import threading
 import uuid
 import zipfile
 from collections.abc import Callable
@@ -36,6 +38,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
+from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
@@ -620,12 +623,22 @@ class SessionManager:
         else:
             prompt_slot_cm = nullcontext(PromptSlot(acquired=True))
 
-        with prompt_slot_cm as slot:
+        with prompt_slot_cm as slot, contextlib.ExitStack() as cleanup:
             if not slot.acquired:
                 raise OnyxError(
                     OnyxErrorCode.CONFLICT,
                     "This session is busy with an active turn. Try again when it finishes.",
                 )
+
+            # Workspace/snapshot cleanup below can outlast one lease.
+            slot_renewal_stop = threading.Event()
+            cleanup.callback(slot_renewal_stop.set)
+            start_thread_with_context(
+                target=slot.keep_alive,
+                name=f"delete-slot-renewal-{session_id}",
+                daemon=True,
+                args=(slot_renewal_stop, OPENCODE_PROMPT_TIMEOUT_SECONDS),
+            )
 
             if sandbox and sandbox.status.is_active():
                 if session.opencode_session_id:

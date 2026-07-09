@@ -422,6 +422,25 @@ def _drive_agent(
                 sandbox_id, session_id, task_prompt
             ):
                 slot.extend()
+                if slot.lost:
+                    session_manager.finalize_persist(session_id, state)
+                    mark_run_status(
+                        db_session=db_session,
+                        run_id=run_id,
+                        status=ScheduledTaskRunStatus.FAILED,
+                        error_class=ScheduledTaskErrorClass.AGENT_EXCEPTION,
+                        error_detail="Prompt slot lease lost mid-turn.",
+                    )
+                    _notify(
+                        db_session=db_session,
+                        user_id=task_user_id,
+                        task_name=task_name,
+                        task_id=task_id,
+                        run_id=run_id,
+                        notif_type=NotificationType.SCHEDULED_TASK_FAILED,
+                    )
+                    db_session.commit()
+                    return False
                 # Approval gate: mark awaiting_approval, return. Resume
                 # mechanics are owned by the approvals project; this is
                 # "terminal for display" until it ships.

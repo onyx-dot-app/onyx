@@ -112,12 +112,21 @@ class PromptSlot:
             )
 
     def keep_alive(self, stop: threading.Event, max_seconds: float) -> None:
-        """For turn paths whose loop progress is client-paced — SSE
+        """For holders whose progress is client-paced or opaque — SSE
         backpressure must not expire a live turn's lease. The cap bounds a
-        leaked holder to roughly the old fixed-TTL ceiling."""
+        leaked holder to roughly the old fixed-TTL ceiling; hitting it marks
+        the slot ``lost`` so the holder aborts instead of driving unrenewed."""
         deadline = time.monotonic() + max_seconds
         while not stop.wait(PROMPT_SLOT_LEASE_SECONDS / 4):
-            if self.lost or time.monotonic() >= deadline:
+            if self.lost:
+                return
+            if time.monotonic() >= deadline:
+                self.lost = True
+                logger.error(
+                    "[SANDBOX-SERVE] prompt_slot: keep-alive window exhausted "
+                    "(%.0fs) — marking slot lost",
+                    max_seconds,
+                )
                 return
             self.extend()
 
