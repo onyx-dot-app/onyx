@@ -33,7 +33,7 @@ backend = [
     "aiohttp==3.14.1",
     "alembic==1.18.4",
     "asyncpg==0.30.0",
-    "atlassian-python-api==3.41.16",
+    "atlassian-python-api==4.0.7",
     "azure-cognitiveservices-speech==1.50.0",
     "beautifulsoup4==4.12.3",
     "boto3==1.39.11",

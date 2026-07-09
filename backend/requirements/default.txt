@@ -192,9 +192,9 @@ asyncpg==0.30.0 \
     --hash=sha256:c47806b1a8cbb0a0db896f4cd34d89942effe353a5035c62734ab13b9f938da3 \
     --hash=sha256:c551e9928ab6707602f44811817f82ba3c446e018bfe1d3abecc8ba5f3eac851 \
     --hash=sha256:f59b430b8e27557c3fb9869222559f7417ced18688375825f8f12302c34e915e
-atlassian-python-api==3.41.16 \
-    --hash=sha256:99e5587233a96d22c45a61b19523dd98e8266c620ba2d289f23e4ea35c9cf316 \
-    --hash=sha256:dc0144ff8b8884562bb2af650586292524ad25f120cd21940df80f0d2ac64411
+atlassian-python-api==4.0.7 \
+    --hash=sha256:46a70cb29eaab87c0a1697fccd3e25df1aa477e6aa4fb9ba936a9d46b425933c \
+    --hash=sha256:8d9cc6068b1d2a48eb434e22e57f6bbd918a47fac9e46b95b7a3cefb00fceacb
 attrs==25.4.0 \
     --hash=sha256:16d5969b87f0859ef33a48b35d55ac1be6e42ae49d5e853b597db70c35c57e11 \
     --hash=sha256:adcf7e2a1fb3b36ac48d97835bb6d8ade15b8dcce26aba8bf1d14847b57a3373
@@ -2772,7 +2772,6 @@ six==1.17.0 \
     --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81
     # via
     #   asana
-    #   atlassian-python-api
     #   dropbox
     #   google-auth-httplib2
     #   html5lib
@@ -2982,6 +2981,7 @@ typing-extensions==4.15.0 \
     --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
     # via
     #   alembic
+    #   atlassian-python-api
     #   azure-core
     #   braintrust
     #   cohere

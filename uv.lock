@@ -407,7 +407,7 @@ wheels = [
 
 [[package]]
 name = "atlassian-python-api"
-version = "3.41.16"
+version = "4.0.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -416,11 +416,11 @@ dependencies = [
     { name = "oauthlib" },
     { name = "requests" },
     { name = "requests-oauthlib" },
-    { name = "six" },
+    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9a/04/15839ae4b60f8f15195a75bf512ab926374832affdbd83463da8edae2b62/atlassian_python_api-3.41.16.tar.gz", hash = "sha256:dc0144ff8b8884562bb2af650586292524ad25f120cd21940df80f0d2ac64411", size = 382425, upload-time = "2024-09-16T07:39:21.035Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/e8/f23b7273e410c6fe9f98f9db25268c6736572f22a9566d1dc9ed3614bb68/atlassian_python_api-4.0.7.tar.gz", hash = "sha256:8d9cc6068b1d2a48eb434e22e57f6bbd918a47fac9e46b95b7a3cefb00fceacb", size = 271149, upload-time = "2025-08-21T13:19:40.746Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/5b/73d6e52274fa35c3a08f62336945b49eedd50aa02c6929f1ed62ae5874c2/atlassian_python_api-3.41.16-py3-none-any.whl", hash = "sha256:99e5587233a96d22c45a61b19523dd98e8266c620ba2d289f23e4ea35c9cf316", size = 177883, upload-time = "2024-09-16T07:39:18.559Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/83/e4f9976ce3c933a079b8931325e7a9c0a8bba7030a2cb85764c0048f3479/atlassian_python_api-4.0.7-py3-none-any.whl", hash = "sha256:46a70cb29eaab87c0a1697fccd3e25df1aa477e6aa4fb9ba936a9d46b425933c", size = 197746, upload-time = "2025-08-21T13:19:39.044Z" },
 ]
 
 [[package]]
@@ -4374,7 +4374,7 @@ backend = [
     { name = "alembic", specifier = "==1.18.4" },
     { name = "asana", specifier = "==5.0.8" },
     { name = "asyncpg", specifier = "==0.30.0" },
-    { name = "atlassian-python-api", specifier = "==3.41.16" },
+    { name = "atlassian-python-api", specifier = "==4.0.7" },
     { name = "azure-cognitiveservices-speech", specifier = "==1.50.0" },
     { name = "beautifulsoup4", specifier = "==4.12.3" },
     { name = "boto3", specifier = "==1.39.11" },
