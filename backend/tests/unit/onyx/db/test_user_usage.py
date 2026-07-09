@@ -1,8 +1,13 @@
-"""Unit tests for the per-user usage ledger (in-memory SQLite)."""
+"""Unit tests for the per-user usage ledger.
+
+`record_user_usage` is Postgres-only (pg_insert upsert); its unit tests mock the
+session like tenant usage. Read-path helpers still run against in-memory SQLite
+seeded with ORM inserts."""
 
 import datetime
 from collections.abc import Generator
 from typing import cast
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -22,11 +27,9 @@ from onyx.db.user_usage import get_total_cost_cents_since
 from onyx.db.user_usage import get_user_cost_cents_in_window
 from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.db.user_usage import get_user_usage_by_day_and_model
-from onyx.db.user_usage import get_window_start
 from onyx.db.user_usage import record_user_usage
 
 
-# SQLite type shims for UserUsage.
 @compiles(PGUUID, "sqlite")
 def _compile_pguuid_sqlite(_element: object, _compiler: object, **_kw: object) -> str:
     return "CHAR(36)"
@@ -37,12 +40,39 @@ def _compile_jsonb_sqlite(_element: object, _compiler: object, **_kw: object) ->
     return "JSON"
 
 
+def _seed_usage(
+    db_session: Session,
+    user_id: str,
+    model: str,
+    flow: str,
+    provider: str | None,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int,
+    cost_cents: float,
+    window_start: datetime.datetime,
+) -> None:
+    """Insert a ledger row without going through the Postgres upsert path."""
+    db_session.add(
+        UserUsage(
+            user_id=user_id,
+            window_start=window_start,
+            model=model,
+            flow=flow,
+            provider=provider or "",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cost_cents=cost_cents,
+        )
+    )
+    db_session.flush()
+
+
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     engine: Engine = create_engine("sqlite://")
-    # Only the table under test; FK to user.id is not enforced by SQLite.
-    user_usage_table = cast(Table, UserUsage.__table__)
-    user_usage_table.create(bind=engine)
+    cast(Table, UserUsage.__table__).create(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
     try:
@@ -51,34 +81,16 @@ def db_session() -> Generator[Session, None, None]:
         session.close()
 
 
-class TestGetWindowStart:
-    def test_weekly_aligns_to_monday(self) -> None:
-        # 2026-06-03 is a Wednesday.
-        dt = datetime.datetime(2026, 6, 3, 14, 22, tzinfo=datetime.timezone.utc)
-        window = get_window_start(dt, period_hours=168)
-        assert window.weekday() == 0  # Monday
-        assert window == datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
-
-    def test_hourly_epoch_aligned(self) -> None:
-        dt = datetime.datetime(2026, 6, 3, 14, 59, 59, tzinfo=datetime.timezone.utc)
-        window = get_window_start(dt, period_hours=1)
-        assert window == datetime.datetime(
-            2026, 6, 3, 14, 0, 0, tzinfo=datetime.timezone.utc
-        )
-
-    def test_naive_datetime_treated_as_utc(self) -> None:
-        naive = datetime.datetime(2026, 6, 3, 14, 30)
-        aware = datetime.datetime(2026, 6, 3, 14, 30, tzinfo=datetime.timezone.utc)
-        assert get_window_start(naive, 1) == get_window_start(aware, 1)
-
-
 class TestRecordUserUsage:
-    def test_two_records_accumulate(self, db_session: Session) -> None:
-        user_id = str(uuid4())
+    """Postgres upsert path — mock the session; do not execute SQL."""
+
+    def test_executes_upsert_and_flushes(self) -> None:
+        mock_session = MagicMock()
         window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        user_id = str(uuid4())
 
         record_user_usage(
-            db_session,
+            mock_session,
             user_id=user_id,
             model="claude-3",
             flow="CHAT",
@@ -89,72 +101,32 @@ class TestRecordUserUsage:
             cost_cents=1.5,
             window_start=window,
         )
+
+        mock_session.execute.assert_called_once()
+        mock_session.flush.assert_called_once()
+
+    def test_null_provider_stored_as_empty_string(self) -> None:
+        from sqlalchemy.dialects import postgresql
+
+        mock_session = MagicMock()
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+
         record_user_usage(
-            db_session,
-            user_id=user_id,
-            model="claude-3",
+            mock_session,
+            user_id=str(uuid4()),
+            model="model-a",
             flow="CHAT",
-            provider="anthropic",
-            input_tokens=200,
-            output_tokens=70,
-            cache_read_tokens=5,
-            cost_cents=2.0,
+            provider=None,
+            input_tokens=10,
+            output_tokens=5,
+            cache_read_tokens=0,
+            cost_cents=0.1,
             window_start=window,
         )
 
-        rows = db_session.query(UserUsage).all()
-        assert len(rows) == 1
-        row = rows[0]
-        assert row.input_tokens == 300
-        assert row.output_tokens == 120
-        assert row.cache_read_tokens == 15
-        assert row.cost_cents == pytest.approx(3.5)
-
-    def test_distinct_dimensions_separate_rows(self, db_session: Session) -> None:
-        user_id = str(uuid4())
-        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
-
-        record_user_usage(
-            db_session,
-            user_id,
-            "model-a",
-            "CHAT",
-            "anthropic",
-            10,
-            5,
-            0,
-            0.1,
-            window,
-        )
-        record_user_usage(
-            db_session,
-            user_id,
-            "model-b",
-            "CHAT",
-            "anthropic",
-            20,
-            5,
-            0,
-            0.2,
-            window,
-        )
-        assert db_session.query(UserUsage).count() == 2
-
-    def test_null_provider_accumulates(self, db_session: Session) -> None:
-        user_id = str(uuid4())
-        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
-
-        record_user_usage(
-            db_session, user_id, "model-a", "CHAT", None, 10, 5, 0, 0.1, window
-        )
-        record_user_usage(
-            db_session, user_id, "model-a", "CHAT", None, 30, 5, 0, 0.3, window
-        )
-        rows = db_session.query(UserUsage).all()
-        assert len(rows) == 1
-        assert rows[0].input_tokens == 40
-        assert rows[0].cost_cents == pytest.approx(0.4)
-        assert rows[0].provider == ""
+        stmt = mock_session.execute.call_args[0][0]
+        compiled = stmt.compile(dialect=postgresql.dialect())
+        assert compiled.params["provider"] == ""
 
 
 class TestAggregation:
@@ -163,41 +135,14 @@ class TestAggregation:
         day1 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
         day2 = datetime.datetime(2026, 6, 2, tzinfo=datetime.timezone.utc)
 
-        record_user_usage(
-            db_session,
-            user_id,
-            "model-a",
-            "CHAT",
-            "anthropic",
-            100,
-            50,
-            0,
-            1.0,
-            day1,
+        _seed_usage(
+            db_session, user_id, "model-a", "CHAT", "anthropic", 100, 50, 0, 1.0, day1
         )
-        record_user_usage(
-            db_session,
-            user_id,
-            "model-b",
-            "CHAT",
-            "anthropic",
-            200,
-            60,
-            0,
-            2.0,
-            day1,
+        _seed_usage(
+            db_session, user_id, "model-b", "CHAT", "anthropic", 200, 60, 0, 2.0, day1
         )
-        record_user_usage(
-            db_session,
-            user_id,
-            "model-a",
-            "CHAT",
-            "anthropic",
-            300,
-            70,
-            0,
-            3.0,
-            day2,
+        _seed_usage(
+            db_session, user_id, "model-a", "CHAT", "anthropic", 300, 70, 0, 3.0, day2
         )
 
         result = get_user_usage_by_day_and_model(
@@ -238,10 +183,8 @@ class TestAggregation:
         other_id = str(uuid4())
         day1 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
 
-        record_user_usage(
-            db_session, user_id, "model-a", "CHAT", None, 100, 50, 0, 1.0, day1
-        )
-        record_user_usage(
+        _seed_usage(db_session, user_id, "model-a", "CHAT", None, 100, 50, 0, 1.0, day1)
+        _seed_usage(
             db_session, other_id, "model-a", "CHAT", None, 999, 50, 0, 9.0, day1
         )
 
@@ -260,29 +203,11 @@ class TestCostInWindow:
         user_id = str(uuid4())
         window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
 
-        record_user_usage(
-            db_session,
-            user_id,
-            "model-a",
-            "CHAT",
-            "anthropic",
-            10,
-            5,
-            0,
-            1.25,
-            window,
+        _seed_usage(
+            db_session, user_id, "model-a", "CHAT", "anthropic", 10, 5, 0, 1.25, window
         )
-        record_user_usage(
-            db_session,
-            user_id,
-            "model-b",
-            "BUILD",
-            "openai",
-            20,
-            5,
-            0,
-            2.75,
-            window,
+        _seed_usage(
+            db_session, user_id, "model-b", "BUILD", "openai", 20, 5, 0, 2.75, window
         )
 
         total = get_user_cost_cents_in_window(db_session, user_id, window)
@@ -298,20 +223,18 @@ class TestCostInWindow:
 
 
 class TestUserCostSince:
-    """Range-scan cost read: sums window_start >= cutoff."""
-
     def test_includes_rows_at_or_after_cutoff(self, db_session: Session) -> None:
         user_id = str(uuid4())
         w = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
-        record_user_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 42.0, w)
+        _seed_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 42.0, w)
         assert get_user_cost_cents_since(db_session, user_id, w) == pytest.approx(42.0)
 
     def test_rows_before_cutoff_excluded(self, db_session: Session) -> None:
         user_id = str(uuid4())
         older = datetime.datetime(2026, 5, 25, tzinfo=datetime.timezone.utc)
         newer = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
-        record_user_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 5.0, older)
-        record_user_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 8.0, newer)
+        _seed_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 5.0, older)
+        _seed_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 8.0, newer)
         assert get_user_cost_cents_since(db_session, user_id, newer) == pytest.approx(
             8.0
         )
@@ -319,8 +242,8 @@ class TestUserCostSince:
     def test_excludes_other_users(self, db_session: Session) -> None:
         u1, u2 = str(uuid4()), str(uuid4())
         window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
-        record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, window)
-        record_user_usage(db_session, u2, "m", "CHAT", None, 1, 1, 0, 9.0, window)
+        _seed_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, window)
+        _seed_usage(db_session, u2, "m", "CHAT", None, 1, 1, 0, 9.0, window)
         assert get_user_cost_cents_since(db_session, u1, window) == pytest.approx(3.0)
 
 
@@ -328,8 +251,8 @@ class TestTotalCostSince:
     def test_sums_across_users(self, db_session: Session) -> None:
         u1, u2 = str(uuid4()), str(uuid4())
         window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
-        record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, window)
-        record_user_usage(db_session, u2, "m", "CHAT", None, 1, 1, 0, 4.0, window)
+        _seed_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, window)
+        _seed_usage(db_session, u2, "m", "CHAT", None, 1, 1, 0, 4.0, window)
 
         assert get_total_cost_cents_since(db_session, window) == pytest.approx(7.0)
 
@@ -337,16 +260,14 @@ class TestTotalCostSince:
         u1 = str(uuid4())
         w1 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
         w2 = datetime.datetime(2026, 6, 8, tzinfo=datetime.timezone.utc)
-        record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, w1)
-        record_user_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 9.0, w2)
+        _seed_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, w1)
+        _seed_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 9.0, w2)
 
-        # cutoff at w2 excludes the earlier w1 row
         assert get_total_cost_cents_since(db_session, w2) == pytest.approx(9.0)
 
 
 @pytest.fixture
 def db_session_with_groups() -> Generator[Session, None, None]:
-    """UserUsage + User__UserGroup tables, for group-scoped cost aggregation."""
     engine: Engine = create_engine("sqlite://")
     cast(Table, UserUsage.__table__).create(bind=engine)
     cast(Table, User__UserGroup.__table__).create(bind=engine)
@@ -371,8 +292,8 @@ class TestGroupCostSince:
             ]
         )
         s.flush()
-        record_user_usage(s, u1, "m", "CHAT", None, 1, 1, 0, 2.0, window)
-        record_user_usage(s, u2, "m", "CHAT", None, 1, 1, 0, 5.0, window)
-        record_user_usage(s, outsider, "m", "CHAT", None, 1, 1, 0, 99.0, window)
+        _seed_usage(s, u1, "m", "CHAT", None, 1, 1, 0, 2.0, window)
+        _seed_usage(s, u2, "m", "CHAT", None, 1, 1, 0, 5.0, window)
+        _seed_usage(s, outsider, "m", "CHAT", None, 1, 1, 0, 99.0, window)
 
         assert get_group_cost_cents_since(s, 10, window) == pytest.approx(7.0)

@@ -1,24 +1,19 @@
-"""Per-user usage recorder: capture, pricing args, drain, shutdown."""
+"""Per-user usage recorder: capture, pricing args, drain, shutdown.
+
+`record_user_usage` is Postgres-only; these tests mock it and assert call args
+rather than executing the upsert against SQLite."""
 
 from __future__ import annotations
 
 from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
 from typing import cast
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy import select
-from sqlalchemy import Table
-from sqlalchemy.dialects.postgresql import JSONB as PGJSONB
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.engine import Engine
-from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from onyx.db.models import UserUsage
 from onyx.tracing.framework.span_data import FunctionSpanData
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.span_data import SpanData
@@ -26,17 +21,6 @@ from onyx.tracing.framework.spans import Span
 from onyx.tracing.processors import user_usage_processor as proc_mod
 from onyx.tracing.processors.user_usage_processor import UserUsageTracingProcessor
 from shared_configs.contextvars import CURRENT_USER_ID_CONTEXTVAR
-
-
-# SQLite type shims for UserUsage.
-@compiles(PGUUID, "sqlite")
-def _compile_pguuid_sqlite(_element: object, _compiler: object, **_kw: object) -> str:
-    return "CHAR(36)"
-
-
-@compiles(PGJSONB, "sqlite")
-def _compile_jsonb_sqlite(_element: object, _compiler: object, **_kw: object) -> str:
-    return "JSON"
 
 
 class _FakeSpan:
@@ -68,37 +52,26 @@ def _generation_span(
 
 
 @pytest.fixture
-def sqlite_engine() -> Engine:
-    # StaticPool so drain-thread sessions see the same in-memory DB.
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    user_usage_table = cast(Table, UserUsage.__table__)
-    user_usage_table.create(bind=engine)
-    return engine
+def recorded_calls() -> list[dict[str, Any]]:
+    return []
 
 
 @pytest.fixture
 def processor(
-    monkeypatch: pytest.MonkeyPatch, sqlite_engine: Engine
+    monkeypatch: pytest.MonkeyPatch, recorded_calls: list[dict[str, Any]]
 ) -> Generator[UserUsageTracingProcessor, None, None]:
-    """Processor wired to test SQLite; compute_cost_cents pinned."""
-    SessionLocal = sessionmaker(bind=sqlite_engine)
-
-    from contextlib import contextmanager
+    """Processor with mocked session + record_user_usage; cost pinned."""
 
     @contextmanager
     def _fake_session(*, tenant_id: str) -> Generator[Any, None, None]:  # noqa: ARG001
-        session = SessionLocal()
-        try:
-            yield session
-        finally:
-            session.close()
+        yield MagicMock()
+
+    def _capture_record(db_session: Any, **kwargs: Any) -> None:  # noqa: ARG001
+        recorded_calls.append(kwargs)
 
     monkeypatch.setattr(proc_mod, "get_session_with_tenant", _fake_session)
     monkeypatch.setattr(proc_mod, "compute_cost_cents", lambda *_a, **_k: (1.0, 2.0))
+    monkeypatch.setattr(proc_mod, "record_user_usage", _capture_record)
 
     p = UserUsageTracingProcessor(flush_interval_seconds=0.05)
     try:
@@ -107,15 +80,11 @@ def processor(
         p.shutdown()
 
 
-def _read_rows(engine: Engine) -> list[UserUsage]:
-    with sessionmaker(bind=engine)() as s:
-        return list(s.execute(select(UserUsage)).scalars().all())
-
-
 def test_records_usage_when_user_id_set(
-    processor: UserUsageTracingProcessor, sqlite_engine: Engine
+    processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
 ) -> None:
-    token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+    user_id = str(uuid4())
+    token = CURRENT_USER_ID_CONTEXTVAR.set(user_id)
     try:
         processor.on_span_end(
             _generation_span(
@@ -131,20 +100,20 @@ def test_records_usage_when_user_id_set(
 
     processor.force_flush()
 
-    rows = _read_rows(sqlite_engine)
-    assert len(rows) == 1
-    row = rows[0]
-    assert row.input_tokens == 100
-    assert row.output_tokens == 50
-    assert row.cache_read_tokens == 20
-    assert row.model == "gpt-4o"
-    assert row.provider == "openai"
-    assert row.flow == "chat_response"
-    assert row.cost_cents == pytest.approx(3.0)  # 1.0 input + 2.0 output
+    assert len(recorded_calls) == 1
+    call = recorded_calls[0]
+    assert call["user_id"] == user_id
+    assert call["input_tokens"] == 100
+    assert call["output_tokens"] == 50
+    assert call["cache_read_tokens"] == 20
+    assert call["model"] == "gpt-4o"
+    assert call["provider"] == "openai"
+    assert call["flow"] == "chat_response"
+    assert call["cost_cents"] == pytest.approx(3.0)  # 1.0 input + 2.0 output
 
 
 def test_normalizes_prompt_completion_token_aliases(
-    processor: UserUsageTracingProcessor, sqlite_engine: Engine
+    processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
 ) -> None:
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
     try:
@@ -158,23 +127,21 @@ def test_normalizes_prompt_completion_token_aliases(
 
     processor.force_flush()
 
-    rows = _read_rows(sqlite_engine)
-    assert len(rows) == 1
-    assert rows[0].input_tokens == 7
-    assert rows[0].output_tokens == 3
+    assert len(recorded_calls) == 1
+    assert recorded_calls[0]["input_tokens"] == 7
+    assert recorded_calls[0]["output_tokens"] == 3
 
 
 def test_no_record_when_user_id_unset(
-    processor: UserUsageTracingProcessor, sqlite_engine: Engine
+    processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
 ) -> None:
-    # No CURRENT_USER_ID_CONTEXTVAR set -> background-worker-like context.
     processor.on_span_end(_generation_span(usage={"input_tokens": 5}))
     processor.force_flush()
-    assert _read_rows(sqlite_engine) == []
+    assert recorded_calls == []
 
 
 def test_ignores_non_generation_spans(
-    processor: UserUsageTracingProcessor, sqlite_engine: Engine
+    processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
 ) -> None:
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
     try:
@@ -184,11 +151,11 @@ def test_ignores_non_generation_spans(
     finally:
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
     processor.force_flush()
-    assert _read_rows(sqlite_engine) == []
+    assert recorded_calls == []
 
 
 def test_ignores_generation_span_without_usage(
-    processor: UserUsageTracingProcessor, sqlite_engine: Engine
+    processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
 ) -> None:
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
     try:
@@ -198,15 +165,14 @@ def test_ignores_generation_span_without_usage(
     finally:
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
     processor.force_flush()
-    assert _read_rows(sqlite_engine) == []
+    assert recorded_calls == []
 
 
 def test_on_span_end_never_raises_on_internal_error(
     processor: UserUsageTracingProcessor,
-    sqlite_engine: Engine,
+    recorded_calls: list[dict[str, Any]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # An exception anywhere in capture must be swallowed (LLM hot path).
     def _boom(*_a: Any, **_k: Any) -> Any:
         raise RuntimeError("boom")
 
@@ -214,30 +180,20 @@ def test_on_span_end_never_raises_on_internal_error(
 
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
     try:
-        # Must not raise.
         processor.on_span_end(_generation_span(usage={"input_tokens": 1}))
     finally:
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
     processor.force_flush()
-    assert _read_rows(sqlite_engine) == []
+    assert recorded_calls == []
 
 
 def test_excludes_cache_reads_from_priced_input(
-    monkeypatch: pytest.MonkeyPatch, sqlite_engine: Engine
+    monkeypatch: pytest.MonkeyPatch, recorded_calls: list[dict[str, Any]]
 ) -> None:
-    # Assert compute_cost_cents gets non-cached input + separate cache_reads.
-    SessionLocal = sessionmaker(bind=sqlite_engine)
-
-    from contextlib import contextmanager
-
     @contextmanager
     def _fake_session(*, tenant_id: str) -> Generator[Any, None, None]:  # noqa: ARG001
-        session = SessionLocal()
-        try:
-            yield session
-        finally:
-            session.close()
+        yield MagicMock()
 
     monkeypatch.setattr(proc_mod, "get_session_with_tenant", _fake_session)
 
@@ -254,7 +210,11 @@ def test_excludes_cache_reads_from_priced_input(
         priced.append((input_tokens, output_tokens, cache_read_tokens))
         return (0.0, 0.0)
 
+    def _capture_record(db_session: Any, **kwargs: Any) -> None:  # noqa: ARG001
+        recorded_calls.append(kwargs)
+
     monkeypatch.setattr(proc_mod, "compute_cost_cents", _capture_cost)
+    monkeypatch.setattr(proc_mod, "record_user_usage", _capture_record)
 
     p = UserUsageTracingProcessor(flush_interval_seconds=0.05)
     try:
@@ -277,19 +237,16 @@ def test_excludes_cache_reads_from_priced_input(
         p.shutdown()
 
     assert priced == [(1000, 500, 2000)]
-
-    rows = _read_rows(sqlite_engine)
-    assert len(rows) == 1
-    assert rows[0].input_tokens == 3000
-    assert rows[0].cache_read_tokens == 2000
+    assert len(recorded_calls) == 1
+    assert recorded_calls[0]["input_tokens"] == 3000
+    assert recorded_calls[0]["cache_read_tokens"] == 2000
 
 
 def test_flush_swallows_record_errors(
     processor: UserUsageTracingProcessor,
-    sqlite_engine: Engine,
+    recorded_calls: list[dict[str, Any]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # A failure while writing one record must not crash the drain loop nor leak.
     def _boom(*_a: Any, **_k: Any) -> None:
         raise RuntimeError("db down")
 
@@ -301,6 +258,5 @@ def test_flush_swallows_record_errors(
     finally:
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
-    # Should not raise even though the write fails.
     processor.force_flush()
-    assert _read_rows(sqlite_engine) == []
+    assert recorded_calls == []

@@ -5,8 +5,6 @@ model, flow, provider), not an append-only per-call ledger."""
 
 from collections import defaultdict
 from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
 
 from sqlalchemy import func
 from sqlalchemy import select
@@ -18,32 +16,10 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserUsage
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 logger = setup_logger()
 
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider"]
-
-# Match tenant usage window; floor 1h. Recorder + /user/usage must share this grid.
-USAGE_PERIOD_HOURS = max(USAGE_LIMIT_WINDOW_SECONDS // 3600, 1)
-
-
-def get_window_start(dt: datetime, period_hours: int) -> datetime:
-    """Fixed UTC window start; weekly → Monday 00:00, else epoch-aligned.
-    Must match onyx/db/usage.py."""
-    dt = datetime_to_utc(dt)
-
-    # Guard against a 0/negative period producing a div-by-zero below.
-    period_seconds = max(period_hours, 1) * 3600
-
-    if period_seconds == 604800:  # 1 week — align to Monday 00:00 UTC
-        midnight = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        return midnight - timedelta(days=dt.weekday())
-
-    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
-    seconds_since_epoch = int((dt - epoch).total_seconds())
-    window_number = seconds_since_epoch // period_seconds
-    return epoch + timedelta(seconds=window_number * period_seconds)
 
 
 def record_user_usage(
@@ -62,67 +38,28 @@ def record_user_usage(
     # Store "" rather than NULL for a missing provider so the dedup unique index
     # collapses these rows on every Postgres version (no NULLS NOT DISTINCT).
     provider = provider or ""
-    dialect = db_session.bind.dialect.name if db_session.bind is not None else ""
-
-    if dialect == "postgresql":
-        stmt = pg_insert(UserUsage).values(
-            user_id=user_id,
-            window_start=window_start,
-            model=model,
-            flow=flow,
-            provider=provider,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cache_read_tokens=cache_read_tokens,
-            cost_cents=cost_cents,
-        )
-        stmt = stmt.on_conflict_do_update(
-            index_elements=_CONFLICT_COLS,
-            set_={
-                "input_tokens": UserUsage.input_tokens + stmt.excluded.input_tokens,
-                "output_tokens": UserUsage.output_tokens + stmt.excluded.output_tokens,
-                "cache_read_tokens": UserUsage.cache_read_tokens
-                + stmt.excluded.cache_read_tokens,
-                "cost_cents": UserUsage.cost_cents + stmt.excluded.cost_cents,
-            },
-        )
-        db_session.execute(stmt)
-        db_session.flush()
-        return
-
-    # Non-postgres (SQLite tests): SELECT ... FOR UPDATE then add-or-insert.
-    existing = db_session.execute(
-        select(UserUsage)
-        .where(
-            UserUsage.user_id == user_id,
-            UserUsage.window_start == window_start,
-            UserUsage.model == model,
-            UserUsage.flow == flow,
-            UserUsage.provider == provider,
-        )
-        .with_for_update()
-    ).scalar_one_or_none()
-
-    if existing is None:
-        db_session.add(
-            UserUsage(
-                user_id=user_id,
-                window_start=window_start,
-                model=model,
-                flow=flow,
-                provider=provider,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cache_read_tokens=cache_read_tokens,
-                cost_cents=cost_cents,
-            )
-        )
-    else:
-        existing.input_tokens += input_tokens
-        existing.output_tokens += output_tokens
-        existing.cache_read_tokens += cache_read_tokens
-        existing.cost_cents += cost_cents
-
+    stmt = pg_insert(UserUsage).values(
+        user_id=user_id,
+        window_start=window_start,
+        model=model,
+        flow=flow,
+        provider=provider,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cost_cents=cost_cents,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=_CONFLICT_COLS,
+        set_={
+            "input_tokens": UserUsage.input_tokens + stmt.excluded.input_tokens,
+            "output_tokens": UserUsage.output_tokens + stmt.excluded.output_tokens,
+            "cache_read_tokens": UserUsage.cache_read_tokens
+            + stmt.excluded.cache_read_tokens,
+            "cost_cents": UserUsage.cost_cents + stmt.excluded.cost_cents,
+        },
+    )
+    db_session.execute(stmt)
     db_session.flush()
 
 
@@ -294,6 +231,5 @@ def get_group_cost_cents_buckets_since(
 
     result: dict[int, list[tuple[datetime, float]]] = defaultdict(list)
     for group_id, window_start, cost in rows:
-        # SQLite returns naive datetimes; coerce so they compare with tz-aware cutoffs.
         result[group_id].append((datetime_to_utc(window_start), float(cost)))
     return result

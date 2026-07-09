@@ -25,7 +25,6 @@ from onyx.db.models import TokenRateLimit
 from onyx.db.models import TokenRateLimit__UserGroup
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserUsage
-from onyx.db.user_usage import record_user_usage
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.llm import cost_overrides
 from onyx.llm.cost import get_model_price_per_million
@@ -88,14 +87,41 @@ class _StubModelConfig:
         self.llm_provider = _StubProvider(provider)
 
 
+def _seed_usage(
+    db_session: Session,
+    user_id: str,
+    model: str,
+    flow: str,
+    provider: str | None,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int,
+    cost_cents: float,
+    window_start: datetime.datetime,
+) -> None:
+    db_session.add(
+        UserUsage(
+            user_id=user_id,
+            window_start=window_start,
+            model=model,
+            flow=flow,
+            provider=provider or "",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cost_cents=cost_cents,
+        )
+    )
+    db_session.flush()
+
+
 def _seed_current_window(db_session: Session, user_id: str) -> datetime.datetime:
-    from onyx.db.user_usage import get_window_start
+    from onyx.db.usage import USAGE_PERIOD_HOURS
+    from onyx.utils.datetime import get_window_start
 
     now = datetime.datetime.now(datetime.timezone.utc)
-    from onyx.db.user_usage import USAGE_PERIOD_HOURS
-
     window = get_window_start(now, USAGE_PERIOD_HOURS)
-    record_user_usage(
+    _seed_usage(
         db_session, user_id, "gpt-4o", "CHAT", "openai", 100, 50, 0, 1.25, window
     )
     return window
@@ -108,11 +134,11 @@ def test_returns_only_callers_rows_and_aggregates(
     other = str(uuid4())
     window = _seed_current_window(db_session, caller)
     # Same window, distinct model -> second per-day row for the caller.
-    record_user_usage(
+    _seed_usage(
         db_session, caller, "claude-3", "CHAT", "anthropic", 200, 60, 5, 2.0, window
     )
     # Another user's usage must never surface.
-    record_user_usage(
+    _seed_usage(
         db_session, other, "gpt-4o", "CHAT", "openai", 999, 999, 0, 99.0, window
     )
 

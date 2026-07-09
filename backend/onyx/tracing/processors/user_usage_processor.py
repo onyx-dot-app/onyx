@@ -11,14 +11,14 @@ from datetime import timezone
 from typing import Any
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.user_usage import get_window_start
+from onyx.db.usage import USAGE_PERIOD_HOURS
 from onyx.db.user_usage import record_user_usage
-from onyx.db.user_usage import USAGE_PERIOD_HOURS
 from onyx.llm.cost import compute_cost_cents
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
+from onyx.utils.datetime import get_window_start
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id

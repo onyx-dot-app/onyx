@@ -22,14 +22,13 @@ from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.db.token_limit import fetch_user_group_token_rate_limits
+from onyx.db.usage import USAGE_PERIOD_HOURS
 from onyx.db.user_usage import get_group_cost_cents_buckets_since
 from onyx.db.user_usage import get_total_cost_cents_since
 from onyx.db.user_usage import get_usage_export
 from onyx.db.user_usage import get_user_cost_cents_in_window
 from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.db.user_usage import get_user_usage_by_day_and_model
-from onyx.db.user_usage import get_window_start
-from onyx.db.user_usage import USAGE_PERIOD_HOURS
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cost import get_model_price_per_million
@@ -46,6 +45,7 @@ from onyx.server.features.usage.models import UsageExportResponse
 from onyx.server.features.usage.models import UsageExportTotals
 from onyx.server.features.usage.models import UsageExportUser
 from onyx.server.features.usage.models import UserUsageResponse
+from onyx.utils.datetime import get_window_start
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
 # Default trailing range for the export when no start is given.

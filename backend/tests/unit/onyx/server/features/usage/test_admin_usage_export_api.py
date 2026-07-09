@@ -24,7 +24,6 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import UserUsage
 from onyx.db.user_usage import get_usage_export
-from onyx.db.user_usage import record_user_usage
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.features.usage.api import admin_usage_router
 
@@ -90,23 +89,42 @@ _W1 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)  # Monday
 _W2 = datetime.datetime(2026, 6, 8, tzinfo=datetime.timezone.utc)  # next Monday
 
 
+def _seed_usage(
+    db_session: Session,
+    user_id: str,
+    model: str,
+    flow: str,
+    provider: str | None,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int,
+    cost_cents: float,
+    window_start: datetime.datetime,
+) -> None:
+    db_session.add(
+        UserUsage(
+            user_id=user_id,
+            window_start=window_start,
+            model=model,
+            flow=flow,
+            provider=provider or "",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cost_cents=cost_cents,
+        )
+    )
+
+
 def _seed_two_users(db_session: Session) -> tuple[str, str]:
     """alice: model-a in W1 + W2, model-b in W1.  bob: model-a in W2."""
     alice = _add_user(db_session, "alice@example.com")
     bob = _add_user(db_session, "bob@example.com")
 
-    record_user_usage(
-        db_session, alice, "model-a", "CHAT", "openai", 100, 50, 5, 1.0, _W1
-    )
-    record_user_usage(
-        db_session, alice, "model-b", "CHAT", "openai", 200, 60, 0, 2.0, _W1
-    )
-    record_user_usage(
-        db_session, alice, "model-a", "CHAT", "openai", 300, 70, 0, 3.0, _W2
-    )
-    record_user_usage(
-        db_session, bob, "model-a", "CHAT", "anthropic", 400, 80, 0, 4.0, _W2
-    )
+    _seed_usage(db_session, alice, "model-a", "CHAT", "openai", 100, 50, 5, 1.0, _W1)
+    _seed_usage(db_session, alice, "model-b", "CHAT", "openai", 200, 60, 0, 2.0, _W1)
+    _seed_usage(db_session, alice, "model-a", "CHAT", "openai", 300, 70, 0, 3.0, _W2)
+    _seed_usage(db_session, bob, "model-a", "CHAT", "anthropic", 400, 80, 0, 4.0, _W2)
     db_session.commit()
     return alice, bob
 
