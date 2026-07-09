@@ -669,9 +669,7 @@ def connector_pruning_generator_task(
                 raw_id_to_parent=all_connector_doc_ids,
             )
 
-            # Backfill source creation time collected during enumeration (a no-op
-            # until connectors emit it). Bumps last_modified so the metadata sync
-            # task patches it onto the indexed chunks.
+            # Backfill source creation time collected during enumeration.
             backfill_docs_created_at__no_commit(
                 ids_to_created_at=extraction_result.id_to_created_at,
                 db_session=db_session,
