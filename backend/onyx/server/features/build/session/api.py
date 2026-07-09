@@ -39,7 +39,6 @@ from onyx.server.features.build.db.build_session import set_build_session_sharin
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
@@ -64,9 +63,15 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
 )
 from onyx.server.features.build.session.sandbox_lifecycle import hydrate_managed_content
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    mark_sandbox_provisioning,
+)
 from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
 from onyx.server.features.build.session.sandbox_lifecycle import (
     recover_unhealthy_sandbox,
+)
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    rollback_failed_provisioning,
 )
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
 from onyx.server.features.build.utils import sanitize_filename
@@ -422,10 +427,7 @@ def restore_session(
         llm_config, all_llm_configs = SessionManager(db_session).build_llm_configs(user)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
-            update_sandbox_status__no_commit(
-                db_session, sandbox.id, SandboxStatus.PROVISIONING
-            )
-            db_session.commit()
+            mark_sandbox_provisioning(db_session, sandbox)
 
             # Provisions, hydrates managed content, and stages the new status;
             # a failure rolls the row back to SLEEPING in the handler below.
@@ -513,24 +515,17 @@ def restore_session(
         try:
             db_session.rollback()
             stuck = get_sandbox_by_user_id(db_session, user.id)
-            if stuck is not None and stuck.status == SandboxStatus.PROVISIONING:
-                # provision() failed — back to SLEEPING so it isn't stuck.
-                update_sandbox_status__no_commit(
-                    db_session, stuck.id, SandboxStatus.SLEEPING
-                )
-                db_session.commit()
-                logger.info(
-                    "Rolled sandbox %s back to SLEEPING after failed restore",
-                    stuck.id,
-                )
-            elif stuck is not None and stuck.status == SandboxStatus.RUNNING:
-                # Workspace load failed after provision — drop the partial dir
-                # so session_workspace_exists() doesn't later report it restored.
-                sandbox_manager.cleanup_session_workspace(stuck.id, session_id)
-                logger.info(
-                    "Cleaned up partial workspace for session %s after failed restore",
-                    session_id,
-                )
+            if stuck is not None and not rollback_failed_provisioning(
+                db_session, stuck
+            ):
+                if stuck.status == SandboxStatus.RUNNING:
+                    # Workspace load failed after provision — drop the partial dir
+                    # so session_workspace_exists() doesn't later report it restored.
+                    sandbox_manager.cleanup_session_workspace(stuck.id, session_id)
+                    logger.info(
+                        "Cleaned up partial workspace for session %s after failed restore",
+                        session_id,
+                    )
         except Exception as rollback_err:
             logger.warning(
                 "Failed to recover sandbox state after restore failure: %s",

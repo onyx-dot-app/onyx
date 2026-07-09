@@ -47,6 +47,15 @@ logger = setup_logger()
 
 _HEALTHCHECK_TIMEOUT_SECONDS = 5.0
 
+# Statuses from which (re-)provisioning a pod is legal.
+_REPROVISIONABLE_STATUSES: frozenset[SandboxStatus] = frozenset(
+    {
+        SandboxStatus.SLEEPING,
+        SandboxStatus.TERMINATED,
+        SandboxStatus.FAILED,
+    }
+)
+
 
 def snapshot_opencode_history_before_recovery(
     sandbox_manager: SandboxManager,
@@ -328,11 +337,7 @@ def ensure_sandbox_ready(
         recover_unhealthy_sandbox(db_session, sandbox_manager, sandbox, tenant_id)
         # Fall through into the re-provision path below.
 
-    if sandbox is not None and sandbox.status not in {
-        SandboxStatus.SLEEPING,
-        SandboxStatus.TERMINATED,
-        SandboxStatus.FAILED,
-    }:
+    if sandbox is not None and sandbox.status not in _REPROVISIONABLE_STATUSES:
         raise RuntimeError(
             f"Sandbox {sandbox.id} in unexpected status "
             f"{sandbox.status.value}; refusing to provision"
@@ -492,3 +497,37 @@ def sleep_sandbox(
     update_sandbox_status__no_commit(db_session, sandbox_id, SandboxStatus.SLEEPING)
     db_session.commit()
     logger.info("Sandbox %s is now sleeping", sandbox_id)
+
+
+def mark_sandbox_provisioning(db_session: DBSession, sandbox: Sandbox) -> None:
+    """Mark a re-provisionable sandbox as PROVISIONING before re-provisioning.
+
+    Commits deliberately so the transition is immediately visible to concurrent
+    pollers of the state machine (e.g. ``_wait_for_provisioning_to_complete``).
+
+    Raises:
+        RuntimeError: sandbox is not in a re-provisionable status (guards
+            against clobbering RUNNING or a concurrent PROVISIONING).
+    """
+    if sandbox.status not in _REPROVISIONABLE_STATUSES:
+        raise RuntimeError(
+            f"Sandbox {sandbox.id} in unexpected status "
+            f"{sandbox.status.value}; refusing to mark PROVISIONING"
+        )
+    update_sandbox_status__no_commit(db_session, sandbox.id, SandboxStatus.PROVISIONING)
+    db_session.commit()
+
+
+def rollback_failed_provisioning(db_session: DBSession, sandbox: Sandbox) -> bool:
+    """Compensating transition for provisioning that died mid-flight:
+    return the sandbox to ``SLEEPING`` (committed) so the stuck status
+    doesn't block the next attempt. Returns whether a rollback was applied.
+    """
+    if sandbox.status != SandboxStatus.PROVISIONING:
+        return False
+    update_sandbox_status__no_commit(db_session, sandbox.id, SandboxStatus.SLEEPING)
+    db_session.commit()
+    logger.info(
+        "Rolled sandbox %s back to SLEEPING after failed provisioning", sandbox.id
+    )
+    return True
