@@ -923,20 +923,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             except exceptions.UserNotExists:
                 try:
-                    # Attempt to get user by email
+                    # The user_db adapter returns None for a missing email, it
+                    # does not raise UserNotExists like the manager method.
                     user = await self.user_db.get_by_email(account_email)
+                    if user is None:
+                        raise exceptions.UserNotExists()
                     if not associate_by_email:
+                        # Linking a login to an existing same-email account is
+                        # an account-takeover vector unless explicitly enabled.
                         raise exceptions.UserAlreadyExists()
 
-                    # Make sure user is not None before adding OAuth account
-                    if user is not None:
-                        user = await self.user_db.add_oauth_account(
-                            user, oauth_account_dict
-                        )
-                    else:
-                        # This shouldn't happen since get_by_email would raise UserNotExists
-                        # but adding as a safeguard
-                        raise exceptions.UserNotExists()
+                    user = await self.user_db.add_oauth_account(
+                        user, oauth_account_dict
+                    )
 
                 except exceptions.UserNotExists:
                     # OAuth-created accounts are not subject to the dotted-Gmail
