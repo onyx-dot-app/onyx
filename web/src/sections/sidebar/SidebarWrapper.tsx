@@ -3,7 +3,7 @@
 import React from "react";
 import { SidebarLayouts } from "@opal/layouts";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
-import Logo from "@/refresh-components/Logo";
+import { Logo } from "@/lib/app/components";
 
 /**
  * Renders the app-branded logo for use as the `logo` prop on sidebar primitives.
