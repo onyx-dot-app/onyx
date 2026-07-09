@@ -68,13 +68,13 @@ import { markdown } from "@opal/utils";
     <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
     <AuthLayouts.OrSeparator />
     <Formik ...>
-      {({ isSubmitting }) => (
+      {({ isSubmitting, isValid, dirty }) => (
         <Form className="flex flex-col gap-6">
           <AuthLayouts.Fields>
             <TextFormField name="email" label="Email" type="email" />
             <TextFormField name="password" label="Password" type="password" />
           </AuthLayouts.Fields>
-          <AuthLayouts.Submit label="sign-in" isSubmitting={isSubmitting} isValid={isValid} dirty={dirty} />
+          <AuthLayouts.Submit label="submit" isSubmitting={isSubmitting} isValid={isValid} dirty={dirty} />
         </Form>
       )}
     </Formik>
