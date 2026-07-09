@@ -1099,6 +1099,13 @@ export default function AgentEditorPage({
           );
           selectedIds = replaced;
           setFieldValue("user_file_ids", replaced);
+        },
+        (failedTempIds) => {
+          // Drop optimistic ids for rejected files (e.g. size/token limit) so
+          // they don't linger as "uploading" and keep the submit button disabled.
+          const failed = new Set(failedTempIds);
+          selectedIds = selectedIds.filter((id) => !failed.has(id));
+          setFieldValue("user_file_ids", selectedIds);
         }
       );
       if (optimistic) {
