@@ -132,9 +132,7 @@ backoff==2.2.1 \
 boto3==1.39.11 \
     --hash=sha256:3027edf20642fe1d5f9dc50a420d0fe2733073ed6a9f0f047b60fe08c3682132 \
     --hash=sha256:af8f1dad35eceff7658fab43b39b0f55892b6e3dd12308733521cc24dd2c9a02
-    # via
-    #   aiobotocore
-    #   cohere
+    # via aiobotocore
 botocore==1.39.11 \
     --hash=sha256:1545352931a8a186f3e977b1e1a4542d7d434796e274c3c62efd0210b5ea76dc \
     --hash=sha256:953b12909d6799350e346ab038e55b6efe622c616f80aef74d7a6683ffdd972c
@@ -252,9 +250,9 @@ click==8.3.1 \
     # via
     #   litellm
     #   uvicorn
-cohere==5.6.1 \
-    --hash=sha256:1c8bcd39a54622d64b83cafb865f102cd2565ce091b0856fd5ce11bf7169109a \
-    --hash=sha256:5d7efda64f0e512d4cc35aa04b17a6f74b3d8c175a99f2797991a7f31dfac349
+cohere==7.0.5 \
+    --hash=sha256:7fc682bb5c408402fc5ce59322bfa3f6aae27bde1ecc2450b0a25370040707ed \
+    --hash=sha256:fd98f82be28c969da7625adddede0bb85f8f84de399daf3a98c40c0e7b93e104
     # via onyx
 colorama==0.4.6 ; sys_platform == 'win32' \
     --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
@@ -603,10 +601,6 @@ httpx==0.28.1 \
     #   google-genai
     #   litellm
     #   openai
-httpx-sse==0.4.3 \
-    --hash=sha256:0ac1c9fe3c0afad2e0ebb25a934a59f4c7823b60792691f779fad2c5568830fc \
-    --hash=sha256:9b1ed0127459a66014aec3c56bebd93da3c1bc8bb6618c8082039a44889a755d
-    # via cohere
 huggingface-hub==0.36.2 \
     --hash=sha256:1934304d2fb224f8afa3b87007d58501acfda9215b334eed53072dd5e815ff7a \
     --hash=sha256:48f0c8eac16145dfce371e9d2d7772854a4f591bcb56c9cf548accf531d54270
@@ -880,10 +874,6 @@ packaging==24.2 \
     #   google-cloud-aiplatform
     #   google-cloud-bigquery
     #   huggingface-hub
-parameterized==0.9.0 \
-    --hash=sha256:4e0758e3d41bea3bbd05ec14fc2c24736723f243b28d702081aef438c9372b1b \
-    --hash=sha256:7fc905272cefa4f364c1a3429cbbe9c0f98b793988efb5bf90aac80f08db09b1
-    # via cohere
 posthog==3.7.4 \
     --hash=sha256:19384bd09d330f9787a7e2446aba14c8057ece56144970ea2791072d4e40cd36 \
     --hash=sha256:21c18c6bf43b2de303ea4cd6e95804cc0f24c20cb2a96a8fd09da2ed50b62faa
@@ -1032,7 +1022,9 @@ pydantic-core==2.33.2 \
     --hash=sha256:c8e7af2f4e0194c22b5b37205bfb293d166a7344a5b0d0eaccebc376546d77d5 \
     --hash=sha256:e80b087132752f6b3d714f041ccf74403799d3b23a72722ea2e6ba2e892555b9 \
     --hash=sha256:f517ca031dfc037a9c07e748cefd8d96235088b83b4f4ba8939105d20fa1dcd6
-    # via pydantic
+    # via
+    #   cohere
+    #   pydantic
 python-dateutil==2.9.0.post0 \
     --hash=sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3 \
     --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
