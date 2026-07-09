@@ -23,6 +23,7 @@ import useScreenSize from "@opal/hooks/useScreenSize";
 // ---------------------------------------------------------------------------
 
 const SCROLL_POSITION_PREFIX = "opal-sidebar-scroll-";
+const SIDEBAR_LOGO_HEIGHT_PX = 28;
 
 // ---------------------------------------------------------------------------
 // Root
@@ -156,7 +157,7 @@ function SidebarHeader({
   );
 
   const Logo = renderAppLogo(foldable ? folded : undefined);
-  const logoEl = <Logo size={28} />;
+  const logoEl = <Logo size={SIDEBAR_LOGO_HEIGHT_PX} />;
 
   return (
     <div className="opal-sidebar-header">
