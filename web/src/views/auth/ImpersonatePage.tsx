@@ -14,6 +14,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { markdown } from "@opal/utils";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
+import { getAppLogo } from "@/lib/app/utils";
 
 const initialValues = { email: "", apiKey: "" };
 
@@ -61,7 +62,7 @@ export default function ImpersonatePage() {
       title="Impersonate User"
       description="Cloud superuser access only."
       bottomPrompt={backToLoginOrSignupCopy()}
-      logoSrc={logoUrl}
+      icon={getAppLogo(logoUrl)}
     >
       <Formik
         initialValues={initialValues}

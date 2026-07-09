@@ -1,7 +1,13 @@
+from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
+
+
+def validate_canvas_perm_sync(connector: CanvasConnector) -> None:
+    connector.probe_course_user_email_visibility()
+    connector.probe_account_user_listing_permission()
 
 
 def validate_confluence_perm_sync(connector: ConfluenceConnector) -> None:
@@ -52,7 +58,9 @@ def validate_perm_sync(connector: BaseConnector) -> None:
 
     Default is a no-op (always successful).
     """
-    if isinstance(connector, ConfluenceConnector):
+    if isinstance(connector, CanvasConnector):
+        validate_canvas_perm_sync(connector)
+    elif isinstance(connector, ConfluenceConnector):
         validate_confluence_perm_sync(connector)
     elif isinstance(connector, GoogleDriveConnector):
         validate_drive_perm_sync(connector)

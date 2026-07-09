@@ -53,12 +53,9 @@ from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
-from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
-from onyx.server.features.build.sandbox.user_library import hydrate_user_library
-from onyx.server.features.build.session import sandbox_lifecycle as _sandbox
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.errors import UploadLimitExceededError
@@ -67,9 +64,11 @@ from onyx.server.features.build.session.llm_config import get_all_build_mode_llm
 from onyx.server.features.build.session.llm_config import select_default_llm_config
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
 from onyx.server.features.build.session.naming import generate_session_name
+from onyx.server.features.build.session.sandbox_lifecycle import ensure_sandbox_ready
+from onyx.server.features.build.session.sandbox_lifecycle import hydrate_managed_content
+from onyx.server.features.build.session.sandbox_lifecycle import ProvisioningPolicy
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.skills.push import build_user_skills_payload
-from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -199,24 +198,6 @@ class SessionManager:
         """
         return get_user_build_sessions(user_id, self._db_session)
 
-    def _hydrate_skills(
-        self, sandbox_id: UUID, user: User, files: FileSet | None = None
-    ) -> None:
-        try:
-            hydrate_sandbox_skills(sandbox_id, user, self._db_session, files=files)
-        except Exception:
-            logger.warning(
-                "Failed to push skills to sandbox %s", sandbox_id, exc_info=True
-            )
-
-    def _hydrate_user_library(self, sandbox_id: UUID, user_id: UUID) -> None:
-        try:
-            hydrate_user_library(sandbox_id, user_id, self._db_session)
-        except Exception:
-            logger.warning(
-                "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
-            )
-
     def _prewarm_opencode_session(
         self, sandbox_id: UUID, session: BuildSession
     ) -> None:
@@ -285,15 +266,16 @@ class SessionManager:
         if user is None:
             raise ValueError(f"User {user_id} not found")
         _, all_llm_configs = self.build_llm_configs(user)
-        return _sandbox.ensure_sandbox_ready(
+        sandbox = ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
             user_id,
             all_llm_configs,
-            policy=_sandbox.ProvisioningPolicy.POLL,
+            policy=ProvisioningPolicy.POLL,
             provisioning_wait_seconds=provisioning_wait_seconds,
             user=user,
         )
+        return sandbox
 
     def create_session__no_commit(
         self,
@@ -371,12 +353,12 @@ class SessionManager:
         # afford to wait through a concurrent provisioner, so we use the
         # FAIL policy (raise RuntimeError if another request is mid-
         # provision).
-        sandbox = _sandbox.ensure_sandbox_ready(
+        sandbox = ensure_sandbox_ready(
             self._db_session,
             self._sandbox_manager,
             user_id,
             all_llm_configs,
-            policy=_sandbox.ProvisioningPolicy.FAIL,
+            policy=ProvisioningPolicy.FAIL,
             user=user,
         )
 
@@ -389,6 +371,15 @@ class SessionManager:
         skills_section, connectable_apps_section, skills_files = (
             build_user_skills_payload(user, self._db_session)
         )
+        # Push the exact fileset AGENTS.md is rendered from, before rendering
+        # it — a skill can never be advertised while missing from disk.
+        hydrate_managed_content(
+            self._sandbox_manager,
+            sandbox.id,
+            user,
+            self._db_session,
+            skills_files=skills_files,
+        )
 
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
@@ -399,8 +390,6 @@ class SessionManager:
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
-        self._hydrate_skills(sandbox.id, user, files=skills_files)
-        self._hydrate_user_library(sandbox.id, user_id)
         self._prewarm_opencode_session(sandbox.id, build_session)
 
         logger.info(
@@ -462,8 +451,9 @@ class SessionManager:
                     if user is None:
                         logger.warning("Cannot push skills: user %s not found", user_id)
                     else:
-                        self._hydrate_skills(sandbox.id, user)
-                    self._hydrate_user_library(sandbox.id, user_id)
+                        hydrate_managed_content(
+                            self._sandbox_manager, sandbox.id, user, self._db_session
+                        )
                     self._prewarm_opencode_session(sandbox.id, existing)
                     logger.info(
                         "Returning existing empty session %s for user %s",
@@ -1184,7 +1174,9 @@ class SessionManager:
             webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
 
             # Quick health check: can the API server reach the NextJS dev server?
-            ready = self._check_nextjs_ready(sandbox.id, session.nextjs_port)
+            ready = self._check_nextjs_ready(
+                sandbox.id, session_id, session.nextjs_port
+            )
 
         return {
             "has_webapp": session.nextjs_port is not None,
@@ -1194,21 +1186,29 @@ class SessionManager:
             "sharing_scope": session.sharing_scope,
         }
 
-    def _check_nextjs_ready(self, sandbox_id: UUID, port: int) -> bool:
+    def _check_nextjs_ready(
+        self, sandbox_id: UUID, session_id: UUID, port: int
+    ) -> bool:
         """Check if the NextJS dev server is responding.
 
-        Does a quick HTTP GET to the sandbox's internal URL with a short timeout.
-        Returns True if the server responds with any status code, False on timeout
-        or connection error.
+        Probes a basePath-scoped dev-asset path with a short timeout: probing
+        outside the basePath renders a spurious 404 page on every poll, and
+        probing the app page itself would report not-ready whenever generated
+        app code 500s (the iframe's error overlay is the right surface for
+        that). A missing /_next/static asset returns a plain 404 without
+        executing app code, so any response means the server is up.
         """
         try:
             sandbox_manager = get_sandbox_manager()
             internal_url = sandbox_manager.get_webapp_url(sandbox_id, port)
+            probe_url = (
+                f"{internal_url}/api/build/sessions/{session_id}/webapp"
+                "/_next/static/onyx-ready-probe.js"
+            )
             with httpx.Client(timeout=2.0) as client:
-                resp = client.get(internal_url)
-                # Any response (even 500) means the server is up
-                return resp.status_code < 500
-        except (httpx.TimeoutException, httpx.ConnectError, Exception):
+                client.get(probe_url)
+            return True
+        except Exception:
             return False
 
     def download_webapp_zip(

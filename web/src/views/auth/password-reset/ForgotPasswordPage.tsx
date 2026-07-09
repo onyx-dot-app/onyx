@@ -6,6 +6,7 @@ import { forgotPassword } from "@/lib/auth/svc";
 import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
+import { getAppLogo } from "@/lib/app/utils";
 import { markdown } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
@@ -58,7 +59,7 @@ export default function ForgotPasswordPage() {
       title="Check your inbox"
       description="We’ve sent a password reset link to your email address."
       bottomPrompt={backToLoginOrSignupCopy()}
-      logoSrc={logoUrl}
+      icon={getAppLogo(logoUrl)}
     >
       <AuthLayouts.Message
         title={`Email sent to ${email}.`}

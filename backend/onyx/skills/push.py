@@ -18,6 +18,7 @@ from onyx.db.skill import SkillAccessPolicy
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
+from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import PushResult
@@ -183,12 +184,14 @@ def hydrate_sandbox_skills(
     sandbox_id: UUID,
     user: User,
     db_session: Session,
+    *,
+    sandbox_manager: SandboxManager,
     files: FileSet | None = None,
 ) -> PushResult:
     """Push all visible skills to a single sandbox (cold-start hydration)."""
     if files is None:
         files = build_skills_fileset_for_user(user, db_session)
-    return get_sandbox_manager().push_to_sandbox(
+    return sandbox_manager.push_to_sandbox(
         sandbox_id=sandbox_id,
         mount_path=SKILLS_MOUNT_PATH,
         files=files,

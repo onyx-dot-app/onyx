@@ -30,6 +30,7 @@ KUBERNETES_SANDBOX_MANAGER = (
     Path(api.__file__).resolve().parents[0]
     / "sandbox/kubernetes/kubernetes_sandbox_manager.py"
 )
+NEXTJS_DEV_SCRIPT = Path(api.__file__).resolve().parents[0] / "sandbox/nextjs_dev.py"
 WEB_NEXT_CONFIG = Path(__file__).resolve().parents[4] / "web/next.config.js"
 
 
@@ -48,20 +49,26 @@ class TestNextjsProxyMountContract:
         assert "assetPrefix" in config_source
         assert re.search(r"\bbasePath\s*[:=]", config_source)
 
-    def test_sandbox_start_scripts_export_next_base_path(self) -> None:
+    def test_sandbox_start_script_exports_next_base_path(self) -> None:
+        source = NEXTJS_DEV_SCRIPT.read_text()
+
+        assert (
+            'export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename '
+            '{session_path})/webapp"'
+        ) in source
+        assert "export WEBAPP_ASSET_PREFIX" not in source
+        assert 'grep -q "WEBAPP_ASSET_PREFIX" next.config.ts' in source
+        assert "nextConfig.basePath = webappBasePath" in source
+        assert "nextConfig.assetPrefix = webappBasePath" in source
+
+    def test_sandbox_managers_use_shared_start_script(self) -> None:
         for manager_source in (DOCKER_SANDBOX_MANAGER, KUBERNETES_SANDBOX_MANAGER):
             source = manager_source.read_text()
 
             assert (
-                'export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename '
-                '{session_path})/webapp"'
+                "from onyx.server.features.build.sandbox.nextjs_dev import "
+                "build_nextjs_start_script"
             ) in source
-            assert "export WEBAPP_ASSET_PREFIX" not in source
-            assert 'grep -q "WEBAPP_ASSET_PREFIX" next.config.ts' in source
-            assert (
-                "? {{ basePath: webappBasePath, assetPrefix: webappBasePath }}"
-                in source
-            )
 
     def test_web_dev_rewrites_hmr_websocket_to_backend(self) -> None:
         """Local Next dev cannot proxy websocket upgrades via /api/[...path]."""
@@ -314,6 +321,13 @@ class TestProxyRequestWiring:
             "X-Forwarded-User": "victim@example.com",
             "X-Forwarded-Email": "victim@example.com",
             "X-Forwarded-Preferred-Username": "victim",
+            # Browser context — Next dev blocks /_next/* on unlisted Origins.
+            "Origin": "https://cloud.onyx.app",
+            # sec-fetch-* prefix matcher (not literal deny-list entries).
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-User": "?1",
             # x-onyx-* prefix matcher (not literal deny-list entries).
             "X-Onyx-Authorization": "Bearer alt-victim-token",
             "X-Onyx-Tenant-ID": "victim-tenant",

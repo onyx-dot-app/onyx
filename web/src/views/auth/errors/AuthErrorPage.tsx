@@ -7,6 +7,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { backToLoginOrSignupCopy, welcomeCardCopy } from "@/lib/auth/copies";
+import { getAppLogo } from "@/lib/app/utils";
 
 const ERROR_CODE_MESSAGES: Record<string, string> = {
   access_denied: "Access was denied by your identity provider.",
@@ -44,7 +45,7 @@ export default function AuthErrorPage() {
     <AuthLayouts.Card
       {...welcomeCardCopy(appName)}
       bottomPrompt={backToLoginOrSignupCopy()}
-      logoSrc={logoUrl}
+      icon={getAppLogo(logoUrl)}
     >
       <AuthLayouts.Message
         messageType="warning"

@@ -13,6 +13,7 @@ import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { AuthType } from "@/lib/auth/types";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { useAuthRedirect } from "@/lib/auth/hooks";
+import { getAppLogo } from "@/lib/app/utils";
 import { markdown } from "@opal/utils";
 
 function getAuthUrl(authType: AuthType, nextUrl: string | null): string | null {
@@ -100,7 +101,7 @@ export default function LoginPage() {
     <AuthLayouts.Card
       {...welcomeCardCopy(appName)}
       bottomPrompt={bottomPrompt}
-      logoSrc={logoUrl}
+      icon={getAppLogo(logoUrl)}
     >
       {verified && (
         <AuthLayouts.Message

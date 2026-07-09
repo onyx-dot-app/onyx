@@ -10,6 +10,7 @@ import { useCurrentUser } from "@/lib/users/hooks";
 import { verifyEmail } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
 import { backToLoginOrSignupCopy, welcomeCardCopy } from "@/lib/auth/copies";
+import { getAppLogo } from "@/lib/app/utils";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function VerifyEmailPage() {
     <AuthLayouts.Card
       {...welcomeCardCopy(appName)}
       bottomPrompt={backToLoginOrSignupCopy()}
-      logoSrc={logoUrl}
+      icon={getAppLogo(logoUrl)}
     >
       {verified ? (
         <AuthLayouts.Message

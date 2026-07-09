@@ -47,6 +47,19 @@ JIRA_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 
 
 #####
+# Canvas
+#####
+# In seconds, default is 30 minutes
+CANVAS_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("CANVAS_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+# In seconds, default is 30 minutes
+CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
+)
+
+
+#####
 # Google Drive
 #####
 GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY = int(

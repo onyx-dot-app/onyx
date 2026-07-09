@@ -14,13 +14,13 @@ from __future__ import annotations
 
 import datetime
 from typing import Callable
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.build.tasks import is_sandbox_idle
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
@@ -29,11 +29,16 @@ from onyx.db.models import User
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
 from onyx.server.features.build.db.sandbox import get_running_sandboxes
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
+from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
+from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
 from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.sandbox_lifecycle import is_sandbox_idle
 from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
+from onyx.skills.push import SKILLS_MOUNT_PATH
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
 from tests.common.craft.stubs import StubSandboxManager
@@ -61,6 +66,8 @@ class TestProvisionTransitions:
             status=SandboxStatus.RUNNING,
             last_heartbeat=None,
         )
+        # Provisioning hydrates managed content (skills + user library).
+        stub_sandbox_manager.write_files_to_sandbox_silent = True
 
         provision_sandbox(
             db_session=db_session,
@@ -441,3 +448,198 @@ class TestIdleCleanupSelection:
             s.id for s in get_running_sandboxes(db_session) if is_sandbox_idle(s, now)
         }
         assert row.id not in idle_ids
+
+
+class _PushRecordingStub(StubSandboxManager):
+    """Records (mount_path, sandbox row status at push time) for each push,
+    plus a unified op log ordering pushes against workspace renders."""
+
+    def __init__(self, row: Sandbox) -> None:
+        super().__init__()
+        self._row = row
+        self.write_files_to_sandbox_silent = True
+        self.pushes: list[tuple[str, SandboxStatus]] = []
+        self.ops: list[str] = []
+
+    def write_files_to_sandbox(
+        self,
+        *,
+        sandbox_id: UUID,
+        mount_path: str,
+        files: FileSet,
+    ) -> None:
+        self.pushes.append((mount_path, self._row.status))
+        self.ops.append(f"push:{mount_path}")
+        super().write_files_to_sandbox(
+            sandbox_id=sandbox_id, mount_path=mount_path, files=files
+        )
+
+    def setup_session_workspace(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        llm_config: LLMProviderConfig,
+        nextjs_port: int | None,
+        skills_section: str,
+        connectable_apps_section: str,
+        user_name: str | None = None,
+    ) -> None:
+        self.ops.append("render_workspace")
+        super().setup_session_workspace(
+            sandbox_id,
+            session_id,
+            llm_config,
+            nextjs_port,
+            skills_section,
+            connectable_apps_section,
+            user_name,
+        )
+
+    def restore_snapshot(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        snapshot_storage_path: str,
+        nextjs_port: int | None,
+        llm_config: LLMProviderConfig,
+        skills_section: str,
+        connectable_apps_section: str,
+    ) -> None:
+        self.ops.append("render_workspace")
+        super().restore_snapshot(
+            sandbox_id,
+            session_id,
+            snapshot_storage_path,
+            nextjs_port,
+            llm_config,
+            skills_section,
+            connectable_apps_section,
+        )
+
+
+class TestManagedContentPushOrdering:
+    """Cold-start ordering guarantee: managed skills + user library are pushed
+    before a sandbox is reported RUNNING. Turns dispatch as soon as RUNNING is
+    visible and opencode scans the skills directory once per instance, so a
+    push still in flight at first-turn time permanently hides managed skills
+    (prod incident 2026-07-06: agent saw only ``customize-opencode``)."""
+
+    def test_provision_pushes_managed_content_before_running(
+        self,
+        db_session: Session,
+        test_user: User,
+    ) -> None:
+        row = create_sandbox__no_commit(db_session, test_user.id)
+        db_session.commit()
+
+        stub = _PushRecordingStub(row)
+        stub.provision_returns = SandboxInfo(
+            sandbox_id=row.id,
+            directory_path="/tmp/sandbox",
+            status=SandboxStatus.RUNNING,
+            last_heartbeat=None,
+        )
+
+        provision_sandbox(
+            db_session=db_session,
+            sandbox_manager=stub,
+            sandbox=row,
+            user=test_user,
+            user_id=test_user.id,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            all_llm_configs=[default_llm_config()],
+        )
+        db_session.commit()
+        db_session.refresh(row)
+
+        assert row.status == SandboxStatus.RUNNING
+        assert [mount for mount, _ in stub.pushes] == [
+            SKILLS_MOUNT_PATH,
+            USER_LIBRARY_MOUNT_PATH,
+        ]
+        # Every push landed while the row had not yet flipped to RUNNING.
+        assert all(status == SandboxStatus.PROVISIONING for _, status in stub.pushes)
+
+    @pytest.mark.parametrize("has_snapshot", [False, True])
+    def test_restore_pushes_managed_content_before_running_commit(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        monkeypatch: pytest.MonkeyPatch,
+        has_snapshot: bool,
+    ) -> None:
+        """Covers both cold-wake branches: fresh workspace setup and snapshot
+        restore. A restore after hydration cannot clobber managed mounts —
+        snapshot archives are scoped to /workspace/sessions/<id>
+        (sandbox_daemon/snapshot.py) and config regen only re-links
+        /workspace/managed."""
+        row = sandbox(user=test_user, status=SandboxStatus.SLEEPING)
+        idle_session = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="wake-ordering",
+            status=BuildSessionStatus.IDLE,
+        )
+        db_session.add(idle_session)
+        if has_snapshot:
+            create_snapshot__no_commit(
+                db_session=db_session,
+                session_id=idle_session.id,
+                storage_path="craft/snapshots/wake-ordering.tar.gz",
+                size_bytes=1,
+            )
+        db_session.commit()
+
+        stub = _PushRecordingStub(row)
+        stub.provision_returns = SandboxInfo(
+            sandbox_id=row.id,
+            directory_path="/tmp/sandbox",
+            status=SandboxStatus.RUNNING,
+            last_heartbeat=None,
+        )
+        stub.session_workspace_exists_returns = False
+        if has_snapshot:
+            stub.restore_snapshot_silent = True
+        else:
+            stub.setup_session_workspace_silent = True
+
+        monkeypatch.setattr(
+            "onyx.server.features.build.session.api.get_sandbox_manager",
+            lambda: stub,
+        )
+        monkeypatch.setattr(
+            "onyx.server.features.build.session.manager.get_sandbox_manager",
+            lambda: stub,
+        )
+        monkeypatch.setattr(
+            "onyx.server.features.build.sandbox.factory._sandbox_manager_instance",
+            stub,
+        )
+
+        restore_session(
+            session_id=idle_session.id,
+            user=test_user,
+            db_session=db_session,
+        )
+
+        db_session.expire_all()
+        refreshed = db_session.get(Sandbox, row.id)
+        assert refreshed is not None
+        assert refreshed.status == SandboxStatus.RUNNING
+        assert stub.restore_snapshot_count == (1 if has_snapshot else 0)
+        assert stub.setup_session_workspace_count == (0 if has_snapshot else 1)
+        # First pair lands while the committed status is still PROVISIONING
+        # (no turn can dispatch against an unhydrated pod); the second pair is
+        # the fileset AGENTS.md is rendered from, pushed before the render so
+        # AGENTS.md can never land ahead of disk.
+        assert stub.ops == [
+            f"push:{SKILLS_MOUNT_PATH}",
+            f"push:{USER_LIBRARY_MOUNT_PATH}",
+            f"push:{SKILLS_MOUNT_PATH}",
+            f"push:{USER_LIBRARY_MOUNT_PATH}",
+            "render_workspace",
+        ]
+        assert all(
+            status == SandboxStatus.PROVISIONING for _, status in stub.pushes[:2]
+        )

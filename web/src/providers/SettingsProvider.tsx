@@ -5,6 +5,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { NEXT_PUBLIC_CLOUD_ENABLED, DOCS_BASE_URL } from "@/lib/constants";
 import { FetchError } from "@/lib/fetcher";
 import { welcomeCardCopy } from "@/lib/auth/copies";
+import { getAppLogo } from "@/lib/app/utils";
 import { markdown } from "@opal/utils";
 
 interface SettingsProviderProps {
@@ -28,7 +29,10 @@ export default function SettingsProvider({ children }: SettingsProviderProps) {
   if (error && !isAuthError(error)) {
     return (
       <AuthLayouts.Root>
-        <AuthLayouts.Card {...welcomeCardCopy(appName)} logoSrc={logoUrl}>
+        <AuthLayouts.Card
+          {...welcomeCardCopy(appName)}
+          icon={getAppLogo(logoUrl)}
+        >
           {NEXT_PUBLIC_CLOUD_ENABLED ? (
             <AuthLayouts.Message
               title="Maintenance in progress."

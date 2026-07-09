@@ -13,6 +13,7 @@ import { logout } from "@/lib/users/svc";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { getAuthRedirect, AuthPage } from "@/lib/auth/redirect";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
+import { isAuthPath } from "@/lib/auth/paths";
 
 interface AuthTypeAPIResponse {
   auth_type: string;
@@ -103,8 +104,6 @@ export function useAuthRedirect(currentPage: AuthPage): boolean {
   return isAuthStateLoading;
 }
 
-const AUTH_FLOW_PREFIX = "/auth";
-
 function computeSecondsUntilExpiration(user: User): number | null {
   if (!user.token_expires_at) return null;
   return getSecondsUntilExpiration(new Date(user.token_expires_at));
@@ -128,7 +127,7 @@ function computeSecondsUntilExpiration(user: User): number | null {
  */
 export function useSessionWatcher(): boolean {
   const pathname = usePathname();
-  const inAuthFlow = pathname?.startsWith(AUTH_FLOW_PREFIX) ?? false;
+  const inAuthFlow = isAuthPath(pathname);
 
   const { user, mutateUser, userError } = useCurrentUser();
   const expiryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

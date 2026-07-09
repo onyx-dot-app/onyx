@@ -11,8 +11,7 @@ import {
 import { Form } from "formik";
 import SvgArrowRightCircle from "@opal/icons/arrow-right-circle";
 import { Content } from "@opal/layouts";
-import { SvgOnyxLogo } from "@opal/logos";
-import type { RichStr } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgSimpleLoader } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
@@ -32,19 +31,19 @@ function Root({ children }: RootProps) {
 // ---------------------------------------------------------------------------
 
 interface CardProps {
+  icon: IconFunctionComponent;
   title: string | RichStr;
   description?: string | RichStr;
   children?: React.ReactNode;
   bottomPrompt?: string | RichStr;
-  logoSrc?: string | null;
 }
 
 function Card({
+  icon: Icon,
   title,
   description,
   children,
   bottomPrompt,
-  logoSrc,
 }: CardProps) {
   return (
     <div className="opal-auth-card-outer">
@@ -52,17 +51,7 @@ function Card({
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <div className="p-0.5">
-              {logoSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  alt="Logo"
-                  src={logoSrc}
-                  className="rounded-full object-cover object-center"
-                  style={{ width: "3rem", height: "3rem" }}
-                />
-              ) : (
-                <SvgOnyxLogo size={48} />
-              )}
+              <Icon size={48} />
             </div>
             <Content
               sizePreset="headline"
@@ -146,7 +135,11 @@ function Submit({ label, isSubmitting, isValid, dirty }: SubmitProps) {
     <Button
       type="submit"
       width="full"
-      disabled={isSubmitting || !isValid || !dirty}
+      disabled={
+        Boolean(isSubmitting) ||
+        (isValid !== undefined && !isValid) ||
+        (dirty !== undefined && !dirty)
+      }
       icon={isSubmitting ? SvgSimpleLoader : undefined}
       rightIcon={SvgArrowRightCircle}
     >

@@ -4328,8 +4328,25 @@ class KVStore(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    # TODO(cleanup): legacy, do not write. Nothing writes it anymore (the encrypt
+    # flag is gone); the only reader is the load() fallback for rows written
+    # before that, when value was null. Slated for a drop migration in a later
+    # release, held back so the drop rolls out after every pod is on this release.
+    # Deferred so it is never SELECTed eagerly, which is what makes that drop safe.
     encrypted_value: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
-        EncryptedJson(), nullable=True
+        EncryptedJson(), nullable=True, deferred=True
+    )
+
+
+class EncryptedKeyValueStore(Base):
+    """Encrypted-at-rest key/value storage for instance-level secrets. Postgres
+    only, never cached, so secrets stay out of Redis."""
+
+    __tablename__ = "encrypted_key_value_store"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(), nullable=False
     )
 
 

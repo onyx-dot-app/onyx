@@ -19,7 +19,7 @@
   "dependencies": {
     "dompurify": "^3.4.8",
     "lit": "^3.1.0",
-    "marked": "^18.0.4",
+    "marked": "^18.0.5",
     "terser": "^5.46.1"
   },
   "devDependencies": {

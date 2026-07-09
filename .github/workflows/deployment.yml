@@ -1229,6 +1229,15 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
+      # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
+      # with the same Docker account credentials (the account must have DHI catalog access).
+      - name: Login to Docker Hardened Images (dhi.io)
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          registry: dhi.io
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
       - name: Build and push AMD64
         id: build
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
@@ -1303,6 +1312,15 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee
         with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
+      # with the same Docker account credentials (the account must have DHI catalog access).
+      - name: Login to Docker Hardened Images (dhi.io)
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          registry: dhi.io
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 

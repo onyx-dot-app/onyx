@@ -12,6 +12,7 @@ import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { requestEmailVerification } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
+import { getAppLogo } from "@/lib/app/utils";
 
 export default function SendEmailVerificationPage() {
   const router = useRouter();
@@ -59,7 +60,7 @@ export default function SendEmailVerificationPage() {
       title="Check your inbox"
       description="We've sent a verification link to your email address."
       bottomPrompt={backToLoginOrSignupCopy()}
-      logoSrc={logoUrl}
+      icon={getAppLogo(logoUrl)}
     >
       <AuthLayouts.Message
         title={`Email sent to ${user.email}`}

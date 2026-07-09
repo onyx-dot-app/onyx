@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import * as AuthLayouts from "@opal/layouts/auth/components";
 import { Button } from "@opal/components";
+import SvgSparkle from "@opal/icons/sparkle";
 import { markdown } from "@opal/utils";
 
 const meta: Meta = {
@@ -24,10 +25,11 @@ export const BasicLogin: Story = {
   render: () => (
     <AuthLayouts.Root>
       <AuthLayouts.Card
-        title="Welcome to Onyx"
-        description="Your open source AI platform for work"
+        icon={SvgSparkle}
+        title="Welcome back"
+        description="Sign in to your account"
         bottomPrompt={markdown(
-          "New to Onyx? [Create an Account](/auth/signup)"
+          "Don't have an account? [Create an Account](/auth/signup)"
         )}
       >
         <AuthLayouts.Fields>
@@ -44,10 +46,11 @@ export const WithSSOAndSeparator: Story = {
   render: () => (
     <AuthLayouts.Root>
       <AuthLayouts.Card
-        title="Welcome to Onyx"
-        description="Your open source AI platform for work"
+        icon={SvgSparkle}
+        title="Welcome back"
+        description="Sign in to your account"
         bottomPrompt={markdown(
-          "New to Onyx? [Create an Account](/auth/signup)"
+          "Don't have an account? [Create an Account](/auth/signup)"
         )}
       >
         <Button width="full">Continue with Google</Button>
@@ -66,8 +69,9 @@ export const Signup: Story = {
   render: () => (
     <AuthLayouts.Root>
       <AuthLayouts.Card
+        icon={SvgSparkle}
         title="Create account"
-        description="Get started with Onyx"
+        description="Get started"
         bottomPrompt={markdown(
           "Already have an account? [Sign In](/auth/login)"
         )}
@@ -86,6 +90,7 @@ export const ForgotPassword: Story = {
   render: () => (
     <AuthLayouts.Root>
       <AuthLayouts.Card
+        icon={SvgSparkle}
         title="Forgot Password"
         description="Enter your email address and we'll send you a reset link."
         bottomPrompt={markdown("[Back to Login](/auth/login)")}
@@ -102,7 +107,11 @@ export const ForgotPassword: Story = {
 export const DisabledSubmit: Story = {
   render: () => (
     <AuthLayouts.Root>
-      <AuthLayouts.Card title="Sign in" description="Submitting…">
+      <AuthLayouts.Card
+        icon={SvgSparkle}
+        title="Sign in"
+        description="Submitting…"
+      >
         <AuthLayouts.Fields>
           <FieldPlaceholder label="Email" />
           <FieldPlaceholder label="Password" />

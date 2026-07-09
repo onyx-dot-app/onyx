@@ -16,6 +16,7 @@ import {
   TENANT_ID_COOKIE_NAME,
 } from "@/lib/constants";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
+import { getAppLogo } from "@/lib/app/utils";
 
 const initialValues = { password: "", confirmPassword: "" };
 
@@ -69,7 +70,7 @@ export default function ResetPasswordPage() {
       title="Reset Password"
       description={`for account ${email}`}
       bottomPrompt={backToLoginOrSignupCopy()}
-      logoSrc={logoUrl}
+      icon={getAppLogo(logoUrl)}
     >
       {resetSuccess ? (
         <AuthLayouts.Message

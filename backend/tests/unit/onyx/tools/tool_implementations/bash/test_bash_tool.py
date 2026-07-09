@@ -426,7 +426,7 @@ def _is_available_env(
 
         mock_client = MagicMock()
         mock_client.health.return_value = HealthResponse(
-            healthy=healthy, version=server_version
+            connected=healthy, version=server_version
         )
         mock_client.supports.return_value = supports_return
 
