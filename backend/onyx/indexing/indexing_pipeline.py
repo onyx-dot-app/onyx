@@ -1290,7 +1290,6 @@ def index_doc_batch(
 
     filtered_documents, filter_failures = filter_fnc(document_batch)
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
-
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
         context = adapter.prepare(
             filtered_documents, ignore_time_skip, index_to_secondary
