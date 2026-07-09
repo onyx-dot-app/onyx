@@ -14,7 +14,7 @@ import { usePathname } from "next/navigation";
 import { Button, Spacer, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
-import type { RichStr } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { useSidebarState } from "@opal/layouts/root/components";
 import useScreenSize from "@opal/hooks/useScreenSize";
 
@@ -114,7 +114,12 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
 // ---------------------------------------------------------------------------
 
 interface SidebarHeaderProps {
-  logo?: (folded: boolean | undefined) => React.ReactNode;
+  /**
+   * Logo factory. Receives the effective fold state (`undefined` when the
+   * sidebar is non-foldable) and returns an `IconFunctionComponent` that is
+   * rendered at `size={28}` in the topbar.
+   */
+  renderAppLogo: (folded: boolean | undefined) => IconFunctionComponent;
   /**
    * When `true` (default), the logo is shown in the folded state with a
    * hover-to-reveal fold button. When `false`, only the fold button is shown
@@ -125,7 +130,7 @@ interface SidebarHeaderProps {
 }
 
 function SidebarHeader({
-  logo,
+  renderAppLogo,
   showLogoWhenFolded = true,
   children,
 }: SidebarHeaderProps) {
@@ -138,28 +143,25 @@ function SidebarHeader({
 
   const closeButton = useMemo(
     () => (
-      <div className="px-1">
-        <Button
-          icon={SvgSidebar}
-          prominence="tertiary"
-          tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
-          tooltipSide={folded ? "right" : "bottom"}
-          size="md"
-          onClick={toggleFolded}
-        />
-      </div>
+      <Button
+        icon={SvgSidebar}
+        prominence="tertiary"
+        tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
+        tooltipSide={folded ? "right" : "bottom"}
+        size="md"
+        onClick={toggleFolded}
+      />
     ),
     [folded, toggleFolded]
   );
 
-  if (logo == null && !children) return null;
-
-  const logoEl = logo != null ? logo(foldable ? folded : undefined) : null;
+  const Logo = renderAppLogo(foldable ? folded : undefined);
+  const logoEl = <Logo size={28} />;
 
   return (
     <div className="opal-sidebar-header">
-      {logo != null && (
-        <div className="opal-sidebar-header__topbar">
+      <div className="opal-sidebar-header__topbar">
+        <div className="opal-sidebar-header__topbar-inner">
           {!foldable ? (
             logoEl
           ) : folded && showLogoWhenFolded && logoEl ? (
@@ -176,7 +178,7 @@ function SidebarHeader({
             </>
           )}
         </div>
-      )}
+      </div>
       {children && (
         <div className="opal-sidebar-header__content">{children}</div>
       )}

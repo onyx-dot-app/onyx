@@ -1,3 +1,5 @@
+"use client";
+
 import { ReactNode } from "react";
 import type { IconProps } from "@opal/types";
 import { SidebarLayouts } from "@opal/layouts";
@@ -23,14 +25,14 @@ export default function StepSidebar({
   return (
     <SidebarLayouts.Root>
       <SidebarLayouts.Header
-        logo={renderAppLogo}
+        renderAppLogo={renderAppLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       />
-      <div className="px-2">
+      <SidebarLayouts.Body scrollKey="step-sidebar">
         <SidebarTab icon={buttonIcon} href={buttonHref}>
           {buttonName}
         </SidebarTab>
-      </div>
+      </SidebarLayouts.Body>
 
       <div className="h-full w-full px-4">{children}</div>
     </SidebarLayouts.Root>

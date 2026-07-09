@@ -454,7 +454,7 @@ const MemoizedBuildSidebarInner = memo(() => {
   return (
     <SidebarLayouts.Root foldable>
       <SidebarLayouts.Header
-        logo={renderAppLogo}
+        renderAppLogo={renderAppLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         <div className="flex flex-col gap-0.5">

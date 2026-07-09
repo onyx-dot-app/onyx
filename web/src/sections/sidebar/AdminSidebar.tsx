@@ -242,7 +242,7 @@ export default function AdminSidebar() {
   return (
     <SidebarLayouts.Root>
       <SidebarLayouts.Header
-        logo={renderAppLogo}
+        renderAppLogo={renderAppLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         {folded ? (
