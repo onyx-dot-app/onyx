@@ -1,7 +1,11 @@
+"use client";
+
 import { ReactNode } from "react";
 import type { IconProps } from "@opal/types";
+import { SidebarLayouts } from "@opal/layouts";
 import { SidebarTab } from "@opal/components";
-import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
+import { renderAppLogo } from "@/lib/app/utils";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 
 export interface StepSidebarProps {
   children: ReactNode;
@@ -16,15 +20,21 @@ export default function StepSidebar({
   buttonIcon,
   buttonHref,
 }: StepSidebarProps) {
+  const showLogoWhenFolded = useShowLogoWhenFolded();
+
   return (
-    <SidebarWrapper>
-      <div className="px-2">
+    <SidebarLayouts.Root>
+      <SidebarLayouts.Header
+        renderAppLogo={renderAppLogo}
+        showLogoWhenFolded={showLogoWhenFolded}
+      />
+      <SidebarLayouts.Body scrollKey="step-sidebar">
         <SidebarTab icon={buttonIcon} href={buttonHref}>
           {buttonName}
         </SidebarTab>
-      </div>
+      </SidebarLayouts.Body>
 
       <div className="h-full w-full px-4">{children}</div>
-    </SidebarWrapper>
+    </SidebarLayouts.Root>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
 import { useSettings } from "@/lib/settings/hooks";
@@ -43,7 +43,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { renderAppLogo } from "@/lib/app/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -196,7 +196,7 @@ function RecentsSection({
   );
 }
 
-const AppSidebar = memo(function AppSidebarInner() {
+export default function AppSidebar() {
   const { folded } = useSidebarState();
   const router = useRouter();
   const combinedSettingsData = useSettings();
@@ -663,15 +663,13 @@ const AppSidebar = memo(function AppSidebarInner() {
       <SidebarLayouts.Root foldable>
         <SidebarLayouts.Header
           showLogoWhenFolded={showLogoWhenFolded}
-          logo={renderAppLogo}
+          renderAppLogo={renderAppLogo}
         >
-          <div className="flex flex-col">
-            {newSessionButton}
-            {searchChatsButton}
-            {isOnyxCraftEnabled && buildButton}
-            {folded && moreAgentsButton}
-            {folded && newProjectButton}
-          </div>
+          {newSessionButton}
+          {searchChatsButton}
+          {isOnyxCraftEnabled && buildButton}
+          {folded && moreAgentsButton}
+          {folded && newProjectButton}
         </SidebarLayouts.Header>
 
         <SidebarLayouts.Body scrollKey="app-sidebar">
@@ -741,7 +739,4 @@ const AppSidebar = memo(function AppSidebarInner() {
       </SidebarLayouts.Root>
     </>
   );
-});
-AppSidebar.displayName = "AppSidebar";
-
-export default AppSidebar;
+}

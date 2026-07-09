@@ -87,7 +87,11 @@
 }
 
 .opal-sidebar-header__topbar {
-  @apply flex flex-row justify-between items-start pt-3 px-2;
+  @apply pt-3 px-2;
+}
+
+.opal-sidebar-header__topbar-inner {
+  @apply flex flex-row justify-between items-start px-1 w-full;
 }
 
 .opal-sidebar-header__content {

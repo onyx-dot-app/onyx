@@ -18,7 +18,7 @@ import {
   useSidebarState,
 } from "@opal/layouts";
 import RefreshText from "@/refresh-components/texts/Text";
-import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { renderAppLogo } from "@/lib/app/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { Popover, PopoverMenu } from "@opal/components";
@@ -454,7 +454,7 @@ const MemoizedBuildSidebarInner = memo(() => {
   return (
     <SidebarLayouts.Root foldable>
       <SidebarLayouts.Header
-        logo={renderAppLogo}
+        renderAppLogo={renderAppLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         <div className="flex flex-col gap-0.5">
