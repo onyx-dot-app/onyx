@@ -15,16 +15,16 @@ No props — accepts `children` only.
 
 ### Card
 
-The main auth card. Renders the product logo (or a custom logo), a heading, an optional
-description, card content, and a bottom prompt rendered outside/below the card border.
+The main auth card. Renders an icon above a heading, optional description, card content, and
+an optional bottom prompt rendered outside/below the card border.
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
+| `icon` | `IconFunctionComponent` | **(required)** | Logo/icon rendered above the card heading |
 | `title` | `string \| RichStr` | **(required)** | Card heading |
 | `description` | `string \| RichStr` | — | Subtitle below the heading |
 | `children` | `ReactNode` | — | Card body (form, buttons, separators) |
 | `bottomPrompt` | `string \| RichStr` | — | Text/link below the card (e.g. "Already have an account?") |
-| `logoSrc` | `string \| null` | — | Custom logo URL; falls back to the default logo |
 
 ### OrSeparator
 
@@ -57,13 +57,14 @@ Full-width submit button. Thin wrapper around `Button` with `type="submit"` and 
 ```tsx
 import { AuthLayouts } from "@opal/layouts";
 import { markdown } from "@opal/utils";
+import { getAppLogo } from "@/lib/app/utils";
 
 <AuthLayouts.Root>
   <AuthLayouts.Card
+    icon={getAppLogo(logoSrc)}
     title="Welcome back"
     description="Sign in to your account"
     bottomPrompt={markdown("Don't have an account? [Create an Account](/auth/signup)")}
-    logoSrc={logoUrl}
   >
     <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
     <AuthLayouts.OrSeparator />
