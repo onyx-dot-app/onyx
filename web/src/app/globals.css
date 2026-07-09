@@ -182,10 +182,14 @@
 
 /* TEXTAREA */
 
-textarea {
-  resize: vertical;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+/* In `base` so utility classes (e.g. `resize-none`) can override; an
+   unlayered rule would beat every layered Tailwind utility. */
+@layer base {
+  textarea {
+    resize: vertical;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
 }
 
 .nextjs-portal {
