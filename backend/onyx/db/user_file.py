@@ -270,15 +270,6 @@ def count_user_files_reconcile_pending(db_session: Session) -> int:
     ).scalar_one()
 
 
-def any_user_file_reconcile_pending(db_session: Session) -> bool:
-    """EXISTS over the un-reconciled set — the swap gate's cheap check (partial index)."""
-    return bool(
-        db_session.scalar(
-            select(exists().where(UserFile.secondary_reconcile_pending.is_(True)))
-        )
-    )
-
-
 def any_user_file_reconcile_pending_for_users(
     db_session: Session, user_ids: list[UUID]
 ) -> bool:

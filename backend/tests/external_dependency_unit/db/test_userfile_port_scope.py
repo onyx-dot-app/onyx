@@ -25,7 +25,6 @@ from onyx.db.port_attempt import get_active_port_attempt
 from onyx.db.port_attempt import get_latest_port_attempt
 from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
-from onyx.db.user_file import any_user_file_reconcile_pending
 from onyx.db.user_file import clear_user_file_reconcile_pending
 from onyx.db.user_file import count_user_files_reconcile_pending
 from onyx.db.user_file import fetch_port_scope_user_ids
@@ -269,7 +268,6 @@ def test_secondary_pending_flag_round_trip(
     db_session.expire_all()
     marked = db_session.get(UserFile, uf.id)
     assert marked is not None and marked.secondary_reconcile_pending is True
-    assert any_user_file_reconcile_pending(db_session) is True
     assert count_user_files_reconcile_pending(db_session) == baseline + 1
 
     clear_user_file_reconcile_pending(db_session, uf.id)
