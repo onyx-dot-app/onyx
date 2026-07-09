@@ -114,7 +114,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
 // ---------------------------------------------------------------------------
 
 interface SidebarHeaderProps {
-  logo?: (folded: boolean | undefined) => React.ReactNode;
+  logo?: React.FunctionComponent<{ size?: number }>;
   /**
    * When `true` (default), the logo is shown in the folded state with a
    * hover-to-reveal fold button. When `false`, only the fold button is shown
@@ -154,7 +154,8 @@ function SidebarHeader({
 
   if (logo == null && !children) return null;
 
-  const logoEl = logo != null ? logo(foldable ? folded : undefined) : null;
+  const Logo = logo;
+  const logoEl = Logo != null ? <Logo size={28} /> : null;
 
   return (
     <div className="opal-sidebar-header">

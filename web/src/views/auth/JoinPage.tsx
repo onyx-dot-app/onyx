@@ -3,13 +3,12 @@
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuthTypeMetadata, useAuthRedirect } from "@/lib/auth/hooks";
-import { useSettings } from "@/lib/settings/hooks";
 import { AuthType } from "@/lib/auth/types";
 import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import SignInButton from "@/sections/auth/SignInButton";
-import { getAppLogo } from "@/lib/app/utils";
+import { useAppLogo } from "@/lib/app/hooks";
 
 function getAuthUrl(authType: AuthType): string | null {
   switch (authType) {
@@ -31,7 +30,7 @@ export default function JoinPage() {
   const defaultEmail = searchParams.get("email");
 
   const { authTypeMetadata } = useAuthTypeMetadata();
-  const { logoUrl } = useSettings();
+  const icon = useAppLogo(true);
 
   useAuthRedirect("join");
 
@@ -58,7 +57,7 @@ export default function JoinPage() {
     <AuthLayouts.Card
       title="Re-authenticate to join team"
       description="Sign in to accept your team invitation."
-      icon={getAppLogo(logoUrl)}
+      icon={icon}
     >
       {isCloud && authUrl && (
         <>

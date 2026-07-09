@@ -13,7 +13,7 @@ import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { AuthType } from "@/lib/auth/types";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { useAuthRedirect } from "@/lib/auth/hooks";
-import { getAppLogo } from "@/lib/app/utils";
+import { useAppLogo } from "@/lib/app/hooks";
 import { markdown } from "@opal/utils";
 
 function getAuthUrl(authType: AuthType, nextUrl: string | null): string | null {
@@ -46,7 +46,8 @@ export default function LoginPage() {
 
   const { user } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
-  const { logoUrl, appName } = useSettings();
+  const { appName } = useSettings();
+  const icon = useAppLogo(true);
 
   useSendAuthRequiredMessage();
   const isLoading = useAuthRedirect("login");
@@ -101,7 +102,7 @@ export default function LoginPage() {
     <AuthLayouts.Card
       {...welcomeCardCopy(appName)}
       bottomPrompt={bottomPrompt}
-      icon={getAppLogo(logoUrl)}
+      icon={icon}
     >
       {verified && (
         <AuthLayouts.Message

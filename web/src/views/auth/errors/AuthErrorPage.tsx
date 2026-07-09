@@ -7,7 +7,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { backToLoginOrSignupCopy, welcomeCardCopy } from "@/lib/auth/copies";
-import { getAppLogo } from "@/lib/app/utils";
+import { useAppLogo } from "@/lib/app/hooks";
 
 const ERROR_CODE_MESSAGES: Record<string, string> = {
   access_denied: "Access was denied by your identity provider.",
@@ -39,13 +39,14 @@ export default function AuthErrorPage() {
   const searchParams = useSearchParams();
   if (!searchParams?.get("error")) redirect("/auth/login");
   const message = resolveMessage(searchParams.get("error"));
-  const { appName, logoUrl } = useSettings();
+  const { appName } = useSettings();
+  const icon = useAppLogo(true);
 
   return (
     <AuthLayouts.Card
       {...welcomeCardCopy(appName)}
       bottomPrompt={backToLoginOrSignupCopy()}
-      icon={getAppLogo(logoUrl)}
+      icon={icon}
     >
       <AuthLayouts.Message
         messageType="warning"

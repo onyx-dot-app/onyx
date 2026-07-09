@@ -1,18 +1,15 @@
 "use client";
 
-import React from "react";
-import { SidebarLayouts } from "@opal/layouts";
+import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
-import Logo from "@/refresh-components/Logo";
+import { useAppLogo } from "@/lib/app/hooks";
 
-/**
- * Renders the app-branded logo for use as the `logo` prop on sidebar primitives.
- * Exported so other sidebar entry points (e.g. AdminSidebar) can reuse it.
- */
-export function renderAppLogo(folded: boolean | undefined): React.ReactNode {
+function SidebarLogo({ size = 28 }: { size?: number }) {
+  const { folded } = useSidebarState();
+  const Logo = useAppLogo(folded);
   return (
     <div className="px-1">
-      <Logo folded={folded} size={28} />
+      <Logo size={size} />
     </div>
   );
 }
@@ -35,7 +32,7 @@ export default function SidebarWrapper({
   return (
     <SidebarLayouts.Root foldable={foldable}>
       <SidebarLayouts.Header
-        logo={renderAppLogo}
+        logo={SidebarLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       />
       {children}

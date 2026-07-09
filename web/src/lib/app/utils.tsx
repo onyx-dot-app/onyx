@@ -1,6 +1,6 @@
 "use client";
 
-import { SvgOnyxLogo } from "@opal/logos";
+import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 
 function makeImgIcon(src: string): IconFunctionComponent {
@@ -17,7 +17,10 @@ function makeImgIcon(src: string): IconFunctionComponent {
   };
 }
 
-export function getAppLogo(logoSrc?: string | null): IconFunctionComponent {
+export function getAppLogo(
+  logoSrc: string | null | undefined,
+  folded: boolean
+): IconFunctionComponent {
   if (logoSrc) return makeImgIcon(logoSrc);
-  return SvgOnyxLogo;
+  return folded ? SvgOnyxLogo : SvgOnyxLogoTyped;
 }

@@ -6,20 +6,19 @@ import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import { PageLoader } from "@/refresh-components/PageLoader";
-import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { requestEmailVerification } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
-import { getAppLogo } from "@/lib/app/utils";
+import { useAppLogo } from "@/lib/app/hooks";
 
 export default function SendEmailVerificationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading, mutateUser } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
-  const { logoUrl } = useSettings();
+  const icon = useAppLogo(true);
 
   // Poll for verification status so the original tab auto-advances to /app
   // once the user verifies in a different tab.
@@ -60,7 +59,7 @@ export default function SendEmailVerificationPage() {
       title="Check your inbox"
       description="We've sent a verification link to your email address."
       bottomPrompt={backToLoginOrSignupCopy()}
-      icon={getAppLogo(logoUrl)}
+      icon={icon}
     >
       <AuthLayouts.Message
         title={`Email sent to ${user.email}`}

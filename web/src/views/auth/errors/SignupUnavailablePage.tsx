@@ -3,16 +3,17 @@
 import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { backToLoginOrSignupCopy, welcomeCardCopy } from "@/lib/auth/copies";
-import { getAppLogo } from "@/lib/app/utils";
+import { useAppLogo } from "@/lib/app/hooks";
 
 export default function SignupUnavailablePage() {
-  const { logoUrl, appName } = useSettings();
+  const { appName } = useSettings();
+  const icon = useAppLogo(true);
 
   return (
     <AuthLayouts.Card
       {...welcomeCardCopy(appName)}
       bottomPrompt={backToLoginOrSignupCopy(true)}
-      icon={getAppLogo(logoUrl)}
+      icon={icon}
     >
       <AuthLayouts.Message
         title="New account creation unavailable."

@@ -4,9 +4,8 @@ import { useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { forgotPassword } from "@/lib/auth/svc";
 import { AuthLayouts } from "@opal/layouts";
-import { useSettings } from "@/lib/settings/hooks";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
-import { getAppLogo } from "@/lib/app/utils";
+import { useAppLogo } from "@/lib/app/hooks";
 import { markdown } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
@@ -17,7 +16,7 @@ export default function ForgotPasswordPage() {
   const searchParams = useSearchParams();
   const email = searchParams?.get("email");
   const isResend = searchParams?.get("reset") === "true";
-  const { logoUrl } = useSettings();
+  const icon = useAppLogo(true);
 
   const firedRef = useRef(false);
 
@@ -59,7 +58,7 @@ export default function ForgotPasswordPage() {
       title="Check your inbox"
       description="We’ve sent a password reset link to your email address."
       bottomPrompt={backToLoginOrSignupCopy()}
-      icon={getAppLogo(logoUrl)}
+      icon={icon}
     >
       <AuthLayouts.Message
         title={`Email sent to ${email}.`}

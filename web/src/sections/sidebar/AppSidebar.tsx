@@ -43,7 +43,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { useAppLogo } from "@/lib/app/hooks";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -198,6 +198,7 @@ function RecentsSection({
 
 const AppSidebar = memo(function AppSidebarInner() {
   const { folded } = useSidebarState();
+  const AppSidebarLogo = useAppLogo(folded);
   const router = useRouter();
   const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
@@ -663,7 +664,7 @@ const AppSidebar = memo(function AppSidebarInner() {
       <SidebarLayouts.Root foldable>
         <SidebarLayouts.Header
           showLogoWhenFolded={showLogoWhenFolded}
-          logo={renderAppLogo}
+          logo={AppSidebarLogo}
         >
           <div className="flex flex-col">
             {newSessionButton}

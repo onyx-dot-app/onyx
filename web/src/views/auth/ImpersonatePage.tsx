@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { AuthLayouts, InputVertical } from "@opal/layouts";
-import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { Formik, Form, type FormikHelpers } from "formik";
 import * as Yup from "yup";
@@ -14,7 +13,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { markdown } from "@opal/utils";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
-import { getAppLogo } from "@/lib/app/utils";
+import { useAppLogo } from "@/lib/app/hooks";
 
 const initialValues = { email: "", apiKey: "" };
 
@@ -26,7 +25,7 @@ const impersonationSchema = Yup.object().shape({
 export default function ImpersonatePage() {
   const router = useRouter();
   const { user } = useCurrentUser();
-  const { logoUrl } = useSettings();
+  const icon = useAppLogo(true);
 
   useEffect(() => {
     if (user === undefined) return;
@@ -62,7 +61,7 @@ export default function ImpersonatePage() {
       title="Impersonate User"
       description="Cloud superuser access only."
       bottomPrompt={backToLoginOrSignupCopy()}
-      icon={getAppLogo(logoUrl)}
+      icon={icon}
     >
       <Formik
         initialValues={initialValues}

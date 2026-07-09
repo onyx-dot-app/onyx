@@ -5,7 +5,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { NEXT_PUBLIC_CLOUD_ENABLED, DOCS_BASE_URL } from "@/lib/constants";
 import { FetchError } from "@/lib/fetcher";
 import { welcomeCardCopy } from "@/lib/auth/copies";
-import { getAppLogo } from "@/lib/app/utils";
+import { useAppLogo } from "@/lib/app/hooks";
 import { markdown } from "@opal/utils";
 
 interface SettingsProviderProps {
@@ -18,7 +18,8 @@ interface SettingsProviderProps {
  * silently ignored so unauthenticated users still see the app shell.
  */
 export default function SettingsProvider({ children }: SettingsProviderProps) {
-  const { appName, logoUrl, error } = useSettings();
+  const { appName, error } = useSettings();
+  const icon = useAppLogo(true);
 
   function isAuthError(err: Error) {
     return (
@@ -29,10 +30,7 @@ export default function SettingsProvider({ children }: SettingsProviderProps) {
   if (error && !isAuthError(error)) {
     return (
       <AuthLayouts.Root>
-        <AuthLayouts.Card
-          {...welcomeCardCopy(appName)}
-          icon={getAppLogo(logoUrl)}
-        >
+        <AuthLayouts.Card {...welcomeCardCopy(appName)} icon={icon}>
           {NEXT_PUBLIC_CLOUD_ENABLED ? (
             <AuthLayouts.Message
               title="Maintenance in progress."

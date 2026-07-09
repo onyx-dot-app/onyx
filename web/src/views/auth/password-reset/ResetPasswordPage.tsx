@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { redirect } from "next/navigation";
 import { resetPassword } from "@/lib/auth/svc";
 import { AuthLayouts, InputVertical } from "@opal/layouts";
-import { useSettings } from "@/lib/settings/hooks";
+import { useAppLogo } from "@/lib/app/hooks";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
@@ -16,7 +16,6 @@ import {
   TENANT_ID_COOKIE_NAME,
 } from "@/lib/constants";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
-import { getAppLogo } from "@/lib/app/utils";
 
 const initialValues = { password: "", confirmPassword: "" };
 
@@ -32,7 +31,7 @@ export default function ResetPasswordPage() {
   const token = searchParams?.get("token");
   const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
   const email = searchParams?.get("email");
-  const { logoUrl } = useSettings();
+  const icon = useAppLogo(true);
   const [resetSuccess, setResetSuccess] = useState(false);
 
   useEffect(() => {
@@ -70,7 +69,7 @@ export default function ResetPasswordPage() {
       title="Reset Password"
       description={`for account ${email}`}
       bottomPrompt={backToLoginOrSignupCopy()}
-      icon={getAppLogo(logoUrl)}
+      icon={icon}
     >
       {resetSuccess ? (
         <AuthLayouts.Message
