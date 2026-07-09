@@ -259,6 +259,7 @@ async def refresh_oauth_token(
                     await user_manager.user_db.update(
                         user, {"oidc_expiry": oidc_expiry}
                     )
+                    user.oidc_expiry = oidc_expiry
 
             # Update the OAuth account
             await user_manager.user_db.update_oauth_account(  # ty: ignore[invalid-argument-type]
