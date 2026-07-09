@@ -1,12 +1,16 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { useRouter } from "next/navigation";
+import { useSWRConfig } from "swr";
 import { useOnboardingModal } from "@/app/craft/onboarding/hooks/useOnboardingModal";
 import BuildOnboardingModal from "@/app/craft/onboarding/components/BuildOnboardingModal";
-import NoLlmProvidersModal from "@/app/craft/onboarding/components/NoLlmProvidersModal";
 import { OnboardingModalController } from "@/app/craft/onboarding/types";
+import ProviderSetupModal from "@/sections/modals/languageModels/ProviderSetupModal";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
+import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { useUser } from "@/providers/UserProvider";
+import { toast } from "@/hooks/useToast";
 
 // Context for accessing onboarding modal controls
 const OnboardingContext = createContext<OnboardingModalController | null>(null);
@@ -28,9 +32,12 @@ interface BuildOnboardingProviderProps {
 export function BuildOnboardingProvider({
   children,
 }: BuildOnboardingProviderProps) {
-  const router = useRouter();
   const { user } = useUser();
   const controller = useOnboardingModal();
+  const { mutate } = useSWRConfig();
+  const ensurePreProvisionedSession = useBuildSessionStore(
+    (state) => state.ensurePreProvisionedSession
+  );
 
   // Show loading state while user data is loading
   if (!user) {
@@ -41,29 +48,27 @@ export function BuildOnboardingProvider({
     );
   }
 
-  // Non-admins can't configure providers, so block them when none of the
-  // supported providers is accessible.
-  const showNoProvidersModal =
-    !controller.isLoading && !controller.isAdmin && !controller.hasAnyProvider;
-
   return (
     <OnboardingContext.Provider value={controller}>
-      <NoLlmProvidersModal
-        open={showNoProvidersModal}
-        onClose={() => router.push("/app")}
+      <BuildOnboardingModal
+        mode={controller.mode}
+        onComplete={controller.completeOnboarding}
+        onClose={controller.close}
       />
 
-      {!showNoProvidersModal && (
-        <BuildOnboardingModal
-          mode={controller.mode}
-          llmProviders={controller.llmProviders}
-          isAdmin={controller.isAdmin}
-          hasAnyProvider={controller.hasAnyProvider}
-          onComplete={controller.completeOnboarding}
-          onLlmComplete={controller.completeLlmSetup}
-          onClose={controller.close}
-        />
-      )}
+      <ProviderSetupModal
+        providerKey={controller.activeProviderKey}
+        shouldMarkAsDefault={(controller.llmProviders ?? []).length === 0}
+        analyticsSource={LLMProviderConfiguredSource.CRAFT_ONBOARDING}
+        onOpenChange={(open) => {
+          if (!open) controller.closeProviderModal();
+        }}
+        onSuccess={async () => {
+          await refreshLlmProviderCaches(mutate);
+          toast.success("Provider connected!");
+          ensurePreProvisionedSession();
+        }}
+      />
 
       {children}
     </OnboardingContext.Provider>

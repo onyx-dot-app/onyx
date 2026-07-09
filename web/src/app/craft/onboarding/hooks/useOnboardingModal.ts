@@ -16,11 +16,7 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 
 export function useOnboardingModal(): OnboardingModalController {
   const { user, isAdmin } = useUser();
-  const {
-    llmProviders,
-    isLoading: isLoadingLlm,
-    refetch: refetchLlmProviders,
-  } = useLLMProviders();
+  const { llmProviders, isLoading: isLoadingLlm } = useLLMProviders();
 
   // Get ensurePreProvisionedSession from the session store
   const ensurePreProvisionedSession = useBuildSessionStore(
@@ -30,29 +26,28 @@ export function useOnboardingModal(): OnboardingModalController {
   // Modal mode state
   const [mode, setMode] = useState<OnboardingModalMode>({ type: "closed" });
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [activeProviderKey, setActiveProviderKey] = useState<string | null>(
+    null
+  );
 
   const hasAnyProvider = useMemo(
     () => hasSupportedCraftProvider(llmProviders),
     [llmProviders]
   );
 
-  // Auto-open initial onboarding modal on first load.
-  // Shows the intro once (until dismissed) and the LLM setup step when an
-  // admin has no supported provider configured yet.
+  // Auto-open the intro once (until dismissed). LLM setup lives inline on the
+  // welcome page, so the intro is not conditioned on provider state.
   useEffect(() => {
-    if (hasInitialized || isLoadingLlm || !user) return;
+    if (hasInitialized || !user) return;
 
-    const needsOnboarding = !getCraftOnboardingSeen();
-    const needsLlmSetup = isAdmin && !hasAnyProvider;
-
-    if (needsOnboarding || needsLlmSetup) {
+    if (!getCraftOnboardingSeen()) {
       setMode({ type: "initial-onboarding" });
     }
 
     setHasInitialized(true);
-  }, [hasInitialized, isLoadingLlm, user, isAdmin, hasAnyProvider]);
+  }, [hasInitialized, user]);
 
-  // Complete onboarding callback — fired when the intro / LLM setup flow is done
+  // Complete onboarding callback — fired when the intro is done
   const completeOnboarding = useCallback(async () => {
     setCraftOnboardingSeen();
 
@@ -61,14 +56,13 @@ export function useOnboardingModal(): OnboardingModalController {
     ensurePreProvisionedSession();
   }, [ensurePreProvisionedSession]);
 
-  // Complete LLM setup callback
-  const completeLlmSetup = useCallback(async () => {
-    await refetchLlmProviders();
-  }, [refetchLlmProviders]);
+  // Any well-known provider type — getProvider resolves the matching modal.
+  const openProviderModal = useCallback((providerKey: string) => {
+    setActiveProviderKey(providerKey);
+  }, []);
 
-  // Actions
-  const openLlmSetup = useCallback((provider?: string) => {
-    setMode({ type: "add-llm", provider });
+  const closeProviderModal = useCallback(() => {
+    setActiveProviderKey(null);
   }, []);
 
   const close = useCallback(() => {
@@ -80,12 +74,12 @@ export function useOnboardingModal(): OnboardingModalController {
   return {
     mode,
     isOpen,
-    openLlmSetup,
     close,
-    llmProviders,
     completeOnboarding,
-    completeLlmSetup,
-    refetchLlmProviders,
+    activeProviderKey,
+    openProviderModal,
+    closeProviderModal,
+    llmProviders,
     isAdmin,
     hasAnyProvider,
     isLoading: isLoadingLlm,
