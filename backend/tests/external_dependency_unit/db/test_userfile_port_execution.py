@@ -287,6 +287,29 @@ def test_swap_gate_not_deadlocked_by_canceled_user(
     assert _user_file_port_has_pending_work(db_session, future_ss_id) is False
 
 
+def test_swap_not_blocked_by_undrainable_secondary_pending_flag(
+    db_session: Session, future_ss_id: int, port_user: User
+) -> None:
+    """The swap must NOT gate on secondary_only_sync_pending while the metadata sync only
+    update()s FUTURE: a file the port never copies (uploaded after its port settled, or
+    beyond the snapshot bound) would flag forever and deadlock. Gating waits until new
+    user files are also dual-written to FUTURE."""
+    future_ss = db_session.get(SearchSettings, future_ss_id)
+    assert future_ss is not None
+    uf = _make_user_file(db_session, port_user.id)
+    attempt = create_port_attempt(
+        db_session, None, future_ss_id, port_user_id=port_user.id
+    )
+    mark_port_in_progress(db_session, attempt.id)
+    mark_port_succeeded(db_session, attempt.id)
+
+    uf.secondary_only_sync_pending = True
+    db_session.commit()
+    assert all_user_scopes_ported(db_session, future_ss_id, [port_user.id]) is True
+    # flag set, yet the swap is ready — no deadlock
+    assert _port_swap_ready(db_session, future_ss, [], [port_user.id]) is True
+
+
 # --- INSTANT reclaim: the source stays pinned until user files drain ---------
 
 

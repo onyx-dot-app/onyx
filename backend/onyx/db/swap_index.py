@@ -224,6 +224,11 @@ def _port_swap_ready(
     if not all_user_scopes_ported(db_session, ss_id, required_user_ids):
         return False
 
+    # No user-file secondary-pending gate here yet. The metadata sync only update()s
+    # FUTURE — it can't create a doc the port never copied (a file uploaded after the
+    # user's port settled, or whose id is beyond the attempt's snapshot bound). Such a
+    # file would set secondary_only_sync_pending forever, so gating on it would deadlock
+    # the swap. Gate on it only once new user files are also dual-written to FUTURE.
     return (
         count_secondary_only_sync_pending_documents_for_cc_pairs(
             db_session, [cc_pair.id for cc_pair in required_cc_pairs]

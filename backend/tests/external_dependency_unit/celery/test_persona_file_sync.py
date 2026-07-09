@@ -43,6 +43,7 @@ from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.persona import upsert_persona
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
@@ -214,6 +215,31 @@ class TestCheckSweepIncludesPersonaSync:
         ]
         assert len(matching_calls) == 1
 
+    def test_secondary_pending_flag_reenqueues_when_needs_sync_cleared(
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """C1: a deferred file (needs_*_sync already cleared) is still re-enqueued so the
+        drain can retry the FUTURE update — else the flag stays stuck and blocks the swap."""
+        user = create_test_user(db_session, "secpend_sweep")
+        uf = _create_completed_user_file(db_session, user)
+        uf.secondary_only_sync_pending = True
+        db_session.commit()
+
+        mock_app = MagicMock()
+
+        with _patch_task_app(check_for_user_file_project_sync, mock_app):
+            check_for_user_file_project_sync.run(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            )
+
+        enqueued_ids = {
+            call.kwargs["kwargs"]["user_file_id"]
+            for call in mock_app.send_task.call_args_list
+        }
+        assert str(uf.id) in enqueued_ids
+
 
 # ---------------------------------------------------------------------------
 # Test: process_single_user_file_project_sync passes persona_ids to index
@@ -250,6 +276,7 @@ class TestSyncTaskWritesPersonaIds:
         mock_doc_index = MagicMock()
         mock_search_settings = MagicMock()
         mock_search_settings.primary = MagicMock()
+        mock_search_settings.primary.port_backfill_source_id = None
         mock_search_settings.secondary = None
 
         redis_client = get_redis_client(
@@ -330,6 +357,7 @@ class TestSyncTaskWritesPersonaIds:
         mock_doc_index = MagicMock()
         mock_search_settings = MagicMock()
         mock_search_settings.primary = MagicMock()
+        mock_search_settings.primary.port_backfill_source_id = None
         mock_search_settings.secondary = None
 
         redis_client = get_redis_client(
@@ -381,6 +409,7 @@ class TestSyncTaskWritesPersonaIds:
         mock_doc_index = MagicMock()
         mock_search_settings = MagicMock()
         mock_search_settings.primary = MagicMock()
+        mock_search_settings.primary.port_backfill_source_id = None
         mock_search_settings.secondary = None
 
         redis_client = get_redis_client(
@@ -530,3 +559,113 @@ class TestUpsertPersonaMarksSyncFlag:
 
         db_session.refresh(uf)
         assert uf.needs_persona_sync is True
+
+
+# ---------------------------------------------------------------------------
+# Test: GAP 2 — re-enabled secondary ACL sync defers on a missing FUTURE doc
+# and drains once the port supplies it
+# ---------------------------------------------------------------------------
+
+
+def _run_sync(uf_id: str, mock_doc_index: MagicMock, secondary: Any) -> None:
+    """Run the sync task with the index mocked and the secondary target configured."""
+    mock_search_settings = MagicMock()
+    mock_search_settings.primary = MagicMock()
+    mock_search_settings.primary.port_backfill_source_id = None
+    mock_search_settings.secondary = secondary
+
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    redis_client.delete(user_file_project_sync_lock_key(uf_id))
+
+    with (
+        patch(_PATCH_DISABLE_VDB, False),
+        patch(_PATCH_HTTPX_INIT),
+        patch(_PATCH_GET_SETTINGS, return_value=mock_search_settings),
+        patch(_PATCH_GET_INDICES, return_value=[mock_doc_index]),
+    ):
+        process_single_user_file_project_sync.run(
+            user_file_id=uf_id,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
+
+
+class TestSecondaryDeferAndDrain:
+    """project_sync_user_file_impl defers a missing-FUTURE write and drains on retry."""
+
+    def test_defer_on_secondary_missing_sets_flag(
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """FUTURE lacks the not-yet-ported file: needs_*_sync clears but the file is
+        flagged so a later scan retries the update."""
+        user = create_test_user(db_session, "defer_set")
+        uf = _create_completed_user_file(db_session, user, needs_project_sync=True)
+
+        mock_doc_index = MagicMock()
+        mock_doc_index.update.side_effect = SecondaryIndexDocumentMissingError(
+            [str(uf.id)]
+        )
+
+        _run_sync(str(uf.id), mock_doc_index, secondary=MagicMock())
+
+        db_session.refresh(uf)
+        assert uf.secondary_only_sync_pending is True
+        assert uf.needs_project_sync is False
+
+    def test_drain_clears_flag_on_success(
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """Once the port has copied the file, the update succeeds and the flag clears."""
+        user = create_test_user(db_session, "defer_drain")
+        uf = _create_completed_user_file(db_session, user)
+        uf.secondary_only_sync_pending = True
+        db_session.commit()
+
+        mock_doc_index = MagicMock()  # update() succeeds
+        _run_sync(str(uf.id), mock_doc_index, secondary=MagicMock())
+
+        db_session.refresh(uf)
+        assert uf.secondary_only_sync_pending is False
+
+    def test_no_secondary_drain_clears_flag(
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """Post-INSTANT-swap the secondary is None; the drain updates the promoted primary
+        and clears the flag — else it stays stuck forever (no secondary to reach)."""
+        user = create_test_user(db_session, "defer_nosec")
+        uf = _create_completed_user_file(db_session, user)
+        uf.secondary_only_sync_pending = True
+        db_session.commit()
+
+        mock_doc_index = MagicMock()
+        _run_sync(str(uf.id), mock_doc_index, secondary=None)
+
+        db_session.refresh(uf)
+        assert uf.secondary_only_sync_pending is False
+
+    def test_non_portable_file_not_flagged(
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """A non-COMPLETED file that misses FUTURE is never ported, so it must not be
+        flagged — its flag would never drain (mark it synced instead)."""
+        user = create_test_user(db_session, "defer_nonportable")
+        uf = _create_completed_user_file(db_session, user, needs_project_sync=True)
+        uf.status = UserFileStatus.PROCESSING
+        db_session.commit()
+
+        mock_doc_index = MagicMock()
+        mock_doc_index.update.side_effect = SecondaryIndexDocumentMissingError(
+            [str(uf.id)]
+        )
+
+        _run_sync(str(uf.id), mock_doc_index, secondary=MagicMock())
+
+        db_session.refresh(uf)
+        assert uf.secondary_only_sync_pending is False

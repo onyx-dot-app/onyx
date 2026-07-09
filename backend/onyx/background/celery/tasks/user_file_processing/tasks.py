@@ -40,12 +40,14 @@ from onyx.connectors.models import HierarchyNode
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
+from onyx.db.port_attempt import port_backfill_has_pending_work
 from onyx.db.port_orphan_candidate import record_port_orphan_candidates_for_user_file
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import build_tracking_raw_file_callback
 from onyx.file_store.staging import delete_files_best_effort
@@ -810,6 +812,8 @@ def check_for_user_file_project_sync(self: Task, *, tenant_id: str) -> None:
                             sa.or_(
                                 UserFile.needs_project_sync.is_(True),
                                 UserFile.needs_persona_sync.is_(True),
+                                # re-enqueue port-deferred files so the drain retries
+                                UserFile.secondary_only_sync_pending.is_(True),
                             ),
                             UserFile.status == UserFileStatus.COMPLETED,
                         )
@@ -899,15 +903,19 @@ def project_sync_user_file_impl(
 
             if not skip_vespa:
                 active_search_settings = get_active_search_settings(db_session)
-                # User files are only ever written to the primary index (initial
-                # indexing passes no secondary, and the port flow never copies them).
-                # Targeting the secondary here would raise
-                # SecondaryIndexDocumentMissingError during a reindex and leave
-                # needs_project_sync stuck, retrying for the whole reindex window.
+                # INSTANT-promoted primary still backfilling: defer updates to
+                # not-yet-ported files, else the create-only port reinstalls a stale ACL.
+                primary_backfill_in_progress = (
+                    active_search_settings.primary.port_backfill_source_id is not None
+                    and port_backfill_has_pending_work(
+                        db_session, active_search_settings.primary.id
+                    )
+                )
                 document_indices = get_all_document_indices(
                     search_settings=active_search_settings.primary,
-                    secondary_search_settings=None,
+                    secondary_search_settings=active_search_settings.secondary,
                     httpx_client=HttpxPool.get("vespa"),
+                    primary_backfill_in_progress=primary_backfill_in_progress,
                 )
                 retry_document_indices = [
                     RetryDocumentIndex(document_index)
@@ -923,6 +931,7 @@ def project_sync_user_file_impl(
         # DB connection returned to pool here; Vespa HTTP calls run without it.
 
         # Phase 2: Vespa HTTP calls (no DB session held)
+        port_index_missing = False
         if not skip_vespa:
             update_request = MetadataUpdateRequest(
                 document_ids=[file_id_str],
@@ -934,7 +943,15 @@ def project_sync_user_file_impl(
                 persona_ids=set(persona_ids),
             )
             for retry_document_index in retry_document_indices:
-                retry_document_index.update([update_request])
+                try:
+                    retry_document_index.update([update_request])
+                except SecondaryIndexDocumentMissingError:
+                    # Not yet ported to FUTURE (or the INSTANT-promoted primary): defer
+                    # via the flag. The port supplies content; a later scan lands the ACL.
+                    task_logger.debug(
+                        f"user_file={file_id_str} not in a still-porting index; deferring sync."
+                    )
+                    port_index_missing = True
 
         task_logger.info(f"project_sync_user_file_impl - User file id={user_file_id}")
 
@@ -946,6 +963,11 @@ def project_sync_user_file_impl(
                 user_file.needs_persona_sync = False
                 user_file.last_project_sync_at = datetime.datetime.now(
                     datetime.timezone.utc
+                )
+                # Defer only a portable (COMPLETED) file — a non-portable one is never
+                # ported, so its flag would never drain (leave it synced instead).
+                user_file.secondary_only_sync_pending = (
+                    port_index_missing and user_file.status == UserFileStatus.COMPLETED
                 )
                 db_session.add(user_file)
                 db_session.commit()
