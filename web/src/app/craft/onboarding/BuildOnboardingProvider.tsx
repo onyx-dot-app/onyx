@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 import { useSWRConfig } from "swr";
 import { useOnboardingModal } from "@/app/craft/onboarding/hooks/useOnboardingModal";
-import BuildOnboardingModal from "@/app/craft/onboarding/components/BuildOnboardingModal";
+import LivingMapModal from "@/app/craft/onboarding/components/LivingMapModal";
 import { OnboardingModalController } from "@/app/craft/onboarding/types";
 import ProviderSetupModal from "@/sections/modals/languageModels/ProviderSetupModal";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
@@ -50,10 +50,10 @@ export function BuildOnboardingProvider({
 
   return (
     <OnboardingContext.Provider value={controller}>
-      <BuildOnboardingModal
-        mode={controller.mode}
+      <LivingMapModal
+        open={controller.introOpen}
         onComplete={controller.completeOnboarding}
-        onClose={controller.close}
+        onDismiss={controller.dismissOnboarding}
       />
 
       <ProviderSetupModal

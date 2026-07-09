@@ -80,21 +80,31 @@ export function getDefaultLlmSelection(
 // Onboarding "seen" flag
 // =============================================================================
 
-// Tracks whether the user has dismissed the craft onboarding modal so the
-// intro only auto-shows once.
-const CRAFT_ONBOARDING_SEEN_COOKIE_NAME = "craft_onboarding_seen";
-
-export function getCraftOnboardingSeen(): boolean {
-  if (typeof document === "undefined") return false;
-  return document.cookie
-    .split("; ")
-    .some((row) => row.startsWith(`${CRAFT_ONBOARDING_SEEN_COOKIE_NAME}=`));
+// Tracks whether the user has dismissed the craft onboarding intro so it only
+// auto-shows once per user (mirrors the main app's
+// `onyx:onboardingCompleted:{userId}`).
+function craftOnboardingSeenKey(userId: string): string {
+  return `onyx:craftOnboardingSeen:${userId}`;
 }
 
-export function setCraftOnboardingSeen(): void {
-  if (typeof document === "undefined") return;
-  const expires = new Date(
-    Date.now() + 365 * 24 * 60 * 60 * 1000
-  ).toUTCString();
-  document.cookie = `${CRAFT_ONBOARDING_SEEN_COOKIE_NAME}=1; path=/; expires=${expires}; SameSite=Lax`;
+// localStorage access throws when the browser blocks site data; treat that
+// as "not seen" rather than crashing the page.
+export function getCraftOnboardingSeen(userId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return (
+      window.localStorage.getItem(craftOnboardingSeenKey(userId)) === "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function setCraftOnboardingSeen(userId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(craftOnboardingSeenKey(userId), "true");
+  } catch {
+    // Storage unavailable — the intro will re-show next visit.
+  }
 }
