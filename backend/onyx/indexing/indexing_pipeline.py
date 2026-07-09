@@ -1458,6 +1458,7 @@ def index_doc_batch(
                     filtered_documents=filtered_documents,
                     enrichment=enricher,
                     db_session=db_session,
+                    index_to_secondary=index_to_secondary,
                 )
 
             # Persist content hash only for documents confirmed written to the

@@ -179,6 +179,16 @@ def get_search_settings_by_id(
     return db_session.get(SearchSettings, search_settings_id)
 
 
+def active_secondary_port_target(db_session: Session) -> SearchSettings | None:
+    """The secondary index a reindex-port is populating (the dual-write target), or None.
+    Pure — never unpins a drained INSTANT source (unlike _resolve_port_target_settings).
+    None after an INSTANT swap: FUTURE was promoted to current, so the live pass covers it."""
+    secondary = get_secondary_search_settings(db_session)
+    if secondary is not None and secondary.use_port_flow:
+        return secondary
+    return None
+
+
 def get_active_search_settings(db_session: Session) -> ActiveSearchSettings:
     """Returns active search settings. Secondary search settings may be None."""
 

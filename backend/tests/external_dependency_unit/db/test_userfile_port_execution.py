@@ -287,13 +287,38 @@ def test_swap_gate_not_deadlocked_by_canceled_user(
     assert _user_file_port_has_pending_work(db_session, future_ss_id) is False
 
 
-def test_swap_not_blocked_by_undrainable_secondary_pending_flag(
+def test_swap_gate_blocks_on_secondary_pending_then_releases(
     db_session: Session, future_ss_id: int, port_user: User
 ) -> None:
-    """The swap must NOT gate on secondary_only_sync_pending while the metadata sync only
-    update()s FUTURE: a file the port never copies (uploaded after its port settled, or
-    beyond the snapshot bound) would flag forever and deadlock. Gating waits until new
-    user files are also dual-written to FUTURE."""
+    """Now that every flag is drainable (dual-write + 404 fallback), the swap gate holds while
+    a user's secondary_reconcile_pending is set and releases once it clears."""
+    future_ss = db_session.get(SearchSettings, future_ss_id)
+    assert future_ss is not None
+    uf = _make_user_file(db_session, port_user.id)
+    attempt = create_port_attempt(
+        db_session, None, future_ss_id, port_user_id=port_user.id
+    )
+    mark_port_in_progress(db_session, attempt.id)
+    mark_port_succeeded(db_session, attempt.id)
+    assert all_user_scopes_ported(db_session, future_ss_id, [port_user.id]) is True
+
+    uf.secondary_reconcile_pending = True
+    db_session.commit()
+    # flag set -> swap blocked
+    assert _port_swap_ready(db_session, future_ss, [], [port_user.id]) is False
+
+    uf.secondary_reconcile_pending = False
+    db_session.commit()
+    # flag drained -> swap ready
+    assert _port_swap_ready(db_session, future_ss, [], [port_user.id]) is True
+
+
+def test_swap_gate_ignores_reconcile_flag_on_non_completed_file(
+    db_session: Session, future_ss_id: int, port_user: User
+) -> None:
+    """A reconcile flag stuck on a non-COMPLETED file is undrainable (the reconciler only
+    flags / re-enqueues COMPLETED files), so the gate must ignore it — else a delete racing
+    the mark, or a FAILED file, wedges the swap with no drain path."""
     future_ss = db_session.get(SearchSettings, future_ss_id)
     assert future_ss is not None
     uf = _make_user_file(db_session, port_user.id)
@@ -303,10 +328,14 @@ def test_swap_not_blocked_by_undrainable_secondary_pending_flag(
     mark_port_in_progress(db_session, attempt.id)
     mark_port_succeeded(db_session, attempt.id)
 
-    uf.secondary_only_sync_pending = True
+    uf.secondary_reconcile_pending = True
     db_session.commit()
-    assert all_user_scopes_ported(db_session, future_ss_id, [port_user.id]) is True
-    # flag set, yet the swap is ready — no deadlock
+    # COMPLETED + flag -> blocks
+    assert _port_swap_ready(db_session, future_ss, [], [port_user.id]) is False
+
+    uf.status = UserFileStatus.FAILED
+    db_session.commit()
+    # same flag, now on a FAILED (undrainable) row -> gate ignores it
     assert _port_swap_ready(db_session, future_ss, [], [port_user.id]) is True
 
 
