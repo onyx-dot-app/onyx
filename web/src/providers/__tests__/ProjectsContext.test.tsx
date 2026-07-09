@@ -159,4 +159,40 @@ describe("ProjectsContext beginUpload size precheck", () => {
     expect(onSuccess).not.toHaveBeenCalled();
     expect(onFailure).toHaveBeenCalledWith([]);
   });
+
+  it("reports the optimistic temp id via onFailure when the server rejects a file", async () => {
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    const rejected = new File(["small"], "too-many-tokens.txt", {
+      type: "text/plain",
+    });
+    const onSuccess = jest.fn();
+    const onFailure = jest.fn();
+
+    mockUploadFiles.mockResolvedValue({
+      user_files: [],
+      rejected_files: [
+        { file_name: "too-many-tokens.txt", reason: "Exceeds token limit" },
+      ],
+    });
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [rejected],
+        null,
+        onSuccess,
+        onFailure
+      );
+    });
+
+    const tempId = optimisticFiles[0]?.temp_id;
+    expect(tempId).toBeTruthy();
+    expect(mockUploadFiles).toHaveBeenCalledTimes(1);
+    expect(mockToastWarning).toHaveBeenCalledTimes(1);
+    // AgentEditorPage relies on this callback firing with the failed temp id
+    // to strip the file from user_file_ids; otherwise the submit button stays
+    // disabled forever waiting on a phantom "uploading" file.
+    expect(onFailure).toHaveBeenCalledWith([tempId]);
+  });
 });
