@@ -222,6 +222,8 @@ class DocumentBase(BaseModel):
 
     # UTC time
     doc_updated_at: datetime | None = None
+    # UTC time the document was created at the source
+    doc_created_at: datetime | None = None
     chunk_count: int | None = None
 
     # Owner, creator, etc.
@@ -420,6 +422,7 @@ class Document(DocumentBase):
             semantic_identifier=base.semantic_identifier,
             metadata=base.metadata,
             doc_updated_at=base.doc_updated_at,
+            doc_created_at=base.doc_created_at,
             primary_owners=base.primary_owners,
             secondary_owners=base.secondary_owners,
             title=base.title,
