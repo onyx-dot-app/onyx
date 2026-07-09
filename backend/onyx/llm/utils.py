@@ -51,15 +51,30 @@ _TWELVE_LABS_PEGASUS_MODEL_NAMES = [
     "twelvelabs/us.twelvelabs.pegasus-1-2-v1",
 ]
 _TWELVE_LABS_PEGASUS_OUTPUT_TOKENS = max(512, GEN_AI_MODEL_FALLBACK_MAX_TOKENS // 4)
+_MINIMAX_M3_MODEL_NAMES = ["MiniMax-M3", "minimax/MiniMax-M3"]
 CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
-    model_name: {
-        "max_input_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
-        "max_output_tokens": _TWELVE_LABS_PEGASUS_OUTPUT_TOKENS,
-        "max_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
-        "supports_reasoning": False,
-        "supports_vision": False,
-    }
-    for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
+    **{
+        model_name: {
+            "input_cost_per_token": 0.6 / ONE_MILLION,
+            "output_cost_per_token": 2.4 / ONE_MILLION,
+            "cache_read_input_token_cost": 0.12 / ONE_MILLION,
+            "max_input_tokens": ONE_MILLION,
+            "max_tokens": ONE_MILLION,
+            "supports_reasoning": False,
+            "supports_vision": False,
+        }
+        for model_name in _MINIMAX_M3_MODEL_NAMES
+    },
+    **{
+        model_name: {
+            "max_input_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+            "max_output_tokens": _TWELVE_LABS_PEGASUS_OUTPUT_TOKENS,
+            "max_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+            "supports_reasoning": False,
+            "supports_vision": False,
+        }
+        for model_name in _TWELVE_LABS_PEGASUS_MODEL_NAMES
+    },
 }
 
 

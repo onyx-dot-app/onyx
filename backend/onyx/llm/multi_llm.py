@@ -47,6 +47,7 @@ from onyx.llm.well_known_providers.constants import (
     AWS_SECRET_ACCESS_KEY_KWARG_ENV_VAR_FORMAT,
 )
 from onyx.llm.well_known_providers.constants import LM_STUDIO_API_KEY_CONFIG_KEY
+from onyx.llm.well_known_providers.constants import MINIMAX_API_BASE
 from onyx.llm.well_known_providers.constants import OLLAMA_API_KEY_CONFIG_KEY
 from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_KWARG
 from onyx.llm.well_known_providers.constants import VERTEX_AUTH_METHOD_WORKLOAD_IDENTITY
@@ -425,6 +426,7 @@ class LitellmLLM(LLM):
         if model_provider in (
             LlmProviderNames.BIFROST,
             LlmProviderNames.OPENAI_COMPATIBLE,
+            LlmProviderNames.MINIMAX,
             LlmProviderNames.NEBIUS_TOKENFACTORY,
         ):
             self._custom_llm_provider = "openai"
@@ -433,6 +435,8 @@ class LitellmLLM(LLM):
             # placeholder to prevent LiteLLM from raising AuthenticationError.
             if not self._api_key:
                 model_kwargs.setdefault("api_key", "not-needed")
+            if self._api_base is None and model_provider == LlmProviderNames.MINIMAX:
+                self._api_base = MINIMAX_API_BASE
             if self._api_base is not None:
                 base = self._api_base.rstrip("/")
                 self._api_base = base if base.endswith("/v1") else f"{base}/v1"
@@ -554,6 +558,7 @@ class LitellmLLM(LLM):
         is_openai_compatible_proxy = self._model_provider in (
             LlmProviderNames.BIFROST,
             LlmProviderNames.OPENAI_COMPATIBLE,
+            LlmProviderNames.MINIMAX,
             LlmProviderNames.NEBIUS_TOKENFACTORY,
         )
         model_provider = (

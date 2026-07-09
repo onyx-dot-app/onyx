@@ -17,6 +17,9 @@ BIFROST_PROVIDER_NAME = "bifrost"
 
 OPENAI_COMPATIBLE_PROVIDER_NAME = "openai_compatible"
 
+MINIMAX_PROVIDER_NAME = "minimax"
+MINIMAX_API_BASE = "https://api.minimax.io/v1"
+
 NEBIUS_TOKENFACTORY_PROVIDER_NAME = "nebius_tokenfactory"
 
 # Providers that use optional Bearer auth from custom_config

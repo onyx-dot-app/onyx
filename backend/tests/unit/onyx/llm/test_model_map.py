@@ -132,3 +132,19 @@ def test_twelvelabs_pegasus_override_present() -> None:
         assert model_obj["supports_reasoning"] is False
     finally:
         get_model_map.cache_clear()
+
+
+def test_minimax_m3_override_present() -> None:
+    get_model_map.cache_clear()
+    try:
+        model_map = get_model_map()
+        model_obj = find_model_obj(model_map, LlmProviderNames.MINIMAX, "MiniMax-M3")
+        assert model_obj is not None
+        assert model_obj["max_input_tokens"] == 1_000_000
+        assert model_obj["max_tokens"] == 1_000_000
+        assert model_obj["input_cost_per_token"] == 0.6 / 1_000_000
+        assert model_obj["output_cost_per_token"] == 2.4 / 1_000_000
+        assert model_obj["cache_read_input_token_cost"] == 0.12 / 1_000_000
+        assert model_obj["supports_reasoning"] is False
+    finally:
+        get_model_map.cache_clear()

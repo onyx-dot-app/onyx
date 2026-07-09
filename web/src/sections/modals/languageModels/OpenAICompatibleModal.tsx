@@ -102,13 +102,22 @@ function OpenAICompatibleModalInternals({
   );
 }
 
-export default function OpenAICompatibleModal({
+interface OpenAICompatibleModalProps extends LLMProviderFormProps {
+  providerName?: LLMProviderName;
+  defaultApiBase?: string;
+  description?: string;
+}
+
+export function OpenAICompatibleModal({
   variant = "llm-configuration",
   existingLlmProvider,
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
-}: LLMProviderFormProps) {
+  providerName = LLMProviderName.OPENAI_COMPATIBLE,
+  defaultApiBase,
+  description = "Connect from other cloud or self-hosted models via OpenAI-compatible endpoints.",
+}: OpenAICompatibleModalProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -116,9 +125,13 @@ export default function OpenAICompatibleModal({
 
   const initialValues = useInitialValues(
     isOnboarding,
-    LLMProviderName.OPENAI_COMPATIBLE,
+    providerName,
     existingLlmProvider
   ) as OpenAICompatibleModalValues;
+
+  if (!initialValues.api_base && defaultApiBase) {
+    initialValues.api_base = defaultApiBase;
+  }
 
   const validationSchema = buildValidationSchema(isOnboarding, {
     apiBase: true,
@@ -126,18 +139,18 @@ export default function OpenAICompatibleModal({
 
   return (
     <ModalWrapper
-      providerName={LLMProviderName.OPENAI_COMPATIBLE}
+      providerName={providerName}
       llmProvider={existingLlmProvider}
       onClose={onClose}
       initialValues={initialValues}
-      description="Connect from other cloud or self-hosted models via OpenAI-compatible endpoints."
+      description={description}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
           analyticsSource: isOnboarding
             ? LLMProviderConfiguredSource.CHAT_ONBOARDING
             : LLMProviderConfiguredSource.ADMIN_PAGE,
-          providerName: LLMProviderName.OPENAI_COMPATIBLE,
+          providerName,
           values,
           initialValues,
           existingLlmProvider,
@@ -167,3 +180,5 @@ export default function OpenAICompatibleModal({
     </ModalWrapper>
   );
 }
+
+export default OpenAICompatibleModal;
