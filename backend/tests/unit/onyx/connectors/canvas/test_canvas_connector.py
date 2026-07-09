@@ -12,6 +12,9 @@ from ee.onyx.external_permissions.canvas.access import CanvasCoursePermissionCon
 from ee.onyx.external_permissions.canvas.access import get_announcement_permissions
 from ee.onyx.external_permissions.canvas.access import get_assignment_permissions
 from ee.onyx.external_permissions.canvas.access import get_page_permissions
+from ee.onyx.external_permissions.canvas.group_sync import (
+    _referenced_group_and_section_ids,
+)
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.client import CanvasApiClient
@@ -1819,6 +1822,44 @@ class TestRetrieveAllSlimDocsPermSync:
         ):
             with pytest.raises(RuntimeError, match="permission lookup failed"):
                 list(connector.retrieve_all_slim_docs_perm_sync())
+
+
+class TestCanvasGroupSyncHelpers:
+    def test_referenced_ids_fetch_assignments_once(self) -> None:
+        connector = MagicMock(spec=CanvasConnector)
+        connector._list_assignments.return_value = [
+            CanvasAssignment(
+                id=20,
+                name="Group override",
+                html_url=f"{FAKE_BASE_URL}/courses/1/assignments/20",
+                course_id=1,
+                overrides=[CanvasAssignmentOverride(group_id=99)],
+            ),
+            CanvasAssignment(
+                id=21,
+                name="Section override",
+                html_url=f"{FAKE_BASE_URL}/courses/1/assignments/21",
+                course_id=1,
+                overrides=[CanvasAssignmentOverride(course_section_id=10)],
+            ),
+        ]
+        connector._list_announcements.return_value = [
+            CanvasAnnouncement(
+                id=30,
+                title="Section announcement",
+                html_url=f"{FAKE_BASE_URL}/courses/1/discussion_topics/30",
+                course_id=1,
+                is_section_specific=True,
+                sections=[CanvasAnnouncementSection(id=11)],
+            )
+        ]
+
+        group_ids, section_ids = _referenced_group_and_section_ids(connector, 1)
+
+        assert group_ids == {99}
+        assert section_ids == {10, 11}
+        connector._list_assignments.assert_called_once_with(1)
+        connector._list_announcements.assert_called_once_with(1)
 
 
 class TestCanvasPermissionMapping:
