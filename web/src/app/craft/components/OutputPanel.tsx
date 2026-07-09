@@ -6,6 +6,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   useSession,
   useWebappNeedsRefresh,
+  useWebappNeedsRemount,
   useBuildSessionStore,
   usePanelTabs,
   useActiveOutputTab,
@@ -191,6 +192,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
 
   // Webapp refresh trigger from streaming / restore
   const webappNeedsRefresh = useWebappNeedsRefresh();
+  const webappNeedsRemount = useWebappNeedsRemount();
 
   // Track polling window: poll for up to 30s after a restore/refresh trigger
   const [pollingDeadline, setPollingDeadline] = useState<number | null>(null);
@@ -228,16 +230,18 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
       refreshInterval: shouldPoll ? 2000 : 0,
       revalidateOnFocus: true,
       keepPreviousData: true,
+      // Stop polling via onSuccess (not a useEffect over `ready`) — a refresh
+      // bump resets isWebappReady while `ready` stays true across fetches, so
+      // an effect keyed on the value never re-fires and each poll window runs
+      // its full 30s instead of stopping at the first healthy response.
+      onSuccess: (data) => {
+        if (data?.ready) {
+          setIsWebappReady(true);
+          setPollingDeadline(null);
+        }
+      },
     }
   );
-
-  // Update readiness from SWR response and clear polling deadline
-  useEffect(() => {
-    if (webappInfo?.ready) {
-      setIsWebappReady(true);
-      setPollingDeadline(null);
-    }
-  }, [webappInfo?.ready]);
 
   // Update cache when SWR returns data for current session
   useEffect(() => {
@@ -246,15 +250,11 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
     }
   }, [webappInfo?.webapp_url, session?.id, cachedForSessionId]);
 
-  // Refresh when web/ file changes or after restore.
-  // webappNeedsRefresh is a counter that increments on each edit/restore,
-  // ensuring each triggers a new refresh even if the panel is already open.
-  // Also bump previewRefreshKey so the iframe actually remounts — SWR
-  // re-fetching webapp-info isn't enough when the URL stays the same.
+  // Re-fetch webapp-info when web/ files change or after restore. Live code
+  // edits reach the iframe via the proxied HMR websocket — no remount needed.
   useEffect(() => {
     if (webappNeedsRefresh > 0 && isFullyOpen && session?.id) {
       mutate();
-      setPreviewRefreshKey((k) => k + 1);
     }
   }, [webappNeedsRefresh, isFullyOpen, mutate, session?.id]);
 
@@ -618,7 +618,10 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
               ) : (
                 <PreviewTab
                   webappUrl={displayUrl}
-                  refreshKey={previewRefreshKey}
+                  // Remounts on manual refresh and after a restore (the new
+                  // pod's HMR socket can't update the old page). Live edits
+                  // flow through HMR and never remount.
+                  refreshKey={previewRefreshKey + webappNeedsRemount}
                 />
               ))}
             {activeOutputTab === "files" && (

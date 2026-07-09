@@ -2123,7 +2123,7 @@ async def _get_user_from_token_data(token_data: dict) -> User | None:
 _LOOPBACK_HOSTNAMES = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
-def _is_same_origin(actual: str, expected: str) -> bool:
+def is_same_origin(actual: str, expected: str) -> bool:
     """Compare two origins for the WebSocket CSWSH check.
 
     Scheme and hostname must match exactly.  Port must also match, except
@@ -2173,7 +2173,7 @@ async def current_user_from_websocket(
         logger.warning("WS auth: missing Origin header")
         raise BasicAuthenticationError(detail="Access denied. Missing origin.")
 
-    if not _is_same_origin(origin, WEB_DOMAIN):
+    if not is_same_origin(origin, WEB_DOMAIN):
         logger.warning(
             "WS auth: origin mismatch. Expected %s, got %s", WEB_DOMAIN, origin
         )
