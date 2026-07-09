@@ -38,7 +38,10 @@ import CraftInputBar, {
 } from "@/app/craft/components/CraftInputBar";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
-import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
+import {
+  BuildLlmSelection,
+  hasSupportedCraftProvider,
+} from "@/app/craft/onboarding/constants";
 import ScheduledRunBanner, {
   useScheduledRunContext,
 } from "@/app/craft/components/ScheduledRunBanner";
@@ -98,7 +101,12 @@ export default function BuildChatPanel({
   const toggleOutputPanel = useToggleOutputPanel();
   const onWakeIntent = useWakeOnIntent();
 
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders, isLoading: isLoadingProviders } = useLLMProviders();
+  // Sessions can outlive the org's supported providers; gate the composer
+  // like the welcome page until one exists (the model picker stays enabled so
+  // admins can connect from its popover).
+  const needsProvider =
+    !isLoadingProviders && !hasSupportedCraftProvider(llmProviders);
   // Picker shows the session's stored model unless the user picks another.
   // The pick is keyed by session so it can't leak across sessions.
   const sessionModel = useMemo<BuildLlmSelection | null>(() => {
@@ -798,13 +806,17 @@ export default function BuildChatPanel({
                     onInterrupt={
                       scheduledRunInFlight ? undefined : handleInterrupt
                     }
-                    disabled={isViewingSubagent || scheduledRunInFlight}
+                    disabled={
+                      isViewingSubagent || scheduledRunInFlight || needsProvider
+                    }
                     placeholder={
                       isViewingSubagent
                         ? "Switch to the main agent to send a message"
                         : scheduledRunInFlight
                           ? "Scheduled run in progress..."
-                          : "Continue the conversation..."
+                          : needsProvider
+                            ? "Connect a model provider to continue..."
+                            : "Continue the conversation..."
                     }
                     queuedMessages={queuedMessages}
                     onQueueMessage={handleQueueMessage}

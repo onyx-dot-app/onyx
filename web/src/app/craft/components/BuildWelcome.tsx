@@ -44,9 +44,12 @@ export default function BuildWelcome({
   const handleWordmarkClick = useVideoBackgroundToggleClick();
   const { isAdmin, hasAnyProvider, isLoading } = useOnboarding();
 
-  // Craft can't build without a supported provider: gate the inputs and show
-  // setup (admins) or the locked notice (everyone else) until one exists.
+  // Craft can't build without a supported provider: show setup (admins) or
+  // the locked notice (everyone else) until one exists.
   const setupPending = !isLoading && !hasAnyProvider;
+  // Inputs also stay gated while provider state loads, so a no-provider
+  // workspace never flashes an enabled composer.
+  const inputsDisabled = isLoading || !hasAnyProvider;
 
   const handlePromptClick = (promptText: string) => {
     inputBarRef.current?.setMessage(promptText);
@@ -88,7 +91,7 @@ export default function BuildWelcome({
             <ModelPickerButton
               selection={selectedModel}
               onChange={setSelectedModel}
-              disabled={setupPending}
+              disabled={inputsDisabled}
             />
           </div>
         </div>
@@ -104,7 +107,7 @@ export default function BuildWelcome({
             isRunning={isRunning}
             placeholder="Analyze my data and create a dashboard..."
             sandboxInitializing={sandboxInitializing}
-            disabled={setupPending}
+            disabled={inputsDisabled}
           />
         </div>
       </div>

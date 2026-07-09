@@ -53,8 +53,13 @@ export function useOnboardingModal(): OnboardingModalController {
 
     // Trigger pre-provisioning now that onboarding is complete so the sandbox
     // starts provisioning immediately rather than waiting for the controller.
-    ensurePreProvisionedSession();
-  }, [ensurePreProvisionedSession]);
+    // With no supported provider, session create would fail and the resulting
+    // backoff would delay the sandbox after a provider is finally connected —
+    // the connect success path kicks provisioning off instead.
+    if (hasAnyProvider) {
+      ensurePreProvisionedSession();
+    }
+  }, [ensurePreProvisionedSession, hasAnyProvider]);
 
   // Any well-known provider type — getProvider resolves the matching modal.
   const openProviderModal = useCallback((providerKey: string) => {
