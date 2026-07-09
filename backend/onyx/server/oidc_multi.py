@@ -7,12 +7,10 @@ matching provider rows exist.
 
 import hashlib
 import json
-import secrets
-import time
 import uuid
 from typing import Any
 
-import jwt
+from cachetools import TTLCache
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Request
@@ -20,8 +18,6 @@ from fastapi import Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi_users.authentication import Strategy
-from fastapi_users.jwt import decode_jwt
-from fastapi_users.router.common import ErrorCode
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
 from httpx_oauth.oauth2 import BaseOAuth2
@@ -34,13 +30,13 @@ from onyx.auth.users import auth_backend
 from onyx.auth.users import complete_login_flow
 from onyx.auth.users import CSRF_TOKEN_COOKIE_NAME
 from onyx.auth.users import CSRF_TOKEN_KEY
+from onyx.auth.users import decode_and_validate_oauth_state
 from onyx.auth.users import generate_csrf_token
 from onyx.auth.users import generate_pkce_pair
 from onyx.auth.users import generate_state_token
 from onyx.auth.users import get_pkce_cookie_name
 from onyx.auth.users import get_user_manager
 from onyx.auth.users import OAuth2AuthorizeResponse
-from onyx.auth.users import STATE_TOKEN_AUDIENCE
 from onyx.auth.users import STATE_TOKEN_LIFETIME_SECONDS
 from onyx.auth.users import UserManager
 from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
@@ -51,9 +47,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.db.models import User
+from onyx.db.sso_provider import CONFIG_MODEL_BY_TYPE
 from onyx.db.sso_provider import fetch_sso_provider_by_name
-from onyx.db.sso_provider import GoogleProviderConfig
-from onyx.db.sso_provider import OIDCProviderConfig
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -64,15 +59,13 @@ logger = setup_logger()
 router = APIRouter(prefix="/auth/oidc")
 
 _CLIENT_CACHE_TTL_SECONDS = 600
-# Off by default: linking a second provider to an existing account by verified
-# email is an account-takeover vector when two IdPs can assert the same domain.
-# An admin opt-in belongs on the provider row.
+# Hardcoded off: linking a second IdP to an existing account by verified email is
+# an account-takeover vector when two IdPs can assert one domain.
 _ALLOW_AUTO_LINK = False
 
-_CLIENT_CACHE: dict[
-    tuple[str, str, SSOProviderType, str],
-    tuple[BaseOAuth2[Any], float],
-] = {}
+_CLIENT_CACHE: TTLCache[tuple[str, str, SSOProviderType, str], BaseOAuth2[Any]] = (
+    TTLCache(maxsize=128, ttl=_CLIENT_CACHE_TTL_SECONDS)
+)
 
 
 def _resolve_oidc_provider(
@@ -95,13 +88,14 @@ def _resolve_oidc_provider(
 
     raw_config = provider.config.get_value(apply_mask=False)
     try:
-        if provider.provider_type is SSOProviderType.GOOGLE_OAUTH:
-            return provider, GoogleProviderConfig.model_validate(
-                raw_config
-            ).model_dump()
-        return provider, OIDCProviderConfig.model_validate(raw_config).model_dump()
+        config = (
+            CONFIG_MODEL_BY_TYPE[provider.provider_type]
+            .model_validate(raw_config)
+            .model_dump()
+        )
     except ValidationError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown OIDC provider") from e
+    return provider, config
 
 
 def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[Any]:
@@ -138,17 +132,16 @@ def _get_cache_key(
 async def _get_oauth_client(
     provider: SSOProvider, config: dict[str, Any]
 ) -> BaseOAuth2[Any]:
-    # Building an OIDC client fetches the discovery doc over the network, so
-    # cache per provider+config. The TTL bounds staleness after an admin edit.
+    # Constructing an OIDC client fetches the IdP discovery doc over the network.
+    # Cache per provider+config. The TTL bounds how long a rotated upstream
+    # discovery doc stays stale. A config edit re-keys and rebuilds at once.
     cache_key = _get_cache_key(provider, config)
     cached_client = _CLIENT_CACHE.get(cache_key)
     if cached_client is not None:
-        client, stamp = cached_client
-        if time.monotonic() - stamp <= _CLIENT_CACHE_TTL_SECONDS:
-            return client
+        return cached_client
 
     client = await run_in_threadpool(_build_client, provider, config)
-    _CLIENT_CACHE[cache_key] = (client, time.monotonic())
+    _CLIENT_CACHE[cache_key] = client
     return client
 
 
@@ -179,60 +172,10 @@ def _delete_pkce_cookie(response: Response, state: str) -> None:
     )
 
 
-def _decode_and_validate_state(
-    request: Request, state: str, provider_name: str
-) -> dict[str, str]:
-    try:
-        state_data = decode_jwt(state, USER_AUTH_SECRET, [STATE_TOKEN_AUDIENCE])
-    except jwt.DecodeError:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            getattr(
-                ErrorCode,
-                "ACCESS_TOKEN_DECODE_ERROR",
-                "ACCESS_TOKEN_DECODE_ERROR",
-            ),
-        )
-    except jwt.ExpiredSignatureError:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            getattr(
-                ErrorCode,
-                "ACCESS_TOKEN_ALREADY_EXPIRED",
-                "ACCESS_TOKEN_ALREADY_EXPIRED",
-            ),
-        )
-    except jwt.PyJWTError:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            getattr(
-                ErrorCode,
-                "ACCESS_TOKEN_DECODE_ERROR",
-                "ACCESS_TOKEN_DECODE_ERROR",
-            ),
-        )
-
-    cookie_csrf_token = request.cookies.get(CSRF_TOKEN_COOKIE_NAME)
-    state_csrf_token = state_data.get(CSRF_TOKEN_KEY)
-    if (
-        not cookie_csrf_token
-        or not state_csrf_token
-        or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
-    ):
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
-        )
-
-    # Bind the flow to its provider so a state minted for one provider cannot be
-    # replayed against another provider's callback.
-    if state_data.get("provider_name") != provider_name:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "SSO state does not match the callback provider",
-        )
-
-    return state_data
+def _callback_uri(provider_name: str) -> str:
+    # The IdP redirects the browser here, so route it through /api to reach
+    # FastAPI. The bare /auth/oidc path is served by the web app, not the API.
+    return f"{WEB_DOMAIN}/api/auth/oidc/{provider_name}/callback"
 
 
 @router.get("/{provider_name}/authorize")
@@ -243,9 +186,7 @@ async def oidc_login_for_provider(
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
-    # The IdP redirects the browser here, so route it through /api to reach
-    # FastAPI. The bare /auth/oidc path is served by the web app, not the API.
-    redirect_uri = f"{WEB_DOMAIN}/api/auth/oidc/{provider_name}/callback"
+    redirect_uri = _callback_uri(provider_name)
     next_url = sanitize_next_url(request.query_params.get("next"))
     csrf_token = generate_csrf_token()
     state = generate_state_token(
@@ -313,7 +254,7 @@ async def oidc_login_callback_for_provider(
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
-    redirect_uri = f"{WEB_DOMAIN}/api/auth/oidc/{provider_name}/callback"
+    redirect_uri = _callback_uri(provider_name)
 
     if error is not None:
         raise OnyxError(
@@ -331,7 +272,12 @@ async def oidc_login_callback_for_provider(
             "Missing state parameter in OAuth callback",
         )
 
-    state_data = _decode_and_validate_state(request, state, provider_name)
+    state_data = decode_and_validate_oauth_state(
+        request=request,
+        state_value=state,
+        state_secret=USER_AUTH_SECRET,
+        expected_provider_name=provider_name,
+    )
 
     code_verifier: str | None = None
     if OIDC_PKCE_ENABLED:

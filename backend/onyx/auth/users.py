@@ -2267,6 +2267,67 @@ def get_pkce_cookie_name(state: str) -> str:
     return f"{PKCE_COOKIE_NAME_PREFIX}_{state_hash}"
 
 
+def decode_and_validate_oauth_state(
+    *,
+    request: Request,
+    state_value: str,
+    state_secret: SecretType,
+    csrf_token_cookie_name: str = CSRF_TOKEN_COOKIE_NAME,
+    expected_provider_name: str | None = None,
+) -> Dict[str, str]:
+    """Decode the signed OAuth state and enforce the CSRF double-submit.
+    Optionally bind the flow to a provider so a state minted for one provider
+    cannot be replayed on another provider's callback."""
+    try:
+        state_data = decode_jwt(state_value, state_secret, [STATE_TOKEN_AUDIENCE])
+    except jwt.DecodeError:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            getattr(
+                ErrorCode, "ACCESS_TOKEN_DECODE_ERROR", "ACCESS_TOKEN_DECODE_ERROR"
+            ),
+        )
+    except jwt.ExpiredSignatureError:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            getattr(
+                ErrorCode,
+                "ACCESS_TOKEN_ALREADY_EXPIRED",
+                "ACCESS_TOKEN_ALREADY_EXPIRED",
+            ),
+        )
+    except jwt.PyJWTError:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            getattr(
+                ErrorCode, "ACCESS_TOKEN_DECODE_ERROR", "ACCESS_TOKEN_DECODE_ERROR"
+            ),
+        )
+
+    cookie_csrf_token = request.cookies.get(csrf_token_cookie_name)
+    state_csrf_token = state_data.get(CSRF_TOKEN_KEY)
+    if (
+        not cookie_csrf_token
+        or not state_csrf_token
+        or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
+        )
+
+    if (
+        expected_provider_name is not None
+        and state_data.get("provider_name") != expected_provider_name
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "SSO state does not match the callback provider",
+        )
+
+    return state_data
+
+
 async def complete_login_flow(
     *,
     oauth_client: BaseOAuth2[Any],
@@ -2280,10 +2341,10 @@ async def complete_login_flow(
     is_verified_by_default: bool,
     allowed_email_domains_override: Sequence[str] | None = None,
 ) -> RedirectResponse:
-    # A failed or rejected userinfo fetch (bad status, malformed body,
-    # unverified email) must land as a controlled login rejection, not
-    # an unhandled 500. OnyxError has a global handler that GetIdEmailError
-    # does not.
+    """Shared post-token OAuth/OIDC login: read the verified identity, create or
+    authenticate the user, and return a web or mobile redirect."""
+    # Convert a failed or unverified userinfo fetch into a controlled login
+    # rejection. OnyxError has a global handler, GetIdEmailError would 500.
     try:
         account_id, account_email = await oauth_client.get_id_email(
             token["access_token"]
@@ -2311,7 +2372,6 @@ async def complete_login_flow(
 
     request.state.referral_source = referral_source
 
-    # Proceed to authenticate or create the user
     try:
         user = await user_manager.oauth_callback(  # ty: ignore[invalid-argument-type]
             oauth_client.name,
@@ -2337,9 +2397,9 @@ async def complete_login_flow(
             ErrorCode.LOGIN_BAD_CREDENTIALS,
         )
 
-    # Mobile clients get a PKCE one-time code over a deep link, not a web
-    # cookie. Guarded on the signed-state marker, so the web path below is
-    # byte-for-byte unchanged.
+    # Mobile SSO returns a one-time PKCE code over a deep link instead of a web
+    # session cookie. Gated on the signed-state marker so only mobile clients
+    # take this early return.
     if is_mobile_sso(state_data):
         redirect_response = await complete_mobile_sso(user, state_data, strategy)
         # Fire analytics like the web/bearer-login paths (PostHog identify).
@@ -2347,20 +2407,17 @@ async def complete_login_flow(
         await user_manager.on_after_login(user, request)
         return redirect_response
 
-    # Login user
     response = await backend.login(strategy, user)
     await user_manager.on_after_login(user, request, response)
 
-    # Prepare redirect response
     if tenant_id is None:
-        # Use URL utility to add parameters
         redirect_destination = add_url_params(next_url, {"new_team": "true"})
         redirect_response = RedirectResponse(redirect_destination, status_code=302)
     else:
-        # No parameters to add
         redirect_response = RedirectResponse(next_url, status_code=302)
 
-    # Copy headers from auth response to redirect response, with special handling for Set-Cookie
+    # Carry auth headers onto the redirect. Set-Cookie may repeat, so append each
+    # rather than assign, which would collapse them.
     for header_name, header_value in response.headers.items():
         header_name_lower = header_name.lower()
         if header_name_lower == "set-cookie":
@@ -2600,51 +2657,12 @@ def get_oauth_router(
             return error_response
 
         def decode_and_validate_state(state_value: str) -> Dict[str, str]:
-            try:
-                state_data = decode_jwt(
-                    state_value, state_secret, [STATE_TOKEN_AUDIENCE]
-                )
-            except jwt.DecodeError:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    getattr(
-                        ErrorCode,
-                        "ACCESS_TOKEN_DECODE_ERROR",
-                        "ACCESS_TOKEN_DECODE_ERROR",
-                    ),
-                )
-            except jwt.ExpiredSignatureError:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    getattr(
-                        ErrorCode,
-                        "ACCESS_TOKEN_ALREADY_EXPIRED",
-                        "ACCESS_TOKEN_ALREADY_EXPIRED",
-                    ),
-                )
-            except jwt.PyJWTError:
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    getattr(
-                        ErrorCode,
-                        "ACCESS_TOKEN_DECODE_ERROR",
-                        "ACCESS_TOKEN_DECODE_ERROR",
-                    ),
-                )
-
-            cookie_csrf_token = request.cookies.get(csrf_token_cookie_name)
-            state_csrf_token = state_data.get(CSRF_TOKEN_KEY)
-            if (
-                not cookie_csrf_token
-                or not state_csrf_token
-                or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
-            ):
-                raise OnyxError(
-                    OnyxErrorCode.VALIDATION_ERROR,
-                    getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
-                )
-
-            return state_data
+            return decode_and_validate_oauth_state(
+                request=request,
+                state_value=state_value,
+                state_secret=state_secret,
+                csrf_token_cookie_name=csrf_token_cookie_name,
+            )
 
         token: OAuth2Token
         state_data: Dict[str, str]

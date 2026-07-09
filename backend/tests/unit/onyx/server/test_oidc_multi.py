@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import CSRF_TOKEN_COOKIE_NAME
 from onyx.auth.users import CSRF_TOKEN_KEY
+from onyx.auth.users import decode_and_validate_oauth_state
 from onyx.auth.users import generate_csrf_token
 from onyx.auth.users import generate_state_token
 from onyx.db.enums import SSOProviderType
@@ -126,7 +127,7 @@ def test_build_client_oidc_uses_provider_name(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.asyncio
-async def test_client_cache_hits_then_rebuilds_after_ttl(
+async def test_client_cache_hits_and_rebuilds_on_config_change(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     oidc_multi._CLIENT_CACHE.clear()
@@ -141,59 +142,68 @@ async def test_client_cache_hits_then_rebuilds_after_ttl(
 
     await oidc_multi._get_oauth_client(provider, dict(_OIDC_CONFIG))
     await oidc_multi._get_oauth_client(provider, dict(_OIDC_CONFIG))
-    assert builds["count"] == 1  # second call is a cache hit
+    assert builds["count"] == 1  # same key is a cache hit
 
-    # Age the cached entry past the TTL, then it must rebuild.
-    key = oidc_multi._get_cache_key(provider, dict(_OIDC_CONFIG))
-    client, stamp = oidc_multi._CLIENT_CACHE[key]
-    oidc_multi._CLIENT_CACHE[key] = (
-        client,
-        stamp - oidc_multi._CLIENT_CACHE_TTL_SECONDS - 1,
+    # A rotated secret changes the config hash, so the key changes and rebuilds.
+    await oidc_multi._get_oauth_client(
+        provider, {**_OIDC_CONFIG, "client_secret": "rotated"}
     )
-    await oidc_multi._get_oauth_client(provider, dict(_OIDC_CONFIG))
     assert builds["count"] == 2
     oidc_multi._CLIENT_CACHE.clear()
 
 
-def test_decode_state_accepts_valid(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(oidc_multi, "USER_AUTH_SECRET", _TEST_SECRET)
+def test_decode_state_accepts_valid() -> None:
     csrf = generate_csrf_token()
     state = generate_state_token(
         {"next_url": "/", "provider_name": "okta", CSRF_TOKEN_KEY: csrf}, _TEST_SECRET
     )
     request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: csrf}))
-    data = oidc_multi._decode_and_validate_state(request, state, "okta")
+    data = decode_and_validate_oauth_state(
+        request=request,
+        state_value=state,
+        state_secret=_TEST_SECRET,
+        expected_provider_name="okta",
+    )
     assert data[CSRF_TOKEN_KEY] == csrf
 
 
-def test_decode_state_rejects_mismatched_csrf(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(oidc_multi, "USER_AUTH_SECRET", _TEST_SECRET)
+def test_decode_state_rejects_mismatched_csrf() -> None:
     csrf = generate_csrf_token()
     state = generate_state_token(
         {"next_url": "/", "provider_name": "okta", CSRF_TOKEN_KEY: csrf}, _TEST_SECRET
     )
     request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: "different"}))
     with pytest.raises(OnyxError):
-        oidc_multi._decode_and_validate_state(request, state, "okta")
+        decode_and_validate_oauth_state(
+            request=request,
+            state_value=state,
+            state_secret=_TEST_SECRET,
+            expected_provider_name="okta",
+        )
 
 
-def test_decode_state_rejects_wrong_provider(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_decode_state_rejects_wrong_provider() -> None:
     # A state minted for one provider must not validate on another's callback.
-    monkeypatch.setattr(oidc_multi, "USER_AUTH_SECRET", _TEST_SECRET)
     csrf = generate_csrf_token()
     state = generate_state_token(
         {"next_url": "/", "provider_name": "okta", CSRF_TOKEN_KEY: csrf}, _TEST_SECRET
     )
     request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: csrf}))
     with pytest.raises(OnyxError):
-        oidc_multi._decode_and_validate_state(request, state, "google")
+        decode_and_validate_oauth_state(
+            request=request,
+            state_value=state,
+            state_secret=_TEST_SECRET,
+            expected_provider_name="google",
+        )
 
 
 def test_decode_state_rejects_bad_jwt() -> None:
     request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: "x"}))
     with pytest.raises(OnyxError):
-        oidc_multi._decode_and_validate_state(request, "not-a-jwt", "okta")
+        decode_and_validate_oauth_state(
+            request=request,
+            state_value="not-a-jwt",
+            state_secret=_TEST_SECRET,
+            expected_provider_name="okta",
+        )
