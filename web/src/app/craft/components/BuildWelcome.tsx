@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
 import { useVideoBackgroundToggleClick } from "@/app/craft/components/video-background/useVideoBackgroundToggleClick";
 import Text from "@/refresh-components/texts/Text";
-import Logo from "@/refresh-components/Logo";
+import { Logo } from "@/lib/app/components";
 import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";

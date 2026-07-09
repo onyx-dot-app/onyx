@@ -21,7 +21,7 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import { useAppLogo } from "@/lib/app/hooks";
+import { renderAppLogo } from "@/lib/app/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { markdown } from "@opal/utils";
 
@@ -188,7 +188,6 @@ function groupBySection(items: SidebarItemEntry[]) {
 
 export default function AdminSidebar() {
   const { folded, setFolded } = useSidebarState();
-  const AdminSidebarLogo = useAppLogo(folded);
   const showLogoWhenFolded = useShowLogoWhenFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
@@ -243,7 +242,7 @@ export default function AdminSidebar() {
   return (
     <SidebarLayouts.Root>
       <SidebarLayouts.Header
-        logo={AdminSidebarLogo}
+        renderAppLogo={renderAppLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         {folded ? (

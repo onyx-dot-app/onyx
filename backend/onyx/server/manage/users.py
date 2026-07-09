@@ -1030,23 +1030,31 @@ def verify_user_logged_in(
             else oidc_expiry
         )
 
-    team_name = fetch_ee_implementation_or_noop(
-        "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
-    )(user.email)
-
+    team_name: str | None
     new_tenant: TenantSnapshot | None = None
     tenant_invitation: TenantSnapshot | None = None
 
-    if MULTI_TENANT:
-        if team_name != get_current_tenant_id():
-            user_count = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping", "get_tenant_count", None
-            )(team_name)
-            new_tenant = TenantSnapshot(tenant_id=team_name, number_of_users=user_count)
-
-        tenant_invitation = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
+    # Service-account (API key) emails are synthetic with no UserTenantMapping row,
+    # so get_tenant_id_for_email raises. An API key belongs only to its own tenant.
+    if MULTI_TENANT and user.account_type == AccountType.SERVICE_ACCOUNT:
+        team_name = tenant_id
+    else:
+        team_name = fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
         )(user.email)
+
+        if MULTI_TENANT:
+            if team_name != tenant_id:
+                user_count = fetch_ee_implementation_or_noop(
+                    "onyx.server.tenants.user_mapping", "get_tenant_count", None
+                )(team_name)
+                new_tenant = TenantSnapshot(
+                    tenant_id=team_name, number_of_users=user_count
+                )
+
+            tenant_invitation = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
+            )(user.email)
 
     super_users_list = cast(
         list[str],

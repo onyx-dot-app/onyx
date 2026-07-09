@@ -18,7 +18,7 @@ import {
   useSidebarState,
 } from "@opal/layouts";
 import RefreshText from "@/refresh-components/texts/Text";
-import { useAppLogo } from "@/lib/app/hooks";
+import { renderAppLogo } from "@/lib/app/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { Popover, PopoverMenu } from "@opal/components";
@@ -328,7 +328,6 @@ function BuildSessionButton({
 
 const MemoizedBuildSidebarInner = memo(() => {
   const { folded } = useSidebarState();
-  const CraftSidebarLogo = useAppLogo(folded);
   const router = useRouter();
   const pathname = usePathname();
   const session = useSession();
@@ -455,7 +454,7 @@ const MemoizedBuildSidebarInner = memo(() => {
   return (
     <SidebarLayouts.Root foldable>
       <SidebarLayouts.Header
-        logo={CraftSidebarLogo}
+        renderAppLogo={renderAppLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         <div className="flex flex-col gap-0.5">
