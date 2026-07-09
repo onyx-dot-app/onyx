@@ -48,6 +48,26 @@ export const GLOBAL_DEFAULT_LLM_OPTION: LLMOption = {
 };
 
 // ---------------------------------------------------------------------------
+// llmOptionKey
+// ---------------------------------------------------------------------------
+
+/**
+ * Stable identity key for a selectable model. Prefers the unique model
+ * configuration id; the provider + model name fallback can collide when two
+ * providers expose a model with the same name, so it is only used for
+ * options that were never persisted (no id).
+ */
+export function llmOptionKey(option: {
+  provider: string;
+  modelName: string;
+  modelConfigurationId?: number | null;
+}): string {
+  return option.modelConfigurationId != null
+    ? `mc:${option.modelConfigurationId}`
+    : `${option.provider}:${option.modelName}`;
+}
+
+// ---------------------------------------------------------------------------
 // buildLlmOptions
 // ---------------------------------------------------------------------------
 
