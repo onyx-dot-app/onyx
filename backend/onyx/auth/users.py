@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from functools import partial
 from typing import Any
 from typing import cast
 from typing import Dict
@@ -2388,8 +2389,8 @@ async def complete_login_flow(
     # take this early return.
     if is_mobile_sso(state_data):
         redirect_response = await complete_mobile_sso(user, state_data, strategy)
-        # Fire analytics like the web/bearer-login paths (PostHog identify).
-        # No web response here, so its anon-cookie cleanup no-ops.
+        # Call on_after_login on the mobile early-return so login analytics and
+        # audit still fire. No web response, so its anon-cookie cleanup no-ops.
         await user_manager.on_after_login(user, request)
         return redirect_response
 
@@ -2727,26 +2728,8 @@ def get_oauth_router(
                 )
             state_data = decode_and_validate_state(callback_state)
 
-        if enable_pkce:
-            try:
-                redirect_response = await complete_login_flow(
-                    oauth_client=oauth_client,
-                    token=token,
-                    state_data=state_data,
-                    request=request,
-                    user_manager=user_manager,
-                    backend=backend,
-                    strategy=strategy,
-                    associate_by_email=associate_by_email,
-                    is_verified_by_default=is_verified_by_default,
-                    allowed_email_domains_override=None,
-                )
-            except OnyxError as e:
-                return build_error_response(e)
-            delete_pkce_cookie(redirect_response)
-            return redirect_response
-
-        return await complete_login_flow(
+        login = partial(
+            complete_login_flow,
             oauth_client=oauth_client,
             token=token,
             state_data=state_data,
@@ -2756,7 +2739,15 @@ def get_oauth_router(
             strategy=strategy,
             associate_by_email=associate_by_email,
             is_verified_by_default=is_verified_by_default,
-            allowed_email_domains_override=None,
         )
+        if enable_pkce:
+            try:
+                redirect_response = await login()
+            except OnyxError as e:
+                return build_error_response(e)
+            delete_pkce_cookie(redirect_response)
+            return redirect_response
+
+        return await login()
 
     return router

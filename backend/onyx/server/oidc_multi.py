@@ -66,6 +66,7 @@ _ALLOW_AUTO_LINK = False
 _CLIENT_CACHE: TTLCache[tuple[str, str, SSOProviderType, str], BaseOAuth2[Any]] = (
     TTLCache(maxsize=128, ttl=_CLIENT_CACHE_TTL_SECONDS)
 )
+_COOKIE_SECURE = WEB_DOMAIN.startswith("https")
 
 
 def _resolve_oidc_provider(
@@ -78,9 +79,9 @@ def _resolve_oidc_provider(
     )
     if provider is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown OIDC provider")
-    if (
-        provider.provider_type is not SSOProviderType.GOOGLE_OAUTH
-        and provider.provider_type is not SSOProviderType.OIDC
+    if provider.provider_type not in (
+        SSOProviderType.GOOGLE_OAUTH,
+        SSOProviderType.OIDC,
     ):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown OIDC provider")
     if provider.config is None:
@@ -132,9 +133,9 @@ def _get_cache_key(
 async def _get_oauth_client(
     provider: SSOProvider, config: dict[str, Any]
 ) -> BaseOAuth2[Any]:
-    # Constructing an OIDC client fetches the IdP discovery doc over the network.
-    # Cache per provider+config. The TTL bounds how long a rotated upstream
-    # discovery doc stays stale. A config edit re-keys and rebuilds at once.
+    # Building an OIDC client fetches the IdP discovery doc over the network, so
+    # cache per provider+config (Google clients share the cache, no fetch). The
+    # TTL bounds how long a rotated upstream config stays stale before a re-key.
     cache_key = _get_cache_key(provider, config)
     cached_client = _CLIENT_CACHE.get(cache_key)
     if cached_client is not None:
@@ -156,7 +157,7 @@ def _set_oauth_cookie(
         value=value,
         max_age=STATE_TOKEN_LIFETIME_SECONDS,
         path="/",
-        secure=WEB_DOMAIN.startswith("https"),
+        secure=_COOKIE_SECURE,
         httponly=True,
         samesite="lax",
     )
@@ -166,7 +167,7 @@ def _delete_pkce_cookie(response: Response, state: str) -> None:
     response.delete_cookie(
         key=get_pkce_cookie_name(state),
         path="/",
-        secure=WEB_DOMAIN.startswith("https"),
+        secure=_COOKIE_SECURE,
         httponly=True,
         samesite="lax",
     )
@@ -229,9 +230,7 @@ async def oidc_login_for_provider(
         key=CSRF_TOKEN_COOKIE_NAME,
         value=csrf_token,
     )
-    if OIDC_PKCE_ENABLED:
-        if code_verifier is None:
-            raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Missing PKCE verifier")
+    if code_verifier is not None:
         _set_oauth_cookie(
             response,
             key=get_pkce_cookie_name(state),
