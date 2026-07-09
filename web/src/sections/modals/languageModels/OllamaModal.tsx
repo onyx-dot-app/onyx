@@ -169,6 +169,7 @@ export default function OllamaModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -235,9 +236,11 @@ export default function OllamaModal({
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.OLLAMA_CHAT,
           values: submitValues,
           initialValues,

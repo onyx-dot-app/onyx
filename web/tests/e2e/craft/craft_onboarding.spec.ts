@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsRandomUser, apiLogin } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { CraftWelcomePage } from "@tests/e2e/pages/CraftWelcomePage";
 
 /**
  * Craft Provider Onboarding E2E Tests
@@ -57,13 +58,6 @@ async function createFreshUser(page: Page): Promise<void> {
   await loginAsRandomUser(page, { setDisplayName: false });
 }
 
-async function dismissIntro(page: Page): Promise<void> {
-  const intro = page.getByText("What is Onyx Craft?");
-  await expect(intro).toBeVisible({ timeout: 15000 });
-  await page.getByRole("button", { name: "Get Started!" }).click();
-  await expect(intro).not.toBeVisible();
-}
-
 test.describe("Craft Provider Onboarding @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
@@ -88,30 +82,25 @@ test.describe("Craft Provider Onboarding @exclusive", () => {
     test("shows inline LLM setup with disabled input and working toggle", async ({
       page,
     }) => {
-      await page.goto("/craft/v1");
-      await dismissIntro(page);
+      const welcome = new CraftWelcomePage(page);
+      await welcome.goto();
+      await welcome.dismissIntro();
 
-      const llmSetup = page.locator('[aria-label="craft-llm-setup"]');
-      await expect(llmSetup).toBeVisible({ timeout: 15000 });
-
-      const messageInput = page.locator('[aria-label="Message input"]');
-      await expect(messageInput).toHaveAttribute("aria-disabled", "true");
+      await expect(welcome.llmSetup).toBeVisible({ timeout: 15000 });
+      await welcome.expectInputDisabled();
 
       // Recommended-only by default: the 3 build-mode providers
-      await expect(llmSetup.getByText("Claude")).toBeVisible();
-      await expect(llmSetup.getByText("GPT")).toBeVisible();
-      await expect(llmSetup.getByText("OpenRouter")).toBeVisible();
-      await expect(llmSetup.getByText("Gemini")).not.toBeVisible();
+      await expect(welcome.providerCard("Claude")).toBeVisible();
+      await expect(welcome.providerCard("GPT")).toBeVisible();
+      await expect(welcome.providerCard("OpenRouter")).toBeVisible();
+      await expect(welcome.providerCard("Gemini")).not.toBeVisible();
 
       // Toggle off reveals the full catalog
-      await llmSetup.getByRole("switch").click();
-      await expect(llmSetup.getByText("Gemini")).toBeVisible();
+      await welcome.toggleRecommendedOnly();
+      await expect(welcome.providerCard("Gemini")).toBeVisible();
 
       // Clicking a provider card opens the shared provider modal
-      await llmSetup.getByText("Claude").click();
-      await expect(page.getByText("Set up Claude")).toBeVisible({
-        timeout: 10000,
-      });
+      await welcome.openProviderSetup("Claude");
     });
   });
 
@@ -130,17 +119,13 @@ test.describe("Craft Provider Onboarding @exclusive", () => {
     });
 
     test("shows inline locked state with disabled input", async ({ page }) => {
-      await page.goto("/craft/v1");
-      await dismissIntro(page);
+      const welcome = new CraftWelcomePage(page);
+      await welcome.goto();
+      await welcome.dismissIntro();
 
-      const locked = page.locator('[aria-label="craft-llm-locked"]');
-      await expect(locked).toBeVisible({ timeout: 15000 });
-      await expect(
-        page.locator('[aria-label="craft-llm-setup"]')
-      ).not.toBeVisible();
-
-      const messageInput = page.locator('[aria-label="Message input"]');
-      await expect(messageInput).toHaveAttribute("aria-disabled", "true");
+      await expect(welcome.lockedState).toBeVisible({ timeout: 15000 });
+      await expect(welcome.llmSetup).not.toBeVisible();
+      await welcome.expectInputDisabled();
     });
   });
 
@@ -152,19 +137,13 @@ test.describe("Craft Provider Onboarding @exclusive", () => {
     });
 
     test("no setup section and input enabled", async ({ page }) => {
-      await page.goto("/craft/v1");
-      await dismissIntro(page);
+      const welcome = new CraftWelcomePage(page);
+      await welcome.goto();
+      await welcome.dismissIntro();
 
-      await expect(
-        page.locator('[aria-label="craft-llm-setup"]')
-      ).not.toBeVisible();
-      await expect(
-        page.locator('[aria-label="craft-llm-locked"]')
-      ).not.toBeVisible();
-
-      const messageInput = page.locator('[aria-label="Message input"]');
-      await expect(messageInput).toBeVisible({ timeout: 15000 });
-      await expect(messageInput).toHaveAttribute("aria-disabled", "false");
+      await expect(welcome.llmSetup).not.toBeVisible();
+      await expect(welcome.lockedState).not.toBeVisible();
+      await welcome.expectInputEnabled();
     });
   });
 });

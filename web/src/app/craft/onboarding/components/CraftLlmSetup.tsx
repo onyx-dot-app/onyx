@@ -20,12 +20,12 @@ import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
  * a card opens the shared provider-specific modal (hosted by
  * BuildOnboardingProvider).
  */
+const craftKeys: string[] = CRAFT_PROVIDERS.map(({ key }) => key);
+
 export default function CraftLlmSetup() {
   const { openProviderModal } = useOnboarding();
   const { llmProviderOptions } = useLLMProviderOptions();
   const [recommendedOnly, setRecommendedOnly] = useState(true);
-
-  const craftKeys: string[] = CRAFT_PROVIDERS.map(({ key }) => key);
 
   // Recommended = the build-mode providers; the full catalog keeps them
   // first, then the remaining well-known providers.
@@ -35,7 +35,6 @@ export default function CraftLlmSetup() {
       .map((option) => option.name)
       .filter((name) => !isSupportedProviderType(name));
     return [...craftKeys, ...others];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recommendedOnly, llmProviderOptions]);
 
   return (
