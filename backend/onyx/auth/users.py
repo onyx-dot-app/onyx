@@ -2282,26 +2282,15 @@ def decode_and_validate_oauth_state(
         state_data = decode_jwt(state_value, state_secret, [STATE_TOKEN_AUDIENCE])
     except jwt.DecodeError:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            getattr(
-                ErrorCode, "ACCESS_TOKEN_DECODE_ERROR", "ACCESS_TOKEN_DECODE_ERROR"
-            ),
+            OnyxErrorCode.VALIDATION_ERROR, ErrorCode.ACCESS_TOKEN_DECODE_ERROR
         )
     except jwt.ExpiredSignatureError:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            getattr(
-                ErrorCode,
-                "ACCESS_TOKEN_ALREADY_EXPIRED",
-                "ACCESS_TOKEN_ALREADY_EXPIRED",
-            ),
+            OnyxErrorCode.VALIDATION_ERROR, ErrorCode.ACCESS_TOKEN_ALREADY_EXPIRED
         )
     except jwt.PyJWTError:
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            getattr(
-                ErrorCode, "ACCESS_TOKEN_DECODE_ERROR", "ACCESS_TOKEN_DECODE_ERROR"
-            ),
+            OnyxErrorCode.VALIDATION_ERROR, ErrorCode.ACCESS_TOKEN_DECODE_ERROR
         )
 
     cookie_csrf_token = request.cookies.get(csrf_token_cookie_name)
@@ -2311,10 +2300,7 @@ def decode_and_validate_oauth_state(
         or not state_csrf_token
         or not secrets.compare_digest(cookie_csrf_token, state_csrf_token)
     ):
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            getattr(ErrorCode, "OAUTH_INVALID_STATE", "OAUTH_INVALID_STATE"),
-        )
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, ErrorCode.OAUTH_INVALID_STATE)
 
     if (
         expected_provider_name is not None
