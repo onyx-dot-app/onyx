@@ -24,10 +24,10 @@ export const BasicLogin: Story = {
   render: () => (
     <AuthLayouts.Root>
       <AuthLayouts.Card
-        title="Welcome to Onyx"
-        description="Your open source AI platform for work"
+        title="Welcome back"
+        description="Sign in to your account"
         bottomPrompt={markdown(
-          "New to Onyx? [Create an Account](/auth/signup)"
+          "Don't have an account? [Create an Account](/auth/signup)"
         )}
       >
         <AuthLayouts.Fields>
@@ -44,10 +44,10 @@ export const WithSSOAndSeparator: Story = {
   render: () => (
     <AuthLayouts.Root>
       <AuthLayouts.Card
-        title="Welcome to Onyx"
-        description="Your open source AI platform for work"
+        title="Welcome back"
+        description="Sign in to your account"
         bottomPrompt={markdown(
-          "New to Onyx? [Create an Account](/auth/signup)"
+          "Don't have an account? [Create an Account](/auth/signup)"
         )}
       >
         <Button width="full">Continue with Google</Button>
@@ -67,7 +67,7 @@ export const Signup: Story = {
     <AuthLayouts.Root>
       <AuthLayouts.Card
         title="Create account"
-        description="Get started with Onyx"
+        description="Get started"
         bottomPrompt={markdown(
           "Already have an account? [Sign In](/auth/login)"
         )}

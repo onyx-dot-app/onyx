@@ -15,7 +15,7 @@ No props — accepts `children` only.
 
 ### Card
 
-The main auth card. Renders the Onyx logo (or a custom logo), a heading, an optional
+The main auth card. Renders the product logo (or a custom logo), a heading, an optional
 description, card content, and a bottom prompt rendered outside/below the card border.
 
 | Prop | Type | Default | Description |
@@ -24,7 +24,7 @@ description, card content, and a bottom prompt rendered outside/below the card b
 | `description` | `string \| RichStr` | — | Subtitle below the heading |
 | `children` | `ReactNode` | — | Card body (form, buttons, separators) |
 | `bottomPrompt` | `string \| RichStr` | — | Text/link below the card (e.g. "Already have an account?") |
-| `logoSrc` | `string \| null` | — | Custom logo URL; falls back to the Onyx logo |
+| `logoSrc` | `string \| null` | — | Custom logo URL; falls back to the default logo |
 
 ### OrSeparator
 
@@ -60,9 +60,9 @@ import { markdown } from "@opal/utils";
 
 <AuthLayouts.Root>
   <AuthLayouts.Card
-    title="Welcome to Onyx"
-    description="Your open source AI platform for work"
-    bottomPrompt={markdown("New to Onyx? [Create an Account](/auth/signup)")}
+    title="Welcome back"
+    description="Sign in to your account"
+    bottomPrompt={markdown("Don't have an account? [Create an Account](/auth/signup)")}
     logoSrc={logoUrl}
   >
     <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
