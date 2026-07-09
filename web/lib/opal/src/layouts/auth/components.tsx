@@ -146,7 +146,11 @@ function Submit({ label, isSubmitting, isValid, dirty }: SubmitProps) {
     <Button
       type="submit"
       width="full"
-      disabled={Boolean(isSubmitting) || (isValid !== undefined && !isValid) || (dirty !== undefined && !dirty)}
+      disabled={
+        Boolean(isSubmitting) ||
+        (isValid !== undefined && !isValid) ||
+        (dirty !== undefined && !dirty)
+      }
       icon={isSubmitting ? SvgSimpleLoader : undefined}
       rightIcon={SvgArrowRightCircle}
     >
