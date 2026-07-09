@@ -24,10 +24,12 @@ import httpx
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheLockLostError
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
-from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import PROMPT_SLOT_LEASE_SECONDS
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
@@ -56,6 +58,9 @@ OPENCODE_SERVE_READY_POLL_INTERVAL_SECONDS = 0.25
 # How long a new turn waits for the previous turn's slot before giving up.
 PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS = 10.0
 
+# Must exceed the lease so a reclaimed turn can wait out a dead holder's slot.
+PROMPT_SLOT_RECLAIM_ACQUIRE_TIMEOUT_SECONDS = PROMPT_SLOT_LEASE_SECONDS + 10.0
+
 # Live attach streams are UI-facing. Coalesce adjacent text deltas just long
 # enough to avoid one React update per tiny opencode token burst, while keeping
 # control packets and final/error packets effectively immediate.
@@ -75,6 +80,46 @@ class ServeConnectionInfo:
         if not self.password:
             return None
         return httpx.BasicAuth(OPENCODE_SERVER_USERNAME, self.password)
+
+
+class PromptSlot:
+    """Prompt-slot handle. While driving a turn, call ``extend`` at least once
+    per ``PROMPT_SLOT_LEASE_SECONDS`` or the lock expires mid-turn. ``lost``
+    goes sticky-True once the lease is confirmed gone (another turn may
+    already hold the slot) — callers must stop driving opencode."""
+
+    def __init__(self, acquired: bool, lock: CacheLock | None = None) -> None:
+        self.acquired = acquired
+        self.lost = False
+        self._lock = lock
+
+    def extend(self) -> None:
+        if self._lock is None or self.lost:
+            return
+        try:
+            self._lock.extend(PROMPT_SLOT_LEASE_SECONDS)
+        except CacheLockLostError:
+            self.lost = True
+            logger.error(
+                "[SANDBOX-SERVE] prompt_slot: lease lost mid-turn — mutual "
+                "exclusion is gone; caller must abort",
+                exc_info=True,
+            )
+        except CACHE_TRANSIENT_ERRORS:
+            logger.warning(
+                "[SANDBOX-SERVE] prompt_slot: lease extend failed — relying on expiry",
+                exc_info=True,
+            )
+
+    def keep_alive(self, stop: threading.Event, max_seconds: float) -> None:
+        """For turn paths whose loop progress is client-paced — SSE
+        backpressure must not expire a live turn's lease. The cap bounds a
+        leaked holder to roughly the old fixed-TTL ceiling."""
+        deadline = time.monotonic() + max_seconds
+        while not stop.wait(PROMPT_SLOT_LEASE_SECONDS / 4):
+            if self.lost or time.monotonic() >= deadline:
+                return
+            self.extend()
 
 
 class _ServeMixin:
@@ -160,24 +205,24 @@ class _ServeMixin:
         self,
         sandbox_id: UUID,
         build_session_id: UUID,
-    ) -> Generator[bool, None, None]:
+        acquire_timeout: float = PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+    ) -> Generator[PromptSlot, None, None]:
         """Serialize turns for a build session across replicas via the cache.
 
         opencode-serve's ``prompt_async`` isn't concurrent-safe, so a second
-        in-flight POST corrupts session state. Yields False if a turn is
-        already in flight (caller aborts without side effects); fails open if
-        the cache is down. Auto-expires after a turn's max length. Keyed on
-        ``build_session_id``, which (unlike the opencode id) is stable per turn.
+        in-flight POST corrupts session state. Yields ``acquired=False`` if a
+        turn is already in flight; fails open if the cache is down. The short
+        lease must be renewed via ``PromptSlot.extend``, so a dead holder
+        strands the slot for at most one lease. Keyed on ``build_session_id``,
+        which (unlike the opencode id) is stable per turn.
         """
         # Tenant isolation is handled by the cache backend's key-prefixing.
         try:
             lock = get_cache_backend().lock(
                 f"buildpromptslot_{sandbox_id}_{build_session_id}",
-                timeout=SANDBOX_TURN_TIMEOUT_SECONDS,
+                timeout=PROMPT_SLOT_LEASE_SECONDS,
             )
-            acquired = lock.acquire(
-                blocking=True, blocking_timeout=PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS
-            )
+            acquired = lock.acquire(blocking=True, blocking_timeout=acquire_timeout)
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
                 "[SANDBOX-SERVE] prompt_slot: cache unreachable (%s) — failing open "
@@ -186,7 +231,7 @@ class _ServeMixin:
                 sandbox_id,
                 build_session_id,
             )
-            yield True
+            yield PromptSlot(acquired=True)
             return
 
         try:
@@ -197,7 +242,9 @@ class _ServeMixin:
                     sandbox_id,
                     build_session_id,
                 )
-            yield acquired
+                yield PromptSlot(acquired=False)
+            else:
+                yield PromptSlot(acquired=True, lock=lock)
         finally:
             if acquired:
                 try:

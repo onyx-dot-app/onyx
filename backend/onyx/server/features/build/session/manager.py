@@ -56,6 +56,10 @@ from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.serve_transport import (
+    PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+)
+from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session import sandbox_lifecycle as _sandbox
@@ -609,14 +613,14 @@ class SessionManager:
 
         # Get user's sandbox to clean up session workspace
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        prompt_slot_cm: AbstractContextManager[bool]
+        prompt_slot_cm: AbstractContextManager[PromptSlot]
         if sandbox and sandbox.status.is_active():
             prompt_slot_cm = self._sandbox_manager.prompt_slot(sandbox.id, session_id)
         else:
-            prompt_slot_cm = nullcontext(True)
+            prompt_slot_cm = nullcontext(PromptSlot(acquired=True))
 
-        with prompt_slot_cm as acquired_prompt_slot:
-            if not acquired_prompt_slot:
+        with prompt_slot_cm as slot:
+            if not slot.acquired:
                 raise OnyxError(
                     OnyxErrorCode.CONFLICT,
                     "This session is busy with an active turn. Try again when it finishes.",
@@ -807,8 +811,11 @@ class SessionManager:
         self,
         sandbox_id: UUID,
         session_id: UUID,
-    ) -> AbstractContextManager[bool]:
-        return self._sandbox_manager.prompt_slot(sandbox_id, session_id)
+        acquire_timeout: float = PROMPT_SLOT_ACQUIRE_TIMEOUT_SECONDS,
+    ) -> AbstractContextManager[PromptSlot]:
+        return self._sandbox_manager.prompt_slot(
+            sandbox_id, session_id, acquire_timeout=acquire_timeout
+        )
 
     def yield_sandbox_events(
         self,

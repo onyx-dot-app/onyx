@@ -168,6 +168,10 @@ SANDBOX_TURN_TIMEOUT_SECONDS = float(
     os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0")
 )
 
+# Prompt-slot lock lease; renewed on every sandbox event/keepalive, so a dead
+# holder strands the slot for at most this long.
+PROMPT_SLOT_LEASE_SECONDS = float(os.environ.get("PROMPT_SLOT_LEASE_SECONDS", "120.0"))
+
 # Match against the EXPOSE directive in the sandbox Dockerfile.
 OPENCODE_SERVE_PORT = int(os.environ.get("OPENCODE_SERVE_PORT", "4096"))
 

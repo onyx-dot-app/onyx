@@ -267,9 +267,9 @@ def test_prompt_slot_serializes_on_docker() -> None:
 
     other_session = UUID("00000000-0000-0000-0000-000000000001")
     with mgr.prompt_slot(_SBX, other_session) as outer:
-        assert outer is True
+        assert outer.acquired is True
         with mgr.prompt_slot(_SBX, other_session) as inner:
-            assert inner is False
+            assert inner.acquired is False
 
 
 def test_provision_generates_fresh_password_and_injects_into_container_env(

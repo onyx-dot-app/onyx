@@ -397,7 +397,8 @@ def _drive_agent(
         # agent loop. __enter__/__exit__ used directly (rather than a
         # `with`) to avoid reindenting the existing try/except block.
         prompt_slot_cm = session_manager.prompt_slot(sandbox_id, session_id)
-        if not prompt_slot_cm.__enter__():
+        slot = prompt_slot_cm.__enter__()
+        if not slot.acquired:
             prompt_slot_cm.__exit__(None, None, None)
             mark_run_status(
                 db_session=db_session,
@@ -420,6 +421,7 @@ def _drive_agent(
             for sandbox_event in session_manager.yield_sandbox_events(
                 sandbox_id, session_id, task_prompt
             ):
+                slot.extend()
                 # Approval gate: mark awaiting_approval, return. Resume
                 # mechanics are owned by the approvals project; this is
                 # "terminal for display" until it ships.

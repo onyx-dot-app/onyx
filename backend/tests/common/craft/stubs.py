@@ -64,6 +64,7 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 
 _UNSET = object()
@@ -74,6 +75,15 @@ def _not_configured(method_name: str) -> NotImplementedError:
         f"StubSandboxManager.{method_name} not configured for this test — "
         "set the corresponding attribute or override the method."
     )
+
+
+class RecordingPromptSlot(PromptSlot):
+    def __init__(self, *, acquired: bool) -> None:
+        super().__init__(acquired=acquired)
+        self.extend_calls = 0
+
+    def extend(self) -> None:
+        self.extend_calls += 1
 
 
 class StubSandboxManager(SandboxManager):
@@ -227,6 +237,7 @@ class StubSandboxManager(SandboxManager):
         self.last_write_files_to_sandbox_payload: dict[str, Any] | None = None
         self.last_get_webapp_url_payload: dict[str, Any] | None = None
         self.last_generate_pptx_preview_payload: dict[str, Any] | None = None
+        self.last_prompt_slot: RecordingPromptSlot | None = None
 
     # ------------------------------------------------------------------
     # send_message_events property: snapshot iterables on assignment so
@@ -423,13 +434,17 @@ class StubSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         build_session_id: UUID,
-    ) -> Generator[bool, None, None]:
+        acquire_timeout: float = 10.0,
+    ) -> Generator[PromptSlot, None, None]:
         self.prompt_slot_count += 1
         self.last_prompt_slot_payload = {
             "sandbox_id": sandbox_id,
             "build_session_id": build_session_id,
+            "acquire_timeout": acquire_timeout,
         }
-        yield self.prompt_slot_returns
+        slot = RecordingPromptSlot(acquired=self.prompt_slot_returns)
+        self.last_prompt_slot = slot
+        yield slot
 
     def ensure_opencode_session(
         self,
