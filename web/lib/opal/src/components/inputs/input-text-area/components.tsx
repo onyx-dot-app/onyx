@@ -101,6 +101,12 @@ function InputTextArea({
         )}
         rows={rows}
         {...props}
+        // After the spread so uncontrolled typing also resizes. The effect
+        // covers programmatic value changes.
+        onInput={(event) => {
+          adjustHeight();
+          props.onInput?.(event);
+        }}
       />
       {rightSection && (
         <div className="opal-input-textarea-right">{rightSection}</div>
