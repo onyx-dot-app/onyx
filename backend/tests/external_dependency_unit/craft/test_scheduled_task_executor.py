@@ -363,6 +363,8 @@ def test_prompt_response_marks_run_succeeded(
     assert refreshed is not None
     assert refreshed.status == ScheduledTaskRunStatus.SUCCEEDED
     assert refreshed.error_class is None
+    assert stub_sandbox_manager.last_prompt_slot is not None
+    assert stub_sandbox_manager.last_prompt_slot.extend_calls >= 1
 
 
 def test_cancelled_prompt_response_marks_run_failed(
