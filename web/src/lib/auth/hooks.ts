@@ -3,7 +3,6 @@
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import useSWR from "swr";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
@@ -12,58 +11,10 @@ import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { isAuthPath } from "@/lib/auth/paths";
-
-interface AuthTypeAPIResponse {
-  auth_type: string;
-  requires_verification: boolean;
-  anonymous_user_enabled: boolean | null;
-  password_min_length: number;
-  password_max_length: number;
-  password_require_uppercase: boolean;
-  password_require_lowercase: boolean;
-  password_require_digit: boolean;
-  password_require_special_char: boolean;
-  has_users: boolean;
-  oauth_enabled: boolean;
-}
-
-const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {
-  authType: NEXT_PUBLIC_CLOUD_ENABLED ? AuthType.CLOUD : AuthType.BASIC,
-  autoRedirect: false,
-  requiresVerification: false,
-  anonymousUserEnabled: null,
-  passwordMinLength: 8,
-  passwordMaxLength: 64,
-  passwordRequireUppercase: false,
-  passwordRequireLowercase: false,
-  passwordRequireDigit: false,
-  passwordRequireSpecialChar: false,
-  hasUsers: false,
-  oauthEnabled: false,
-};
-
-async function fetchAuthTypeMetadata(url: string): Promise<AuthTypeMetadata> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to fetch auth type metadata");
-  const data: AuthTypeAPIResponse = await res.json();
-  const authType = NEXT_PUBLIC_CLOUD_ENABLED
-    ? AuthType.CLOUD
-    : (data.auth_type as AuthType);
-  return {
-    authType,
-    autoRedirect: authType === AuthType.OIDC || authType === AuthType.SAML,
-    requiresVerification: data.requires_verification,
-    anonymousUserEnabled: data.anonymous_user_enabled,
-    passwordMinLength: data.password_min_length,
-    passwordMaxLength: data.password_max_length,
-    passwordRequireUppercase: data.password_require_uppercase,
-    passwordRequireLowercase: data.password_require_lowercase,
-    passwordRequireDigit: data.password_require_digit,
-    passwordRequireSpecialChar: data.password_require_special_char,
-    hasUsers: data.has_users,
-    oauthEnabled: data.oauth_enabled,
-  };
-}
+import {
+  fetchAuthTypeMetadata,
+  DEFAULT_AUTH_TYPE_METADATA,
+} from "@/lib/auth/svc";
 
 export function useAuthTypeMetadata(): {
   authTypeMetadata: AuthTypeMetadata;
