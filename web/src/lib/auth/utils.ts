@@ -1,4 +1,32 @@
 // ---------------------------------------------------------------------------
+// Auth URL helpers
+// ---------------------------------------------------------------------------
+
+import { AuthType } from "@/lib/auth/types";
+
+export function getAuthUrl(
+  authType: AuthType,
+  nextUrl: string | null
+): string | null {
+  const params = new URLSearchParams({ redirect: "true" });
+  if (nextUrl) params.set("next", nextUrl);
+
+  switch (authType) {
+    case AuthType.BASIC:
+      return null;
+    case AuthType.GOOGLE_OAUTH:
+    case AuthType.CLOUD:
+      return `/api/auth/oauth/authorize?${params}`;
+    case AuthType.OIDC:
+      return `/api/auth/oidc/authorize?${params}`;
+    case AuthType.SAML:
+      return `/api/auth/saml/authorize?${params}`;
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Password predicate functions
 // ---------------------------------------------------------------------------
 

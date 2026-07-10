@@ -7,32 +7,13 @@ import { AuthLayouts } from "@opal/layouts";
 import { welcomeCardCopy } from "@/lib/auth/copies";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
-import { useAuthTypeMetadata } from "@/lib/auth/hooks";
+import { useAuthTypeMetadata, useAuthRedirect } from "@/lib/auth/hooks";
 import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
 import { AuthType } from "@/lib/auth/types";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
-import { useAuthRedirect } from "@/lib/auth/hooks";
+import { getAuthUrl } from "@/lib/auth/utils";
 import { markdown } from "@opal/utils";
 import { Logo } from "@/lib/app/components";
-
-function getAuthUrl(authType: AuthType, nextUrl: string | null): string | null {
-  const params = new URLSearchParams({ redirect: "true" });
-  if (nextUrl) params.set("next", nextUrl);
-
-  switch (authType) {
-    case AuthType.BASIC:
-      return null;
-    case AuthType.GOOGLE_OAUTH:
-    case AuthType.CLOUD:
-      return `/api/auth/oauth/authorize?${params}`;
-    case AuthType.OIDC:
-      return `/api/auth/oidc/authorize?${params}`;
-    case AuthType.SAML:
-      return `/api/auth/saml/authorize?${params}`;
-    default:
-      return null;
-  }
-}
 
 export default function LoginPage() {
   const router = useRouter();
