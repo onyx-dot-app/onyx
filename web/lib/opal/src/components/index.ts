@@ -103,6 +103,12 @@ export {
   type PaginationSize,
 } from "@opal/components/pagination/components";
 
+/* Calendar */
+export {
+  Calendar,
+  type CalendarProps,
+} from "@opal/components/calendar/components";
+
 /* Checkbox */
 export {
   Checkbox,
