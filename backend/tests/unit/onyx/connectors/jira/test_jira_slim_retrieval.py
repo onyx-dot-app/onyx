@@ -18,6 +18,7 @@ def _make_issue(key: str, project_key: str = "TEST") -> MagicMock:
     issue.fields.project.key = project_key
     issue.fields.project.name = "Test Project"
     issue.fields.parent = None
+    issue.fields.created = "2023-01-01T12:00:00.000+0000"
     return issue
 
 

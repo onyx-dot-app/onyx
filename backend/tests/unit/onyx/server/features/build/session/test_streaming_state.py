@@ -38,6 +38,7 @@ class _FakeStreamingSandboxManager:
         agent_model: str | None = None,
         on_opencode_session_resolved: Any = None,  # noqa: ARG002
         should_interrupt: Any = None,  # noqa: ARG002
+        should_abort_on_teardown: Any = None,  # noqa: ARG002
     ) -> Any:
         self.last_payload = {
             "sandbox_id": sandbox_id,

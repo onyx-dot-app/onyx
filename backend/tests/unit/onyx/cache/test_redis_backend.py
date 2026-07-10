@@ -4,8 +4,15 @@ import threading
 from queue import Queue
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import MagicMock
 
+import pytest
+from redis.exceptions import LockNotOwnedError
+from redis.lock import Lock as RedisLock
+
+from onyx.cache.interface import CacheLockLostError
 from onyx.cache.redis_backend import RedisCacheBackend
+from onyx.cache.redis_backend import RedisCacheLock
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
@@ -77,3 +84,14 @@ def test_redis_cache_locks_can_release_from_a_different_thread() -> None:
     ]
     assert release_thread.is_alive() is False
     assert release_errors.empty()
+
+
+def test_redis_cache_lock_extend_translates_lock_not_owned_error() -> None:
+    inner_lock = MagicMock(spec=RedisLock)
+    inner_lock.extend.side_effect = LockNotOwnedError(
+        "Cannot extend a lock that's no longer owned"
+    )
+    lock = RedisCacheLock(inner_lock)
+
+    with pytest.raises(CacheLockLostError):
+        lock.extend(30.0)

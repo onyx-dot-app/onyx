@@ -229,6 +229,10 @@ def get_interactive_turn_events(
                         # subscriber queue has gone idle.
                         continue
                     terminal_error_detail = None
+                    # Not redundant with the attach-time force start: a dead
+                    # runner's turn only becomes reclaimable 90s after its last
+                    # heartbeat; claim no-ops while the turn is healthy.
+                    maybe_start_runner()
                 if terminal_error_detail:
                     yield _format_stream_error(terminal_error_detail)
         except GeneratorExit:

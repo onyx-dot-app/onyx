@@ -222,7 +222,7 @@ class DocumentBase(BaseModel):
 
     # UTC time
     doc_updated_at: datetime | None = None
-    # UTC time the document was created at the source
+    # UTC source creation time.
     doc_created_at: datetime | None = None
     chunk_count: int | None = None
 
@@ -466,6 +466,8 @@ class SlimDocument(BaseModel):
     id: str
     external_access: ExternalAccess | None = None
     parent_hierarchy_raw_node_id: str | None = None
+    # UTC source creation time.
+    doc_created_at: datetime | None = None
 
 
 class HierarchyNode(BaseModel):

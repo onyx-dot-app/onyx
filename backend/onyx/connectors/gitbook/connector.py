@@ -196,6 +196,10 @@ def _convert_page_to_document(
         doc_updated_at=datetime.fromisoformat(page["updatedAt"]).replace(
             tzinfo=timezone.utc
         ),
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=datetime.fromisoformat(page["createdAt"]).replace(
+            tzinfo=timezone.utc
+        ),
         metadata={
             "path": page.get("path", ""),
             "type": page.get("type", ""),

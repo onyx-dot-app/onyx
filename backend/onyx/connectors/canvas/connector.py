@@ -272,6 +272,7 @@ class CanvasAnnouncement(BaseModel):
     message: str | None = None
     html_url: str
     posted_at: str | None = None
+    created_at: str | None = None
     course_id: int
     is_section_specific: bool = False
     sections: list[CanvasAnnouncementSection] = Field(default_factory=list)
@@ -285,6 +286,7 @@ class CanvasAnnouncement(BaseModel):
             message=payload.get("message"),
             html_url=payload["html_url"],
             posted_at=payload.get("posted_at"),
+            created_at=payload.get("created_at"),
             course_id=course_id,
             is_section_specific=payload.get("is_section_specific") or False,
             sections=[
@@ -432,6 +434,7 @@ class CanvasConnector(
         text: str,
         semantic_identifier: str,
         doc_updated_at: datetime | None,
+        doc_created_at: datetime | None,
         course_id: int,
         doc_type: str,
     ) -> Document:
@@ -445,6 +448,7 @@ class CanvasConnector(
             source=DocumentSource.CANVAS,
             semantic_identifier=semantic_identifier,
             doc_updated_at=doc_updated_at,
+            doc_created_at=doc_created_at,
             metadata={"course_id": str(course_id), "type": doc_type},
         )
 
@@ -458,6 +462,8 @@ class CanvasConnector(
             text_parts.append(body_text)
 
         doc_updated_at = _parse_canvas_dt(page.updated_at) if page.updated_at else None
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at = _parse_canvas_dt(page.created_at) if page.created_at else None
 
         document = self._build_document(
             doc_id=f"canvas-page-{page.course_id}-{page.page_id}",
@@ -465,6 +471,7 @@ class CanvasConnector(
             text="\n\n".join(text_parts),
             semantic_identifier=page.title or f"Page {page.page_id}",
             doc_updated_at=doc_updated_at,
+            doc_created_at=doc_created_at,
             course_id=page.course_id,
             doc_type="page",
         )
@@ -487,6 +494,10 @@ class CanvasConnector(
         doc_updated_at = (
             _parse_canvas_dt(assignment.updated_at) if assignment.updated_at else None
         )
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at = (
+            _parse_canvas_dt(assignment.created_at) if assignment.created_at else None
+        )
 
         document = self._build_document(
             doc_id=f"canvas-assignment-{assignment.course_id}-{assignment.id}",
@@ -494,6 +505,7 @@ class CanvasConnector(
             text="\n\n".join(text_parts),
             semantic_identifier=assignment.name or f"Assignment {assignment.id}",
             doc_updated_at=doc_updated_at,
+            doc_created_at=doc_created_at,
             course_id=assignment.course_id,
             doc_type="assignment",
         )
@@ -513,6 +525,12 @@ class CanvasConnector(
         doc_updated_at = (
             _parse_canvas_dt(announcement.posted_at) if announcement.posted_at else None
         )
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at = (
+            _parse_canvas_dt(announcement.created_at)
+            if announcement.created_at
+            else None
+        )
 
         document = self._build_document(
             doc_id=f"canvas-announcement-{announcement.course_id}-{announcement.id}",
@@ -520,6 +538,7 @@ class CanvasConnector(
             text="\n\n".join(text_parts),
             semantic_identifier=announcement.title or f"Announcement {announcement.id}",
             doc_updated_at=doc_updated_at,
+            doc_created_at=doc_created_at,
             course_id=announcement.course_id,
             doc_type="announcement",
         )

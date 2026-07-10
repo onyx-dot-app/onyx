@@ -1,5 +1,6 @@
 import abc
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Self
 
 from pydantic import BaseModel
@@ -150,6 +151,10 @@ class MetadataUpdateRequest(BaseModel):
     secondary_index_updated: bool | None = None
     project_ids: set[int] | None = None
     persona_ids: set[int] | None = None
+    # Source creation time. Patched onto existing chunks without re-embedding when
+    # a connector supplies a creation time for an already-indexed document.
+    # TODO: Can be removed after some time - used for backfill sync
+    created_at: datetime | None = None
 
 
 class SecondaryIndexDocumentMissingError(Exception):
