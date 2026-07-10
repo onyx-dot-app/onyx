@@ -23,7 +23,9 @@ from sqlalchemy.orm import sessionmaker
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserUsage
 from onyx.db.user_usage import get_group_cost_cents_since
+from onyx.db.user_usage import get_total_cost_cents_buckets_since
 from onyx.db.user_usage import get_total_cost_cents_since
+from onyx.db.user_usage import get_user_cost_cents_buckets_since
 from onyx.db.user_usage import get_user_cost_cents_in_window
 from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.db.user_usage import get_user_usage_by_day_and_model
@@ -265,6 +267,37 @@ class TestTotalCostSince:
         _seed_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 9.0, w2)
 
         assert get_total_cost_cents_since(db_session, w2) == pytest.approx(9.0)
+
+
+class TestUserCostBucketsSince:
+    def test_returns_per_window_totals(self, db_session: Session) -> None:
+        user_id = str(uuid4())
+        other = str(uuid4())
+        w1 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        w2 = datetime.datetime(2026, 6, 8, tzinfo=datetime.timezone.utc)
+        _seed_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 3.0, w1)
+        _seed_usage(db_session, user_id, "n", "CHAT", None, 1, 1, 0, 5.0, w1)
+        _seed_usage(db_session, user_id, "m", "CHAT", None, 1, 1, 0, 9.0, w2)
+        _seed_usage(db_session, other, "m", "CHAT", None, 1, 1, 0, 99.0, w1)
+
+        buckets = dict(get_user_cost_cents_buckets_since(db_session, user_id, w1))
+        assert buckets[w1] == pytest.approx(8.0)
+        assert buckets[w2] == pytest.approx(9.0)
+        assert sum(c for ws, c in buckets.items() if ws >= w2) == pytest.approx(9.0)
+
+
+class TestTotalCostBucketsSince:
+    def test_sums_across_users_per_window(self, db_session: Session) -> None:
+        u1, u2 = str(uuid4()), str(uuid4())
+        w1 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        w2 = datetime.datetime(2026, 6, 8, tzinfo=datetime.timezone.utc)
+        _seed_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 3.0, w1)
+        _seed_usage(db_session, u2, "m", "CHAT", None, 1, 1, 0, 4.0, w1)
+        _seed_usage(db_session, u1, "m", "CHAT", None, 1, 1, 0, 9.0, w2)
+
+        buckets = dict(get_total_cost_cents_buckets_since(db_session, w1))
+        assert buckets[w1] == pytest.approx(7.0)
+        assert buckets[w2] == pytest.approx(9.0)
 
 
 @pytest.fixture

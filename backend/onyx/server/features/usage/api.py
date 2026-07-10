@@ -1,6 +1,7 @@
 """Admin cost overrides + user/usage endpoints."""
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import date
 from datetime import datetime
 from datetime import time
@@ -18,16 +19,17 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import fetch_default_llm_model
+from onyx.db.models import TokenRateLimit
 from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.db.token_limit import fetch_user_group_token_rate_limits
 from onyx.db.usage import USAGE_PERIOD_HOURS
 from onyx.db.user_usage import get_group_cost_cents_buckets_since
-from onyx.db.user_usage import get_total_cost_cents_since
+from onyx.db.user_usage import get_total_cost_cents_buckets_since
 from onyx.db.user_usage import get_usage_export
+from onyx.db.user_usage import get_user_cost_cents_buckets_since
 from onyx.db.user_usage import get_user_cost_cents_in_window
-from onyx.db.user_usage import get_user_cost_cents_since
 from onyx.db.user_usage import get_user_usage_by_day_and_model
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -38,6 +40,7 @@ from onyx.llm.cost_overrides import list_overrides
 from onyx.llm.cost_overrides import upsert_override
 from onyx.server.features.usage.models import CostOverride
 from onyx.server.features.usage.models import CostOverrideUpsertRequest
+from onyx.server.features.usage.models import EffectiveCostBudget
 from onyx.server.features.usage.models import ModelPrice
 from onyx.server.features.usage.models import UsageExportRecord
 from onyx.server.features.usage.models import UsageExportResponse
@@ -54,31 +57,52 @@ _DEFAULT_EXPORT_DAYS = 30
 _LEDGER_GRID = timedelta(seconds=USAGE_LIMIT_WINDOW_SECONDS)
 
 
-def _user_cost_budget(
-    db_session: Session, user_id: str
-) -> tuple[float | None, float | None, int | None]:
+def _used_from_buckets(
+    buckets: list[tuple[datetime, float]], cutoff: datetime
+) -> float:
+    return sum(c for ws, c in buckets if ws >= cutoff)
+
+
+def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget | None:
     """Effective cost budget (most binding across user/global/group limits)."""
     now = datetime.now(tz=timezone.utc)
-    candidates: list[tuple[float, float, int]] = []
+    candidates: list[EffectiveCostBudget] = []
 
-    def _add(budget: float | None, used: float, period_hours: int) -> None:
-        if budget is not None:
-            candidates.append((budget - used, budget, period_hours))
+    def _add_from_limits(
+        limits: Sequence[TokenRateLimit],
+        buckets: list[tuple[datetime, float]],
+    ) -> None:
+        for rl in limits:
+            if rl.cost_budget_cents is None:
+                continue
+            cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
+            used = _used_from_buckets(buckets, cutoff)
+            candidates.append(
+                EffectiveCostBudget(
+                    budget_cents=rl.cost_budget_cents,
+                    remaining_cents=rl.cost_budget_cents - used,
+                    period_hours=rl.period_hours,
+                )
+            )
 
-    for rl in fetch_all_user_token_rate_limits(db_session, enabled_only=True):
-        cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
-        _add(
-            rl.cost_budget_cents,
-            get_user_cost_cents_since(db_session, user_id, cutoff),
-            rl.period_hours,
+    user_rls = fetch_all_user_token_rate_limits(db_session, enabled_only=True)
+    user_cost_rls = [rl for rl in user_rls if rl.cost_budget_cents is not None]
+    if user_cost_rls:
+        broadest = max(rl.period_hours for rl in user_cost_rls)
+        fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+        _add_from_limits(
+            user_cost_rls,
+            get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
         )
 
-    for rl in fetch_all_global_token_rate_limits(db_session, enabled_only=True):
-        cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
-        _add(
-            rl.cost_budget_cents,
-            get_total_cost_cents_since(db_session, cutoff),
-            rl.period_hours,
+    global_rls = fetch_all_global_token_rate_limits(db_session, enabled_only=True)
+    global_cost_rls = [rl for rl in global_rls if rl.cost_budget_cents is not None]
+    if global_cost_rls:
+        broadest = max(rl.period_hours for rl in global_cost_rls)
+        fetch_cutoff = now - timedelta(hours=broadest) - _LEDGER_GRID
+        _add_from_limits(
+            global_cost_rls,
+            get_total_cost_cents_buckets_since(db_session, fetch_cutoff),
         )
 
     group_candidate = _group_cost_budget_candidate(db_session, user_id, now)
@@ -86,14 +110,18 @@ def _user_cost_budget(
         candidates.append(group_candidate)
 
     if not candidates:
-        return None, None, None
-    remaining, budget, period_hours = min(candidates, key=lambda c: c[0])
-    return budget, max(remaining, 0.0), period_hours
+        return None
+    best = min(candidates, key=lambda c: c.remaining_cents)
+    return EffectiveCostBudget(
+        budget_cents=best.budget_cents,
+        remaining_cents=max(best.remaining_cents, 0.0),
+        period_hours=best.period_hours,
+    )
 
 
 def _group_cost_budget_candidate(
     db_session: Session, user_id: str, now: datetime
-) -> tuple[float, float, int] | None:
+) -> EffectiveCostBudget | None:
     """Group cost headroom. Gate requires all groups over budget → pick most
     permissive; cost-exempt group exempts scope."""
     group_limits = fetch_user_group_token_rate_limits(db_session, UUID(user_id))
@@ -116,21 +144,28 @@ def _group_cost_budget_candidate(
         db_session, list(group_limits.keys()), fetch_cutoff
     )
 
-    most_permissive: tuple[float, float, int] | None = None
+    most_permissive: EffectiveCostBudget | None = None
     for group_id, limits in group_limits.items():
         group_buckets = buckets.get(group_id, [])
-        group_binding: tuple[float, float, int] | None = None
+        group_binding: EffectiveCostBudget | None = None
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
             cutoff = now - timedelta(hours=rl.period_hours) - _LEDGER_GRID
-            used = sum(c for ws, c in group_buckets if ws >= cutoff)
+            used = _used_from_buckets(group_buckets, cutoff)
             remaining = rl.cost_budget_cents - used
-            if group_binding is None or remaining < group_binding[0]:
-                group_binding = (remaining, rl.cost_budget_cents, rl.period_hours)
+            if group_binding is None or remaining < group_binding.remaining_cents:
+                group_binding = EffectiveCostBudget(
+                    budget_cents=rl.cost_budget_cents,
+                    remaining_cents=remaining,
+                    period_hours=rl.period_hours,
+                )
         if group_binding is None:
             return None  # a cost-exempt group exempts the whole group scope
-        if most_permissive is None or group_binding[0] > most_permissive[0]:
+        if (
+            most_permissive is None
+            or group_binding.remaining_cents > most_permissive.remaining_cents
+        ):
             most_permissive = group_binding
 
     return most_permissive
@@ -178,16 +213,14 @@ def get_my_usage(
                 output_per_mtok=output_per_mtok,
             )
 
-    budget_cents, budget_remaining_cents, budget_period_hours = _user_cost_budget(
-        db_session, user_id
-    )
+    budget = _user_cost_budget(db_session, user_id)
 
     return UserUsageResponse(
         per_day_by_model=per_day,
         window_cost_cents=window_cost_cents,
-        budget_cents=budget_cents,
-        budget_remaining_cents=budget_remaining_cents,
-        budget_period_hours=budget_period_hours,
+        budget_cents=budget.budget_cents if budget is not None else None,
+        budget_remaining_cents=(budget.remaining_cents if budget is not None else None),
+        budget_period_hours=budget.period_hours if budget is not None else None,
         selected_model_price=selected_model_price,
     )
 
@@ -210,6 +243,7 @@ def export_usage(
         days=1
     )
 
+    # TODO(evan-onyx): this might need to be done in a background task
     rows = get_usage_export(db_session, start=start_dt, end=end_dt, model=model)
 
     records_by_email: dict[str, list[UsageExportRecord]] = defaultdict(list)

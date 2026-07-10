@@ -78,6 +78,14 @@ class ModelPrice(BaseModel):
     output_per_mtok: float | None
 
 
+class EffectiveCostBudget(BaseModel):
+    """One cost limit after applying current usage (cents + period)."""
+
+    budget_cents: float
+    remaining_cents: float
+    period_hours: int
+
+
 class UserUsageResponse(BaseModel):
     per_day_by_model: list[UsageDayModel]
     window_cost_cents: float

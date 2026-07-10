@@ -203,6 +203,26 @@ def get_user_cost_cents_since(
     return float(total)
 
 
+def get_user_cost_cents_buckets_since(
+    db_session: Session,
+    user_id: str,
+    cutoff: datetime,
+) -> list[tuple[datetime, float]]:
+    """Per-window cost buckets for one user — Python-side multi-period windowing."""
+    rows = db_session.execute(
+        select(
+            UserUsage.window_start,
+            func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
+        )
+        .where(
+            UserUsage.user_id == user_id,
+            UserUsage.window_start >= cutoff,
+        )
+        .group_by(UserUsage.window_start)
+    ).all()
+    return [(datetime_to_utc(window_start), float(cost)) for window_start, cost in rows]
+
+
 def get_total_cost_cents_since(
     db_session: Session,
     cutoff: datetime,
@@ -214,6 +234,22 @@ def get_total_cost_cents_since(
         )
     ).scalar_one()
     return float(total)
+
+
+def get_total_cost_cents_buckets_since(
+    db_session: Session,
+    cutoff: datetime,
+) -> list[tuple[datetime, float]]:
+    """Tenant-wide per-window cost buckets for multi-period global budgets."""
+    rows = db_session.execute(
+        select(
+            UserUsage.window_start,
+            func.coalesce(func.sum(UserUsage.cost_cents), 0.0),
+        )
+        .where(UserUsage.window_start >= cutoff)
+        .group_by(UserUsage.window_start)
+    ).all()
+    return [(datetime_to_utc(window_start), float(cost)) for window_start, cost in rows]
 
 
 def get_group_cost_cents_since(
