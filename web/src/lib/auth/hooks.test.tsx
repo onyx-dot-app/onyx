@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { setDocumentVisibility } from "@tests/setup/test-utils";
-import { useTokenRefresh } from "@/hooks/useTokenRefresh";
+import { useTokenRefresh } from "@/lib/auth/hooks";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 import { User } from "@/lib/types";
 
@@ -97,16 +97,12 @@ describe("useTokenRefresh", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    // Simulate the parent re-render storm that occurs when onRefreshFail
-    // -> mutateUser produces a new user object identity.
     for (let i = 0; i < 10; i++) {
       await act(async () => {
         rerender({ user: { ...fakeUser } });
       });
     }
 
-    // The time-gate should suppress every follow-up attempt; the original
-    // bug fired ~one extra call per re-render.
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -123,7 +119,6 @@ describe("useTokenRefresh", () => {
         )
       );
 
-      // No refresh on hidden mount, and none from interval ticks while hidden.
       await act(async () => {
         jest.advanceTimersByTime(31 * 60 * 1000);
       });
