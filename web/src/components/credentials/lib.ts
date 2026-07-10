@@ -3,8 +3,9 @@ import * as Yup from "yup";
 import { dictionaryType, formType } from "./types";
 import {
   Credential,
-  getDisplayNameForCredentialKey,
   CredentialTemplateWithAuth,
+  credentialTemplates,
+  getDisplayNameForCredentialKey,
 } from "@/lib/connectors/credentials";
 import { isTypedFileField } from "@/lib/connectors/fileTypes";
 
@@ -107,12 +108,72 @@ export function createEditingValidationSchema(json_values: dictionaryType) {
   return Yup.object().shape(schemaFields);
 }
 
-export function createInitialValues(credential: Credential<any>): formType {
+function getAuthMethodFieldsForCredential(
+  credentialJson: dictionaryType,
+  credentialTemplate: CredentialTemplateWithAuth<dictionaryType>
+): dictionaryType {
+  const authMethods = credentialTemplate.authMethods ?? [];
+  const storedAuthMethod =
+    typeof credentialJson.authentication_method === "string"
+      ? credentialJson.authentication_method
+      : undefined;
+  const selectedAuthMethod =
+    authMethods.find((method) => method.value === storedAuthMethod) ??
+    authMethods.find((method) =>
+      Object.keys(method.fields).some((fieldKey) => fieldKey in credentialJson)
+    ) ??
+    authMethods[0];
+
+  return {
+    authentication_method:
+      storedAuthMethod ??
+      selectedAuthMethod?.value ??
+      credentialTemplate.authentication_method ??
+      "",
+    ...selectedAuthMethod?.fields,
+  };
+}
+
+export function getEditableCredentialFields(
+  credential: Credential<any>,
+  sourceType: Credential<any>["source"] = credential.source
+): dictionaryType {
+  const credentialJson = credential.credential_json ?? {};
+  const credentialTemplate = credentialTemplates[sourceType] as
+    | dictionaryType
+    | null
+    | undefined;
+
+  if (!credentialTemplate) {
+    return credentialJson;
+  }
+
+  const templateWithAuth =
+    credentialTemplate as CredentialTemplateWithAuth<dictionaryType>;
+  const templateFields =
+    templateWithAuth.authMethods && templateWithAuth.authMethods.length > 1
+      ? getAuthMethodFieldsForCredential(credentialJson, templateWithAuth)
+      : Object.fromEntries(
+          Object.entries(credentialTemplate).filter(
+            ([key]) => key !== "authMethods"
+          )
+        );
+
+  return {
+    ...templateFields,
+    ...credentialJson,
+  };
+}
+
+export function createInitialValues(
+  credential: Credential<any>,
+  credentialFields: dictionaryType = credential.credential_json
+): formType {
   const initialValues: formType = {
     name: credential.name || "",
   };
 
-  for (const key in credential.credential_json) {
+  for (const key in credentialFields) {
     // Initialize TypedFile fields as null, other fields as empty strings
     if (isTypedFileField(key)) {
       initialValues[key] = null as any; // TypedFile fields start as null

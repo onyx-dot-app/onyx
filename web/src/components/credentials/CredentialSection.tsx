@@ -264,10 +264,11 @@ export default function CredentialSection({
               title="Edit Credential"
               onClose={closeEditingCredential}
             />
-            <Modal.Body>
+            <Modal.Body alignItems="stretch">
               <EditCredential
                 onUpdate={onUpdateCredential}
                 credential={editingCredential}
+                sourceType={sourceType}
                 onClose={closeEditingCredential}
               />
             </Modal.Body>

@@ -201,9 +201,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const handleStatusUpdate = async (
     newStatus: ConnectorCredentialPairStatus
   ) => {
-    setShowIsResolvingKickoffLoader(true); // Show fullscreen spinner
+    setShowIsResolvingKickoffLoader(true);
     await handleStatusChange(newStatus);
-    setShowIsResolvingKickoffLoader(false); // Hide fullscreen spinner
+    setShowIsResolvingKickoffLoader(false);
   };
 
   const triggerReIndex = async (fromBeginning: boolean) => {
