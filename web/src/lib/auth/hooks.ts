@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import type { Route } from "next";
+import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -12,8 +11,6 @@ import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
 import { useCurrentUser } from "@/lib/users/hooks";
-import { getAuthRedirect, AuthPage } from "@/lib/auth/redirect";
-import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import { isAuthPath } from "@/lib/auth/paths";
 
 interface AuthTypeAPIResponse {
@@ -89,35 +86,6 @@ export function useAuthTypeMetadata(): {
     isLoading,
     error,
   };
-}
-
-export function useAuthRedirect(currentPage: AuthPage): boolean {
-  const { user, isLoading } = useCurrentUser();
-  const { authTypeMetadata, isLoading: isAuthTypeLoading } =
-    useAuthTypeMetadata();
-  const signupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
-  const router = useRouter();
-  const isAuthStateLoading = isLoading || isAuthTypeLoading;
-
-  useEffect(() => {
-    if (isAuthStateLoading) return;
-    const destination = getAuthRedirect(
-      user,
-      authTypeMetadata,
-      currentPage,
-      signupDisabled
-    );
-    if (destination) router.replace(destination as Route);
-  }, [
-    isAuthStateLoading,
-    user,
-    authTypeMetadata,
-    currentPage,
-    signupDisabled,
-    router,
-  ]);
-
-  return isAuthStateLoading;
 }
 
 function computeSecondsUntilExpiration(user: User): number | null {
