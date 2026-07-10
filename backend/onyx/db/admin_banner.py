@@ -9,17 +9,16 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# A site-wide banner is one global fact, not a per-user notification, so it
-# lives as a single value in the per-tenant, Redis-cached KV store: O(1) writes
-# on publish and cheap cached reads on the per-user display endpoint.
+# The banner's authored content is one global fact, stored as a single value in
+# the per-tenant KV store. It reaches users as a per-user SYSTEM_ANNOUNCEMENT
+# notification synthesized on read, so there is no separate display endpoint.
 ADMIN_BANNER_KV_KEY = "admin_banner"
 
 
 class AdminBanner(BaseModel):
     title: str
     content: str | None
-    # ISO-8601; doubles as the client dismiss key, so editing the banner
-    # re-shows it to users who dismissed the previous version.
+    # ISO-8601 timestamp of the last publish/edit.
     updated_at: str
 
 
