@@ -17,6 +17,7 @@ import useSWR, { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { AdminBanner } from "@/lib/banner/interfaces";
+import { invalidateNotificationCaches } from "@/lib/notifications/api";
 
 const route = ADMIN_ROUTES.THEME;
 
@@ -83,6 +84,9 @@ export default function ThemePage() {
       return false;
     }
     await mutate(SWR_KEYS.adminBanner);
+    // The banner reaches users as a synthesized notification, so the mounted
+    // banner queue and bell must refetch to show the change without a reload.
+    await invalidateNotificationCaches();
     return true;
   }
 
