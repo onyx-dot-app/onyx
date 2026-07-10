@@ -77,6 +77,11 @@ class OutlineConnector(LoadConnector, PollConnector):
             if collection.get("updatedAt") is not None
             else None
         )
+        created_at_str = (
+            str(collection.get("createdAt"))
+            if collection.get("createdAt") is not None
+            else None
+        )
         return Document(
             id="outline_collection__" + str(collection.get("id")),
             sections=[TextSection(link=url, text=html.unescape(text))],
@@ -85,6 +90,10 @@ class OutlineConnector(LoadConnector, PollConnector):
             title=title,
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "collection"},
         )
@@ -103,6 +112,11 @@ class OutlineConnector(LoadConnector, PollConnector):
             if document.get("updatedAt") is not None
             else None
         )
+        created_at_str = (
+            str(document.get("createdAt"))
+            if document.get("createdAt") is not None
+            else None
+        )
         return Document(
             id="outline_document__" + str(document.get("id")),
             sections=[TextSection(link=url, text=html.unescape(text))],
@@ -111,6 +125,10 @@ class OutlineConnector(LoadConnector, PollConnector):
             title=title,
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "document"},
         )

@@ -34,6 +34,7 @@ def mock_issue_small() -> MagicMock:
     fields.assignee.emailAddress = "john@example.com"
     fields.summary = "Small Issue"
     fields.updated = "2023-01-01T00:00:00+0000"
+    fields.created = "2023-01-01T00:00:00+0000"
     fields.labels = []
 
     issue.fields = fields
@@ -59,6 +60,7 @@ def mock_issue_large() -> MagicMock:
     fields.assignee.emailAddress = "jane@example.com"
     fields.summary = "Large Issue"
     fields.updated = "2023-01-02T00:00:00+0000"
+    fields.created = "2023-01-02T00:00:00+0000"
     fields.labels = []
 
     issue.fields = fields

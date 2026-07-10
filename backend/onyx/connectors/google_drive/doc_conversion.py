@@ -885,6 +885,11 @@ def _convert_drive_item_to_document(
                     owner.get("displayName", "") for owner in file.get("owners", [])
                 ),
             },
+            doc_created_at=(
+                datetime.fromisoformat(created_time.replace("Z", "+00:00"))
+                if (created_time := file.get("createdTime"))
+                else None
+            ),
             doc_updated_at=datetime.fromisoformat(
                 file.get("modifiedTime", "").replace("Z", "+00:00")
             ),
@@ -961,4 +966,9 @@ def build_slim_document(
         id=onyx_document_id_from_drive_file(file),
         external_access=external_access,
         parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
+        doc_created_at=(
+            datetime.fromisoformat(created_time.replace("Z", "+00:00"))
+            if (created_time := file.get("createdTime"))
+            else None
+        ),
     )

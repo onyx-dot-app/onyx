@@ -124,6 +124,7 @@ class AxeroForum(BaseModel):
     initial_content: str
     responses: list[str]
     last_update: datetime
+    created: datetime | None = None
 
 
 def _map_post_to_parent(
@@ -152,11 +153,11 @@ def _map_post_to_parent(
             initial_post_d = _get_obj_by_id(p_id, api_key, axero_base_url)[
                 "ResponseData"
             ]
+            initial_post_created = initial_post_d.get("DateCreated")
             initial_post_time = time_str_to_utc(
-                initial_post_d.get("DateUpdated")
-                or initial_post_d.get("DateCreated")
-                or epoch_str
+                initial_post_d.get("DateUpdated") or initial_post_created or epoch_str
             )
+
             post_map[p_id] = AxeroForum(
                 doc_id="AXERO_" + str(initial_post_d.get("ContentID")),
                 title=initial_post_d.get("ContentTitle"),
@@ -164,6 +165,11 @@ def _map_post_to_parent(
                 initial_content=initial_post_d.get("ContentSummary"),
                 responses=[post.get("ContentSummary")],
                 last_update=max(post_time, initial_post_time),
+                created=(
+                    time_str_to_utc(initial_post_created)
+                    if initial_post_created
+                    else None
+                ),
             )
 
     return list(post_map.values())
@@ -223,6 +229,8 @@ def _translate_forum_to_doc(af: AxeroForum) -> Document:
         source=DocumentSource.AXERO,
         semantic_identifier=af.title,
         doc_updated_at=af.last_update,
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=af.created,
         metadata={},
     )
 
@@ -240,12 +248,15 @@ def _translate_content_to_doc(content: dict) -> Document:
         content_parsed = parse_html_page_basic(body)
         page_text += content_parsed
 
+    date_created = content["DateCreated"]
     doc = Document(
         id="AXERO_" + str(content["ContentID"]),
         sections=[TextSection(link=content["ContentURL"], text=page_text)],
         source=DocumentSource.AXERO,
         semantic_identifier=content["ContentTitle"],
         doc_updated_at=time_str_to_utc(content["DateUpdated"]),
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=time_str_to_utc(date_created),
         metadata={"space": content["SpaceName"]},
     )
 

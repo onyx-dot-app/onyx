@@ -738,6 +738,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
+                    doc_created_at=ticket.created_at.replace(tzinfo=timezone.utc),
                     doc_updated_at=ticket.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
                     doc_metadata={
@@ -893,6 +894,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
+                    doc_created_at=company.created_at.replace(tzinfo=timezone.utc),
                     doc_updated_at=company.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
                     doc_metadata={
@@ -1046,6 +1048,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
+                    doc_created_at=deal.created_at.replace(tzinfo=timezone.utc),
                     doc_updated_at=deal.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
                     doc_metadata={
@@ -1219,6 +1222,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
+                    doc_created_at=contact.created_at.replace(tzinfo=timezone.utc),
                     doc_updated_at=contact.updated_at.replace(tzinfo=timezone.utc),
                     metadata=metadata,
                     doc_metadata={

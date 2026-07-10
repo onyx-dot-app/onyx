@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from datetime import timezone
 from io import BytesIO
 from typing import Any
 from typing import Dict
@@ -31,6 +32,19 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 _SLIM_BATCH_SIZE = 1000
+
+
+def _parse_highspot_timestamp(value: Any) -> datetime | None:
+    """Parse a Highspot ISO timestamp into a tz-aware UTC datetime, or None."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 class HighspotSpot(BaseModel):
@@ -239,7 +253,13 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                                 item_details.get("can_download", False)
                                             ),
                                         },
-                                        doc_updated_at=item_details.get("date_updated"),
+                                        doc_updated_at=_parse_highspot_timestamp(
+                                            item_details.get("date_updated")
+                                        ),
+                                        # NOTE: doc_created_at population not yet verified against live data
+                                        doc_created_at=_parse_highspot_timestamp(
+                                            item_details.get("date_added")
+                                        ),
                                     )
                                 )
 
@@ -423,8 +443,32 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                                 logger.warning("Item without ID found, skipping")
                                 continue
 
+                            # Prefer the list payload; fall back to a per-item
+                            # detail fetch when the list omits the creation time.
+                            date_added = item.get("date_added")
+                            if date_added is None:
+                                try:
+                                    item_details = self.client.get_item(item_id)
+                                    date_added = (
+                                        item_details.get("date_added")
+                                        if item_details
+                                        else None
+                                    )
+                                except HighspotClientError as e:
+                                    logger.warning(
+                                        "Could not fetch created_at for item %s: %s",
+                                        item_id,
+                                        str(e),
+                                    )
+
                             slim_doc_batch.append(
-                                SlimDocument(id=f"HIGHSPOT_{item_id}")
+                                SlimDocument(
+                                    id=f"HIGHSPOT_{item_id}",
+                                    # NOTE: doc_created_at population not yet verified against live data
+                                    doc_created_at=_parse_highspot_timestamp(
+                                        date_added
+                                    ),
+                                )
                             )
 
                             if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
