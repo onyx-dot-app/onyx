@@ -79,6 +79,9 @@ function InputTags({
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    // During IME composition, Enter confirms the candidate and Backspace
+    // edits the composition. Neither may add or arm tags.
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
