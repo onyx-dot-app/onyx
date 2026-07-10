@@ -22,6 +22,8 @@ import onyx.document_index.opensearch.client as client_module
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import DocumentTimeField
+from onyx.context.search.models import DocumentTimeRange
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
@@ -143,6 +145,7 @@ def _create_test_document_chunk(
     ),
     source_type: DocumentSource = DocumentSource.FILE,
     last_updated: datetime | None = None,
+    created_at: datetime | None = None,
     user_projects: list[int] | None = None,
     document_sets: list[str] | None = None,
 ) -> DocumentChunk:
@@ -164,6 +167,7 @@ def _create_test_document_chunk(
         source_type=source_type.value,
         metadata_list=None,
         last_updated=last_updated,
+        created_at=created_at,
         public=document_access.is_public,
         access_control_list=generate_opensearch_filtered_access_control_list(
             document_access
@@ -2441,6 +2445,97 @@ class TestOpenSearchClient:
         assert (
             last_six_months_results[1].document_chunk.document_id == "no-last-updated"
         )
+
+    def test_updated_in_past_window_uses_activity_overlap(
+        self,
+        test_client: OpenSearchIndexClient,
+        search_pipeline: None,  # noqa: ARG002
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ "updated 4-7 months ago" must match a doc whose stored latest edit is
+        AFTER the window, as long as it was created before the window ends.
+
+        We keep no edit history, so a doc created 8mo ago and last edited 2mo ago
+        may well have been edited inside the 4-7mo window (the unstored 5mo edit).
+        The filter approximates this with the overlap last_updated >= 7mo AND
+        created_at <= 4mo, rather than a strict last_updated in [7mo, 4mo] which
+        would wrongly drop it."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        now = datetime.now(timezone.utc)
+        docs = [
+            # Created 8mo ago, stored latest edit 2mo ago (an in-window 5mo edit
+            # is unstored). Must emerge.
+            _create_test_document_chunk(
+                document_id="edited-again-after-window",
+                content="Good match",
+                created_at=now - timedelta(days=8 * 30),
+                last_updated=now - timedelta(days=2 * 30),
+                tenant_state=tenant_state,
+            ),
+            # Created and last edited 2mo ago: it did not exist during the window,
+            # so it cannot have been updated then. Must NOT emerge.
+            _create_test_document_chunk(
+                document_id="created-after-window",
+                content="Good match",
+                created_at=now - timedelta(days=2 * 30),
+                last_updated=now - timedelta(days=2 * 30),
+                tenant_state=tenant_state,
+            ),
+            # Last edited 9mo ago (before the window): its latest edit predates
+            # the window start, so no update at/after 7mo. Must NOT emerge.
+            _create_test_document_chunk(
+                document_id="last-edited-before-window",
+                content="Good match",
+                created_at=now - timedelta(days=12 * 30),
+                last_updated=now - timedelta(days=9 * 30),
+                tenant_state=tenant_state,
+            ),
+        ]
+        for doc in docs:
+            test_client.index_document(document=doc, tenant_state=tenant_state)
+        test_client.refresh_index()
+
+        # "updated 4-7 months ago" as the overlap.
+        search_body = DocumentQuery.get_hybrid_search_query(
+            query_text="Good match",
+            query_vector=_generate_test_vector(0.1),
+            num_hits=5,
+            tenant_state=tenant_state,
+            index_filters=IndexFilters(
+                access_control_list=None,
+                tenant_id=None,
+                document_time_ranges=[
+                    DocumentTimeRange(
+                        field=DocumentTimeField.UPDATED_AT,
+                        start=now - timedelta(days=7 * 30),
+                    ),
+                    DocumentTimeRange(
+                        field=DocumentTimeField.CREATED_AT,
+                        end=now - timedelta(days=4 * 30),
+                    ),
+                ],
+            ),
+            include_hidden=False,
+        )
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
+
+        # Under test.
+        results = test_client.search(
+            body=search_body,
+            search_pipeline_id=pipeline_name,
+        )
+
+        # Postcondition: only the doc whose activity span overlaps the window.
+        result_ids = {result.document_chunk.document_id for result in results}
+        assert result_ids == {"edited-again-after-window"}
 
     def test_random_search(
         self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch

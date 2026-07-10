@@ -11,7 +11,7 @@ How `IndexFilters` fields combine into the final query filter. Describes the act
 | **Visibility** | `hidden` | Always applied (unless `include_hidden`) |
 | **Tenant** | `tenant_id` | AND (multi-tenant only) |
 | **ACL** | `access_control_list` | OR within, AND with rest |
-| **Narrowing** | `source_type`, `tags`, `time_cutoff`, `time_cutoff_upper` | Each OR within, AND with rest |
+| **Narrowing** | `source_type`, `tags`, `time_cutoff`, `time_cutoff_upper`, `document_time_ranges` | Each OR within, AND with rest |
 | **Knowledge scope** | `document_set`, `attached_document_ids`, `hierarchy_node_ids`, `persona_id_filter`, `project_id_filter` | OR within group, AND with rest |
 
 ## How filters combine
@@ -27,6 +27,48 @@ AND (tag = T1 OR ...)                   -- if set
 AND <knowledge scope>                   -- see below
 AND time >= cutoff                      -- if set
 ```
+
+## Time filtering
+
+Two ways to constrain time, both AND-ed into the query:
+
+- **Plain window** — `time_cutoff` / `time_cutoff_upper`. Both are bounds on
+  `last_updated` (a single inclusive `[gte, lte]` range). This is the simple
+  request/persona-facing form and its meaning is unchanged from #12574.
+- **`document_time_ranges`** (OpenSearch only) — a list of field-aware
+  `DocumentTimeRange`s, each an inclusive `[start, end]` window on **one** field
+  (`created_at` or `last_updated`). All ranges in the list are AND-ed. When set,
+  this takes precedence over the plain window. Use it to express a query's
+  created-vs-updated intent.
+
+### Why intent needs both fields
+
+We store only a document's creation time and its **latest** update time — no edit
+history. That shapes how intents map onto ranges:
+
+| Intent | `DocumentTimeRange`(s) | Resulting predicate |
+|---|---|---|
+| **created in [S, E]** | `created_at [S, E]` | `created_at >= S AND created_at <= E` |
+| **updated / active in [S, E]** | `last_updated [S, →]` **and** `created_at [→, E]` | `last_updated >= S AND created_at <= E` (overlap) |
+| **last-touched in [S, E]** (strict) | `last_updated [S, E]` | `last_updated >= S AND last_updated <= E` |
+
+The **updated/active** intent is an *overlap*, not a strict `last_updated` range:
+the upper bound must go on `created_at`, because `last_updated` is only the latest
+edit. A doc created 8mo ago, edited 5mo ago (unstored) then 2mo ago (the stored
+latest) was updated inside a "4–7 months ago" window and must still match — a
+strict `last_updated <= 4mo` would wrongly drop it, while the overlap keeps it
+(its latest edit is `>= 7mo` and it existed by `4mo`).
+
+### Undated documents
+
+We prefer to over- than under-extend, so a missing timestamp does not remove a
+document — with one exception to avoid flooding recent-window queries:
+
+- **`created_at` ranges**: undated docs are **always** kept (a doc with no
+  `created_at` cannot be shown to fall outside the window).
+- **`last_updated` ranges**: undated docs are kept only for an **old, open-ended
+  lower bound** (start older than `ASSUMED_DOCUMENT_AGE_DAYS`, no upper bound); a
+  recent or bounded range excludes them.
 
 ## Knowledge scope rules
 
@@ -116,4 +158,5 @@ AND (user_project contains 7)
 | `tags` | `metadata_list` | `array<string>` | Document metadata tags |
 | `time_cutoff` | `doc_updated_at` | `long` | Minimum document update timestamp |
 | `time_cutoff_upper` | `doc_updated_at` | `long` | Maximum document update timestamp; usable alone or together with `time_cutoff` for a closed range; excludes undated docs in all cases |
+| `document_time_ranges` | `last_updated` / `created_at` | `long` | Field-aware time windows (OpenSearch only); see [Time filtering](#time-filtering). Takes precedence over `time_cutoff` / `time_cutoff_upper` when set |
 | `tenant_id` | `tenant_id` | `string` | Tenant isolation (multi-tenant) |

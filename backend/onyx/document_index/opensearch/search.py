@@ -12,6 +12,8 @@ from onyx.configs.app_configs import OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED
 from onyx.configs.app_configs import OPENSEARCH_PROFILING_DISABLED
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
+from onyx.context.search.models import DocumentTimeField
+from onyx.context.search.models import DocumentTimeRange
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
 from onyx.document_index.interfaces_new import TenantState
@@ -35,6 +37,7 @@ from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FI
 from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_VECTOR_FIELD_NAME
+from onyx.document_index.opensearch.schema import CREATED_AT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_ID_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
 from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
@@ -173,6 +176,35 @@ def get_normalization_pipeline_name_and_config() -> tuple[str, dict[str, Any]]:
         )
 
 
+def _resolve_document_time_ranges(
+    index_filters: IndexFilters,
+) -> list[DocumentTimeRange] | None:
+    """Resolve the field-aware time ranges to apply for a search.
+
+    An explicit index_filters.document_time_ranges always wins — this is how a
+    caller expresses created-vs-updated intent, including the "updated in [S, E]"
+    overlap (a last_updated lower bound AND a created_at upper bound).
+
+    Otherwise the plain [time_cutoff, time_cutoff_upper] window keeps its literal
+    meaning: both are bounds on last_updated (a single last_updated range), as
+    introduced in #12574. This keeps every IndexFilters — however it was built —
+    working without each call site having to construct ranges, and without the
+    plain window silently changing which field its upper bound targets.
+    """
+    if index_filters.document_time_ranges is not None:
+        return index_filters.document_time_ranges
+
+    if index_filters.time_cutoff is None and index_filters.time_cutoff_upper is None:
+        return None
+    return [
+        DocumentTimeRange(
+            field=DocumentTimeField.UPDATED_AT,
+            start=index_filters.time_cutoff,
+            end=index_filters.time_cutoff_upper,
+        )
+    ]
+
+
 class DocumentQuery:
     """
     TODO(andrei): Implement multi-phase search strategies.
@@ -230,8 +262,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             project_id_filter=index_filters.project_id_filter,
             persona_id_filter=index_filters.persona_id_filter,
-            time_cutoff=index_filters.time_cutoff,
-            time_cutoff_upper=index_filters.time_cutoff_upper,
+            document_time_ranges=_resolve_document_time_ranges(index_filters),
             min_chunk_index=min_chunk_index,
             max_chunk_index=max_chunk_index,
             max_chunk_size=max_chunk_size,
@@ -297,8 +328,7 @@ class DocumentQuery:
             document_sets=[],
             project_id_filter=None,
             persona_id_filter=None,
-            time_cutoff=None,
-            time_cutoff_upper=None,
+            document_time_ranges=None,
             min_chunk_index=None,
             max_chunk_index=None,
             max_chunk_size=None,
@@ -370,8 +400,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             project_id_filter=index_filters.project_id_filter,
             persona_id_filter=index_filters.persona_id_filter,
-            time_cutoff=index_filters.time_cutoff,
-            time_cutoff_upper=index_filters.time_cutoff_upper,
+            document_time_ranges=_resolve_document_time_ranges(index_filters),
             min_chunk_index=None,
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
@@ -466,8 +495,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             project_id_filter=index_filters.project_id_filter,
             persona_id_filter=index_filters.persona_id_filter,
-            time_cutoff=index_filters.time_cutoff,
-            time_cutoff_upper=index_filters.time_cutoff_upper,
+            document_time_ranges=_resolve_document_time_ranges(index_filters),
             min_chunk_index=None,
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
@@ -549,8 +577,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             project_id_filter=index_filters.project_id_filter,
             persona_id_filter=index_filters.persona_id_filter,
-            time_cutoff=index_filters.time_cutoff,
-            time_cutoff_upper=index_filters.time_cutoff_upper,
+            document_time_ranges=_resolve_document_time_ranges(index_filters),
             min_chunk_index=None,
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
@@ -611,8 +638,7 @@ class DocumentQuery:
             document_sets=index_filters.document_set or [],
             project_id_filter=index_filters.project_id_filter,
             persona_id_filter=index_filters.persona_id_filter,
-            time_cutoff=index_filters.time_cutoff,
-            time_cutoff_upper=index_filters.time_cutoff_upper,
+            document_time_ranges=_resolve_document_time_ranges(index_filters),
             min_chunk_index=None,
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
@@ -851,8 +877,7 @@ class DocumentQuery:
         document_sets: list[str],
         project_id_filter: int | None,
         persona_id_filter: int | None,
-        time_cutoff: datetime | None,
-        time_cutoff_upper: datetime | None,
+        document_time_ranges: list[DocumentTimeRange] | None,
         min_chunk_index: int | None,
         max_chunk_index: int | None,
         max_chunk_size: int | None = None,
@@ -895,16 +920,14 @@ class DocumentQuery:
             persona_id_filter: If not None, only documents whose personas array
                 contains this persona ID will be retrieved. Primary — creates
                 a knowledge scope on its own.
-            time_cutoff: Inclusive lower bound on a document's last updated time.
-                If not None, documents last updated before this time will not be
-                returned. Documents which have no last updated time are included
-                only when this bound is open-ended (time_cutoff_upper is None)
-                and older than ASSUMED_DOCUMENT_AGE_DAYS — a closed range cannot
-                vouch for an undated document.
-            time_cutoff_upper: Inclusive upper bound on a document's last updated
-                time. If not None, documents last updated after this time will
-                not be returned. May be set with or without time_cutoff. When
-                set, undated documents are always excluded.
+            document_time_ranges: Field-aware time windows, each an inclusive
+                range on a document's created_at or last_updated field. All
+                supplied ranges are AND-ed together, letting a caller express
+                "created in [S, E]" (one created_at range), "updated in [S, E]"
+                (one last_updated range), or "active in [S, E]" (a last_updated
+                lower bound AND a created_at upper bound — the best-guess overlap
+                used when edit history is unavailable). See
+                _get_document_time_filter for undated-document handling.
             min_chunk_index: The minimum chunk index to retrieve, inclusive. If
                 None, no minimum chunk index will be applied.
             max_chunk_index: The maximum chunk index to retrieve, inclusive. If
@@ -1091,45 +1114,108 @@ class DocumentQuery:
         def _get_persona_filter(persona_id: int) -> TermQuery[int]:
             return {"term": {PERSONAS_FIELD_NAME: {"value": persona_id}}}
 
-        def _get_time_cutoff_filter(
-            time_cutoff: datetime | None,
-            time_cutoff_upper: datetime | None,
+        def _get_date_range_clause(
+            field_name: str,
+            gte: datetime | None,
+            lte: datetime | None,
+            include_undated: bool,
         ) -> dict[str, Any]:
+            """Null-tolerant inclusive range filter on a single date field.
+
+            Returns a should (logical OR) clause matching documents whose
+            field_name falls within [gte, lte] (either bound may be open). When
+            include_undated is True, documents that have no value for field_name
+            also match: we would rather over-extend the result set than drop a
+            document we cannot place in time.
+
+            Since this returns an isolated bool should clause, it can be cached in
+            OpenSearch independently of other clauses in _get_search_filters.
+            """
             # Convert to UTC if not already so the bounds are comparable to the
             # document data.
             range_bounds: dict[str, int] = {}
-            if time_cutoff is not None:
-                time_cutoff = set_or_convert_timezone_to_utc(time_cutoff)
-                range_bounds["gte"] = int(time_cutoff.timestamp())
-            if time_cutoff_upper is not None:
-                time_cutoff_upper = set_or_convert_timezone_to_utc(time_cutoff_upper)
-                range_bounds["lte"] = int(time_cutoff_upper.timestamp())
+            if gte is not None:
+                range_bounds["gte"] = int(
+                    set_or_convert_timezone_to_utc(gte).timestamp()
+                )
+            if lte is not None:
+                range_bounds["lte"] = int(
+                    set_or_convert_timezone_to_utc(lte).timestamp()
+                )
 
             # Logical OR operator on its elements.
-            time_cutoff_filter: dict[str, Any] = {
+            date_range_clause: dict[str, Any] = {
                 "bool": {"should": [], "minimum_should_match": 1}
             }
-            time_cutoff_filter["bool"]["should"].append(
-                {"range": {LAST_UPDATED_FIELD_NAME: range_bounds}}
+            date_range_clause["bool"]["should"].append(
+                {"range": {field_name: range_bounds}}
             )
-            if (
-                time_cutoff is not None
-                and time_cutoff_upper is None
-                and time_cutoff
-                < datetime.now(timezone.utc) - timedelta(days=ASSUMED_DOCUMENT_AGE_DAYS)
-            ):
-                # The lower bound is older than ASSUMED_DOCUMENT_AGE_DAYS ago and
-                # open-ended, so include documents which have no
-                # LAST_UPDATED_FIELD_NAME value. A bounded range excludes them —
-                # an undated doc cannot be shown to fall within the range.
-                time_cutoff_filter["bool"]["should"].append(
-                    {
-                        "bool": {
-                            "must_not": {"exists": {"field": LAST_UPDATED_FIELD_NAME}}
-                        }
-                    }
+            if include_undated:
+                date_range_clause["bool"]["should"].append(
+                    {"bool": {"must_not": {"exists": {"field": field_name}}}}
                 )
-            return time_cutoff_filter
+            return date_range_clause
+
+        def _include_undated_for_range(time_range: DocumentTimeRange) -> bool:
+            """Undated-document policy for a single time range.
+
+            We prefer over- to under-extending, so a missing timestamp should not
+            remove a document — subject to one long-standing exception that keeps
+            recent-window queries from being flooded by undated legacy documents:
+
+              - created_at ranges: always keep undated documents. A document with
+                no created_at cannot be shown to fall outside the window.
+              - last_updated ranges: keep undated documents only for an old,
+                open-ended lower bound (start older than ASSUMED_DOCUMENT_AGE_DAYS
+                and no upper bound). A recent or bounded window excludes them.
+            """
+            if time_range.field is DocumentTimeField.CREATED_AT:
+                return True
+            return (
+                time_range.start is not None
+                and time_range.end is None
+                and time_range.start
+                < datetime.now(timezone.utc) - timedelta(days=ASSUMED_DOCUMENT_AGE_DAYS)
+            )
+
+        def _get_document_time_filter(
+            document_time_ranges: list[DocumentTimeRange],
+        ) -> list[dict[str, Any]]:
+            """Build null-tolerant, AND-ed clauses for field-aware time ranges.
+
+            Each range targets one document date field (created_at or
+            last_updated). The caller chooses the field(s) per query intent:
+
+              - "created in [S, E]" -> one created_at range (both bounds).
+              - "updated/changed/active in [S, E]" -> the OVERLAP: a last_updated
+                lower bound (>= S) AND a created_at upper bound (<= E). We store
+                only creation and latest-update times (no edit history), so an
+                update in the window is possible whenever the document's
+                [created_at, last_updated] span overlaps it. The upper bound must
+                NOT go on last_updated: it is only the latest edit, so a doc
+                updated again after E (with an earlier, unstored in-window edit)
+                would be wrongly dropped.
+
+            Undated documents are handled per _include_undated_for_range. Returns
+            a list of independent clauses to be AND-ed into the filter.
+            """
+            field_name_by_time_field = {
+                DocumentTimeField.CREATED_AT: CREATED_AT_FIELD_NAME,
+                DocumentTimeField.UPDATED_AT: LAST_UPDATED_FIELD_NAME,
+            }
+            clauses: list[dict[str, Any]] = []
+            for time_range in document_time_ranges:
+                if time_range.start is None and time_range.end is None:
+                    continue
+                clauses.append(
+                    _get_date_range_clause(
+                        field_name_by_time_field[time_range.field],
+                        gte=time_range.start,
+                        lte=time_range.end,
+                        include_undated=_include_undated_for_range(time_range),
+                    )
+                )
+            return clauses
 
         def _get_chunk_index_filter(
             min_chunk_index: int | None, max_chunk_index: int | None
@@ -1288,14 +1374,11 @@ class DocumentQuery:
                 )
             filter_clauses.append(knowledge_filter)
 
-        if time_cutoff is not None or time_cutoff_upper is not None:
-            # When a time bound is provided, only retrieve documents whose last
-            # updated time falls within [time_cutoff, time_cutoff_upper] (either
-            # bound may be open). For documents with no LAST_UPDATED_FIELD_NAME
-            # value, see _get_time_cutoff_filter for the inclusion rule.
-            filter_clauses.append(
-                _get_time_cutoff_filter(time_cutoff, time_cutoff_upper)
-            )
+        if document_time_ranges:
+            # Field-aware time windows on created_at / last_updated, AND-ed
+            # together. See _get_document_time_filter for per-intent semantics
+            # and the undated-document rules.
+            filter_clauses.extend(_get_document_time_filter(document_time_ranges))
 
         if min_chunk_index is not None or max_chunk_index is not None:
             filter_clauses.append(
