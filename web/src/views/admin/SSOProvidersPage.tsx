@@ -133,7 +133,7 @@ export default function SSOProvidersPage() {
           <IllustrationContent
             illustration={SvgNoResult}
             title="No SSO providers yet"
-            description="Add a provider to let users sign in with Google or OIDC."
+            description="Add a provider to let users sign in with Google, OIDC, or SAML."
           />
         ) : (
           <div className={cn("flex w-full flex-col gap-2")}>

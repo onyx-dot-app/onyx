@@ -10,8 +10,6 @@ interface SSOProviderDetail {
   description: string;
 }
 
-// SAML is defined on the shared type but not yet offered as a create option
-// (see CREATABLE_SSO_PROVIDER_TYPES).
 export const SSO_PROVIDER_DETAILS: Record<SSOProviderType, SSOProviderDetail> =
   {
     GOOGLE_OAUTH: {
@@ -35,6 +33,7 @@ export const SSO_PROVIDER_DETAILS: Record<SSOProviderType, SSOProviderDetail> =
 export const CREATABLE_SSO_PROVIDER_TYPES: SSOProviderType[] = [
   "GOOGLE_OAUTH",
   "OIDC",
+  "SAML",
 ];
 
 export async function copyRedirectUri(redirectUri: string): Promise<void> {

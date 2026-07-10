@@ -237,6 +237,45 @@ def test_update_partial_config_preserves_stored_keys(
     )
 
 
+def test_create_saml_provider(
+    client: TestClient,
+    db_session: Session,
+    provider_names: list[str],
+) -> None:
+    """SAML providers can be created via the admin API. The redirect URI points
+    at the SAML callback and secret config (sp_private_key) is masked on read."""
+    name = _new_provider_name(provider_names, prefix="saml-test")
+    response = client.post(
+        "/admin/sso/provider",
+        json={
+            "name": name,
+            "display_name": "Company SAML",
+            "provider_type": SSOProviderType.SAML.value,
+            "config": {
+                "idp_entity_id": "https://idp.example.com/entity",
+                "idp_sso_url": "https://idp.example.com/sso",
+                "idp_x509_cert": "MIIDsamplecertvalue",
+                "sp_entity_id": "onyx",
+                "sp_private_key": "-----BEGIN PRIVATE KEY-----secret",
+            },
+            "allowed_email_domains": ["companysaml.com"],
+        },
+    )
+    assert response.status_code == 200
+    provider_names.append(name)
+    body = response.json()
+    assert body["provider_type"] == SSOProviderType.SAML.value
+    assert body["redirect_uri"] == f"{WEB_DOMAIN}/api/auth/saml/{name}/callback"
+    assert is_masked_credential(body["config"]["sp_private_key"]) is True
+
+    db_session.expire_all()
+    stored = db_session.get(SSOProvider, body["id"])
+    assert stored is not None and stored.config is not None
+    raw = stored.config.get_value(apply_mask=False)
+    assert raw["idp_entity_id"] == "https://idp.example.com/entity"
+    assert raw["sp_private_key"] == "-----BEGIN PRIVATE KEY-----secret"
+
+
 def test_create_rejects_masked_credentials(
     client: TestClient,
     db_session: Session,
