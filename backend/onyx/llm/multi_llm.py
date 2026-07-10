@@ -572,19 +572,12 @@ class LitellmLLM(LLM):
             model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
 
         # Tool choice
-        # Some models reject or silently drop reasoning when tool_choice is
-        # required, so fall back to AUTO and rely on the chat loop's fallback
-        # tool-call extraction to still enforce the tool:
-        #   - Claude will not use reasoning when tool_choice is required.
-        #   - Qwen (Alibaba) thinking models return a 400
-        #     "The tool_choice parameter does not support being set to required
-        #     or object in thinking mode".
-        # We intentionally match on model name rather than `is_reasoning` here:
-        # `model_is_reasoning_model` relies on the litellm/local registry, which
-        # lags behind newly released Qwen models (e.g. it returns False for
-        # qwen3.7-plus), so gating on it would miss exactly the thinking models
-        # that reject `required`. The downgrade is safe for non-thinking Qwen
-        # models since the chat loop still enforces the forced tool.
+        # Downgrade tool_choice=required to AUTO for models that mishandle it:
+        # Claude skips reasoning when it's set, and Qwen thinking models reject
+        # it with a 400. The chat loop's fallback tool-call extraction still
+        # enforces the forced tool. Matched by model name rather than
+        # `is_reasoning` because the litellm/local registry lags behind new
+        # Qwen releases (e.g. qwen3.7-plus).
         if (is_claude_model or is_qwen_model) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
