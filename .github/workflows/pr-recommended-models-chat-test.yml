@@ -1,21 +1,11 @@
-# Verifies that every model in recommended-models.json works end-to-end (LLM
-# provider creation + a real chat with tool calling) before the change merges.
-# Production deployments fetch that JSON live from `main` (AUTO_LLM_CONFIG_URL),
-# so a broken recommended model reaches all deployments as soon as it lands.
+# Pre-merge check that every model in recommended-models.json works end-to-end,
+# via the nightly provider chat pipeline. Production deployments fetch that JSON
+# live from `main` (AUTO_LLM_CONFIG_URL), so broken recommendations ship immediately.
 #
-# Reuses the nightly provider chat pipeline, but with model lists derived from
-# recommended-models.json instead of the NIGHTLY_LLM_* repo vars. `strict: false`
-# lets providers absent from the JSON (bedrock, azure, ollama_chat) skip cleanly;
-# genuine per-model chat failures still fail the run regardless of strict. The
-# trade-off is that a covered provider whose credentials fail to resolve also
-# skips (green) — pytest runs with -rs, so skips are visible in the job log.
-#
-# Fork PRs are skipped: secrets (the AWS OIDC role) are unavailable there, and
-# recommended-model bumps come from maintainers.
-#
-# Keep this a NON-required status check: it calls real provider APIs (flaky,
-# costs money), and the top-level `paths:` filter is only safe for non-required
-# checks (see the trigger comment in pr-integration-tests.yml).
+# `strict: false` lets providers absent from the JSON skip cleanly; genuine chat
+# failures still fail the run. Fork PRs skip (no OIDC secrets). Keep this a
+# non-required status check: it calls real provider APIs, and the top-level
+# `paths:` filter is only safe for non-required checks (see pr-integration-tests.yml).
 name: Recommended LLM Models Chat Tests
 concurrency:
   group: Recommended-LLM-Models-Chat-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
