@@ -6,7 +6,7 @@ import { useSessionWatcher } from "@/lib/auth/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 import Modal from "@/refresh-components/Modal";
 import { Button, Text } from "@opal/components";
-import { SvgLogOut } from "@opal/icons";
+import { SvgLogOut, SvgCheckCircle, SvgXCircle } from "@opal/icons";
 import { AuthType } from "@/lib/auth/types";
 import { SvgGoogle } from "@opal/logos";
 import type { IconProps } from "@opal/types";
@@ -22,6 +22,7 @@ import { useUser } from "@/providers/UserProvider";
 import { validateInternalRedirect } from "@/lib/auth/utils";
 import {
   AuthLayouts,
+  Content,
   InputVertical,
   type AuthSubmitLabel,
 } from "@opal/layouts";
@@ -311,32 +312,37 @@ export function EmailPasswordForm({
                 />
               </InputVertical>
 
-              <InputVertical
-                title="Password"
-                withLabel="password"
-                subDescription={
-                  isSignup
-                    ? `Password must be at least ${passwordMinLength} characters`
-                    : undefined
-                }
-                topRight={
-                  NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED &&
-                  !isSignup &&
-                  !errors.email &&
-                  !!values.email
-                    ? markdown(
-                        `[Forgot password?](/auth/forgot-password?email=${encodeURIComponent(values.email)})`
-                      )
-                    : undefined
-                }
-              >
-                <PasswordInputTypeInField
-                  name="password"
-                  placeholder="Password"
-                  data-testid="password"
-                  autoComplete={isSignup ? "new-password" : "current-password"}
-                />
-              </InputVertical>
+              <div className="flex flex-col gap-1">
+                <InputVertical
+                  title="Password"
+                  withLabel="password"
+                  topRight={
+                    NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED &&
+                    !isSignup &&
+                    !errors.email &&
+                    !!values.email
+                      ? markdown(
+                          `[Forgot password?](/auth/forgot-password?email=${encodeURIComponent(values.email)})`
+                        )
+                      : undefined
+                  }
+                  subDescription={
+                    isSignup ? "Password requirements:" : undefined
+                  }
+                >
+                  <PasswordInputTypeInField
+                    name="password"
+                    placeholder="Password"
+                    data-testid="password"
+                    autoComplete={
+                      isSignup ? "new-password" : "current-password"
+                    }
+                  />
+                </InputVertical>
+                {isSignup && (
+                  <PasswordRequirements password={values.password} />
+                )}
+              </div>
             </AuthLayouts.Fields>
 
             <AuthLayouts.Submit
@@ -360,5 +366,70 @@ export function EmailPasswordForm({
         );
       }}
     </Formik>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PasswordRequirements
+// ---------------------------------------------------------------------------
+
+interface PasswordRequirementsProps {
+  password: string;
+}
+
+export function PasswordRequirements({ password }: PasswordRequirementsProps) {
+  const { authTypeMetadata } = useUser();
+
+  const rules = [
+    ...(authTypeMetadata?.passwordMinLength
+      ? [
+          {
+            label: `At least ${authTypeMetadata.passwordMinLength} characters`,
+            met: password.length >= authTypeMetadata.passwordMinLength,
+          },
+        ]
+      : []),
+    ...(authTypeMetadata?.passwordRequireUppercase
+      ? [
+          {
+            label: "Contains uppercase letter.",
+            met: /[A-Z]/.test(password),
+          },
+        ]
+      : []),
+    ...(authTypeMetadata?.passwordRequireLowercase
+      ? [
+          {
+            label: "Contains lowercase letter.",
+            met: /[a-z]/.test(password),
+          },
+        ]
+      : []),
+    ...(authTypeMetadata?.passwordRequireDigit
+      ? [{ label: "Contains number.", met: /\d/.test(password) }]
+      : []),
+    ...(authTypeMetadata?.passwordRequireSpecialChar
+      ? [
+          {
+            label: "Contains special character.",
+            met: /[^A-Za-z0-9]/.test(password),
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="flex flex-col gap-1">
+      {rules.map((rule) => (
+        <Content
+          key={rule.label}
+          sizePreset="secondary"
+          variant="body"
+          icon={rule.met ? SvgCheckCircle : SvgXCircle}
+          color={rule.met ? "success" : "muted"}
+          title={rule.label}
+        />
+      ))}
+    </div>
   );
 }
