@@ -550,6 +550,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # Check for disposable emails FIRST so obvious throwaway domains are
         # rejected before hitting Google's siteverify API. Cheap local check.
         security_settings = get_security_settings()
+
+        # First lockdown stage: password signup off refuses public self-service
+        # registration. `safe` is fastapi-users' flag for the untrusted register
+        # route. SSO provisioning (OAuth/SAML/JWT) calls create() with safe=False,
+        # so those users are still created through their provider.
+        if (
+            safe
+            and AUTH_TYPE == AuthType.BASIC
+            and not security_settings.password_signup_enabled
+        ):
+            raise OnyxError(
+                OnyxErrorCode.REGISTRATION_DISABLED,
+                "Password signup is disabled. Sign in through your SSO provider.",
+            )
+
         try:
             verify_email_domain(
                 user_create.email,
@@ -1277,6 +1292,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 outcome,
                 actor=AuditActor(email=email),
             )
+
+        # Second lockdown stage: password login off refuses password auth for
+        # everyone. SSO never reaches here, so enabled providers still admit users.
+        # Raise a distinct reason (not None → generic bad-credentials) so a legit
+        # admin sees why. The setting is global, so this leaks nothing per-account.
+        if (
+            AUTH_TYPE == AuthType.BASIC
+            and not get_security_settings().password_login_enabled
+        ):
+            _audit_login_failure(AuditOutcome.DENIED)
+            raise BasicAuthenticationError(detail="PASSWORD_LOGIN_DISABLED")
 
         tenant_id: str | None = None
         try:

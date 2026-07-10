@@ -8,6 +8,8 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from onyx.auth.permissions import require_permission
+from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.constants import AuthType
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -23,6 +25,13 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/security")
+
+# Only a password-based (BASIC) deployment mounts and enforces password auth, so
+# the lockdown toggles are meaningless elsewhere. Reject them there rather than
+# persist a control that would silently never fire.
+_PASSWORD_LOCKDOWN_FIELDS = frozenset(
+    {"password_signup_enabled", "password_login_enabled"}
+)
 
 
 def _parse_put_body(raw: bytes) -> tuple[SecuritySettingsOverrides, set[str]]:
@@ -63,6 +72,14 @@ async def put_security_settings_endpoint(
 ) -> SecuritySettings:
     raw = await request.body()
     overrides, present_keys = _parse_put_body(raw)
+
+    lockdown_in_payload = present_keys & _PASSWORD_LOCKDOWN_FIELDS
+    if lockdown_in_payload and AUTH_TYPE != AuthType.BASIC:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Password login controls apply only to password-based deployments: "
+            + ", ".join(sorted(lockdown_in_payload)),
+        )
 
     # Primary boundary for operator-locked fields. The storage layer also
     # strips them; this gives admins a clear 403 instead of a silent no-op.

@@ -22,6 +22,8 @@ from onyx.server.manage.sso.models import SSOProviderCreateRequest
 from onyx.server.manage.sso.models import SSOProviderEnabledRequest
 from onyx.server.manage.sso.models import SSOProviderResponse
 from onyx.server.manage.sso.models import SSOProviderUpdateRequest
+from onyx.server.security.store import load_effective_uncached
+from onyx.server.security.store import security_settings_write_lock
 from onyx.utils.encryption import mask_credential_dict
 from onyx.utils.encryption import reject_masked_credentials
 
@@ -168,13 +170,40 @@ def set_sso_provider_enabled_endpoint(
 ) -> SSOProviderResponse:
     _fetch_sso_provider_or_raise(db_session, provider_id)
 
+    # Disabling a provider and turning off password login are the two ways to
+    # break the "some login path always exists" invariant. Both run under the
+    # shared write lock reading fresh (uncached) state, so they can't both pass
+    # on each other's stale value and strand the instance with no way in.
+    if request.enabled:
+        provider = _set_enabled_or_raise(db_session, provider_id, True)
+        return SSOProviderResponse.from_model(provider, WEB_DOMAIN)
+
+    with security_settings_write_lock():
+        if not load_effective_uncached().password_login_enabled:
+            remaining = [
+                provider
+                for provider in fetch_sso_providers(db_session, enabled_only=True)
+                if provider.id != provider_id
+            ]
+            if not remaining:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "Re-enable password login before disabling the last SSO "
+                    "provider, otherwise no one can sign in.",
+                )
+        provider = _set_enabled_or_raise(db_session, provider_id, False)
+
+    return SSOProviderResponse.from_model(provider, WEB_DOMAIN)
+
+
+def _set_enabled_or_raise(
+    db_session: Session, provider_id: int, enabled: bool
+) -> SSOProvider:
     try:
-        provider = set_sso_provider_enabled(
+        return set_sso_provider_enabled(
             db_session=db_session,
             provider_id=provider_id,
-            enabled=request.enabled,
+            enabled=enabled,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
-
-    return SSOProviderResponse.from_model(provider, WEB_DOMAIN)

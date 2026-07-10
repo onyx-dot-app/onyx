@@ -4409,6 +4409,12 @@ class SecuritySettings(Base):
     password_require_special_char: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    password_signup_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
+    password_login_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
 
     __table_args__ = (
         CheckConstraint("id = true", name="ck_security_settings_singleton"),
