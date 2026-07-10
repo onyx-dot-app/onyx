@@ -18,9 +18,10 @@ Usage (Celery tasks and FastAPI handlers):
         # result is a validated Pydantic model instance (response_type)
         ...
 
-The HTTP call, response validation, and fail-strategy handling live in the
-edition-agnostic ``onyx.hooks.http_executor``. This module resolves the hook
-configuration from the DB and persists execution results.
+The HTTP call and response validation live in the generic
+``onyx.utils.external_endpoint`` client. This module resolves the hook
+configuration from the DB, persists execution results, and applies the hook's
+fail strategy.
 
 is_reachable update policy
 --------------------------
@@ -60,11 +61,13 @@ from onyx.db.hook import create_hook_execution_log__no_commit
 from onyx.db.hook import get_non_deleted_hook_by_hook_point
 from onyx.db.hook import update_hook__no_commit
 from onyx.db.models import Hook
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
-from onyx.hooks.http_executor import execute_hook_endpoint
-from onyx.hooks.http_executor import HookEndpointConfig
+from onyx.utils.external_endpoint import ExternalEndpointConfig
 from onyx.utils.external_endpoint import ExternalEndpointOutcome
+from onyx.utils.external_endpoint import post_json_to_endpoint
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -154,12 +157,14 @@ def _execute_hook_inner(
     payload: dict[str, Any],
     response_type: type[T],
 ) -> T | HookSoftFailed:
-    """Extract config from the Hook row, run the HTTP call, and persist the result.
+    """Extract config from the Hook row, run the HTTP call, persist the result,
+    and apply the hook's fail strategy.
 
     Raises OnyxError on HARD failure. Returns HookSoftFailed on SOFT failure.
     """
     hook_id = hook.id
     endpoint_url = hook.endpoint_url
+    fail_strategy = hook.fail_strategy
     current_is_reachable: bool | None = hook.is_reachable
 
     if not endpoint_url:
@@ -168,27 +173,45 @@ def _execute_hook_inner(
             "active hooks without an endpoint_url must be rejected by _lookup_hook"
         )
 
-    config = HookEndpointConfig(
+    config = ExternalEndpointConfig(
         endpoint_url=endpoint_url,
         api_key=hook.api_key.get_value(apply_mask=False) if hook.api_key else None,
         timeout_seconds=hook.timeout_seconds,
-        fail_strategy=hook.fail_strategy,
     )
 
-    def _on_result(outcome: ExternalEndpointOutcome) -> None:
-        # Skip the is_reachable write when the value would not change — avoids a
-        # no-op DB round-trip on every call when the hook is already in the
-        # expected state.
-        if outcome.reachability_signal == current_is_reachable:
-            outcome = outcome.model_copy(update={"reachability_signal": None})
-        _persist_result(hook_id=hook_id, outcome=outcome)
-
-    return execute_hook_endpoint(
-        config=config,
-        payload=payload,
-        response_type=response_type,
-        on_result=_on_result,
+    outcome, validated_model = post_json_to_endpoint(
+        config=config, payload=payload, response_type=response_type
     )
+
+    # Skip the is_reachable write when the value would not change — avoids a
+    # no-op DB round-trip on every call when the hook is already in the
+    # expected state.
+    persisted_outcome = outcome
+    if persisted_outcome.reachability_signal == current_is_reachable:
+        persisted_outcome = persisted_outcome.model_copy(
+            update={"reachability_signal": None}
+        )
+    _persist_result(hook_id=hook_id, outcome=persisted_outcome)
+
+    if not outcome.is_success:
+        if fail_strategy == HookFailStrategy.HARD:
+            raise OnyxError(
+                OnyxErrorCode.HOOK_EXECUTION_FAILED,
+                outcome.error_message or "Hook execution failed.",
+            )
+        logger.warning(
+            "Hook execution failed (soft fail) for hook_id=%s: %s",
+            hook_id,
+            outcome.error_message,
+        )
+        return HookSoftFailed()
+
+    if validated_model is None:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"validated_model is None for successful hook call (hook_id={hook_id})",
+        )
+    return validated_model
 
 
 def _execute_hook_impl(
