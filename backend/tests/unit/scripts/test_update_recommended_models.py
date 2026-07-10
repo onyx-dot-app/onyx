@@ -296,6 +296,50 @@ def test_build_recommendations_no_change_returns_previous_untouched() -> None:
     assert report.added == {} and report.removed == {}
 
 
+def test_build_recommendations_tolerates_hand_reordered_previous() -> None:
+    """A hand-edited file that lists models in a different order (e.g. a new
+    model placed above the default) is semantically identical at runtime and
+    must not register as a model change."""
+    rules = _rules(
+        {
+            "openrouter": _section(
+                [
+                    _rule(label="extra", include_regex=r"^acme/model-2$"),
+                    _rule(
+                        label="main",
+                        include_regex=r"^acme/model-1$",
+                        is_default_source=True,
+                    ),
+                ]
+            )
+        }
+    )
+    catalog = [
+        _cat("acme/model-1", "Acme: Model 1", 100),
+        _cat("acme/model-2", "Acme: Model 2", 200),
+    ]
+    # Generated order would be [model-1 (default), model-2]; previous lists
+    # model-2 first, above the default.
+    previous = LLMRecommendations.model_validate(
+        {
+            "version": "1.4",
+            "updated_at": "2026-06-04T00:00:00Z",
+            "providers": {
+                "openrouter": {
+                    "default_model": "acme/model-1",
+                    "additional_visible_models": [
+                        {"name": "acme/model-2", "display_name": "Model 2"},
+                        {"name": "acme/model-1", "display_name": "Model 1"},
+                    ],
+                }
+            },
+        }
+    )
+    result, report = build_recommendations(rules, catalog, previous, TODAY)
+    assert result is previous
+    assert not report.models_changed
+
+
 def test_build_recommendations_bumps_version_on_model_change() -> None:
     rules, catalog, previous = _simple_setup()
     catalog.append(_cat("acme/model-2", "Acme: Model 2", 200))

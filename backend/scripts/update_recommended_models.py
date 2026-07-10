@@ -357,12 +357,14 @@ def build_section(
 
 
 def _sections_equal(a: LLMProviderRecommendation, b: LLMProviderRecommendation) -> bool:
+    # Compare the runtime-visible view (get_visible_models normalizes to
+    # default-first and dedupes), not raw file order: a hand-reordered but
+    # semantically identical section must not bump version/updated_at.
     def key(section: LLMProviderRecommendation) -> tuple[Any, ...]:
         return (
             section.default_model.name,
             tuple(
-                (model.name, model.display_name)
-                for model in section.additional_visible_models
+                (model.name, model.display_name) for model in _visible_models(section)
             ),
         )
 

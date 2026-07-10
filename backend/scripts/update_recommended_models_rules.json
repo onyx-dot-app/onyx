@@ -11,7 +11,31 @@
       "pinned_default": null,
       "rules": [
         {
-          "label": "gpt-line",
+          "label": "gpt-sol",
+          "vendor_prefix": "openai/",
+          "include_regex": "^openai/gpt-\\d+(\\.\\d+)?-sol$",
+          "exclude_regex": "-pro",
+          "limit": 1,
+          "is_default_source": false
+        },
+        {
+          "label": "gpt-terra",
+          "vendor_prefix": "openai/",
+          "include_regex": "^openai/gpt-\\d+(\\.\\d+)?-terra$",
+          "exclude_regex": "-pro",
+          "limit": 1,
+          "is_default_source": false
+        },
+        {
+          "label": "gpt-luna",
+          "vendor_prefix": "openai/",
+          "include_regex": "^openai/gpt-\\d+(\\.\\d+)?-luna$",
+          "exclude_regex": "-pro",
+          "limit": 1,
+          "is_default_source": false
+        },
+        {
+          "label": "gpt-plain-line",
           "vendor_prefix": "openai/",
           "include_regex": "^openai/gpt-\\d+(\\.\\d+)?$",
           "exclude_regex": "-(mini|nano|chat|codex|pro|audio|realtime|image|luna|terra|sol)",
@@ -29,6 +53,14 @@
       "pinned_default": null,
       "rules": [
         {
+          "label": "fable",
+          "vendor_prefix": "anthropic/",
+          "include_regex": "^anthropic/claude-fable-\\d+(\\.\\d+)?$",
+          "exclude_regex": "-(fast|thinking)",
+          "limit": 1,
+          "is_default_source": false
+        },
+        {
           "label": "opus",
           "vendor_prefix": "anthropic/",
           "include_regex": "^anthropic/claude-opus-\\d+(\\.\\d+)?$",
@@ -41,7 +73,7 @@
           "vendor_prefix": "anthropic/",
           "include_regex": "^anthropic/claude-sonnet-\\d+(\\.\\d+)?$",
           "exclude_regex": "-(fast|thinking)",
-          "limit": 1,
+          "limit": 2,
           "is_default_source": false
         },
         {
