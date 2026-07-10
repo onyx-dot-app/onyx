@@ -148,6 +148,21 @@ jobs:
           alembic upgrade head
           alembic heads --verbose
 
+      # A real OIDC server for the live multi-provider login test. Auth leg only.
+      # Fail if it never becomes ready, otherwise the live tests would silently skip.
+      - name: Start mock OIDC server
+        if: matrix.test-dir == 'auth'
+        run: |
+          docker run -d --name mock-oidc -p 8086:8080 \
+            ghcr.io/navikt/mock-oauth2-server:2.1.10
+          ready="http://localhost:8086/issuer-a/.well-known/openid-configuration"
+          for _ in $(seq 1 30); do
+            curl -sf "$ready" >/dev/null && break
+            sleep 1
+          done
+          curl -sf "$ready" >/dev/null \
+            || { echo "mock OIDC server never became ready"; exit 1; }
+
       - name: Run Tests for ${{ matrix.test-dir }}
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         env:
