@@ -189,7 +189,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
 
   return (
     <Modal open onOpenChange={onClose}>
-      <Modal.Content width="sm" preventAccidentalClose>
+      <Modal.Content width="md" height="full" preventAccidentalClose>
         <Formik<SSOProviderFormValues>
           initialValues={initialValues}
           validationSchema={validationSchema}
@@ -212,7 +212,9 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
             );
 
             return (
-              <Form>
+              // flex-col fills the fixed-height Content so Modal.Body scrolls
+              // while the header and footer stay pinned.
+              <Form className="flex min-h-0 flex-1 flex-col">
                 <Modal.Header
                   icon={providerTypeIcon}
                   title={
