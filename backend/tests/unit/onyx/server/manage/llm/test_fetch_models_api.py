@@ -15,6 +15,8 @@ import pytest
 from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.llm.models import (
+    AnthropicFinalModelResponse,
+    AnthropicModelsRequest,
     BedrockModelsRequest,
     BifrostFinalModelResponse,
     BifrostModelsRequest,
@@ -25,6 +27,8 @@ from onyx.server.manage.llm.models import (
     OllamaFinalModelResponse,
     OllamaModelsRequest,
     OpenAICompatibleModelsRequest,
+    OpenAIFinalModelResponse,
+    OpenAIModelsRequest,
     OpenRouterFinalModelResponse,
     OpenRouterModelsRequest,
 )
@@ -477,6 +481,482 @@ class TestGetOpenRouterAvailableModels:
             # No DB operations should happen
             mock_session.execute.assert_not_called()
             mock_session.commit.assert_not_called()
+
+
+class TestGetOpenAIAvailableModels:
+    """Tests for the OpenAI model fetch endpoint."""
+
+    @pytest.fixture
+    def mock_openai_response(self) -> dict:
+        """Mock response from OpenAI /v1/models endpoint."""
+        return {
+            "object": "list",
+            "data": [
+                {"id": "gpt-4o", "object": "model", "owned_by": "openai"},
+                {"id": "o1", "object": "model", "owned_by": "openai"},
+                # Dated duplicate of gpt-4o — should be filtered
+                {"id": "gpt-4o-2024-08-06", "object": "model", "owned_by": "openai"},
+                # Dated model WITHOUT an undated base — should be kept
+                {
+                    "id": "gpt-6-preview-2030-01-01",
+                    "object": "model",
+                    "owned_by": "openai",
+                },
+                # Non-chat models — should all be filtered
+                {"id": "text-embedding-3-small", "object": "model"},
+                {"id": "whisper-1", "object": "model"},
+                {"id": "dall-e-3", "object": "model"},
+                {"id": "tts-1", "object": "model"},
+                {"id": "omni-moderation-latest", "object": "model"},
+                {"id": "gpt-4o-realtime-preview", "object": "model"},
+                {"id": "gpt-4o-transcribe", "object": "model"},
+                # Deprecated — should be filtered
+                {"id": "gpt-3.5-turbo", "object": "model"},
+            ],
+        }
+
+    def test_returns_model_list(self, mock_openai_response: dict) -> None:
+        """Only chat-capable models survive, sorted, with parser display names."""
+        from onyx.server.manage.llm.api import get_openai_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_openai_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = OpenAIModelsRequest(api_key="test-key")
+            results = get_openai_available_models(request, MagicMock(), mock_session)
+
+            assert all(isinstance(r, OpenAIFinalModelResponse) for r in results)
+            assert [r.name for r in results] == [
+                "gpt-4o",
+                "gpt-6-preview-2030-01-01",
+                "o1",
+            ]
+            gpt_4o = next(r for r in results if r.name == "gpt-4o")
+            assert gpt_4o.display_name == "GPT-4o"
+
+    def test_filters_non_chat_and_dated_models(
+        self, mock_openai_response: dict
+    ) -> None:
+        """Embedding/audio/image/moderation, deprecated, and dated-duplicate
+        model ids are excluded; dated ids without an undated base survive."""
+        from onyx.server.manage.llm.api import get_openai_available_models
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_openai_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = OpenAIModelsRequest(api_key="test-key")
+            results = get_openai_available_models(request, MagicMock(), MagicMock())
+
+            names = {r.name for r in results}
+            assert "text-embedding-3-small" not in names
+            assert "whisper-1" not in names
+            assert "dall-e-3" not in names
+            assert "tts-1" not in names
+            assert "omni-moderation-latest" not in names
+            assert "gpt-4o-realtime-preview" not in names
+            assert "gpt-4o-transcribe" not in names
+            assert "gpt-3.5-turbo" not in names
+            # Dated duplicate filtered because "gpt-4o" is present
+            assert "gpt-4o-2024-08-06" not in names
+            # Dated id with no undated base is kept
+            assert "gpt-6-preview-2030-01-01" in names
+
+    def test_infers_capability_flags(self, mock_openai_response: dict) -> None:
+        """Vision/reasoning flags and token limits come from litellm metadata."""
+        from onyx.server.manage.llm.api import get_openai_available_models
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_openai_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = OpenAIModelsRequest(api_key="test-key")
+            results = get_openai_available_models(request, MagicMock(), MagicMock())
+
+            gpt_4o = next(r for r in results if r.name == "gpt-4o")
+            o1 = next(r for r in results if r.name == "o1")
+
+            assert gpt_4o.supports_image_input is True
+            assert gpt_4o.supports_reasoning is False
+            assert o1.supports_reasoning is True
+            assert gpt_4o.max_input_tokens > 0
+
+    def test_syncs_to_db_when_provider_id_specified(
+        self, mock_openai_response: dict
+    ) -> None:
+        """Test that models are synced to DB when provider_id is given."""
+        from onyx.server.manage.llm.api import get_openai_available_models
+
+        mock_session = MagicMock()
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.model_configurations = []
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch(
+                "onyx.db.llm.fetch_existing_llm_provider_by_id",
+                return_value=mock_provider,
+            ),
+        ):
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_openai_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = OpenAIModelsRequest(api_key="test-key", provider_id=1)
+            get_openai_available_models(request, MagicMock(), mock_session)
+
+            assert mock_session.execute.called
+            mock_session.commit.assert_called_once()
+
+    def test_no_sync_when_provider_id_not_specified(
+        self, mock_openai_response: dict
+    ) -> None:
+        """Test that models are NOT synced when provider_id is None."""
+        from onyx.server.manage.llm.api import get_openai_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_openai_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = OpenAIModelsRequest(api_key="test-key")
+            get_openai_available_models(request, MagicMock(), mock_session)
+
+            mock_session.execute.assert_not_called()
+            mock_session.commit.assert_not_called()
+
+    def test_auth_failure_returns_400(self) -> None:
+        """A 401 from OpenAI maps to a validation error, not a gateway fault."""
+        from onyx.error_handling.error_codes import OnyxErrorCode
+        from onyx.server.manage.llm.api import get_openai_available_models
+
+        error_response = httpx.Response(
+            status_code=401,
+            request=httpx.Request("GET", "https://api.openai.com/v1/models"),
+        )
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+                "401 Unauthorized",
+                request=error_response.request,
+                response=error_response,
+            )
+            mock_get.return_value = mock_response
+
+            request = OpenAIModelsRequest(api_key="bad-key")
+            with pytest.raises(OnyxError) as exc_info:
+                get_openai_available_models(request, MagicMock(), MagicMock())
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.status_code == 400
+
+    def test_request_failure_is_logged_and_returns_400(self) -> None:
+        """A request-layer failure is logged and returns 400 (client misconfig)."""
+        from onyx.error_handling.error_codes import OnyxErrorCode
+        from onyx.server.manage.llm.api import get_openai_available_models
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.logger.warning") as mock_warning,
+        ):
+            mock_get.side_effect = httpx.ConnectError(
+                "Connection refused", request=MagicMock()
+            )
+
+            request = OpenAIModelsRequest(api_key="test-key")
+            with pytest.raises(OnyxError) as exc_info:
+                get_openai_available_models(request, MagicMock(), MagicMock())
+
+            mock_warning.assert_called_once()
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.status_code == 400
+
+
+class TestGetAnthropicAvailableModels:
+    """Tests for the Anthropic model fetch endpoint."""
+
+    @pytest.fixture
+    def mock_anthropic_response(self) -> dict:
+        """Mock response from Anthropic /v1/models endpoint."""
+        return {
+            "data": [
+                {
+                    "type": "model",
+                    "id": "claude-sonnet-4-5-20250929",
+                    "display_name": "Claude Sonnet 4.5",
+                    "created_at": "2025-09-29T00:00:00Z",
+                },
+                {
+                    "type": "model",
+                    "id": "claude-3-5-haiku-20241022",
+                    "display_name": "Claude Haiku 3.5",
+                    "created_at": "2024-10-22T00:00:00Z",
+                },
+                {
+                    "type": "model",
+                    "id": "claude-2.1",
+                    "display_name": "Claude 2.1",
+                    "created_at": "2023-11-21T00:00:00Z",
+                },
+                {
+                    "type": "model",
+                    "id": "claude-instant-1.2",
+                    "display_name": "Claude Instant 1.2",
+                    "created_at": "2023-08-09T00:00:00Z",
+                },
+            ],
+            "first_id": "claude-sonnet-4-5-20250929",
+            "last_id": "claude-instant-1.2",
+            "has_more": False,
+        }
+
+    def test_returns_model_list_with_api_display_names(
+        self, mock_anthropic_response: dict
+    ) -> None:
+        """Display names come verbatim from the Anthropic API response."""
+        from onyx.server.manage.llm.api import get_anthropic_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_anthropic_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = AnthropicModelsRequest(api_key="test-key")
+            results = get_anthropic_available_models(request, MagicMock(), mock_session)
+
+            assert all(isinstance(r, AnthropicFinalModelResponse) for r in results)
+            assert [r.name for r in results] == [
+                "claude-3-5-haiku-20241022",
+                "claude-sonnet-4-5-20250929",
+            ]
+            # The API's display_name is used verbatim (differs from the litellm
+            # parser's "Claude 3.5 Haiku" ordering)
+            haiku = next(r for r in results if "haiku" in r.name)
+            assert haiku.display_name == "Claude Haiku 3.5"
+
+    def test_filters_obsolete_models(self, mock_anthropic_response: dict) -> None:
+        """claude-2 / claude-instant generations are excluded."""
+        from onyx.server.manage.llm.api import get_anthropic_available_models
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_anthropic_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = AnthropicModelsRequest(api_key="test-key")
+            results = get_anthropic_available_models(request, MagicMock(), MagicMock())
+
+            names = {r.name for r in results}
+            assert "claude-2.1" not in names
+            assert "claude-instant-1.2" not in names
+
+    def test_paginates_through_has_more(self) -> None:
+        """Pagination follows has_more/last_id and merges all pages."""
+        from onyx.server.manage.llm.api import get_anthropic_available_models
+
+        page_one = {
+            "data": [
+                {
+                    "type": "model",
+                    "id": "claude-sonnet-4-5-20250929",
+                    "display_name": "Claude Sonnet 4.5",
+                }
+            ],
+            "last_id": "claude-sonnet-4-5-20250929",
+            "has_more": True,
+        }
+        page_two = {
+            "data": [
+                {
+                    "type": "model",
+                    "id": "claude-3-5-haiku-20241022",
+                    "display_name": "Claude Haiku 3.5",
+                }
+            ],
+            "last_id": "claude-3-5-haiku-20241022",
+            "has_more": False,
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            responses = []
+            for page in (page_one, page_two):
+                mock_response = MagicMock()
+                mock_response.json.return_value = page
+                mock_response.raise_for_status = MagicMock()
+                responses.append(mock_response)
+            mock_get.side_effect = responses
+
+            request = AnthropicModelsRequest(api_key="test-key")
+            results = get_anthropic_available_models(request, MagicMock(), MagicMock())
+
+            assert mock_get.call_count == 2
+            first_params = mock_get.call_args_list[0].kwargs["params"]
+            second_params = mock_get.call_args_list[1].kwargs["params"]
+            assert "after_id" not in first_params
+            assert second_params["after_id"] == "claude-sonnet-4-5-20250929"
+
+            assert {r.name for r in results} == {
+                "claude-sonnet-4-5-20250929",
+                "claude-3-5-haiku-20241022",
+            }
+
+    def test_infers_capability_flags(self) -> None:
+        """Vision/reasoning flags come from litellm metadata."""
+        from onyx.server.manage.llm.api import get_anthropic_available_models
+
+        response_payload = {
+            "data": [
+                {
+                    "type": "model",
+                    "id": "claude-3-7-sonnet-20250219",
+                    "display_name": "Claude Sonnet 3.7",
+                },
+                {
+                    "type": "model",
+                    "id": "claude-3-5-haiku-20241022",
+                    "display_name": "Claude Haiku 3.5",
+                },
+            ],
+            "has_more": False,
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response_payload
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = AnthropicModelsRequest(api_key="test-key")
+            results = get_anthropic_available_models(request, MagicMock(), MagicMock())
+
+            sonnet = next(r for r in results if "3-7-sonnet" in r.name)
+            haiku = next(r for r in results if "haiku" in r.name)
+
+            # From litellm metadata
+            assert sonnet.supports_image_input is True
+            assert sonnet.supports_reasoning is True
+            assert sonnet.max_input_tokens > 0
+            # Haiku 3.5 has no litellm entry; without cost-map data the
+            # flags default to False (admins can flip them in the UI)
+            assert haiku.supports_image_input is False
+            assert haiku.supports_reasoning is False
+
+    def test_syncs_to_db_when_provider_id_specified(
+        self, mock_anthropic_response: dict
+    ) -> None:
+        """Test that models are synced to DB when provider_id is given."""
+        from onyx.server.manage.llm.api import get_anthropic_available_models
+
+        mock_session = MagicMock()
+        mock_provider = MagicMock()
+        mock_provider.id = 1
+        mock_provider.model_configurations = []
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch(
+                "onyx.db.llm.fetch_existing_llm_provider_by_id",
+                return_value=mock_provider,
+            ),
+        ):
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_anthropic_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = AnthropicModelsRequest(api_key="test-key", provider_id=1)
+            get_anthropic_available_models(request, MagicMock(), mock_session)
+
+            assert mock_session.execute.called
+            mock_session.commit.assert_called_once()
+
+    def test_no_sync_when_provider_id_not_specified(
+        self, mock_anthropic_response: dict
+    ) -> None:
+        """Test that models are NOT synced when provider_id is None."""
+        from onyx.server.manage.llm.api import get_anthropic_available_models
+
+        mock_session = MagicMock()
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_anthropic_response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = AnthropicModelsRequest(api_key="test-key")
+            get_anthropic_available_models(request, MagicMock(), mock_session)
+
+            mock_session.execute.assert_not_called()
+            mock_session.commit.assert_not_called()
+
+    def test_auth_failure_returns_400(self) -> None:
+        """A 401 from Anthropic maps to a validation error, not a gateway fault."""
+        from onyx.error_handling.error_codes import OnyxErrorCode
+        from onyx.server.manage.llm.api import get_anthropic_available_models
+
+        error_response = httpx.Response(
+            status_code=401,
+            request=httpx.Request("GET", "https://api.anthropic.com/v1/models"),
+        )
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+                "401 Unauthorized",
+                request=error_response.request,
+                response=error_response,
+            )
+            mock_get.return_value = mock_response
+
+            request = AnthropicModelsRequest(api_key="bad-key")
+            with pytest.raises(OnyxError) as exc_info:
+                get_anthropic_available_models(request, MagicMock(), MagicMock())
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.status_code == 400
+
+    def test_request_failure_is_logged_and_returns_400(self) -> None:
+        """A request-layer failure is logged and returns 400 (client misconfig)."""
+        from onyx.error_handling.error_codes import OnyxErrorCode
+        from onyx.server.manage.llm.api import get_anthropic_available_models
+
+        with (
+            patch("onyx.server.manage.llm.api.httpx.get") as mock_get,
+            patch("onyx.server.manage.llm.api.logger.warning") as mock_warning,
+        ):
+            mock_get.side_effect = httpx.ConnectError(
+                "Connection refused", request=MagicMock()
+            )
+
+            request = AnthropicModelsRequest(api_key="test-key")
+            with pytest.raises(OnyxError) as exc_info:
+                get_anthropic_available_models(request, MagicMock(), MagicMock())
+
+            mock_warning.assert_called_once()
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.status_code == 400
 
 
 class TestGetLMStudioAvailableModels:

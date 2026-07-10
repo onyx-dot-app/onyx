@@ -141,28 +141,38 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
     return False
 
 
+# TODO: remove these lists once we have a comprehensive model configuration page
+# The ideal flow should be: fetch all available models --> filter by type
+# --> allow user to modify filters and select models based on current context
+_OPENAI_NON_CHAT_MODEL_TERMS = {
+    "embed",
+    "audio",
+    "tts",
+    "whisper",
+    "dall-e",
+    "image",
+    "moderation",
+    "sora",
+    "container",
+    "realtime",
+    "transcribe",
+}
+_OPENAI_DEPRECATED_MODEL_TERMS = {"babbage", "davinci", "gpt-3.5", "gpt-4-"}
+_OPENAI_EXCLUDED_TERMS = _OPENAI_NON_CHAT_MODEL_TERMS | _OPENAI_DEPRECATED_MODEL_TERMS
+
+
+def is_openai_chat_model_id(model_id: str) -> bool:
+    """Whether an OpenAI model id looks like a usable chat-completion model
+    (i.e. not an embedding/audio/image/moderation or deprecated model)."""
+    model_lower = model_id.lower()
+    return not any(ex in model_lower for ex in _OPENAI_EXCLUDED_TERMS)
+
+
 def get_openai_model_names() -> list[str]:
     """Get OpenAI model names dynamically from litellm."""
     import re
 
     import litellm
-
-    # TODO: remove these lists once we have a comprehensive model configuration page
-    # The ideal flow should be: fetch all available models --> filter by type
-    # --> allow user to modify filters and select models based on current context
-    non_chat_model_terms = {
-        "embed",
-        "audio",
-        "tts",
-        "whisper",
-        "dall-e",
-        "image",
-        "moderation",
-        "sora",
-        "container",
-    }
-    deprecated_model_terms = {"babbage", "davinci", "gpt-3.5", "gpt-4-"}
-    excluded_terms = non_chat_model_terms | deprecated_model_terms
 
     # NOTE: We are explicitly excluding all "timestamped" models
     # because they are mostly just noise in the admin configuration panel
@@ -170,10 +180,7 @@ def get_openai_model_names() -> list[str]:
     date_pattern = re.compile(r"-\d{4}")
 
     def is_valid_model(model: str) -> bool:
-        model_lower = model.lower()
-        return not any(
-            ex in model_lower for ex in excluded_terms
-        ) and not date_pattern.search(model)
+        return is_openai_chat_model_id(model) and not date_pattern.search(model)
 
     return sorted(
         (

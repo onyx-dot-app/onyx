@@ -459,6 +459,36 @@ class OpenRouterFinalModelResponse(BaseModel):
     supports_image_input: bool
 
 
+# OpenAI dynamic models fetch
+class OpenAIModelsRequest(BaseModel):
+    api_key: str
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class OpenAIFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g., "gpt-4o")
+    display_name: str  # Derived via the litellm model-name parser
+    max_input_tokens: int
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
+# Anthropic dynamic models fetch
+class AnthropicModelsRequest(BaseModel):
+    api_key: str
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class AnthropicFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g., "claude-sonnet-4-5")
+    display_name: str  # Human-readable name from the Anthropic API
+    max_input_tokens: int
+    supports_image_input: bool
+    supports_reasoning: bool
+
+
 # LM Studio dynamic models fetch
 class LMStudioModelsRequest(BaseModel):
     api_base: str
