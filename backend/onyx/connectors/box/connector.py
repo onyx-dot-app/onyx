@@ -397,9 +397,13 @@ class BoxConnector(
     ) -> BoxAccessContext:
         """Access to a folder's subtree: inherited ancestor access plus the
         folder's own collaborations, shared link, and owner."""
-        access = self._fetch_collaborations_access(
-            inherited_access, folder_id, is_folder=True
-        )
+        access = inherited_access
+        # Box's root folder (id 0) can't be collaborated; asking for its
+        # collaborations returns HTTP 400, so skip that call for root.
+        if folder_id != BOX_ROOT_FOLDER_ID:
+            access = self._fetch_collaborations_access(
+                access, folder_id, is_folder=True
+            )
         folder = self.client.folders.get_folder_by_id(
             folder_id, fields=["shared_link", "owned_by"]
         )

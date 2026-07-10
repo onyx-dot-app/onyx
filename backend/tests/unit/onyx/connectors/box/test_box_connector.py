@@ -351,6 +351,37 @@ def test_slim_retrieval_skips_non_indexable_files() -> None:
     assert slim_ids == {"box-file-1"}
 
 
+def test_perm_sync_skips_root_folder_collaborations() -> None:
+    """A whole-enterprise connector seeds at root folder 0, which Box refuses to
+    return collaborations for (HTTP 400). Perm sync must skip that call rather
+    than fail the whole run."""
+    modified = datetime(2024, 6, 1, tzinfo=timezone.utc)
+    fake_client = FakeBoxClient(
+        folders_by_id={"0": FolderFull(id="0", name="All Files", owned_by=_OWNER)},
+        pages={
+            ("0", None): Items(
+                entries=[_file("1", "a.txt", modified)], next_marker=None
+            )
+        },
+        file_contents={"1": b"hi"},
+    )
+    connector = BoxConnector()  # no folder_ids -> whole-enterprise (root "0")
+    connector._client = cast(BoxClient, fake_client)
+    connector._enterprise_client = cast(BoxClient, fake_client)
+    connector._enterprise_id = "ent"
+
+    slim_ids: set[str] = set()
+    for batch in connector.retrieve_all_slim_docs_perm_sync(start=_START, end=_END):
+        for item in batch:
+            if isinstance(item, HierarchyNode):
+                continue
+            slim_ids.add(item.id)
+
+    assert slim_ids == {"box-file-1"}
+    # root folder collaborations were never queried (Box would 400)
+    assert "0" not in fake_client.list_collaborations.folder_collaboration_calls
+
+
 @pytest.mark.parametrize(
     "value,expected",
     [

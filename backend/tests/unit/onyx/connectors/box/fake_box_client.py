@@ -93,6 +93,7 @@ class FakeListCollaborationsManager:
         self._folder_collaborations = folder_collaborations
         self._file_collaborations = file_collaborations
         self.file_collaboration_calls: list[str] = []
+        self.folder_collaboration_calls: list[str] = []
 
     def get_folder_collaborations(
         self,
@@ -101,6 +102,10 @@ class FakeListCollaborationsManager:
         limit: int | None = None,  # noqa: ARG002
         marker: str | None = None,  # noqa: ARG002
     ) -> Collaborations:
+        self.folder_collaboration_calls.append(folder_id)
+        # Box rejects collaboration queries on the root folder with HTTP 400.
+        if folder_id == "0":
+            raise make_box_api_error(400)
         return Collaborations(
             entries=self._folder_collaborations.get(folder_id, []),
             next_marker=None,
