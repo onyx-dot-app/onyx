@@ -32,7 +32,7 @@ interface TagListProps {
  */
 function TagList({ items, onRemove, maxVisible, overflowIcon }: TagListProps) {
   const visible = maxVisible === undefined ? items : items.slice(0, maxVisible);
-  const hidden = items.slice(visible.length);
+  const hidden = maxVisible === undefined ? [] : items.slice(maxVisible);
 
   return (
     <div className="flex w-full flex-wrap items-center gap-1">
