@@ -18,20 +18,16 @@ Usage (Celery tasks and FastAPI handlers):
         # result is a validated Pydantic model instance (response_type)
         ...
 
+The HTTP call, response validation, and fail-strategy handling live in the
+edition-agnostic ``onyx.hooks.http_executor``. This module resolves the hook
+configuration from the DB and persists execution results.
+
 is_reachable update policy
 --------------------------
 ``is_reachable`` on the Hook row is updated selectively — only when the outcome
-carries meaningful signal about physical reachability:
-
-  NetworkError (DNS, connection refused)  → False  (cannot reach the server)
-  HTTP 401 / 403                          → False  (api_key revoked or invalid)
-  TimeoutException                        → None   (server may be slow, skip write)
-  Other HTTP errors (4xx / 5xx)           → None   (server responded, skip write)
-  Unknown exception                       → None   (no signal, skip write)
-  Non-JSON / non-dict response            → None   (server responded, skip write)
-  Success (2xx, valid dict)               → True   (confirmed reachable)
-
-None means "leave the current value unchanged" — no DB round-trip is made.
+carries a reachability signal (``HookHTTPOutcome.updated_is_reachable`` is
+non-None; see ``onyx.hooks.http_executor`` for the per-outcome semantics).
+Writes are additionally skipped when the value would not change.
 
 DB session design
 -----------------
@@ -51,14 +47,10 @@ The executor uses three sessions:
      prevent the execution log from being written. This update is best-effort.
 """
 
-import json
-import time
 from typing import Any
 from typing import TypeVar
 
-import httpx
 from pydantic import BaseModel
-from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -68,10 +60,11 @@ from onyx.db.hook import create_hook_execution_log__no_commit
 from onyx.db.hook import get_non_deleted_hook_by_hook_point
 from onyx.db.hook import update_hook__no_commit
 from onyx.db.models import Hook
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
+from onyx.hooks.http_executor import execute_hook_endpoint
+from onyx.hooks.http_executor import HookEndpointConfig
+from onyx.hooks.http_executor import HookHTTPOutcome
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -84,18 +77,6 @@ T = TypeVar("T", bound=BaseModel)
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
-
-
-class _HttpOutcome(BaseModel):
-    """Structured result of an HTTP hook call, returned by _process_response."""
-
-    is_success: bool
-    updated_is_reachable: (
-        bool | None
-    )  # True/False = write to DB, None = unchanged (skip write)
-    status_code: int | None
-    error_message: str | None
-    response_payload: dict[str, Any] | None
 
 
 def _lookup_hook(
@@ -119,109 +100,10 @@ def _lookup_hook(
     return hook
 
 
-def _process_response(
-    *,
-    response: httpx.Response | None,
-    exc: Exception | None,
-    timeout: float,
-) -> _HttpOutcome:
-    """Process the result of an HTTP call and return a structured outcome.
-
-    Called after the client.post() try/except. If post() raised, exc is set and
-    response is None. Otherwise response is set and exc is None. Handles
-    raise_for_status(), JSON decoding, and the dict shape check.
-    """
-    if exc is not None:
-        if isinstance(exc, httpx.NetworkError):
-            msg = f"Hook network error (endpoint unreachable): {exc}"
-            logger.warning(msg, exc_info=exc)
-            return _HttpOutcome(
-                is_success=False,
-                updated_is_reachable=False,
-                status_code=None,
-                error_message=msg,
-                response_payload=None,
-            )
-        if isinstance(exc, httpx.TimeoutException):
-            msg = f"Hook timed out after {timeout}s: {exc}"
-            logger.warning(msg, exc_info=exc)
-            return _HttpOutcome(
-                is_success=False,
-                updated_is_reachable=None,  # timeout doesn't indicate unreachability
-                status_code=None,
-                error_message=msg,
-                response_payload=None,
-            )
-        msg = f"Hook call failed: {exc}"
-        logger.exception(msg, exc_info=exc)
-        return _HttpOutcome(
-            is_success=False,
-            updated_is_reachable=None,  # unknown error — don't make assumptions
-            status_code=None,
-            error_message=msg,
-            response_payload=None,
-        )
-
-    if response is None:
-        raise ValueError(
-            "exactly one of response or exc must be non-None; both are None"
-        )
-    status_code = response.status_code
-
-    try:
-        response.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        msg = f"Hook returned HTTP {e.response.status_code}: {e.response.text}"
-        logger.warning(msg, exc_info=e)
-        # 401/403 means the api_key has been revoked or is invalid — mark unreachable
-        # so the operator knows to update it. All other HTTP errors keep is_reachable
-        # as-is (server is up, the request just failed for application reasons).
-        auth_failed = e.response.status_code in (401, 403)
-        return _HttpOutcome(
-            is_success=False,
-            updated_is_reachable=False if auth_failed else None,
-            status_code=status_code,
-            error_message=msg,
-            response_payload=None,
-        )
-
-    try:
-        response_payload = response.json()
-    except (json.JSONDecodeError, httpx.DecodingError) as e:
-        msg = f"Hook returned non-JSON response: {e}"
-        logger.warning(msg, exc_info=e)
-        return _HttpOutcome(
-            is_success=False,
-            updated_is_reachable=None,  # server responded — reachability unchanged
-            status_code=status_code,
-            error_message=msg,
-            response_payload=None,
-        )
-
-    if not isinstance(response_payload, dict):
-        msg = f"Hook returned non-dict JSON (got {type(response_payload).__name__})"
-        logger.warning(msg)
-        return _HttpOutcome(
-            is_success=False,
-            updated_is_reachable=None,  # server responded — reachability unchanged
-            status_code=status_code,
-            error_message=msg,
-            response_payload=None,
-        )
-
-    return _HttpOutcome(
-        is_success=True,
-        updated_is_reachable=True,
-        status_code=status_code,
-        error_message=None,
-        response_payload=response_payload,
-    )
-
-
 def _persist_result(
     *,
     hook_id: int,
-    outcome: _HttpOutcome,
+    outcome: HookHTTPOutcome,
     duration_ms: int,
 ) -> None:
     """Write the execution log on failure and optionally update is_reachable, each
@@ -273,13 +155,11 @@ def _execute_hook_inner(
     payload: dict[str, Any],
     response_type: type[T],
 ) -> T | HookSoftFailed:
-    """Make the HTTP call, validate the response, and return a typed model.
+    """Extract config from the Hook row, run the HTTP call, and persist the result.
 
     Raises OnyxError on HARD failure. Returns HookSoftFailed on SOFT failure.
     """
-    timeout = hook.timeout_seconds
     hook_id = hook.id
-    fail_strategy = hook.fail_strategy
     endpoint_url = hook.endpoint_url
     current_is_reachable: bool | None = hook.is_reachable
 
@@ -289,71 +169,27 @@ def _execute_hook_inner(
             "active hooks without an endpoint_url must be rejected by _lookup_hook"
         )
 
-    start = time.monotonic()
-    response: httpx.Response | None = None
-    exc: Exception | None = None
-    try:
-        api_key: str | None = (
-            hook.api_key.get_value(apply_mask=False) if hook.api_key else None
-        )
-        headers: dict[str, str] = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-        with httpx.Client(
-            timeout=timeout, follow_redirects=False
-        ) as client:  # SSRF guard: never follow redirects
-            response = client.post(endpoint_url, json=payload, headers=headers)
-    except Exception as e:
-        exc = e
-    duration_ms = int((time.monotonic() - start) * 1000)
+    config = HookEndpointConfig(
+        endpoint_url=endpoint_url,
+        api_key=hook.api_key.get_value(apply_mask=False) if hook.api_key else None,
+        timeout_seconds=hook.timeout_seconds,
+        fail_strategy=hook.fail_strategy,
+    )
 
-    outcome = _process_response(response=response, exc=exc, timeout=timeout)
+    def _on_result(outcome: HookHTTPOutcome, duration_ms: int) -> None:
+        # Skip the is_reachable write when the value would not change — avoids a
+        # no-op DB round-trip on every call when the hook is already in the
+        # expected state.
+        if outcome.updated_is_reachable == current_is_reachable:
+            outcome = outcome.model_copy(update={"updated_is_reachable": None})
+        _persist_result(hook_id=hook_id, outcome=outcome, duration_ms=duration_ms)
 
-    # Validate the response payload against response_type.
-    # A validation failure downgrades the outcome to a failure so it is logged,
-    # is_reachable is left unchanged (server responded — just a bad payload),
-    # and fail_strategy is respected below.
-    validated_model: T | None = None
-    if outcome.is_success and outcome.response_payload is not None:
-        try:
-            validated_model = response_type.model_validate(outcome.response_payload)
-        except ValidationError as e:
-            msg = (
-                f"Hook response failed validation against {response_type.__name__}: {e}"
-            )
-            outcome = _HttpOutcome(
-                is_success=False,
-                updated_is_reachable=None,  # server responded — reachability unchanged
-                status_code=outcome.status_code,
-                error_message=msg,
-                response_payload=None,
-            )
-
-    # Skip the is_reachable write when the value would not change — avoids a
-    # no-op DB round-trip on every call when the hook is already in the expected state.
-    if outcome.updated_is_reachable == current_is_reachable:
-        outcome = outcome.model_copy(update={"updated_is_reachable": None})
-    _persist_result(hook_id=hook_id, outcome=outcome, duration_ms=duration_ms)
-
-    if not outcome.is_success:
-        if fail_strategy == HookFailStrategy.HARD:
-            raise OnyxError(
-                OnyxErrorCode.HOOK_EXECUTION_FAILED,
-                outcome.error_message or "Hook execution failed.",
-            )
-        logger.warning(
-            "Hook execution failed (soft fail) for hook_id=%s: %s",
-            hook_id,
-            outcome.error_message,
-        )
-        return HookSoftFailed()
-
-    if validated_model is None:
-        raise OnyxError(
-            OnyxErrorCode.INTERNAL_ERROR,
-            f"validated_model is None for successful hook call (hook_id={hook_id})",
-        )
-    return validated_model
+    return execute_hook_endpoint(
+        config=config,
+        payload=payload,
+        response_type=response_type,
+        on_result=_on_result,
+    )
 
 
 def _execute_hook_impl(
