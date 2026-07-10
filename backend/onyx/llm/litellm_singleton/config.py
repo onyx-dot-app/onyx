@@ -110,6 +110,47 @@ def register_ollama_models() -> None:
     )
 
 
+def load_model_cost_supplements() -> None:
+    """
+    Load model-cost entries that were merged into LiteLLM's registry upstream
+    but are not shipped in the LiteLLM version Onyx pins, and add them to
+    litellm.model_cost.
+
+    Currently contains the Azure GPT-5.6 entries from
+    https://github.com/BerriAI/litellm/pull/32678. Without them, Azure
+    GPT-5.6 deployments are missing capability metadata (reasoning/vision)
+    and Azure-specific pricing.
+
+    Unlike the display-metadata enrichments, supplements never overwrite an
+    existing entry, so the bundled registry wins as soon as a LiteLLM upgrade
+    ships these models — delete the corresponding entries from the JSON file
+    once that happens.
+    """
+    supplements_path = Path(__file__).parent / "model_cost_supplements.json"
+
+    if not supplements_path.exists():
+        logger.warning("Model cost supplements file not found: %s", supplements_path)
+        return
+
+    try:
+        with open(supplements_path) as f:
+            supplements = json.load(f)
+
+        added = 0
+        for model_key, metadata in supplements.items():
+            if model_key not in litellm.model_cost:
+                litellm.model_cost[model_key] = metadata
+                added += 1
+
+        logger.info(
+            "Loaded %s of %s supplemental model-cost entries",
+            added,
+            len(supplements),
+        )
+    except Exception as e:
+        logger.error("Failed to load model cost supplements: %s", e)
+
+
 def load_model_metadata_enrichments() -> None:
     """
     Load model metadata enrichments from JSON file and merge into litellm.model_cost.
@@ -159,4 +200,7 @@ def load_model_metadata_enrichments() -> None:
 def initialize_litellm() -> None:
     configure_litellm_settings()
     register_ollama_models()
+    # Supplements must load before enrichments so display metadata merges
+    # into the supplemented entries.
+    load_model_cost_supplements()
     load_model_metadata_enrichments()

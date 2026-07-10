@@ -149,6 +149,13 @@ class TestIsTrueOpenAIModel:
                 is True
             )
 
+    def test_azure_gpt_5_6_models(self) -> None:
+        """GPT-5.6 variants on Azure are true OpenAI models — this drives the
+        responses-API bridge (https://github.com/onyx-dot-app/onyx/issues/12847)."""
+        for model_name in ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]:
+            assert is_true_openai_model(LlmProviderNames.OPENAI, model_name) is True
+            assert is_true_openai_model(LlmProviderNames.AZURE, model_name) is True
+
     def test_azure_openai_model_through_litellm_proxy(self) -> None:
         """Test that Azure OpenAI models are correctly identified."""
         assert is_true_openai_model(LlmProviderNames.LITELLM_PROXY, "gpt-4") is True

@@ -598,6 +598,22 @@
     "model_vendor": "openai",
     "model_version": "2025-11-13"
   },
+  "azure/gpt-5.6": {
+    "display_name": "GPT-5.6",
+    "model_vendor": "openai"
+  },
+  "azure/gpt-5.6-sol": {
+    "display_name": "GPT-5.6 Sol",
+    "model_vendor": "openai"
+  },
+  "azure/gpt-5.6-terra": {
+    "display_name": "GPT-5.6 Terra",
+    "model_vendor": "openai"
+  },
+  "azure/gpt-5.6-luna": {
+    "display_name": "GPT-5.6 Luna",
+    "model_vendor": "openai"
+  },
   "azure/gpt-audio-2025-08-28": {
     "display_name": "GPT Audio",
     "model_vendor": "openai",
@@ -2532,6 +2548,22 @@
     "display_name": "GPT-5 Pro",
     "model_vendor": "openai",
     "model_version": "2025-10-06"
+  },
+  "gpt-5.6": {
+    "display_name": "GPT-5.6",
+    "model_vendor": "openai"
+  },
+  "gpt-5.6-sol": {
+    "display_name": "GPT-5.6 Sol",
+    "model_vendor": "openai"
+  },
+  "gpt-5.6-terra": {
+    "display_name": "GPT-5.6 Terra",
+    "model_vendor": "openai"
+  },
+  "gpt-5.6-luna": {
+    "display_name": "GPT-5.6 Luna",
+    "model_vendor": "openai"
   },
   "gpt-5.5": {
     "display_name": "GPT-5.5",

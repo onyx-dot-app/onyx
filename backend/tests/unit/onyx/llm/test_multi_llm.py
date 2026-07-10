@@ -1030,6 +1030,50 @@ def test_azure_openai_model_uses_httphandler_client() -> None:
         assert isinstance(kwargs["client"], HTTPHandler)
 
 
+@pytest.mark.parametrize("model_name", ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"])
+def test_azure_gpt_5_6_uses_responses_bridge(model_name: str) -> None:
+    """Azure GPT-5.6 deployments must route through LiteLLM's completions ->
+    responses bridge like other true OpenAI models.
+
+    Regression test for https://github.com/onyx-dot-app/onyx/issues/12847:
+    when these models were missing from the model registry they were routed
+    to the Azure Chat Completions path and could fail with a deployment
+    NotFoundError.
+    """
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name=model_name,
+        api_base="https://my-resource.openai.azure.com",
+        api_version="2026-07-09",
+        max_input_tokens=128000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = [
+            litellm.ModelResponse(
+                id="chatcmpl-123",
+                choices=[
+                    litellm.Choices(
+                        delta=_create_delta(role="assistant", content="Hello"),
+                        finish_reason="stop",
+                        index=0,
+                    )
+                ],
+                model=model_name,
+            ),
+        ]
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        llm.invoke(messages)
+
+        mock_completion.assert_called_once()
+        assert (
+            mock_completion.call_args.kwargs["model"] == f"azure/responses/{model_name}"
+        )
+
+
 def test_temporary_env_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
     # Assign some environment variables
     EXPECTED_ENV_VARS = {
