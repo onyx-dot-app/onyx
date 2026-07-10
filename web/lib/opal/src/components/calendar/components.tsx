@@ -55,6 +55,9 @@ function NextMonthButton({
 function Calendar(props: CalendarProps) {
   return (
     <DayPicker
+      // Spread first so the Opal-owned chrome below wins even against
+      // untyped callers that smuggle in classNames/components.
+      {...props}
       classNames={{
         root: "opal-calendar",
         months: "opal-calendar-months",
@@ -78,7 +81,6 @@ function Calendar(props: CalendarProps) {
         range_end: "opal-calendar-cell--range-end",
       }}
       components={{ PreviousMonthButton, NextMonthButton }}
-      {...props}
     />
   );
 }
