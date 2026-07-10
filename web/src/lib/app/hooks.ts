@@ -1,11 +1,11 @@
 "use client";
 
 import { useLayoutEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useSettings } from "@/lib/settings/hooks";
 import { APP_SLOGAN } from "@/lib/constants";
 import useAppFocus from "@/hooks/useAppFocus";
 import useChatSessions from "@/hooks/useChatSessions";
-import { usePathname } from "next/navigation";
 
 export function useCustomFooterContent(): string {
   const settings = useSettings();

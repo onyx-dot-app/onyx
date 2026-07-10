@@ -6,6 +6,7 @@ import type { Route } from "next";
 import useSWR from "swr";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
@@ -182,4 +183,84 @@ export function useSessionWatcher(): boolean {
     userError?.status === 403 &&
     hasSeenAuthenticatedUserRef.current
   );
+}
+
+const REFRESH_INTERVAL = 600000;
+const MIN_REFRESH_GAP_MS = REFRESH_INTERVAL - 60000;
+const VISIBILITY_REFRESH_GAP_MS = 60000;
+
+export function useTokenRefresh(
+  user: User | null,
+  authTypeMetadata: AuthTypeMetadata,
+  authTypeMetadataLoading: boolean,
+  onRefreshFail: () => Promise<void>
+) {
+  const lastAttemptRef = useRef<number>(Date.now());
+  const isFirstLoadRef = useRef(true);
+
+  useEffect(() => {
+    if (authTypeMetadataLoading) return;
+
+    if (
+      !user ||
+      user.id === NO_AUTH_USER_ID ||
+      user.is_anonymous_user ||
+      authTypeMetadata.authType === AuthType.OIDC ||
+      authTypeMetadata.authType === AuthType.SAML
+    ) {
+      return;
+    }
+
+    const refreshTokenPeriodically = async () => {
+      const isTimeToRefresh =
+        isFirstLoadRef.current ||
+        Date.now() - lastAttemptRef.current > MIN_REFRESH_GAP_MS;
+
+      if (!isTimeToRefresh) return;
+
+      isFirstLoadRef.current = false;
+      lastAttemptRef.current = Date.now();
+
+      try {
+        const response = await fetch("/api/auth/refresh", {
+          method: "POST",
+          credentials: "include",
+        });
+
+        if (response.ok) {
+          console.debug("Auth token refreshed successfully");
+        } else {
+          console.warn("Failed to refresh auth token:", response.status);
+          await onRefreshFail();
+        }
+      } catch (error) {
+        console.error("Error refreshing auth token:", error);
+      }
+    };
+
+    if (!document.hidden) {
+      refreshTokenPeriodically();
+    }
+
+    const intervalId = setInterval(() => {
+      if (document.hidden) return;
+      refreshTokenPeriodically();
+    }, REFRESH_INTERVAL);
+
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - lastAttemptRef.current > VISIBILITY_REFRESH_GAP_MS
+      ) {
+        refreshTokenPeriodically();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [user, authTypeMetadata, authTypeMetadataLoading, onRefreshFail]);
 }
