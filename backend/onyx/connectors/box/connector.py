@@ -16,6 +16,7 @@ from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_mini import FolderMini
 from box_sdk_gen.schemas.group_mini import GroupMini
 from box_sdk_gen.schemas.user_collaborations import UserCollaborations
+from box_sdk_gen.schemas.user_mini import UserMini
 from box_sdk_gen.schemas.web_link import WebLink
 
 from onyx.configs.app_configs import BOX_CONNECTOR_SIZE_THRESHOLD
@@ -133,11 +134,18 @@ def parse_box_folder_id(folder_id_or_url: str) -> str:
 
     parsed = urlparse(value)
     path_parts = [part for part in parsed.path.split("/") if part]
-    if len(path_parts) >= 2 and path_parts[-2] == "folder":
+    # Box uses both /folder/<id> and /folders/<id> in its URLs.
+    if len(path_parts) >= 2 and path_parts[-2] in ("folder", "folders"):
         return path_parts[-1]
     raise ConnectorValidationError(
         f"Could not extract a folder ID from Box URL: {folder_id_or_url}"
     )
+
+
+def normalize_box_login(login: str) -> str:
+    """Box logins are emails; lowercase them so stored ACLs match Onyx's
+    lowercased user identities (access filters compare emails exactly)."""
+    return login.strip().lower()
 
 
 def _box_api_status_code(error: BoxAPIError) -> int | None:
@@ -193,7 +201,7 @@ def apply_collaborations_to_access(
         accessible_by = collaboration.accessible_by
         if isinstance(accessible_by, UserCollaborations):
             if accessible_by.login:
-                user_emails.add(accessible_by.login)
+                user_emails.add(normalize_box_login(accessible_by.login))
         elif isinstance(accessible_by, GroupMini):
             group_ids.add(box_group_id(accessible_by.id))
     return BoxAccessContext(
@@ -230,16 +238,10 @@ def apply_shared_link_to_access(
     if shared_link_access is None:
         return access
     if shared_link_access == "open" and not is_password_enabled:
-        return BoxAccessContext(
-            user_emails=access.user_emails,
-            group_ids=access.group_ids,
-            is_public=True,
-        )
+        return access.merged_with(BoxAccessContext(is_public=True))
     if shared_link_access == "company":
-        return BoxAccessContext(
-            user_emails=access.user_emails,
-            group_ids=access.group_ids | {enterprise_users_group_id},
-            is_public=access.is_public,
+        return access.merged_with(
+            BoxAccessContext(group_ids={enterprise_users_group_id})
         )
     return access
 
@@ -320,7 +322,7 @@ class BoxConnector(
         """Look up the numeric Box user ID for an email so admins configure the
         connector with an email instead of an opaque ID. Requires the app's
         'Manage users' scope (the enterprise-subject client)."""
-        normalized = email.strip().lower()
+        normalized = normalize_box_login(email)
         try:
             users = self.enterprise_client.users.get_users(
                 filter_term=normalized, fields=["login"], limit=100
@@ -334,7 +336,7 @@ class BoxConnector(
                 )
             raise
         for user in users.entries or []:
-            if user.login and user.login.lower() == normalized:
+            if user.login and normalize_box_login(user.login) == normalized:
                 return user.id
         raise ConnectorValidationError(
             f"No Box user found with email '{email}'. Enter the email of a user "
@@ -363,25 +365,18 @@ class BoxConnector(
         item_id: str,
         is_folder: bool,
     ) -> BoxAccessContext:
+        manager = self.client.list_collaborations
+        fetch = (
+            manager.get_folder_collaborations
+            if is_folder
+            else manager.get_file_collaborations
+        )
         access = base_access
         marker: str | None = None
         while True:
-            if is_folder:
-                collaborations = (
-                    self.client.list_collaborations.get_folder_collaborations(
-                        folder_id=item_id,
-                        limit=_BOX_COLLABORATIONS_PAGE_SIZE,
-                        marker=marker,
-                    )
-                )
-            else:
-                collaborations = (
-                    self.client.list_collaborations.get_file_collaborations(
-                        file_id=item_id,
-                        limit=_BOX_COLLABORATIONS_PAGE_SIZE,
-                        marker=marker,
-                    )
-                )
+            collaborations = fetch(
+                item_id, limit=_BOX_COLLABORATIONS_PAGE_SIZE, marker=marker
+            )
             access = apply_collaborations_to_access(
                 access, collaborations.entries or []
             )
@@ -389,6 +384,29 @@ class BoxConnector(
             if not marker:
                 break
         return access
+
+    def _apply_owner(
+        self, access: BoxAccessContext, owned_by: UserMini | None
+    ) -> BoxAccessContext:
+        if owned_by is None or not owned_by.login:
+            return access
+        return access.merged_with(
+            BoxAccessContext(user_emails={normalize_box_login(owned_by.login)})
+        )
+
+    def _apply_shared_link(
+        self, access: BoxAccessContext, shared_link: Any
+    ) -> BoxAccessContext:
+        # folder/file/web-link shared links are distinct SDK types that all
+        # expose access / effective_access / is_password_enabled.
+        if shared_link is None:
+            return access
+        return apply_shared_link_to_access(
+            access,
+            shared_link_access_level(shared_link),
+            shared_link.is_password_enabled,
+            self._all_enterprise_users_group_id(),
+        )
 
     def _resolve_folder_access(
         self,
@@ -407,18 +425,8 @@ class BoxConnector(
         folder = self.client.folders.get_folder_by_id(
             folder_id, fields=["shared_link", "owned_by"]
         )
-        if folder.owned_by is not None and folder.owned_by.login:
-            access = access.merged_with(
-                BoxAccessContext(user_emails={folder.owned_by.login})
-            )
-        if folder.shared_link is not None:
-            access = apply_shared_link_to_access(
-                access,
-                shared_link_access_level(folder.shared_link),
-                folder.shared_link.is_password_enabled,
-                self._all_enterprise_users_group_id(),
-            )
-        return access
+        access = self._apply_owner(access, folder.owned_by)
+        return self._apply_shared_link(access, folder.shared_link)
 
     def _resolve_ancestor_access(
         self, path_entries: list[FolderMini] | None
@@ -453,21 +461,20 @@ class BoxConnector(
         file: FileFull,
         folder_access: BoxAccessContext,
     ) -> BoxAccessContext:
-        access = folder_access
-        if file.owned_by is not None and file.owned_by.login:
-            access = access.merged_with(
-                BoxAccessContext(user_emails={file.owned_by.login})
-            )
+        access = self._apply_owner(folder_access, file.owned_by)
         if file.has_collaborations:
             access = self._fetch_collaborations_access(access, file.id, is_folder=False)
-        if file.shared_link is not None:
-            access = apply_shared_link_to_access(
-                access,
-                shared_link_access_level(file.shared_link),
-                file.shared_link.is_password_enabled,
-                self._all_enterprise_users_group_id(),
-            )
-        return access
+        return self._apply_shared_link(access, file.shared_link)
+
+    def _resolve_web_link_access(
+        self,
+        web_link: WebLink,
+        folder_access: BoxAccessContext,
+    ) -> BoxAccessContext:
+        # A bookmark's access is the inherited folder access plus its own shared
+        # link (no owner or collaborations). Shared with the full and slim paths
+        # so perm sync can't revoke link-granted access.
+        return self._apply_shared_link(folder_access, web_link.shared_link)
 
     def _seed_frontier(self, include_permissions: bool) -> list[BoxFolderFrontierEntry]:
         frontier: list[BoxFolderFrontierEntry] = []
@@ -631,16 +638,9 @@ class BoxConnector(
 
         external_access = None
         if include_permissions and folder.access is not None:
-            access = folder.access
-            if web_link.shared_link is not None:
-                # A bookmark can carry its own shared link, same as files.
-                access = apply_shared_link_to_access(
-                    access,
-                    shared_link_access_level(web_link.shared_link),
-                    web_link.shared_link.is_password_enabled,
-                    self._all_enterprise_users_group_id(),
-                )
-            external_access = access.to_external_access()
+            external_access = self._resolve_web_link_access(
+                web_link, folder.access
+            ).to_external_access()
 
         return Document(
             id=box_web_link_document_id(web_link.id),
@@ -667,7 +667,9 @@ class BoxConnector(
                     item, folder.access
                 ).to_external_access()
             else:
-                external_access = folder.access.to_external_access()
+                external_access = self._resolve_web_link_access(
+                    item, folder.access
+                ).to_external_access()
         document_id = (
             box_file_document_id(item.id)
             if isinstance(item, FileFull)

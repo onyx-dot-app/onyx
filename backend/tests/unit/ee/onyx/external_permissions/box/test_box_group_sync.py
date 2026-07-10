@@ -2,10 +2,12 @@ from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
 from box_sdk_gen import BoxClient
 from box_sdk_gen.schemas.group_full import GroupFull
 from box_sdk_gen.schemas.user_mini import UserMini
 
+from ee.onyx.external_permissions.box import group_sync as group_sync_module
 from ee.onyx.external_permissions.box.group_sync import box_group_sync
 from onyx.connectors.box.connector import box_all_enterprise_users_group_id
 from onyx.connectors.box.connector import box_group_id
@@ -95,6 +97,33 @@ def test_group_sync_skips_group_whose_membership_fetch_fails() -> None:
     assert result[box_group_id("g1")] == ["g1u@x.com"]
     # the failing group is omitted entirely, not yielded with empty members
     assert box_group_id("g2") not in result
+    assert box_all_enterprise_users_group_id(_ENTERPRISE_ID) in result
+
+
+def test_group_sync_skips_group_exceeding_offset_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A group with more members than the offset ceiling can page must be skipped
+    # entirely (preserving its prior membership), not yielded as a partial group
+    # that would revoke access for the omitted members.
+    monkeypatch.setattr(group_sync_module, "_MAX_OFFSET", 4)
+    groups = [GroupFull(id="big", name="Big"), GroupFull(id="small", name="Small")]
+    fake = FakeBoxClient(
+        folders_by_id={},
+        pages={},
+        groups=groups,
+        members_by_group={
+            "big": [UserMini(id=str(i), login=f"b{i}@x.com") for i in range(6)],
+            "small": [UserMini(id="1", login="s@x.com")],
+        },
+        users_by_login={"e@x.com": "1"},
+        page_size=2,
+    )
+
+    result = _run_group_sync(fake)
+
+    assert box_group_id("small") in result
+    assert box_group_id("big") not in result
     assert box_all_enterprise_users_group_id(_ENTERPRISE_ID) in result
 
 

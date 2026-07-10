@@ -72,6 +72,16 @@ def test_read_capable_roles_grant_access(role: CollaborationRoleField) -> None:
     assert access.user_emails == {"reader@example.com"}
 
 
+def test_collaboration_login_is_lowercased() -> None:
+    """Box logins can be mixed-case; ACL emails must be lowercased to match
+    Onyx's normalized user identities (else access checks silently miss)."""
+    access = apply_collaborations_to_access(
+        BoxAccessContext(),
+        [_user_collab("Mixed.Case@Example.COM", CollaborationRoleField.VIEWER)],
+    )
+    assert access.user_emails == {"mixed.case@example.com"}
+
+
 def test_uploader_role_grants_nothing() -> None:
     access = apply_collaborations_to_access(
         BoxAccessContext(),

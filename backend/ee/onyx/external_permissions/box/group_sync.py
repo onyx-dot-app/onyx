@@ -7,6 +7,7 @@ from ee.onyx.external_permissions.utils import credential_json
 from onyx.connectors.box.connector import box_all_enterprise_users_group_id
 from onyx.connectors.box.connector import box_group_id
 from onyx.connectors.box.connector import BoxConnector
+from onyx.connectors.box.connector import normalize_box_login
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
@@ -14,8 +15,12 @@ logger = setup_logger()
 
 _PAGE_SIZE = 1000
 # Box's offset-paginated list endpoints reject offsets past ~10k with HTTP 400.
-# Stop there (loudly) rather than let the 400 abort the whole sync.
 _MAX_OFFSET = 10_000
+
+
+class BoxGroupTooLargeError(Exception):
+    """A group has more members than Box's offset pagination can enumerate, so
+    it can't be synced completely."""
 
 
 def _fetch_group_member_emails(client: BoxClient, group_id: str) -> set[str]:
@@ -28,20 +33,16 @@ def _fetch_group_member_emails(client: BoxClient, group_id: str) -> set[str]:
         entries = memberships.entries or []
         for membership in entries:
             if membership.user is not None and membership.user.login:
-                emails.add(membership.user.login)
+                emails.add(normalize_box_login(membership.user.login))
         offset += len(entries)
         total = memberships.total_count
         if not entries or (total is not None and offset >= total):
             return emails
         if offset >= _MAX_OFFSET:
-            logger.warning(
-                "Box group %s has more than %d members; syncing only the first "
-                "%d (Box offset-pagination ceiling).",
-                group_id,
-                _MAX_OFFSET,
-                offset,
-            )
-            return emails
+            # Yielding the first 10k as a "complete" group would make the sync
+            # replace membership and revoke access for everyone omitted, so treat
+            # it as unpageable and let the caller preserve prior membership.
+            raise BoxGroupTooLargeError(group_id)
 
 
 def _fetch_all_enterprise_user_emails(client: BoxClient) -> set[str]:
@@ -54,7 +55,7 @@ def _fetch_all_enterprise_user_emails(client: BoxClient) -> set[str]:
         )
         for user in users.entries or []:
             if user.login:
-                emails.add(user.login)
+                emails.add(normalize_box_login(user.login))
         marker = users.next_marker
         if not marker:
             return emails
@@ -81,6 +82,17 @@ def box_group_sync(
         for group in entries:
             try:
                 member_emails = _fetch_group_member_emails(client, group.id)
+            except BoxGroupTooLargeError:
+                # Skip (don't yield) so the group keeps its prior membership
+                # instead of being replaced by a partial set (which would revoke
+                # access for members past the offset ceiling).
+                logger.warning(
+                    "Box group %s exceeds the %d-member pagination ceiling; "
+                    "skipping to preserve its existing membership.",
+                    group.id,
+                    _MAX_OFFSET,
+                )
+                continue
             except Exception:
                 # Skip (don't yield) on failure: one bad group must not abort the
                 # sync, and yielding it empty would wipe its last-synced members.
