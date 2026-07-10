@@ -1243,13 +1243,13 @@ def _maybe_push_documents(
             )
             if use_config_push:
                 push_document_via_config(payload)
-                continue
-            execute_hook(
-                db_session=db_session,
-                hook_point=HookPoint.DOCUMENT_PUSH,
-                payload=payload.model_dump(),
-                response_type=DocumentPushResponse,
-            )
+            else:
+                execute_hook(
+                    db_session=db_session,
+                    hook_point=HookPoint.DOCUMENT_PUSH,
+                    payload=payload.model_dump(),
+                    response_type=DocumentPushResponse,
+                )
 
 
 @log_function_time(debug_only=True)
