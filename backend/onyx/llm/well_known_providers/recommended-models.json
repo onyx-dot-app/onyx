@@ -1,6 +1,6 @@
 {
-  "version": "1.4",
-  "updated_at": "2026-06-04T00:00:00Z",
+  "version": "1.5",
+  "updated_at": "2026-07-10T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-5.5",
@@ -14,6 +14,10 @@
       "default_model": "claude-opus-4-8",
       "additional_visible_models": [
         {
+          "name": "claude-fable-5",
+          "display_name": "Claude Fable 5"
+        },
+        {
           "name": "claude-opus-4-8",
           "display_name": "Claude Opus 4.8"
         },
@@ -24,6 +28,10 @@
         {
           "name": "claude-opus-4-6",
           "display_name": "Claude Opus 4.6"
+        },
+        {
+          "name": "claude-sonnet-5",
+          "display_name": "Claude Sonnet 5"
         },
         {
           "name": "claude-sonnet-4-6",
