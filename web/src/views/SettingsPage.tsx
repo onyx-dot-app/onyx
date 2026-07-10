@@ -1310,8 +1310,8 @@ function AccountsAccessSettings() {
     currentPassword: Yup.string().required("Current password is required"),
     newPassword: Yup.string()
       .min(
-        authTypeMetadata.passwordMinLength,
-        `Password must be at least ${authTypeMetadata.passwordMinLength} characters`
+        authTypeMetadata?.passwordMinLength ?? 0,
+        `Password must be at least ${authTypeMetadata?.passwordMinLength ?? 0} characters`
       )
       .required("New password is required"),
     confirmPassword: Yup.string()

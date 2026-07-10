@@ -867,7 +867,7 @@ export function useAuthType(): AuthType | null {
     return null;
   }
 
-  return authTypeMetadata.authType;
+  return authTypeMetadata?.authType ?? null;
 }
 
 /*

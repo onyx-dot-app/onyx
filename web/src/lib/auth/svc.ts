@@ -15,21 +15,6 @@ interface AuthTypeAPIResponse {
   oauth_enabled: boolean;
 }
 
-export const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {
-  authType: NEXT_PUBLIC_CLOUD_ENABLED ? AuthType.CLOUD : AuthType.BASIC,
-  autoRedirect: false,
-  requiresVerification: false,
-  anonymousUserEnabled: null,
-  passwordMinLength: 8,
-  passwordMaxLength: 64,
-  passwordRequireUppercase: false,
-  passwordRequireLowercase: false,
-  passwordRequireDigit: false,
-  passwordRequireSpecialChar: false,
-  hasUsers: false,
-  oauthEnabled: false,
-};
-
 export async function fetchAuthTypeMetadata(
   url: string
 ): Promise<AuthTypeMetadata> {

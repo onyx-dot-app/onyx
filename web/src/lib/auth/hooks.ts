@@ -11,13 +11,10 @@ import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { isAuthPath } from "@/lib/auth/paths";
-import {
-  fetchAuthTypeMetadata,
-  DEFAULT_AUTH_TYPE_METADATA,
-} from "@/lib/auth/svc";
+import { fetchAuthTypeMetadata } from "@/lib/auth/svc";
 
 export function useAuthTypeMetadata(): {
-  authTypeMetadata: AuthTypeMetadata;
+  authTypeMetadata: AuthTypeMetadata | undefined;
   isLoading: boolean;
   error: Error | undefined;
 } {
@@ -32,11 +29,7 @@ export function useAuthTypeMetadata(): {
     }
   );
 
-  return {
-    authTypeMetadata: data ?? DEFAULT_AUTH_TYPE_METADATA,
-    isLoading,
-    error,
-  };
+  return { authTypeMetadata: data, isLoading, error };
 }
 
 function computeSecondsUntilExpiration(user: User): number | null {
@@ -110,7 +103,7 @@ const VISIBILITY_REFRESH_GAP_MS = 60000;
 
 export function useTokenRefresh(
   user: User | null,
-  authTypeMetadata: AuthTypeMetadata,
+  authTypeMetadata: AuthTypeMetadata | undefined,
   authTypeMetadataLoading: boolean,
   onRefreshFail: () => Promise<void>
 ) {
@@ -118,7 +111,7 @@ export function useTokenRefresh(
   const isFirstLoadRef = useRef(true);
 
   useEffect(() => {
-    if (authTypeMetadataLoading) return;
+    if (authTypeMetadataLoading || !authTypeMetadata) return;
 
     if (
       !user ||
