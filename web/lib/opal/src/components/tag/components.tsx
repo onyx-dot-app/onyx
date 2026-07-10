@@ -54,6 +54,10 @@ interface TagProps {
 // Tag
 // ---------------------------------------------------------------------------
 
+// Class of the editable tag's remove control. Exported so composites (chip
+// fields) can target it for keyboard flows without a fragile string copy.
+const TAG_REMOVE_CLASS = "opal-auxiliary-tag-remove";
+
 function Tag({
   icon: Icon,
   title,
@@ -119,7 +123,7 @@ function Tag({
           // raw-ok: the remove control is 16px (md) / 12px (sm), and Button's fixed sizes bottom out at 16px, so the tag owns its remove sizing
           <button
             type="button"
-            className="opal-auxiliary-tag-remove"
+            className={TAG_REMOVE_CLASS}
             aria-label={
               typeof title === "string" ? `Remove ${title}` : "Remove"
             }
@@ -144,5 +148,5 @@ function Tag({
   );
 }
 
-export { Tag, type TagProps, type TagSize };
+export { Tag, TAG_REMOVE_CLASS, type TagProps, type TagSize };
 export { TAG_COLORS, type TagColor } from "@opal/components/tag/colors";
