@@ -1,0 +1,206 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import useSWR from "swr";
+import { Button, Card, MessageCard, Switch } from "@opal/components";
+import { SvgCopy, SvgPlus, SvgSettings } from "@opal/icons";
+import SvgNoResult from "@opal/illustrations/no-result";
+import {
+  ContentAction,
+  IllustrationContent,
+  SettingsLayouts,
+} from "@opal/layouts";
+import { cn } from "@opal/utils";
+import { toast } from "@/hooks/useToast";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
+import type { SSOProviderResponse } from "@/lib/sso/interfaces";
+import { setSSOProviderEnabled } from "@/lib/sso/svc";
+import { copyRedirectUri, SSO_PROVIDER_DETAILS } from "@/lib/sso/utils";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { PageLoader } from "@/refresh-components/PageLoader";
+import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { SSOProviderModal } from "@/sections/modals/sso/SSOProviderModal";
+
+const route = ADMIN_ROUTES.SSO_PROVIDERS;
+const DESCRIPTION = "Let users sign in through your identity provider.";
+
+interface ShellProps {
+  children: React.ReactNode;
+  onAddProvider: () => void;
+}
+
+function Shell({ children, onAddProvider }: ShellProps) {
+  return (
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={route.title}
+        description={DESCRIPTION}
+        divider
+        rightChildren={
+          <Button icon={SvgPlus} onClick={onAddProvider}>
+            Add Provider
+          </Button>
+        }
+      />
+      <SettingsLayouts.Body>{children}</SettingsLayouts.Body>
+    </SettingsLayouts.Root>
+  );
+}
+
+export default function SSOProvidersPage() {
+  const [activeProvider, setActiveProvider] = useState<
+    SSOProviderResponse | "new" | null
+  >(null);
+  const [pendingProviderId, setPendingProviderId] = useState<number | null>(
+    null
+  );
+  const setupModal = useCreateModal();
+  const {
+    data: providers,
+    error,
+    isLoading,
+    mutate,
+  } = useSWR<SSOProviderResponse[]>(
+    SWR_KEYS.adminSsoProviders,
+    errorHandlingFetcher
+  );
+
+  useEffect(() => {
+    if (!setupModal.isOpen) {
+      setActiveProvider(null);
+    }
+  }, [setupModal.isOpen]);
+
+  function openCreateModal() {
+    setActiveProvider("new");
+    setupModal.toggle(true);
+  }
+
+  function openEditModal(provider: SSOProviderResponse) {
+    setActiveProvider(provider);
+    setupModal.toggle(true);
+  }
+
+  async function handleEnabledChange(
+    provider: SSOProviderResponse,
+    enabled: boolean
+  ): Promise<void> {
+    setPendingProviderId(provider.id);
+
+    try {
+      await setSSOProviderEnabled(provider.id, enabled);
+      await mutate();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unexpected error occurred."
+      );
+    } finally {
+      setPendingProviderId(null);
+    }
+  }
+
+  if (error) {
+    const detail =
+      error instanceof FetchError && typeof error.info?.detail === "string"
+        ? error.info.detail
+        : error.message;
+
+    return (
+      <Shell onAddProvider={openCreateModal}>
+        <MessageCard
+          variant="error"
+          title="Failed to load SSO providers"
+          description={detail ?? "Unable to load SSO providers."}
+        />
+      </Shell>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Shell onAddProvider={openCreateModal}>
+        <PageLoader />
+      </Shell>
+    );
+  }
+
+  return (
+    <>
+      <Shell onAddProvider={openCreateModal}>
+        {!providers?.length ? (
+          <IllustrationContent
+            illustration={SvgNoResult}
+            title="No SSO providers yet"
+            description="Add a provider to let users sign in with Google or OIDC."
+          />
+        ) : (
+          <div className={cn("flex w-full flex-col gap-2")}>
+            {providers.map((provider) => {
+              const isPending = pendingProviderId === provider.id;
+
+              return (
+                <Card key={provider.id} border="solid" rounding="lg">
+                  <ContentAction
+                    icon={SSO_PROVIDER_DETAILS[provider.provider_type].icon}
+                    title={provider.display_name}
+                    suffix={SSO_PROVIDER_DETAILS[provider.provider_type].label}
+                    description={provider.redirect_uri}
+                    sizePreset="main-ui"
+                    variant="section"
+                    padding="md"
+                    rightChildren={
+                      <div
+                        className={cn(
+                          "flex h-full items-center gap-2 self-center"
+                        )}
+                      >
+                        <Button
+                          icon={SvgCopy}
+                          prominence="tertiary"
+                          size="sm"
+                          tooltip="Copy redirect URI"
+                          disabled={isPending}
+                          onClick={() => {
+                            void copyRedirectUri(provider.redirect_uri);
+                          }}
+                        />
+                        <Switch
+                          checked={provider.enabled}
+                          disabled={isPending}
+                          onCheckedChange={(enabled) => {
+                            void handleEnabledChange(provider, enabled);
+                          }}
+                        />
+                        <Button
+                          icon={SvgSettings}
+                          prominence="tertiary"
+                          size="sm"
+                          tooltip="Edit"
+                          disabled={isPending}
+                          onClick={() => {
+                            openEditModal(provider);
+                          }}
+                        />
+                      </div>
+                    }
+                  />
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </Shell>
+
+      {activeProvider !== null && (
+        <setupModal.Provider>
+          <SSOProviderModal
+            provider={activeProvider === "new" ? null : activeProvider}
+            onSaved={async () => mutate()}
+          />
+        </setupModal.Provider>
+      )}
+    </>
+  );
+}
