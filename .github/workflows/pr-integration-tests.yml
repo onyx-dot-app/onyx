@@ -147,55 +147,18 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Format branch name for cache
-        id: format-branch
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ -n "${PR_NUMBER}" ]; then
-            CACHE_SUFFIX="${PR_NUMBER}"
-          else
-            # shellcheck disable=SC2001
-            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
-          fi
-          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
-
-      - name: Log in to ECR pull-through cache
-        uses: ./.github/actions/login-ecr-pullthrough-cache
+      - name: Build model server image
+        uses: ./.github/actions/build-model-server-image
         with:
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          run-id: ${{ github.run_id }}
+          tag-prefix: integration-test-model-server-test
           ecr-registry: ${{ vars.ECR_REGISTRY }}
-
-      # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
-      # with the same Docker account credentials (the account must have DHI catalog access).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
-        with:
-          registry: dhi.io
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Build and push Model Server Docker image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.model_server
-          push: true
-          build-args: |
-            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-model-server-test-${{ github.run_id }}
-          cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
-            type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-model-server:latest
-          cache-to: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
 
   build-devcontainer-image:
     needs: changes
