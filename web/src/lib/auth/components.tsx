@@ -206,6 +206,7 @@ export function EmailPasswordForm({
 
   const { user, authTypeMetadata } = useUser();
   const passwordMinLength = authTypeMetadata?.passwordMinLength ?? 8;
+  const passwordMaxLength = authTypeMetadata?.passwordMaxLength ?? Infinity;
   const { getCaptchaToken } = useCaptcha();
 
   const initialValues: FormValues = {
@@ -224,6 +225,10 @@ export function EmailPasswordForm({
           .min(
             passwordMinLength,
             `Password must be at least ${passwordMinLength} characters`
+          )
+          .max(
+            passwordMaxLength,
+            `Password must be at most ${passwordMaxLength} characters`
           )
           .required(),
       }),
@@ -380,12 +385,22 @@ interface PasswordRequirementsProps {
 export function PasswordRequirements({ password }: PasswordRequirementsProps) {
   const { authTypeMetadata } = useUser();
 
+  const maxLength = authTypeMetadata?.passwordMaxLength ?? Infinity;
+
   const rules = [
     ...(authTypeMetadata?.passwordMinLength
       ? [
           {
             label: `At least ${authTypeMetadata.passwordMinLength} characters`,
             met: password.length >= authTypeMetadata.passwordMinLength,
+          },
+        ]
+      : []),
+    ...(maxLength < Infinity
+      ? [
+          {
+            label: `At most ${maxLength} characters`,
+            met: password.length <= maxLength,
           },
         ]
       : []),

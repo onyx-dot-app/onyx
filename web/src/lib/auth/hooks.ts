@@ -20,6 +20,7 @@ interface AuthTypeAPIResponse {
   requires_verification: boolean;
   anonymous_user_enabled: boolean | null;
   password_min_length: number;
+  password_max_length: number;
   password_require_uppercase: boolean;
   password_require_lowercase: boolean;
   password_require_digit: boolean;
@@ -34,6 +35,7 @@ const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {
   requiresVerification: false,
   anonymousUserEnabled: null,
   passwordMinLength: 0,
+  passwordMaxLength: Infinity,
   passwordRequireUppercase: false,
   passwordRequireLowercase: false,
   passwordRequireDigit: false,
@@ -55,6 +57,7 @@ async function fetchAuthTypeMetadata(url: string): Promise<AuthTypeMetadata> {
     requiresVerification: data.requires_verification,
     anonymousUserEnabled: data.anonymous_user_enabled,
     passwordMinLength: data.password_min_length,
+    passwordMaxLength: data.password_max_length,
     passwordRequireUppercase: data.password_require_uppercase,
     passwordRequireLowercase: data.password_require_lowercase,
     passwordRequireDigit: data.password_require_digit,

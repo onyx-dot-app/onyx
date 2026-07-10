@@ -12,6 +12,7 @@ export interface AuthTypeMetadata {
   requiresVerification: boolean;
   anonymousUserEnabled: boolean | null;
   passwordMinLength: number;
+  passwordMaxLength: number;
   passwordRequireUppercase: boolean;
   passwordRequireLowercase: boolean;
   passwordRequireDigit: boolean;

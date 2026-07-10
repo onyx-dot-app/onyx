@@ -55,6 +55,7 @@ async def get_auth_type(response: Response) -> AuthTypeResponse:
         requires_verification=user_needs_to_be_verified(),
         anonymous_user_enabled=anonymous_user_enabled(),
         password_min_length=security.password_min_length,
+        password_max_length=security.password_max_length,
         password_require_uppercase=security.password_require_uppercase,
         password_require_lowercase=security.password_require_lowercase,
         password_require_digit=security.password_require_digit,
