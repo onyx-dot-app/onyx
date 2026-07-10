@@ -5,7 +5,7 @@ import {
   canEditCredentialWithForm,
   createInitialValues,
   getEditableCredentialFields,
-} from "@/components/credentials/lib";
+} from "@/lib/credentials/utils";
 
 function buildCredential(
   credential: Partial<Credential<Record<string, unknown>>>

@@ -1,6 +1,5 @@
 import * as Yup from "yup";
 
-import { dictionaryType, formType } from "@/components/credentials/types";
 import {
   Credential,
   CredentialTemplateWithAuth,
@@ -8,11 +7,15 @@ import {
   getDisplayNameForCredentialKey,
 } from "@/lib/connectors/credentials";
 import { isTypedFileField } from "@/lib/connectors/fileTypes";
+import type {
+  CredentialFieldValues,
+  CredentialFormValues,
+} from "@/lib/credentials/types";
 
-export function createValidationSchema(json_values: Record<string, any>) {
+export function createValidationSchema(jsonValues: Record<string, any>) {
   const schemaFields: Record<string, Yup.AnySchema> = {};
-  const template = json_values as CredentialTemplateWithAuth<any>;
-  // multi‐auth templates
+  const template = jsonValues as CredentialTemplateWithAuth<any>;
+  // multi-auth templates
   if (template.authMethods && template.authMethods.length > 1) {
     // auth method selector
     schemaFields["authentication_method"] = Yup.string().required(
@@ -28,7 +31,7 @@ export function createValidationSchema(json_values: Record<string, any>) {
             .default(false)
             .transform((v, o) => (o === undefined ? false : v));
         } else if (isTypedFileField(key)) {
-          //TypedFile fields - use mixed schema instead of string (check before null check)
+          // TypedFile fields use mixed schema instead of string.
           schemaFields[key] = Yup.mixed().when("authentication_method", {
             is: method.value,
             then: () =>
@@ -56,19 +59,19 @@ export function createValidationSchema(json_values: Record<string, any>) {
       });
     });
   }
-  // single‐auth templates and other fields
-  for (const key in json_values) {
-    if (!Object.prototype.hasOwnProperty.call(json_values, key)) continue;
+  // single-auth templates and other fields
+  for (const key in jsonValues) {
+    if (!Object.prototype.hasOwnProperty.call(jsonValues, key)) continue;
     if (key === "authentication_method" || key === "authMethods") continue;
     const displayName = getDisplayNameForCredentialKey(key);
-    const def = json_values[key];
+    const def = jsonValues[key];
     if (typeof def === "boolean") {
       schemaFields[key] = Yup.boolean()
         .nullable()
         .default(false)
         .transform((v, o) => (o === undefined ? false : v));
     } else if (isTypedFileField(key)) {
-      // TypedFile fields - use mixed schema instead of string (check before null check)
+      // TypedFile fields use mixed schema instead of string.
       schemaFields[key] = Yup.mixed().required(
         `Please select a ${displayName} file`
       );
@@ -90,13 +93,15 @@ export function createValidationSchema(json_values: Record<string, any>) {
   return Yup.object().shape(schemaFields);
 }
 
-export function createEditingValidationSchema(json_values: dictionaryType) {
+export function createEditingValidationSchema(
+  jsonValues: CredentialFieldValues
+) {
   const schemaFields: { [key: string]: Yup.AnySchema } = {};
 
-  for (const key in json_values) {
-    if (Object.prototype.hasOwnProperty.call(json_values, key)) {
+  for (const key in jsonValues) {
+    if (Object.prototype.hasOwnProperty.call(jsonValues, key)) {
       if (isTypedFileField(key)) {
-        // TypedFile fields - use mixed schema for optional file uploads during editing
+        // TypedFile fields use mixed schema for optional file uploads during editing.
         schemaFields[key] = Yup.mixed().optional();
       } else {
         schemaFields[key] = Yup.string().optional();
@@ -109,9 +114,9 @@ export function createEditingValidationSchema(json_values: dictionaryType) {
 }
 
 function getAuthMethodFieldsForCredential(
-  credentialJson: dictionaryType,
-  credentialTemplate: CredentialTemplateWithAuth<dictionaryType>
-): dictionaryType {
+  credentialJson: CredentialFieldValues,
+  credentialTemplate: CredentialTemplateWithAuth<CredentialFieldValues>
+): CredentialFieldValues {
   const authMethods = credentialTemplate.authMethods ?? [];
   const storedAuthMethod =
     typeof credentialJson.authentication_method === "string"
@@ -141,7 +146,9 @@ const OAUTH_MANAGED_CREDENTIAL_KEYS = new Set([
   "token_type",
 ]);
 
-function isOAuthManagedCredentialJson(credentialJson: dictionaryType): boolean {
+function isOAuthManagedCredentialJson(
+  credentialJson: CredentialFieldValues
+): boolean {
   return Object.keys(credentialJson).some(
     (key) =>
       OAUTH_MANAGED_CREDENTIAL_KEYS.has(key) ||
@@ -154,14 +161,14 @@ function isOAuthManagedCredentialJson(credentialJson: dictionaryType): boolean {
 export function getEditableCredentialFields(
   credential: Credential<any>,
   sourceType: Credential<any>["source"] = credential.source
-): dictionaryType {
+): CredentialFieldValues {
   const credentialJson = credential.credential_json ?? {};
   if (isOAuthManagedCredentialJson(credentialJson)) {
     return {};
   }
 
   const credentialTemplate = credentialTemplates[sourceType] as
-    | dictionaryType
+    | CredentialFieldValues
     | null
     | undefined;
 
@@ -170,7 +177,7 @@ export function getEditableCredentialFields(
   }
 
   const templateWithAuth =
-    credentialTemplate as CredentialTemplateWithAuth<dictionaryType>;
+    credentialTemplate as CredentialTemplateWithAuth<CredentialFieldValues>;
   const templateFields =
     templateWithAuth.authMethods && templateWithAuth.authMethods.length > 1
       ? getAuthMethodFieldsForCredential(credentialJson, templateWithAuth)
@@ -199,16 +206,16 @@ export function canEditCredentialWithForm(
 
 export function createInitialValues(
   credential: Credential<any>,
-  credentialFields: dictionaryType = credential.credential_json
-): formType {
-  const initialValues: formType = {
+  credentialFields: CredentialFieldValues = credential.credential_json
+): CredentialFormValues {
+  const initialValues: CredentialFormValues = {
     name: credential.name || "",
   };
 
   for (const key in credentialFields) {
     // Initialize TypedFile fields as null, other fields as empty strings
     if (isTypedFileField(key)) {
-      initialValues[key] = null as any; // TypedFile fields start as null
+      initialValues[key] = null;
     } else {
       initialValues[key] = "";
     }

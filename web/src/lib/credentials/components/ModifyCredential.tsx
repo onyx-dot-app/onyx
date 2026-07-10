@@ -16,7 +16,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { Button } from "@opal/components";
-import { canEditCredentialWithForm } from "@/components/credentials/lib";
+import { canEditCredentialWithForm } from "@/lib/credentials/utils";
 interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
   editableCredentials: Credential<any>[];

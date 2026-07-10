@@ -3,9 +3,7 @@
 import { AccessType, ValidSources } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { FaKey } from "react-icons/fa";
 import { useState } from "react";
-import { FiEdit2 } from "react-icons/fi";
 import {
   deleteCredential,
   swapCredential,
@@ -13,16 +11,13 @@ import {
   updateCredentialWithPrivateKey,
 } from "@/lib/credential";
 import { toast } from "@/hooks/useToast";
-import CreateCredential from "@/components/credentials/actions/CreateCredential";
 import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
-import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
-import { Text } from "@opal/components";
+import { Card, Text } from "@opal/components";
 import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
 } from "@/app/admin/connector/[ccPairId]/lib";
 import Modal from "@/refresh-components/Modal";
-import EditCredential from "@/components/credentials/actions/EditCredential";
 import { getSourceDisplayName } from "@/lib/sources";
 import {
   ConfluenceCredentialJson,
@@ -33,10 +28,12 @@ import {
   useOAuthDetails,
 } from "@/lib/connectors/oauth";
 import { Spinner } from "@/components/Spinner";
-import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
-import { Card } from "@/components/ui/card";
 import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
 import { SvgEdit, SvgKey } from "@opal/icons";
+import CreateCredential from "@/lib/credentials/components/CreateCredential";
+import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
+import EditCredential from "@/lib/credentials/components/EditCredential";
+import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 
 export interface CredentialSectionProps {
   ccPair: CCPairFullInfo;
@@ -69,6 +66,8 @@ export default function CredentialSection({
 
     if (oauthDetails.oauth_enabled) {
       if (oauthDetails.additional_kwargs.length > 0) {
+        setShowModifyCredential(false);
+        setEditingCredential(null);
         setShowCreateCredential(true);
       } else {
         const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
@@ -78,6 +77,7 @@ export default function CredentialSection({
       }
     } else {
       setShowModifyCredential(false);
+      setEditingCredential(null);
       setShowCreateCredential(true);
     }
   };
@@ -138,7 +138,8 @@ export default function CredentialSection({
   };
 
   const onEditCredential = (credential: Credential<any>) => {
-    closeModifyCredential();
+    setShowModifyCredential(true);
+    setShowCreateCredential(false);
     setEditingCredential(credential);
   };
 
@@ -153,8 +154,14 @@ export default function CredentialSection({
   const [editingCredential, setEditingCredential] =
     useState<Credential<any> | null>(null);
 
-  const closeModifyCredential = () => {
+  const closeCredentialModal = () => {
     setShowModifyCredential(false);
+    setShowCreateCredential(false);
+    setEditingCredential(null);
+  };
+
+  const closeModifyCredential = () => {
+    closeCredentialModal();
   };
 
   const closeCreateCredential = () => {
@@ -163,8 +170,41 @@ export default function CredentialSection({
 
   const closeEditingCredential = () => {
     setEditingCredential(null);
+    setShowCreateCredential(false);
     setShowModifyCredential(true);
   };
+
+  const handleCredentialModalOpenChange = (open: boolean) => {
+    if (open) {
+      setShowModifyCredential(true);
+      return;
+    }
+
+    if (showCreateCredential) {
+      closeCreateCredential();
+      return;
+    }
+
+    if (editingCredential) {
+      closeEditingCredential();
+      return;
+    }
+
+    closeCredentialModal();
+  };
+
+  const showCredentialModal =
+    showModifyCredential || editingCredential != null || showCreateCredential;
+  const credentialModalTitle = showCreateCredential
+    ? `Create ${getSourceDisplayName(sourceType)} Credential`
+    : editingCredential
+      ? "Edit Credential"
+      : "Update Credentials";
+  const closeCurrentCredentialView = showCreateCredential
+    ? closeCreateCredential
+    : editingCredential
+      ? closeEditingCredential
+      : closeModifyCredential;
   if (!credentials || !editableCredentials) {
     return <></>;
   }
@@ -177,10 +217,10 @@ export default function CredentialSection({
       rounded-lg
       bg-background"
     >
-      <Card className="p-6">
+      <Card padding="lg" border="solid" rounding="lg">
         <div className="flex items-center">
           <div className="shrink-0 mr-3">
-            <FaKey className="h-4 w-4 text-muted-foreground" />
+            <SvgKey size={16} className="text-muted-foreground" />
           </div>
           <div className="grow flex flex-col justify-center">
             <div className="flex items-center justify-between">
@@ -220,7 +260,7 @@ export default function CredentialSection({
                   hover:text-accent-foreground
                   transition-colors"
               >
-                <FiEdit2 className="h-4 w-4" />
+                <SvgEdit size={16} />
                 <span className="sr-only">Update Credentials</span>
               </button>
             </div>
@@ -228,82 +268,60 @@ export default function CredentialSection({
         </div>
       </Card>
 
-      {showModifyCredential && (
-        <Modal open onOpenChange={closeModifyCredential}>
+      {showCredentialModal && (
+        <Modal open onOpenChange={handleCredentialModalOpenChange}>
           <Modal.Content>
             <Modal.Header
-              icon={SvgEdit}
-              title="Update Credentials"
-              onClose={closeModifyCredential}
+              icon={showCreateCredential ? SvgKey : SvgEdit}
+              title={credentialModalTitle}
+              onClose={closeCurrentCredentialView}
             />
             <Modal.Body alignItems="stretch">
-              <ModifyCredential
-                close={closeModifyCredential}
-                accessType={ccPair.access_type}
-                attachedConnector={ccPair.connector}
-                defaultedCredential={defaultedCredential}
-                credentials={credentials}
-                editableCredentials={editableCredentials}
-                onDeleteCredential={onDeleteCredential}
-                onEditCredential={(credential: Credential<any>) =>
-                  onEditCredential(credential)
-                }
-                onSwap={onSwap}
-                onCreateNew={() => makeShowCreateCredential()}
-              />
-            </Modal.Body>
-          </Modal.Content>
-        </Modal>
-      )}
-
-      {editingCredential && (
-        <Modal open onOpenChange={closeEditingCredential}>
-          <Modal.Content>
-            <Modal.Header
-              icon={SvgEdit}
-              title="Edit Credential"
-              onClose={closeEditingCredential}
-            />
-            <Modal.Body alignItems="stretch">
-              <EditCredential
-                onUpdate={onUpdateCredential}
-                credential={editingCredential}
-                sourceType={sourceType}
-                onClose={closeEditingCredential}
-              />
-            </Modal.Body>
-          </Modal.Content>
-        </Modal>
-      )}
-
-      {showCreateCredential && (
-        <Modal open onOpenChange={closeCreateCredential}>
-          <Modal.Content>
-            <Modal.Header
-              icon={SvgKey}
-              title={`Create ${getSourceDisplayName(sourceType)} Credential`}
-              onClose={closeCreateCredential}
-            />
-            <Modal.Body>
-              {oauthDetailsLoading ? (
-                <Spinner />
-              ) : (
+              {showCreateCredential ? (
                 <>
-                  {oauthDetails && oauthDetails.oauth_enabled ? (
-                    <CreateStdOAuthCredential
-                      sourceType={sourceType}
-                      additionalFields={oauthDetails.additional_kwargs}
-                    />
+                  {oauthDetailsLoading ? (
+                    <Spinner />
                   ) : (
-                    <CreateCredential
-                      sourceType={sourceType}
-                      accessType={ccPair.access_type}
-                      swapConnector={ccPair.connector}
-                      onSwap={onSwap}
-                      onClose={closeCreateCredential}
-                    />
+                    <>
+                      {oauthDetails && oauthDetails.oauth_enabled ? (
+                        <CreateStdOAuthCredential
+                          sourceType={sourceType}
+                          additionalFields={oauthDetails.additional_kwargs}
+                        />
+                      ) : (
+                        <CreateCredential
+                          sourceType={sourceType}
+                          accessType={ccPair.access_type}
+                          swapConnector={ccPair.connector}
+                          onSwap={onSwap}
+                          onClose={closeCreateCredential}
+                        />
+                      )}
+                    </>
                   )}
                 </>
+              ) : editingCredential ? (
+                <EditCredential
+                  onUpdate={onUpdateCredential}
+                  credential={editingCredential}
+                  sourceType={sourceType}
+                  onClose={closeEditingCredential}
+                />
+              ) : (
+                <ModifyCredential
+                  close={closeModifyCredential}
+                  accessType={ccPair.access_type}
+                  attachedConnector={ccPair.connector}
+                  defaultedCredential={defaultedCredential}
+                  credentials={credentials}
+                  editableCredentials={editableCredentials}
+                  onDeleteCredential={onDeleteCredential}
+                  onEditCredential={(credential: Credential<any>) =>
+                    onEditCredential(credential)
+                  }
+                  onSwap={onSwap}
+                  onCreateNew={() => makeShowCreateCredential()}
+                />
               )}
             </Modal.Body>
           </Modal.Content>

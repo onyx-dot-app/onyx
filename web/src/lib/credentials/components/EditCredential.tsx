@@ -1,7 +1,5 @@
-import { Button } from "@opal/components";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 
-import { FaNewspaper } from "react-icons/fa";
 import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@/hooks/useToast";
@@ -13,14 +11,17 @@ import {
   createEditingValidationSchema,
   createInitialValues,
   getEditableCredentialFields,
-} from "@/components/credentials/lib";
-import { dictionaryType, formType } from "@/components/credentials/types";
+} from "@/lib/credentials/utils";
 import { isTypedFileField } from "@/lib/connectors/fileTypes";
-import { SvgTrash } from "@opal/icons";
+import { SvgCheckSquare, SvgTrash } from "@opal/icons";
+import type {
+  CredentialFieldValues,
+  CredentialFormValues,
+} from "@/lib/credentials/types";
 import type { ValidSources } from "@/lib/types";
 
 export interface EditCredentialProps {
-  credential: Credential<dictionaryType>;
+  credential: Credential<CredentialFieldValues>;
   sourceType: ValidSources;
   onClose: () => void;
   onUpdate: (
@@ -49,8 +50,8 @@ export default function EditCredential({
   );
 
   const handleSubmit = async (
-    values: formType,
-    formikHelpers: FormikHelpers<formType>
+    values: CredentialFormValues,
+    formikHelpers: FormikHelpers<CredentialFormValues>
   ) => {
     formikHelpers.setSubmitting(true);
     try {
@@ -112,7 +113,11 @@ export default function EditCredential({
               <Button onClick={() => resetForm()} icon={SvgTrash}>
                 Reset Changes
               </Button>
-              <Button disabled={isSubmitting} type="submit" icon={FaNewspaper}>
+              <Button
+                disabled={isSubmitting}
+                type="submit"
+                icon={SvgCheckSquare}
+              >
                 Update
               </Button>
             </div>
