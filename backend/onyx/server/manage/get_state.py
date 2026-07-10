@@ -41,10 +41,11 @@ _SSO_AUTHORIZE_ROUTER = {
 
 
 def _fetch_sso_provider_options() -> list[SSOProviderOption]:
-    # Single-tenant only. /auth/type runs before any tenant context, so a
-    # multi-tenant lookup has no tenant to key on, and cloud does not use the
-    # provider table.
-    if MULTI_TENANT or AUTH_TYPE == AuthType.CLOUD:
+    # Single-tenant BASIC only. /auth/type runs before any tenant context, so a
+    # multi-tenant lookup has no tenant to key on, and only a BASIC deployment
+    # renders the provider buttons (legacy oidc/saml auto-redirect to the one IdP
+    # and never consume this list), so the query is pure overhead elsewhere.
+    if MULTI_TENANT or AUTH_TYPE != AuthType.BASIC:
         return []
     with get_session_with_shared_schema() as db_session:
         return [
@@ -79,7 +80,10 @@ async def get_auth_type(response: Response) -> AuthTypeResponse:
     # Cache only after bootstrap; the first user flow depends on a live
     # has_users flag so avoid serving a stale redirect. no-store in that
     # case prevents an intermediate CDN with a default TTL from pinning
-    # has_users=false past the first signup.
+    # has_users=false past the first signup. sso_providers rides this cache
+    # too, so a disabled provider's button can linger up to 60s. Clicking it
+    # still fails closed (authorize resolves enabled_only), so this is a UX
+    # blip, not an access path. Reduce the window if that is too slow.
     response.headers["Cache-Control"] = (
         "public, max-age=60" if has_users else "no-store"
     )
