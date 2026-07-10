@@ -55,6 +55,10 @@ Radix Dialog compound, the Figma Modal. `Modal` is the Radix root (`open`, `onOp
 
 Right-aligned action row. `BasicModalFooter` adds the common layout: optional `left` slot plus right-aligned `cancel`/`submit`.
 
+## Positioning
+
+When a `[data-main-container]` element is present (the content area beside the sidebar), the modal centers on it instead of the viewport, and falls back to viewport centering on medium screens or when the container is absent.
+
 ## Deferred
 
-Container-relative centering (the app-side `useContainerCenter` behavior) and the remaining Figma header/footer content variants (Search, Card, Panel, Checkbox, Message) are follow-ups.
+The remaining Figma header/footer content variants (Search, Card, Panel, Checkbox, Message) are follow-ups.

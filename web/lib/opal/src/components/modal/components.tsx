@@ -12,6 +12,7 @@ import { Button } from "@opal/components";
 import { Content, Section, type SectionProps } from "@opal/layouts";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
+import useContainerCenter from "@opal/hooks/useContainerCenter";
 
 // ---------------------------------------------------------------------------
 // Root + Overlay
@@ -216,6 +217,10 @@ const ModalContent = React.forwardRef<
       [ref, contentRef]
     );
 
+    // Center on [data-main-container] when present (the content area beside
+    // the sidebar) instead of the viewport.
+    const { centerX, centerY, hasContainerCenter } = useContainerCenter();
+
     const isTop = position === "top";
 
     const animationClasses = cn(
@@ -226,9 +231,29 @@ const ModalContent = React.forwardRef<
       "duration-200"
     );
 
+    const containerStyle: React.CSSProperties | undefined =
+      hasContainerCenter && !isTop
+        ? ({
+            left: centerX,
+            top: centerY,
+            "--tw-enter-translate-x": "-50%",
+            "--tw-exit-translate-x": "-50%",
+            "--tw-enter-translate-y": "-50%",
+            "--tw-exit-translate-y": "-50%",
+          } as React.CSSProperties)
+        : hasContainerCenter && isTop
+          ? ({
+              left: centerX,
+              "--tw-enter-translate-x": "-50%",
+              "--tw-exit-translate-x": "-50%",
+            } as React.CSSProperties)
+          : undefined;
+
     const positionClasses = cn(
-      "fixed -translate-x-1/2 left-1/2",
-      isTop ? "top-[72px]" : "-translate-y-1/2 top-1/2"
+      "fixed -translate-x-1/2",
+      isTop
+        ? cn("top-[72px]", !hasContainerCenter && "left-1/2")
+        : cn("-translate-y-1/2", !hasContainerCenter && "left-1/2 top-1/2")
     );
 
     // Internal handlers are defined after the props spread so callers cannot
@@ -286,6 +311,7 @@ const ModalContent = React.forwardRef<
               {...dialogEventHandlers}
             >
               <div
+                style={containerStyle}
                 className={cn(
                   positionClasses,
                   "z-modal",
@@ -304,6 +330,7 @@ const ModalContent = React.forwardRef<
           ) : (
             <DialogPrimitive.Content
               ref={handleRef}
+              style={containerStyle}
               className={cn(
                 positionClasses,
                 "overflow-hidden",
