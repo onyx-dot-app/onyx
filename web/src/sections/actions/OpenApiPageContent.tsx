@@ -2,7 +2,7 @@
 
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import OpenAPIAuthenticationModal, {
   AuthMethod,
   OpenAPIAuthFormValues,

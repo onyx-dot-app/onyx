@@ -22,7 +22,7 @@ import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { LlmManager } from "@/lib/hooks";
 import { RegenerationFactory } from "@/app/app/message/messageComponents/AgentMessage";
 import useFeedbackController from "@/hooks/useFeedbackController";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";

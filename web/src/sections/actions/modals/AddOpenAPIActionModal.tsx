@@ -2,7 +2,7 @@
 
 import { markdown } from "@opal/utils";
 import Link from "next/link";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { InputVertical, toast } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
@@ -19,7 +19,7 @@ import {
 import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { useModal } from "@opal/components";
 import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
 import {

@@ -6,7 +6,7 @@ import { useUser } from "@/providers/UserProvider";
 import { toast } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
 import { getPanelOrigin } from "@/lib/extension/utils";

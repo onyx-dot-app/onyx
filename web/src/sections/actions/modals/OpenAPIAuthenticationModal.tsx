@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Button, Divider, MessageCard } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { InputTypeIn } from "@opal/components";

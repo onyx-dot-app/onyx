@@ -1,4 +1,4 @@
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import {
   Table,
   TableBody,

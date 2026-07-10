@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { Button, Text } from "@opal/components";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import {
   SvgClock,
   SvgEdit,

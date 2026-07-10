@@ -11,7 +11,7 @@ import { ContentAction } from "@opal/layouts";
 import { formatDurationSeconds } from "@opal/time";
 import { noProp } from "@/lib/utils";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 
 // =============================================================================
 // MemoryTagWithTooltip

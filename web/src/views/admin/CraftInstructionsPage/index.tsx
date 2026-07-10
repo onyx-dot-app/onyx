@@ -14,7 +14,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
 import { Section } from "@/layouts/general-layouts";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
