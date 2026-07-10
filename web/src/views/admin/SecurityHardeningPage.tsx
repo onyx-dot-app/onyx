@@ -48,8 +48,6 @@ interface SecuritySettings {
   password_require_lowercase: boolean;
   password_require_digit: boolean;
   password_require_special_char: boolean;
-  password_signup_enabled: boolean;
-  password_login_enabled: boolean;
 }
 
 // Write shape: a partial patch. The backend treats only the keys present in the
@@ -259,40 +257,6 @@ export default function SecurityHardeningPage() {
               )}
             </Section>
           </Card>
-
-          {/* Password lockdown (single-tenant only). Two-stage by design so an
-              admin can't lock themselves out: close signup, confirm SSO, then
-              close login. */}
-          {!isMultiTenant && (
-            <Card border="solid" rounding="lg">
-              <Section>
-                <Content
-                  title="Password Login"
-                  description="Close password auth once SSO works. Turn off signup first, confirm your SSO login, then turn off login so you never lock yourself out."
-                  sizePreset="main-ui"
-                  variant="section"
-                />
-
-                <ToggleRow
-                  title="Allow Password Signup"
-                  description="When off, new accounts are created only by signing in through an SSO provider."
-                  checked={draft.password_signup_enabled}
-                  onCheckedChange={(checked) =>
-                    void saveSettings({ password_signup_enabled: checked })
-                  }
-                />
-
-                <ToggleRow
-                  title="Allow Password Login"
-                  description="When off, everyone signs in through SSO. Requires at least one enabled SSO provider."
-                  checked={draft.password_login_enabled}
-                  onCheckedChange={(checked) =>
-                    void saveSettings({ password_login_enabled: checked })
-                  }
-                />
-              </Section>
-            </Card>
-          )}
 
           {/* Password policy (single-tenant only) */}
           {!isMultiTenant && (

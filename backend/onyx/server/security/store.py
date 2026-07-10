@@ -1,8 +1,6 @@
 import threading
 import time
 from collections.abc import Callable
-from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import Any
 
 from cachetools import TTLCache
@@ -14,7 +12,6 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.security_settings import load_overrides as _db_load_overrides
 from onyx.db.security_settings import upsert_overrides as _db_upsert_overrides
-from onyx.db.sso_provider import fetch_sso_providers
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
@@ -96,11 +93,6 @@ def _build_env_defaults() -> SecuritySettings:
         password_require_lowercase=_cfg.PASSWORD_REQUIRE_LOWERCASE,
         password_require_digit=_cfg.PASSWORD_REQUIRE_DIGIT,
         password_require_special_char=_cfg.PASSWORD_REQUIRE_SPECIAL_CHAR,
-        # Not env-configurable: a fresh instance must boot with password auth on
-        # (no SSO provider exists yet), and turning either off is a guarded
-        # runtime admin action so it can't strand the instance.
-        password_signup_enabled=True,
-        password_login_enabled=True,
     )
 
 
@@ -165,29 +157,15 @@ def _apply_present_keys(
     return SecuritySettingsOverrides.model_validate(merged)
 
 
-def _assert_login_path_survives(effective: SecuritySettings) -> None:
-    """Second lockdown stage guard: disabling password login is only safe once
-    an SSO provider can let the admin back in. Blocks the save that would leave
-    the instance with no working login path."""
-    if effective.password_login_enabled:
-        return
-    with get_session_with_current_tenant() as db_session:
-        if not fetch_sso_providers(db_session, enabled_only=True):
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "Enable an SSO provider before turning off password login, "
-                "otherwise no one can sign in.",
-            )
+def apply_patch(
+    patch: SecuritySettingsOverrides, present_keys: set[str]
+) -> SecuritySettings:
+    """Public write entry point. Acquires the Redis lock for the full
+    read-modify-write so concurrent writers can't clobber each other.
 
-
-@contextmanager
-def security_settings_write_lock() -> Iterator[None]:
-    """Serialize any mutation whose safety depends on the joint state of the
-    security settings and the SSO provider list. Both lockout guards run under
-    this same lock so neither can pass on a value the other is mid-changing.
-
-    Raises ``OnyxError(CONFLICT)`` if a competing writer holds it past the wait
-    window.
+    Raises ``OnyxError(CONFLICT)`` if a competing writer holds the lock past
+    the wait window, and ``OnyxError(INVALID_INPUT)`` if the merged effective
+    state would violate a model invariant.
     """
     cache = get_cache_backend()
     lock = cache.lock(
@@ -199,31 +177,6 @@ def security_settings_write_lock() -> Iterator[None]:
             "Another security settings save is in progress, please retry.",
         )
     try:
-        yield
-    finally:
-        # Lease may have expired during the write. Unconditional release would
-        # raise LockNotOwnedError and mask a successful save as a 500.
-        if lock.owned():
-            lock.release()
-
-
-def load_effective_uncached() -> SecuritySettings:
-    """Fresh, cache-bypassing effective settings. Use inside the write lock when
-    a decision must see the latest persisted value, not a TTL-stale one."""
-    return merge_with_env(_load_raw_overrides_unlocked())
-
-
-def apply_patch(
-    patch: SecuritySettingsOverrides, present_keys: set[str]
-) -> SecuritySettings:
-    """Public write entry point. Holds the shared write lock for the full
-    read-modify-write so concurrent writers can't clobber each other.
-
-    Raises ``OnyxError(CONFLICT)`` if a competing writer holds the lock past
-    the wait window, and ``OnyxError(INVALID_INPUT)`` if the merged effective
-    state would violate a model invariant.
-    """
-    with security_settings_write_lock():
         existing = _load_raw_overrides_unlocked()
         merged = _apply_present_keys(existing, patch, present_keys)
         try:
@@ -231,9 +184,13 @@ def apply_patch(
             effective = merge_with_env(merged)
         except ValidationError as e:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
-        _assert_login_path_survives(effective)
         _store_overrides_unlocked(merged)
         return effective
+    finally:
+        # Lease may have expired during the write. Unconditional release would
+        # raise LockNotOwnedError and mask a successful save as a 500.
+        if lock.owned():
+            lock.release()
 
 
 def _current_tenant_id_or_default() -> str:
