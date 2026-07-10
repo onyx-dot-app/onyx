@@ -63,7 +63,7 @@ export async function forgotPassword(email: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch(() => ({}));
     const errorMessage =
       error?.detail || "An error occurred during password reset.";
     throw new Error(errorMessage);
@@ -81,7 +81,7 @@ export async function resetPassword(
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch(() => ({}));
     if (error?.detail?.code === "RESET_PASSWORD_INVALID_PASSWORD") {
       throw new Error(error.detail.reason || "Invalid password");
     }
@@ -91,14 +91,17 @@ export async function resetPassword(
   }
 }
 
-export async function requestEmailVerification(
-  email: string
-): Promise<Response> {
-  return fetch("/api/auth/request-verify-token", {
+export async function requestEmailVerification(email: string): Promise<void> {
+  const response = await fetch("/api/auth/request-verify-token", {
     headers: { "Content-Type": "application/json" },
     method: "POST",
     body: JSON.stringify({ email }),
   });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error?.detail || "Failed to request email verification.");
+  }
 }
 
 export async function verifyEmail(token: string): Promise<void> {
@@ -150,7 +153,7 @@ export async function impersonateUser(
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch(() => ({}));
     throw new Error(error?.detail || "Failed to impersonate user");
   }
 }
