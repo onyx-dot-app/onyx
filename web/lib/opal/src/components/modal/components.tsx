@@ -204,14 +204,17 @@ const ModalContent = React.forwardRef<
       [preventAccidentalClose, hasAttemptedClose]
     );
 
-    const handleRef = (node: HTMLDivElement | null) => {
-      if (typeof ref === "function") {
-        ref(node);
-      } else if (ref) {
-        ref.current = node;
-      }
-      contentRef(node);
-    };
+    const handleRef = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        if (typeof ref === "function") {
+          ref(node);
+        } else if (ref) {
+          ref.current = node;
+        }
+        contentRef(node);
+      },
+      [ref, contentRef]
+    );
 
     const isTop = position === "top";
 
@@ -228,7 +231,11 @@ const ModalContent = React.forwardRef<
       isTop ? "top-[72px]" : "-translate-y-1/2 top-1/2"
     );
 
+    // Internal handlers are defined after the props spread so callers cannot
+    // replace them. Each forwards to the caller's handler.
     const dialogEventHandlers = {
+      ...(!hasDescription && { "aria-describedby": undefined }),
+      ...props,
       onOpenAutoFocus: (e: Event) => {
         resetState();
         props.onOpenAutoFocus?.(e);
@@ -237,10 +244,22 @@ const ModalContent = React.forwardRef<
         resetState();
         props.onCloseAutoFocus?.(e);
       },
-      onEscapeKeyDown: handleInteractOutside,
-      onPointerDownOutside: handleInteractOutside,
-      ...(!hasDescription && { "aria-describedby": undefined }),
-      ...props,
+      onEscapeKeyDown: (e: KeyboardEvent) => {
+        handleInteractOutside(e);
+        props.onEscapeKeyDown?.(e);
+      },
+      onPointerDownOutside: (
+        e: Parameters<
+          NonNullable<
+            React.ComponentPropsWithoutRef<
+              typeof DialogPrimitive.Content
+            >["onPointerDownOutside"]
+          >
+        >[0]
+      ) => {
+        handleInteractOutside(e);
+        props.onPointerDownOutside?.(e);
+      },
     };
 
     const cardClasses = cn(
