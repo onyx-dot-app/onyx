@@ -21,12 +21,11 @@ import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
 import {
   validateInternalRedirect,
-  passwordMeetsMinLength,
-  passwordMeetsMaxLength,
   passwordHasUppercase,
   passwordHasLowercase,
   passwordHasDigit,
   passwordHasSpecialChar,
+  passwordMeetsLengthRequirements,
 } from "@/lib/auth/utils";
 import {
   AuthLayouts,
@@ -231,17 +230,16 @@ export function EmailPasswordForm({
   };
 
   const validationSchema = useMemo(() => {
-    let passwordSchema = Yup.string()
-      .test(
-        "min-length",
-        `Password must be at least ${passwordMinLength} characters`,
-        (v) => passwordMeetsMinLength(v ?? "", passwordMinLength)
-      )
-      .test(
-        "max-length",
-        `Password must be at most ${passwordMaxLength} characters`,
-        (v) => passwordMeetsMaxLength(v ?? "", passwordMaxLength)
-      );
+    let passwordSchema = Yup.string().test(
+      "length",
+      `Password must be between ${passwordMinLength}-${passwordMaxLength} characters`,
+      (v) =>
+        passwordMeetsLengthRequirements(
+          v ?? "",
+          passwordMinLength,
+          passwordMaxLength
+        )
+    );
 
     if (passwordRequireUppercase)
       passwordSchema = passwordSchema.test(
@@ -446,12 +444,12 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
   const rules = (
     [
       {
-        label: `At least ${passwordMinLength} characters`,
-        met: passwordMeetsMinLength(password, passwordMinLength),
-      },
-      {
-        label: `At most ${passwordMaxLength} characters`,
-        met: passwordMeetsMaxLength(password, passwordMaxLength),
+        label: `${passwordMinLength}~${passwordMaxLength} characters`,
+        met: passwordMeetsLengthRequirements(
+          password,
+          passwordMinLength,
+          passwordMaxLength
+        ),
       },
       passwordRequireUppercase && {
         label: "Contains uppercase letter.",

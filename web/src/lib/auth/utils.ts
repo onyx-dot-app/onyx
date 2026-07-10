@@ -2,12 +2,12 @@
 // Password predicate functions
 // ---------------------------------------------------------------------------
 
-export function passwordMeetsMinLength(password: string, min: number): boolean {
-  return password.length >= min;
-}
-
-export function passwordMeetsMaxLength(password: string, max: number): boolean {
-  return password.length <= max;
+export function passwordMeetsLengthRequirements(
+  password: string,
+  min: number,
+  max: number
+): boolean {
+  return password.length >= min && password.length <= max;
 }
 
 export function passwordHasUppercase(password: string): boolean {
