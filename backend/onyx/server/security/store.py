@@ -187,7 +187,7 @@ def apply_patch(
         _store_overrides_unlocked(merged)
         return effective
     finally:
-        # Lease may have expired during the write; unconditional release would
+        # Lease may have expired during the write. Unconditional release would
         # raise LockNotOwnedError and mask a successful save as a 500.
         if lock.owned():
             lock.release()
