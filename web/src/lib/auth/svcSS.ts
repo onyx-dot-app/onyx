@@ -3,6 +3,7 @@ import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { AuthTypeMetadata } from "@/lib/auth/types";
+import type { SSOProviderType } from "@/lib/auth/types";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
   const res = await fetch(buildUrl("/auth/type"));
@@ -17,6 +18,12 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
     password_min_length: number;
     has_users: boolean;
     oauth_enabled: boolean;
+    sso_providers?: {
+      name: string;
+      display_name: string;
+      provider_type: SSOProviderType;
+      authorize_url: string;
+    }[];
   } = await res.json();
 
   const authType: AuthType = NEXT_PUBLIC_CLOUD_ENABLED
@@ -33,6 +40,12 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
     passwordMinLength: data.password_min_length,
     hasUsers: data.has_users,
     oauthEnabled: data.oauth_enabled,
+    ssoProviders: (data.sso_providers ?? []).map((provider) => ({
+      name: provider.name,
+      displayName: provider.display_name,
+      providerType: provider.provider_type,
+      authorizeUrl: provider.authorize_url,
+    })),
   };
 }
 
