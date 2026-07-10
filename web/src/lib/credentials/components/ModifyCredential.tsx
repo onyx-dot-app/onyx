@@ -16,6 +16,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { Button } from "@opal/components";
+import { canEditCredentialWithForm } from "@/lib/credentials/utils";
 interface CredentialSelectionTableProps {
   credentials: Credential<any>[];
   editableCredentials: Credential<any>[];
@@ -91,6 +92,8 @@ function CredentialSelectionTable({
               const editable = editableCredentials.some(
                 (editableCredential) => editableCredential.id === credential.id
               );
+              const formEditable =
+                editable && canEditCredentialWithForm(credential);
               return (
                 <tr
                   key={credential.id}
@@ -126,9 +129,8 @@ function CredentialSelectionTable({
                       }}
                       icon={SvgTrash}
                     />
-                    {onEditCredential && (
+                    {onEditCredential && formEditable && (
                       <button
-                        disabled={!editable}
                         onClick={() => onEditCredential(credential)}
                         className="cursor-pointer my-auto"
                         aria-label="Edit credential"
@@ -227,7 +229,7 @@ export default function ModifyCredential({
         </Modal>
       )}
 
-      <div className="mb-0">
+      <div className="mb-0 w-full">
         <Text as="p" className="mb-4">
           Select a credential as needed! Ensure that you have selected a
           credential with the proper permissions for this connector!

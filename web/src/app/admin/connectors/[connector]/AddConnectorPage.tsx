@@ -14,8 +14,9 @@ import { submitFiles } from "@/app/admin/connectors/[connector]/pages/utils/file
 import { submitGoogleSite } from "@/app/admin/connectors/[connector]/pages/utils/google_site";
 import AdvancedFormPage from "@/app/admin/connectors/[connector]/pages/Advanced";
 import DynamicConnectionForm from "@/app/admin/connectors/[connector]/pages/DynamicConnectorCreationForm";
-import CreateCredential from "@/components/credentials/actions/CreateCredential";
-import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
+import CreateCredential from "@/lib/credentials/components/CreateCredential";
+import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
+import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 import {
   ConfigurableSources,
   oauthSupportedSources,
@@ -52,7 +53,6 @@ import {
   getConnectorOauthRedirectUrl,
   useOAuthDetails,
 } from "@/lib/connectors/oauth";
-import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
 import { Button } from "@opal/components";
 import { Section } from "@opal/layouts";

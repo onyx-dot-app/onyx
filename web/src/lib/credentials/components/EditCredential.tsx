@@ -1,7 +1,5 @@
-import { Button } from "@opal/components";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 
-import { FaNewspaper, FaTrash } from "react-icons/fa";
 import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@/hooks/useToast";
@@ -9,12 +7,22 @@ import {
   Credential,
   getDisplayNameForCredentialKey,
 } from "@/lib/connectors/credentials";
-import { createEditingValidationSchema, createInitialValues } from "../lib";
-import { dictionaryType, formType } from "../types";
+import {
+  createEditingValidationSchema,
+  createInitialValues,
+  getEditableCredentialFields,
+} from "@/lib/credentials/utils";
 import { isTypedFileField } from "@/lib/connectors/fileTypes";
-import { SvgTrash } from "@opal/icons";
+import { SvgCheckSquare, SvgTrash } from "@opal/icons";
+import type {
+  CredentialFieldValues,
+  CredentialFormValues,
+} from "@/lib/credentials/types";
+import type { ValidSources } from "@/lib/types";
+
 export interface EditCredentialProps {
-  credential: Credential<dictionaryType>;
+  credential: Credential<CredentialFieldValues>;
+  sourceType: ValidSources;
   onClose: () => void;
   onUpdate: (
     selectedCredentialId: Credential<any>,
@@ -25,17 +33,25 @@ export interface EditCredentialProps {
 
 export default function EditCredential({
   credential,
+  sourceType,
   onClose,
   onUpdate,
 }: EditCredentialProps) {
-  const validationSchema = createEditingValidationSchema(
-    credential.credential_json
+  const editableCredentialFields = getEditableCredentialFields(
+    credential,
+    sourceType
   );
-  const initialValues = createInitialValues(credential);
+  const validationSchema = createEditingValidationSchema(
+    editableCredentialFields
+  );
+  const initialValues = createInitialValues(
+    credential,
+    editableCredentialFields
+  );
 
   const handleSubmit = async (
-    values: formType,
-    formikHelpers: FormikHelpers<formType>
+    values: CredentialFormValues,
+    formikHelpers: FormikHelpers<CredentialFormValues>
   ) => {
     formikHelpers.setSubmitting(true);
     try {
@@ -49,7 +65,7 @@ export default function EditCredential({
   };
 
   return (
-    <div className="flex flex-col gap-y-6">
+    <div className="flex w-full flex-col gap-y-6">
       <Text as="p">
         Ensure that you update to a credential with the proper permissions!
       </Text>
@@ -60,7 +76,7 @@ export default function EditCredential({
         onSubmit={handleSubmit}
       >
         {({ isSubmitting, resetForm }) => (
-          <Form>
+          <Form className="flex w-full flex-col gap-y-4">
             <TextFormField
               includeRevert
               name="name"
@@ -68,7 +84,7 @@ export default function EditCredential({
               label="Name (optional):"
             />
 
-            {Object.entries(credential.credential_json).map(([key, value]) =>
+            {Object.entries(editableCredentialFields).map(([key, value]) =>
               isTypedFileField(key) ? (
                 <TypedFileUploadFormField
                   key={key}
@@ -80,11 +96,12 @@ export default function EditCredential({
                   includeRevert
                   key={key}
                   name={key}
-                  placeholder={value as string}
+                  placeholder={value == null ? undefined : String(value)}
                   label={getDisplayNameForCredentialKey(key)}
                   type={
                     key.toLowerCase().includes("token") ||
-                    key.toLowerCase().includes("password")
+                    key.toLowerCase().includes("password") ||
+                    key.toLowerCase().includes("secret")
                       ? "password"
                       : "text"
                   }
@@ -96,7 +113,11 @@ export default function EditCredential({
               <Button onClick={() => resetForm()} icon={SvgTrash}>
                 Reset Changes
               </Button>
-              <Button disabled={isSubmitting} type="submit" icon={FaNewspaper}>
+              <Button
+                disabled={isSubmitting}
+                type="submit"
+                icon={SvgCheckSquare}
+              >
                 Update
               </Button>
             </div>
