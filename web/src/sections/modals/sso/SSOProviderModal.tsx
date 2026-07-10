@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { Button, Text } from "@opal/components";
@@ -40,7 +40,7 @@ export interface SSOProviderModalProps {
 // Config values are keyed dynamically (config.<field name>), so they live in a
 // nested map Formik addresses by path while the fixed fields stay typed.
 interface SSOProviderFormValues {
-  provider_type: string;
+  provider_type: SSOProviderType;
   name: string;
   display_name: string;
   config: Record<string, string>;
@@ -115,43 +115,46 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
     allowed_email_domains: provider?.allowed_email_domains ?? [],
   };
 
-  // A config field is required whenever the selected type declares it non-
-  // optional. On edit the masked value is prefilled, so "required" is satisfied
-  // without re-entry and clearing a required field is still blocked.
-  const configSchema: Record<string, Yup.StringSchema> = {};
-  for (const field of ALL_CONFIG_FIELDS) {
-    const requiredTypes = CREATABLE_SSO_PROVIDER_TYPES.filter((type) =>
-      CONFIG_FIELDS_BY_TYPE[type].some(
-        (candidate) => candidate.name === field.name && !candidate.optional
-      )
-    );
-    configSchema[field.name] = Yup.string().when("provider_type", {
-      is: (type: string) => requiredTypes.includes(type as SSOProviderType),
-      then: (schema) => schema.required(`${field.label} is required`),
-      otherwise: (schema) => schema.optional(),
-    });
-  }
+  // Derived purely from module-level constants, so it's built once. A config
+  // field is required whenever the selected type declares it non-optional. On
+  // edit the masked value is prefilled, so "required" is satisfied without
+  // re-entry and clearing a required field is still blocked.
+  const validationSchema = useMemo(() => {
+    const configSchema: Record<string, Yup.StringSchema> = {};
+    for (const field of ALL_CONFIG_FIELDS) {
+      const requiredTypes = CREATABLE_SSO_PROVIDER_TYPES.filter((type) =>
+        CONFIG_FIELDS_BY_TYPE[type].some(
+          (candidate) => candidate.name === field.name && !candidate.optional
+        )
+      );
+      configSchema[field.name] = Yup.string().when("provider_type", {
+        is: (type: string) => requiredTypes.includes(type as SSOProviderType),
+        then: (schema) => schema.required(`${field.label} is required`),
+        otherwise: (schema) => schema.optional(),
+      });
+    }
 
-  const validationSchema = Yup.object({
-    provider_type: Yup.string()
-      .oneOf(CREATABLE_SSO_PROVIDER_TYPES)
-      .required("Provider type is required"),
-    name: Yup.string()
-      .required("Name is required")
-      .matches(
-        /^[a-z0-9-]+$/,
-        "Use lowercase letters, numbers, and hyphens only"
-      ),
-    display_name: Yup.string().required("Display name is required"),
-    config: Yup.object(configSchema),
-    allowed_email_domains: Yup.array().of(Yup.string()).optional(),
-  });
+    return Yup.object({
+      provider_type: Yup.string()
+        .oneOf(CREATABLE_SSO_PROVIDER_TYPES)
+        .required("Provider type is required"),
+      name: Yup.string()
+        .required("Name is required")
+        .matches(
+          /^[a-z0-9-]+$/,
+          "Use lowercase letters, numbers, and hyphens only"
+        ),
+      display_name: Yup.string().required("Display name is required"),
+      config: Yup.object(configSchema),
+      allowed_email_domains: Yup.array().of(Yup.string()).optional(),
+    });
+  }, []);
 
   async function handleSubmit(
     values: SSOProviderFormValues,
     { setSubmitting }: { setSubmitting: (isSubmitting: boolean) => void }
   ) {
-    const providerType = values.provider_type as SSOProviderType;
+    const providerType = values.provider_type;
     const config = buildConfig(providerType, values);
     try {
       if (!isEditing) {
@@ -205,7 +208,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
             dirty,
             isValid,
           }) => {
-            const providerType = values.provider_type as SSOProviderType;
+            const providerType = values.provider_type;
             const providerTypeIcon = SSO_PROVIDER_DETAILS[providerType].icon;
             const domainChips: ChipItem[] = values.allowed_email_domains.map(
               (domain) => ({ id: domain, label: domain })
