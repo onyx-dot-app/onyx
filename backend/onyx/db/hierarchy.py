@@ -107,6 +107,7 @@ def ensure_source_node_exists(
         node_type=HierarchyNodeType.SOURCE,
         document_id=None,
         parent_id=None,  # SOURCE nodes have no parent
+        is_public=True,
     )
 
     db_session.add(source_node)
