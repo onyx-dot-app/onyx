@@ -252,6 +252,12 @@ export const ADMIN_ROUTES = {
     title: "Security & Hardening",
     sidebarLabel: "Security & Hardening",
   },
+  SSO_PROVIDERS: {
+    path: "/admin/sso-providers",
+    icon: SvgUserKey,
+    title: "SSO Providers",
+    sidebarLabel: "SSO Providers",
+  },
   // Prefix-only entries used for layout matching — not rendered as sidebar
   // items or page headers.
   DOCUMENTS: {
