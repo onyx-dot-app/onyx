@@ -201,6 +201,42 @@ def test_sso_provider_crud_masks_and_restores_secrets(
     assert is_masked_credential(disabled_provider["config"]["client_secret"]) is True
 
 
+def test_update_partial_config_preserves_stored_keys(
+    client: TestClient,
+    db_session: Session,
+    provider_names: list[str],
+) -> None:
+    """A PATCH whose config omits a stored key must not erase it. The omitted
+    openid_config_url survives, the sent client_id updates, and the masked
+    client_secret restores the stored value."""
+    name = _new_provider_name(provider_names)
+    create_response = client.post(
+        "/admin/sso/provider",
+        json=_build_oidc_request(name, "super-secret-value"),
+    )
+    assert create_response.status_code == 200
+    provider_names.append(name)
+    provider_id = create_response.json()["id"]
+    masked_secret = create_response.json()["config"]["client_secret"]
+
+    patch_response = client.patch(
+        f"/admin/sso/provider/{provider_id}",
+        json={"config": {"client_id": "new-client-id", "client_secret": masked_secret}},
+    )
+    assert patch_response.status_code == 200
+
+    db_session.expire_all()
+    stored = db_session.get(SSOProvider, provider_id)
+    assert stored is not None and stored.config is not None
+    config = stored.config.get_value(apply_mask=False)
+    assert config["client_id"] == "new-client-id"
+    assert config["client_secret"] == "super-secret-value"
+    assert (
+        config["openid_config_url"]
+        == "https://idp.example.com/.well-known/openid-configuration"
+    )
+
+
 def test_create_rejects_masked_credentials(
     client: TestClient,
     db_session: Session,

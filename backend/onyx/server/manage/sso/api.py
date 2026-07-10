@@ -143,7 +143,12 @@ def update_sso_provider_endpoint(
         stored_config = (
             provider.config.get_value(apply_mask=False) if provider.config else {}
         )
-        merged_config = _restore_masked_config(request.config, stored_config)
+        # Overlay only the keys the caller sent so a partial payload can't drop
+        # stored config. Masked placeholders restore the stored value in place.
+        merged_config = {
+            **stored_config,
+            **_restore_masked_config(request.config, stored_config),
+        }
         reject_masked_credentials(merged_config)
         validate_sso_config(provider.provider_type, merged_config)
 
@@ -191,6 +196,8 @@ def set_sso_provider_enabled_endpoint(
                     "Re-enable password login before disabling the last SSO "
                     "provider, otherwise no one can sign in.",
                 )
+        # Commits inside the lock (set_sso_provider_enabled), so the login-toggle
+        # guard can never acquire the lock and read a pre-disable provider state.
         provider = _set_enabled_or_raise(db_session, provider_id, False)
 
     return SSOProviderResponse.from_model(provider, WEB_DOMAIN)
