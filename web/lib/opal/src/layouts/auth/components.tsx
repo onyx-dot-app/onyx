@@ -14,6 +14,8 @@ import { Content } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgSimpleLoader } from "@opal/icons";
 
+const ICON_SIZE_PX = 44;
+
 // ---------------------------------------------------------------------------
 // Root — screen-centering wrapper for auth pages
 // ---------------------------------------------------------------------------
@@ -51,7 +53,7 @@ function Card({
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <div className="p-0.5">
-              <Icon size={48} />
+              <Icon size={ICON_SIZE_PX} />
             </div>
             <Content
               sizePreset="headline"
