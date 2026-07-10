@@ -15,7 +15,38 @@ type IconContainerSize =
 
 type IconContainerType = "default" | "entity" | "action";
 
-interface IconContainerProps {
+/**
+ * Content union: a bare glyph, the light circle around a required icon, or
+ * the dark circle with the required name's initial. Invalid combinations
+ * (an avatar circle without its content) are type errors.
+ */
+type IconContainerContentProps =
+  | {
+      avatar?: undefined;
+
+      /**
+       * Glyph for the bare icon content. Logo components from `@opal/logos`
+       * work here too.
+       */
+      icon?: IconFunctionComponent;
+      name?: never;
+    }
+  | {
+      /** Light circle around `icon`. */
+      avatar: "icon";
+      icon: IconFunctionComponent;
+      name?: never;
+    }
+  | {
+      /** Dark circle with the initial of `name`. */
+      avatar: "user";
+
+      /** Initial source (first character after trim, uppercased). */
+      name: string;
+      icon?: never;
+    };
+
+type IconContainerProps = IconContainerContentProps & {
   /** Size preset, keyed to the line-height scale of the matching text role. */
   size?: IconContainerSize;
 
@@ -25,22 +56,7 @@ interface IconContainerProps {
    * as a hook for interactive contexts.
    */
   type?: IconContainerType;
-
-  /**
-   * Glyph for the bare icon content, or the circle's glyph with
-   * `avatar="icon"`. Logo components from `@opal/logos` work here too.
-   */
-  icon?: IconFunctionComponent;
-
-  /**
-   * Renders the round avatar: `"user"` is the dark circle with the initial
-   * of `name`, `"icon"` is the light circle around `icon`.
-   */
-  avatar?: "user" | "icon";
-
-  /** Initial source for `avatar="user"`. */
-  name?: string;
-}
+};
 
 // ---------------------------------------------------------------------------
 // IconContainer

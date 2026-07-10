@@ -10,9 +10,9 @@ Fixed-size icon slot, the Figma Icon Container. One primitive covers the bare gl
 |---|---|---|---|
 | `size` | `IconContainerSize` | `"main-ui"` | Box keyed to the line-height scale: secondary 16, main-ui 20, main-content 24, section 28, sub-headline 32 |
 | `type` | `"default" \| "entity" \| "action"` | `"default"` | Reading prominence. `entity` renders `text-04` at every size, `action` emits `data-type="action"` as a styling hook and currently renders like `default` |
-| `icon` | `IconFunctionComponent` | — | Glyph for the bare content, or the circle's glyph with `avatar="icon"`. Logos from `@opal/logos` work here too |
-| `avatar` | `"user" \| "icon"` | — | Round avatar: `user` is the dark circle with the initial of `name`, `icon` is the light circle around `icon` |
-| `name` | `string` | — | Initial source for `avatar="user"` (first character after trim, uppercased, `?` fallback) |
+| `icon` | `IconFunctionComponent` | — | Glyph for the bare content, required with `avatar="icon"`. Logos from `@opal/logos` work here too |
+| `avatar` | `"user" \| "icon"` | — | Round avatar: `user` is the dark circle with the initial of `name`, `icon` is the light circle around `icon`. The content union makes an avatar without its content a type error |
+| `name` | `string` | — | Required with `avatar="user"`: initial source (first character after trim, uppercased, `?` fallback for empty strings) |
 
 Glyph sizes follow the spec (12 at secondary, 16 at main-ui and main-content, 24 at section and sub-headline, with entity bumping main-ui to 18). The avatar circle fills the box up to 24px.
 
