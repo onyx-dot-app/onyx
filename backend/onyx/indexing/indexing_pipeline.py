@@ -1183,19 +1183,17 @@ def _maybe_push_documents(
     the config-driven endpoint (all editions, from DOCUMENT_PUSH_ENDPOINT_URL)
     when set, otherwise the DOCUMENT_PUSH hook (EE, from the hook table).
 
-    The hook sink is single-tenant only — a per-tenant admin-configured
-    destination would mix documents from different organizations. The
-    config-driven sink is deployment-wide by definition (set by the operator),
-    so it also runs in multi-tenant deployments.
+    Single-tenant only — multi-tenant deployments would mix documents from
+    different organizations into a shared external destination.
     Does not fire during initial indexing (from_beginning=True).
     """
     if from_beginning:
         return
 
-    use_config_push = get_document_push_config() is not None
-
-    if MULTI_TENANT and not use_config_push:
+    if MULTI_TENANT:
         return
+
+    use_config_push = get_document_push_config() is not None
 
     if adapter.connector_id is None or adapter.credential_id is None:
         return

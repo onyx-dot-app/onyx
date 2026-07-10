@@ -354,7 +354,7 @@ def test_document_push_skipped_in_multi_tenant_mode() -> None:
     mock_hook.assert_not_called()
 
 
-def test_document_push_config_sink_runs_in_multi_tenant_mode() -> None:
+def test_document_push_config_sink_skipped_in_multi_tenant_mode() -> None:
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
     from onyx.utils.external_endpoint import ExternalEndpointConfig
 
@@ -365,8 +365,6 @@ def test_document_push_config_sink_runs_in_multi_tenant_mode() -> None:
     doc = _make_doc(doc_id="doc1")
     with (
         patch(_PATCH_MULTI_TENANT, True),
-        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
-        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
         patch(
             "onyx.indexing.indexing_pipeline.get_document_push_config",
             return_value=config,
@@ -378,9 +376,8 @@ def test_document_push_config_sink_runs_in_multi_tenant_mode() -> None:
     ):
         _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
 
-    # The config sink is deployment-wide, so it runs in multi-tenant too;
-    # the hook sink stays single-tenant only.
-    mock_config_push.assert_called_once()
+    # Multi-tenant skips both sinks — even with the env config set.
+    mock_config_push.assert_not_called()
     mock_hook.assert_not_called()
 
 

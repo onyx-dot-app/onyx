@@ -11,10 +11,9 @@ There are two delivery mechanisms for the same payload:
 The two sinks are either/or, never both: the call site checks this config
 first (a cached local read) and only falls back to the hook when it is unset.
 
-Unlike the hook (single-tenant only), this sink also runs in multi-tenant
-deployments — the endpoint is deployment-wide and operator-owned, so
-receiving documents from all tenants is the expected behavior. Note the
-payload carries no tenant identifier.
+Like the hook, this sink is single-tenant only — a shared destination would
+mix documents from different organizations (the payload carries no tenant
+identifier).
 
 The endpoint URL is operator-supplied through the environment, so unlike
 admin-entered hook URLs it is trusted to point at private-network destinations
