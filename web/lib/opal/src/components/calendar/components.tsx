@@ -56,8 +56,10 @@ function Calendar(props: CalendarProps) {
   return (
     <DayPicker
       // Spread first so the Opal-owned chrome below wins even against
-      // untyped callers that smuggle in classNames/components.
+      // untyped callers that smuggle in stripped props.
       {...props}
+      // Outside days render as empty fixed-width cells, never as numerals.
+      showOutsideDays={false}
       classNames={{
         root: "opal-calendar",
         months: "opal-calendar-months",
