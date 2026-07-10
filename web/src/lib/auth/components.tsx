@@ -204,14 +204,17 @@ export function EmailPasswordForm({
   const isSignup = label !== "submit";
   const isJoin = label === "join";
 
-  const { user, authTypeMetadata } = useUser();
-  const passwordMinLength = authTypeMetadata?.passwordMinLength ?? 8;
-  const passwordMaxLength = authTypeMetadata?.passwordMaxLength ?? Infinity;
-  const requireUppercase = authTypeMetadata?.passwordRequireUppercase ?? false;
-  const requireLowercase = authTypeMetadata?.passwordRequireLowercase ?? false;
-  const requireDigit = authTypeMetadata?.passwordRequireDigit ?? false;
-  const requireSpecialChar =
-    authTypeMetadata?.passwordRequireSpecialChar ?? false;
+  const {
+    user,
+    authTypeMetadata: {
+      passwordMaxLength,
+      passwordMinLength,
+      passwordRequireDigit,
+      passwordRequireLowercase,
+      passwordRequireSpecialChar,
+      passwordRequireUppercase,
+    },
+  } = useUser();
   const { getCaptchaToken } = useCaptcha();
 
   const initialValues: FormValues = {
@@ -230,22 +233,22 @@ export function EmailPasswordForm({
         `Password must be at most ${passwordMaxLength} characters`
       );
 
-    if (requireUppercase)
+    if (passwordRequireUppercase)
       passwordSchema = passwordSchema.matches(
         /[A-Z]/,
         "Password must contain at least one uppercase letter"
       );
-    if (requireLowercase)
+    if (passwordRequireLowercase)
       passwordSchema = passwordSchema.matches(
         /[a-z]/,
         "Password must contain at least one lowercase letter"
       );
-    if (requireDigit)
+    if (passwordRequireDigit)
       passwordSchema = passwordSchema.matches(
         /\d/,
         "Password must contain at least one number"
       );
-    if (requireSpecialChar)
+    if (passwordRequireSpecialChar)
       passwordSchema = passwordSchema.matches(
         /[^A-Za-z0-9]/,
         "Password must contain at least one special character"
@@ -261,10 +264,10 @@ export function EmailPasswordForm({
   }, [
     passwordMinLength,
     passwordMaxLength,
-    requireUppercase,
-    requireLowercase,
-    requireDigit,
-    requireSpecialChar,
+    passwordRequireUppercase,
+    passwordRequireLowercase,
+    passwordRequireDigit,
+    passwordRequireSpecialChar,
   ]);
 
   const handleSubmit = async (values: FormValues) => {
@@ -418,7 +421,7 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
   const { authTypeMetadata } = useUser();
 
   const rules = [
-    ...(authTypeMetadata?.passwordMinLength
+    ...(authTypeMetadata.passwordMinLength
       ? [
           {
             label: `At least ${authTypeMetadata.passwordMinLength} characters`,
@@ -426,7 +429,7 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
           },
         ]
       : []),
-    ...(authTypeMetadata?.passwordMaxLength
+    ...(authTypeMetadata.passwordMaxLength
       ? [
           {
             label: `At most ${authTypeMetadata.passwordMaxLength} characters`,
@@ -434,7 +437,7 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
           },
         ]
       : []),
-    ...(authTypeMetadata?.passwordRequireUppercase
+    ...(authTypeMetadata.passwordRequireUppercase
       ? [
           {
             label: "Contains uppercase letter.",
@@ -442,7 +445,7 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
           },
         ]
       : []),
-    ...(authTypeMetadata?.passwordRequireLowercase
+    ...(authTypeMetadata.passwordRequireLowercase
       ? [
           {
             label: "Contains lowercase letter.",
@@ -450,10 +453,10 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
           },
         ]
       : []),
-    ...(authTypeMetadata?.passwordRequireDigit
+    ...(authTypeMetadata.passwordRequireDigit
       ? [{ label: "Contains number.", met: /\d/.test(password) }]
       : []),
-    ...(authTypeMetadata?.passwordRequireSpecialChar
+    ...(authTypeMetadata.passwordRequireSpecialChar
       ? [
           {
             label: "Contains special character.",
