@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { Button, Card, MessageCard, Switch } from "@opal/components";
 import { SvgCopy, SvgPlus, SvgSettings } from "@opal/icons";
@@ -50,9 +50,9 @@ function Shell({ children, onAddProvider }: ShellProps) {
 }
 
 export default function SSOProvidersPage() {
-  const [activeProvider, setActiveProvider] = useState<
-    SSOProviderResponse | "new" | null
-  >(null);
+  const [editProvider, setEditProvider] = useState<SSOProviderResponse | null>(
+    null
+  );
   const [pendingProviderId, setPendingProviderId] = useState<number | null>(
     null
   );
@@ -67,19 +67,13 @@ export default function SSOProvidersPage() {
     errorHandlingFetcher
   );
 
-  useEffect(() => {
-    if (!setupModal.isOpen) {
-      setActiveProvider(null);
-    }
-  }, [setupModal.isOpen]);
-
   function openCreateModal() {
-    setActiveProvider("new");
+    setEditProvider(null);
     setupModal.toggle(true);
   }
 
   function openEditModal(provider: SSOProviderResponse) {
-    setActiveProvider(provider);
+    setEditProvider(provider);
     setupModal.toggle(true);
   }
 
@@ -193,14 +187,9 @@ export default function SSOProvidersPage() {
         )}
       </Shell>
 
-      {activeProvider !== null && (
-        <setupModal.Provider>
-          <SSOProviderModal
-            provider={activeProvider === "new" ? null : activeProvider}
-            onSaved={async () => mutate()}
-          />
-        </setupModal.Provider>
-      )}
+      <setupModal.Provider>
+        <SSOProviderModal provider={editProvider} onSaved={() => mutate()} />
+      </setupModal.Provider>
     </>
   );
 }

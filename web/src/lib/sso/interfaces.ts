@@ -1,7 +1,7 @@
-// Admin-side shapes for the SSO provider list. Mirrors the backend models in
-// backend/onyx/server/manage/sso/models.py. `config` secrets come back masked
-// (all-bullet placeholder) and are accepted back verbatim to keep the stored
-// value.
+// Admin-side shapes for the SSO provider list, mirroring the backend response
+// model. `config` secrets come back masked (bullets, or a truncated
+// first4...last4 form for longer values) and are accepted back verbatim to keep
+// the stored value.
 
 export type SSOProviderType = "GOOGLE_OAUTH" | "OIDC" | "SAML";
 

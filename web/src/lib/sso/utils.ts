@@ -38,9 +38,9 @@ export const CREATABLE_SSO_PROVIDER_TYPES: SSOProviderType[] = [
 
 export type SSOConfigFieldKind = "text" | "textarea" | "password";
 
-// One entry per key in the backend config model for a provider type. `name`
-// mirrors the field on GoogleProviderConfig / OIDCProviderConfig /
-// SAMLProviderConfig in backend/onyx/db/sso_provider.py.
+// One entry per key in a provider type's backend config model. `name` must
+// match the backend config field exactly, since values are sent as
+// config.<name>.
 export interface SSOConfigField {
   name: string;
   label: string;

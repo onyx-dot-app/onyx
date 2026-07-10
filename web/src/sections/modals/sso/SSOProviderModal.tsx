@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { Button, Text } from "@opal/components";
@@ -52,9 +52,45 @@ interface SSOProviderFormValues {
 const ALL_CONFIG_FIELDS: SSOConfigField[] =
   CREATABLE_SSO_PROVIDER_TYPES.flatMap((type) => CONFIG_FIELDS_BY_TYPE[type]);
 
+// Required-ness follows the selected type's non-optional fields. On edit the
+// masked value prefills, so "required" passes without re-entry, but clearing a
+// required field is still blocked.
+function buildConfigSchema(): Record<string, Yup.StringSchema> {
+  const schema: Record<string, Yup.StringSchema> = {};
+  for (const field of ALL_CONFIG_FIELDS) {
+    const requiredTypes = CREATABLE_SSO_PROVIDER_TYPES.filter((type) =>
+      CONFIG_FIELDS_BY_TYPE[type].some(
+        (candidate) => candidate.name === field.name && !candidate.optional
+      )
+    );
+    schema[field.name] = Yup.string().when("provider_type", {
+      is: (type: string) => requiredTypes.includes(type as SSOProviderType),
+      then: (s) => s.required(`${field.label} is required`),
+      otherwise: (s) => s.optional(),
+    });
+  }
+  return schema;
+}
+
+const SSO_VALIDATION_SCHEMA = Yup.object({
+  provider_type: Yup.string()
+    .oneOf(CREATABLE_SSO_PROVIDER_TYPES)
+    .required("Provider type is required"),
+  name: Yup.string()
+    .required("Name is required")
+    .matches(
+      /^[a-z0-9-]+$/,
+      "Use lowercase letters, numbers, and hyphens only"
+    ),
+  display_name: Yup.string().required("Display name is required"),
+  config: Yup.object(buildConfigSchema()),
+  allowed_email_domains: Yup.array().of(Yup.string()).optional(),
+});
+
 // The backend masks every config string on read and restores any field returned
 // unchanged, so the form sends its current values and the server round-trips the
-// untouched (masked) ones. Blank optional keys are omitted so they stay null.
+// untouched (masked) ones. Blank optional keys are omitted rather than sent as
+// empty strings.
 function buildConfig(
   providerType: SSOProviderType,
   values: SSOProviderFormValues
@@ -115,41 +151,6 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
     allowed_email_domains: provider?.allowed_email_domains ?? [],
   };
 
-  // Derived purely from module-level constants, so it's built once. A config
-  // field is required whenever the selected type declares it non-optional. On
-  // edit the masked value is prefilled, so "required" is satisfied without
-  // re-entry and clearing a required field is still blocked.
-  const validationSchema = useMemo(() => {
-    const configSchema: Record<string, Yup.StringSchema> = {};
-    for (const field of ALL_CONFIG_FIELDS) {
-      const requiredTypes = CREATABLE_SSO_PROVIDER_TYPES.filter((type) =>
-        CONFIG_FIELDS_BY_TYPE[type].some(
-          (candidate) => candidate.name === field.name && !candidate.optional
-        )
-      );
-      configSchema[field.name] = Yup.string().when("provider_type", {
-        is: (type: string) => requiredTypes.includes(type as SSOProviderType),
-        then: (schema) => schema.required(`${field.label} is required`),
-        otherwise: (schema) => schema.optional(),
-      });
-    }
-
-    return Yup.object({
-      provider_type: Yup.string()
-        .oneOf(CREATABLE_SSO_PROVIDER_TYPES)
-        .required("Provider type is required"),
-      name: Yup.string()
-        .required("Name is required")
-        .matches(
-          /^[a-z0-9-]+$/,
-          "Use lowercase letters, numbers, and hyphens only"
-        ),
-      display_name: Yup.string().required("Display name is required"),
-      config: Yup.object(configSchema),
-      allowed_email_domains: Yup.array().of(Yup.string()).optional(),
-    });
-  }, []);
-
   async function handleSubmit(
     values: SSOProviderFormValues,
     { setSubmitting }: { setSubmitting: (isSubmitting: boolean) => void }
@@ -195,7 +196,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
       <Modal.Content width="md" height="full" preventAccidentalClose>
         <Formik<SSOProviderFormValues>
           initialValues={initialValues}
-          validationSchema={validationSchema}
+          validationSchema={SSO_VALIDATION_SCHEMA}
           onSubmit={handleSubmit}
           enableReinitialize
         >

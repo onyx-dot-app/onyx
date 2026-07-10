@@ -5,6 +5,8 @@ import {
   SSOProviderUpdateRequest,
 } from "@/lib/sso/interfaces";
 
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
 async function errorDetail(response: Response): Promise<string> {
   try {
     return (await response.json()).detail ?? "Request failed";
@@ -13,43 +15,48 @@ async function errorDetail(response: Response): Promise<string> {
   }
 }
 
-export async function createSSOProvider(
-  request: SSOProviderCreateRequest
-): Promise<SSOProviderResponse> {
-  const response = await fetch(SWR_KEYS.adminSsoProviders, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
+async function ssoRequest<T>(
+  url: string,
+  method: string,
+  body: unknown
+): Promise<T> {
+  const response = await fetch(url, {
+    method,
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(await errorDetail(response));
   return response.json();
 }
 
-export async function updateSSOProvider(
+export function createSSOProvider(
+  request: SSOProviderCreateRequest
+): Promise<SSOProviderResponse> {
+  return ssoRequest<SSOProviderResponse>(
+    SWR_KEYS.adminSsoProviders,
+    "POST",
+    request
+  );
+}
+
+export function updateSSOProvider(
   providerId: number,
   request: SSOProviderUpdateRequest
 ): Promise<SSOProviderResponse> {
-  const response = await fetch(`${SWR_KEYS.adminSsoProviders}/${providerId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
-  if (!response.ok) throw new Error(await errorDetail(response));
-  return response.json();
+  return ssoRequest<SSOProviderResponse>(
+    `${SWR_KEYS.adminSsoProviders}/${providerId}`,
+    "PATCH",
+    request
+  );
 }
 
-export async function setSSOProviderEnabled(
+export function setSSOProviderEnabled(
   providerId: number,
   enabled: boolean
 ): Promise<SSOProviderResponse> {
-  const response = await fetch(
+  return ssoRequest<SSOProviderResponse>(
     `${SWR_KEYS.adminSsoProviders}/${providerId}/enabled`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled }),
-    }
+    "POST",
+    { enabled }
   );
-  if (!response.ok) throw new Error(await errorDetail(response));
-  return response.json();
 }
