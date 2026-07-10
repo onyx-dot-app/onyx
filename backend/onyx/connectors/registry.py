@@ -116,6 +116,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.loopio.connector",
         class_name="LoopioConnector",
     ),
+    DocumentSource.BOX: ConnectorMapping(
+        module_path="onyx.connectors.box.connector",
+        class_name="BoxConnector",
+    ),
     DocumentSource.DROPBOX: ConnectorMapping(
         module_path="onyx.connectors.dropbox.connector",
         class_name="DropboxConnector",

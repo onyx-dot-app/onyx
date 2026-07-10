@@ -721,6 +721,19 @@ wheels = [
 ]
 
 [[package]]
+name = "boxsdk"
+version = "10.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "requests-toolbelt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/29/c5/0b83160803fa3629043baacf44b8b6e2533643da1ad5c83477252f17ff75/boxsdk-10.12.0.tar.gz", hash = "sha256:92e08a961d5203da0e9995ef7725d02331200b1677b6a09045c9c7e6becc3c86", size = 285602, upload-time = "2026-06-11T09:27:05.382Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/25/50/836836af5d397013db2976351b752dde3bb9b3fe7a90c76f250544ba9174/boxsdk-10.12.0-py3-none-any.whl", hash = "sha256:0563eb38ec26a7f500318e8d98e190156912626f52c68e7d60e30ef43bebd467", size = 607050, upload-time = "2026-06-11T09:27:03.583Z" },
+]
+
+[[package]]
 name = "braintrust"
 version = "0.3.9"
 source = { registry = "https://pypi.org/simple" }
@@ -4231,6 +4244,7 @@ backend = [
     { name = "azure-cognitiveservices-speech" },
     { name = "beautifulsoup4" },
     { name = "boto3" },
+    { name = "boxsdk" },
     { name = "braintrust" },
     { name = "celery" },
     { name = "chardet" },
@@ -4402,6 +4416,7 @@ backend = [
     { name = "azure-cognitiveservices-speech", specifier = "==1.50.0" },
     { name = "beautifulsoup4", specifier = "==4.12.3" },
     { name = "boto3", specifier = "==1.39.11" },
+    { name = "boxsdk", specifier = "==10.12.0" },
     { name = "braintrust", specifier = "==0.3.9" },
     { name = "celery", specifier = "==5.5.1" },
     { name = "chardet", specifier = "==5.2.0" },
