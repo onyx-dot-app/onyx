@@ -50,7 +50,6 @@ from onyx.llm.factory import (
 )
 from onyx.llm.model_capabilities import (
     get_bedrock_token_limit,
-    get_max_input_tokens,
     litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
 )
@@ -2219,10 +2218,10 @@ def get_openai_available_models(
                 OpenAIFinalModelResponse(
                     name=model_id,
                     display_name=display_name,
-                    max_input_tokens=get_max_input_tokens(
-                        model_name=model_id,
-                        model_provider=LlmProviderNames.OPENAI,
-                    ),
+                    # OpenAI's /v1/models response does not include context
+                    # length; leave None so runtime resolves it via litellm
+                    # (self-heals for models litellm doesn't know yet).
+                    max_input_tokens=None,
                     supports_image_input=litellm_thinks_model_supports_image_input(
                         model_id, LlmProviderNames.OPENAI
                     ),
@@ -2377,10 +2376,10 @@ def get_anthropic_available_models(
                 AnthropicFinalModelResponse(
                     name=model_id,
                     display_name=display_name,
-                    max_input_tokens=get_max_input_tokens(
-                        model_name=model_id,
-                        model_provider=LlmProviderNames.ANTHROPIC,
-                    ),
+                    # Anthropic's /v1/models response does not include context
+                    # length; leave None so runtime resolves it via litellm
+                    # (self-heals for models litellm doesn't know yet).
+                    max_input_tokens=None,
                     supports_image_input=litellm_thinks_model_supports_image_input(
                         model_id, LlmProviderNames.ANTHROPIC
                     ),
