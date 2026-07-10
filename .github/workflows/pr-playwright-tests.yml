@@ -292,7 +292,6 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-token: ${{ secrets.DOCKER_TOKEN }}
-          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
