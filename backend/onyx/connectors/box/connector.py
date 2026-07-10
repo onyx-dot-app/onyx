@@ -99,15 +99,17 @@ _READ_ACCESS_COLLABORATION_ROLES = {
 }
 
 BOX_GROUP_ID_PREFIX = "box-group"
-BOX_ALL_ENTERPRISE_USERS_GROUP_ID = "box-enterprise-all-users"
+BOX_ALL_ENTERPRISE_USERS_GROUP_PREFIX = "box-enterprise-all-users"
 
 
 def box_group_id(group_id: str) -> str:
     return f"{BOX_GROUP_ID_PREFIX}-{group_id}"
 
 
-def box_all_enterprise_users_group_id() -> str:
-    return BOX_ALL_ENTERPRISE_USERS_GROUP_ID
+def box_all_enterprise_users_group_id(enterprise_id: str) -> str:
+    # Scoped by enterprise so two Box connectors on one tenant can't leak
+    # "company"-link docs across enterprises via a shared group id.
+    return f"{BOX_ALL_ENTERPRISE_USERS_GROUP_PREFIX}-{enterprise_id}"
 
 
 def box_file_document_id(file_id: str) -> str:
@@ -201,16 +203,28 @@ def apply_collaborations_to_access(
     )
 
 
+def shared_link_access_level(shared_link: Any) -> str | None:
+    """Prefer `effective_access` over raw `access`: enterprise policy can
+    downgrade an "open" link, and only `effective_access` reflects that (so we
+    don't treat a restricted link as public)."""
+    if shared_link is None:
+        return None
+    if shared_link.effective_access is not None:
+        return shared_link.effective_access.value
+    return shared_link.access.value if shared_link.access else None
+
+
 def apply_shared_link_to_access(
     access: BoxAccessContext,
     shared_link_access: str | None,
     is_password_enabled: bool | None,
+    enterprise_users_group_id: str,
 ) -> BoxAccessContext:
     """Fold a Box shared link into an access context.
 
     - "open" links are world-readable -> public (unless password protected).
     - "company" links are readable by any logged-in enterprise user -> the
-      synthetic all-enterprise-users group (populated by group sync).
+      (enterprise-scoped) synthetic all-users group, populated by group sync.
     - "collaborators" links grant nothing beyond existing collaborations.
     """
     if shared_link_access is None:
@@ -224,7 +238,7 @@ def apply_shared_link_to_access(
     if shared_link_access == "company":
         return BoxAccessContext(
             user_emails=access.user_emails,
-            group_ids=access.group_ids | {box_all_enterprise_users_group_id()},
+            group_ids=access.group_ids | {enterprise_users_group_id},
             is_public=access.is_public,
         )
     return access
@@ -251,6 +265,7 @@ class BoxConnector(
 
         self._client: BoxClient | None = None
         self._enterprise_client: BoxClient | None = None
+        self._enterprise_id: str | None = None
 
     def set_allow_images(self, value: bool) -> None:
         self.allow_images = value
@@ -271,6 +286,11 @@ class BoxConnector(
             raise ConnectorMissingCredentialError("Box")
         return self._enterprise_client
 
+    def _all_enterprise_users_group_id(self) -> str:
+        if self._enterprise_id is None:
+            raise ConnectorMissingCredentialError("Box")
+        return box_all_enterprise_users_group_id(self._enterprise_id)
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         client_id = credentials.get("box_client_id")
         client_secret = credentials.get("box_client_secret")
@@ -286,6 +306,7 @@ class BoxConnector(
             )
         )
         self._enterprise_client = BoxClient(auth=auth)
+        self._enterprise_id = enterprise_id
 
         user_email = credentials.get("box_user_email")
         if user_email:
@@ -389,8 +410,9 @@ class BoxConnector(
         if folder.shared_link is not None:
             access = apply_shared_link_to_access(
                 access,
-                folder.shared_link.access.value if folder.shared_link.access else None,
+                shared_link_access_level(folder.shared_link),
                 folder.shared_link.is_password_enabled,
+                self._all_enterprise_users_group_id(),
             )
         return access
 
@@ -407,11 +429,18 @@ class BoxConnector(
             try:
                 access = self._resolve_folder_access(ancestor.id, access)
             except BoxAPIError as e:
+                status = _box_api_status_code(e)
+                if status not in (403, 404):
+                    # Fail loud: swallowing a transient error would under-
+                    # permission every descendant of this ancestor.
+                    raise
+                # 403/404 just means the user can't see an ancestor above the
+                # configured root; skip it.
                 logger.warning(
                     "Cannot read ancestor folder %s while resolving inherited "
                     "access (status=%s); skipping it.",
                     ancestor.id,
-                    _box_api_status_code(e),
+                    status,
                 )
         return access
 
@@ -430,8 +459,9 @@ class BoxConnector(
         if file.shared_link is not None:
             access = apply_shared_link_to_access(
                 access,
-                file.shared_link.access.value if file.shared_link.access else None,
+                shared_link_access_level(file.shared_link),
                 file.shared_link.is_password_enabled,
+                self._all_enterprise_users_group_id(),
             )
         return access
 
@@ -467,11 +497,10 @@ class BoxConnector(
         finally:
             stream.close()
 
-    def _build_file_sections(
-        self, file: FileFull
-    ) -> list[TextSection | ImageSection] | None:
-        """Returns None when the file should be skipped (unsupported type,
-        over the size threshold, images disabled, or empty download)."""
+    def _file_is_indexable(self, file: FileFull) -> bool:
+        """Network-free check of whether a file can yield a document (size + type).
+        Used by both the full and slim paths so pruning never keeps a document
+        alive for a file the full path would skip."""
         file_name = file.name or file.id
         if file.size is not None and file.size > self.size_threshold:
             logger.warning(
@@ -480,14 +509,28 @@ class BoxConnector(
                 file.size,
                 self.size_threshold,
             )
+            return False
+        extension = get_file_ext(file_name)
+        if extension in OnyxFileExtensions.IMAGE_EXTENSIONS:
+            return self.allow_images
+        if extension not in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
+            logger.debug("Skipping %s: unsupported extension %s", file_name, extension)
+            return False
+        return True
+
+    def _build_file_sections(
+        self, file: FileFull
+    ) -> list[TextSection | ImageSection] | None:
+        """Returns None when the file should be skipped (unsupported type,
+        over the size threshold, images disabled, or empty download)."""
+        if not self._file_is_indexable(file):
             return None
 
+        file_name = file.name or file.id
         extension = get_file_ext(file_name)
         link = box_file_link(file.id)
 
         if extension in OnyxFileExtensions.IMAGE_EXTENSIONS:
-            if not self.allow_images:
-                return None
             content = self._download_file(file)
             if not content:
                 return None
@@ -499,10 +542,6 @@ class BoxConnector(
                 file_origin=FileOrigin.CONNECTOR,
             )
             return [image_section]
-
-        if extension not in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
-            logger.debug("Skipping %s: unsupported extension %s", file_name, extension)
-            return None
 
         content = self._download_file(file)
         if content is None:
@@ -588,7 +627,16 @@ class BoxConnector(
 
         external_access = None
         if include_permissions and folder.access is not None:
-            external_access = folder.access.to_external_access()
+            access = folder.access
+            if web_link.shared_link is not None:
+                # A bookmark can carry its own shared link, same as files.
+                access = apply_shared_link_to_access(
+                    access,
+                    shared_link_access_level(web_link.shared_link),
+                    web_link.shared_link.is_password_enabled,
+                    self._all_enterprise_users_group_id(),
+                )
+            external_access = access.to_external_access()
 
         return Document(
             id=box_web_link_document_id(web_link.id),
@@ -733,6 +781,9 @@ class BoxConnector(
                 if not _in_time_window(item.modified_at, start, end):
                     continue
                 if slim:
+                    # Mirror the full path's skip criteria (see _file_is_indexable).
+                    if not self._file_is_indexable(item):
+                        continue
                     yield self._build_slim_document(item, entry, include_permissions)
                 else:
                     converted = self._convert_file(item, entry, include_permissions)
@@ -882,22 +933,37 @@ class BoxConnector(
         if self._client is None:
             raise ConnectorMissingCredentialError("Box")
 
+        # Identity check in its own block so its failure reports a credential
+        # problem, not the folder-not-found message below.
         try:
             self.client.users.get_user_me()
+        except BoxAPIError as e:
+            status = _box_api_status_code(e)
+            if status in (401, 404):
+                raise CredentialExpiredError(
+                    "Box credentials are invalid, or the impersonated user could "
+                    f"not be authenticated (HTTP {status}). Verify the client "
+                    "ID/secret, that the app is authorized in the Box Admin "
+                    "Console, and that the impersonated user exists."
+                )
+            if status == 403:
+                raise InsufficientPermissionsError(
+                    "The Box app lacks the scopes needed to authenticate (HTTP 403)."
+                )
+            raise UnexpectedValidationError(
+                f"Unexpected Box API error during validation (status={status}): "
+                f"{e.message}"
+            )
+
+        try:
             for folder_id in self.entry_folder_ids:
                 self.client.folders.get_folder_by_id(folder_id, fields=["id"])
         except BoxAPIError as e:
             status = _box_api_status_code(e)
-            if status == 401:
-                raise CredentialExpiredError(
-                    "Box credentials are invalid or expired (HTTP 401). Verify "
-                    "the client ID/secret and that the app is authorized in the "
-                    "Box Admin Console."
-                )
             if status == 403:
                 raise InsufficientPermissionsError(
-                    "The Box app lacks permission to read the configured "
-                    "content (HTTP 403)."
+                    "The Box app lacks permission to read a configured folder "
+                    "(HTTP 403)."
                 )
             if status == 404:
                 raise ConnectorValidationError(

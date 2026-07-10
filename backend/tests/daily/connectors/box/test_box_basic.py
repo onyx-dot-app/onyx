@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from ee.onyx.external_permissions.box.group_sync import box_group_sync
-from onyx.connectors.box.connector import BOX_ALL_ENTERPRISE_USERS_GROUP_ID
+from onyx.connectors.box.connector import box_all_enterprise_users_group_id
 from onyx.connectors.box.connector import box_group_id
 from onyx.connectors.box.connector import BOX_ROOT_FOLDER_ID
 from onyx.connectors.box.connector import BoxConnector
@@ -277,8 +277,11 @@ def test_group_sync(test_secrets: dict[TestSecret, str]) -> None:
 
     # the synthetic enterprise-wide group backs "company" shared links and
     # must contain every managed user, including the collaborator
-    assert BOX_ALL_ENTERPRISE_USERS_GROUP_ID in groups_by_id
-    enterprise_group = groups_by_id[BOX_ALL_ENTERPRISE_USERS_GROUP_ID]
+    enterprise_group_id = box_all_enterprise_users_group_id(
+        test_secrets[TestSecret.BOX_ENTERPRISE_ID]
+    )
+    assert enterprise_group_id in groups_by_id
+    enterprise_group = groups_by_id[enterprise_group_id]
     assert collaborator_email in enterprise_group.user_emails
 
     # the real Box group from the test corpus, with its membership expanded

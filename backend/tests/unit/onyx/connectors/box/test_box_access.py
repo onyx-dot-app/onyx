@@ -100,31 +100,34 @@ def test_group_collaboration_maps_to_prefixed_group_id() -> None:
     assert access.user_emails == set()
 
 
+_ENTERPRISE_GROUP_ID = "box-enterprise-all-users-ent42"
+
+
 def test_shared_link_open_is_public() -> None:
     access = apply_shared_link_to_access(
-        BoxAccessContext(), "open", is_password_enabled=False
+        BoxAccessContext(), "open", False, _ENTERPRISE_GROUP_ID
     )
     assert access.is_public is True
 
 
 def test_shared_link_open_with_password_is_not_public() -> None:
     access = apply_shared_link_to_access(
-        BoxAccessContext(), "open", is_password_enabled=True
+        BoxAccessContext(), "open", True, _ENTERPRISE_GROUP_ID
     )
     assert access.is_public is False
 
 
 def test_shared_link_company_maps_to_enterprise_group() -> None:
     access = apply_shared_link_to_access(
-        BoxAccessContext(), "company", is_password_enabled=False
+        BoxAccessContext(), "company", False, _ENTERPRISE_GROUP_ID
     )
     assert access.is_public is False
-    assert access.group_ids == {"box-enterprise-all-users"}
+    assert access.group_ids == {_ENTERPRISE_GROUP_ID}
 
 
 def test_shared_link_collaborators_grants_nothing() -> None:
     access = apply_shared_link_to_access(
-        BoxAccessContext(), "collaborators", is_password_enabled=False
+        BoxAccessContext(), "collaborators", False, _ENTERPRISE_GROUP_ID
     )
     assert access.is_public is False
     assert access.group_ids == set()

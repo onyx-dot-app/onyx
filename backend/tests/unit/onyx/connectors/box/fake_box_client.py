@@ -179,10 +179,14 @@ class FakeGroupsManager:
 
 class FakeMembershipsManager:
     def __init__(
-        self, members_by_group: dict[str, list[UserMini]], page_size: int
+        self,
+        members_by_group: dict[str, list[UserMini]],
+        page_size: int,
+        fail_status_by_group: dict[str, int],
     ) -> None:
         self._members_by_group = members_by_group
         self._page_size = page_size
+        self._fail_status_by_group = fail_status_by_group
 
     def get_group_memberships(
         self,
@@ -191,6 +195,8 @@ class FakeMembershipsManager:
         limit: int | None = None,  # noqa: ARG002
         offset: int | None = None,
     ) -> GroupMemberships:
+        if group_id in self._fail_status_by_group:
+            raise make_box_api_error(self._fail_status_by_group[group_id])
         members = self._members_by_group.get(group_id, [])
         start = offset or 0
         page = members[start : start + self._page_size]
@@ -211,6 +217,7 @@ class FakeBoxClient:
         users_fail_status: int | None = None,
         groups: list[GroupFull] | None = None,
         members_by_group: dict[str, list[UserMini]] | None = None,
+        membership_fail_status_by_group: dict[str, int] | None = None,
         # small page so pagination loops run without thousands of fake entries
         page_size: int = 2,
     ) -> None:
@@ -225,4 +232,6 @@ class FakeBoxClient:
             users_by_login or {}, users_fail_status, page_size
         )
         self.groups = FakeGroupsManager(groups or [], page_size)
-        self.memberships = FakeMembershipsManager(members_by_group or {}, page_size)
+        self.memberships = FakeMembershipsManager(
+            members_by_group or {}, page_size, membership_fail_status_by_group or {}
+        )

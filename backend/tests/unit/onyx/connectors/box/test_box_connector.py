@@ -314,6 +314,43 @@ def test_unsupported_and_oversized_files_are_skipped() -> None:
     assert not failures
 
 
+def _mixed_indexability_client() -> FakeBoxClient:
+    return FakeBoxClient(
+        folders_by_id={"100": FolderFull(id="100", name="Root")},
+        pages={
+            ("100", None): Items(
+                entries=[
+                    _file("1", "ok.txt", datetime(2024, 6, 1, tzinfo=timezone.utc)),
+                    _file("2", "binary.exe", datetime(2024, 6, 1, tzinfo=timezone.utc)),
+                    _file(
+                        "3",
+                        "huge.txt",
+                        datetime(2024, 6, 1, tzinfo=timezone.utc),
+                        size=10**12,
+                    ),
+                    _file("4", "pic.png", datetime(2024, 6, 1, tzinfo=timezone.utc)),
+                ],
+                next_marker=None,
+            ),
+        },
+        file_contents={"1": b"fine"},
+    )
+
+
+def test_slim_retrieval_skips_non_indexable_files() -> None:
+    """The slim/pruning enumeration must apply the same size/type gate as the
+    full path, else pruning would keep documents alive for files that can never
+    be indexed."""
+    connector = _make_connector(_mixed_indexability_client())
+    slim_ids: set[str] = set()
+    for batch in connector.retrieve_all_slim_docs(start=_START, end=_END):
+        for item in batch:
+            if isinstance(item, HierarchyNode):
+                continue
+            slim_ids.add(item.id)
+    assert slim_ids == {"box-file-1"}
+
+
 @pytest.mark.parametrize(
     "value,expected",
     [
