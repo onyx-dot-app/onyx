@@ -16,9 +16,11 @@ import type {
 } from "@/lib/sso/interfaces";
 import { createSSOProvider, updateSSOProvider } from "@/lib/sso/svc";
 import {
+  CONFIG_FIELDS_BY_TYPE,
   copyRedirectUri,
   CREATABLE_SSO_PROVIDER_TYPES,
   SSO_PROVIDER_DETAILS,
+  type SSOConfigField,
 } from "@/lib/sso/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -35,101 +37,104 @@ export interface SSOProviderModalProps {
   onSaved: () => Promise<unknown>;
 }
 
+// Config values are keyed dynamically (config.<field name>), so they live in a
+// nested map Formik addresses by path while the fixed fields stay typed.
 interface SSOProviderFormValues {
   provider_type: string;
   name: string;
   display_name: string;
-  // OIDC / Google
-  client_id: string;
-  client_secret: string;
-  openid_config_url: string;
-  // SAML
-  idp_entity_id: string;
-  idp_sso_url: string;
-  idp_x509_cert: string;
-  sp_entity_id: string;
-  sp_x509_cert: string;
-  sp_private_key: string;
-  email_attribute: string;
+  config: Record<string, string>;
   allowed_email_domains: string[];
 }
 
-function configString(config: Record<string, string>, key: string): string {
-  return config[key] ?? "";
-}
+// Every config key across all provider types, so switching type in create mode
+// never lands on an uncontrolled input.
+const ALL_CONFIG_FIELDS: SSOConfigField[] =
+  CREATABLE_SSO_PROVIDER_TYPES.flatMap((type) => CONFIG_FIELDS_BY_TYPE[type]);
 
-// The backend masks every config string on read and restores any field whose
-// value comes back unchanged, so the form sends its current values and lets the
-// server round-trip the untouched (masked) ones. Optional keys are omitted when
-// blank so they stay null rather than becoming "".
-function buildConfig(values: SSOProviderFormValues): Record<string, string> {
-  if (values.provider_type === "SAML") {
-    const config: Record<string, string> = {
-      idp_entity_id: values.idp_entity_id.trim(),
-      idp_sso_url: values.idp_sso_url.trim(),
-      idp_x509_cert: values.idp_x509_cert.trim(),
-      sp_entity_id: values.sp_entity_id.trim(),
-    };
-    if (values.sp_x509_cert.trim()) {
-      config.sp_x509_cert = values.sp_x509_cert.trim();
+// The backend masks every config string on read and restores any field returned
+// unchanged, so the form sends its current values and the server round-trips the
+// untouched (masked) ones. Blank optional keys are omitted so they stay null.
+function buildConfig(
+  providerType: SSOProviderType,
+  values: SSOProviderFormValues
+): Record<string, string> {
+  const config: Record<string, string> = {};
+  for (const field of CONFIG_FIELDS_BY_TYPE[providerType]) {
+    const raw = values.config[field.name] ?? "";
+    const value = field.kind === "password" ? raw : raw.trim();
+    if (field.optional && !value) {
+      continue;
     }
-    if (values.sp_private_key) {
-      config.sp_private_key = values.sp_private_key;
-    }
-    if (values.email_attribute.trim()) {
-      config.email_attribute = values.email_attribute.trim();
-    }
-    return config;
-  }
-
-  const config: Record<string, string> = {
-    client_id: values.client_id.trim(),
-    client_secret: values.client_secret,
-  };
-  if (values.provider_type === "OIDC") {
-    config.openid_config_url = values.openid_config_url.trim();
+    config[field.name] = value;
   }
   return config;
+}
+
+function initialConfig(config: Record<string, string>): Record<string, string> {
+  const initial: Record<string, string> = {};
+  for (const field of ALL_CONFIG_FIELDS) {
+    initial[field.name] = config[field.name] ?? "";
+  }
+  return initial;
+}
+
+function ConfigInput({
+  field,
+  isEditing,
+}: {
+  field: SSOConfigField;
+  isEditing: boolean;
+}) {
+  const name = `config.${field.name}`;
+  if (field.kind === "textarea") {
+    return <InputTextAreaField name={name} placeholder={field.placeholder} />;
+  }
+  if (field.kind === "password") {
+    return (
+      <PasswordInputTypeInField
+        name={name}
+        placeholder={field.placeholder}
+        isNonRevealable={isEditing}
+      />
+    );
+  }
+  return <InputTypeInField name={name} placeholder={field.placeholder} />;
 }
 
 export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
   const onClose = useModalClose();
   const isEditing = provider !== null;
-  const config = provider?.config ?? {};
   const [domainInput, setDomainInput] = useState("");
 
   const initialValues: SSOProviderFormValues = {
     provider_type: provider?.provider_type ?? "GOOGLE_OAUTH",
     name: provider?.name ?? "",
     display_name: provider?.display_name ?? "",
-    client_id: configString(config, "client_id"),
-    client_secret: configString(config, "client_secret"),
-    openid_config_url: configString(config, "openid_config_url"),
-    idp_entity_id: configString(config, "idp_entity_id"),
-    idp_sso_url: configString(config, "idp_sso_url"),
-    idp_x509_cert: configString(config, "idp_x509_cert"),
-    sp_entity_id: configString(config, "sp_entity_id"),
-    sp_x509_cert: configString(config, "sp_x509_cert"),
-    sp_private_key: configString(config, "sp_private_key"),
-    email_attribute: configString(config, "email_attribute"),
+    config: initialConfig(provider?.config ?? {}),
     allowed_email_domains: provider?.allowed_email_domains ?? [],
   };
 
-  // Required on create only. On edit the stored (masked) value is already
-  // present, so leaving a field untouched is allowed and round-trips.
-  const requiredOnCreate = isEditing
-    ? Yup.string()
-    : Yup.string().required("Required");
-  const requiredWhenType = (type: SSOProviderType, message: string) =>
-    Yup.string().when("provider_type", {
-      is: type,
-      then: (schema) => (isEditing ? schema : schema.required(message)),
+  // A config field is required whenever the selected type declares it non-
+  // optional. On edit the masked value is prefilled, so "required" is satisfied
+  // without re-entry and clearing a required field is still blocked.
+  const configSchema: Record<string, Yup.StringSchema> = {};
+  for (const field of ALL_CONFIG_FIELDS) {
+    const requiredTypes = CREATABLE_SSO_PROVIDER_TYPES.filter((type) =>
+      CONFIG_FIELDS_BY_TYPE[type].some(
+        (candidate) => candidate.name === field.name && !candidate.optional
+      )
+    );
+    configSchema[field.name] = Yup.string().when("provider_type", {
+      is: (type: string) => requiredTypes.includes(type as SSOProviderType),
+      then: (schema) => schema.required(`${field.label} is required`),
       otherwise: (schema) => schema.optional(),
     });
+  }
 
   const validationSchema = Yup.object({
     provider_type: Yup.string()
-      .oneOf(["GOOGLE_OAUTH", "OIDC", "SAML"])
+      .oneOf(CREATABLE_SSO_PROVIDER_TYPES)
       .required("Provider type is required"),
     name: Yup.string()
       .required("Name is required")
@@ -138,24 +143,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
         "Use lowercase letters, numbers, and hyphens only"
       ),
     display_name: Yup.string().required("Display name is required"),
-    client_id: Yup.string().when("provider_type", {
-      is: (type: string) => type !== "SAML",
-      then: (schema) => schema.required("Client ID is required"),
-      otherwise: (schema) => schema.optional(),
-    }),
-    client_secret: Yup.string().when("provider_type", {
-      is: (type: string) => type !== "SAML",
-      then: () => requiredOnCreate,
-      otherwise: (schema) => schema.optional(),
-    }),
-    openid_config_url: requiredWhenType(
-      "OIDC",
-      "OpenID configuration URL is required"
-    ),
-    idp_entity_id: requiredWhenType("SAML", "IdP entity ID is required"),
-    idp_sso_url: requiredWhenType("SAML", "IdP SSO URL is required"),
-    idp_x509_cert: requiredWhenType("SAML", "IdP certificate is required"),
-    sp_entity_id: requiredWhenType("SAML", "SP entity ID is required"),
+    config: Yup.object(configSchema),
     allowed_email_domains: Yup.array().of(Yup.string()).optional(),
   });
 
@@ -163,14 +151,15 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
     values: SSOProviderFormValues,
     { setSubmitting }: { setSubmitting: (isSubmitting: boolean) => void }
   ) {
-    const providerConfig = buildConfig(values);
+    const providerType = values.provider_type as SSOProviderType;
+    const config = buildConfig(providerType, values);
     try {
       if (!isEditing) {
         const request: SSOProviderCreateRequest = {
           name: values.name.trim(),
           display_name: values.display_name.trim(),
-          provider_type: values.provider_type as SSOProviderType,
-          config: providerConfig,
+          provider_type: providerType,
+          config,
           allowed_email_domains: values.allowed_email_domains,
         };
         await createSSOProvider(request);
@@ -179,7 +168,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
         const request: SSOProviderUpdateRequest = {
           display_name: values.display_name.trim(),
           allowed_email_domains: values.allowed_email_domains,
-          config: providerConfig,
+          config,
         };
         await updateSSOProvider(provider.id, request);
         toast.success("SSO provider updated");
@@ -216,10 +205,8 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
             dirty,
             isValid,
           }) => {
-            const isSaml = values.provider_type === "SAML";
-            const providerTypeIcon =
-              SSO_PROVIDER_DETAILS[values.provider_type as SSOProviderType]
-                .icon;
+            const providerType = values.provider_type as SSOProviderType;
+            const providerTypeIcon = SSO_PROVIDER_DETAILS[providerType].icon;
             const domainChips: ChipItem[] = values.allowed_email_domains.map(
               (domain) => ({ id: domain, label: domain })
             );
@@ -291,114 +278,19 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     />
                   </InputVertical>
 
-                  {!isSaml && (
-                    <>
-                      <InputVertical title="Client ID" withLabel="client_id">
-                        <InputTypeInField
-                          name="client_id"
-                          placeholder="Client ID"
-                        />
-                      </InputVertical>
-
-                      <InputVertical
-                        title="Client Secret"
-                        withLabel="client_secret"
-                      >
-                        <PasswordInputTypeInField
-                          name="client_secret"
-                          placeholder="Client secret"
-                          isNonRevealable={isEditing}
-                        />
-                      </InputVertical>
-
-                      {values.provider_type === "OIDC" && (
-                        <InputVertical
-                          title="OpenID Configuration URL"
-                          withLabel="openid_config_url"
-                        >
-                          <InputTypeInField
-                            name="openid_config_url"
-                            placeholder="https://example.com/.well-known/openid-configuration"
-                          />
-                        </InputVertical>
-                      )}
-                    </>
-                  )}
-
-                  {isSaml && (
-                    <>
-                      <InputVertical
-                        title="IdP Entity ID"
-                        withLabel="idp_entity_id"
-                      >
-                        <InputTypeInField
-                          name="idp_entity_id"
-                          placeholder="https://idp.example.com/entity"
-                        />
-                      </InputVertical>
-
-                      <InputVertical
-                        title="IdP SSO URL"
-                        withLabel="idp_sso_url"
-                      >
-                        <InputTypeInField
-                          name="idp_sso_url"
-                          placeholder="https://idp.example.com/sso"
-                        />
-                      </InputVertical>
-
-                      <InputVertical
-                        title="IdP X.509 Certificate"
-                        withLabel="idp_x509_cert"
-                      >
-                        <InputTextAreaField
-                          name="idp_x509_cert"
-                          placeholder="-----BEGIN CERTIFICATE-----"
-                        />
-                      </InputVertical>
-
-                      <InputVertical
-                        title="SP Entity ID"
-                        withLabel="sp_entity_id"
-                      >
-                        <InputTypeInField
-                          name="sp_entity_id"
-                          placeholder="onyx"
-                        />
-                      </InputVertical>
-
-                      <InputVertical
-                        title="SP X.509 Certificate (Optional)"
-                        withLabel="sp_x509_cert"
-                      >
-                        <InputTextAreaField
-                          name="sp_x509_cert"
-                          placeholder="-----BEGIN CERTIFICATE-----"
-                        />
-                      </InputVertical>
-
-                      <InputVertical
-                        title="SP Private Key (Optional)"
-                        withLabel="sp_private_key"
-                      >
-                        <PasswordInputTypeInField
-                          name="sp_private_key"
-                          placeholder="-----BEGIN PRIVATE KEY-----"
-                          isNonRevealable={isEditing}
-                        />
-                      </InputVertical>
-
-                      <InputVertical
-                        title="Email Attribute (Optional)"
-                        withLabel="email_attribute"
-                      >
-                        <InputTypeInField
-                          name="email_attribute"
-                          placeholder="email"
-                        />
-                      </InputVertical>
-                    </>
-                  )}
+                  {CONFIG_FIELDS_BY_TYPE[providerType].map((field) => (
+                    <InputVertical
+                      key={field.name}
+                      title={
+                        field.optional
+                          ? `${field.label} (Optional)`
+                          : field.label
+                      }
+                      withLabel={`config.${field.name}`}
+                    >
+                      <ConfigInput field={field} isEditing={isEditing} />
+                    </InputVertical>
+                  ))}
 
                   <InputVertical
                     title="Allowed Email Domains (Optional)"
