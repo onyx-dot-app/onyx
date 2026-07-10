@@ -18,6 +18,8 @@ ADMIN_BANNER_KV_KEY = "admin_banner"
 class AdminBanner(BaseModel):
     title: str
     content: str | None
+    # Admin's choice to also show the announcement as a first-visit popup.
+    show_as_popup: bool = False
     # ISO-8601 timestamp of the last publish/edit.
     updated_at: str
 
@@ -30,10 +32,13 @@ def get_admin_banner() -> AdminBanner | None:
     return AdminBanner.model_validate(raw)
 
 
-def set_admin_banner(title: str, content: str | None) -> AdminBanner:
+def set_admin_banner(
+    title: str, content: str | None, show_as_popup: bool = False
+) -> AdminBanner:
     banner = AdminBanner(
         title=title,
         content=content,
+        show_as_popup=show_as_popup,
         updated_at=datetime.now(timezone.utc).isoformat(),
     )
     get_kv_store().store(ADMIN_BANNER_KV_KEY, banner.model_dump())

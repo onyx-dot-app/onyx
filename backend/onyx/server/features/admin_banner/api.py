@@ -24,6 +24,7 @@ MAX_CONTENT_LEN = 1000
 class AdminBannerUpdateRequest(BaseModel):
     title: str = Field(..., max_length=MAX_TITLE_LEN)
     content: str | None = Field(default=None, max_length=MAX_CONTENT_LEN)
+    show_as_popup: bool = False
 
 
 # Admin-only configuration of the single site-wide banner. Users receive it
@@ -52,7 +53,9 @@ def upsert_admin_banner(
             "Title must include non-whitespace characters",
         )
     content = (request.content or "").strip() or None
-    banner = set_admin_banner(title=title, content=content)
+    banner = set_admin_banner(
+        title=title, content=content, show_as_popup=request.show_as_popup
+    )
     # Clear existing rows so every user re-materializes the edited banner.
     delete_notifications_by_type(NotificationType.SYSTEM_ANNOUNCEMENT, db_session)
     return banner
