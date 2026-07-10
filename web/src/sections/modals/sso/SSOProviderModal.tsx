@@ -58,25 +58,22 @@ const ALL_CONFIG_FIELDS: SSOConfigField[] = Array.from(
   ).values()
 );
 
-// Required-ness follows the selected type's non-optional fields. On edit the
-// masked value prefills, so "required" passes without re-entry, but clearing a
-// required field is still blocked.
-function buildConfigSchema(): Record<string, Yup.StringSchema> {
-  const schema: Record<string, Yup.StringSchema> = {};
-  for (const field of ALL_CONFIG_FIELDS) {
-    const requiredTypes = CREATABLE_SSO_PROVIDER_TYPES.filter((type) =>
-      CONFIG_FIELDS_BY_TYPE[type].some(
-        (candidate) => candidate.name === field.name && !candidate.optional
-      )
-    );
-    schema[field.name] = Yup.string().when("provider_type", {
-      is: (type: string) => requiredTypes.includes(type as SSOProviderType),
-      then: (s) => s.required(`${field.label} is required`),
-      otherwise: (s) => s.optional(),
-    });
+function configSchemaForType(fields: SSOConfigField[]) {
+  const shape: Record<string, Yup.StringSchema> = {};
+  for (const field of fields) {
+    shape[field.name] = field.optional
+      ? Yup.string().optional()
+      : Yup.string().required(`${field.label} is required`);
   }
-  return schema;
+  return Yup.object(shape);
 }
+
+const CONFIG_SCHEMA_BY_TYPE = Object.fromEntries(
+  CREATABLE_SSO_PROVIDER_TYPES.map((type) => [
+    type,
+    configSchemaForType(CONFIG_FIELDS_BY_TYPE[type]),
+  ])
+);
 
 const SSO_VALIDATION_SCHEMA = Yup.object({
   provider_type: Yup.string()
@@ -89,7 +86,14 @@ const SSO_VALIDATION_SCHEMA = Yup.object({
       "Use lowercase letters, numbers, and hyphens only"
     ),
   display_name: Yup.string().required("Display name is required"),
-  config: Yup.object(buildConfigSchema()),
+  // The whole config schema switches on the sibling provider_type (a when()
+  // nested inside the config object cannot see parent keys, so per-field
+  // conditions would silently never require anything). On edit the masked
+  // value prefills, so "required" passes without re-entry.
+  config: Yup.object().when(
+    "provider_type",
+    ([type], schema) => CONFIG_SCHEMA_BY_TYPE[type as string] ?? schema
+  ),
   allowed_email_domains: Yup.array().of(Yup.string()).optional(),
 });
 
