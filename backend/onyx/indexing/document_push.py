@@ -70,8 +70,9 @@ class DocumentPushPayload(BaseModel):
 
 
 class DocumentPushResponse(BaseModel):
-    """Response from a document push endpoint. The body is not used — any 2xx
-    response with a JSON object body is treated as success."""
+    """Response from a Document Push hook endpoint. Exists to satisfy the hook
+    framework's type requirements, which demand a JSON object body on 2xx.
+    The config-driven sink does not use it — it ignores the body entirely."""
 
 
 @lru_cache(maxsize=1)
@@ -122,10 +123,11 @@ def push_document_via_config(payload: DocumentPushPayload) -> None:
     if config is None:
         return
     try:
+        # No response_type: the push is fire-and-forget, so any 2xx counts as
+        # success regardless of body (endpoints commonly ACK with 204/empty).
         outcome, _ = post_json_to_endpoint(
             config=config,
             payload=payload.model_dump(),
-            response_type=DocumentPushResponse,
         )
         if outcome.is_success:
             logger.debug(

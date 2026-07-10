@@ -69,6 +69,7 @@ def _process_response(
     exc: Exception | None,
     timeout: float,
     duration_ms: int,
+    parse_json: bool,
 ) -> ExternalEndpointOutcome:
     """Process the result of an HTTP call and return a structured outcome.
 
@@ -138,6 +139,18 @@ def _process_response(
             duration_ms=duration_ms,
         )
 
+    if not parse_json:
+        # Fire-and-forget: any 2xx is success — endpoints commonly ACK with
+        # 204 or an empty body, so the body must not be required.
+        return ExternalEndpointOutcome(
+            is_success=True,
+            reachability_signal=True,
+            status_code=status_code,
+            error_message=None,
+            response_payload=None,
+            duration_ms=duration_ms,
+        )
+
     try:
         response_payload = response.json()
     except (json.JSONDecodeError, httpx.DecodingError) as e:
@@ -181,13 +194,16 @@ def post_json_to_endpoint(
     *,
     config: ExternalEndpointConfig,
     payload: dict[str, Any],
-    response_type: type[T],
+    response_type: type[T] | None = None,
 ) -> tuple[ExternalEndpointOutcome, T | None]:
     """POST the payload and validate the response body against response_type.
 
-    Returns (outcome, validated_model). The model is non-None exactly when
-    outcome.is_success is True. Never raises on HTTP or validation failures —
-    they are reported through the outcome.
+    Returns (outcome, validated_model). With a response_type, the body must be
+    a JSON object that validates against it, and the model is non-None exactly
+    when outcome.is_success is True. Without one (fire-and-forget), the body
+    is ignored — any 2xx is success — and the model is always None. Never
+    raises on HTTP or validation failures — they are reported through the
+    outcome.
     """
     timeout = config.timeout_seconds
 
@@ -207,13 +223,21 @@ def post_json_to_endpoint(
     duration_ms = int((time.monotonic() - start) * 1000)
 
     outcome = _process_response(
-        response=response, exc=exc, timeout=timeout, duration_ms=duration_ms
+        response=response,
+        exc=exc,
+        timeout=timeout,
+        duration_ms=duration_ms,
+        parse_json=response_type is not None,
     )
 
     # A validation failure downgrades the outcome to a failure. The
     # reachability signal is cleared: the server responded — just a bad payload.
     validated_model: T | None = None
-    if outcome.is_success and outcome.response_payload is not None:
+    if (
+        response_type is not None
+        and outcome.is_success
+        and outcome.response_payload is not None
+    ):
         try:
             validated_model = response_type.model_validate(outcome.response_payload)
         except ValidationError as e:
