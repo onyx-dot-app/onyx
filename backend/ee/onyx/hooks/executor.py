@@ -25,9 +25,9 @@ configuration from the DB and persists execution results.
 is_reachable update policy
 --------------------------
 ``is_reachable`` on the Hook row is updated selectively — only when the outcome
-carries a reachability signal (``HookHTTPOutcome.updated_is_reachable`` is
-non-None; see ``onyx.hooks.http_executor`` for the per-outcome semantics).
-Writes are additionally skipped when the value would not change.
+carries a reachability signal (``ExternalEndpointOutcome.reachability_signal``
+is non-None; see ``onyx.utils.external_endpoint`` for the per-outcome
+semantics). Writes are additionally skipped when the value would not change.
 
 DB session design
 -----------------
@@ -64,7 +64,7 @@ from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
 from onyx.hooks.http_executor import execute_hook_endpoint
 from onyx.hooks.http_executor import HookEndpointConfig
-from onyx.hooks.http_executor import HookHTTPOutcome
+from onyx.utils.external_endpoint import ExternalEndpointOutcome
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -103,8 +103,7 @@ def _lookup_hook(
 def _persist_result(
     *,
     hook_id: int,
-    outcome: HookHTTPOutcome,
-    duration_ms: int,
+    outcome: ExternalEndpointOutcome,
 ) -> None:
     """Write the execution log on failure and optionally update is_reachable, each
     in its own session so a failure in one does not affect the other."""
@@ -120,7 +119,7 @@ def _persist_result(
                     is_success=False,
                     error_message=outcome.error_message,
                     status_code=outcome.status_code,
-                    duration_ms=duration_ms,
+                    duration_ms=outcome.duration_ms,
                 )
                 log_session.commit()
         except Exception:
@@ -129,16 +128,16 @@ def _persist_result(
             )
 
     # Update is_reachable separately — best-effort, non-critical.
-    # None means the value is unchanged (set by the caller to skip the no-op write).
+    # None means no signal (or the caller cleared it to skip a no-op write).
     # update_hook__no_commit can raise OnyxError(NOT_FOUND) if the hook was
     # concurrently deleted, so keep this isolated from the log write above.
-    if outcome.updated_is_reachable is not None:
+    if outcome.reachability_signal is not None:
         try:
             with get_session_with_current_tenant() as reachable_session:
                 update_hook__no_commit(
                     db_session=reachable_session,
                     hook_id=hook_id,
-                    is_reachable=outcome.updated_is_reachable,
+                    is_reachable=outcome.reachability_signal,
                 )
                 reachable_session.commit()
         except Exception:
@@ -176,13 +175,13 @@ def _execute_hook_inner(
         fail_strategy=hook.fail_strategy,
     )
 
-    def _on_result(outcome: HookHTTPOutcome, duration_ms: int) -> None:
+    def _on_result(outcome: ExternalEndpointOutcome) -> None:
         # Skip the is_reachable write when the value would not change — avoids a
         # no-op DB round-trip on every call when the hook is already in the
         # expected state.
-        if outcome.updated_is_reachable == current_is_reachable:
-            outcome = outcome.model_copy(update={"updated_is_reachable": None})
-        _persist_result(hook_id=hook_id, outcome=outcome, duration_ms=duration_ms)
+        if outcome.reachability_signal == current_is_reachable:
+            outcome = outcome.model_copy(update={"reachability_signal": None})
+        _persist_result(hook_id=hook_id, outcome=outcome)
 
     return execute_hook_endpoint(
         config=config,

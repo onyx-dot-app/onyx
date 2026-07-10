@@ -355,14 +355,12 @@ def test_document_push_skipped_in_multi_tenant_mode() -> None:
 
 
 def test_document_push_config_sink_runs_in_multi_tenant_mode() -> None:
-    from onyx.db.enums import HookFailStrategy
-    from onyx.hooks.http_executor import HookEndpointConfig
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
+    from onyx.utils.external_endpoint import ExternalEndpointConfig
 
-    config = HookEndpointConfig(
+    config = ExternalEndpointConfig(
         endpoint_url="https://push.example.com/docs",
         timeout_seconds=30.0,
-        fail_strategy=HookFailStrategy.SOFT,
     )
     doc = _make_doc(doc_id="doc1")
     with (
@@ -414,7 +412,7 @@ def test_document_push_skipped_for_non_public_connector() -> None:
 
 def test_document_push_fires_execute_hook_for_public_doc() -> None:
     from onyx.db.enums import HookPoint
-    from onyx.hooks.points.document_push import DocumentPushResponse
+    from onyx.indexing.document_push import DocumentPushResponse
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
 
     doc = _make_doc(doc_id="doc1")
@@ -440,14 +438,12 @@ def test_document_push_fires_execute_hook_for_public_doc() -> None:
 
 
 def test_document_push_config_wins_and_skips_hook() -> None:
-    from onyx.db.enums import HookFailStrategy
-    from onyx.hooks.http_executor import HookEndpointConfig
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
+    from onyx.utils.external_endpoint import ExternalEndpointConfig
 
-    config = HookEndpointConfig(
+    config = ExternalEndpointConfig(
         endpoint_url="https://push.example.com/docs",
         timeout_seconds=30.0,
-        fail_strategy=HookFailStrategy.SOFT,
     )
     doc = _make_doc(doc_id="doc1")
     with (

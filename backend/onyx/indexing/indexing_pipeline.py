@@ -63,10 +63,10 @@ from onyx.hooks.points.document_ingestion import DocumentIngestionOwner
 from onyx.hooks.points.document_ingestion import DocumentIngestionPayload
 from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
 from onyx.hooks.points.document_ingestion import DocumentIngestionSection
-from onyx.hooks.points.document_push import DocumentPushPayload
-from onyx.hooks.points.document_push import DocumentPushResponse
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
+from onyx.indexing.document_push import DocumentPushPayload
+from onyx.indexing.document_push import DocumentPushResponse
 from onyx.indexing.document_push import get_document_push_config
 from onyx.indexing.document_push import push_document_via_config
 from onyx.indexing.embedder import embed_chunks_with_failure_handling

@@ -7,7 +7,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from onyx.hooks.points.document_push import DocumentPushPayload
+from onyx.indexing.document_push import DocumentPushPayload
 from onyx.indexing.document_push import get_document_push_config
 from onyx.indexing.document_push import push_document_via_config
 
