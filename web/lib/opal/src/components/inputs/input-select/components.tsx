@@ -345,7 +345,10 @@ function InputSelectItem({
   childrenRef.current = children;
   iconRef.current = icon;
 
-  React.useEffect(() => {
+  // Layout effect so the trigger never paints the placeholder on first
+  // render when a value is already selected. Radix mounts closed Content
+  // into a detached fragment, so this runs even while the menu is closed.
+  React.useLayoutEffect(() => {
     if (!isSelected) return;
     setSelectedItemDisplay({ childrenRef, iconRef });
 
