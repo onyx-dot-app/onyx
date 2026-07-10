@@ -53,11 +53,19 @@ export default function LivingMapModal({
 
   return (
     <Modal open onOpenChange={(o) => !o && onDismiss()}>
-      <Modal.Content width="xl" height="fit">
+      {/* A stray backdrop click shouldn't permanently dismiss the tour —
+          closing is via Escape, the header X, or the final CTA. */}
+      <Modal.Content
+        width="xl"
+        height="fit"
+        onPointerDownOutside={(event) => event.preventDefault()}
+      >
+        {/* The X routes through Radix → onOpenChange, which owns dismissal;
+            a real handler here would double-fire onDismiss. */}
         <Modal.Header
           title="Meet Craft"
           description={stage.description}
-          onClose={onDismiss}
+          onClose={() => {}}
         />
         <Modal.Body padding={1.5}>
           <LivingMapDiagram

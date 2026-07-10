@@ -72,7 +72,7 @@ export class ScheduledTasksPage {
       .catch(() => false);
     if (appeared) {
       await this.page.keyboard.press("Escape");
-      await intro.waitFor({ state: "hidden" });
+      await expect(intro).toBeHidden();
     }
   }
 

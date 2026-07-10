@@ -3,7 +3,7 @@
 import { Text } from "@opal/components";
 import { SvgArrowUp, SvgPlus } from "@opal/icons";
 import { cn } from "@opal/utils";
-import Logo from "@/refresh-components/Logo";
+import { Logo } from "@/lib/app/components";
 
 interface WelcomePageMockProps {
   /** Overlay content (e.g. a modal) rendered on top of the page. */

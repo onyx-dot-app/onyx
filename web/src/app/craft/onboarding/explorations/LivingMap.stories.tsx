@@ -12,13 +12,14 @@ const meta: Meta<typeof LivingMapModal> = {
   title: "Apps/Craft/Onboarding Explorations/Living Map",
   component: LivingMapModal,
   parameters: { layout: "fullscreen" },
-  args: { open: true, onComplete: () => {} },
+  args: { open: true },
   argTypes: {
     initialStage: {
       control: "select",
       options: LIVING_MAP_STAGES.map((stage) => stage.id),
     },
     onComplete: { action: "complete" },
+    onDismiss: { action: "dismiss" },
   },
   render: (args) => (
     <WelcomePageMock dimmed>
