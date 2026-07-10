@@ -1,0 +1,129 @@
+{
+  "global_exclude_regex": "(:free$)|(-image$)|(-audio$)|(embedding)",
+  "require_text_output": true,
+  "sections": {
+    "openai": {
+      "id_transform": "strip_prefix",
+      "transform_is_reliable": true,
+      "emit_display_name": false,
+      "id_overrides": {},
+      "display_name_overrides": {},
+      "pinned_default": null,
+      "rules": [
+        {
+          "label": "gpt-line",
+          "vendor_prefix": "openai/",
+          "include_regex": "^openai/gpt-\\d+(\\.\\d+)?$",
+          "exclude_regex": "-(mini|nano|chat|codex|pro|audio|realtime|image|luna|terra|sol)",
+          "limit": 3,
+          "is_default_source": true
+        }
+      ]
+    },
+    "anthropic": {
+      "id_transform": "strip_prefix_dots_to_dashes",
+      "transform_is_reliable": false,
+      "emit_display_name": true,
+      "id_overrides": {},
+      "display_name_overrides": {},
+      "pinned_default": null,
+      "rules": [
+        {
+          "label": "opus",
+          "vendor_prefix": "anthropic/",
+          "include_regex": "^anthropic/claude-opus-\\d+(\\.\\d+)?$",
+          "exclude_regex": "-(fast|thinking)",
+          "limit": 3,
+          "is_default_source": true
+        },
+        {
+          "label": "sonnet",
+          "vendor_prefix": "anthropic/",
+          "include_regex": "^anthropic/claude-sonnet-\\d+(\\.\\d+)?$",
+          "exclude_regex": "-(fast|thinking)",
+          "limit": 1,
+          "is_default_source": false
+        },
+        {
+          "label": "haiku",
+          "vendor_prefix": "anthropic/",
+          "include_regex": "^anthropic/claude-haiku-\\d+(\\.\\d+)?$",
+          "exclude_regex": "-(fast|thinking)",
+          "limit": 1,
+          "is_default_source": false
+        }
+      ]
+    },
+    "vertex_ai": {
+      "id_transform": "strip_prefix",
+      "transform_is_reliable": false,
+      "emit_display_name": true,
+      "id_overrides": {},
+      "display_name_overrides": {
+        "gemini-3.1-pro-preview": "Gemini 3.1 Pro",
+        "gemini-3-flash-preview": "Gemini 3 Flash"
+      },
+      "pinned_default": null,
+      "rules": [
+        {
+          "label": "gemini-pro",
+          "vendor_prefix": "google/",
+          "include_regex": "^google/gemini-\\d+(\\.\\d+)?-pro(-preview)?$",
+          "exclude_regex": "-(lite|image|audio|tts|customtools)",
+          "limit": 1,
+          "is_default_source": true
+        },
+        {
+          "label": "gemini-flash",
+          "vendor_prefix": "google/",
+          "include_regex": "^google/gemini-\\d+(\\.\\d+)?-flash(-preview)?$",
+          "exclude_regex": "-(lite|image|audio|tts|customtools)",
+          "limit": 1,
+          "is_default_source": false
+        }
+      ]
+    },
+    "openrouter": {
+      "id_transform": "keep_full_id",
+      "transform_is_reliable": true,
+      "emit_display_name": true,
+      "id_overrides": {},
+      "display_name_overrides": {},
+      "pinned_default": null,
+      "rules": [
+        {
+          "label": "glm",
+          "vendor_prefix": "z-ai/",
+          "include_regex": "^z-ai/glm-\\d+(\\.\\d+)?$",
+          "exclude_regex": "-(turbo|flash|air)",
+          "limit": 1,
+          "is_default_source": true
+        },
+        {
+          "label": "deepseek",
+          "vendor_prefix": "deepseek/",
+          "include_regex": "^deepseek/deepseek-v\\d+(\\.\\d+)?(-pro)?$",
+          "exclude_regex": "-(exp|flash)",
+          "limit": 1,
+          "is_default_source": false
+        },
+        {
+          "label": "qwen",
+          "vendor_prefix": "qwen/",
+          "include_regex": "^qwen/qwen\\d+(\\.\\d+)?-(plus|max)$",
+          "exclude_regex": "-(preview|thinking)",
+          "limit": 1,
+          "is_default_source": false
+        },
+        {
+          "label": "kimi",
+          "vendor_prefix": "moonshotai/",
+          "include_regex": "^moonshotai/kimi-k\\d+(\\.\\d+)?$",
+          "exclude_regex": "-(code|thinking)",
+          "limit": 1,
+          "is_default_source": false
+        }
+      ]
+    }
+  }
+}
