@@ -66,29 +66,28 @@ def parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
     return (major, minor)
 
 
+def _version_at_least(model_name: str, min_version: tuple[int, int]) -> bool:
+    version = parse_anthropic_model_version(model_name)
+    return version is not None and version >= min_version
+
+
 def anthropic_supports_adaptive_thinking(model_name: str) -> bool:
     """True for Claude models that accept thinking.type.adaptive (4.6+)."""
-    version = parse_anthropic_model_version(model_name)
-    return (
-        version is not None
-        and version >= _ANTHROPIC_ADAPTIVE_THINKING_SUPPORTED_MIN_VERSION
+    return _version_at_least(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_SUPPORTED_MIN_VERSION
     )
 
 
 def anthropic_requires_adaptive_thinking(model_name: str) -> bool:
-    """True for Claude models that reject the legacy thinking config (Opus 4.7+)."""
-    version = parse_anthropic_model_version(model_name)
-    return (
-        version is not None
-        and version >= _ANTHROPIC_ADAPTIVE_THINKING_REQUIRED_MIN_VERSION
+    """True for Claude models that reject the legacy thinking config (4.7+)."""
+    return _version_at_least(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_REQUIRED_MIN_VERSION
     )
 
 
 def anthropic_omits_sampling_params(model_name: str) -> bool:
     """True for Claude models that reject non-default temperature/top_p/top_k
-    (Opus 4.7+)."""
-    version = parse_anthropic_model_version(model_name)
-    return (
-        version is not None
-        and version >= _ANTHROPIC_ADAPTIVE_THINKING_REQUIRED_MIN_VERSION
+    (4.7+)."""
+    return _version_at_least(
+        model_name, _ANTHROPIC_ADAPTIVE_THINKING_REQUIRED_MIN_VERSION
     )
