@@ -386,6 +386,10 @@ def test_document_push_fires_execute_hook_for_public_doc() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
         patch(_PATCH_EXECUTE_HOOK) as mock_hook,
     ):
         _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
@@ -399,27 +403,39 @@ def test_document_push_fires_execute_hook_for_public_doc() -> None:
     assert payload["content"] == "Hello"
 
 
-def test_document_push_config_fallback_when_hook_skipped() -> None:
+def test_document_push_config_wins_and_skips_hook() -> None:
+    from onyx.db.enums import HookFailStrategy
+    from onyx.hooks.http_executor import HookEndpointConfig
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
 
+    config = HookEndpointConfig(
+        endpoint_url="https://push.example.com/docs",
+        timeout_seconds=30.0,
+        fail_strategy=HookFailStrategy.SOFT,
+    )
     doc = _make_doc(doc_id="doc1")
     with (
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
-        patch(_PATCH_EXECUTE_HOOK, return_value=HookSkipped()),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=config,
+        ),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
         patch(
             "onyx.indexing.indexing_pipeline.push_document_via_config"
         ) as mock_config_push,
     ):
         _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
 
+    # Either/or: the config-driven sink wins and the hook DB lookup is skipped.
     mock_config_push.assert_called_once()
     assert mock_config_push.call_args.args[0].document_id == "doc1"
+    mock_hook.assert_not_called()
 
 
-def test_document_push_config_not_called_when_hook_configured() -> None:
-    from onyx.hooks.points.document_push import DocumentPushResponse
+def test_document_push_falls_back_to_hook_when_config_unset() -> None:
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
 
     doc = _make_doc(doc_id="doc1")
@@ -427,14 +443,18 @@ def test_document_push_config_not_called_when_hook_configured() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
-        patch(_PATCH_EXECUTE_HOOK, return_value=DocumentPushResponse()),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
         patch(
             "onyx.indexing.indexing_pipeline.push_document_via_config"
         ) as mock_config_push,
     ):
         _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
 
-    # Either/or: a configured hook takes precedence over the env-config sink.
+    mock_hook.assert_called_once()
     mock_config_push.assert_not_called()
 
 
@@ -446,6 +466,10 @@ def test_document_push_hook_exception_propagates() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
         patch(_PATCH_EXECUTE_HOOK, side_effect=RuntimeError("hard fail")),
         pytest.raises(RuntimeError, match="hard fail"),
     ):

@@ -67,6 +67,7 @@ from onyx.hooks.points.document_push import DocumentPushPayload
 from onyx.hooks.points.document_push import DocumentPushResponse
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
+from onyx.indexing.document_push import get_document_push_config
 from onyx.indexing.document_push import push_document_via_config
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
@@ -1179,9 +1180,8 @@ def _maybe_push_documents(
     from_beginning: bool = False,
 ) -> None:
     """Push each successfully indexed public document to an external sink:
-    the DOCUMENT_PUSH hook (EE, from the hook table) when one is configured,
-    otherwise the config-driven endpoint (all editions, from
-    DOCUMENT_PUSH_ENDPOINT_URL).
+    the config-driven endpoint (all editions, from DOCUMENT_PUSH_ENDPOINT_URL)
+    when set, otherwise the DOCUMENT_PUSH hook (EE, from the hook table).
 
     Single-tenant only — multi-tenant deployments would mix documents from
     different organizations into a shared external destination.
@@ -1199,6 +1199,8 @@ def _maybe_push_documents(
     successfully_indexed = {r.document_id for r in insertion_records}
     if not successfully_indexed:
         return
+
+    use_config_push = get_document_push_config() is not None
 
     with get_session_with_current_tenant() as db_session:
         cc_pair = get_connector_credential_pair(
@@ -1236,16 +1238,18 @@ def _maybe_push_documents(
                     for k, v in (doc.metadata or {}).items()
                 },
             )
-            hook_result = execute_hook(
+            # Either/or: the config-driven endpoint wins when set — checked
+            # first since it is a cached local read, while the hook path does
+            # a DB lookup per document.
+            if use_config_push:
+                push_document_via_config(payload)
+                continue
+            execute_hook(
                 db_session=db_session,
                 hook_point=HookPoint.DOCUMENT_PUSH,
                 payload=payload.model_dump(),
                 response_type=DocumentPushResponse,
             )
-            # Either/or: the config-driven endpoint is a fallback for when no
-            # DOCUMENT_PUSH hook is configured (e.g. non-EE deployments).
-            if isinstance(hook_result, HookSkipped):
-                push_document_via_config(payload)
 
 
 @log_function_time(debug_only=True)

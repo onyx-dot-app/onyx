@@ -4,9 +4,9 @@ Pushes successfully indexed documents to an operator-configured HTTP endpoint
 (DOCUMENT_PUSH_ENDPOINT_URL et al. in app_configs). This is not a hook: it does
 not read the hook table and is not managed via the EE /admin/hooks API. It
 reuses the hook framework's payload shape (DocumentPushPayload) and HTTP
-machinery (execute_hook_endpoint). The call site treats it as a fallback: it
-fires only when no DOCUMENT_PUSH hook is configured, so the two sinks are
-either/or, never both.
+machinery (execute_hook_endpoint). The two sinks are either/or, never both:
+the call site checks this config first (a cached local read) and only falls
+back to the DOCUMENT_PUSH hook when it is unset.
 
 The endpoint URL is operator-supplied through the environment, so unlike
 admin-entered hook URLs it is trusted to point at private-network destinations
