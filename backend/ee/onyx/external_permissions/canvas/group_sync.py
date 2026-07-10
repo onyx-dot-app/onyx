@@ -2,7 +2,7 @@ from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.canvas.access import build_course_permission_context
-from ee.onyx.external_permissions.canvas.utils import credential_json
+from ee.onyx.external_permissions.utils import credential_json
 from onyx.connectors.canvas.connector import canvas_all_users_group_id
 from onyx.connectors.canvas.connector import canvas_course_group_id
 from onyx.connectors.canvas.connector import canvas_group_group_id

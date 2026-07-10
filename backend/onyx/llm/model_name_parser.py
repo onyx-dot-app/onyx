@@ -135,6 +135,7 @@ def _generate_display_name_from_model(model_name: str) -> str:
         "gemini-2.5-pro-exp-03-25" → "Gemini 2.5 Pro"
         "claude-3-5-sonnet-20241022" → "Claude 3.5 Sonnet"
         "gpt-oss:120b" → "GPT-OSS 120B" (hyphenated exception)
+        "gpt-4o-mini" → "GPT-4o Mini" (GPT- brand prefix kept)
     """
     try:
         # Remove provider prefix if present
@@ -164,6 +165,13 @@ def _generate_display_name_from_model(model_name: str) -> str:
         # Remove version suffixes like -v1, -v2
         cleaned = re.sub(r"-v\d+$", "", cleaned)
 
+        # GPT models keep the "GPT-" brand prefix, with the hyphen bound to the
+        # version token (e.g., "gpt-4o-mini" → "GPT-4o Mini")
+        gpt_prefix = ""
+        if base_name_lower.startswith("gpt-"):
+            gpt_prefix = "GPT-"
+            cleaned = cleaned[len(gpt_prefix) :]
+
         # Convert separators to spaces
         cleaned = cleaned.replace("-", " ").replace("_", " ")
 
@@ -174,8 +182,11 @@ def _generate_display_name_from_model(model_name: str) -> str:
         # Title case each word, preserving version numbers
         words = cleaned.split()
         result_words = []
-        for word in words:
-            if word.isdigit() or re.match(r"^\d+\.?\d*$", word):
+        for i, word in enumerate(words):
+            if gpt_prefix and i == 0 and re.match(r"^\d", word):
+                # Version tokens like "4o" or "4.1" keep their casing after "GPT-"
+                result_words.append(word)
+            elif word.isdigit() or re.match(r"^\d+\.?\d*$", word):
                 # Keep numbers as-is
                 result_words.append(word)
             elif word.lower() in ("pro", "lite", "mini", "flash", "preview", "ultra"):
@@ -185,7 +196,7 @@ def _generate_display_name_from_model(model_name: str) -> str:
                 # Title case other words
                 result_words.append(word.title())
 
-        return " ".join(result_words) + size_suffix
+        return gpt_prefix + " ".join(result_words) + size_suffix
     except Exception:
         return model_name
 

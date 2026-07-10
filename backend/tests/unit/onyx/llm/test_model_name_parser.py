@@ -40,6 +40,14 @@ def test_direct_provider_inference() -> None:
     assert result.provider_display_name == "GPT (OpenAI)"
 
 
+def test_gpt_model_fallback_keeps_gpt_prefix() -> None:
+    """Unenriched GPT models keep the "GPT-" brand prefix in generated display names."""
+    result = parse_litellm_model_name("azure/gpt-4o-mini-custom")
+
+    assert result.display_name == "GPT-4o Mini Custom"
+    assert result.vendor == "openai"
+
+
 def test_unknown_model_fallback() -> None:
     """Test that unknown models get a cleaned-up display name."""
     result = parse_litellm_model_name("some-unknown-model-xyz")
