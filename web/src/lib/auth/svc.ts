@@ -51,7 +51,10 @@ export async function forgotPassword(email: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error = await response.json().catch((e) => {
+      console.warn("forgotPassword: failed to parse error response", e);
+      return {};
+    });
     const errorMessage =
       error?.detail || "An error occurred during password reset.";
     throw new Error(errorMessage);
@@ -69,7 +72,10 @@ export async function resetPassword(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error = await response.json().catch((e) => {
+      console.warn("resetPassword: failed to parse error response", e);
+      return {};
+    });
     if (error?.detail?.code === "RESET_PASSWORD_INVALID_PASSWORD") {
       throw new Error(error.detail.reason || "Invalid password");
     }
@@ -87,7 +93,13 @@ export async function requestEmailVerification(email: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error = await response.json().catch((e) => {
+      console.warn(
+        "requestEmailVerification: failed to parse error response",
+        e
+      );
+      return {};
+    });
     throw new Error(error?.detail || "Failed to request email verification.");
   }
 }
@@ -119,7 +131,10 @@ export async function verifyCaptchaForOAuth(token: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
+    const body = await response.json().catch((e) => {
+      console.warn("verifyCaptchaForOAuth: failed to parse error response", e);
+      return {};
+    });
     throw new Error(
       `Captcha verify rejected: status=${response.status} detail=${body.detail ?? "(none)"}`
     );
@@ -141,7 +156,10 @@ export async function impersonateUser(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
+    const error = await response.json().catch((e) => {
+      console.warn("impersonateUser: failed to parse error response", e);
+      return {};
+    });
     throw new Error(error?.detail || "Failed to impersonate user");
   }
 }
