@@ -13,16 +13,16 @@ import {
   updateCredentialWithPrivateKey,
 } from "@/lib/credential";
 import { toast } from "@/hooks/useToast";
-import CreateCredential from "./actions/CreateCredential";
+import CreateCredential from "@/components/credentials/actions/CreateCredential";
 import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
-import ModifyCredential from "./actions/ModifyCredential";
+import ModifyCredential from "@/components/credentials/actions/ModifyCredential";
 import { Text } from "@opal/components";
 import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
 } from "@/app/admin/connector/[ccPairId]/lib";
 import Modal from "@/refresh-components/Modal";
-import EditCredential from "./actions/EditCredential";
+import EditCredential from "@/components/credentials/actions/EditCredential";
 import { getSourceDisplayName } from "@/lib/sources";
 import {
   ConfluenceCredentialJson,
@@ -34,7 +34,7 @@ import {
 } from "@/lib/connectors/oauth";
 import { Spinner } from "@/components/Spinner";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
-import { Card } from "../ui/card";
+import { Card } from "@/components/ui/card";
 import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
 import { SvgEdit, SvgKey } from "@opal/icons";
 
@@ -236,7 +236,7 @@ export default function CredentialSection({
               title="Update Credentials"
               onClose={closeModifyCredential}
             />
-            <Modal.Body>
+            <Modal.Body alignItems="stretch">
               <ModifyCredential
                 close={closeModifyCredential}
                 accessType={ccPair.access_type}
@@ -264,10 +264,11 @@ export default function CredentialSection({
               title="Edit Credential"
               onClose={closeEditingCredential}
             />
-            <Modal.Body>
+            <Modal.Body alignItems="stretch">
               <EditCredential
                 onUpdate={onUpdateCredential}
                 credential={editingCredential}
+                sourceType={sourceType}
                 onClose={closeEditingCredential}
               />
             </Modal.Body>
