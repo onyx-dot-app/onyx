@@ -67,6 +67,7 @@ from onyx.hooks.points.document_push import DocumentPushPayload
 from onyx.hooks.points.document_push import DocumentPushResponse
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
+from onyx.indexing.document_push import push_document_via_config
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
@@ -1177,7 +1178,10 @@ def _maybe_push_documents(
     insertion_records: list[DocumentInsertionRecord],
     from_beginning: bool = False,
 ) -> None:
-    """Fire the DOCUMENT_PUSH hook for each successfully indexed public document.
+    """Push each successfully indexed public document to the external sinks:
+    the DOCUMENT_PUSH hook (EE, from the hook table) and the config-driven
+    endpoint (all editions, from DOCUMENT_PUSH_ENDPOINT_URL). The sinks are
+    independent; each fires only when configured.
 
     Single-tenant only — multi-tenant deployments would mix documents from
     different organizations into a shared external destination.
@@ -1238,6 +1242,7 @@ def _maybe_push_documents(
                 payload=payload.model_dump(),
                 response_type=DocumentPushResponse,
             )
+            push_document_via_config(payload)
 
 
 @log_function_time(debug_only=True)
