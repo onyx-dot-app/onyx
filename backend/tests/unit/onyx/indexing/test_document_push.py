@@ -100,6 +100,17 @@ def test_invalid_url_disables_push() -> None:
     mock_client_cls.assert_not_called()
 
 
+def test_non_positive_timeout_disables_push() -> None:
+    with (
+        patch(f"{_MODULE}.DOCUMENT_PUSH_ENDPOINT_URL", "https://push.example.com/docs"),
+        patch(f"{_MODULE}.DOCUMENT_PUSH_TIMEOUT_SECONDS", 0.0),
+        patch("httpx.Client") as mock_client_cls,
+    ):
+        assert get_document_push_config() is None
+        push_document_via_config(_make_payload())
+    mock_client_cls.assert_not_called()
+
+
 def test_private_network_url_is_allowed() -> None:
     # Operator-supplied env config may target internal systems — the primary
     # self-hosted use case.

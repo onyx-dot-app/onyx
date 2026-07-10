@@ -94,6 +94,17 @@ def get_document_push_config() -> ExternalEndpointConfig | None:
             "push is disabled"
         )
         return None
+    if DOCUMENT_PUSH_TIMEOUT_SECONDS <= 0:
+        logger.error(
+            "DOCUMENT_PUSH_TIMEOUT_SECONDS must be positive (got %s) — "
+            "config-driven document push is disabled",
+            DOCUMENT_PUSH_TIMEOUT_SECONDS,
+        )
+        return None
+    logger.notice(
+        "Config-driven document push enabled — pushing indexed documents to %s",
+        endpoint_url,
+    )
     return ExternalEndpointConfig(
         endpoint_url=endpoint_url,
         api_key=DOCUMENT_PUSH_API_KEY,
@@ -111,13 +122,26 @@ def push_document_via_config(payload: DocumentPushPayload) -> None:
     if config is None:
         return
     try:
-        # Failure details are logged by post_json_to_endpoint; the outcome is
-        # intentionally ignored here.
-        post_json_to_endpoint(
+        outcome, _ = post_json_to_endpoint(
             config=config,
             payload=payload.model_dump(),
             response_type=DocumentPushResponse,
         )
+        if outcome.is_success:
+            logger.debug(
+                "Pushed document_id=%s (HTTP %s, %sms)",
+                payload.document_id,
+                outcome.status_code,
+                outcome.duration_ms,
+            )
+        else:
+            # The client already logged the failure detail; this line adds the
+            # document context the generic client doesn't have.
+            logger.warning(
+                "Failed to push document_id=%s: %s",
+                payload.document_id,
+                outcome.error_message,
+            )
     except Exception:
         logger.exception(
             "Unexpected error pushing document_id=%s to the configured endpoint",
