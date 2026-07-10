@@ -343,7 +343,7 @@ export function EmailPasswordForm({
       );
 
       if (!response.ok) {
-        const errorBody: any = await response.json();
+        const errorBody: any = await response.json().catch(() => ({}));
         const errorDetail = errorBody.detail;
         let errorMsg = "Unknown error";
         if (response.status === 429) {
@@ -356,6 +356,20 @@ export function EmailPasswordForm({
         toast.error(errorMsg);
         return;
       }
+
+      // On verification-required deployments the server blocks login until the
+      // email is confirmed, so we must NOT call basicLogin first — it would
+      // fail and leave the user stranded even though the account was created.
+      if (shouldVerify) {
+        try {
+          await requestEmailVerification(email);
+        } catch (e) {
+          // Best-effort: the account already exists, so redirect regardless.
+          console.warn("requestEmailVerification failed:", e);
+        }
+        window.location.href = "/auth/waiting-on-verification";
+        return;
+      }
     }
 
     const loginCaptchaToken = await getCaptchaToken("login");
@@ -366,17 +380,13 @@ export function EmailPasswordForm({
     );
 
     if (loginResponse.ok) {
-      if (isSignup && shouldVerify) {
-        await requestEmailVerification(email);
-        window.location.href = "/auth/send-email-verification";
-      } else {
-        const validatedNextUrl = validateInternalRedirect(nextUrl);
-        window.location.href =
-          validatedNextUrl ??
-          `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
-      }
+      const validatedNextUrl = validateInternalRedirect(nextUrl);
+      window.location.href =
+        validatedNextUrl ??
+        `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
     } else {
-      const errorDetail: any = (await loginResponse.json()).detail;
+      const errorBody: any = await loginResponse.json().catch(() => ({}));
+      const errorDetail = errorBody.detail;
       let errorMsg = "Unknown error";
       if (loginResponse.status === 429) {
         errorMsg = "Too many requests. Please try again later.";
@@ -394,6 +404,7 @@ export function EmailPasswordForm({
   return (
     <Formik
       initialValues={initialValues}
+      enableReinitialize
       validateOnChange={true}
       validateOnBlur={true}
       validationSchema={validationSchema}
@@ -448,7 +459,7 @@ export function EmailPasswordForm({
             <AuthLayouts.Submit
               label={label}
               isSubmitting={isSubmitting}
-              isValid={isValid}
+              isValid={isValid && (!isSignup || Boolean(authTypeMetadata))}
               dirty={dirty}
             />
 

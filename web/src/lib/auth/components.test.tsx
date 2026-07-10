@@ -40,7 +40,7 @@ jest.mock("@/providers/UserProvider", () => ({
 
 jest.mock("@/lib/hooks/useCaptcha", () => ({
   useCaptcha: () => ({
-    getCaptchaToken: async () => null,
+    getCaptchaToken: async () => undefined,
     isCaptchaEnabled: false,
   }),
 }));
