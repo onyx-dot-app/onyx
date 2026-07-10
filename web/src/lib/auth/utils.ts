@@ -1,3 +1,61 @@
+// ---------------------------------------------------------------------------
+// Auth URL helpers
+// ---------------------------------------------------------------------------
+
+import { AuthType } from "@/lib/auth/types";
+
+export function getAuthUrl(
+  authType: AuthType,
+  nextUrl: string | null
+): string | null {
+  const params = new URLSearchParams({ redirect: "true" });
+  if (nextUrl) params.set("next", nextUrl);
+
+  switch (authType) {
+    case AuthType.BASIC:
+      return null;
+    case AuthType.GOOGLE_OAUTH:
+    case AuthType.CLOUD:
+      return `/api/auth/oauth/authorize?${params}`;
+    case AuthType.OIDC:
+      return `/api/auth/oidc/authorize?${params}`;
+    case AuthType.SAML:
+      return `/api/auth/saml/authorize?${params}`;
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Password predicate functions
+// ---------------------------------------------------------------------------
+
+export function passwordMeetsLengthRequirements(
+  password: string,
+  min: number,
+  max: number
+): boolean {
+  return password.length >= min && password.length <= max;
+}
+
+export function passwordHasUppercase(password: string): boolean {
+  return /[A-Z]/.test(password);
+}
+
+export function passwordHasLowercase(password: string): boolean {
+  return /[a-z]/.test(password);
+}
+
+export function passwordHasDigit(password: string): boolean {
+  return /\d/.test(password);
+}
+
+export function passwordHasSpecialChar(password: string): boolean {
+  return /[^A-Za-z0-9]/.test(password);
+}
+
+// ---------------------------------------------------------------------------
+
 /**
  * Validates a redirect URL to prevent Open Redirect vulnerabilities.
  * Only allows internal paths (relative URLs starting with /).

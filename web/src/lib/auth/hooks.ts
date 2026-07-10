@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import type { Route } from "next";
 import useSWR from "swr";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -11,7 +12,113 @@ import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
 import { useCurrentUser } from "@/lib/users/hooks";
+import { getAuthRedirect, AuthPage } from "@/lib/auth/redirect";
+import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import { isAuthPath } from "@/lib/auth/paths";
+
+interface AuthTypeAPIResponse {
+  auth_type: string;
+  requires_verification: boolean;
+  anonymous_user_enabled: boolean | null;
+  password_min_length: number;
+  password_max_length: number;
+  password_require_uppercase: boolean;
+  password_require_lowercase: boolean;
+  password_require_digit: boolean;
+  password_require_special_char: boolean;
+  has_users: boolean;
+  oauth_enabled: boolean;
+}
+
+const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {
+  authType: NEXT_PUBLIC_CLOUD_ENABLED ? AuthType.CLOUD : AuthType.BASIC,
+  autoRedirect: false,
+  requiresVerification: false,
+  anonymousUserEnabled: null,
+  passwordMinLength: 8,
+  passwordMaxLength: 64,
+  passwordRequireUppercase: false,
+  passwordRequireLowercase: false,
+  passwordRequireDigit: false,
+  passwordRequireSpecialChar: false,
+  hasUsers: false,
+  oauthEnabled: false,
+};
+
+async function fetchAuthTypeMetadata(url: string): Promise<AuthTypeMetadata> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch auth type metadata");
+  const data: AuthTypeAPIResponse = await res.json();
+  const authType = NEXT_PUBLIC_CLOUD_ENABLED
+    ? AuthType.CLOUD
+    : (data.auth_type as AuthType);
+  return {
+    authType,
+    autoRedirect: authType === AuthType.OIDC || authType === AuthType.SAML,
+    requiresVerification: data.requires_verification,
+    anonymousUserEnabled: data.anonymous_user_enabled,
+    passwordMinLength: data.password_min_length,
+    passwordMaxLength: data.password_max_length,
+    passwordRequireUppercase: data.password_require_uppercase,
+    passwordRequireLowercase: data.password_require_lowercase,
+    passwordRequireDigit: data.password_require_digit,
+    passwordRequireSpecialChar: data.password_require_special_char,
+    hasUsers: data.has_users,
+    oauthEnabled: data.oauth_enabled,
+  };
+}
+
+export function useAuthTypeMetadata(): {
+  authTypeMetadata: AuthTypeMetadata;
+  isLoading: boolean;
+  error: Error | undefined;
+} {
+  const { data, error, isLoading } = useSWR<AuthTypeMetadata>(
+    SWR_KEYS.authType,
+    fetchAuthTypeMetadata,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 30_000,
+    }
+  );
+
+  return {
+    authTypeMetadata: data ?? DEFAULT_AUTH_TYPE_METADATA,
+    isLoading,
+    error,
+  };
+}
+
+export function useAuthRedirect(currentPage: AuthPage): boolean {
+  const { user, isLoading } = useCurrentUser();
+  const { authTypeMetadata, isLoading: isAuthTypeLoading } =
+    useAuthTypeMetadata();
+  const signupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
+  const router = useRouter();
+  const isAuthStateLoading = isLoading || isAuthTypeLoading;
+
+  useEffect(() => {
+    if (isAuthStateLoading) return;
+    const destination = getAuthRedirect(
+      user,
+      authTypeMetadata,
+      currentPage,
+      signupDisabled
+    );
+    if (destination) router.replace(destination as Route);
+  }, [
+    isAuthStateLoading,
+    user,
+    authTypeMetadata,
+    currentPage,
+    signupDisabled,
+    router,
+  ]);
+
+  return isAuthStateLoading;
+}
 
 function computeSecondsUntilExpiration(user: User): number | null {
   if (!user.token_expires_at) return null;
@@ -77,74 +184,6 @@ export function useSessionWatcher(): boolean {
     hasSeenAuthenticatedUserRef.current
   );
 }
-
-// ---------------------------------------------------------------------------
-// useAuthTypeMetadata
-// ---------------------------------------------------------------------------
-
-interface AuthTypeAPIResponse {
-  auth_type: string;
-  requires_verification: boolean;
-  anonymous_user_enabled: boolean | null;
-  password_min_length: number;
-  has_users: boolean;
-  oauth_enabled: boolean;
-}
-
-const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {
-  authType: NEXT_PUBLIC_CLOUD_ENABLED ? AuthType.CLOUD : AuthType.BASIC,
-  autoRedirect: false,
-  requiresVerification: false,
-  anonymousUserEnabled: null,
-  passwordMinLength: 0,
-  hasUsers: false,
-  oauthEnabled: false,
-};
-
-async function fetchAuthTypeMetadata(url: string): Promise<AuthTypeMetadata> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to fetch auth type metadata");
-  const data: AuthTypeAPIResponse = await res.json();
-  const authType = NEXT_PUBLIC_CLOUD_ENABLED
-    ? AuthType.CLOUD
-    : (data.auth_type as AuthType);
-  return {
-    authType,
-    autoRedirect: authType === AuthType.OIDC || authType === AuthType.SAML,
-    requiresVerification: data.requires_verification,
-    anonymousUserEnabled: data.anonymous_user_enabled,
-    passwordMinLength: data.password_min_length,
-    hasUsers: data.has_users,
-    oauthEnabled: data.oauth_enabled,
-  };
-}
-
-export function useAuthTypeMetadata(): {
-  authTypeMetadata: AuthTypeMetadata;
-  isLoading: boolean;
-  error: Error | undefined;
-} {
-  const { data, error, isLoading } = useSWR<AuthTypeMetadata>(
-    SWR_KEYS.authType,
-    fetchAuthTypeMetadata,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      revalidateIfStale: false,
-      dedupingInterval: 30_000,
-    }
-  );
-
-  return {
-    authTypeMetadata: data ?? DEFAULT_AUTH_TYPE_METADATA,
-    isLoading,
-    error,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// useTokenRefresh
-// ---------------------------------------------------------------------------
 
 const REFRESH_INTERVAL = 600000;
 const MIN_REFRESH_GAP_MS = REFRESH_INTERVAL - 60000;

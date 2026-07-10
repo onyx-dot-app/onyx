@@ -460,7 +460,7 @@ def send_forgot_password_email(
     tenant_param = f"&tenant={tenant_id}" if tenant_id and MULTI_TENANT else ""
     message = "<p>Please click the button below to reset your password. This link will expire in 24 hours.</p>"
     cta_text = "Reset Password"
-    cta_link = f"{WEB_DOMAIN}/auth/reset-password?token={token}{tenant_param}"
+    cta_link = f"{WEB_DOMAIN}/auth/reset-password?token={token}{tenant_param}&email={user_email}"
     html_content = build_html_email(
         application_name,
         heading,
@@ -470,7 +470,7 @@ def send_forgot_password_email(
     )
     text_content = (
         f"Please click the following link to reset your password. This link will expire in 24 hours.\n"
-        f"{WEB_DOMAIN}/auth/reset-password?token={token}{tenant_param}"
+        f"{WEB_DOMAIN}/auth/reset-password?token={token}{tenant_param}&email={user_email}"
     )
     send_email(
         user_email,

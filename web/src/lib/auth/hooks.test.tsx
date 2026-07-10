@@ -10,6 +10,11 @@ const baseAuthMetadata = (authType: AuthType): AuthTypeMetadata => ({
   requiresVerification: false,
   anonymousUserEnabled: null,
   passwordMinLength: 0,
+  passwordMaxLength: Infinity,
+  passwordRequireUppercase: false,
+  passwordRequireLowercase: false,
+  passwordRequireDigit: false,
+  passwordRequireSpecialChar: false,
   hasUsers: true,
   oauthEnabled: false,
 });
