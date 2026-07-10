@@ -12,20 +12,8 @@ from onyx.server.security.store import _build_env_defaults
 
 
 def _settings(*, user_directory_admin_only: bool) -> SecuritySettings:
-    base = _build_env_defaults()
-    return SecuritySettings(
-        user_directory_admin_only=user_directory_admin_only,
-        track_external_idp_expiry=base.track_external_idp_expiry,
-        ssrf_protection_level=base.ssrf_protection_level,
-        mask_credential_prefix=base.mask_credential_prefix,
-        llm_custom_config_env_injection=base.llm_custom_config_env_injection,
-        valid_email_domains=base.valid_email_domains,
-        password_min_length=base.password_min_length,
-        password_max_length=base.password_max_length,
-        password_require_uppercase=base.password_require_uppercase,
-        password_require_lowercase=base.password_require_lowercase,
-        password_require_digit=base.password_require_digit,
-        password_require_special_char=base.password_require_special_char,
+    return _build_env_defaults().model_copy(
+        update={"user_directory_admin_only": user_directory_admin_only}
     )
 
 
