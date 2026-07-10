@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
@@ -95,6 +96,23 @@ export function useSessionWatcher(): boolean {
     userError?.status === 403 &&
     hasSeenAuthenticatedUserRef.current
   );
+}
+
+export function useAuthType(): AuthType | null {
+  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
+  // camelCase-mapped shape — a raw fetcher here would poison the cache for
+  // every other consumer of the key.
+  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
+
+  if (NEXT_PUBLIC_CLOUD_ENABLED) {
+    return AuthType.CLOUD;
+  }
+
+  if (error || isLoading) {
+    return null;
+  }
+
+  return authTypeMetadata?.authType ?? null;
 }
 
 const REFRESH_INTERVAL = 600000;
