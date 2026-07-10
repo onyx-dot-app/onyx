@@ -57,6 +57,7 @@ def create_mock_issue() -> Callable[..., MagicMock]:
         key: str = "TEST-123",
         summary: str = "Test Issue",
         updated: str = "2023-01-01T12:00:00.000+0000",
+        created: str = "2023-01-01T12:00:00.000+0000",
         description: str = "Test Description",
         labels: list[str] | None = None,
         project_key: str = "TEST",
@@ -72,6 +73,7 @@ def create_mock_issue() -> Callable[..., MagicMock]:
         mock_issue.key = key
         mock_issue.fields.summary = summary
         mock_issue.fields.updated = updated
+        mock_issue.fields.created = created
         mock_issue.fields.description = description
         mock_issue.fields.labels = labels or []
 

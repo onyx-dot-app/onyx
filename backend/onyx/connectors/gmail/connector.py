@@ -1,6 +1,7 @@
 from base64 import urlsafe_b64decode
 from collections.abc import Callable
 from collections.abc import Iterator
+from datetime import datetime
 from typing import Any
 from typing import cast
 from typing import Dict
@@ -59,6 +60,14 @@ PAYLOAD_FIELDS = f"payload(headers, {PARTS_FIELDS})"
 MESSAGES_FIELDS = f"messages(id, {PAYLOAD_FIELDS})"
 THREADS_FIELDS = f"threads(id, {MESSAGES_FIELDS})"
 THREAD_FIELDS = f"id, {MESSAGES_FIELDS}"
+
+# The slim listing (THREAD_LIST_FIELDS) only returns thread IDs. To backfill
+# doc_created_at during perm/prune sync without a full re-index, the slim path
+# does one extra minimal per-thread fetch. format="metadata" + metadataHeaders
+# make the server return only the Date header per message (the `fields` mask
+# can't filter within the headers list); the mask trims the rest of the envelope.
+SLIM_CREATED_AT_FIELDS = "id, messages(payload(headers))"
+SLIM_CREATED_AT_METADATA_HEADERS = ["Date"]
 
 EMAIL_FIELDS = [
     "cc",
@@ -224,6 +233,7 @@ def thread_to_document(
 
     sections = []
     semantic_identifier = ""
+    created_at = None
     updated_at = None
     from_emails: dict[str, str | None] = {}
     other_emails: dict[str, str | None] = {}
@@ -249,6 +259,22 @@ def thread_to_document(
 
         if message_metadata.get("updated_at"):
             updated_at = message_metadata.get("updated_at")
+            # Messages arrive oldest-first, so the first Date header is the
+            # thread's creation time.
+            if not created_at:
+                created_at = message_metadata.get("updated_at")
+
+    created_at_datetime = None
+    if created_at:
+        try:
+            created_at_datetime = time_str_to_utc(created_at)
+        except (ValueError, OverflowError) as e:
+            logger.warning(
+                "Skipping unparseable Gmail Date header on thread %s: %r (%s)",
+                full_thread.get("id"),
+                created_at,
+                e,
+            )
 
     updated_at_datetime = None
     if updated_at:
@@ -286,6 +312,7 @@ def thread_to_document(
         # This is used to perform permission sync
         primary_owners=primary_owners,
         secondary_owners=secondary_owners,
+        doc_created_at=created_at_datetime,
         doc_updated_at=updated_at_datetime,
         # Not adding emails to metadata because it's already in the sections
         metadata={},
@@ -329,10 +356,64 @@ def _full_thread_from_id(
         )
 
 
+def _slim_thread_created_at(
+    thread_id: str,
+    user_email: str,
+    gmail_service: GmailService,
+) -> datetime | None:
+    """Minimal per-thread fetch to derive the thread's creation time.
+
+    Mirrors the full path: messages arrive oldest-first, so the first message's
+    Date header is the thread's creation time. Failures are swallowed so this
+    additive backfill can never break perm/prune sync.
+    """
+    try:
+        thread = next(
+            execute_single_retrieval(
+                retrieval_function=gmail_service.users()  # ty: ignore[unresolved-attribute]
+                .threads()
+                .get,
+                list_key=None,
+                userId=user_email,
+                fields=SLIM_CREATED_AT_FIELDS,
+                format="metadata",
+                metadataHeaders=SLIM_CREATED_AT_METADATA_HEADERS,
+                id=thread_id,
+                continue_on_404_or_403=True,
+            ),
+            None,
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch created_at for Gmail thread %s: %r", thread_id, e
+        )
+        return None
+
+    if thread is None:
+        return None
+
+    for message in thread.get("messages", []):
+        headers = message.get("payload", {}).get("headers", [])
+        for header in headers:
+            if (header.get("name") or "").lower() != "date":
+                continue
+            try:
+                return time_str_to_utc(header["value"])
+            except (ValueError, OverflowError) as e:
+                logger.warning(
+                    "Skipping unparseable Gmail Date header on thread %s: %r (%s)",
+                    thread_id,
+                    header.get("value"),
+                    e,
+                )
+                return None
+    return None
+
+
 def _slim_thread_from_id(
     thread_id: str,
     user_email: str,
-    gmail_service: GmailService,  # noqa: ARG001
+    gmail_service: GmailService,
 ) -> SlimDocument:
     return SlimDocument(
         id=thread_id,
@@ -341,6 +422,8 @@ def _slim_thread_from_id(
             external_user_group_ids=set(),
             is_public=False,
         ),
+        # Slim listing lacks dates; do a minimal per-thread fetch to backfill.
+        doc_created_at=_slim_thread_created_at(thread_id, user_email, gmail_service),
     )
 
 
@@ -473,6 +556,11 @@ class GmailConnector(
                                 external_user_emails={user_email},
                                 external_user_group_ids=set(),
                                 is_public=False,
+                            ),
+                            # Slim listing lacks dates; do a minimal per-thread
+                            # fetch to backfill created_at.
+                            doc_created_at=_slim_thread_created_at(
+                                thread["id"], user_email, gmail_service
                             ),
                         )
                     )

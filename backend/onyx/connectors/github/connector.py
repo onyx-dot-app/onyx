@@ -368,6 +368,11 @@ def _convert_pr_to_document(
             if pull_request.updated_at
             else None
         ),
+        doc_created_at=(
+            pull_request.created_at.replace(tzinfo=timezone.utc)
+            if pull_request.created_at
+            else None
+        ),
         # this metadata is used in perm sync
         doc_metadata=doc_metadata,
         metadata={
@@ -449,6 +454,9 @@ def _convert_issue_to_document(
         semantic_identifier=f"{issue.number}: {issue.title}",
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
+        doc_created_at=(
+            issue.created_at.replace(tzinfo=timezone.utc) if issue.created_at else None
+        ),
         # this metadata is used in perm sync
         doc_metadata=doc_metadata,
         metadata={
@@ -943,6 +951,11 @@ class GithubConnector(
                         source=DocumentSource.GITHUB,
                         semantic_identifier="",
                         metadata={},
+                        doc_created_at=(
+                            pr.created_at.replace(tzinfo=timezone.utc)
+                            if pr.created_at
+                            else None
+                        ),
                     )
                 else:
                     # we iterate backwards in time, so at this point we stop processing prs
@@ -1035,6 +1048,11 @@ class GithubConnector(
                         source=DocumentSource.GITHUB,
                         semantic_identifier="",
                         metadata={},
+                        doc_created_at=(
+                            issue.created_at.replace(tzinfo=timezone.utc)
+                            if issue.created_at
+                            else None
+                        ),
                     )
                 else:
                     # we iterate backwards in time, so at this point we stop processing issues
@@ -1193,7 +1211,9 @@ class GithubConnector(
                 if document is not None:
                     batch.append(
                         SlimDocument(
-                            id=document.id, external_access=document.external_access
+                            id=document.id,
+                            external_access=document.external_access,
+                            doc_created_at=document.doc_created_at,
                         )
                     )
                 if next_checkpoint is not None:

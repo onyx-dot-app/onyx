@@ -327,6 +327,8 @@ class TeamsConnector(
                         SlimDocument(
                             id=message.id,
                             external_access=external_access,
+                            # NOTE: doc_created_at population not yet verified against live data
+                            doc_created_at=message.created_date_time,
                         )
                     )
 
@@ -488,6 +490,8 @@ def _convert_thread_to_document(
         source=DocumentSource.TEAMS,
         semantic_identifier=semantic_string,
         title="",  # teams threads don't really have a "title"
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=top_message.created_date_time,
         doc_updated_at=most_recent_message_datetime,
         primary_owners=expert_infos,
         metadata={},

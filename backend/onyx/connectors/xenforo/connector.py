@@ -116,6 +116,8 @@ def scrape_page_posts(
                     "time": formatted_time,
                 },
                 doc_updated_at=post_date,
+                # NOTE: doc_created_at population not yet verified against live data
+                doc_created_at=post_date,
             )
 
             documents.append(document)

@@ -77,7 +77,11 @@ _ATTACHMENT_EXPANSION_FIELDS = [
     "version",
     "space",
     "metadata.labels",
+    "history",  # for history.createdDate
 ]
+# These slim-path sets are intentionally trimmed for perf (CONFCLOUD-77618);
+# `history` is added only to expose `history.createdDate` for doc_created_at
+# backfill on the slim path.
 # Fast path: page + ancestor restrictions inlined. Subject to
 # CONFCLOUD-77618 / 76424 on draft/trashed/outdated ancestors.
 _RESTRICTIONS_EXPANSION_FIELDS = [
@@ -86,6 +90,7 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
     "restrictions.read.restrictions.group",
     "ancestors.restrictions.read.restrictions.user",
     "ancestors.restrictions.read.restrictions.group",
+    "history",  # for history.createdDate (doc_created_at backfill)
 ]
 # CONFCLOUD-77618 fallback: bare ancestors only; EE resolver fetches
 # each ancestor's restrictions via `restriction/byOperation`.
@@ -94,11 +99,16 @@ _PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS = [
     "restrictions.read.restrictions.user",
     "restrictions.read.restrictions.group",
     "ancestors",
+    "history",  # for history.createdDate (doc_created_at backfill)
 ]
 # Pruning needs `space` + `ancestors` to populate hierarchy nodes and
 # parent ids; skipping them would flatten the graph. No restrictions
 # expand here, so CONFCLOUD-77618 can't fire.
-_PRUNING_EXPANSION_FIELDS = ["space", "ancestors"]
+_PRUNING_EXPANSION_FIELDS = [
+    "space",
+    "ancestors",
+    "history",  # for history.createdDate (doc_created_at backfill)
+]
 
 _SLIM_DOC_BATCH_SIZE = 5000
 
@@ -566,6 +576,7 @@ class ConfluenceConnector(
                 semantic_identifier=page_title,
                 metadata=metadata,
                 doc_updated_at=datetime_from_string(page["version"]["when"]),
+                doc_created_at=datetime_from_string(page["history"]["createdDate"]),
                 primary_owners=primary_owners if primary_owners else None,
                 parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
             )
@@ -720,6 +731,9 @@ class ConfluenceConnector(
                             if attachment.get("version")
                             and attachment["version"].get("when")
                             else None
+                        ),
+                        doc_created_at=datetime_from_string(
+                            attachment["history"]["createdDate"]
                         ),
                         primary_owners=primary_owners,
                         parent_hierarchy_raw_node_id=attachment_parent_hierarchy_raw_id,
@@ -1145,6 +1159,7 @@ class ConfluenceConnector(
                         if include_permissions
                         else None
                     ),
+                    doc_created_at=datetime_from_string(page["history"]["createdDate"]),
                     parent_hierarchy_raw_node_id=self._get_parent_hierarchy_raw_id(
                         page
                     ),
@@ -1207,6 +1222,9 @@ class ConfluenceConnector(
                             )
                             if include_permissions
                             else None
+                        ),
+                        doc_created_at=datetime_from_string(
+                            attachment["history"]["createdDate"]
                         ),
                         parent_hierarchy_raw_node_id=page_id,
                     )

@@ -340,6 +340,7 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
                 }
             ),
             doc_updated_at=_parse_time(prompt.get("created")),
+            doc_created_at=_parse_time(prompt.get("created")),
         )
 
     def _dataset_to_document(
@@ -378,6 +379,7 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
                 }
             ),
             doc_updated_at=_parse_time(ref.created),
+            doc_created_at=_parse_time(ref.created),
             file_id=csv_file_id,
         )
 
@@ -485,6 +487,7 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
                 }
             ),
             doc_updated_at=_parse_time(ref.created),
+            doc_created_at=_parse_time(ref.created),
             file_id=file_id,
         )
 
