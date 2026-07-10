@@ -8,6 +8,11 @@ machinery (execute_hook_endpoint). The two sinks are either/or, never both:
 the call site checks this config first (a cached local read) and only falls
 back to the DOCUMENT_PUSH hook when it is unset.
 
+Unlike the hook (single-tenant only), this sink also runs in multi-tenant
+deployments — the endpoint is deployment-wide and operator-owned, so
+receiving documents from all tenants is the expected behavior. Note the
+payload carries no tenant identifier.
+
 The endpoint URL is operator-supplied through the environment, so unlike
 admin-entered hook URLs it is trusted to point at private-network destinations
 — pushing to an internal system is the primary use case. Scheme and structural

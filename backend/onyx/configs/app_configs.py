@@ -1357,9 +1357,9 @@ INDEXING_WORKER_TRACEMALLOC = (
 )
 
 # When set, every successfully indexed public-connector document is POSTed to
-# this endpoint (single-tenant only). Available in all editions — unlike the
-# Document Push hook, which is managed via the EE /admin/hooks API. See
-# onyx/indexing/document_push.py.
+# this endpoint (in multi-tenant deployments this spans all tenants). Available
+# in all editions — unlike the Document Push hook, which is managed via the EE
+# /admin/hooks API. See onyx/indexing/document_push.py.
 DOCUMENT_PUSH_ENDPOINT_URL = os.environ.get("DOCUMENT_PUSH_ENDPOINT_URL") or None
 # Sent as "Authorization: Bearer <key>" on each push request.
 DOCUMENT_PUSH_API_KEY = os.environ.get("DOCUMENT_PUSH_API_KEY") or None

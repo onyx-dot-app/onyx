@@ -344,9 +344,45 @@ def test_document_push_skipped_in_multi_tenant_mode() -> None:
     doc = _make_doc(doc_id="doc1")
     with (
         patch(_PATCH_MULTI_TENANT, True),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
         patch(_PATCH_EXECUTE_HOOK) as mock_hook,
     ):
         _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+    mock_hook.assert_not_called()
+
+
+def test_document_push_config_sink_runs_in_multi_tenant_mode() -> None:
+    from onyx.db.enums import HookFailStrategy
+    from onyx.hooks.http_executor import HookEndpointConfig
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    config = HookEndpointConfig(
+        endpoint_url="https://push.example.com/docs",
+        timeout_seconds=30.0,
+        fail_strategy=HookFailStrategy.SOFT,
+    )
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, True),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=config,
+        ),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+        patch(
+            "onyx.indexing.indexing_pipeline.push_document_via_config"
+        ) as mock_config_push,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    # The config sink is deployment-wide, so it runs in multi-tenant too;
+    # the hook sink stays single-tenant only.
+    mock_config_push.assert_called_once()
     mock_hook.assert_not_called()
 
 
