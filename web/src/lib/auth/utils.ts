@@ -1,3 +1,33 @@
+// ---------------------------------------------------------------------------
+// Password predicate functions
+// ---------------------------------------------------------------------------
+
+export function passwordMeetsMinLength(password: string, min: number): boolean {
+  return password.length >= min;
+}
+
+export function passwordMeetsMaxLength(password: string, max: number): boolean {
+  return password.length <= max;
+}
+
+export function passwordHasUppercase(password: string): boolean {
+  return /[A-Z]/.test(password);
+}
+
+export function passwordHasLowercase(password: string): boolean {
+  return /[a-z]/.test(password);
+}
+
+export function passwordHasDigit(password: string): boolean {
+  return /\d/.test(password);
+}
+
+export function passwordHasSpecialChar(password: string): boolean {
+  return /[^A-Za-z0-9]/.test(password);
+}
+
+// ---------------------------------------------------------------------------
+
 /**
  * Validates a redirect URL to prevent Open Redirect vulnerabilities.
  * Only allows internal paths (relative URLs starting with /).

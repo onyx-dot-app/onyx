@@ -19,7 +19,15 @@ import * as Yup from "yup";
 import { requestEmailVerification } from "@/lib/auth/svc";
 import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
-import { validateInternalRedirect } from "@/lib/auth/utils";
+import {
+  validateInternalRedirect,
+  passwordMeetsMinLength,
+  passwordMeetsMaxLength,
+  passwordHasUppercase,
+  passwordHasLowercase,
+  passwordHasDigit,
+  passwordHasSpecialChar,
+} from "@/lib/auth/utils";
 import {
   AuthLayouts,
   Content,
@@ -224,34 +232,40 @@ export function EmailPasswordForm({
 
   const validationSchema = useMemo(() => {
     let passwordSchema = Yup.string()
-      .min(
-        passwordMinLength,
-        `Password must be at least ${passwordMinLength} characters`
+      .test(
+        "min-length",
+        `Password must be at least ${passwordMinLength} characters`,
+        (v) => passwordMeetsMinLength(v ?? "", passwordMinLength)
       )
-      .max(
-        passwordMaxLength,
-        `Password must be at most ${passwordMaxLength} characters`
+      .test(
+        "max-length",
+        `Password must be at most ${passwordMaxLength} characters`,
+        (v) => passwordMeetsMaxLength(v ?? "", passwordMaxLength)
       );
 
     if (passwordRequireUppercase)
-      passwordSchema = passwordSchema.matches(
-        /[A-Z]/,
-        "Password must contain at least one uppercase letter"
+      passwordSchema = passwordSchema.test(
+        "uppercase",
+        "Password must contain at least one uppercase letter",
+        (v) => passwordHasUppercase(v ?? "")
       );
     if (passwordRequireLowercase)
-      passwordSchema = passwordSchema.matches(
-        /[a-z]/,
-        "Password must contain at least one lowercase letter"
+      passwordSchema = passwordSchema.test(
+        "lowercase",
+        "Password must contain at least one lowercase letter",
+        (v) => passwordHasLowercase(v ?? "")
       );
     if (passwordRequireDigit)
-      passwordSchema = passwordSchema.matches(
-        /\d/,
-        "Password must contain at least one number"
+      passwordSchema = passwordSchema.test(
+        "digit",
+        "Password must contain at least one number",
+        (v) => passwordHasDigit(v ?? "")
       );
     if (passwordRequireSpecialChar)
-      passwordSchema = passwordSchema.matches(
-        /[^A-Za-z0-9]/,
-        "Password must contain at least one special character"
+      passwordSchema = passwordSchema.test(
+        "special-char",
+        "Password must contain at least one special character",
+        (v) => passwordHasSpecialChar(v ?? "")
       );
 
     return Yup.object().shape({
@@ -270,7 +284,7 @@ export function EmailPasswordForm({
     passwordRequireSpecialChar,
   ]);
 
-  const handleSubmit = async (values: FormValues) => {
+  async function handleSubmit(values: FormValues) {
     const email = values.email.toLowerCase();
 
     if (isSignup) {
@@ -329,7 +343,7 @@ export function EmailPasswordForm({
       }
       toast.error(errorMsg);
     }
-  };
+  }
 
   return (
     <Formik
@@ -418,53 +432,45 @@ interface PasswordRequirementsProps {
 }
 
 export function PasswordRequirements({ password }: PasswordRequirementsProps) {
-  const { authTypeMetadata } = useUser();
+  const {
+    authTypeMetadata: {
+      passwordMinLength,
+      passwordMaxLength,
+      passwordRequireUppercase,
+      passwordRequireLowercase,
+      passwordRequireDigit,
+      passwordRequireSpecialChar,
+    },
+  } = useUser();
 
-  const rules = [
-    ...(authTypeMetadata.passwordMinLength
-      ? [
-          {
-            label: `At least ${authTypeMetadata.passwordMinLength} characters`,
-            met: password.length >= authTypeMetadata.passwordMinLength,
-          },
-        ]
-      : []),
-    ...(authTypeMetadata.passwordMaxLength
-      ? [
-          {
-            label: `At most ${authTypeMetadata.passwordMaxLength} characters`,
-            met: password.length <= authTypeMetadata.passwordMaxLength,
-          },
-        ]
-      : []),
-    ...(authTypeMetadata.passwordRequireUppercase
-      ? [
-          {
-            label: "Contains uppercase letter.",
-            met: /[A-Z]/.test(password),
-          },
-        ]
-      : []),
-    ...(authTypeMetadata.passwordRequireLowercase
-      ? [
-          {
-            label: "Contains lowercase letter.",
-            met: /[a-z]/.test(password),
-          },
-        ]
-      : []),
-    ...(authTypeMetadata.passwordRequireDigit
-      ? [{ label: "Contains number.", met: /\d/.test(password) }]
-      : []),
-    ...(authTypeMetadata.passwordRequireSpecialChar
-      ? [
-          {
-            label: "Contains special character.",
-            met: /[^A-Za-z0-9]/.test(password),
-          },
-        ]
-      : []),
-  ];
+  const rules = (
+    [
+      {
+        label: `At least ${passwordMinLength} characters`,
+        met: passwordMeetsMinLength(password, passwordMinLength),
+      },
+      {
+        label: `At most ${passwordMaxLength} characters`,
+        met: passwordMeetsMaxLength(password, passwordMaxLength),
+      },
+      passwordRequireUppercase && {
+        label: "Contains uppercase letter.",
+        met: passwordHasUppercase(password),
+      },
+      passwordRequireLowercase && {
+        label: "Contains lowercase letter.",
+        met: passwordHasLowercase(password),
+      },
+      passwordRequireDigit && {
+        label: "Contains number.",
+        met: passwordHasDigit(password),
+      },
+      passwordRequireSpecialChar && {
+        label: "Contains special character.",
+        met: passwordHasSpecialChar(password),
+      },
+    ] as const
+  ).filter((r): r is { label: string; met: boolean } => Boolean(r));
 
   return (
     <div className="flex flex-col gap-1">
