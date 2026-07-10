@@ -1193,8 +1193,6 @@ def _maybe_push_documents(
     if MULTI_TENANT:
         return
 
-    use_config_push = get_document_push_config() is not None
-
     if adapter.connector_id is None or adapter.credential_id is None:
         return
 
@@ -1208,6 +1206,11 @@ def _maybe_push_documents(
         )
         if cc_pair is None or cc_pair.access_type != AccessType.PUBLIC:
             return
+
+        # Either/or: the config-driven endpoint wins when set — checked first
+        # since it is a cached local read, while the hook path does a DB
+        # lookup per document.
+        use_config_push = get_document_push_config() is not None
 
         doc_map = {doc.id: doc for doc in filtered_documents}
         for doc_id in successfully_indexed:
@@ -1238,9 +1241,6 @@ def _maybe_push_documents(
                     for k, v in (doc.metadata or {}).items()
                 },
             )
-            # Either/or: the config-driven endpoint wins when set — checked
-            # first since it is a cached local read, while the hook path does
-            # a DB lookup per document.
             if use_config_push:
                 push_document_via_config(payload)
                 continue
