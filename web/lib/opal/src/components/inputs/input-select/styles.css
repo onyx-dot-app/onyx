@@ -1,0 +1,71 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   InputSelect (Figma Input/Select)
+
+   Trigger on the .opal-input chrome plus an open-state border. Items are
+   pure layout rows: Radix owns interaction, so highlight and selection are
+   styled from its data attributes, with the selected row using the
+   select-heavy tokens (action-link bg, interactive foreground vars).
+   --------------------------------------------------------------------------- */
+
+.opal-input-select-root {
+  @apply relative w-full;
+  min-width: var(--block-width-form-input-min);
+}
+
+.opal-input-select-trigger {
+  @apply cursor-pointer focus:outline-hidden;
+}
+
+.opal-input-select-trigger[data-variant="primary"][data-state="open"] {
+  border-color: var(--border-05);
+}
+
+.opal-input-select-trigger[data-variant="disabled"] {
+  cursor: not-allowed;
+}
+
+.opal-input-select-icon {
+  @apply size-4 shrink-0 text-text-03;
+}
+
+.opal-input-select-trigger[data-variant="disabled"] .opal-input-select-icon {
+  @apply text-text-01;
+}
+
+.opal-input-select-chevron {
+  @apply transition-transform;
+}
+
+.opal-input-select-trigger[data-state="open"] .opal-input-select-chevron {
+  rotate: 180deg;
+}
+
+.opal-input-select-content {
+  @apply z-popover max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1;
+  width: var(--radix-select-trigger-width);
+}
+
+/* The rows sit outside any .interactive ancestor (portaled), so the item
+   provides the base foreground vars ContentAction's interactive color reads. */
+.opal-input-select-item {
+  @apply rounded-08 outline-hidden focus:outline-hidden;
+  color: var(--interactive-foreground);
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-03);
+}
+
+.opal-input-select-item[data-highlighted] {
+  @apply bg-background-tint-02;
+}
+
+.opal-input-select-item[data-state="checked"] {
+  background-color: var(--action-link-01);
+  --interactive-foreground: var(--action-link-05);
+  --interactive-foreground-icon: var(--action-link-05);
+}
+
+.opal-input-select-label {
+  @apply px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-text-03;
+}
