@@ -579,6 +579,12 @@ class LitellmLLM(LLM):
         #   - Qwen (Alibaba) thinking models return a 400
         #     "The tool_choice parameter does not support being set to required
         #     or object in thinking mode".
+        # We intentionally match on model name rather than `is_reasoning` here:
+        # `model_is_reasoning_model` relies on the litellm/local registry, which
+        # lags behind newly released Qwen models (e.g. it returns False for
+        # qwen3.7-plus), so gating on it would miss exactly the thinking models
+        # that reject `required`. The downgrade is safe for non-thinking Qwen
+        # models since the chat loop still enforces the forced tool.
         if (is_claude_model or is_qwen_model) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
