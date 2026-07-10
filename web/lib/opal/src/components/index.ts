@@ -133,6 +133,14 @@ export {
   type InputTypeInProps,
 } from "@opal/components/inputs/input-type-in/components";
 
+/* InputSelect */
+export {
+  InputSelect,
+  type InputSelectRootProps,
+  type InputSelectTriggerProps,
+  type InputSelectItemProps,
+} from "@opal/components/inputs/input-select/components";
+
 /* InputTags */
 export {
   InputTags,
