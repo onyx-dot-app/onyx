@@ -232,7 +232,7 @@ export function EmailPasswordForm({
           )
           .required(),
       }),
-    [passwordMinLength]
+    [passwordMinLength, passwordMaxLength]
   );
 
   const handleSubmit = async (values: FormValues) => {
@@ -385,8 +385,6 @@ interface PasswordRequirementsProps {
 export function PasswordRequirements({ password }: PasswordRequirementsProps) {
   const { authTypeMetadata } = useUser();
 
-  const maxLength = authTypeMetadata?.passwordMaxLength ?? Infinity;
-
   const rules = [
     ...(authTypeMetadata?.passwordMinLength
       ? [
@@ -396,11 +394,11 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
           },
         ]
       : []),
-    ...(maxLength < Infinity
+    ...(authTypeMetadata?.passwordMaxLength
       ? [
           {
-            label: `At most ${maxLength} characters`,
-            met: password.length <= maxLength,
+            label: `At most ${authTypeMetadata.passwordMaxLength} characters`,
+            met: password.length <= authTypeMetadata.passwordMaxLength,
           },
         ]
       : []),
