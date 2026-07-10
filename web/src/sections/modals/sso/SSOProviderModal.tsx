@@ -233,6 +233,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                 <Modal.Body>
                   <InputVertical
                     title="Provider Type"
+                    description="The protocol this provider authenticates with."
                     withLabel="provider_type"
                   >
                     <InputSelect
@@ -265,7 +266,11 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     </InputSelect>
                   </InputVertical>
 
-                  <InputVertical title="Name" withLabel="name">
+                  <InputVertical
+                    title="Name"
+                    description="Unique lowercase slug used in the login URL. Cannot be changed later."
+                    withLabel="name"
+                  >
                     <InputTypeInField
                       name="name"
                       placeholder="company-a"
@@ -273,7 +278,11 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     />
                   </InputVertical>
 
-                  <InputVertical title="Display Name" withLabel="display_name">
+                  <InputVertical
+                    title="Display Name"
+                    description="Label shown on the sign-in button."
+                    withLabel="display_name"
+                  >
                     <InputTypeInField
                       name="display_name"
                       placeholder="Company A"
@@ -288,6 +297,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                           ? `${field.label} (Optional)`
                           : field.label
                       }
+                      description={field.description}
                       withLabel={`config.${field.name}`}
                     >
                       <ConfigInput field={field} isEditing={isEditing} />
@@ -296,6 +306,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
 
                   <InputVertical
                     title="Allowed Email Domains (Optional)"
+                    description="Only emails in these domains may sign in through this provider. Empty allows any."
                     withLabel
                   >
                     <InputChipField
@@ -328,7 +339,11 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                   </InputVertical>
 
                   {provider?.redirect_uri && (
-                    <InputVertical title={redirectLabel} withLabel>
+                    <InputVertical
+                      title={redirectLabel}
+                      description="Register this URL in your IdP as the callback."
+                      withLabel
+                    >
                       <div
                         className={cn(
                           "flex items-start justify-between gap-2 rounded-12 border border-border-03 bg-background-neutral-02 p-3"

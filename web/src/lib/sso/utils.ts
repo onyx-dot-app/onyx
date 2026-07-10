@@ -45,6 +45,7 @@ export interface SSOConfigField {
   name: string;
   label: string;
   kind: SSOConfigFieldKind;
+  description: string;
   optional?: boolean;
   placeholder?: string;
 }
@@ -53,12 +54,14 @@ const CLIENT_ID_FIELD: SSOConfigField = {
   name: "client_id",
   label: "Client ID",
   kind: "text",
+  description: "The OAuth client ID from your provider's console.",
   placeholder: "Client ID",
 };
 const CLIENT_SECRET_FIELD: SSOConfigField = {
   name: "client_secret",
   label: "Client Secret",
   kind: "password",
+  description: "The OAuth client secret. Stored encrypted.",
   placeholder: "Client secret",
 };
 
@@ -72,6 +75,7 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
         name: "openid_config_url",
         label: "OpenID Configuration URL",
         kind: "text",
+        description: "The IdP's OpenID Connect discovery document URL.",
         placeholder: "https://example.com/.well-known/openid-configuration",
       },
     ],
@@ -80,30 +84,37 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
         name: "idp_entity_id",
         label: "IdP Entity ID",
         kind: "text",
+        description: "The identity provider's entity ID (issuer).",
         placeholder: "https://idp.example.com/entity",
       },
       {
         name: "idp_sso_url",
         label: "IdP SSO URL",
         kind: "text",
+        description: "The IdP endpoint that receives sign-in requests.",
         placeholder: "https://idp.example.com/sso",
       },
       {
         name: "idp_x509_cert",
         label: "IdP X.509 Certificate",
         kind: "textarea",
+        description:
+          "The IdP's signing certificate, used to verify assertions.",
         placeholder: "-----BEGIN CERTIFICATE-----",
       },
       {
         name: "sp_entity_id",
         label: "SP Entity ID",
         kind: "text",
+        description: "This instance's entity ID, registered with the IdP.",
         placeholder: "onyx",
       },
       {
         name: "sp_x509_cert",
         label: "SP X.509 Certificate",
         kind: "textarea",
+        description:
+          "Only if this instance signs requests or decrypts assertions.",
         optional: true,
         placeholder: "-----BEGIN CERTIFICATE-----",
       },
@@ -111,6 +122,8 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
         name: "sp_private_key",
         label: "SP Private Key",
         kind: "password",
+        description:
+          "Private key paired with the SP certificate. Stored encrypted.",
         optional: true,
         placeholder: "-----BEGIN PRIVATE KEY-----",
       },
@@ -118,6 +131,8 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
         name: "email_attribute",
         label: "Email Attribute",
         kind: "text",
+        description:
+          "SAML attribute holding the user's email. Defaults to common keys.",
         optional: true,
         placeholder: "email",
       },
