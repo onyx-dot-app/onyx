@@ -13,7 +13,10 @@ import { cn, mergeRefs } from "@opal/utils";
 // ---------------------------------------------------------------------------
 
 interface InputTextAreaProps extends WithoutStyles<
-  Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "disabled">
+  Omit<
+    React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+    "disabled" | "readOnly"
+  >
 > {
   variant?: InputVariants;
 
@@ -43,7 +46,6 @@ interface InputTextAreaProps extends WithoutStyles<
 function InputTextArea({
   variant = "primary",
   rows = 4,
-  readOnly,
   autoResize = false,
   maxRows,
   resizable = true,
@@ -52,7 +54,7 @@ function InputTextArea({
   ...props
 }: InputTextAreaProps) {
   const disabled = variant === "disabled";
-  const isReadOnly = variant === "readOnly" || readOnly;
+  const isReadOnly = variant === "readOnly";
 
   const internalRef = React.useRef<HTMLTextAreaElement | null>(null);
   const cachedLineHeight = React.useRef<number | null>(null);

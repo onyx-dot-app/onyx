@@ -2,7 +2,7 @@
 
 **Import:** `import { InputTextArea, type InputTextAreaProps } from "@opal/components";`
 
-Multiline text field on the shared `.opal-input` chrome. Accepts standard textarea attributes except `disabled` (use `variant="disabled"`), `className`, and `style`.
+Multiline text field on the shared `.opal-input` chrome. Accepts standard textarea attributes except `disabled` and `readOnly` (use the matching `variant`), `className`, and `style`.
 
 ## Props
 
