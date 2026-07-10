@@ -228,6 +228,9 @@ def post_json_to_endpoint(
                 "External endpoint response failed validation against "
                 f"{response_type.__name__}: {error_summary}"
             )
+            # Log here like every other failure branch — fire-and-forget
+            # callers discard the outcome and rely on the client's logging.
+            logger.warning(msg)
             outcome = outcome.model_copy(
                 update={
                     "is_success": False,
