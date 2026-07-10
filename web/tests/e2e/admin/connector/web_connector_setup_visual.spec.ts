@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
-import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
+import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 
 /**
  * Visual-regression coverage for the web connector setup wizard
@@ -20,16 +20,12 @@ for (const theme of THEMES) {
   test(`web connector setup wizard – ${theme} mode`, async ({ page }) => {
     await setThemeBeforeNavigation(page, theme);
 
-    await page.goto("/admin/connectors/web?step=1");
+    const setupPage = new ConnectorSetupPage(page, "web");
+    await setupPage.goto();
 
-    await expect(page.locator('[aria-label="admin-page-title"]')).toBeVisible({
-      timeout: 10000,
-    });
-    await expect(page.getByTestId("base_url")).toBeVisible();
+    await expect(setupPage.textField("base_url")).toBeVisible();
     await page.waitForLoadState("networkidle");
 
-    await expectScreenshot(page, {
-      name: `admin-${theme}-connectors--web--step-1`,
-    });
+    await setupPage.expectScreenshot(`admin-${theme}-connectors--web--step-1`);
   });
 }
