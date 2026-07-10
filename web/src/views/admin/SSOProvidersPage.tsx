@@ -14,7 +14,10 @@ import { cn } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
+import { useSettings } from "@/lib/settings/hooks";
+import { Tier } from "@/lib/settings/types";
 import type { SSOProviderResponse } from "@/lib/sso/interfaces";
+import { tierAtLeast } from "@/lib/tiers";
 import { setSSOProviderEnabled } from "@/lib/sso/svc";
 import { copyRedirectUri, SSO_PROVIDER_DETAILS } from "@/lib/sso/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -28,9 +31,10 @@ const DESCRIPTION = "Let users sign in through your identity provider.";
 interface ShellProps {
   children: React.ReactNode;
   onAddProvider: () => void;
+  addGated?: boolean;
 }
 
-function Shell({ children, onAddProvider }: ShellProps) {
+function Shell({ children, onAddProvider, addGated }: ShellProps) {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -39,7 +43,16 @@ function Shell({ children, onAddProvider }: ShellProps) {
         description={DESCRIPTION}
         divider
         rightChildren={
-          <Button icon={SvgPlus} onClick={onAddProvider}>
+          <Button
+            icon={SvgPlus}
+            onClick={onAddProvider}
+            disabled={addGated}
+            tooltip={
+              addGated
+                ? "Multiple enabled SSO providers are available on the Business or Enterprise plan."
+                : undefined
+            }
+          >
             Add Provider
           </Button>
         }
@@ -57,6 +70,7 @@ export default function SSOProvidersPage() {
     null
   );
   const setupModal = useCreateModal();
+  const settings = useSettings();
   const {
     data: providers,
     error,
@@ -66,6 +80,12 @@ export default function SSOProvidersPage() {
     SWR_KEYS.adminSsoProviders,
     errorHandlingFetcher
   );
+
+  // Mirrors the backend gate: below Business, adding is blocked only while
+  // another provider is enabled (new providers are created enabled).
+  const addGated =
+    !tierAtLeast(settings?.tier, Tier.BUSINESS) &&
+    Boolean(providers?.some((provider) => provider.enabled));
 
   function openCreateModal() {
     setEditProvider(null);
@@ -102,7 +122,7 @@ export default function SSOProvidersPage() {
         : error.message;
 
     return (
-      <Shell onAddProvider={openCreateModal}>
+      <Shell onAddProvider={openCreateModal} addGated={addGated}>
         <MessageCard
           variant="error"
           title="Failed to load SSO providers"
@@ -114,7 +134,7 @@ export default function SSOProvidersPage() {
 
   if (isLoading) {
     return (
-      <Shell onAddProvider={openCreateModal}>
+      <Shell onAddProvider={openCreateModal} addGated={addGated}>
         <PageLoader />
       </Shell>
     );
@@ -122,7 +142,7 @@ export default function SSOProvidersPage() {
 
   return (
     <>
-      <Shell onAddProvider={openCreateModal}>
+      <Shell onAddProvider={openCreateModal} addGated={addGated}>
         {!providers?.length ? (
           <IllustrationContent
             illustration={SvgNoResult}
