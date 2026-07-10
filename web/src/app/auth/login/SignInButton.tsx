@@ -28,7 +28,7 @@
 
 import { useState } from "react";
 import { Button } from "@opal/components";
-import { AuthType } from "@/lib/constants";
+import { AuthType } from "@/lib/auth/types";
 import { FcGoogle } from "react-icons/fc";
 import type { IconProps } from "@opal/types";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";

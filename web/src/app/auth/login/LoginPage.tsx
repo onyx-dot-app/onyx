@@ -1,12 +1,12 @@
 "use client";
 
-import { AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 import LoginText from "@/app/auth/login/LoginText";
 import SignInButton from "@/app/auth/login/SignInButton";
 import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
 import EmailPasswordForm from "./EmailPasswordForm";
-import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
-import { useSendAuthRequiredMessage } from "@/lib/extension/utils";
+import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
+import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import Text from "@/refresh-components/texts/Text";
 import { Button, MessageCard } from "@opal/components";
 

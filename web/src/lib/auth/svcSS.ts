@@ -1,9 +1,12 @@
 import { buildUrl, UrlBuilder } from "@/lib/utilsSS";
-import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
-import { AuthTypeMetadata } from "@/lib/auth/types";
-import type { SSOProviderType } from "@/lib/auth/types";
+import {
+  AuthType,
+  AuthTypeMetadata,
+  type SSOProviderType,
+} from "@/lib/auth/types";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
   const res = await fetch(buildUrl("/auth/type"));

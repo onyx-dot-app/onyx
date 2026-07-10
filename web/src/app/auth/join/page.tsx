@@ -1,13 +1,12 @@
 import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
-import { AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 import { redirect } from "next/navigation";
 import EmailPasswordForm from "../login/EmailPasswordForm";
 import SignInButton from "@/app/auth/login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
-import { AuthType } from "@/lib/constants";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;

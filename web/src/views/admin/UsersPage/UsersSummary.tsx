@@ -8,8 +8,8 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
-import { AuthType } from "@/lib/constants";
+import { useAuthTypeMetadata } from "@/lib/auth/hooks";
+import { AuthType } from "@/lib/auth/types";
 import InviteOnlyCard from "./InviteOnlyCard";
 
 // ---------------------------------------------------------------------------
