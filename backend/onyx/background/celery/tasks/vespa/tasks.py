@@ -524,6 +524,7 @@ def document_index_metadata_sync_task(
                     document_sets=update_doc_sets,
                     boost=doc.boost,
                     hidden=doc.hidden,
+                    created_at=doc.doc_created_at,
                 )
 
                 # Reindex-port: doc missing from a still-populating index (FUTURE, or the
