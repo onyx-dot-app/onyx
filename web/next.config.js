@@ -96,11 +96,6 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: "/auth/waiting-on-verification",
-        destination: "/auth/email-verification",
-        permanent: true,
-      },
-      {
         source: "/chat",
         destination: "/app",
         permanent: true,
