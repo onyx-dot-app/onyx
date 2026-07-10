@@ -1,7 +1,7 @@
 import useSWR from "swr";
-import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 
 interface AuthTypeAPIResponse {
   auth_type: string;

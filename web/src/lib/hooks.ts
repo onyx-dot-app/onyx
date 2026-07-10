@@ -30,11 +30,8 @@ import {
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
-import {
-  AuthType,
-  DEFAULT_AGENT_ID,
-  NEXT_PUBLIC_CLOUD_ENABLED,
-} from "./constants";
+import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
+import { AuthType } from "@/lib/auth/types";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";

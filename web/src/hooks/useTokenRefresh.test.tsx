@@ -1,8 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { setDocumentVisibility } from "@tests/setup/test-utils";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
-import { AuthTypeMetadata } from "@/lib/auth/types";
-import { AuthType } from "@/lib/constants";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 import { User } from "@/lib/types";
 
 const baseAuthMetadata = (authType: AuthType): AuthTypeMetadata => ({
