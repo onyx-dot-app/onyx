@@ -7,6 +7,30 @@ defined below — names and file contents must match character-for-character.
 The unit tests under `backend/tests/unit/onyx/connectors/box/` need none of
 this; they run fully offline.
 
+## Incremental indexing (how the connector polls)
+
+Box's folder-listing API (`GET /folders/:id/items`) has no server-side
+modified-time filter, so a naive poll would re-list the entire corpus every
+run. The connector avoids that:
+
+- **First index, folder-scoped connectors, pruning, and permission sync** do a
+  full BFS crawl of the folder tree.
+- **Steady-state whole-enterprise polls** (poll window ≤ 7 days) instead consume
+  the Box enterprise **events stream** (`GET /events?stream_type=admin_logs`,
+  filtered to content-change event types) and re-index only the files that
+  actually changed — no full tree walk. This mirrors SharePoint's Graph-delta
+  approach.
+- A window wider than 7 days (e.g. a long outage) falls back to a full crawl,
+  which doubles as periodic reconciliation. If the events API errors (e.g.
+  missing admin scope) the run falls back to a full crawl rather than indexing
+  nothing.
+- Deletions are reconciled by the slim-based pruning job, not the events path
+  (the events path only re-indexes changed/added files).
+
+There is no daily test for the events path — admin-log ingestion lag makes a
+synchronous live assertion flaky — but it's covered comprehensively offline in
+`backend/tests/unit/onyx/connectors/box/test_box_events.py`.
+
 ## 1. Create a Box developer account
 
 Sign up at <https://developer.box.com> (free). This provisions a sandbox
