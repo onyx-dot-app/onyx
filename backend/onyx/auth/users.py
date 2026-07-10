@@ -550,7 +550,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # Check for disposable emails FIRST so obvious throwaway domains are
         # rejected before hitting Google's siteverify API. Cheap local check.
         security_settings = get_security_settings()
-
         try:
             verify_email_domain(
                 user_create.email,
