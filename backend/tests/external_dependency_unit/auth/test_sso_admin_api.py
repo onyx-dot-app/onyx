@@ -1,4 +1,5 @@
-"""Guard SSO admin secret masking and masked-placeholder updates.
+"""Guard SSO admin CRUD: secret masking, masked-placeholder round-trips,
+partial-config merges, and duplicate or missing provider handling.
 
 The API must never persist masked secrets as real config values.
 """
@@ -75,9 +76,15 @@ def _build_oidc_request(name: str, client_secret: str) -> dict[str, Any]:
     }
 
 
-def _new_provider_name(provider_names: list[str], prefix: str = "oidc-test") -> str:
-    _ = provider_names
+def _new_provider_name(prefix: str = "oidc-test") -> str:
     return f"{prefix}-{uuid4().hex[:8]}"
+
+
+def _stored_config(db_session: Session, provider_id: int) -> dict[str, Any]:
+    db_session.expire_all()
+    stored = db_session.get(SSOProvider, provider_id)
+    assert stored is not None and stored.config is not None
+    return stored.config.get_value(apply_mask=False)
 
 
 def _find_provider(providers: list[dict[str, Any]], provider_id: int) -> dict[str, Any]:
@@ -92,7 +99,7 @@ def test_sso_provider_crud_masks_and_restores_secrets(
     db_session: Session,
     provider_names: list[str],
 ) -> None:
-    name = _new_provider_name(provider_names)
+    name = _new_provider_name()
     original_secret = "super-secret-value"
 
     create_response = client.post(
@@ -145,14 +152,7 @@ def test_sso_provider_crud_masks_and_restores_secrets(
         is True
     )
 
-    db_session.expire_all()
-    stored_provider = db_session.get(SSOProvider, provider_id)
-    assert stored_provider is not None
-    assert stored_provider.config is not None
-    assert (
-        stored_provider.config.get_value(apply_mask=False)["client_secret"]
-        == original_secret
-    )
+    assert _stored_config(db_session, provider_id)["client_secret"] == original_secret
 
     new_secret = "new-super-secret"
     patch_new_secret_response = client.patch(
@@ -174,14 +174,7 @@ def test_sso_provider_crud_masks_and_restores_secrets(
         is True
     )
 
-    db_session.expire_all()
-    stored_provider = db_session.get(SSOProvider, provider_id)
-    assert stored_provider is not None
-    assert stored_provider.config is not None
-    assert (
-        stored_provider.config.get_value(apply_mask=False)["client_secret"]
-        == new_secret
-    )
+    assert _stored_config(db_session, provider_id)["client_secret"] == new_secret
 
     disable_response = client.post(
         f"/admin/sso/provider/{provider_id}/enabled",
@@ -208,7 +201,7 @@ def test_update_partial_config_preserves_stored_keys(
     """A PATCH whose config omits a stored key must not erase it. The omitted
     openid_config_url survives, the sent client_id updates, and the masked
     client_secret restores the stored value."""
-    name = _new_provider_name(provider_names)
+    name = _new_provider_name()
     create_response = client.post(
         "/admin/sso/provider",
         json=_build_oidc_request(name, "super-secret-value"),
@@ -224,10 +217,7 @@ def test_update_partial_config_preserves_stored_keys(
     )
     assert patch_response.status_code == 200
 
-    db_session.expire_all()
-    stored = db_session.get(SSOProvider, provider_id)
-    assert stored is not None and stored.config is not None
-    config = stored.config.get_value(apply_mask=False)
+    config = _stored_config(db_session, provider_id)
     assert config["client_id"] == "new-client-id"
     assert config["client_secret"] == "super-secret-value"
     assert (
@@ -243,7 +233,7 @@ def test_create_saml_provider(
 ) -> None:
     """SAML providers can be created via the admin API. The redirect URI points
     at the SAML callback and secret config (sp_private_key) is masked on read."""
-    name = _new_provider_name(provider_names, prefix="saml-test")
+    name = _new_provider_name(prefix="saml-test")
     response = client.post(
         "/admin/sso/provider",
         json={
@@ -267,10 +257,7 @@ def test_create_saml_provider(
     assert body["redirect_uri"] == f"{WEB_DOMAIN}/api/auth/saml/{name}/callback"
     assert is_masked_credential(body["config"]["sp_private_key"]) is True
 
-    db_session.expire_all()
-    stored = db_session.get(SSOProvider, body["id"])
-    assert stored is not None and stored.config is not None
-    raw = stored.config.get_value(apply_mask=False)
+    raw = _stored_config(db_session, body["id"])
     assert raw["idp_entity_id"] == "https://idp.example.com/entity"
     assert raw["sp_private_key"] == "-----BEGIN PRIVATE KEY-----secret"
 
@@ -278,9 +265,8 @@ def test_create_saml_provider(
 def test_create_rejects_masked_credentials(
     client: TestClient,
     db_session: Session,
-    provider_names: list[str],
 ) -> None:
-    name = _new_provider_name(provider_names)
+    name = _new_provider_name()
 
     response = client.post(
         "/admin/sso/provider",
@@ -301,7 +287,7 @@ def test_create_duplicate_name_returns_duplicate_resource(
     db_session: Session,
     provider_names: list[str],
 ) -> None:
-    name = _new_provider_name(provider_names)
+    name = _new_provider_name()
 
     first_response = client.post(
         "/admin/sso/provider",

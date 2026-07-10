@@ -15,67 +15,16 @@ from onyx.db.sso_provider import create_sso_provider
 from onyx.db.sso_provider import fetch_sso_providers
 from onyx.db.sso_provider import set_sso_provider_enabled
 from onyx.db.sso_provider import update_sso_provider
-from onyx.db.sso_provider import validate_sso_config
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.sso.models import SSOProviderCreateRequest
 from onyx.server.manage.sso.models import SSOProviderEnabledRequest
 from onyx.server.manage.sso.models import SSOProviderResponse
 from onyx.server.manage.sso.models import SSOProviderUpdateRequest
-from onyx.utils.encryption import mask_credential_dict
 from onyx.utils.encryption import reject_masked_credentials
+from onyx.utils.encryption import restore_masked_credentials
 
 admin_router = APIRouter(prefix="/admin/sso")
-
-
-def _restore_masked_value(incoming: Any, stored: Any, masked_stored: Any) -> Any:
-    if (
-        isinstance(incoming, dict)
-        and isinstance(stored, dict)
-        and isinstance(masked_stored, dict)
-    ):
-        restored = dict(incoming)
-        for key, value in incoming.items():
-            if key not in stored or key not in masked_stored:
-                continue
-            restored[key] = _restore_masked_value(
-                value, stored[key], masked_stored[key]
-            )
-        return restored
-
-    if (
-        isinstance(incoming, list)
-        and isinstance(stored, list)
-        and isinstance(masked_stored, list)
-    ):
-        restored_list = list(incoming)
-        for index, value in enumerate(incoming):
-            if index >= len(stored) or index >= len(masked_stored):
-                continue
-            restored_list[index] = _restore_masked_value(
-                value,
-                stored[index],
-                masked_stored[index],
-            )
-        return restored_list
-
-    if incoming == masked_stored:
-        return stored
-
-    return incoming
-
-
-def _restore_masked_config(
-    incoming: dict[str, Any], stored: dict[str, Any]
-) -> dict[str, Any]:
-    restored = _restore_masked_value(
-        incoming,
-        stored,
-        mask_credential_dict(stored),
-    )
-    if not isinstance(restored, dict):
-        return incoming
-    return restored
 
 
 def _fetch_sso_provider_or_raise(db_session: Session, provider_id: int) -> SSOProvider:
@@ -136,21 +85,20 @@ def update_sso_provider_endpoint(
 ) -> SSOProviderResponse:
     provider = _fetch_sso_provider_or_raise(db_session, provider_id)
 
-    merged_config: dict[str, Any] | None = None
-    if request.config is not None:
-        stored_config = (
-            provider.config.get_value(apply_mask=False) if provider.config else {}
-        )
-        # Overlay only the keys the caller sent so a partial payload can't drop
-        # stored config. Masked placeholders restore the stored value in place.
-        merged_config = {
-            **stored_config,
-            **_restore_masked_config(request.config, stored_config),
-        }
-        reject_masked_credentials(merged_config)
-        validate_sso_config(provider.provider_type, merged_config)
-
     try:
+        merged_config: dict[str, Any] | None = None
+        if request.config is not None:
+            stored_config = (
+                provider.config.get_value(apply_mask=False) if provider.config else {}
+            )
+            # Overlay only the keys the caller sent so a partial payload can't
+            # drop stored config. Masked placeholders restore the stored value
+            # in place.
+            merged_config = {
+                **stored_config,
+                **restore_masked_credentials(request.config, stored_config),
+            }
+            reject_masked_credentials(merged_config)
         updated_provider = update_sso_provider(
             db_session=db_session,
             provider_id=provider_id,
@@ -172,12 +120,9 @@ def set_sso_provider_enabled_endpoint(
     db_session: Session = Depends(get_session),
 ) -> SSOProviderResponse:
     _fetch_sso_provider_or_raise(db_session, provider_id)
-    try:
-        provider = set_sso_provider_enabled(
-            db_session=db_session,
-            provider_id=provider_id,
-            enabled=request.enabled,
-        )
-    except ValueError as e:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+    provider = set_sso_provider_enabled(
+        db_session=db_session,
+        provider_id=provider_id,
+        enabled=request.enabled,
+    )
     return SSOProviderResponse.from_model(provider, WEB_DOMAIN)
