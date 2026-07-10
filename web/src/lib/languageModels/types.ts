@@ -242,7 +242,7 @@ export interface OpenAIFetchParams {
 export interface OpenAIModelResponse {
   name: string;
   display_name: string;
-  max_input_tokens: number;
+  max_input_tokens: number | null;
   supports_image_input: boolean;
   supports_reasoning: boolean;
 }
@@ -255,7 +255,7 @@ export interface AnthropicFetchParams {
 export interface AnthropicModelResponse {
   name: string;
   display_name: string;
-  max_input_tokens: number;
+  max_input_tokens: number | null;
   supports_image_input: boolean;
   supports_reasoning: boolean;
 }

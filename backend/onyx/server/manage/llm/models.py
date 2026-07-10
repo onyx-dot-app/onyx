@@ -469,7 +469,8 @@ class OpenAIModelsRequest(BaseModel):
 class OpenAIFinalModelResponse(BaseModel):
     name: str  # Model ID (e.g., "gpt-4o")
     display_name: str  # Derived via the litellm model-name parser
-    max_input_tokens: int
+    # Not in the /v1/models response; None defers to runtime litellm lookup
+    max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
 
@@ -484,7 +485,8 @@ class AnthropicModelsRequest(BaseModel):
 class AnthropicFinalModelResponse(BaseModel):
     name: str  # Model ID (e.g., "claude-sonnet-4-5")
     display_name: str  # Human-readable name from the Anthropic API
-    max_input_tokens: int
+    # Not in the /v1/models response; None defers to runtime litellm lookup
+    max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
 
