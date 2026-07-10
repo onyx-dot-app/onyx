@@ -23,7 +23,11 @@ from onyx.db.llm import (
 )
 from onyx.db.models import IndexModelStatus, User
 from onyx.db.port_attempt import (
+    ReindexErrorRow,
+    ReindexProgressCounts,
     cancel_active_port_attempts,
+    get_reindex_error_rows,
+    get_reindex_progress_counts,
     port_backfill_has_pending_work,
 )
 from onyx.db.search_settings import (
@@ -291,6 +295,30 @@ def get_secondary_search_settings_endpoint(
         return None
 
     return SavedSearchSettings.from_db_model(secondary_search_settings)
+
+
+@router.get("/reindex-progress")
+def get_reindex_progress(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ReindexProgressCounts:
+    secondary = get_secondary_search_settings(db_session)
+    if secondary is None:
+        return ReindexProgressCounts(
+            total=0, waiting=0, in_progress=0, completed=0, failed=0
+        )
+    return get_reindex_progress_counts(db_session, secondary.id)
+
+
+@router.get("/reindex-errors")
+def get_reindex_errors(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[ReindexErrorRow]:
+    secondary = get_secondary_search_settings(db_session)
+    if secondary is None:
+        return []
+    return get_reindex_error_rows(db_session, secondary.id)
 
 
 @router.get("/get-all-search-settings")

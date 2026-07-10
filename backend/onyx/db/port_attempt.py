@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
+from pydantic import BaseModel
 from sqlalchemy import ColumnElement, and_, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -18,7 +19,7 @@ from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
 )
 from onyx.db.enums import IndexModelStatus, PortAttemptStatus, SwitchoverType
-from onyx.db.models import PortAttempt, SearchSettings
+from onyx.db.models import ConnectorCredentialPair, PortAttempt, SearchSettings, User
 from onyx.db.user_file import fetch_port_scope_user_ids
 from onyx.utils.logger import setup_logger
 
@@ -176,6 +177,176 @@ def _latest_port_status_by_user(
     }
 
 
+def _latest_port_status_by_cc_pair(
+    db_session: Session,
+    search_settings_id: int,
+    cc_pair_ids: Collection[int],
+) -> dict[int, PortAttemptStatus]:
+    """Latest attempt status per cc_pair (connector twin of _latest_port_status_by_user);
+    cc_pairs with no attempt are absent."""
+    if not cc_pair_ids:
+        return {}
+    return {
+        cc_pair_id: status
+        for cc_pair_id, status in db_session.execute(
+            select(PortAttempt.cc_pair_id, PortAttempt.status)
+            .where(
+                PortAttempt.search_settings_id == search_settings_id,
+                PortAttempt.cc_pair_id.in_(cc_pair_ids),
+            )
+            .distinct(PortAttempt.cc_pair_id)
+            .order_by(
+                PortAttempt.cc_pair_id,
+                PortAttempt.time_created.desc(),
+                PortAttempt.id.desc(),
+            )
+        )
+        if cc_pair_id is not None
+    }
+
+
+def _reindex_port_scope(
+    db_session: Session, search_settings_id: int
+) -> tuple[list[int], list[UUID]]:
+    """cc_pairs + users the port processes for this FUTURE settings (active-only iff
+    ACTIVE_ONLY switchover). Shared so progress counts and error rows can't drift."""
+    settings = db_session.get(SearchSettings, search_settings_id)
+    active_only = (
+        settings is not None and settings.switchover_type == SwitchoverType.ACTIVE_ONLY
+    )
+    cc_pair_ids = fetch_indexable_standard_connector_credential_pair_ids(
+        db_session, active_cc_pairs_only=active_only
+    )
+    user_ids = fetch_port_scope_user_ids(db_session)
+    return cc_pair_ids, user_ids
+
+
+class ReindexProgressCounts(BaseModel):
+    """Combined connector + user-file port progress; buckets partition `total`."""
+
+    total: int
+    waiting: int
+    in_progress: int
+    completed: int
+    failed: int
+
+
+def get_reindex_progress_counts(
+    db_session: Session, search_settings_id: int
+) -> ReindexProgressCounts:
+    """Bucket each in-scope entity (both scopes) by its latest PortAttempt. No attempt /
+    NOT_STARTED / CANCELED → waiting, so the bar never stalls above real remaining work."""
+    cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
+    total = len(cc_pair_ids) + len(user_ids)
+
+    statuses = [
+        *_latest_port_status_by_cc_pair(
+            db_session, search_settings_id, cc_pair_ids
+        ).values(),
+        *_latest_port_status_by_user(db_session, search_settings_id, user_ids).values(),
+    ]
+    in_progress = sum(1 for s in statuses if s == PortAttemptStatus.IN_PROGRESS)
+    completed = sum(1 for s in statuses if s == PortAttemptStatus.SUCCESS)
+    failed = sum(1 for s in statuses if s == PortAttemptStatus.FAILED)
+
+    return ReindexProgressCounts(
+        total=total,
+        waiting=max(0, total - in_progress - completed - failed),
+        in_progress=in_progress,
+        completed=completed,
+        failed=failed,
+    )
+
+
+class ReindexErrorRow(BaseModel):
+    """A failed port unit for the error modal; exactly one of cc_pair_id / user_id set,
+    name = connector name or user email."""
+
+    scope: PortScope
+    cc_pair_id: int | None
+    user_id: UUID | None
+    name: str
+    error_msg: str | None
+
+
+def get_reindex_error_rows(
+    db_session: Session, search_settings_id: int
+) -> list[ReindexErrorRow]:
+    """In-scope entities (both scopes) whose latest port attempt is FAILED, with name +
+    error_msg. Same scope/latest-per-entity as get_reindex_progress_counts's `failed`."""
+    cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
+
+    rows: list[ReindexErrorRow] = []
+
+    if cc_pair_ids:
+        for cc_pair_id, name, status, error_msg in db_session.execute(
+            select(
+                PortAttempt.cc_pair_id,
+                ConnectorCredentialPair.name,
+                PortAttempt.status,
+                PortAttempt.error_msg,
+            )
+            .join(
+                ConnectorCredentialPair,
+                PortAttempt.cc_pair_id == ConnectorCredentialPair.id,
+            )
+            .where(
+                PortAttempt.search_settings_id == search_settings_id,
+                PortAttempt.cc_pair_id.in_(cc_pair_ids),
+            )
+            .distinct(PortAttempt.cc_pair_id)
+            .order_by(
+                PortAttempt.cc_pair_id,
+                PortAttempt.time_created.desc(),
+                PortAttempt.id.desc(),
+            )
+        ):
+            if status == PortAttemptStatus.FAILED:
+                rows.append(
+                    ReindexErrorRow(
+                        scope="connector",
+                        cc_pair_id=cc_pair_id,
+                        user_id=None,
+                        name=name,
+                        error_msg=error_msg,
+                    )
+                )
+
+    if user_ids:
+        for user_id, email, status, error_msg in db_session.execute(
+            # User.email is mistyped by ty, breaking the select() overload match.
+            select(  # ty: ignore[no-matching-overload]
+                PortAttempt.port_user_id,
+                User.email,
+                PortAttempt.status,
+                PortAttempt.error_msg,
+            )
+            .join(User, PortAttempt.port_user_id == User.id)
+            .where(
+                PortAttempt.search_settings_id == search_settings_id,
+                PortAttempt.port_user_id.in_(user_ids),
+            )
+            .distinct(PortAttempt.port_user_id)
+            .order_by(
+                PortAttempt.port_user_id,
+                PortAttempt.time_created.desc(),
+                PortAttempt.id.desc(),
+            )
+        ):
+            if status == PortAttemptStatus.FAILED:
+                rows.append(
+                    ReindexErrorRow(
+                        scope="user_file",
+                        cc_pair_id=None,
+                        user_id=user_id,
+                        name=email,
+                        error_msg=error_msg,
+                    )
+                )
+
+    return rows
+
+
 def _user_file_port_has_pending_work(
     db_session: Session, search_settings_id: int
 ) -> bool:
@@ -226,19 +397,9 @@ def port_backfill_has_pending_work(
     # Latest attempt per cc_pair in one DISTINCT ON pass (avoids an N+1 over cc_pairs).
     settled_cc_pairs = {
         cc_pair_id
-        for cc_pair_id, status in db_session.execute(
-            select(PortAttempt.cc_pair_id, PortAttempt.status)
-            .where(
-                PortAttempt.search_settings_id == search_settings_id,
-                PortAttempt.cc_pair_id.in_(in_scope_cc_pair_ids),
-            )
-            .distinct(PortAttempt.cc_pair_id)
-            .order_by(
-                PortAttempt.cc_pair_id,
-                PortAttempt.time_created.desc(),
-                PortAttempt.id.desc(),
-            )
-        )
+        for cc_pair_id, status in _latest_port_status_by_cc_pair(
+            db_session, search_settings_id, in_scope_cc_pair_ids
+        ).items()
         if status in _SETTLED_STATUSES
     }
     # Pending if any in-scope cc_pair has no settled latest attempt (incl. none at all).

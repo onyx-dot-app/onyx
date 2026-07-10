@@ -88,6 +88,12 @@ export {
   type IconContainerSize,
   type IconContainerType,
 } from "@opal/components/icon-container/components";
+/* ProgressBar */
+export {
+  ProgressBar,
+  type ProgressBarProps,
+  type ProgressBarColor,
+} from "@opal/components/progress-bar/components";
 
 /* Card */
 export { Card, type CardProps } from "@opal/components/cards/card/components";
