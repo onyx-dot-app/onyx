@@ -77,3 +77,28 @@ def test_archive_walk_skips_hidden_entries() -> None:
         "outputs/web",
         "outputs/web/app",
     ]
+
+
+def test_archive_walk_skips_nextjs_runtime_files() -> None:
+    sandbox_manager = StubSandboxManager()
+    sandbox_manager.list_directory_returns_by_path = {
+        "": [
+            FilesystemEntry(name="outputs", path="outputs", is_directory=True),
+            FilesystemEntry(name="nextjs.log", path="nextjs.log", is_directory=False),
+            FilesystemEntry(name="nextjs.pid", path="nextjs.pid", is_directory=False),
+        ],
+        "outputs": [
+            FilesystemEntry(
+                name="report.md", path="outputs/report.md", is_directory=False
+            ),
+        ],
+    }
+
+    files = _manager(sandbox_manager)._walk_sandbox_dir(
+        uuid4(),
+        uuid4(),
+        "",
+        arcname_for=lambda path: path,
+    )
+
+    assert files == [("outputs/report.md", "outputs/report.md")]
