@@ -48,57 +48,23 @@ jobs:
             backend/requirements/default.txt
             backend/requirements/dev.txt
 
-      - name: Format branch name for cache
-        id: format-branch
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ -n "${PR_NUMBER}" ]; then
-            CACHE_SUFFIX="${PR_NUMBER}"
-          else
-            # shellcheck disable=SC2001
-            CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
-          fi
-          echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
-
-      - name: Log in to ECR pull-through cache
-        uses: ./.github/actions/login-ecr-pullthrough-cache
+      - name: Build model server image
+        uses: ./.github/actions/build-model-server-image
         with:
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          run-id: ${{ github.run_id }}
+          tag-prefix: model-server
           ecr-registry: ${{ vars.ECR_REGISTRY }}
-
-      # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
-      # with the same Docker account credentials (the account must have DHI catalog access).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
-        with:
-          registry: dhi.io
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
-
-      - name: Build and load
-        uses: docker/bake-action@6614cfa25eff9a0b2b2697efb0b6159e7680d584 # ratchet:docker/bake-action@v7.2.0
-        env:
-          TAG: model-server-${{ github.run_id }}
-        with:
-          load: true
-          targets: model-server
-          set: |
-            model-server.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }}
-            model-server.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
-            model-server.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
-            model-server.cache-from=type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-model-server:latest
-            model-server.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
-            model-server.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
-            model-server.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-token: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Start Docker containers
         id: start_docker
         env:
-          IMAGE_TAG: model-server-${{ github.run_id }}
+          ONYX_MODEL_SERVER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ github.run_id }}
         run: |
           cd deployment/docker_compose
           docker compose \

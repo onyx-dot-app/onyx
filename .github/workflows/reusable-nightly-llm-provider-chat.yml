@@ -76,6 +76,20 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          parse-json-secrets: false
+          secret-ids: |
+            DOCKER_USERNAME, test/docker-username
+            DOCKER_TOKEN, test/docker-token
+
       - name: Build model server image
         uses: ./.github/actions/build-model-server-image
         with:
@@ -84,7 +98,10 @@ jobs:
           pr-number: ${{ github.event.pull_request.number }}
           github-sha: ${{ github.sha }}
           run-id: ${{ github.run_id }}
+          tag-prefix: nightly-llm-it-model-server
           ecr-registry: ${{ vars.ECR_REGISTRY }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
   build-devcontainer-image:
     runs-on:
