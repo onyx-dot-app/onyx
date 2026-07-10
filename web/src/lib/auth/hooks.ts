@@ -129,14 +129,17 @@ export function useTokenRefresh(
   const isFirstLoadRef = useRef(true);
 
   useEffect(() => {
-    if (authTypeMetadataLoading || !authTypeMetadata) return;
+    // Wait for the first load to complete; don't wait on a persistent error —
+    // if metadata is unavailable we conservatively allow refresh so that BASIC
+    // sessions aren't silently killed by a transient /auth/type failure.
+    if (authTypeMetadataLoading) return;
 
     if (
       !user ||
       user.id === NO_AUTH_USER_ID ||
       user.is_anonymous_user ||
-      authTypeMetadata.authType === AuthType.OIDC ||
-      authTypeMetadata.authType === AuthType.SAML
+      authTypeMetadata?.authType === AuthType.OIDC ||
+      authTypeMetadata?.authType === AuthType.SAML
     ) {
       return;
     }
