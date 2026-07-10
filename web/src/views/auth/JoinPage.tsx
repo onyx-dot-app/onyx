@@ -6,8 +6,7 @@ import { useAuthTypeMetadata, useAuthRedirect } from "@/lib/auth/hooks";
 import { AuthType } from "@/lib/auth/types";
 import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
-import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
-import SignInButton from "@/sections/auth/SignInButton";
+import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import { Logo } from "@/lib/app/components";
 
 function getAuthUrl(authType: AuthType): string | null {

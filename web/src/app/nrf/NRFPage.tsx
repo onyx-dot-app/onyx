@@ -17,7 +17,7 @@ import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import SidePanelHeader from "@/app/nrf/side-panel/SidePanelHeader";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
-import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
+import { EmailPasswordForm } from "@/lib/auth/components";
 import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";

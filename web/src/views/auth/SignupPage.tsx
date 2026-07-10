@@ -6,7 +6,7 @@ import { useAuthTypeMetadata, useAuthRedirect } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
-import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
+import { EmailPasswordForm } from "@/lib/auth/components";
 import { markdown } from "@opal/utils";
 import { Logo } from "@/lib/app/components";
 

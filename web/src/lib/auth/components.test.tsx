@@ -7,7 +7,7 @@
 import React from "react";
 import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
 import { toast } from "@/hooks/useToast";
-import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
+import { EmailPasswordForm } from "@/lib/auth/components";
 
 // Mock next/navigation (not used by this component, but required by dependencies)
 jest.mock("next/navigation", () => ({
