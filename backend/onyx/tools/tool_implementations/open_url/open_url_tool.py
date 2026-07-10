@@ -232,31 +232,35 @@ def _resolve_urls_to_document_ids(
     """
     matches: list[IndexedDocumentRequest] = []
     unresolved: list[str] = []
-    normalized_map: dict[str, set[str]] = {}
+    # Ordered by connector-defined candidate priority; the first indexed variant wins.
+    normalized_map: dict[str, list[str]] = {}
 
     for url in urls:
         # A single URL may map to several candidate document IDs; match whichever is indexed.
         candidates = normalize_url_candidates(url)
 
         if candidates:
-            variants: set[str] = set()
+            variants: list[str] = []
             for candidate in candidates:
                 if candidate.startswith(("http://", "https://")):
-                    variants |= _url_lookup_variants(candidate) or {candidate}
+                    candidate_variants = list(_url_lookup_variants(candidate)) or [
+                        candidate
+                    ]
                 else:
                     # Non-URL canonical id (e.g. a Notion UUID); use it directly.
-                    variants.add(candidate)
+                    candidate_variants = [candidate]
+                variants.extend(v for v in candidate_variants if v not in variants)
             normalized_map[url] = variants
         else:
             # No normalizer found - could be a non-URL document ID (e.g., FILE_CONNECTOR__...)
             if url and not url.startswith(("http://", "https://")):
                 # Likely a document ID, use it directly
-                normalized_map[url] = {url}
+                normalized_map[url] = [url]
             else:
                 # Try generic normalization as fallback
-                variants = _url_lookup_variants(url)
-                if variants:
-                    normalized_map[url] = variants
+                fallback_variants = list(_url_lookup_variants(url))
+                if fallback_variants:
+                    normalized_map[url] = fallback_variants
                 else:
                     unresolved.append(url)
 

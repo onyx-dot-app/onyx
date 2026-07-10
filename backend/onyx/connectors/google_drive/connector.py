@@ -30,6 +30,9 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.google_drive.doc_conversion import (
+    _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE,
+)
+from onyx.connectors.google_drive.doc_conversion import (
     _FALLBACK_WEB_VIEW_LINK_TEMPLATES,
 )
 from onyx.connectors.google_drive.doc_conversion import build_slim_document
@@ -150,7 +153,7 @@ def _candidate_document_ids_from_file_id(file_id: str) -> list[str]:
         template.format(file_id)
         for template in _FALLBACK_WEB_VIEW_LINK_TEMPLATES.values()
     ]
-    uploaded_binary_link = f"https://drive.google.com/file/d/{file_id}/view"
+    uploaded_binary_link = _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE.format(file_id)
 
     candidates: list[str] = []
     for link in [*native_doc_links, uploaded_binary_link]:
