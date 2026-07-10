@@ -41,7 +41,10 @@ const [draft, setDraft] = useState("");
 <InputTags
   tags={tags}
   onRemoveTag={(id) => setTags(tags.filter((t) => t.id !== id))}
-  onAdd={(label) => setTags([...tags, { id: crypto.randomUUID(), label }])}
+  onAdd={(label) => {
+    setTags([...tags, { id: crypto.randomUUID(), label }]);
+    setDraft("");
+  }}
   value={draft}
   onChange={setDraft}
   placeholder="Add a tag…"

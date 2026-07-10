@@ -64,6 +64,7 @@ export {
 export {
   Tag,
   TAG_COLORS,
+  TAG_REMOVE_CLASS,
   type TagProps,
   type TagColor,
 } from "@opal/components/tag/components";

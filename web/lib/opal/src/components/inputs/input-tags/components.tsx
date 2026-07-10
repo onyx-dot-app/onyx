@@ -6,7 +6,7 @@ import "@opal/components/inputs/input-type-in/styles.css";
 import "@opal/components/inputs/input-tags/styles.css";
 import { useRef } from "react";
 import type { IconFunctionComponent } from "@opal/types";
-import { Button, Tag } from "@opal/components";
+import { Button, Tag, TAG_REMOVE_CLASS } from "@opal/components";
 import { SvgX } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
@@ -56,10 +56,6 @@ interface InputTagsProps {
 // ---------------------------------------------------------------------------
 // InputTags
 // ---------------------------------------------------------------------------
-
-// Tag renders its remove control with this class. InputTags reaches into it
-// to drive the armed-tag keyboard flow (arm the last tag, delete an armed one).
-const TAG_REMOVE_CLASS = "opal-auxiliary-tag-remove";
 
 /**
  * Chips-in-input (Figma `Input/Tags`): editable Tags inline with a text
