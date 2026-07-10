@@ -34,7 +34,10 @@ export async function fetchAuthTypeMetadata(
   url: string
 ): Promise<AuthTypeMetadata> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to fetch auth type metadata");
+  if (!res.ok) {
+    console.error(`fetchAuthTypeMetadata: ${res.status} ${res.statusText}`);
+    throw new Error("Failed to fetch auth type metadata");
+  }
   const data: AuthTypeAPIResponse = await res.json();
   const authType = NEXT_PUBLIC_CLOUD_ENABLED
     ? AuthType.CLOUD
