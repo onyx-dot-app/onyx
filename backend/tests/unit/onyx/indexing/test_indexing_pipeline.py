@@ -399,6 +399,45 @@ def test_document_push_fires_execute_hook_for_public_doc() -> None:
     assert payload["content"] == "Hello"
 
 
+def test_document_push_config_fallback_when_hook_skipped() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_EXECUTE_HOOK, return_value=HookSkipped()),
+        patch(
+            "onyx.indexing.indexing_pipeline.push_document_via_config"
+        ) as mock_config_push,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    mock_config_push.assert_called_once()
+    assert mock_config_push.call_args.args[0].document_id == "doc1"
+
+
+def test_document_push_config_not_called_when_hook_configured() -> None:
+    from onyx.hooks.points.document_push import DocumentPushResponse
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(_PATCH_EXECUTE_HOOK, return_value=DocumentPushResponse()),
+        patch(
+            "onyx.indexing.indexing_pipeline.push_document_via_config"
+        ) as mock_config_push,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    # Either/or: a configured hook takes precedence over the env-config sink.
+    mock_config_push.assert_not_called()
+
+
 def test_document_push_hook_exception_propagates() -> None:
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
 

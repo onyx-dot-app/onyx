@@ -1178,10 +1178,10 @@ def _maybe_push_documents(
     insertion_records: list[DocumentInsertionRecord],
     from_beginning: bool = False,
 ) -> None:
-    """Push each successfully indexed public document to the external sinks:
-    the DOCUMENT_PUSH hook (EE, from the hook table) and the config-driven
-    endpoint (all editions, from DOCUMENT_PUSH_ENDPOINT_URL). The sinks are
-    independent; each fires only when configured.
+    """Push each successfully indexed public document to an external sink:
+    the DOCUMENT_PUSH hook (EE, from the hook table) when one is configured,
+    otherwise the config-driven endpoint (all editions, from
+    DOCUMENT_PUSH_ENDPOINT_URL).
 
     Single-tenant only — multi-tenant deployments would mix documents from
     different organizations into a shared external destination.
@@ -1236,13 +1236,16 @@ def _maybe_push_documents(
                     for k, v in (doc.metadata or {}).items()
                 },
             )
-            execute_hook(
+            hook_result = execute_hook(
                 db_session=db_session,
                 hook_point=HookPoint.DOCUMENT_PUSH,
                 payload=payload.model_dump(),
                 response_type=DocumentPushResponse,
             )
-            push_document_via_config(payload)
+            # Either/or: the config-driven endpoint is a fallback for when no
+            # DOCUMENT_PUSH hook is configured (e.g. non-EE deployments).
+            if isinstance(hook_result, HookSkipped):
+                push_document_via_config(payload)
 
 
 @log_function_time(debug_only=True)
