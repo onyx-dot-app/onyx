@@ -12,6 +12,7 @@ from ee.onyx.external_permissions.google_drive.folder_retrieval import (
 )
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.models import PermissionType
+from ee.onyx.external_permissions.utils import credential_json
 from onyx.access.utils import build_domain_group_id
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
@@ -446,12 +447,7 @@ def gdrive_group_sync(
     google_drive_connector = GoogleDriveConnector(
         **cc_pair.connector.connector_specific_config
     )
-    credential_json = (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
-    )
-    google_drive_connector.load_credentials(credential_json)
+    google_drive_connector.load_credentials(credential_json(cc_pair))
     admin_service = get_admin_service(
         google_drive_connector.creds, google_drive_connector.primary_admin_email
     )
