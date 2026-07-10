@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.hierarchy import _get_accessible_hierarchy_nodes_for_source
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
+from onyx.db.hierarchy import get_source_hierarchy_node
 from onyx.db.models import HierarchyNode
 
 
@@ -154,3 +155,39 @@ def test_combined_email_and_group(
     assert email_node.raw_node_id in result_ids
     assert group_node.raw_node_id in result_ids
     assert private_node.raw_node_id not in result_ids
+
+
+def test_source_node_always_accessible(
+    db_session: Session,
+) -> None:
+    """SOURCE roots are always returned, even when is_public is false."""
+    source_node = get_source_hierarchy_node(db_session, DocumentSource.SLACK)
+    assert source_node is not None
+    original_is_public = source_node.is_public
+    source_node.is_public = False
+
+    tag = uuid4().hex[:8]
+    private_child = HierarchyNode(
+        raw_node_id=f"private_child_{tag}",
+        display_name=f"Private Child {tag}",
+        source=DocumentSource.SLACK,
+        node_type=HierarchyNodeType.CHANNEL,
+        is_public=False,
+    )
+    db_session.add(private_child)
+    db_session.flush()
+
+    try:
+        results = _get_accessible_hierarchy_nodes_for_source(
+            db_session,
+            source=DocumentSource.SLACK,
+            user_email="",
+            external_group_ids=[],
+        )
+        result_ids = {n.id for n in results}
+        assert source_node.id in result_ids
+        assert private_child.id not in result_ids
+    finally:
+        source_node.is_public = original_is_public
+        db_session.delete(private_child)
+        db_session.commit()

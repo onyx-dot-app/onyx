@@ -7,6 +7,7 @@ The API must never persist masked secrets as real config values.
 from collections.abc import Generator
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -22,6 +23,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.manage.sso.api import admin_router
 from onyx.utils.encryption import is_masked_credential
@@ -60,6 +62,34 @@ def provider_names(db_session: Session) -> Generator[list[str], None, None]:
     if names:
         db_session.execute(delete(SSOProvider).where(SSOProvider.name.in_(names)))
     db_session.commit()
+
+
+@pytest.fixture()
+def only_test_providers_enabled(db_session: Session) -> Generator[None, None, None]:
+    """Give the multi-SSO count assertions a clean baseline: pre-existing
+    enabled providers (e.g. rows on a shared dev database) are disabled for
+    the duration of the test and restored afterwards."""
+    preexisting_ids = list(
+        db_session.scalars(
+            select(SSOProvider.id).where(SSOProvider.enabled.is_(True))
+        ).all()
+    )
+    if preexisting_ids:
+        for provider in db_session.scalars(
+            select(SSOProvider).where(SSOProvider.id.in_(preexisting_ids))
+        ):
+            provider.enabled = False
+        db_session.commit()
+    try:
+        yield
+    finally:
+        db_session.rollback()
+        if preexisting_ids:
+            for provider in db_session.scalars(
+                select(SSOProvider).where(SSOProvider.id.in_(preexisting_ids))
+            ):
+                provider.enabled = True
+            db_session.commit()
 
 
 def _build_oidc_request(name: str, client_secret: str) -> dict[str, Any]:
@@ -282,6 +312,7 @@ def test_create_rejects_masked_credentials(
     assert stored_provider is None
 
 
+@pytest.mark.usefixtures("only_test_providers_enabled")
 def test_create_duplicate_name_returns_duplicate_resource(
     client: TestClient,
     db_session: Session,
@@ -295,6 +326,16 @@ def test_create_duplicate_name_returns_duplicate_resource(
     )
     assert first_response.status_code == 200
     provider_names.append(name)
+    first_id = first_response.json()["id"]
+
+    # Disable the first row so the multi-SSO tier gate cannot fire on the
+    # duplicate attempt under license enforcement. Name uniqueness is
+    # tier-independent.
+    disable_response = client.post(
+        f"/admin/sso/provider/{first_id}/enabled",
+        json={"enabled": False},
+    )
+    assert disable_response.status_code == 200
 
     duplicate_response = client.post(
         "/admin/sso/provider",
@@ -330,3 +371,84 @@ def test_missing_provider_routes_return_not_found(client: TestClient) -> None:
     )
     assert enabled_response.status_code == OnyxErrorCode.NOT_FOUND.status_code
     assert enabled_response.json()["error_code"] == OnyxErrorCode.NOT_FOUND.code
+
+
+def _gated_bridge(*_args: Any, **_kwargs: Any) -> Any:
+    """Stands in for the EE tier bridge as a below-Business tenant."""
+
+    def _deny() -> None:
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Multiple enabled SSO providers require the Business or Enterprise plan.",
+        )
+
+    return _deny
+
+
+@pytest.mark.usefixtures("only_test_providers_enabled")
+def test_second_enabled_provider_requires_business_tier(
+    client: TestClient,
+    provider_names: list[str],
+) -> None:
+    """Below Business, a second simultaneously enabled provider is blocked
+    while single-provider management stays fully allowed: toggling the only
+    provider works, and a second create passes once the first is disabled."""
+    first_name = _new_provider_name()
+    first_response = client.post(
+        "/admin/sso/provider",
+        json=_build_oidc_request(first_name, "first-secret"),
+    )
+    assert first_response.status_code == 200
+    provider_names.append(first_name)
+    first_id = first_response.json()["id"]
+
+    with patch(
+        "onyx.server.manage.sso.api.fetch_ee_implementation_or_noop",
+        _gated_bridge,
+    ):
+        second_name = _new_provider_name()
+        gated_create = client.post(
+            "/admin/sso/provider",
+            json=_build_oidc_request(second_name, "second-secret"),
+        )
+        assert (
+            gated_create.status_code == OnyxErrorCode.FEATURE_NOT_AVAILABLE.status_code
+        )
+        assert (
+            gated_create.json()["error_code"]
+            == OnyxErrorCode.FEATURE_NOT_AVAILABLE.code
+        )
+
+        disable_first = client.post(
+            f"/admin/sso/provider/{first_id}/enabled",
+            json={"enabled": False},
+        )
+        assert disable_first.status_code == 200
+
+        reenable_first = client.post(
+            f"/admin/sso/provider/{first_id}/enabled",
+            json={"enabled": True},
+        )
+        assert reenable_first.status_code == 200
+
+        disable_again = client.post(
+            f"/admin/sso/provider/{first_id}/enabled",
+            json={"enabled": False},
+        )
+        assert disable_again.status_code == 200
+
+        allowed_create = client.post(
+            "/admin/sso/provider",
+            json=_build_oidc_request(second_name, "second-secret"),
+        )
+        assert allowed_create.status_code == 200
+        provider_names.append(second_name)
+
+        gated_reenable = client.post(
+            f"/admin/sso/provider/{first_id}/enabled",
+            json={"enabled": True},
+        )
+        assert (
+            gated_reenable.status_code
+            == OnyxErrorCode.FEATURE_NOT_AVAILABLE.status_code
+        )
