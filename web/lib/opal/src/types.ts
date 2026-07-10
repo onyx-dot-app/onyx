@@ -168,6 +168,7 @@ export type StatusVariants =
   | "info"
   | "success"
   | "warning"
+  | "pending"
   | "error";
 
 // ---------------------------------------------------------------------------

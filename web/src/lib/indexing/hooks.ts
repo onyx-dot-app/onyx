@@ -16,6 +16,8 @@ import {
   ConfiguredEmbeddingProvider,
   EmbeddingModelResponse,
   LLMContextualCost,
+  ReindexErrorRow,
+  ReindexProgress,
   SavedSearchSettings,
 } from "@/lib/indexing/interfaces";
 
@@ -26,8 +28,8 @@ import {
  * - 60 s otherwise — catches migrations started elsewhere without hammering
  *   the backend when idle
  */
-export function secondaryRefreshInterval(
-  latestData: EmbeddingModelResponse | null | undefined
+export function secondaryRefreshInterval<T>(
+  latestData: T | null | undefined
 ): number {
   return latestData ? 5000 : 60000;
 }
@@ -47,12 +49,12 @@ export function useCurrentSearchSettings({
 }
 
 /**
- * Fetch the secondary (in-progress) embedding model.
- * Returns `null` when no re-index is running.
+ * Fetch the secondary (in-progress) search settings; `null` when no re-index is
+ * running. Carries `use_port_flow` (gates which reindex banner shows).
  * Self-throttles via `secondaryRefreshInterval`.
  */
 export function useSecondarySearchSettings() {
-  return useSWR<EmbeddingModelResponse | null>(
+  return useSWR<SavedSearchSettings | null>(
     SWR_KEYS.secondarySearchSettings,
     errorHandlingFetcher,
     { refreshInterval: secondaryRefreshInterval }
@@ -84,6 +86,31 @@ export function useLLMContextualCosts() {
   return useSWR<LLMContextualCost[]>(
     SWR_KEYS.llmContextualCost,
     errorHandlingFetcher
+  );
+}
+
+/** Combined connector + user-file re-index progress; polls when pollIntervalMs > 0. */
+export function useReindexProgress({
+  pollIntervalMs = 0,
+}: { pollIntervalMs?: number } = {}) {
+  return useSWR<ReindexProgress>(
+    SWR_KEYS.reindexProgress,
+    errorHandlingFetcher,
+    {
+      refreshInterval: pollIntervalMs,
+    }
+  );
+}
+
+/**
+ * Failed re-index units for the error modal. Fetches only when `enabled` (modal open),
+ * polling 5s so a long-open modal tracks the banner's live `failed` count.
+ */
+export function useReindexErrors(enabled: boolean) {
+  return useSWR<ReindexErrorRow[]>(
+    enabled ? SWR_KEYS.reindexErrors : null,
+    errorHandlingFetcher,
+    { refreshInterval: 5000 }
   );
 }
 

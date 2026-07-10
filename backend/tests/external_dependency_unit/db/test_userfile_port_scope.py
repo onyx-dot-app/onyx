@@ -23,6 +23,10 @@ from onyx.db.port_attempt import count_active_port_attempts
 from onyx.db.port_attempt import create_port_attempt
 from onyx.db.port_attempt import get_active_port_attempt
 from onyx.db.port_attempt import get_latest_port_attempt
+from onyx.db.port_attempt import get_reindex_error_rows
+from onyx.db.port_attempt import get_reindex_progress_counts
+from onyx.db.port_attempt import mark_port_canceled
+from onyx.db.port_attempt import mark_port_failed
 from onyx.db.port_attempt import mark_port_in_progress
 from onyx.db.port_attempt import mark_port_succeeded
 from onyx.db.user_file import clear_user_file_reconcile_pending
@@ -275,3 +279,111 @@ def test_secondary_pending_flag_round_trip(
     cleared = db_session.get(UserFile, uf.id)
     assert cleared is not None and cleared.secondary_reconcile_pending is False
     assert count_user_files_reconcile_pending(db_session) == baseline
+
+
+def test_reindex_progress_counts_and_errors_both_scopes(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """get_reindex_progress_counts / get_reindex_error_rows span both scopes. The FUTURE
+    SearchSettings here is unique, so only its own attempts count against it and other
+    tenant data lands in `waiting` — making in_progress/completed/failed + error rows
+    exact despite the shared DB."""
+    ss = make_future_search_settings(db_session, use_port_flow=True)
+    cc_pairs: list[ConnectorCredentialPair] = []
+    users: list[User] = []
+    try:
+        # Connectors, one per bucket.
+        cc_waiting = make_cc_pair(db_session)
+        create_port_attempt(db_session, cc_waiting.id, ss.id)  # NOT_STARTED -> waiting
+        cc_no_attempt = make_cc_pair(db_session)  # no attempt -> waiting
+        cc_in_progress = make_cc_pair(db_session)
+        mark_port_in_progress(
+            db_session, create_port_attempt(db_session, cc_in_progress.id, ss.id).id
+        )
+        cc_completed = make_cc_pair(db_session)
+        mark_port_succeeded(
+            db_session, create_port_attempt(db_session, cc_completed.id, ss.id).id
+        )
+        cc_failed = make_cc_pair(db_session)
+        mark_port_failed(
+            db_session,
+            create_port_attempt(db_session, cc_failed.id, ss.id).id,
+            error_msg="connector boom",
+        )
+        cc_canceled = make_cc_pair(db_session)  # CANCELED is settled -> waiting bucket
+        mark_port_canceled(
+            db_session, create_port_attempt(db_session, cc_canceled.id, ss.id).id
+        )
+        cc_pairs = [
+            cc_waiting,
+            cc_no_attempt,
+            cc_in_progress,
+            cc_completed,
+            cc_failed,
+            cc_canceled,
+        ]
+
+        # Users (per-user scope; a COMPLETED file puts the user in scope).
+        u_completed = create_test_user(db_session, "reindexprog")
+        _make_user_file(db_session, u_completed.id)
+        mark_port_succeeded(
+            db_session,
+            create_port_attempt(
+                db_session, None, ss.id, port_user_id=u_completed.id
+            ).id,
+        )
+        u_failed = create_test_user(db_session, "reindexprog")
+        _make_user_file(db_session, u_failed.id)
+        mark_port_failed(
+            db_session,
+            create_port_attempt(db_session, None, ss.id, port_user_id=u_failed.id).id,
+            error_msg="user boom",
+        )
+        u_waiting = create_test_user(db_session, "reindexprog")
+        _make_user_file(db_session, u_waiting.id)  # no attempt -> waiting
+        users = [u_completed, u_failed, u_waiting]
+
+        counts = get_reindex_progress_counts(db_session, ss.id)
+        # Exact: only this fresh FUTURE's attempts contribute to these buckets.
+        assert counts.in_progress == 1
+        assert counts.completed == 2
+        assert counts.failed == 2
+        assert (
+            counts.waiting + counts.in_progress + counts.completed + counts.failed
+            == counts.total
+        )
+        assert counts.total >= 9
+        assert counts.waiting >= 4
+
+        rows = get_reindex_error_rows(db_session, ss.id)
+        by_key = {(r.scope, r.name): r for r in rows}
+
+        assert ("connector", cc_failed.name) in by_key
+        conn_row = by_key[("connector", cc_failed.name)]
+        assert conn_row.cc_pair_id == cc_failed.id
+        assert conn_row.user_id is None
+        assert conn_row.error_msg == "connector boom"
+
+        assert ("user_file", u_failed.email) in by_key
+        user_row = by_key[("user_file", u_failed.email)]
+        assert user_row.user_id == u_failed.id
+        assert user_row.cc_pair_id is None
+        assert user_row.error_msg == "user boom"
+
+        assert len(rows) == counts.failed == 2
+    finally:
+        db_session.rollback()
+        db_session.query(SearchSettings).filter(SearchSettings.id == ss.id).delete(
+            synchronize_session="fetch"
+        )
+        for u in users:
+            db_session.query(UserFile).filter(UserFile.user_id == u.id).delete(
+                synchronize_session="fetch"
+            )
+            obj = db_session.get(User, u.id)
+            if obj is not None:
+                db_session.delete(obj)
+        db_session.commit()
+        for cc in cc_pairs:
+            cleanup_cc_pair(db_session, cc)
