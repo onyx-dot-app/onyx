@@ -37,7 +37,7 @@ def test_single_provider_renders_all_required_fields() -> None:
     assert config["model"] == "anthropic/claude-opus-4-7"
     assert config["enabled_providers"] == ["anthropic"]
     assert config["provider"]["anthropic"]["options"]["apiKey"] == "sk-test"
-    # opus-4-7 is in _ADAPTIVE_THINKING_MODELS, so adaptive thinking.
+    # opus-4-7 supports adaptive thinking (Claude 4.6+), so adaptive thinking.
     # Anthropic defaults adaptive thinking display to "omitted"; explicit
     # summarized display is required for Craft to receive readable thought text.
     assert config["provider"]["anthropic"]["models"]["claude-opus-4-7"]["options"][
@@ -45,16 +45,45 @@ def test_single_provider_renders_all_required_fields() -> None:
     ] == {"type": "adaptive", "display": "summarized"}
 
 
-def test_adaptive_anthropic_models_request_readable_thinking_summaries() -> None:
+@pytest.mark.parametrize(
+    "provider, model",
+    [
+        ("anthropic", "claude-opus-4-8"),
+        ("anthropic", "claude-sonnet-4-6"),
+        # Claude 5 line requires adaptive — the legacy enabled+budgetTokens
+        # config would be rejected outright.
+        ("anthropic", "claude-fable-5"),
+        # Bedrock model ids carry a vendor prefix the version parser strips.
+        ("bedrock", "anthropic.claude-opus-4-7-20260115-v1:0"),
+    ],
+)
+def test_adaptive_anthropic_models_request_readable_thinking_summaries(
+    provider: str, model: str
+) -> None:
     config = build_multi_provider_opencode_config(
-        providers=[_cfg("anthropic", "claude-opus-4-8")],
-        default_provider="anthropic",
-        default_model="claude-opus-4-8",
+        providers=[_cfg(provider, model)],
+        default_provider=provider,
+        default_model=model,
     )
 
-    assert config["provider"]["anthropic"]["models"]["claude-opus-4-8"]["options"][
-        "thinking"
-    ] == {"type": "adaptive", "display": "summarized"}
+    assert config["provider"][provider]["models"][model]["options"]["thinking"] == {
+        "type": "adaptive",
+        "display": "summarized",
+    }
+
+
+@pytest.mark.parametrize("model", ["claude-haiku-4-5", "claude-3-5-sonnet-20241022"])
+def test_pre_adaptive_anthropic_models_use_legacy_thinking_config(model: str) -> None:
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", model)],
+        default_provider="anthropic",
+        default_model=model,
+    )
+
+    assert config["provider"]["anthropic"]["models"][model]["options"]["thinking"] == {
+        "type": "enabled",
+        "budgetTokens": 16000,
+    }
 
 
 def test_multi_provider_each_gets_its_own_block() -> None:
