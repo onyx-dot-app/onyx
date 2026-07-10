@@ -1023,6 +1023,11 @@ def backfill_docs_created_at__no_commit(
     )
     now = datetime.now(timezone.utc)
     for document in documents_to_update:
+        # Unknown chunk count → the metadata-sync update is a no-op (it skips
+        # chunk_count < 0), so persisting here would falsely mark the doc synced
+        # without the index ever getting created_at. Leave it for a later sweep.
+        if document.chunk_count is None:
+            continue
         new_created_at = ids_to_created_at[document.id]
         if document.doc_created_at == new_created_at:
             continue

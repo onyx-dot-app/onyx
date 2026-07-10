@@ -75,6 +75,7 @@ def test_backfill_sets_created_at_and_bumps_last_modified(db_session: Session) -
             id=doc_id,
             semantic_id=doc_id,
             kg_stage=KGStage.NOT_STARTED,
+            chunk_count=2,
             doc_created_at=None,
             last_modified=old_modified,
         )
@@ -102,6 +103,7 @@ def test_backfill_is_noop_when_value_unchanged(db_session: Session) -> None:
             id=doc_id,
             semantic_id=doc_id,
             kg_stage=KGStage.NOT_STARTED,
+            chunk_count=2,
             doc_created_at=_CREATED_AT,  # already set to the incoming value
         )
     )
@@ -121,6 +123,38 @@ def test_backfill_is_noop_when_value_unchanged(db_session: Session) -> None:
         # value already matched → row not touched, so no needless re-sync
         assert after.doc_created_at == _CREATED_AT
         assert after.last_modified == last_modified_before
+    finally:
+        db_session.query(DbDocument).filter(DbDocument.id == doc_id).delete()
+        db_session.commit()
+
+
+def test_backfill_skips_doc_without_chunk_count(db_session: Session) -> None:
+    # An unknown chunk count makes the metadata-sync update a no-op, so the
+    # backfill must NOT persist created_at (which would falsely mark it synced);
+    # it's left for a later sweep once indexing sets the count.
+    doc_id = f"created-at-backfill-{uuid4().hex[:8]}"
+    old_modified = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    db_session.add(
+        DbDocument(
+            id=doc_id,
+            semantic_id=doc_id,
+            kg_stage=KGStage.NOT_STARTED,
+            chunk_count=None,
+            doc_created_at=None,
+            last_modified=old_modified,
+        )
+    )
+    db_session.commit()
+    try:
+        backfill_docs_created_at__no_commit({doc_id: _CREATED_AT}, db_session)
+        db_session.commit()
+
+        db_session.expire_all()
+        row = db_session.get(DbDocument, doc_id)
+        assert row is not None
+        # not persisted, not dirtied → retried on a later sweep
+        assert row.doc_created_at is None
+        assert row.last_modified == old_modified
     finally:
         db_session.query(DbDocument).filter(DbDocument.id == doc_id).delete()
         db_session.commit()
