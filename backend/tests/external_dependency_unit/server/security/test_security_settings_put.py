@@ -332,3 +332,67 @@ def test_apply_patch_strips_operator_locked_in_multi_tenant(
     )
 
     assert _load_row_as_dict() == {"user_directory_admin_only": True}
+
+
+# -----------------------------------------------------------------------------
+# Two-stage password lockdown: the login toggle can't strand the instance.
+# The guard keys on the global enabled-provider count, so the count source is
+# patched rather than relying on the shared DB's provider rows.
+# -----------------------------------------------------------------------------
+
+
+def _patch_enabled_providers(
+    monkeypatch: pytest.MonkeyPatch, providers: list[object]
+) -> None:
+    monkeypatch.setattr(
+        security_store,
+        "fetch_sso_providers",
+        lambda *_a, **_kw: providers,
+    )
+
+
+def test_put_rejects_disabling_login_with_no_enabled_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stage two guard: with no SSO fallback, turning off password login would
+    lock everyone out, so the save is refused and nothing persists."""
+    _patch_enabled_providers(monkeypatch, [])
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"password_login_enabled": False})
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+    assert _load_row_as_dict() is None
+
+
+def test_put_allows_disabling_login_with_enabled_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_enabled_providers(monkeypatch, [object()])
+
+    result = _put({"password_login_enabled": False})
+    assert result.password_login_enabled is False
+    assert _load_row_as_dict() == {"password_login_enabled": False}
+
+
+def test_put_allows_signup_lockdown_without_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stage one (signup off) has no provider prerequisite. Only login does."""
+    _patch_enabled_providers(monkeypatch, [])
+
+    result = _put({"password_signup_enabled": False})
+    assert result.password_signup_enabled is False
+    assert _load_row_as_dict() == {"password_signup_enabled": False}
+
+
+def test_put_rejects_lockdown_toggle_in_multi_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lockdown toggles only apply to single-tenant deployments. In
+    multi-tenant they would silently never enforce, so the write is refused."""
+    monkeypatch.setattr(security_api, "MULTI_TENANT", True)
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"password_login_enabled": False})
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+    assert _load_row_as_dict() is None

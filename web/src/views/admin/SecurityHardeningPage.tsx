@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
+import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -49,6 +50,8 @@ interface SecuritySettings {
   password_require_lowercase: boolean;
   password_require_digit: boolean;
   password_require_special_char: boolean;
+  password_signup_enabled: boolean;
+  password_login_enabled: boolean;
 }
 
 // Write shape: a partial patch. The backend treats only the keys present in the
@@ -87,6 +90,15 @@ function ToggleRow({
 
 export default function SecurityHardeningPage() {
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
+  const { authTypeMetadata, isLoading: authTypeLoading } =
+    useAuthTypeMetadata();
+  // The lockdown toggles only enforce on self-hosted deployments, so the
+  // card hides where the backend would refuse the save. The explicit === false
+  // waits for the fetch, metadata is undefined while loading or unreachable.
+  const showPasswordLockdown =
+    !isMultiTenant &&
+    !authTypeLoading &&
+    authTypeMetadata?.multiTenant === false;
 
   const { data: settings, isLoading: settingsLoading } =
     useSWR<SecuritySettings>(
@@ -264,6 +276,40 @@ export default function SecurityHardeningPage() {
               )}
             </Section>
           </Card>
+
+          {/* Password lockdown (single-tenant only). Two-stage by design
+              so an admin can't lock themselves out: close signup, confirm SSO,
+              then close login. */}
+          {showPasswordLockdown && (
+            <Card border="solid" rounding="lg">
+              <Section>
+                <Content
+                  title="Password Login"
+                  description="Close password auth once SSO works. Turn off signup first, confirm your SSO login, then turn off login so you never lock yourself out."
+                  sizePreset="main-ui"
+                  variant="section"
+                />
+
+                <ToggleRow
+                  title="Allow Password Signup"
+                  description="When off, new accounts are created only by signing in through an SSO provider."
+                  checked={draft.password_signup_enabled}
+                  onCheckedChange={(checked) =>
+                    void saveSettings({ password_signup_enabled: checked })
+                  }
+                />
+
+                <ToggleRow
+                  title="Allow Password Login"
+                  description="When off, everyone signs in through SSO. Requires at least one enabled SSO provider."
+                  checked={draft.password_login_enabled}
+                  onCheckedChange={(checked) =>
+                    void saveSettings({ password_login_enabled: checked })
+                  }
+                />
+              </Section>
+            </Card>
+          )}
 
           {/* Password policy (single-tenant only) */}
           {!isMultiTenant && (

@@ -566,6 +566,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # Check for disposable emails FIRST so obvious throwaway domains are
         # rejected before hitting Google's siteverify API. Cheap local check.
         security_settings = get_security_settings()
+
+        # First lockdown stage: password signup off refuses public self-service
+        # registration, single-tenant only. safe=True marks the untrusted public
+        # register route. SSO provisioning (SAML/JWT via safe=False, OAuth via
+        # its own flow) never carries it, so SSO users are still created
+        # through their provider.
+        if safe and not MULTI_TENANT and not security_settings.password_signup_enabled:
+            raise OnyxError(
+                OnyxErrorCode.REGISTRATION_DISABLED,
+                "Password signup is disabled. Sign in through your SSO provider.",
+            )
+
         try:
             verify_email_domain(
                 user_create.email,
@@ -1322,6 +1334,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 outcome,
                 actor=AuditActor(email=email),
             )
+
+        # Second lockdown stage: password login off refuses password auth for
+        # everyone, single-tenant only (this runs before the user's tenant
+        # is resolved, and the toggles are operator-locked in multi-tenant). SSO
+        # never reaches here, so enabled providers still admit users. Raise a
+        # distinct reason instead of the generic bad-credentials None so a legit
+        # admin sees why. The setting is global, so it leaks nothing per-account.
+        if not MULTI_TENANT and not get_security_settings().password_login_enabled:
+            _audit_login_failure(AuditOutcome.DENIED)
+            raise BasicAuthenticationError(detail="PASSWORD_LOGIN_DISABLED")
 
         tenant_id: str | None = None
         try:
