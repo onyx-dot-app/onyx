@@ -1307,6 +1307,9 @@ function AccountsAccessSettings() {
   const authType = useAuthType();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
+  // TODO(auth-refresh): only passwordMinLength is enforced here; the remaining
+  // constraints (max length, uppercase, lowercase, digit, special char) will be
+  // wired up when this form is refreshed as part of auth-refresh.
   const passwordValidationSchema = Yup.object().shape({
     currentPassword: Yup.string().required("Current password is required"),
     newPassword: Yup.string()

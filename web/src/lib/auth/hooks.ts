@@ -14,6 +14,10 @@ import { useCurrentUser } from "@/lib/users/hooks";
 import { isAuthPath } from "@/lib/auth/paths";
 import { fetchAuthTypeMetadata } from "@/lib/auth/svc";
 
+const REFRESH_INTERVAL = 600000;
+const MIN_REFRESH_GAP_MS = REFRESH_INTERVAL - 60000;
+const VISIBILITY_REFRESH_GAP_MS = 60000;
+
 export function useAuthTypeMetadata(): {
   authTypeMetadata: AuthTypeMetadata | undefined;
   isLoading: boolean;
@@ -114,10 +118,6 @@ export function useAuthType(): AuthType | null {
 
   return authTypeMetadata?.authType ?? null;
 }
-
-const REFRESH_INTERVAL = 600000;
-const MIN_REFRESH_GAP_MS = REFRESH_INTERVAL - 60000;
-const VISIBILITY_REFRESH_GAP_MS = 60000;
 
 export function useTokenRefresh(
   user: User | null,
