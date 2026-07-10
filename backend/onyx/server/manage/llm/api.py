@@ -50,9 +50,11 @@ from onyx.llm.factory import (
 )
 from onyx.llm.model_capabilities import (
     get_bedrock_token_limit,
+    get_max_input_tokens,
     litellm_thinks_model_supports_image_input,
     model_is_reasoning_model,
 )
+from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.utils import (
     get_llm_contextual_cost,
     is_sensitive_custom_config_key,
@@ -72,8 +74,12 @@ from onyx.llm.well_known_providers.constants import (
 from onyx.llm.well_known_providers.llm_provider_options import (
     WellKnownLLMProviderDescriptor,
     fetch_available_well_known_llms,
+    is_obsolete_model,
+    is_openai_chat_model_id,
 )
 from onyx.server.manage.llm.models import (
+    AnthropicFinalModelResponse,
+    AnthropicModelsRequest,
     BedrockFinalModelResponse,
     BedrockModelsRequest,
     BifrostFinalModelResponse,
@@ -98,6 +104,8 @@ from onyx.server.manage.llm.models import (
     OllamaModelsRequest,
     OpenAICompatibleFinalModelResponse,
     OpenAICompatibleModelsRequest,
+    OpenAIFinalModelResponse,
+    OpenAIModelsRequest,
     OpenRouterFinalModelResponse,
     OpenRouterModelDetails,
     OpenRouterModelsRequest,
@@ -117,6 +125,7 @@ from onyx.server.manage.llm.utils import (
     is_embedding_model,
     is_reasoning_model,
     is_valid_bedrock_model,
+    should_filter_as_dated_duplicate,
     strip_openrouter_vendor_prefix,
 )
 from onyx.utils.audit import (
@@ -2145,3 +2154,272 @@ def _get_openai_compatible_server_response(
         source_name="OpenAI-Compatible",
         api_key=api_key,
     )
+
+
+_OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
+
+_ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models"
+_ANTHROPIC_API_VERSION = "2023-06-01"
+_ANTHROPIC_MODELS_PAGE_LIMIT = 1000
+_ANTHROPIC_MODELS_MAX_PAGES = 5
+
+
+@admin_router.post("/openai/available-models")
+def get_openai_available_models(
+    request: OpenAIModelsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[OpenAIFinalModelResponse]:
+    """Fetch available models from OpenAI's /v1/models endpoint.
+
+    The listing API only returns model ids, so display names and capability
+    flags are derived from litellm metadata.
+    """
+    api_key = _resolve_api_key(request.api_key, request.provider_id, None, db_session)
+
+    response_json = _get_openai_compatible_models_response(
+        url=_OPENAI_MODELS_URL,
+        source_name="OpenAI",
+        api_key=api_key,
+    )
+
+    data = response_json.get("data", [])
+    if not isinstance(data, list) or len(data) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from OpenAI",
+        )
+
+    all_model_ids = {
+        item.get("id") for item in data if isinstance(item, dict) and item.get("id")
+    }
+
+    results: list[OpenAIFinalModelResponse] = []
+    for item in data:
+        try:
+            model_id = item.get("id", "")
+            if not model_id:
+                continue
+
+            # Skip non-chat (embedding/audio/image/moderation) and deprecated models
+            if not is_openai_chat_model_id(model_id):
+                continue
+            if is_embedding_model(model_id):
+                continue
+            if is_obsolete_model(model_id, LlmProviderNames.OPENAI):
+                continue
+            # Skip dated variants when the undated base model is also present;
+            # the provider read path filters these out anyway.
+            if should_filter_as_dated_duplicate(model_id, all_model_ids):
+                continue
+
+            display_name = parse_litellm_model_name(f"openai/{model_id}").display_name
+
+            results.append(
+                OpenAIFinalModelResponse(
+                    name=model_id,
+                    display_name=display_name,
+                    max_input_tokens=get_max_input_tokens(
+                        model_name=model_id,
+                        model_provider=LlmProviderNames.OPENAI,
+                    ),
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.OPENAI
+                    ),
+                    supports_reasoning=(
+                        model_is_reasoning_model(model_id, LlmProviderNames.OPENAI)
+                        or is_reasoning_model(model_id, display_name)
+                    ),
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse OpenAI model entry",
+                extra={"error": str(e), "item": str(item)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from OpenAI",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="OpenAI",
+        )
+
+    return sorted_results
+
+
+def _get_anthropic_models_response(api_key: str | None) -> list[dict]:
+    """Fetch all model entries from Anthropic's paginated /v1/models endpoint."""
+    headers = {
+        "x-api-key": api_key or "",
+        "anthropic-version": _ANTHROPIC_API_VERSION,
+    }
+
+    entries: list[dict] = []
+    after_id: str | None = None
+    try:
+        for _ in range(_ANTHROPIC_MODELS_MAX_PAGES):
+            params: dict[str, Any] = {"limit": _ANTHROPIC_MODELS_PAGE_LIMIT}
+            if after_id:
+                params["after_id"] = after_id
+
+            response = httpx.get(
+                _ANTHROPIC_MODELS_URL, headers=headers, params=params, timeout=10.0
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+            data = payload.get("data", [])
+            if isinstance(data, list):
+                entries.extend(entry for entry in data if isinstance(entry, dict))
+
+            after_id = payload.get("last_id")
+            if not payload.get("has_more") or not after_id:
+                break
+
+        return entries
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "Authentication failed: invalid or missing API key for Anthropic.",
+            )
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to fetch Anthropic models: {e}",
+        )
+    except httpx.RequestError as e:
+        logger.warning(
+            "Could not reach Anthropic models endpoint",
+            extra={"error": str(e)},
+            exc_info=True,
+        )
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Could not reach Anthropic. Check that api.anthropic.com is reachable "
+            f"from Onyx ({type(e).__name__}).",
+        )
+    except ValueError as e:
+        logger.warning(
+            "Received invalid model response from Anthropic",
+            extra={"error": str(e)},
+            exc_info=True,
+        )
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Failed to fetch Anthropic models: {e}",
+        )
+
+
+@admin_router.post("/anthropic/available-models")
+def get_anthropic_available_models(
+    request: AnthropicModelsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[AnthropicFinalModelResponse]:
+    """Fetch available models from Anthropic's /v1/models endpoint.
+
+    The listing API returns ids and display names; capability flags are
+    derived from litellm metadata.
+    """
+    api_key = _resolve_api_key(request.api_key, request.provider_id, None, db_session)
+
+    data = _get_anthropic_models_response(api_key)
+    if len(data) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from Anthropic",
+        )
+
+    all_model_ids = {
+        item_id for item in data if isinstance(item_id := item.get("id"), str)
+    }
+
+    results: list[AnthropicFinalModelResponse] = []
+    for item in data:
+        try:
+            model_id = item.get("id", "")
+            if not model_id:
+                continue
+
+            if is_obsolete_model(model_id, LlmProviderNames.ANTHROPIC):
+                continue
+            # Skip dated variants when the undated base model is also present;
+            # the provider read path filters these out anyway.
+            if should_filter_as_dated_duplicate(model_id, all_model_ids):
+                continue
+
+            display_name = (
+                item.get("display_name")
+                or parse_litellm_model_name(f"anthropic/{model_id}").display_name
+            )
+
+            results.append(
+                AnthropicFinalModelResponse(
+                    name=model_id,
+                    display_name=display_name,
+                    max_input_tokens=get_max_input_tokens(
+                        model_name=model_id,
+                        model_provider=LlmProviderNames.ANTHROPIC,
+                    ),
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.ANTHROPIC
+                    ),
+                    supports_reasoning=(
+                        model_is_reasoning_model(model_id, LlmProviderNames.ANTHROPIC)
+                        or is_reasoning_model(model_id, display_name)
+                    ),
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Anthropic model entry",
+                extra={"error": str(e), "item": str(item)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from Anthropic",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Anthropic",
+        )
+
+    return sorted_results
