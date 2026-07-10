@@ -29,7 +29,7 @@ export const SSO_PROVIDER_DETAILS: Record<SSOProviderType, SSOProviderDetail> =
     },
   };
 
-// Provider types an admin can create today.
+// Provider types the create modal offers, in dropdown order.
 export const CREATABLE_SSO_PROVIDER_TYPES: SSOProviderType[] = [
   "GOOGLE_OAUTH",
   "OIDC",

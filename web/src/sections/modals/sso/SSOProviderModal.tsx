@@ -47,10 +47,16 @@ interface SSOProviderFormValues {
   allowed_email_domains: string[];
 }
 
-// Every config key across all provider types, so switching type in create mode
-// never lands on an uncontrolled input.
-const ALL_CONFIG_FIELDS: SSOConfigField[] =
-  CREATABLE_SSO_PROVIDER_TYPES.flatMap((type) => CONFIG_FIELDS_BY_TYPE[type]);
+// Every config key across all provider types (deduped by name, since provider
+// types share field constants), so switching type in create mode never lands
+// on an uncontrolled input.
+const ALL_CONFIG_FIELDS: SSOConfigField[] = Array.from(
+  new Map(
+    CREATABLE_SSO_PROVIDER_TYPES.flatMap(
+      (type) => CONFIG_FIELDS_BY_TYPE[type]
+    ).map((field) => [field.name, field])
+  ).values()
+);
 
 // Required-ness follows the selected type's non-optional fields. On edit the
 // masked value prefills, so "required" passes without re-entry, but clearing a
@@ -87,10 +93,9 @@ const SSO_VALIDATION_SCHEMA = Yup.object({
   allowed_email_domains: Yup.array().of(Yup.string()).optional(),
 });
 
-// The backend masks every config string on read and restores any field returned
-// unchanged, so the form sends its current values and the server round-trips the
-// untouched (masked) ones. Blank optional keys are omitted rather than sent as
-// empty strings.
+// The backend masks every config string on read and restores any value sent
+// back unchanged, so the form sends its current values as-is. Blank optional
+// keys are omitted rather than sent as empty strings.
 function buildConfig(
   providerType: SSOProviderType,
   values: SSOProviderFormValues

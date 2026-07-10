@@ -1,5 +1,5 @@
 // Admin-side shapes for the SSO provider list, mirroring the backend response
-// model. `config` secrets come back masked (bullets, or a truncated
+// model. `config` values come back masked (bullets, or a truncated
 // first4...last4 form for longer values) and are accepted back verbatim to keep
 // the stored value.
 
