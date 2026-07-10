@@ -79,7 +79,7 @@ def _process_response(
     if exc is not None:
         if isinstance(exc, httpx.NetworkError):
             msg = f"External endpoint network error (unreachable): {exc}"
-            logger.warning(msg, exc_info=exc)
+            logger.warning(msg)
             return ExternalEndpointOutcome(
                 is_success=False,
                 reachability_signal=False,
@@ -90,7 +90,7 @@ def _process_response(
             )
         if isinstance(exc, httpx.TimeoutException):
             msg = f"External endpoint timed out after {timeout}s: {exc}"
-            logger.warning(msg, exc_info=exc)
+            logger.warning(msg)
             return ExternalEndpointOutcome(
                 is_success=False,
                 reachability_signal=None,  # timeout doesn't indicate unreachability
@@ -119,8 +119,11 @@ def _process_response(
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
-        msg = f"External endpoint returned HTTP {e.response.status_code}: {e.response.text}"
-        logger.warning(msg, exc_info=e)
+        # Deliberately omit the response body — endpoints can echo request
+        # data, secrets, or huge diagnostic pages, and this message flows into
+        # logs, hook execution records, and user-facing error details.
+        msg = f"External endpoint returned HTTP {e.response.status_code}"
+        logger.warning(msg)
         # 401/403 means the api_key has been revoked or is invalid — signal
         # unreachable so the operator knows to update it. All other HTTP errors
         # carry no signal (server is up, the request just failed for
@@ -139,7 +142,7 @@ def _process_response(
         response_payload = response.json()
     except (json.JSONDecodeError, httpx.DecodingError) as e:
         msg = f"External endpoint returned non-JSON response: {e}"
-        logger.warning(msg, exc_info=e)
+        logger.warning(msg)
         return ExternalEndpointOutcome(
             is_success=False,
             reachability_signal=None,  # server responded — no signal
@@ -214,9 +217,16 @@ def post_json_to_endpoint(
         try:
             validated_model = response_type.model_validate(outcome.response_payload)
         except ValidationError as e:
+            # Summarize per-field locations and messages only — str(e) embeds
+            # input_value snippets of the response payload, which must not
+            # reach logs, execution records, or user-facing error details.
+            error_summary = "; ".join(
+                f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}"
+                for err in e.errors(include_input=False, include_url=False)
+            )
             msg = (
                 "External endpoint response failed validation against "
-                f"{response_type.__name__}: {e}"
+                f"{response_type.__name__}: {error_summary}"
             )
             outcome = outcome.model_copy(
                 update={
