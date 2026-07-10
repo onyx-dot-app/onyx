@@ -83,9 +83,8 @@ def _build_index_filters(
         else persona_document_sets
     )
 
-    # Compose the requested lower bound with the persona's time floor — take the
-    # later (more restrictive) of the two so neither bound can be loosened. This
-    # floor is on a document's last_updated time.
+    # The later (more restrictive) of the requested and persona last_updated
+    # floors.
     lower_bounds = [
         bound
         for bound in (base_filters.time_cutoff, persona_time_cutoff)
@@ -93,10 +92,8 @@ def _build_index_filters(
     ]
     recency_floor = max(lower_bounds) if lower_bounds else None
 
-    # Field-aware ranges from the NL time-filter flow take precedence over the
-    # plain window in the index. The recency floor still applies: AND it in as a
-    # last_updated lower bound so a persona/request floor is never loosened. (When
-    # no NL ranges are set, the floor flows through time_cutoff as before.)
+    # Ranges take precedence in the index, so AND the floor into them; with no
+    # ranges the floor flows through time_cutoff.
     document_time_ranges = base_filters.document_time_ranges
     if document_time_ranges is not None and recency_floor is not None:
         document_time_ranges = [

@@ -1,17 +1,7 @@
-"""Unit tests for the OpenSearch time filter construction.
-
-These exercise `DocumentQuery._get_search_filters` directly (a pure DSL builder,
-no live OpenSearch) to pin how field-aware `DocumentTimeRange`s turn into
-`created_at` / `last_updated` range clauses, and when undated documents are
-included.
-
-Each range targets one document date field, so a query's intent is expressed by
-the field(s) chosen:
-
-  - "created in [S, E]" -> one created_at range
-  - "updated in [S, E]" -> one last_updated range
-  - "active in [S, E]"  -> a last_updated lower bound AND a created_at upper bound
-    (best-guess overlap when edit history is unavailable)
+"""Pins how `DocumentTimeRange`s turn into `created_at` / `last_updated` range
+clauses and when undated documents are included, via
+`DocumentQuery._get_search_filters` (a pure DSL builder, no live OpenSearch).
+Intent-to-range mapping: document_index/FILTER_SEMANTICS.md ("Time filtering").
 """
 
 from datetime import datetime
@@ -115,14 +105,9 @@ def test_created_in_window_bounds_created_at_on_both_ends() -> None:
 
 
 def test_updated_in_past_window_uses_overlap_not_strict_last_updated() -> None:
-    """'updated 4-7 months ago' is the OVERLAP, not a single last_updated range:
-    last_updated >= S AND created_at <= E.
-
-    A doc created 8mo ago, updated 5mo ago (unstored) then 2mo ago (the stored
-    latest) was updated inside the window and must still match. A strict
-    last_updated <= E would drop it because the stored latest edit (2mo) is after
-    E (4mo). The overlap keeps it: its latest edit (2mo) is >= S (7mo) and it
-    existed by E."""
+    """'updated in [S, E]' is the overlap (last_updated >= S AND created_at <= E),
+    not a strict last_updated range — a strict upper bound would drop docs
+    edited again after E whose earlier in-window edit is unstored."""
     start = datetime.now(timezone.utc) - timedelta(days=7 * 30)
     end = datetime.now(timezone.utc) - timedelta(days=4 * 30)
     clauses = _build_filters([_updated(start, None), _created(None, end)])

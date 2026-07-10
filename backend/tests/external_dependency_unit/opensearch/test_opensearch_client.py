@@ -2452,14 +2452,9 @@ class TestOpenSearchClient:
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """ "updated 4-7 months ago" must match a doc whose stored latest edit is
-        AFTER the window, as long as it was created before the window ends.
-
-        We keep no edit history, so a doc created 8mo ago and last edited 2mo ago
-        may well have been edited inside the 4-7mo window (the unstored 5mo edit).
-        The filter approximates this with the overlap last_updated >= 7mo AND
-        created_at <= 4mo, rather than a strict last_updated in [7mo, 4mo] which
-        would wrongly drop it."""
+        """The "updated in window" overlap keeps a doc created before the window
+        whose stored latest edit is after it (its in-window edit is unstored),
+        while excluding docs created after the window or last edited before it."""
         # Precondition.
         _patch_global_tenant_state(monkeypatch, False)
         tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)

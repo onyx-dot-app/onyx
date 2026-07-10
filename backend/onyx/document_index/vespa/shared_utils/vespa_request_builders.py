@@ -243,10 +243,9 @@ def build_vespa_filters(
     elif len(knowledge_scope_parts) == 1:
         filter_parts.append(knowledge_scope_parts[0])
 
-    # Time filter. Vespa only indexes doc_updated_at, so consume the updated_at
-    # bounds from document_time_ranges (AND semantics: max of starts, min of
-    # ends) composed with the plain time_cutoff floor; created_at ranges cannot
-    # be enforced here and are dropped (widens rather than narrows).
+    # Vespa only indexes doc_updated_at: apply the updated_at bounds from
+    # document_time_ranges plus the time_cutoff floor; created_at ranges are
+    # dropped (widens rather than narrows).
     updated_at_starts = [bound for bound in [filters.time_cutoff] if bound is not None]
     updated_at_ends: list[datetime] = []
     for time_range in filters.document_time_ranges or []:

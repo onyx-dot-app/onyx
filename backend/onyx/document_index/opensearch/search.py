@@ -179,16 +179,8 @@ def get_normalization_pipeline_name_and_config() -> tuple[str, dict[str, Any]]:
 def _resolve_document_time_ranges(
     index_filters: IndexFilters,
 ) -> list[DocumentTimeRange] | None:
-    """Resolve the field-aware time ranges to apply for a search.
-
-    An explicit index_filters.document_time_ranges always wins — this is how a
-    caller expresses created-vs-updated intent, including the "updated in [S, E]"
-    overlap (a last_updated lower bound AND a created_at upper bound).
-
-    Otherwise the plain time_cutoff keeps its literal meaning: an inclusive
-    lower bound on last_updated. This keeps every IndexFilters — however it was
-    built — working without each call site having to construct ranges.
-    """
+    """Explicit document_time_ranges win; otherwise time_cutoff falls back to a
+    single last_updated lower bound."""
     if index_filters.document_time_ranges is not None:
         return index_filters.document_time_ranges
 
@@ -917,14 +909,9 @@ class DocumentQuery:
             persona_id_filter: If not None, only documents whose personas array
                 contains this persona ID will be retrieved. Primary — creates
                 a knowledge scope on its own.
-            document_time_ranges: Field-aware time windows, each an inclusive
-                range on a document's created_at or last_updated field. All
-                supplied ranges are AND-ed together, letting a caller express
-                "created in [S, E]" (one created_at range), "updated in [S, E]"
-                (one last_updated range), or "active in [S, E]" (a last_updated
-                lower bound AND a created_at upper bound — the best-guess overlap
-                used when edit history is unavailable). See
-                _get_document_time_filter for undated-document handling.
+            document_time_ranges: Inclusive time windows on created_at /
+                last_updated, AND-ed together. See
+                document_index/FILTER_SEMANTICS.md ("Time filtering").
             min_chunk_index: The minimum chunk index to retrieve, inclusive. If
                 None, no minimum chunk index will be applied.
             max_chunk_index: The maximum chunk index to retrieve, inclusive. If
@@ -1117,17 +1104,9 @@ class DocumentQuery:
             lte: datetime | None,
             include_undated: bool,
         ) -> dict[str, Any]:
-            """Null-tolerant inclusive range filter on a single date field.
-
-            Returns a should (logical OR) clause matching documents whose
-            field_name falls within [gte, lte] (either bound may be open). When
-            include_undated is True, documents that have no value for field_name
-            also match: we would rather over-extend the result set than drop a
-            document we cannot place in time.
-
-            Since this returns an isolated bool should clause, it can be cached in
-            OpenSearch independently of other clauses in _get_search_filters.
-            """
+            """Inclusive [gte, lte] range clause on a date field; when
+            include_undated is True, documents missing the field also match.
+            Isolated bool clause, so OpenSearch can cache it independently."""
             # Convert to UTC if not already so the bounds are comparable to the
             # document data.
             range_bounds: dict[str, int] = {}
@@ -1154,18 +1133,9 @@ class DocumentQuery:
             return date_range_clause
 
         def _include_undated_for_range(time_range: DocumentTimeRange) -> bool:
-            """Undated-document policy for a single time range.
-
-            We prefer over- to under-extending, so a missing timestamp should not
-            remove a document — subject to one long-standing exception that keeps
-            recent-window queries from being flooded by undated legacy documents:
-
-              - created_at ranges: always keep undated documents. A document with
-                no created_at cannot be shown to fall outside the window.
-              - last_updated ranges: keep undated documents only for an old,
-                open-ended lower bound (start older than ASSUMED_DOCUMENT_AGE_DAYS
-                and no upper bound). A recent or bounded window excludes them.
-            """
+            """created_at ranges always keep undated documents (over-extend);
+            last_updated ranges keep them only for an old, open-ended lower
+            bound, so recent-window queries aren't flooded by undated docs."""
             if time_range.field is DocumentTimeField.CREATED_AT:
                 return True
             return (
@@ -1178,24 +1148,9 @@ class DocumentQuery:
         def _get_document_time_filter(
             document_time_ranges: list[DocumentTimeRange],
         ) -> list[dict[str, Any]]:
-            """Build null-tolerant, AND-ed clauses for field-aware time ranges.
-
-            Each range targets one document date field (created_at or
-            last_updated). The caller chooses the field(s) per query intent:
-
-              - "created in [S, E]" -> one created_at range (both bounds).
-              - "updated/changed/active in [S, E]" -> the OVERLAP: a last_updated
-                lower bound (>= S) AND a created_at upper bound (<= E). We store
-                only creation and latest-update times (no edit history), so an
-                update in the window is possible whenever the document's
-                [created_at, last_updated] span overlaps it. The upper bound must
-                NOT go on last_updated: it is only the latest edit, so a doc
-                updated again after E (with an earlier, unstored in-window edit)
-                would be wrongly dropped.
-
-            Undated documents are handled per _include_undated_for_range. Returns
-            a list of independent clauses to be AND-ed into the filter.
-            """
+            """One null-tolerant clause per range, to be AND-ed into the filter.
+            For how query intents map onto ranges, see
+            document_index/FILTER_SEMANTICS.md ("Time filtering")."""
             field_name_by_time_field = {
                 DocumentTimeField.CREATED_AT: CREATED_AT_FIELD_NAME,
                 DocumentTimeField.UPDATED_AT: LAST_UPDATED_FIELD_NAME,
@@ -1372,9 +1327,6 @@ class DocumentQuery:
             filter_clauses.append(knowledge_filter)
 
         if document_time_ranges:
-            # Field-aware time windows on created_at / last_updated, AND-ed
-            # together. See _get_document_time_filter for per-intent semantics
-            # and the undated-document rules.
             filter_clauses.extend(_get_document_time_filter(document_time_ranges))
 
         if min_chunk_index is not None or max_chunk_index is not None:

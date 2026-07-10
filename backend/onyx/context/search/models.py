@@ -72,33 +72,9 @@ class DocumentTimeField(str, Enum):
 
 
 class DocumentTimeRange(BaseModel):
-    """An inclusive time window applied to a single document date field.
-
-    We store only a document's creation time and its *latest* update time (no
-    edit history), which is what shapes how query intents map onto ranges:
-
-      - "created in [S, E]"      -> DocumentTimeRange(CREATED_AT, start=S, end=E).
-        created_at is a single known point, so both bounds go on it.
-
-      - "updated/changed in [S, E]" -> the OVERLAP, a pair AND-ed together:
-            DocumentTimeRange(UPDATED_AT, start=S) and
-            DocumentTimeRange(CREATED_AT, end=E)
-        i.e. last_updated >= S AND created_at <= E. This is the best guess
-        without edit history: an update in the window is possible whenever the
-        document's [created_at, last_updated] span overlaps it. Crucially, do
-        NOT put the upper bound on last_updated — last_updated is only the
-        *latest* edit, so an earlier, unstored in-window edit would be missed
-        (a doc updated 5mo ago then again 2mo ago must still match "updated
-        4-7mo ago"). "active in [S, E]" reduces to this same overlap.
-
-      - single UPDATED_AT range with both bounds means "the latest edit falls in
-        [S, E]" (e.g. "last touched between"). This is stricter than
-        "updated in [S, E]" and will drop docs edited again after E; use it only
-        when you truly mean the most-recent-edit timestamp.
-
-    Either bound may be None (open). How documents missing the field are handled
-    is a backend policy (see the OpenSearch builder): we over-extend rather than
-    drop a document we cannot place in time.
+    """An inclusive [start, end] window on one document date field; either bound
+    may be None (open). See document_index/FILTER_SEMANTICS.md ("Time filtering")
+    for how query intents map onto ranges and how undated documents are handled.
     """
 
     field: DocumentTimeField
@@ -109,15 +85,10 @@ class DocumentTimeRange(BaseModel):
 class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None
     document_set: list[str] | None = None
-    # Simple request/persona-facing lower bound on last_updated. Richer intents
-    # (created-at windows, the "updated in window" overlap, upper bounds) are
-    # expressed via document_time_ranges, which takes precedence when set.
+    # Lower bound on last_updated.
     time_cutoff: datetime | None = None
-    # Field-aware time filters consumed by the document index. When None, the
-    # index falls back to interpreting time_cutoff. When set, these are AND-ed
-    # together and take precedence. Populated from the NL time-filter flow
-    # (created-vs-updated intent; see secondary_llm_flows) or supplied directly
-    # by API callers.
+    # Field-aware time windows, AND-ed together; takes precedence over
+    # time_cutoff when set.
     document_time_ranges: list[DocumentTimeRange] | None = None
     tags: list[Tag] | None = None
 
