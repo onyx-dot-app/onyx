@@ -419,7 +419,10 @@ def _drive_agent(
             return False
         try:
             for sandbox_event in session_manager.yield_sandbox_events(
-                sandbox_id, session_id, task_prompt
+                sandbox_id,
+                session_id,
+                task_prompt,
+                turn_timeout_seconds=float(budget_seconds),
             ):
                 slot.extend()
                 if slot.lost:
