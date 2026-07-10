@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import ChunkSearchRequest
+from onyx.context.search.models import DocumentTimeField
+from onyx.context.search.models import DocumentTimeRange
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
@@ -81,7 +83,27 @@ def _build_index_filters(
         else persona_document_sets
     )
 
-    time_filter = base_filters.time_cutoff or persona_time_cutoff
+    # Compose the requested lower bound with the persona's time floor — take the
+    # later (more restrictive) of the two so neither bound can be loosened. This
+    # floor is on a document's last_updated time.
+    lower_bounds = [
+        bound
+        for bound in (base_filters.time_cutoff, persona_time_cutoff)
+        if bound is not None
+    ]
+    recency_floor = max(lower_bounds) if lower_bounds else None
+
+    # Field-aware ranges from the NL time-filter flow take precedence over the
+    # plain window in the index. The recency floor still applies: AND it in as a
+    # last_updated lower bound so a persona/request floor is never loosened. (When
+    # no NL ranges are set, the floor flows through time_cutoff as before.)
+    document_time_ranges = base_filters.document_time_ranges
+    if document_time_ranges is not None and recency_floor is not None:
+        document_time_ranges = [
+            *document_time_ranges,
+            DocumentTimeRange(field=DocumentTimeField.UPDATED_AT, start=recency_floor),
+        ]
+
     source_filter = base_filters.source_type
 
     if bypass_acl:
@@ -98,8 +120,8 @@ def _build_index_filters(
         persona_id_filter=persona_id_filter,
         source_type=source_filter,
         document_set=document_set_filter,
-        time_cutoff=time_filter,
-        time_cutoff_upper=base_filters.time_cutoff_upper,
+        time_cutoff=recency_floor,
+        document_time_ranges=document_time_ranges,
         tags=base_filters.tags,
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,

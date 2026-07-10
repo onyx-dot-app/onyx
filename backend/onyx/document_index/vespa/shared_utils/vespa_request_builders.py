@@ -3,6 +3,7 @@ from datetime import timedelta
 from datetime import timezone
 
 from onyx.configs.constants import INDEX_SEPARATOR
+from onyx.context.search.models import DocumentTimeField
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.vespa.internal_types import VespaChunkRequest
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
@@ -242,10 +243,25 @@ def build_vespa_filters(
     elif len(knowledge_scope_parts) == 1:
         filter_parts.append(knowledge_scope_parts[0])
 
-    # Time filter
+    # Time filter. Vespa only indexes doc_updated_at, so consume the updated_at
+    # bounds from document_time_ranges (AND semantics: max of starts, min of
+    # ends) composed with the plain time_cutoff floor; created_at ranges cannot
+    # be enforced here and are dropped (widens rather than narrows).
+    updated_at_starts = [bound for bound in [filters.time_cutoff] if bound is not None]
+    updated_at_ends: list[datetime] = []
+    for time_range in filters.document_time_ranges or []:
+        if time_range.field is not DocumentTimeField.UPDATED_AT:
+            continue
+        if time_range.start is not None:
+            updated_at_starts.append(time_range.start)
+        if time_range.end is not None:
+            updated_at_ends.append(time_range.end)
     _append(
         filter_parts,
-        _build_time_filter(filters.time_cutoff, filters.time_cutoff_upper),
+        _build_time_filter(
+            max(updated_at_starts) if updated_at_starts else None,
+            min(updated_at_ends) if updated_at_ends else None,
+        ),
     )
 
     # # Knowledge Graph Filters

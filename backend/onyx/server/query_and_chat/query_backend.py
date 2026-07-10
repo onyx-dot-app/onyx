@@ -47,6 +47,7 @@ def admin_search(
         source_type=question.filters.source_type,
         document_set=question.filters.document_set,
         time_cutoff=question.filters.time_cutoff,
+        document_time_ranges=question.filters.document_time_ranges,
         tags=question.filters.tags,
         access_control_list=user_acl_filters,
         tenant_id=tenant_id,

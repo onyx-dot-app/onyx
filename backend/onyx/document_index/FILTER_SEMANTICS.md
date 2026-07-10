@@ -11,7 +11,7 @@ How `IndexFilters` fields combine into the final query filter. Describes the act
 | **Visibility** | `hidden` | Always applied (unless `include_hidden`) |
 | **Tenant** | `tenant_id` | AND (multi-tenant only) |
 | **ACL** | `access_control_list` | OR within, AND with rest |
-| **Narrowing** | `source_type`, `tags`, `time_cutoff`, `time_cutoff_upper`, `document_time_ranges` | Each OR within, AND with rest |
+| **Narrowing** | `source_type`, `tags`, `time_cutoff`, `document_time_ranges` | Each OR within, AND with rest |
 | **Knowledge scope** | `document_set`, `attached_document_ids`, `hierarchy_node_ids`, `persona_id_filter`, `project_id_filter` | OR within group, AND with rest |
 
 ## How filters combine
@@ -32,14 +32,16 @@ AND time >= cutoff                      -- if set
 
 Two ways to constrain time, both AND-ed into the query:
 
-- **Plain window** — `time_cutoff` / `time_cutoff_upper`. Both are bounds on
-  `last_updated` (a single inclusive `[gte, lte]` range). This is the simple
-  request/persona-facing form and its meaning is unchanged from #12574.
-- **`document_time_ranges`** (OpenSearch only) — a list of field-aware
-  `DocumentTimeRange`s, each an inclusive `[start, end]` window on **one** field
-  (`created_at` or `last_updated`). All ranges in the list are AND-ed. When set,
-  this takes precedence over the plain window. Use it to express a query's
-  created-vs-updated intent.
+- **`time_cutoff`** — an inclusive lower bound on `last_updated`. This is the
+  simple request/persona-facing form (persona `search_start_date` composes into
+  it as a floor).
+- **`document_time_ranges`** — a list of field-aware `DocumentTimeRange`s, each
+  an inclusive `[start, end]` window on **one** field (`created_at` or
+  `last_updated`). All ranges in the list are AND-ed. When set, this takes
+  precedence over `time_cutoff`. Use it to express a query's created-vs-updated
+  intent or any upper bound. The deprecated Vespa backend enforces only the
+  `last_updated` bounds from these ranges (it has no `created_at` field, so
+  created_at ranges widen rather than narrow there).
 
 ### Why intent needs both fields
 
@@ -157,6 +159,5 @@ AND (user_project contains 7)
 | `source_type` | `source_type` | `string` | Connector source type (e.g. `web`, `jira`) |
 | `tags` | `metadata_list` | `array<string>` | Document metadata tags |
 | `time_cutoff` | `doc_updated_at` | `long` | Minimum document update timestamp |
-| `time_cutoff_upper` | `doc_updated_at` | `long` | Maximum document update timestamp; usable alone or together with `time_cutoff` for a closed range; excludes undated docs in all cases |
-| `document_time_ranges` | `last_updated` / `created_at` | `long` | Field-aware time windows (OpenSearch only); see [Time filtering](#time-filtering). Takes precedence over `time_cutoff` / `time_cutoff_upper` when set |
+| `document_time_ranges` | `last_updated` / `created_at` | `long` | Field-aware time windows; see [Time filtering](#time-filtering). Takes precedence over `time_cutoff` when set (Vespa enforces only the `last_updated` bounds) |
 | `tenant_id` | `tenant_id` | `string` | Tenant isolation (multi-tenant) |

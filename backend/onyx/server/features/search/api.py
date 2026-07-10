@@ -134,6 +134,7 @@ def search(
         source_type=request.sources,
         document_set=request.document_sets,
         time_cutoff=time_cutoff,
+        document_time_ranges=request.document_time_ranges,
         tags=request.tags,
     )
 

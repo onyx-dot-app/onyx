@@ -5,6 +5,7 @@ from pydantic import Field
 from pydantic import model_validator
 
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import DocumentTimeRange
 from onyx.context.search.models import Tag
 from onyx.tools.models import ChatMinimalTextMessage
 
@@ -18,6 +19,10 @@ class SearchRequest(BaseModel):
     # ISO 8601 timestamp. Only documents updated on or after this moment are
     # returned. Naive (timezone-less) values are treated as UTC server-side.
     time_cutoff: datetime | None = None
+    # Field-aware time windows on created_at / last_updated, AND-ed together.
+    # Takes precedence over time_cutoff when set. Naive bounds are treated as
+    # UTC at the document index.
+    document_time_ranges: list[DocumentTimeRange] | None = None
 
     persona_id: int | None = None
 

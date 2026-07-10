@@ -109,11 +109,16 @@ class DocumentTimeRange(BaseModel):
 class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None
     document_set: list[str] | None = None
-    # Simple request/persona-facing window; both are bounds on last_updated (see
-    # #12574). Created-at and "updated in window" overlap intents are expressed
-    # via IndexFilters.document_time_ranges, which takes precedence when set.
+    # Simple request/persona-facing lower bound on last_updated. Richer intents
+    # (created-at windows, the "updated in window" overlap, upper bounds) are
+    # expressed via document_time_ranges, which takes precedence when set.
     time_cutoff: datetime | None = None
-    time_cutoff_upper: datetime | None = None
+    # Field-aware time filters consumed by the document index. When None, the
+    # index falls back to interpreting time_cutoff. When set, these are AND-ed
+    # together and take precedence. Populated from the NL time-filter flow
+    # (created-vs-updated intent; see secondary_llm_flows) or supplied directly
+    # by API callers.
+    document_time_ranges: list[DocumentTimeRange] | None = None
     tags: list[Tag] | None = None
 
 
@@ -147,10 +152,6 @@ class IndexFilters(BaseFilters, UserFileFilters, AssistantKnowledgeFilters):
     # DocumentAccess::to_acl.
     access_control_list: list[str] | None
     tenant_id: str | None = None
-    # Field-aware time filters consumed by the document index. When None, the
-    # index falls back to interpreting time_cutoff / time_cutoff_upper. When set,
-    # these are AND-ed together and take precedence.
-    document_time_ranges: list[DocumentTimeRange] | None = None
 
 
 class BasicChunkRequest(BaseModel):

@@ -10,6 +10,7 @@ from pydantic import TypeAdapter
 from pydantic import ValidationError
 
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import DocumentTimeRange
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import get_http_client
 from onyx.mcp_server.utils import get_indexed_sources
@@ -80,6 +81,9 @@ def _error_payload(error: str) -> dict[str, Any]:
 
 
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
+_TIME_RANGES_ADAPTER: TypeAdapter[list[DocumentTimeRange] | None] = TypeAdapter(
+    list[DocumentTimeRange] | None
+)
 
 
 @mcp_server.tool()
@@ -88,6 +92,7 @@ async def search_indexed_documents(
     source_types: list[str] | None = None,
     document_set_names: list[str] | None = None,
     time_cutoff: str | None = None,
+    document_time_ranges: list[dict[str, Any]] | None = None,
     skip_query_expansion: bool = False,
 ) -> dict[str, Any]:
     """
@@ -107,6 +112,11 @@ async def search_indexed_documents(
     `time_cutoff` accepts an ISO 8601 timestamp; only documents updated on or
     after that moment are returned. Naive (timezone-less) timestamps are
     treated as UTC server-side.
+    `document_time_ranges` is a list of field-aware time windows, AND-ed
+    together and taking precedence over `time_cutoff`. Each entry is
+    ``{"field": "created_at" | "updated_at", "start": <ISO 8601 | null>,
+    "end": <ISO 8601 | null>}`` with inclusive bounds; use it to scope by
+    document creation time or to bound both ends of an update window.
     `skip_query_expansion` bypasses the LLM query-expansion step; useful when
     you already know the exact phrase to search for (faster, no LLM call for
     expansion).
@@ -185,11 +195,22 @@ async def search_indexed_documents(
         )
         parsed_cutoff = None
 
+    try:
+        parsed_time_ranges = _TIME_RANGES_ADAPTER.validate_python(document_time_ranges)
+    except ValidationError as err:
+        logger.warning(
+            "Onyx MCP Server: invalid document_time_ranges %s (%s); continuing without them",
+            document_time_ranges,
+            err,
+        )
+        parsed_time_ranges = None
+
     request = SearchRequest(
         query=query,
         sources=source_type_enums,
         document_sets=document_set_names,
         time_cutoff=parsed_cutoff,
+        document_time_ranges=parsed_time_ranges,
         skip_query_expansion=skip_query_expansion,
     )
 

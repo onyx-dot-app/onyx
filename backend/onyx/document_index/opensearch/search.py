@@ -185,22 +185,19 @@ def _resolve_document_time_ranges(
     caller expresses created-vs-updated intent, including the "updated in [S, E]"
     overlap (a last_updated lower bound AND a created_at upper bound).
 
-    Otherwise the plain [time_cutoff, time_cutoff_upper] window keeps its literal
-    meaning: both are bounds on last_updated (a single last_updated range), as
-    introduced in #12574. This keeps every IndexFilters — however it was built —
-    working without each call site having to construct ranges, and without the
-    plain window silently changing which field its upper bound targets.
+    Otherwise the plain time_cutoff keeps its literal meaning: an inclusive
+    lower bound on last_updated. This keeps every IndexFilters — however it was
+    built — working without each call site having to construct ranges.
     """
     if index_filters.document_time_ranges is not None:
         return index_filters.document_time_ranges
 
-    if index_filters.time_cutoff is None and index_filters.time_cutoff_upper is None:
+    if index_filters.time_cutoff is None:
         return None
     return [
         DocumentTimeRange(
             field=DocumentTimeField.UPDATED_AT,
             start=index_filters.time_cutoff,
-            end=index_filters.time_cutoff_upper,
         )
     ]
 
