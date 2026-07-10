@@ -1540,6 +1540,13 @@ configMap:
   CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
+  # Push every successfully indexed public-connector document to an external
+  # HTTP endpoint (failures never fail indexing). Intended for non-EE
+  # deployments — EE users should configure the Document Push hook in the
+  # admin UI instead. Not supported in multi-tenant deployments.
+  DOCUMENT_PUSH_ENDPOINT_URL: ""
+  DOCUMENT_PUSH_API_KEY: ""
+  DOCUMENT_PUSH_TIMEOUT_SECONDS: ""
   # Worker Parallelism
   CELERY_WORKER_DOCPROCESSING_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
