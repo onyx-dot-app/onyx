@@ -8,7 +8,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import SignInButton from "@/sections/auth/SignInButton";
-import { useAppLogo } from "@/lib/app/hooks";
+import { Logo } from "@/lib/app/components";
 
 function getAuthUrl(authType: AuthType): string | null {
   switch (authType) {
@@ -30,7 +30,6 @@ export default function JoinPage() {
   const defaultEmail = searchParams.get("email");
 
   const { authTypeMetadata } = useAuthTypeMetadata();
-  const icon = useAppLogo(true);
 
   useAuthRedirect("join");
 
@@ -57,7 +56,7 @@ export default function JoinPage() {
     <AuthLayouts.Card
       title="Re-authenticate to join team"
       description="Sign in to accept your team invitation."
-      icon={icon}
+      icon={Logo}
     >
       {isCloud && authUrl && (
         <>

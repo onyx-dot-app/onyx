@@ -27,14 +27,14 @@ export default function StepSidebar({
       <SidebarLayouts.Header
         renderAppLogo={renderAppLogo}
         showLogoWhenFolded={showLogoWhenFolded}
-      />
-      <SidebarLayouts.Body scrollKey="step-sidebar">
+      >
         <SidebarTab icon={buttonIcon} href={buttonHref}>
           {buttonName}
         </SidebarTab>
+      </SidebarLayouts.Header>
+      <SidebarLayouts.Body scrollKey="step-sidebar">
+        {children}
       </SidebarLayouts.Body>
-
-      <div className="h-full w-full px-4">{children}</div>
     </SidebarLayouts.Root>
   );
 }

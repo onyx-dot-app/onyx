@@ -11,14 +11,13 @@ import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { requestEmailVerification } from "@/lib/auth/svc";
 import { toast } from "@/hooks/useToast";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
-import { useAppLogo } from "@/lib/app/hooks";
+import { Logo } from "@/lib/app/components";
 
 export default function SendEmailVerificationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading, mutateUser } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
-  const icon = useAppLogo(true);
 
   // Poll for verification status so the original tab auto-advances to /app
   // once the user verifies in a different tab.
@@ -59,7 +58,7 @@ export default function SendEmailVerificationPage() {
       title="Check your inbox"
       description="We've sent a verification link to your email address."
       bottomPrompt={backToLoginOrSignupCopy()}
-      icon={icon}
+      icon={Logo}
     >
       <AuthLayouts.Message
         title={`Email sent to ${user.email}`}

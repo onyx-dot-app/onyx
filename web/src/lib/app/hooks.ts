@@ -6,12 +6,6 @@ import { APP_SLOGAN } from "@/lib/constants";
 import useAppFocus from "@/hooks/useAppFocus";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePathname } from "next/navigation";
-import { renderAppLogo } from "@/lib/app/utils";
-import type { IconFunctionComponent } from "@opal/types";
-
-export function useAppLogo(folded: boolean): IconFunctionComponent {
-  return renderAppLogo(folded);
-}
 
 export function useCustomFooterContent(): string {
   const settings = useSettings();

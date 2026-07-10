@@ -5,8 +5,8 @@ import { AuthLayouts } from "@opal/layouts";
 import { NEXT_PUBLIC_CLOUD_ENABLED, DOCS_BASE_URL } from "@/lib/constants";
 import { FetchError } from "@/lib/fetcher";
 import { welcomeCardCopy } from "@/lib/auth/copies";
-import { useAppLogo } from "@/lib/app/hooks";
 import { markdown } from "@opal/utils";
+import { Logo } from "@/lib/app/components";
 
 interface SettingsProviderProps {
   children: React.ReactNode;
@@ -19,7 +19,6 @@ interface SettingsProviderProps {
  */
 export default function SettingsProvider({ children }: SettingsProviderProps) {
   const { appName, error } = useSettings();
-  const icon = useAppLogo(true);
 
   function isAuthError(err: Error) {
     return (
@@ -30,7 +29,7 @@ export default function SettingsProvider({ children }: SettingsProviderProps) {
   if (error && !isAuthError(error)) {
     return (
       <AuthLayouts.Root>
-        <AuthLayouts.Card {...welcomeCardCopy(appName)} icon={icon}>
+        <AuthLayouts.Card {...welcomeCardCopy(appName)} icon={Logo}>
           {NEXT_PUBLIC_CLOUD_ENABLED ? (
             <AuthLayouts.Message
               title="Maintenance in progress."

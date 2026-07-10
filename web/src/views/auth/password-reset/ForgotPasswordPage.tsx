@@ -5,18 +5,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { forgotPassword } from "@/lib/auth/svc";
 import { AuthLayouts } from "@opal/layouts";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
-import { useAppLogo } from "@/lib/app/hooks";
 import { markdown } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import type { Route } from "next";
+import { Logo } from "@/lib/app/components";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams?.get("email");
   const isResend = searchParams?.get("reset") === "true";
-  const icon = useAppLogo(true);
 
   const firedRef = useRef(false);
 
@@ -58,7 +57,7 @@ export default function ForgotPasswordPage() {
       title="Check your inbox"
       description="We’ve sent a password reset link to your email address."
       bottomPrompt={backToLoginOrSignupCopy()}
-      icon={icon}
+      icon={Logo}
     >
       <AuthLayouts.Message
         title={`Email sent to ${email}.`}

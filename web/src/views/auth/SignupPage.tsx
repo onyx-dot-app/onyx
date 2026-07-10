@@ -8,7 +8,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { markdown } from "@opal/utils";
-import { useAppLogo } from "@/lib/app/hooks";
+import { Logo } from "@/lib/app/components";
 
 export default function SignupPage() {
   const searchParams = useSearchParams();
@@ -16,7 +16,6 @@ export default function SignupPage() {
   const defaultEmail = searchParams.get("email");
   const { authTypeMetadata } = useAuthTypeMetadata();
   const { appName } = useSettings();
-  const icon = useAppLogo(true);
 
   useAuthRedirect("signup");
 
@@ -36,7 +35,7 @@ export default function SignupPage() {
       title="Create account"
       description={`Get started with ${appName}`}
       bottomPrompt={markdown("Already have an account? [Sign In](/auth/login)")}
-      icon={icon}
+      icon={Logo}
     >
       <EmailPasswordForm
         label="create"
