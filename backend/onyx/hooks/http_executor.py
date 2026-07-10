@@ -47,7 +47,13 @@ T = TypeVar("T", bound=BaseModel)
 
 class HookEndpointConfig(BaseModel):
     """Connection settings for a hook endpoint, independent of where they
-    were configured (hook DB row or environment variables)."""
+    were configured (hook DB row or environment variables).
+
+    SSRF contract: ``endpoint_url`` must be validated with
+    ``onyx.utils.url.validate_outbound_http_url(https_only=True)`` at
+    configuration time, before it is ever passed here. The executor itself
+    only refuses to follow redirects; it does not re-validate the URL.
+    """
 
     endpoint_url: str
     api_key: str | None = None
