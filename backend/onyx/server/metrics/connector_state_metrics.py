@@ -24,6 +24,9 @@ from prometheus_client.core import REGISTRY
 from prometheus_client.registry import Collector
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
+from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import IndexingMode
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -32,11 +35,12 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = logging.getLogger(__name__)
 
-# One-hot label values; anything else is reported as UNKNOWN so a new enum
-# value can't silently create an unbounded label set.
-_VALID_CC_PAIR_STATUSES = ("ACTIVE", "PAUSED", "DELETING")
-_VALID_ACCESS_TYPES = ("PUBLIC", "PRIVATE", "SYNC")
-_VALID_INDEXING_MODES = ("SCHEDULED", "ON_DEMAND")
+# One-hot label values, derived from the source enums so every persisted
+# state gets its own series; anything outside them (bad data) collapses to
+# UNKNOWN instead of minting unbounded label values.
+_VALID_CC_PAIR_STATUSES = tuple(s.value for s in ConnectorCredentialPairStatus)
+_VALID_ACCESS_TYPES = tuple(a.value for a in AccessType)
+_VALID_INDEXING_MODES = tuple(m.value for m in IndexingMode)
 
 
 def _to_unix_ts(dt: datetime | None) -> int:
