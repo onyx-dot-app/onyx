@@ -1230,6 +1230,16 @@ class GateAddon:
         addr = peer[0]
         if not isinstance(addr, str):
             return None
+        # A dual-stack listener ("::") reports IPv4 peers as IPv4-mapped IPv6
+        # (::ffff:10.2.3.4). The identity cache stores the pod's canonical
+        # IPv4 address, so unmap before lookup or every IPv4 sandbox would be
+        # rejected as unidentified.
+        try:
+            parsed = ipaddress.ip_address(addr)
+        except ValueError:
+            return addr
+        if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped:
+            return str(parsed.ipv4_mapped)
         return addr
 
     def _resolve_gated_session(

@@ -168,6 +168,25 @@ _MATCH_DENY = make_matched_actions(payload={"text": "hi"}, policy=EndpointPolicy
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    ("peer_addr", "expected"),
+    [
+        ("10.0.0.1", "10.0.0.1"),
+        ("::ffff:10.0.0.1", "10.0.0.1"),  # dual-stack listener, IPv4 client
+        ("fd00::2:1", "fd00::2:1"),  # native IPv6 stays untouched
+    ],
+    ids=["ipv4", "ipv4_mapped", "ipv6"],
+)
+def test_extract_src_ip_unmaps_ipv4_mapped_peers(peer_addr: str, expected: str) -> None:
+    """A "::" listener reports IPv4 peers as ::ffff:a.b.c.d; the identity
+    cache stores canonical IPv4 pod IPs, so the mapped form must be unmapped
+    before lookup."""
+    addon = _build(resolver=StubResolver(), matcher=_StubMatcher(result=None))
+    flow = make_flow(peername=(peer_addr, 12345))
+
+    assert addon._extract_src_ip(flow) == expected
+
+
 @pytest.mark.asyncio
 async def test_resolve_and_match_no_source_ip_fails_closed() -> None:
     resolver = StubResolver()
