@@ -162,6 +162,9 @@ def update_connector_specific_config_fields(
 
     The dict is reassigned (rather than mutated in place) so SQLAlchemy detects
     the change on the JSON column. Returns ``None`` if the connector is missing.
+
+    Does NOT commit — the caller owns the transaction, so the config change can
+    be committed atomically with related updates (e.g. a re-index trigger).
     """
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
@@ -171,7 +174,7 @@ def update_connector_specific_config_fields(
     new_config.update(config_updates)
     connector.connector_specific_config = new_config
 
-    db_session.commit()
+    db_session.flush()
     return connector
 
 

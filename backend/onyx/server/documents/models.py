@@ -736,10 +736,19 @@ class CCPropertyUpdateRequest(BaseModel):
     value: str
 
 
-class CCConnectorConfigUpdateRequest(BaseModel):
-    # Partial set of connector_specific_config keys to merge into the connector's
-    # existing configuration. Only an allowlisted set of keys may be updated.
-    connector_specific_config: dict[str, Any]
+class GitlabFilterConfigUpdateRequest(BaseModel):
+    """Partial update of the GitLab connector's file-filtering options.
+
+    The schema doubles as the allowlist: only filtering keys can be edited
+    in-place. Identity keys (e.g. project_owner) stay immutable — changing
+    them would orphan already-indexed documents. ``None`` means "leave the
+    stored value untouched".
+    """
+
+    include_code_files: bool | None = None
+    code_file_patterns: list[str] | None = None
+    include_path_patterns: list[str] | None = None
+    exclude_path_patterns: list[str] | None = None
 
 
 """Connectors Models"""

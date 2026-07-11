@@ -285,9 +285,12 @@ def _convert_file_to_document(
     )
     logger.debug("Generated file ID: %s", file_id)
 
-    # Use last commit date if available, otherwise current time - ensure UTC
-    doc_updated_at = _ensure_utc_datetime(last_commit_date)
-    logger.debug("Document updated_at: %s", doc_updated_at)
+    # Leave doc_updated_at unset when no reliable commit date is available —
+    # the indexing pipeline's content hash then governs change detection. A
+    # fabricated now() timestamp would mark every doc as updated on each run.
+    doc_updated_at = (
+        _ensure_utc_datetime(last_commit_date) if last_commit_date else None
+    )
 
     # Create and return a Document object
     doc = Document(
@@ -345,25 +348,16 @@ def _should_exclude_by_glob(path: str, exclude_patterns: list[str]) -> bool:
     return _matches_any_glob(path, exclude_patterns)
 
 
-def _get_file_last_commit_date(repo: git.Repo, file_path: str) -> datetime:
-    """Get the last commit date for a specific file."""
-    logger.debug("Getting last commit date for file: %s", file_path)
+def _get_file_last_commit_date(repo: git.Repo, file_path: str) -> datetime | None:
+    """Get the last commit date for a specific file (None when unavailable)."""
     try:
         commits = list(repo.iter_commits(paths=file_path, max_count=1))
         if commits:
-            commit_date = commits[0].committed_datetime
-            # Ensure timezone info is present and convert to UTC
-            commit_date = _ensure_utc_datetime(commit_date)
-            logger.debug("Last commit date for '%s': %s", file_path, commit_date)
-            return commit_date
-        else:
-            logger.debug("No commits found for file: %s", file_path)
+            return _ensure_utc_datetime(commits[0].committed_datetime)
+        logger.debug("No commits found for file: %s", file_path)
     except Exception as e:
         logger.warning("Could not get commit date for %s: %s", file_path, e)
-
-    fallback_date = datetime.now(timezone.utc)
-    logger.debug("Using fallback date for '%s': %s", file_path, fallback_date)
-    return fallback_date
+    return None
 
 
 class GitlabConnector(LoadConnector, PollConnector):
@@ -585,13 +579,34 @@ class GitlabConnector(LoadConnector, PollConnector):
                     dirs.remove(".git")
                     logger.debug("Skipped .git directory")
                 for file in files:
-                    yield Path(root) / file
+                    file_path = Path(root) / file
+                    if self._is_safe_repo_file(file_path):
+                        yield file_path
             return
 
         for rel_path in candidate_rel_paths:
             file_path = self.repo_path / rel_path
-            if file_path.is_file():
+            if self._is_safe_repo_file(file_path):
                 yield file_path
+
+    def _is_safe_repo_file(self, file_path: Path) -> bool:
+        """Reject symlinks and anything resolving outside the checkout.
+
+        A repository-controlled symlink (e.g. ``secret -> /etc/passwd``) must
+        not let indexing read and publish files from the host filesystem.
+        """
+        if self.repo_path is None:
+            return False
+        if file_path.is_symlink() or not file_path.is_file():
+            return False
+        try:
+            file_path.resolve().relative_to(self.repo_path.resolve())
+        except ValueError:
+            logger.warning(
+                "Skipping %s: resolves outside the repository checkout", file_path
+            )
+            return False
+        return True
 
     def _get_filtered_files(
         self, candidate_rel_paths: set[str] | None = None
@@ -773,12 +788,17 @@ class GitlabConnector(LoadConnector, PollConnector):
 
             code_doc_batch: list[Document | HierarchyNode] = []
 
+            # On a shallow full clone (clone_depth set) the truncated history
+            # attributes every file to the boundary commit — skip the per-file
+            # lookup and let content hashing govern change detection instead.
+            history_is_reliable = changed_rel_paths is not None or not self.clone_depth
+
             for file_path in file_batch:
                 try:
                     # Get last commit date for the file
                     relative_path = str(file_path.relative_to(self.repo_path))
                     last_commit_date = None
-                    if self.git_repo:
+                    if self.git_repo and history_is_reliable:
                         last_commit_date = _get_file_last_commit_date(
                             self.git_repo, relative_path
                         )

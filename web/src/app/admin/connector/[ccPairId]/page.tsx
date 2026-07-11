@@ -741,17 +741,18 @@ function Main({ ccPairId }: { ccPairId: number }) {
               />
 
               {/* Edit which file types are indexed (GitLab) */}
-              {ccPair.connector.source === ValidSources.GitLab && (
-                <div className="mt-4 flex justify-end">
-                  <Button
-                    prominence="secondary"
-                    icon={SvgSettings}
-                    onClick={() => setEditingGitlabFileTypes(true)}
-                  >
-                    Edit indexed file types
-                  </Button>
-                </div>
-              )}
+              {ccPair.connector.source === ValidSources.GitLab &&
+                ccPair.is_editable_for_current_user && (
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      prominence="secondary"
+                      icon={SvgSettings}
+                      onClick={() => setEditingGitlabFileTypes(true)}
+                    >
+                      Edit indexed file types
+                    </Button>
+                  </div>
+                )}
 
               {/* Inline file management for file connectors */}
               {canManageInlineFileConnectorFiles && (
