@@ -745,7 +745,9 @@ class WebConnector(LoadConnector, SlimConnector):
                                 initial_url,
                                 result.doc.id,
                             )
-                            continue
+                            # Skip-and-move-on, not a transient failure: don't
+                            # burn the remaining retries re-scraping this URL.
+                            break
                         session_ctx.emitted_doc_ids.add(result.doc.id)
                         batch.append(
                             SlimDocument(id=result.doc.id) if slim else result.doc
