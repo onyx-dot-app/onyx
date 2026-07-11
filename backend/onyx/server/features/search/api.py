@@ -125,9 +125,7 @@ def search(
     )
 
     # 3. Build filters. time_cutoff is sugar for an open-ended
-    # updated_at_range; naive values are treated as UTC (see
-    # SearchRequest.time_cutoff) so downstream comparison against tz-aware
-    # document timestamps works.
+    # updated_at_range; naive values are treated as UTC.
     updated_at_range = request.updated_at_range
     if updated_at_range is None and request.time_cutoff is not None:
         time_cutoff = request.time_cutoff

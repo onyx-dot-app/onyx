@@ -74,11 +74,8 @@ class TimeRange(BaseModel):
 class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None
     document_set: list[str] | None = None
-    # Window on when the document was created at the source.
+    # See document_index/FILTER_SEMANTICS.md ("Time filtering").
     created_at_range: TimeRange | None = None
-    # Window on when the document was last updated. See
-    # document_index/FILTER_SEMANTICS.md ("Time filtering") for intent mapping
-    # and undated-document handling.
     updated_at_range: TimeRange | None = None
     tags: list[Tag] | None = None
 

@@ -1127,8 +1127,7 @@ class DocumentQuery:
             """One null-tolerant clause per set range, to be AND-ed into the
             filter. created_at always keeps undated documents (over-extend);
             last_updated keeps them only for an old, open-ended lower bound, so
-            recent-window queries aren't flooded by undated docs. For intent
-            mapping see document_index/FILTER_SEMANTICS.md ("Time filtering")."""
+            recent-window queries aren't flooded by undated docs."""
             clauses: list[dict[str, Any]] = []
             if created_at_range is not None and (
                 created_at_range.start is not None or created_at_range.end is not None

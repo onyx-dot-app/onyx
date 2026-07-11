@@ -82,8 +82,7 @@ def _build_index_filters(
         else persona_document_sets
     )
 
-    # Fold the persona's last_updated floor into updated_at_range, taking the
-    # later (more restrictive) start.
+    # The persona's search_start_date floor must never be loosened.
     updated_at_range = base_filters.updated_at_range
     floor_starts = [
         bound

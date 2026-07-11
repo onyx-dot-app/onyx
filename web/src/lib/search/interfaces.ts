@@ -232,7 +232,7 @@ export interface SearchFlowClassificationResponse {
 export interface BaseFilters {
   source_type?: ValidSources[] | null;
   document_set?: string[] | null;
-  // Window on the document's last-update time; bounds are ISO date strings.
+  // Bounds are ISO date strings.
   updated_at_range?: { start: string | null; end: string | null } | null;
   tags?: Array<{ tag_key: string; tag_value: string }> | null;
 }
