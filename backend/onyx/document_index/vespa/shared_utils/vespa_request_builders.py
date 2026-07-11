@@ -3,7 +3,6 @@ from datetime import timedelta
 from datetime import timezone
 
 from onyx.configs.constants import INDEX_SEPARATOR
-from onyx.context.search.models import DocumentTimeField
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.vespa.internal_types import VespaChunkRequest
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
@@ -243,23 +242,23 @@ def build_vespa_filters(
     elif len(knowledge_scope_parts) == 1:
         filter_parts.append(knowledge_scope_parts[0])
 
-    # Vespa only indexes doc_updated_at: apply the updated_at bounds from
-    # document_time_ranges plus the time_cutoff floor; created_at ranges are
-    # dropped (widens rather than narrows).
-    updated_at_starts = [bound for bound in [filters.time_cutoff] if bound is not None]
-    updated_at_ends: list[datetime] = []
-    for time_range in filters.document_time_ranges or []:
-        if time_range.field is not DocumentTimeField.UPDATED_AT:
-            continue
-        if time_range.start is not None:
-            updated_at_starts.append(time_range.start)
-        if time_range.end is not None:
-            updated_at_ends.append(time_range.end)
+    # Vespa only indexes doc_updated_at: apply updated_at_range plus the
+    # time_cutoff floor; created_at_range is dropped (widens rather than
+    # narrows).
+    updated_at_range = filters.updated_at_range
+    updated_at_starts = [
+        bound
+        for bound in (
+            filters.time_cutoff,
+            updated_at_range.start if updated_at_range else None,
+        )
+        if bound is not None
+    ]
     _append(
         filter_parts,
         _build_time_filter(
             max(updated_at_starts) if updated_at_starts else None,
-            min(updated_at_ends) if updated_at_ends else None,
+            updated_at_range.end if updated_at_range else None,
         ),
     )
 

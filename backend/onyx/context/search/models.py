@@ -64,20 +64,9 @@ class Tag(BaseModel):
     tag_value: str
 
 
-class DocumentTimeField(str, Enum):
-    """A document date field that a time filter can target."""
+class TimeRange(BaseModel):
+    """An inclusive [start, end] window; either bound may be None (open)."""
 
-    CREATED_AT = "created_at"
-    UPDATED_AT = "updated_at"
-
-
-class DocumentTimeRange(BaseModel):
-    """An inclusive [start, end] window on one document date field; either bound
-    may be None (open). See document_index/FILTER_SEMANTICS.md ("Time filtering")
-    for how query intents map onto ranges and how undated documents are handled.
-    """
-
-    field: DocumentTimeField
     start: datetime | None = None
     end: datetime | None = None
 
@@ -87,9 +76,12 @@ class BaseFilters(BaseModel):
     document_set: list[str] | None = None
     # Lower bound on last_updated.
     time_cutoff: datetime | None = None
-    # Field-aware time windows, AND-ed together; takes precedence over
-    # time_cutoff when set.
-    document_time_ranges: list[DocumentTimeRange] | None = None
+    # Window on when the document was created at the source.
+    created_at_range: TimeRange | None = None
+    # Window on when the document was last updated; takes precedence over
+    # time_cutoff when set. See document_index/FILTER_SEMANTICS.md
+    # ("Time filtering") for intent mapping and undated-document handling.
+    updated_at_range: TimeRange | None = None
     tags: list[Tag] | None = None
 
 

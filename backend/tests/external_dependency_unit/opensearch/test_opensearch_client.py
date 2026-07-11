@@ -22,9 +22,8 @@ import onyx.document_index.opensearch.client as client_module
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import DocumentTimeField
-from onyx.context.search.models import DocumentTimeRange
 from onyx.context.search.models import IndexFilters
+from onyx.context.search.models import TimeRange
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
@@ -2507,16 +2506,8 @@ class TestOpenSearchClient:
             index_filters=IndexFilters(
                 access_control_list=None,
                 tenant_id=None,
-                document_time_ranges=[
-                    DocumentTimeRange(
-                        field=DocumentTimeField.UPDATED_AT,
-                        start=now - timedelta(days=7 * 30),
-                    ),
-                    DocumentTimeRange(
-                        field=DocumentTimeField.CREATED_AT,
-                        end=now - timedelta(days=4 * 30),
-                    ),
-                ],
+                updated_at_range=TimeRange(start=now - timedelta(days=7 * 30)),
+                created_at_range=TimeRange(end=now - timedelta(days=4 * 30)),
             ),
             include_hidden=False,
         )

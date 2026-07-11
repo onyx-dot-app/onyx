@@ -11,7 +11,7 @@ How `IndexFilters` fields combine into the final query filter. Describes the act
 | **Visibility** | `hidden` | Always applied (unless `include_hidden`) |
 | **Tenant** | `tenant_id` | AND (multi-tenant only) |
 | **ACL** | `access_control_list` | OR within, AND with rest |
-| **Narrowing** | `source_type`, `tags`, `time_cutoff`, `document_time_ranges` | Each OR within, AND with rest |
+| **Narrowing** | `source_type`, `tags`, `time_cutoff`, `created_at_range`, `updated_at_range` | Each OR within, AND with rest |
 | **Knowledge scope** | `document_set`, `attached_document_ids`, `hierarchy_node_ids`, `persona_id_filter`, `project_id_filter` | OR within group, AND with rest |
 
 ## How filters combine
@@ -35,24 +35,24 @@ Two ways to constrain time, both AND-ed into the query:
 - **`time_cutoff`** — an inclusive lower bound on `last_updated`. This is the
   simple request/persona-facing form (persona `search_start_date` composes into
   it as a floor).
-- **`document_time_ranges`** — a list of field-aware `DocumentTimeRange`s, each
-  an inclusive `[start, end]` window on **one** field (`created_at` or
-  `last_updated`). All ranges in the list are AND-ed. When set, this takes
-  precedence over `time_cutoff`. Use it to express a query's created-vs-updated
-  intent or any upper bound. The deprecated Vespa backend enforces only the
-  `last_updated` bounds from these ranges (it has no `created_at` field, so
-  created_at ranges widen rather than narrow there).
+- **`created_at_range`** / **`updated_at_range`** — inclusive `[start, end]`
+  windows (either bound may be open) on the document's creation / last-update
+  time, AND-ed together when both are set. `updated_at_range` takes precedence
+  over `time_cutoff`. Use them to express a query's created-vs-updated intent
+  or any upper bound. The deprecated Vespa backend enforces only
+  `updated_at_range` (it has no `created_at` field, so `created_at_range`
+  widens rather than narrows there).
 
 ### Why intent needs both fields
 
 We store only a document's creation time and its **latest** update time — no edit
 history. That shapes how intents map onto ranges:
 
-| Intent | `DocumentTimeRange`(s) | Resulting predicate |
+| Intent | Ranges | Resulting predicate |
 |---|---|---|
-| **created in [S, E]** | `created_at [S, E]` | `created_at >= S AND created_at <= E` |
-| **updated / active in [S, E]** | `last_updated [S, →]` **and** `created_at [→, E]` | `last_updated >= S AND created_at <= E` (overlap) |
-| **last-touched in [S, E]** (strict) | `last_updated [S, E]` | `last_updated >= S AND last_updated <= E` |
+| **created in [S, E]** | `created_at_range=[S, E]` | `created_at >= S AND created_at <= E` |
+| **updated / active in [S, E]** | `updated_at_range=[S, →]` **and** `created_at_range=[→, E]` | `last_updated >= S AND created_at <= E` (overlap) |
+| **last-touched in [S, E]** (strict) | `updated_at_range=[S, E]` | `last_updated >= S AND last_updated <= E` |
 
 The **updated/active** intent is an *overlap*, not a strict `last_updated` range:
 the upper bound must go on `created_at`, because `last_updated` is only the latest
@@ -66,9 +66,9 @@ strict `last_updated <= 4mo` would wrongly drop it, while the overlap keeps it
 We prefer to over- than under-extend, so a missing timestamp does not remove a
 document — with one exception to avoid flooding recent-window queries:
 
-- **`created_at` ranges**: undated docs are **always** kept (a doc with no
+- **`created_at_range`**: undated docs are **always** kept (a doc with no
   `created_at` cannot be shown to fall outside the window).
-- **`last_updated` ranges**: undated docs are kept only for an **old, open-ended
+- **`updated_at_range`**: undated docs are kept only for an **old, open-ended
   lower bound** (start older than `ASSUMED_DOCUMENT_AGE_DAYS`, no upper bound); a
   recent or bounded range excludes them.
 
@@ -159,5 +159,6 @@ AND (user_project contains 7)
 | `source_type` | `source_type` | `string` | Connector source type (e.g. `web`, `jira`) |
 | `tags` | `metadata_list` | `array<string>` | Document metadata tags |
 | `time_cutoff` | `doc_updated_at` | `long` | Minimum document update timestamp |
-| `document_time_ranges` | `last_updated` / `created_at` | `long` | Field-aware time windows; see [Time filtering](#time-filtering). Takes precedence over `time_cutoff` when set (Vespa enforces only the `last_updated` bounds) |
+| `created_at_range` | `created_at` | `long` | Window on document creation time; see [Time filtering](#time-filtering) (OpenSearch only) |
+| `updated_at_range` | `doc_updated_at` | `long` | Window on document update time; takes precedence over `time_cutoff` when set |
 | `tenant_id` | `tenant_id` | `string` | Tenant isolation (multi-tenant) |

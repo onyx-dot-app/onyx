@@ -6,12 +6,11 @@ from sqlalchemy.orm import Session
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.context.search.models import ChunkSearchRequest
-from onyx.context.search.models import DocumentTimeField
-from onyx.context.search.models import DocumentTimeRange
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import PersonaSearchInfo
+from onyx.context.search.models import TimeRange
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
@@ -92,14 +91,16 @@ def _build_index_filters(
     ]
     recency_floor = max(lower_bounds) if lower_bounds else None
 
-    # Ranges take precedence in the index, so AND the floor into them; with no
-    # ranges the floor flows through time_cutoff.
-    document_time_ranges = base_filters.document_time_ranges
-    if document_time_ranges is not None and recency_floor is not None:
-        document_time_ranges = [
-            *document_time_ranges,
-            DocumentTimeRange(field=DocumentTimeField.UPDATED_AT, start=recency_floor),
+    # updated_at_range takes precedence in the index, so fold the floor into it;
+    # with no range the floor flows through time_cutoff.
+    updated_at_range = base_filters.updated_at_range
+    if updated_at_range is not None and recency_floor is not None:
+        floored_starts = [
+            bound for bound in (updated_at_range.start, recency_floor) if bound
         ]
+        updated_at_range = TimeRange(
+            start=max(floored_starts), end=updated_at_range.end
+        )
 
     source_filter = base_filters.source_type
 
@@ -118,7 +119,8 @@ def _build_index_filters(
         source_type=source_filter,
         document_set=document_set_filter,
         time_cutoff=recency_floor,
-        document_time_ranges=document_time_ranges,
+        created_at_range=base_filters.created_at_range,
+        updated_at_range=updated_at_range,
         tags=base_filters.tags,
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,

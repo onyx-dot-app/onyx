@@ -4,10 +4,9 @@ from datetime import timezone
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
-from onyx.context.search.models import DocumentTimeField
-from onyx.context.search.models import DocumentTimeRange
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
+from onyx.context.search.models import TimeRange
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
@@ -206,18 +205,14 @@ class TestBuildVespaFilters:
         )
 
     def test_time_range_filter(self) -> None:
-        """A bounded updated_at range (via document_time_ranges) emits strict >=
-        and <= clauses and excludes untimed docs (no `!(... < ...)` form), even
-        when the lower bound is old."""
+        """A bounded updated_at_range emits strict >= and <= clauses and
+        excludes untimed docs (no `!(... < ...)` form), even when the lower
+        bound is old."""
         start = datetime(2020, 1, 1, tzinfo=timezone.utc)
         end = datetime(2020, 1, 31, 23, 59, 59, tzinfo=timezone.utc)
         filters = IndexFilters(
             access_control_list=[],
-            document_time_ranges=[
-                DocumentTimeRange(
-                    field=DocumentTimeField.UPDATED_AT, start=start, end=end
-                )
-            ],
+            updated_at_range=TimeRange(start=start, end=end),
         )
         result = build_vespa_filters(filters)
         start_secs = int(start.timestamp())
@@ -228,13 +223,11 @@ class TestBuildVespaFilters:
         )
 
     def test_time_upper_bound_only(self) -> None:
-        """An upper bound alone (via document_time_ranges) emits just a <= clause."""
+        """An upper bound alone (via updated_at_range) emits just a <= clause."""
         end = datetime(2023, 6, 1, tzinfo=timezone.utc)
         filters = IndexFilters(
             access_control_list=[],
-            document_time_ranges=[
-                DocumentTimeRange(field=DocumentTimeField.UPDATED_AT, end=end)
-            ],
+            updated_at_range=TimeRange(end=end),
         )
         result = build_vespa_filters(filters)
         end_secs = int(end.timestamp())
