@@ -5,6 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SettingsLayouts } from "@opal/layouts";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   TableBody,
   TableCell,
@@ -18,7 +19,6 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 const route = ADMIN_ROUTES.OAUTH_TEST;
 
-const CLAIMS_ENDPOINT = "/api/admin/oauth-test/claims";
 // Runs the normal OIDC login flow and lands back on this page — the backend
 // re-captures the claims on every login.
 const RERUN_URL =
@@ -98,7 +98,7 @@ function Main() {
     data: snapshot,
     error,
     isLoading,
-  } = useSWR<OAuthClaimsSnapshot>(CLAIMS_ENDPOINT, errorHandlingFetcher);
+  } = useSWR<OAuthClaimsSnapshot>(SWR_KEYS.adminOAuthTestClaims, errorHandlingFetcher);
 
   if (isLoading) {
     return <PageLoader />;

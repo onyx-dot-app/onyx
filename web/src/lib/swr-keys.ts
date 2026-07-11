@@ -130,6 +130,7 @@ export const SWR_KEYS = {
   tools: "/api/tool",
   openApiTools: "/api/tool/openapi",
   oauthTokenStatus: "/api/user-oauth-token/status",
+  adminOAuthTestClaims: "/api/admin/oauth-test/claims",
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   voiceProviders: "/api/admin/voice/providers",
