@@ -65,12 +65,13 @@ class Tag(BaseModel):
 
 
 class TimeRange(BaseModel):
-    """An inclusive [start, end] window; either bound may be None (open)."""
+    """An inclusive [start, end] window; either bound may be None (open).
+    A range with neither bound set is falsy, like an empty container."""
 
     start: datetime | None = None
     end: datetime | None = None
 
-    def has_bounds(self) -> bool:
+    def __bool__(self) -> bool:
         return self.start is not None or self.end is not None
 
 

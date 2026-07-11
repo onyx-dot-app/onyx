@@ -1129,7 +1129,7 @@ class DocumentQuery:
             last_updated keeps them only for an old, open-ended lower bound, so
             recent-window queries aren't flooded by undated docs."""
             clauses: list[dict[str, Any]] = []
-            if created_at_range is not None and created_at_range.has_bounds():
+            if created_at_range:
                 clauses.append(
                     _get_date_range_clause(
                         CREATED_AT_FIELD_NAME,
@@ -1138,7 +1138,7 @@ class DocumentQuery:
                         include_undated=True,
                     )
                 )
-            if updated_at_range is not None and updated_at_range.has_bounds():
+            if updated_at_range:
                 include_undated = (
                     updated_at_range.start is not None
                     and updated_at_range.end is None
@@ -1313,7 +1313,7 @@ class DocumentQuery:
                 )
             filter_clauses.append(knowledge_filter)
 
-        if created_at_range is not None or updated_at_range is not None:
+        if created_at_range or updated_at_range:
             filter_clauses.extend(
                 _get_document_time_filter(created_at_range, updated_at_range)
             )
