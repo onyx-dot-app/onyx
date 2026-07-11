@@ -38,10 +38,29 @@ export default function EditGitlabFileTypesModal({
       .map((pattern) => pattern.trim())
       .filter((pattern) => pattern.length > 0);
 
-    const response = await updateConnectorConnectorConfig(ccPairId, {
-      include_code_files: values.include_code_files,
-      code_file_patterns: normalizedPatterns,
-    });
+    // Only write fields the user actually changed. A connector created
+    // before these options existed may omit include_code_files and rely on
+    // the backend's env default — persisting an untouched checkbox would
+    // silently override that default.
+    const configUpdates: Record<string, unknown> = {};
+    if (values.include_code_files !== initialIncludeCodeFiles) {
+      configUpdates.include_code_files = values.include_code_files;
+    }
+    if (
+      JSON.stringify(normalizedPatterns) !==
+      JSON.stringify(initialCodeFilePatterns)
+    ) {
+      configUpdates.code_file_patterns = normalizedPatterns;
+    }
+    if (Object.keys(configUpdates).length === 0) {
+      onClose();
+      return;
+    }
+
+    const response = await updateConnectorConnectorConfig(
+      ccPairId,
+      configUpdates
+    );
 
     if (!response.ok) {
       toast.error(`Failed to update file types: ${await response.text()}`);

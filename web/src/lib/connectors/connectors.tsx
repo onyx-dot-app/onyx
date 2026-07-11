@@ -436,8 +436,10 @@ export const connectorConfigs: Record<
         type: "text",
         name: "branch",
         label: "Branch",
-        description: "Specific branch to clone (e.g., main).",
-        default: "main",
+        optional: true,
+        description:
+          "Specific branch to clone (e.g., main). Leave empty to use the project's default branch.",
+        default: "",
       },
     ],
   },
