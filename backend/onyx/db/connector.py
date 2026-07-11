@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 
 from sqlalchemy import and_
 from sqlalchemy import exists
@@ -151,6 +152,28 @@ def update_connector(
         if connector_data.prune_freq is not None
         else DEFAULT_PRUNING_FREQ
     )
+
+    db_session.commit()
+    return connector
+
+
+def update_connector_specific_config_fields(
+    connector_id: int,
+    config_updates: dict[str, Any],
+    db_session: Session,
+) -> Connector | None:
+    """Merge a partial set of fields into a connector's connector_specific_config.
+
+    The dict is reassigned (rather than mutated in place) so SQLAlchemy detects
+    the change on the JSON column. Returns ``None`` if the connector is missing.
+    """
+    connector = fetch_connector_by_id(connector_id, db_session)
+    if connector is None:
+        return None
+
+    new_config = dict(connector.connector_specific_config or {})
+    new_config.update(config_updates)
+    connector.connector_specific_config = new_config
 
     db_session.commit()
     return connector

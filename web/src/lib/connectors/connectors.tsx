@@ -62,7 +62,22 @@ export interface ListOption extends Option {
   type: "list";
   default?: string[];
   transform?: (values: string[]) => string[];
+  // When provided, a "Use defaults" button is shown that populates the list
+  // with these values (lets users reveal/edit otherwise-hidden defaults).
+  defaultValues?: string[];
 }
+
+// Mirrors DEFAULT_CODE_FILE_PATTERNS in
+// backend/onyx/connectors/gitlab/connector.py — keep the two in sync.
+// prettier-ignore
+export const DEFAULT_GITLAB_CODE_FILE_PATTERNS: string[] = [
+  "*.py", "*.js", "*.ts", "*.java", "*.cpp", "*.c", "*.h", "*.hpp", "*.cs",
+  "*.php", "*.rb", "*.go", "*.rs", "*.kt", "*.scala", "*.swift", "*.m",
+  "*.mm", "*.r", "*.sql", "*.html", "*.htm", "*.css", "*.scss", "*.sass",
+  "*.less", "*.xml", "*.json", "*.yaml", "*.yml", "*.toml", "*.ini", "*.cfg",
+  "*.config", "*.md", "*.rst", "*.txt", "*.sh", "*.bash", "*.ps1", "*.bat",
+  "*.cmd", "*.bazel", "Makefile", "Dockerfile",
+];
 
 export interface TextOption extends Option {
   type: "text";
@@ -375,6 +390,54 @@ export const connectorConfigs: Record<
         name: "include_issues",
         description: "Index issues from repositories",
         default: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include code files?",
+        label: "Include Code Files",
+        name: "include_code_files",
+        description:
+          "Clone the repository and index its files. Subsequent syncs only re-index files changed since the last sync.",
+        default: false,
+      },
+      {
+        type: "list",
+        name: "code_file_patterns",
+        label: "Code File Patterns",
+        description:
+          "Glob patterns for files to index when 'Include Code Files' is enabled. Patterns without a '/' match the filename anywhere (e.g. *.py, Makefile, Dockerfile); patterns with a '/' match the path (e.g. src/*.py). Leave empty to use the built-in defaults, or click 'Use defaults' to start from the built-in list.",
+        default: [],
+        defaultValues: DEFAULT_GITLAB_CODE_FILE_PATTERNS,
+      },
+      {
+        type: "list",
+        name: "include_path_patterns",
+        label: "Include Path Patterns",
+        description:
+          "Glob patterns for paths to include (e.g. src/**, docs/*). Leave empty to include all paths.",
+        default: [],
+      },
+      {
+        type: "list",
+        name: "exclude_path_patterns",
+        label: "Exclude Path Patterns",
+        description:
+          "Glob patterns for paths to exclude (e.g. *_test.py, vendor/**).",
+        default: [],
+      },
+      {
+        type: "number",
+        name: "clone_depth",
+        label: "Clone Depth",
+        description: "Git clone depth (e.g., 1 for shallow clone).",
+        default: 1,
+      },
+      {
+        type: "text",
+        name: "branch",
+        label: "Branch",
+        description: "Specific branch to clone (e.g., main).",
+        default: "main",
       },
     ],
   },
@@ -2055,6 +2118,12 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+  include_code_files?: boolean;
+  code_file_patterns?: string[];
+  include_path_patterns?: string[];
+  exclude_path_patterns?: string[];
+  clone_depth?: number;
+  branch?: string;
 }
 
 export interface LumAppsConfig {
