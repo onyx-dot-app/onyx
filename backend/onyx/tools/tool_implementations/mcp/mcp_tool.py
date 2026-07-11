@@ -227,10 +227,32 @@ class MCPTool(Tool[None]):
                 and self._user_id
             ):
                 if self.mcp_server.transport == MCPTransport.SSE:
-                    logger.warning(
-                        "MCP tool '%s': OAuth token refresh is not supported for SSE transport — auth provider will be ignored. Re-authentication may be required after token expiry.",
-                        self._name,
-                    )
+                    # The SDK OAuthClientProvider (httpx.Auth) that drives refresh
+                    # is incompatible with an open SSE stream, so refresh it
+                    # ourselves before the call: rotate the token when expired and
+                    # swap in the fresh Authorization header. Any failure is
+                    # non-fatal — fall back to the stored token.
+                    try:
+                        from onyx.db.engine.sql_engine import (
+                            get_session_with_current_tenant,
+                        )
+                        from onyx.server.features.mcp.api import (
+                            refresh_mcp_oauth_token_if_expired,
+                        )
+
+                        with get_session_with_current_tenant() as refresh_session:
+                            refreshed_header = refresh_mcp_oauth_token_if_expired(
+                                self.mcp_server,
+                                self.connection_config.id,
+                                refresh_session,
+                            )
+                        if refreshed_header:
+                            headers["Authorization"] = refreshed_header
+                    except Exception:
+                        logger.exception(
+                            "MCP tool '%s': proactive SSE OAuth token refresh failed; using existing token",
+                            self._name,
+                        )
                 else:
                     from onyx.server.features.mcp.api import make_oauth_provider
                     from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
