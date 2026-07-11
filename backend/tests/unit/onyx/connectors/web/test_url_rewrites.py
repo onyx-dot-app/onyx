@@ -5,7 +5,22 @@ from onyx.connectors.web.connector import _rewrite_url
 from onyx.connectors.web.connector import WebConnector
 
 
-def test_parse_url_rewrites() -> None:
+def test_parse_url_rewrites_pairs() -> None:
+    """The admin form submits [source, target] pairs."""
+    parsed = _parse_url_rewrites(
+        [
+            ["https://mirror.internal", "https://docs.example.com"],
+            ["http://a", "http://b"],
+        ]
+    )
+    assert parsed == {
+        "https://mirror.internal": "https://docs.example.com",
+        "http://a": "http://b",
+    }
+
+
+def test_parse_url_rewrites_arrow_strings() -> None:
+    """Hand-written API configs may use "source -> target" strings."""
     parsed = _parse_url_rewrites(
         [
             "https://mirror.internal -> https://docs.example.com",
@@ -24,7 +39,9 @@ def test_parse_url_rewrites_skips_invalid_entries() -> None:
             "no-arrow-here",  # no separator
             " -> https://target.only",  # empty source
             "https://source.only -> ",  # empty target
-            "https://ok -> https://fine",
+            ["https://one.element"],  # not a pair
+            ["", "https://empty.source"],  # empty pair source
+            ["https://ok", "https://fine"],
         ]
     )
     assert parsed == {"https://ok": "https://fine"}
@@ -64,7 +81,7 @@ def test_web_connector_parses_url_rewrites() -> None:
     connector = WebConnector(
         base_url="https://mirror.internal/docs",
         web_connector_type="single",
-        url_rewrites=["https://mirror.internal -> https://docs.example.com"],
+        url_rewrites=[["https://mirror.internal", "https://docs.example.com"]],
     )
     assert connector.url_rewrites == {
         "https://mirror.internal": "https://docs.example.com"

@@ -48,14 +48,32 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
-def _parse_url_rewrites(raw_rewrites: list[str]) -> dict[str, str]:
-    """Parse a list of "source_prefix -> target_prefix" strings into a dict."""
+def _parse_url_rewrites(
+    raw_rewrites: list[list[str] | str],
+) -> dict[str, str]:
+    """Parse URL rewrite rules into a {source_prefix: target_prefix} dict.
+
+    The admin form submits [source, target] pairs; "source -> target" strings
+    are also accepted for configs written by hand against the API.
+    """
     rewrites: dict[str, str] = {}
     for entry in raw_rewrites:
-        if "->" not in entry:
-            logger.warning("Skipping invalid url_rewrite entry (no '->'): %s", entry)
+        if isinstance(entry, str):
+            if "->" not in entry:
+                logger.warning(
+                    "Skipping invalid url_rewrite entry (no '->'): %s", entry
+                )
+                continue
+            src, dst = entry.split("->", 1)
+        elif (
+            isinstance(entry, list)
+            and len(entry) == 2
+            and all(isinstance(part, str) for part in entry)
+        ):
+            src, dst = entry
+        else:
+            logger.warning("Skipping malformed url_rewrite entry: %s", entry)
             continue
-        src, dst = entry.split("->", 1)
         src, dst = src.strip(), dst.strip()
         if src and dst:
             rewrites[src] = dst
@@ -380,7 +398,7 @@ class WebConnector(LoadConnector, SlimConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
-        url_rewrites: list[str] | None = None,
+        url_rewrites: list[list[str] | str] | None = None,
         **kwargs: Any,  # noqa: ARG002
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
