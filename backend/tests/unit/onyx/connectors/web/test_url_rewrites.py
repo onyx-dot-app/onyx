@@ -1,7 +1,13 @@
-"""Unit tests for the web connector's URL rewrite helpers (pure functions)."""
+"""Unit tests for the web connector's URL rewrite helpers."""
 
+from unittest.mock import patch
+
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import Document
+from onyx.connectors.models import TextSection
 from onyx.connectors.web.connector import _parse_url_rewrites
 from onyx.connectors.web.connector import _rewrite_url
+from onyx.connectors.web.connector import ScrapeResult
 from onyx.connectors.web.connector import WebConnector
 
 
@@ -94,3 +100,49 @@ def test_web_connector_defaults_to_no_rewrites() -> None:
         web_connector_type="single",
     )
     assert connector.url_rewrites == {}
+
+
+def test_colliding_rewritten_ids_emit_only_first_document() -> None:
+    """Two fetched URLs can rewrite to the same storage id (e.g. crawling a
+    mirror and the canonical site); only the first document may be emitted or
+    the later one would overwrite it in the index."""
+    connector = WebConnector(
+        base_url="https://mirror.internal/page",
+        web_connector_type="single",
+        url_rewrites=[["https://mirror.internal", "https://docs.example.com"]],
+    )
+    connector.to_visit_list = [
+        "https://mirror.internal/page",
+        "https://docs.example.com/page",
+    ]
+
+    def _fake_scrape(
+        index: int,  # noqa: ARG001
+        initial_url: str,  # noqa: ARG001
+        session_ctx: object,  # noqa: ARG001
+        slim: bool = False,  # noqa: ARG001
+    ) -> ScrapeResult:
+        result = ScrapeResult()
+        result.doc = Document(
+            id="https://docs.example.com/page",
+            sections=[TextSection(link="https://docs.example.com/page", text="x")],
+            source=DocumentSource.WEB,
+            semantic_identifier="page",
+            metadata={},
+        )
+        return result
+
+    with (
+        patch(
+            "onyx.connectors.web.connector.ScrapeSessionContext.initialize",
+        ),
+        patch("onyx.connectors.web.connector.check_internet_connection"),
+        patch("onyx.connectors.web.connector.protected_url_check"),
+        patch.object(WebConnector, "_do_scrape", side_effect=_fake_scrape),
+    ):
+        docs = [doc for batch in connector.load_from_state() for doc in batch]
+
+    assert [doc.id for doc in docs if isinstance(doc, Document)] == [
+        "https://docs.example.com/page"
+    ]
+    assert len(docs) == 1
