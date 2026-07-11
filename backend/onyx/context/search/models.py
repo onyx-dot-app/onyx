@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from datetime import timezone
 from enum import Enum
 from typing import Any
 
@@ -65,10 +66,18 @@ class Tag(BaseModel):
 
 
 class TimeRange(BaseModel):
-    """An inclusive [start, end] window; either bound may be None (open)."""
+    """An inclusive [start, end] window; either bound may be None (open).
+    Naive (timezone-less) bounds are treated as UTC."""
 
     start: datetime | None = None
     end: datetime | None = None
+
+    @field_validator("start", "end")
+    @classmethod
+    def _assume_utc_when_naive(cls, value: datetime | None) -> datetime | None:
+        if value is None or value.tzinfo is not None:
+            return value
+        return value.replace(tzinfo=timezone.utc)
 
     def has_bounds(self) -> bool:
         return self.start is not None or self.end is not None

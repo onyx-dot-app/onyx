@@ -179,6 +179,20 @@ def test_active_in_window_splits_across_fields() -> None:
     assert _includes_undated(created)
 
 
+def test_naive_bounds_are_treated_as_utc() -> None:
+    """Naive (timezone-less) bounds coerce to UTC at model construction, so
+    downstream aware-datetime comparisons (e.g. the persona floor fold) and
+    epoch conversions cannot fail or drift."""
+    time_range = TimeRange(start=datetime(2024, 1, 1), end=datetime(2024, 3, 31))
+    assert time_range.start is not None and time_range.start.tzinfo == timezone.utc
+    assert time_range.end is not None and time_range.end.tzinfo == timezone.utc
+    # Comparable against aware datetimes (this raised TypeError when naive).
+    assert time_range.start < datetime.now(timezone.utc)
+    # Aware bounds pass through untouched.
+    aware = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    assert TimeRange(start=aware).start == aware
+
+
 def test_empty_range_is_skipped() -> None:
     """A range with neither bound set contributes no clause."""
     clauses = _build_filters(created_at_range=TimeRange())
