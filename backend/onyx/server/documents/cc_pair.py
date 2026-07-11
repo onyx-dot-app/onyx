@@ -22,7 +22,11 @@ from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
-from onyx.db.connector import delete_connector
+from onyx.db.connector import (
+    delete_connector,
+    mark_ccpair_with_indexing_trigger,
+    update_connector_specific_config_fields,
+)
 from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
     get_connector_credential_pair_for_user,
@@ -36,6 +40,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    IndexingMode,
     IndexingStatus,
     Permission,
     PermissionSyncStatus,
@@ -65,6 +70,7 @@ from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.models import (
+    CCConnectorConfigUpdateRequest,
     CCPairFullInfo,
     CCPairSyncAttemptsResponse,
     CCPropertyUpdateRequest,
@@ -601,6 +607,64 @@ def update_cc_pair_property(
         )
 
     return StatusResponse(success=True, message=msg, data=cc_pair_id)
+
+
+# Connector config keys that may be edited in-place after a connector is created.
+# Editing other keys (e.g. project_owner) could orphan already-indexed documents,
+# so we keep the allowlist scoped to filtering options.
+EDITABLE_CONNECTOR_CONFIG_KEYS = {
+    "include_code_files",
+    "code_file_patterns",
+    "include_path_patterns",
+    "exclude_path_patterns",
+}
+
+
+@router.put("/admin/cc-pair/{cc_pair_id}/connector-config")
+def update_cc_pair_connector_config(
+    cc_pair_id: int,
+    update_request: CCConnectorConfigUpdateRequest,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse[int]:
+    cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=user,
+        get_editable=True,
+    )
+    if not cc_pair:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user's permissions",
+        )
+
+    invalid_keys = (
+        set(update_request.connector_specific_config) - EDITABLE_CONNECTOR_CONFIG_KEYS
+    )
+    if invalid_keys:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"These connector config keys cannot be edited: {sorted(invalid_keys)}",
+        )
+
+    updated_connector = update_connector_specific_config_fields(
+        connector_id=cc_pair.connector.id,
+        config_updates=update_request.connector_specific_config,
+        db_session=db_session,
+    )
+    if updated_connector is None:
+        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "Connector not found")
+
+    # The new filter only applies repo-wide after a fresh re-index; an incremental
+    # sync would otherwise only pick up files that change after this edit.
+    mark_ccpair_with_indexing_trigger(cc_pair_id, IndexingMode.REINDEX, db_session)
+
+    return StatusResponse(
+        success=True,
+        message="Connector configuration updated successfully",
+        data=cc_pair_id,
+    )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/last_pruned")

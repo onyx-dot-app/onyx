@@ -736,6 +736,12 @@ class CCPropertyUpdateRequest(BaseModel):
     value: str
 
 
+class CCConnectorConfigUpdateRequest(BaseModel):
+    # Partial set of connector_specific_config keys to merge into the connector's
+    # existing configuration. Only an allowlisted set of keys may be updated.
+    connector_specific_config: dict[str, Any]
+
+
 """Connectors Models"""
 
 
