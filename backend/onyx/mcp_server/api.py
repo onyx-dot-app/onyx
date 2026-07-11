@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import Response
 from fastmcp import FastMCP
+from prometheus_fastapi_instrumentator import Instrumentator
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.types import Receive
@@ -106,6 +107,8 @@ def create_mcp_fastapi_app() -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+    Instrumentator().instrument(app).expose(app)
 
     app.mount("/", _ensure_streamable_accept_header)
 
