@@ -11,7 +11,7 @@ How `IndexFilters` fields combine into the final query filter. Describes the act
 | **Visibility** | `hidden` | Always applied (unless `include_hidden`) |
 | **Tenant** | `tenant_id` | AND (multi-tenant only) |
 | **ACL** | `access_control_list` | OR within, AND with rest |
-| **Narrowing** | `source_type`, `tags`, `time_cutoff`, `created_at_range`, `updated_at_range` | Each OR within, AND with rest |
+| **Narrowing** | `source_type`, `tags`, `created_at_range`, `updated_at_range` | Each OR within, AND with rest |
 | **Knowledge scope** | `document_set`, `attached_document_ids`, `hierarchy_node_ids`, `persona_id_filter`, `project_id_filter` | OR within group, AND with rest |
 
 ## How filters combine
@@ -25,23 +25,20 @@ AND (acl contains A1 OR acl contains A2)
 AND (source_type = S1 OR ...)           -- if set
 AND (tag = T1 OR ...)                   -- if set
 AND <knowledge scope>                   -- see below
-AND time >= cutoff                      -- if set
+AND <time windows>                      -- if set, see Time filtering
 ```
 
 ## Time filtering
 
 Two ways to constrain time, both AND-ed into the query:
 
-- **`time_cutoff`** — an inclusive lower bound on `last_updated`. This is the
-  simple request/persona-facing form (persona `search_start_date` composes into
-  it as a floor).
-- **`created_at_range`** / **`updated_at_range`** — inclusive `[start, end]`
-  windows (either bound may be open) on the document's creation / last-update
-  time, AND-ed together when both are set. `updated_at_range` takes precedence
-  over `time_cutoff`. Use them to express a query's created-vs-updated intent
-  or any upper bound. The deprecated Vespa backend enforces only
-  `updated_at_range` (it has no `created_at` field, so `created_at_range`
-  widens rather than narrows there).
+`created_at_range` / `updated_at_range` are inclusive `[start, end]` windows
+(either bound may be open) on the document's creation / last-update time,
+AND-ed together when both are set. Use them to express a query's
+created-vs-updated intent. The persona `search_start_date` floor is folded into
+`updated_at_range.start` in the search pipeline. The deprecated Vespa backend
+enforces only `updated_at_range` (it has no `created_at` field, so
+`created_at_range` widens rather than narrows there).
 
 ### Why intent needs both fields
 
@@ -158,7 +155,6 @@ AND (user_project contains 7)
 | `access_control_list` | `access_control_list` | `weightedset<string>` | ACL entries for the requesting user |
 | `source_type` | `source_type` | `string` | Connector source type (e.g. `web`, `jira`) |
 | `tags` | `metadata_list` | `array<string>` | Document metadata tags |
-| `time_cutoff` | `doc_updated_at` | `long` | Minimum document update timestamp |
 | `created_at_range` | `created_at` | `long` | Window on document creation time; see [Time filtering](#time-filtering) (OpenSearch only) |
-| `updated_at_range` | `doc_updated_at` | `long` | Window on document update time; takes precedence over `time_cutoff` when set |
+| `updated_at_range` | `doc_updated_at` | `long` | Window on document update time; see [Time filtering](#time-filtering) |
 | `tenant_id` | `tenant_id` | `string` | Tenant isolation (multi-tenant) |

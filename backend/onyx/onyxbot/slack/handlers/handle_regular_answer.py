@@ -263,7 +263,6 @@ def handle_regular_answer(
         filters = BaseFilters(
             source_type=None,
             document_set=document_set_names,
-            time_cutoff=None,
             tags=channel_tags if channel_tags else None,
         )
 

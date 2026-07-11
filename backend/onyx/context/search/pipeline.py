@@ -82,24 +82,21 @@ def _build_index_filters(
         else persona_document_sets
     )
 
-    # The later (more restrictive) of the requested and persona last_updated
-    # floors.
-    lower_bounds = [
+    # Fold the persona's last_updated floor into updated_at_range, taking the
+    # later (more restrictive) start.
+    updated_at_range = base_filters.updated_at_range
+    floor_starts = [
         bound
-        for bound in (base_filters.time_cutoff, persona_time_cutoff)
+        for bound in (
+            updated_at_range.start if updated_at_range else None,
+            persona_time_cutoff,
+        )
         if bound is not None
     ]
-    recency_floor = max(lower_bounds) if lower_bounds else None
-
-    # updated_at_range takes precedence in the index, so fold the floor into it;
-    # with no range the floor flows through time_cutoff.
-    updated_at_range = base_filters.updated_at_range
-    if updated_at_range is not None and recency_floor is not None:
-        floored_starts = [
-            bound for bound in (updated_at_range.start, recency_floor) if bound
-        ]
+    if floor_starts:
         updated_at_range = TimeRange(
-            start=max(floored_starts), end=updated_at_range.end
+            start=max(floor_starts),
+            end=updated_at_range.end if updated_at_range else None,
         )
 
     source_filter = base_filters.source_type
@@ -118,7 +115,6 @@ def _build_index_filters(
         persona_id_filter=persona_id_filter,
         source_type=source_filter,
         document_set=document_set_filter,
-        time_cutoff=recency_floor,
         created_at_range=base_filters.created_at_range,
         updated_at_range=updated_at_range,
         tags=base_filters.tags,

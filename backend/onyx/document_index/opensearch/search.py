@@ -175,16 +175,6 @@ def get_normalization_pipeline_name_and_config() -> tuple[str, dict[str, Any]]:
         )
 
 
-def _resolve_updated_at_range(index_filters: IndexFilters) -> TimeRange | None:
-    """An explicit updated_at_range wins; otherwise time_cutoff falls back to a
-    last_updated lower bound."""
-    if index_filters.updated_at_range is not None:
-        return index_filters.updated_at_range
-    if index_filters.time_cutoff is None:
-        return None
-    return TimeRange(start=index_filters.time_cutoff)
-
-
 class DocumentQuery:
     """
     TODO(andrei): Implement multi-phase search strategies.
@@ -243,7 +233,7 @@ class DocumentQuery:
             project_id_filter=index_filters.project_id_filter,
             persona_id_filter=index_filters.persona_id_filter,
             created_at_range=index_filters.created_at_range,
-            updated_at_range=_resolve_updated_at_range(index_filters),
+            updated_at_range=index_filters.updated_at_range,
             min_chunk_index=min_chunk_index,
             max_chunk_index=max_chunk_index,
             max_chunk_size=max_chunk_size,
@@ -383,7 +373,7 @@ class DocumentQuery:
             project_id_filter=index_filters.project_id_filter,
             persona_id_filter=index_filters.persona_id_filter,
             created_at_range=index_filters.created_at_range,
-            updated_at_range=_resolve_updated_at_range(index_filters),
+            updated_at_range=index_filters.updated_at_range,
             min_chunk_index=None,
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
@@ -479,7 +469,7 @@ class DocumentQuery:
             project_id_filter=index_filters.project_id_filter,
             persona_id_filter=index_filters.persona_id_filter,
             created_at_range=index_filters.created_at_range,
-            updated_at_range=_resolve_updated_at_range(index_filters),
+            updated_at_range=index_filters.updated_at_range,
             min_chunk_index=None,
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
@@ -562,7 +552,7 @@ class DocumentQuery:
             project_id_filter=index_filters.project_id_filter,
             persona_id_filter=index_filters.persona_id_filter,
             created_at_range=index_filters.created_at_range,
-            updated_at_range=_resolve_updated_at_range(index_filters),
+            updated_at_range=index_filters.updated_at_range,
             min_chunk_index=None,
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,
@@ -624,7 +614,7 @@ class DocumentQuery:
             project_id_filter=index_filters.project_id_filter,
             persona_id_filter=index_filters.persona_id_filter,
             created_at_range=index_filters.created_at_range,
-            updated_at_range=_resolve_updated_at_range(index_filters),
+            updated_at_range=index_filters.updated_at_range,
             min_chunk_index=None,
             max_chunk_index=None,
             attached_document_ids=index_filters.attached_document_ids,

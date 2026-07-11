@@ -154,10 +154,15 @@ export interface SearchDefaultOverrides {
   offset: number;
 }
 
+export interface TimeRange {
+  start: Date | string | null;
+  end: Date | string | null;
+}
+
 export interface Filters {
   source_type: string[] | null;
   document_set: string[] | null;
-  time_cutoff: Date | null;
+  updated_at_range: TimeRange | null;
 }
 
 export interface SearchRequestArgs {
@@ -227,7 +232,8 @@ export interface SearchFlowClassificationResponse {
 export interface BaseFilters {
   source_type?: ValidSources[] | null;
   document_set?: string[] | null;
-  time_cutoff?: string | null; // ISO date string
+  // Window on the document's last-update time; bounds are ISO date strings.
+  updated_at_range?: { start: string | null; end: string | null } | null;
   tags?: Array<{ tag_key: string; tag_value: string }> | null;
 }
 

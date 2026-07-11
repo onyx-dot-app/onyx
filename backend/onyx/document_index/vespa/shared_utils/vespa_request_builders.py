@@ -242,22 +242,13 @@ def build_vespa_filters(
     elif len(knowledge_scope_parts) == 1:
         filter_parts.append(knowledge_scope_parts[0])
 
-    # Vespa only indexes doc_updated_at: apply updated_at_range plus the
-    # time_cutoff floor; created_at_range is dropped (widens rather than
-    # narrows).
+    # Vespa only indexes doc_updated_at: created_at_range is dropped (widens
+    # rather than narrows).
     updated_at_range = filters.updated_at_range
-    updated_at_starts = [
-        bound
-        for bound in (
-            filters.time_cutoff,
-            updated_at_range.start if updated_at_range else None,
-        )
-        if bound is not None
-    ]
     _append(
         filter_parts,
         _build_time_filter(
-            max(updated_at_starts) if updated_at_starts else None,
+            updated_at_range.start if updated_at_range else None,
             updated_at_range.end if updated_at_range else None,
         ),
     )

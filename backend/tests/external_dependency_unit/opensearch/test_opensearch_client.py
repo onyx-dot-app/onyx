@@ -2407,7 +2407,9 @@ class TestOpenSearchClient:
             num_hits=5,
             tenant_state=tenant_state,
             index_filters=IndexFilters(
-                access_control_list=None, tenant_id=None, time_cutoff=one_week_ago
+                access_control_list=None,
+                tenant_id=None,
+                updated_at_range=TimeRange(start=one_week_ago),
             ),
             include_hidden=False,
         )
@@ -2417,7 +2419,9 @@ class TestOpenSearchClient:
             num_hits=5,
             tenant_state=tenant_state,
             index_filters=IndexFilters(
-                access_control_list=None, tenant_id=None, time_cutoff=six_months_ago
+                access_control_list=None,
+                tenant_id=None,
+                updated_at_range=TimeRange(start=six_months_ago),
             ),
             include_hidden=False,
         )

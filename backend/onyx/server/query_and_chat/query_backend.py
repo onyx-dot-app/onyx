@@ -46,7 +46,6 @@ def admin_search(
     final_filters = IndexFilters(
         source_type=question.filters.source_type,
         document_set=question.filters.document_set,
-        time_cutoff=question.filters.time_cutoff,
         created_at_range=question.filters.created_at_range,
         updated_at_range=question.filters.updated_at_range,
         tags=question.filters.tags,

@@ -16,14 +16,15 @@ class SearchRequest(BaseModel):
     sources: list[DocumentSource] | None = None
     document_sets: list[str] | None = None
     tags: list[Tag] | None = None
-    # ISO 8601 timestamp. Only documents updated on or after this moment are
-    # returned. Naive (timezone-less) values are treated as UTC server-side.
+    # Sugar for an open-ended updated_at_range: only documents updated on or
+    # after this moment are returned. Ignored when updated_at_range is set.
+    # Naive (timezone-less) values are treated as UTC server-side.
     time_cutoff: datetime | None = None
     # Window on when the document was created at the source. Naive bounds are
     # treated as UTC.
     created_at_range: TimeRange | None = None
     # Window on when the document was last updated; takes precedence over
-    # time_cutoff. Naive bounds are treated as UTC.
+    # time_cutoff when set. Naive bounds are treated as UTC.
     updated_at_range: TimeRange | None = None
 
     persona_id: int | None = None
