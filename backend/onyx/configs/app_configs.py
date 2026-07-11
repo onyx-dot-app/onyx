@@ -294,7 +294,13 @@ if _IDP_PROFILE_CLAIM_MAP_RAW:
                 if isinstance(aliases, list)
             }
     except json.JSONDecodeError:
-        pass
+        # Import-time, so plain logging: a silently ignored map would make the
+        # misconfiguration invisible (placeholders just stay empty).
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "IDP_PROFILE_CLAIM_MAP is not valid JSON — ignoring it"
+        )
 
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"

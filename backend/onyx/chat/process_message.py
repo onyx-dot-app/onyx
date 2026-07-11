@@ -107,6 +107,7 @@ from onyx.llm.request_context import reset_llm_mock_response
 from onyx.llm.request_context import set_llm_mock_response
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import AUTO_PLACE_AFTER_LATEST_MESSAGE
 from onyx.server.query_and_chat.models import MessageResponseIDInfo
@@ -821,8 +822,12 @@ def build_chat_turn(
     )
 
     # ── Token reservation ────────────────────────────────────────────────────
-    max_reserved_system_prompt_tokens_str = (persona.system_prompt or "") + (
-        custom_agent_prompt or ""
+    # Reserve against the placeholder-substituted text — the same final form
+    # run_llm_loop sends to the model — so long directory values can't
+    # invalidate the reservation.
+    max_reserved_system_prompt_tokens_str = substitute_user_placeholders(
+        (persona.system_prompt or "") + (custom_agent_prompt or ""),
+        user_memory_context.user_info.placeholder_values,
     )
     reserved_token_count = calculate_reserved_tokens(
         db_session=db_session,

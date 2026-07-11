@@ -270,18 +270,21 @@ def _resolve_profile(email: str) -> dict[str, tuple[str, str]]:
         return {}
     resolved: dict[str, tuple[str, str]] = {}
     for placeholder_key, label, default_aliases in _PROFILE_FIELDS:
-        for alias in _claim_aliases(placeholder_key, default_aliases):
-            value = next(
-                (
-                    source[alias]
-                    for source in sources
-                    if isinstance(source.get(alias), str) and source[alias].strip()
-                ),
-                None,
-            )
-            if value is not None:
-                resolved[placeholder_key] = (label, value.strip())
-                break
+        aliases = _claim_aliases(placeholder_key, default_aliases)
+        # Sources outer, aliases inner: a higher-priority source must win even
+        # when it uses a lower-priority alias for the same concept (e.g. a
+        # directory `division` beats a userinfo `department`).
+        value = next(
+            (
+                source[alias]
+                for source in sources
+                for alias in aliases
+                if isinstance(source.get(alias), str) and source[alias].strip()
+            ),
+            None,
+        )
+        if value is not None:
+            resolved[placeholder_key] = (label, value.strip())
     return resolved
 
 

@@ -362,3 +362,20 @@ def test_claim_map_override_takes_precedence(
 
     # Configured alias wins; built-in aliases remain as fallback.
     assert values["department"] == "Platform"
+
+
+def test_source_precedence_holds_across_aliases() -> None:
+    """A higher-priority source must win even via a lower-priority alias:
+    directory `division` beats userinfo `department`."""
+    snapshot = {
+        "directory_profile": {"division": "Directory Division"},
+        "userinfo": {"department": "Userinfo Dept"},
+        "id_token_claims": {},
+    }
+    redis = MagicMock()
+    redis.get.return_value = json.dumps(snapshot)
+
+    with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
+        values = get_idp_profile_placeholder_values("user@example.com")
+
+    assert values["department"] == "Directory Division"
