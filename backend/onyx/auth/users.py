@@ -87,6 +87,7 @@ from onyx.auth.jwt import verify_jwt_token
 from onyx.auth.mobile_sso.sso_completion import apply_mobile_state
 from onyx.auth.mobile_sso.sso_completion import complete_mobile_sso
 from onyx.auth.mobile_sso.sso_completion import is_mobile_sso
+from onyx.auth.oauth_claims_capture import capture_oauth_login_claims
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
@@ -2366,6 +2367,11 @@ async def complete_login_flow(
             OnyxErrorCode.VALIDATION_ERROR,
             ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
         )
+
+    # Snapshot the raw IdP claims for directory-profile enrichment and the
+    # admin "OAuth Test" page. Best-effort — never raises, no-op unless
+    # IDP_PROFILE_ENRICHMENT_ENABLED.
+    await capture_oauth_login_claims(oauth_client, account_email, token)
 
     next_url = sanitize_next_url(state_data.get("next_url"))
     referral_source = state_data.get("referral_source", None)
