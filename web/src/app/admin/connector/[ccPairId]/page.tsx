@@ -741,7 +741,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
               />
 
               {/* Edit which file types are indexed (GitLab) */}
-              {ccPair.connector.source === ValidSources.GitLab && (
+              {ccPair.connector.source === ValidSources.GitLab &&
+                ccPair.is_editable_for_current_user && (
                 <div className="mt-4 flex justify-end">
                   <Button
                     prominence="secondary"

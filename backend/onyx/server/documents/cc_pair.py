@@ -71,7 +71,6 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.documents.models import CCConnectorConfigUpdateRequest
 from onyx.server.documents.models import CCPairFullInfo
 from onyx.server.documents.models import CCPairSyncAttemptsResponse
 from onyx.server.documents.models import CCPropertyUpdateRequest
@@ -81,6 +80,7 @@ from onyx.server.documents.models import ConnectorCredentialPairMetadata
 from onyx.server.documents.models import DocPermissionSyncAttemptSnapshot
 from onyx.server.documents.models import DocumentSyncStatus
 from onyx.server.documents.models import ExternalGroupSyncAttemptSnapshot
+from onyx.server.documents.models import GitlabFilterConfigUpdateRequest
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricsResponse
@@ -607,21 +607,10 @@ def update_cc_pair_property(
     return StatusResponse(success=True, message=msg, data=cc_pair_id)
 
 
-# Connector config keys that may be edited in-place after a connector is created.
-# Editing other keys (e.g. project_owner) could orphan already-indexed documents,
-# so we keep the allowlist scoped to filtering options.
-EDITABLE_CONNECTOR_CONFIG_KEYS = {
-    "include_code_files",
-    "code_file_patterns",
-    "include_path_patterns",
-    "exclude_path_patterns",
-}
-
-
 @router.put("/admin/cc-pair/{cc_pair_id}/connector-config")
 def update_cc_pair_connector_config(
     cc_pair_id: int,
-    update_request: CCConnectorConfigUpdateRequest,
+    update_request: GitlabFilterConfigUpdateRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
@@ -637,25 +626,30 @@ def update_cc_pair_connector_config(
             "CC Pair not found for current user's permissions",
         )
 
-    invalid_keys = (
-        set(update_request.connector_specific_config) - EDITABLE_CONNECTOR_CONFIG_KEYS
-    )
-    if invalid_keys:
+    # The request schema carries GitLab-only filtering keys; writing them onto
+    # another connector type would break its next indexing run (the factory
+    # expands connector_specific_config into the connector constructor).
+    if cc_pair.connector.source != DocumentSource.GITLAB:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"These connector config keys cannot be edited: {sorted(invalid_keys)}",
+            "Connector config editing is only supported for GitLab connectors",
         )
+
+    config_updates = update_request.model_dump(exclude_none=True)
+    if not config_updates:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "No config fields provided")
 
     updated_connector = update_connector_specific_config_fields(
         connector_id=cc_pair.connector.id,
-        config_updates=update_request.connector_specific_config,
+        config_updates=config_updates,
         db_session=db_session,
     )
     if updated_connector is None:
         raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "Connector not found")
 
     # The new filter only applies repo-wide after a fresh re-index; an incremental
-    # sync would otherwise only pick up files that change after this edit.
+    # sync would otherwise only pick up files that change after this edit. The
+    # config update above is only flushed, so this commit lands both atomically.
     mark_ccpair_with_indexing_trigger(cc_pair_id, IndexingMode.REINDEX, db_session)
 
     return StatusResponse(

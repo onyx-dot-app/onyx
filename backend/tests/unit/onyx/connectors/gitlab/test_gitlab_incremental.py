@@ -189,3 +189,29 @@ def test_exclude_glob_patterns_take_effect(local_repo: tuple[git.Repo, Path]) ->
     # Excluding *.py leaves only the Makefile from the code files.
     filtered = sorted(p.name for p in connector._get_filtered_files(None))
     assert filtered == ["Makefile"]
+
+
+def test_symlinks_are_never_indexed(
+    gitlab_connector: GitlabConnector, tmp_path: Path
+) -> None:
+    """A repo-controlled symlink must not leak files outside the checkout
+    (e.g. secret.py -> /etc/hostname) into the index."""
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    git.Repo.init(repo_path)
+    (repo_path / "real.py").write_text("print('ok')")
+
+    outside = tmp_path / "outside.py"
+    outside.write_text("host secret")
+    (repo_path / "leak.py").symlink_to(outside)
+
+    gitlab_connector.repo_path = repo_path
+
+    full_scan = sorted(p.name for p in gitlab_connector._get_filtered_files(None))
+    assert full_scan == ["real.py"]
+
+    # Incremental candidate paths go through the same guard.
+    candidates = sorted(
+        p.name for p in gitlab_connector._get_filtered_files({"real.py", "leak.py"})
+    )
+    assert candidates == ["real.py"]
