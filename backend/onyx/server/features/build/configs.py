@@ -114,6 +114,23 @@ SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "808
 # read container env), so a compose change here desyncs the probe.
 SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8081"))
 
+# Bind host for the mitmproxy listener and the healthz server. Defaults to
+# IPv4 0.0.0.0; set to "::" on IPv6-only clusters so the kubelet probe and
+# sandbox traffic reach the pod on its IPv6 address.
+SANDBOX_PROXY_LISTEN_HOST = os.environ.get(
+    "SANDBOX_PROXY_LISTEN_HOST",
+    "0.0.0.0",  # noqa: S104 — container scope
+)
+
+# mitmproxy's `block` addon rejects clients connecting from "global" (public)
+# IPs by default so the proxy can't be used as an open relay. IPv6-only
+# clusters assign pods global-unicast addresses (there is no IPv6 equivalent
+# of RFC1918 in common use), so every sandbox client would be blocked. Only
+# enable this when pod ingress is already restricted (e.g. by NetworkPolicy).
+SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS = (
+    os.environ.get("SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS", "false").lower() == "true"
+)
+
 # The CA Secret lives here; the CA ConfigMap is projected into SANDBOX_NAMESPACE
 # so sandboxes can mount it (K8s does not allow cross-namespace ConfigMap
 # mounts).
