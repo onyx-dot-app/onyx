@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import model_validator
@@ -16,11 +14,8 @@ class SearchRequest(BaseModel):
     sources: list[DocumentSource] | None = None
     document_sets: list[str] | None = None
     tags: list[Tag] | None = None
-    # Sugar for an open-ended updated_at_range; ignored when updated_at_range
-    # is set. Naive (timezone-less) values are treated as UTC server-side.
-    time_cutoff: datetime | None = None
     # Inclusive windows on document creation / last-update time. Naive bounds
-    # are treated as UTC.
+    # are treated as UTC server-side.
     created_at_range: TimeRange | None = None
     updated_at_range: TimeRange | None = None
 

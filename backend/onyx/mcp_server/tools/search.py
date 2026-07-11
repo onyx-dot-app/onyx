@@ -205,13 +205,16 @@ async def search_indexed_documents(
             )
             return None
 
+    parsed_updated_at_range = _parse_time_range("updated_at_range", updated_at_range)
+    if parsed_updated_at_range is None and parsed_cutoff is not None:
+        parsed_updated_at_range = TimeRange(start=parsed_cutoff)
+
     request = SearchRequest(
         query=query,
         sources=source_type_enums,
         document_sets=document_set_names,
-        time_cutoff=parsed_cutoff,
         created_at_range=_parse_time_range("created_at_range", created_at_range),
-        updated_at_range=_parse_time_range("updated_at_range", updated_at_range),
+        updated_at_range=parsed_updated_at_range,
         skip_query_expansion=skip_query_expansion,
     )
 

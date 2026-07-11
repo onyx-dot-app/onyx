@@ -11,7 +11,6 @@ directly — a lighter-weight flow with optional query expansion.
 """
 
 import json
-from datetime import timezone
 from typing import cast
 
 from fastapi import APIRouter
@@ -24,7 +23,6 @@ from onyx.chat.emitter import NullEmitter
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import PersonaSearchInfo
-from onyx.context.search.models import TimeRange
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import can_user_access_llm_provider
@@ -124,20 +122,12 @@ def search(
         llm_provider_api_key=llm.config.api_key,
     )
 
-    # 3. Build filters. time_cutoff is sugar for an open-ended
-    # updated_at_range; naive values are treated as UTC.
-    updated_at_range = request.updated_at_range
-    if updated_at_range is None and request.time_cutoff is not None:
-        time_cutoff = request.time_cutoff
-        if time_cutoff.tzinfo is None:
-            time_cutoff = time_cutoff.replace(tzinfo=timezone.utc)
-        updated_at_range = TimeRange(start=time_cutoff)
-
+    # 3. Build filters.
     base_filters = BaseFilters(
         source_type=request.sources,
         document_set=request.document_sets,
         created_at_range=request.created_at_range,
-        updated_at_range=updated_at_range,
+        updated_at_range=request.updated_at_range,
         tags=request.tags,
     )
 
