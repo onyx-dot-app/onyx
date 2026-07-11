@@ -103,6 +103,10 @@ class ScrapeSessionContext:
         self.to_visit = to_visit
         self.url_rewrites = url_rewrites or {}
         self.visited_links: set[str] = set()
+        # Ids already emitted this run. Rewrite rules can map two fetched URLs
+        # onto the same storage id; only the first one wins (a duplicate id
+        # would overwrite the earlier document in the index).
+        self.emitted_doc_ids: set[str] = set()
         self.content_hashes: set[int] = set()
 
         self.at_least_one_doc: bool = False
@@ -734,6 +738,15 @@ class WebConnector(LoadConnector, SlimConnector):
                         continue
 
                     if result.doc:
+                        if result.doc.id in session_ctx.emitted_doc_ids:
+                            logger.warning(
+                                "Skipping %s: rewritten document id %s was "
+                                "already emitted by another URL this run",
+                                initial_url,
+                                result.doc.id,
+                            )
+                            continue
+                        session_ctx.emitted_doc_ids.add(result.doc.id)
                         batch.append(
                             SlimDocument(id=result.doc.id) if slim else result.doc
                         )
