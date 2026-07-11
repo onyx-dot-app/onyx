@@ -95,12 +95,8 @@ class OnyxLumApps:
             time.monotonic() + max(expires_in, 120) - _TOKEN_REFRESH_SKEW_SECONDS
         )
 
-    def _bearer(self, force_refresh: bool = False) -> str:
-        if (
-            force_refresh
-            or not self._token
-            or time.monotonic() >= self._token_expiry_monotonic
-        ):
+    def _bearer(self) -> str:
+        if not self._token or time.monotonic() >= self._token_expiry_monotonic:
             self._mint_token()
         assert self._token is not None
         return self._token
@@ -115,22 +111,37 @@ class OnyxLumApps:
         json_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         url = f"{self.base_url}{path}"
+        last_network_error: requests.RequestException | None = None
         for attempt in range(_MAX_RETRIES):
-            force = attempt == 1  # re-mint once after a 401
-            response = self._session.request(
-                method,
-                url,
-                params=params,
-                json=json_body,
-                headers={
-                    "Authorization": f"Bearer {self._bearer(force_refresh=force)}",
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
-                timeout=self.timeout,
-            )
+            try:
+                response = self._session.request(
+                    method,
+                    url,
+                    params=params,
+                    json=json_body,
+                    headers={
+                        "Authorization": f"Bearer {self._bearer()}",
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    },
+                    timeout=self.timeout,
+                )
+            except requests.RequestException as e:
+                # Connection resets / timeouts are as transient as a 5xx —
+                # back off and retry instead of aborting the indexing attempt.
+                last_network_error = e
+                delay = min(2.0**attempt, _MAX_BACKOFF_SECONDS)
+                logger.warning(
+                    "LumApps network error on %s (%s); retry %d in %.1fs",
+                    path,
+                    e,
+                    attempt + 1,
+                    delay,
+                )
+                time.sleep(delay)
+                continue
             if response.status_code == 401 and attempt == 0:
-                self._token = None  # expired/invalid; retry forces a re-mint
+                self._token = None  # expired/invalid; next _bearer() re-mints
                 continue
             if response.status_code == 429 or response.status_code >= 500:
                 delay = _backoff_seconds(response, attempt)
@@ -146,7 +157,8 @@ class OnyxLumApps:
             if response.status_code != 200:
                 raise LumAppsClientError(response.status_code, response.text)
             return response.json()
-        raise LumAppsClientError(503, f"Exhausted retries calling {path}")
+        detail = f": {last_network_error}" if last_network_error else ""
+        raise LumAppsClientError(503, f"Exhausted retries calling {path}{detail}")
 
     # ---------------------------------------------------------------- methods
     def list_content(self, body: dict[str, Any]) -> dict[str, Any]:

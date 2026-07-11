@@ -13,6 +13,17 @@ def test_slugify_family_key() -> None:
     assert slugify_family_key("") == "metadata"
 
 
+def test_slugify_family_key_non_latin_uses_fallback() -> None:
+    """Fully non-Latin names slugify to nothing; the per-family fallback keeps
+    distinct families from collapsing into one key."""
+    assert slugify_family_key("Страна", fallback="metadata_123") == "metadata_123"
+    assert slugify_family_key("部門", fallback="metadata_456") == "metadata_456"
+    # distinct families -> distinct keys
+    assert slugify_family_key("Страна", fallback="metadata_1") != slugify_family_key(
+        "Отдел", fallback="metadata_2"
+    )
+
+
 def test_pick_lang() -> None:
     val = {"en": "Hello", "fr": "Bonjour"}
     assert pick_lang(val, "fr") == "Bonjour"

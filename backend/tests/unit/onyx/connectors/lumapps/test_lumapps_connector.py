@@ -3,6 +3,9 @@ from datetime import timezone
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.lumapps.connector import LumAppsConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
@@ -75,6 +78,45 @@ def test_slim_docs_exclude_non_live_content() -> None:
     assert len(batches) == 1
     assert [doc.id for doc in batches[0] if isinstance(doc, SlimDocument)] == ["live-1"]
     assert all(isinstance(doc, SlimDocument) for doc in batches[0])
+
+
+def test_slim_docs_use_uid_fallback_like_indexing() -> None:
+    """An item with only a uid is indexed under that uid, so the slim set must
+    carry it too — otherwise pruning would delete a live document."""
+    connector = _make_connector(
+        {
+            "items": [
+                {"id": "live-1", "status": "LIVE"},
+                {"uid": "uid-only-1", "status": "LIVE"},
+            ],
+            "more": False,
+        }
+    )
+
+    batches = list(connector.retrieve_all_slim_docs())
+
+    assert [doc.id for doc in batches[0] if isinstance(doc, SlimDocument)] == [
+        "live-1",
+        "uid-only-1",
+    ]
+
+
+def test_http_base_url_is_rejected() -> None:
+    """The client sends credentials on every token request; plain http would
+    leak them in transit."""
+    connector = LumAppsConnector(
+        base_url="http://example.cell.lumapps.com",
+        organization_id="org-1",
+    )
+    connector.load_credentials(
+        {
+            "lumapps_application_id": "app",
+            "lumapps_api_key": "key",
+            "lumapps_service_user": "svc@example.com",
+        }
+    )
+    with pytest.raises(ConnectorValidationError, match="https"):
+        connector.validate_connector_settings()
 
 
 def test_list_body_requests_live_status_from_api() -> None:

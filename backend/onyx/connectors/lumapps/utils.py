@@ -10,13 +10,16 @@ _CONTENT_KEYS = {"html", "content", "longText", "text", "body", "value"}
 _LANG_CODE_RE = re.compile(r"^[a-z]{2}(?:[-_][A-Za-z]{2,4})?$")
 
 
-def slugify_family_key(name: str) -> str:
+def slugify_family_key(name: str, fallback: str = "metadata") -> str:
     """Turn a metadata family display name into a stable Onyx metadata key.
 
-    e.g. "News type" -> "news_type", "Country" -> "country".
+    e.g. "News type" -> "news_type", "Country" -> "country". Names with no
+    ASCII alphanumerics (e.g. non-Latin family names) slugify to nothing and
+    return ``fallback`` instead — callers pass a per-family fallback so
+    distinct families don't collapse into one key.
     """
     cleaned = re.sub(r"[^a-z0-9]+", "_", (name or "").strip().lower()).strip("_")
-    return cleaned or "metadata"
+    return cleaned or fallback
 
 
 def pick_lang(value: Any, preferred_lang: str, fallback_lang: str = "en") -> str:

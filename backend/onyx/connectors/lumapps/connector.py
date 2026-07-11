@@ -39,7 +39,10 @@ _CONTENT_FIELDS = (
     "updatedAt,publicationDate,metadata,instance,authorId,authorDetails(email),"
     "template,properties),cursor,more"
 )
-_SLIM_FIELDS = "items(id,status),cursor,more"
+# Must request every field the indexing path can use as the document id
+# (id with uid fallback) — anything indexed but missing from the slim set
+# would be wrongly pruned.
+_SLIM_FIELDS = "items(id,uid,status),cursor,more"
 _SLIM_PAGE_SIZE = 100
 
 # Only published content is ingested. The API-side `status` filter in
@@ -110,6 +113,14 @@ class LumAppsConnector(CheckpointedConnector[LumAppsCheckpoint], SlimConnector):
     def _get_client(self) -> OnyxLumApps:
         if self._client is not None:
             return self._client
+        # The client exchanges the application id + API key via HTTP Basic when
+        # minting tokens; over plain http those credentials would travel in
+        # cleartext. LumApps is SaaS-only, so https is always available.
+        if not self.base_url.lower().startswith("https://"):
+            raise ConnectorValidationError(
+                "LumApps base URL must use https:// (credentials are sent with "
+                "every token request)."
+            )
         if not (self._application_id and self._api_key and self._service_user):
             raise ConnectorMissingCredentialError("LumApps")
         self._client = OnyxLumApps(
@@ -198,8 +209,11 @@ class LumAppsConnector(CheckpointedConnector[LumAppsCheckpoint], SlimConnector):
             value_label = pick_lang(meta.get("name"), self.lang)
             family_id = str(meta.get("familyKey") or meta.get("parent") or "")
             family_name = self._family_name(family_id, client) if family_id else ""
+            # Non-Latin family names slugify to nothing; fall back to the stable
+            # family id so distinct families never collapse into one key.
+            fallback_key = f"metadata_{family_id}" if family_id else "metadata"
             self._label_map[metadata_id] = (
-                slugify_family_key(family_name),
+                slugify_family_key(family_name, fallback=fallback_key),
                 value_label,
             )
         return resolve_metadata_labels(metadata_ids, self._label_map)
@@ -313,10 +327,12 @@ class LumAppsConnector(CheckpointedConnector[LumAppsCheckpoint], SlimConnector):
                 )
             )
             items = response.get("items") or []
+            # Same id fallback as _content_to_document — a doc indexed under its
+            # uid must appear in the slim set or pruning would delete it.
             batch: list[SlimDocument | HierarchyNode] = [
-                SlimDocument(id=str(item.get("id")))
+                SlimDocument(id=str(item.get("id") or item.get("uid")))
                 for item in items
-                if item.get("id") and _is_live(item)
+                if (item.get("id") or item.get("uid")) and _is_live(item)
             ]
             if batch:
                 yield batch
