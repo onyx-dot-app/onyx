@@ -70,6 +70,9 @@ class TimeRange(BaseModel):
     start: datetime | None = None
     end: datetime | None = None
 
+    def has_bounds(self) -> bool:
+        return self.start is not None or self.end is not None
+
 
 class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None
