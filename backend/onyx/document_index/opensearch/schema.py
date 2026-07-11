@@ -24,6 +24,7 @@ from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
     EF_CONSTRUCTION,
     EF_SEARCH,
+    OPENSEARCH_KNN_DERIVED_SOURCE_ENABLED,
     M,
 )
 from onyx.document_index.opensearch.string_filtering import (
@@ -599,7 +600,7 @@ class DocumentSchema:
         if OPENSEARCH_INDEX_NUM_REPLICAS is not None:
             number_of_replicas = OPENSEARCH_INDEX_NUM_REPLICAS
 
-        return {
+        settings: dict[str, Any] = {
             "index": {
                 "number_of_shards": number_of_shards,
                 "number_of_replicas": number_of_replicas,
@@ -608,3 +609,8 @@ class DocumentSchema:
                 "knn.algo_param.ef_search": EF_SEARCH,
             }
         }
+        # Only emit the key when opting out so settings payloads for the
+        # default configuration stay unchanged.
+        if not OPENSEARCH_KNN_DERIVED_SOURCE_ENABLED:
+            settings["index"]["knn.derived_source.enabled"] = False
+        return settings

@@ -587,7 +587,10 @@ class OpenSearchIndexClient(OpenSearchClient):
             aws_region=aws_region,
             aws_service=aws_service,
         )
-        self._index_name = index_name
+        # OpenSearch index names must be lowercase; embedding model names (the
+        # main input to index naming) can carry uppercase characters, which
+        # would otherwise fail index creation.
+        self._index_name = index_name.lower()
         self._emit_metrics = emit_metrics
         logger.debug(
             "OpenSearch client created successfully for index %s.",
