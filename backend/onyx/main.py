@@ -140,6 +140,7 @@ from onyx.server.manage.voice.api import admin_router as voice_admin_router
 from onyx.server.manage.voice.user_api import router as voice_router
 from onyx.server.manage.voice.websocket_api import router as voice_websocket_router
 from onyx.server.manage.web_search.api import admin_router as web_search_admin_router
+from onyx.server.metrics.connector_state_metrics import register_connector_state_metrics
 from onyx.server.metrics.postgres_connection_pool import (
     setup_postgres_connection_pool_metrics,
 )
@@ -358,6 +359,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     # Register pool metrics now that engines are created.
     # HTTP instrumentation is set up earlier in get_application() since it
     # adds middleware (which Starlette forbids after the app has started).
+    register_connector_state_metrics()
     setup_postgres_connection_pool_metrics(
         engines={
             "sync": SqlEngine.get_engine(),

@@ -1,7 +1,10 @@
 import json
+import time
 from typing import Any
 
 from mcp.client.auth import OAuthClientProvider
+from prometheus_client import Counter
+from prometheus_client import Histogram
 
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType
@@ -20,6 +23,19 @@ from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# MCP client metrics (Onyx calling external MCP servers)
+MCP_CLIENT_TOOL_TOTAL = Counter(
+    "onyx_mcp_client_tool_calls_total",
+    "External MCP tool calls made by Onyx",
+    ["server_name", "tool_name", "status"],  # status: success, auth_error, error
+)
+MCP_CLIENT_TOOL_LATENCY = Histogram(
+    "onyx_mcp_client_tool_latency_seconds",
+    "External MCP tool call latency",
+    ["server_name", "tool_name"],
+    buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0),
+)
 
 # Headers that cannot be overridden by user requests to prevent security issues
 # Host header is particularly critical - it can be used for Host Header Injection attacks
@@ -129,6 +145,8 @@ class MCPTool(Tool[None]):
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the MCP tool by calling the MCP server"""
+        _start = time.monotonic()
+        _server = self.mcp_server.name
         try:
             # Build headers with proper precedence:
             # 1. Start with additional headers from API request (filled in first, excluding denylisted)
@@ -255,6 +273,12 @@ class MCPTool(Tool[None]):
                 auth=auth,
             )
 
+            MCP_CLIENT_TOOL_LATENCY.labels(
+                server_name=_server, tool_name=self._name
+            ).observe(time.monotonic() - _start)
+            MCP_CLIENT_TOOL_TOTAL.labels(
+                server_name=_server, tool_name=self._name, status="success"
+            ).inc()
             logger.info("MCP tool '%s' executed successfully", self._name)
 
             # Format the tool result for response
@@ -283,6 +307,9 @@ class MCPTool(Tool[None]):
             )
 
         except Exception as e:
+            MCP_CLIENT_TOOL_LATENCY.labels(
+                server_name=_server, tool_name=self._name
+            ).observe(time.monotonic() - _start)
             error_str = str(e).lower()
             logger.error("Failed to execute MCP tool '%s': %s", self._name, e)
 
@@ -305,6 +332,11 @@ class MCPTool(Tool[None]):
             )
 
             if is_auth_error:
+                MCP_CLIENT_TOOL_TOTAL.labels(
+                    server_name=_server,
+                    tool_name=self._name,
+                    status="auth_error",
+                ).inc()
                 auth_error_msg = (
                     f"Authentication failed for the {self._name} tool from {self.mcp_server.name}. "
                     f"Please use the MCP dropdown in the chat bar to update your credentials "
@@ -312,6 +344,11 @@ class MCPTool(Tool[None]):
                 )
                 error_result = {"error": auth_error_msg}
             else:
+                MCP_CLIENT_TOOL_TOTAL.labels(
+                    server_name=_server,
+                    tool_name=self._name,
+                    status="error",
+                ).inc()
                 error_result = {"error": f"Tool execution failed: {str(e)}"}
 
             llm_facing_response = json.dumps(error_result)
