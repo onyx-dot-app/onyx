@@ -27,6 +27,7 @@ from onyx.prompts.tool_prompts import TOOL_SECTION_HEADER
 from onyx.prompts.tool_prompts import WEB_SEARCH_GUIDANCE
 from onyx.prompts.tool_prompts import WEB_SEARCH_SITE_DISABLED_GUIDANCE
 from onyx.prompts.user_info import BASIC_INFORMATION_PROMPT
+from onyx.prompts.user_info import ORGANIZATION_PROFILE_PROMPT
 from onyx.prompts.user_info import TEAM_INFORMATION_PROMPT
 from onyx.prompts.user_info import USER_INFORMATION_HEADER
 from onyx.prompts.user_info import USER_MEMORIES_PROMPT
@@ -163,6 +164,17 @@ def _build_user_information_section(
                     user_name=ctx.user_info.name or "",
                     user_email=ctx.user_info.email or "",
                     user_role=role_line,
+                )
+            )
+
+        if ctx.user_info.organization_profile:
+            formatted_profile = "\n".join(
+                f"- {label}: {value}"
+                for label, value in ctx.user_info.organization_profile.items()
+            )
+            sections.append(
+                ORGANIZATION_PROFILE_PROMPT.format(
+                    organization_profile=formatted_profile
                 )
             )
 

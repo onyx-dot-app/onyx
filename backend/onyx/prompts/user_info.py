@@ -12,6 +12,13 @@ USER_ROLE_PROMPT = """
 User role: {user_role}
 """.lstrip()
 
+# Organization profile comes from the company identity provider (directory).
+ORGANIZATION_PROFILE_PROMPT = """
+## Organization Profile
+Directory information about the user from the company identity provider. Rely on it when the answer depends on the user's location or position (e.g. country-specific HR policies, office specifics):
+{organization_profile}
+""".lstrip()
+
 # Team information should be a paragraph style description of the user's team.
 TEAM_INFORMATION_PROMPT = """
 ## Team Information
