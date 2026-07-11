@@ -408,7 +408,13 @@ class GoogleDriveConnector(
 
         # Best guess: keep the pasted URL's type if it has one; a ?id= link has none.
         if parse_qs(parsed.query).get("id"):
-            normalized = f"https://drive.google.com/file/d/{file_id}"
+            normalized = onyx_document_id_from_drive_file(
+                {
+                    WEB_VIEW_LINK_KEY: _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE.format(
+                        file_id
+                    )
+                }
+            ).rstrip("/")
         else:
             normalized = onyx_document_id_from_drive_file(
                 {WEB_VIEW_LINK_KEY: url, "id": file_id}
