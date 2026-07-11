@@ -8,17 +8,30 @@ Each method calls the API server through the same ``user.headers`` /
 
 from __future__ import annotations
 
-import json
-from collections.abc import Iterator
 from typing import Any
+from typing import NamedTuple
 from uuid import UUID
 
-import httpx
-
+from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SharingScope
+from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
+from onyx.server.features.build.models import UploadResponse
+from onyx.server.features.build.sandbox.models import DirectoryListing
+from onyx.server.features.build.session.models import DetailedSessionResponse
+from onyx.server.features.build.session.models import MessageListResponse
+from onyx.server.features.build.session.models import MessageResponse
+from onyx.server.features.build.session.models import OpencodeHistorySnapshotResponse
+from onyx.server.features.build.session.models import SessionListResponse
+from onyx.server.features.build.session.models import SessionResponse
+from onyx.server.features.build.session.models import SnapshotResponse
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
+
+
+class SessionWithSandbox(NamedTuple):
+    session_id: UUID
+    sandbox_id: UUID
 
 
 def _sessions_url(*parts: str) -> str:
@@ -32,22 +45,6 @@ def _build_url(*parts: str) -> str:
     return f"{API_SERVER_URL}/build/" + "/".join(parts)
 
 
-def _parse_sse_lines(response: httpx.Response) -> Iterator[dict[str, Any]]:
-    """Yield decoded JSON payloads from an SSE stream.
-
-    The send-message endpoint emits Server-Sent Events: ``data: {...}\\n\\n``.
-    Lines without a ``data:`` prefix (comments, retry hints) are skipped.
-    """
-    for raw_line in response.iter_lines():
-        if not raw_line:
-            continue
-        if raw_line.startswith("data:"):
-            payload = raw_line[len("data:") :].strip()
-            if not payload:
-                continue
-            yield json.loads(payload)
-
-
 class BuildSessionManager:
     """Static wrapper around the build-mode session HTTP API."""
 
@@ -57,7 +54,7 @@ class BuildSessionManager:
         *,
         headless: bool = True,
         **kwargs: Any,
-    ) -> dict[str, Any]:
+    ) -> DetailedSessionResponse:
         # The endpoint returns the user's pre-provisioned empty session if
         # one exists. Tests need isolation per call, so delete any existing
         # empty session before creating fresh.
@@ -86,67 +83,73 @@ class BuildSessionManager:
                 f"POST /build/sessions failed: {response.status_code} {response.reason_phrase} "
                 f"— body: {response.text!r} (user_id={user.id}, role={user.role})"
             )
-        return response.json()
+        return DetailedSessionResponse.model_validate(response.json())
 
     @staticmethod
-    def list_sessions(user: DATestUser) -> list[dict[str, Any]]:
+    def create_with_sandbox(
+        user: DATestUser,
+        **kwargs: Any,
+    ) -> SessionWithSandbox:
+        """Create a session and return ``(session_id, sandbox_id)``.
+
+        Asserts the response carries a RUNNING sandbox.
+        """
+        session = BuildSessionManager.create(user, **kwargs)
+        sandbox = session.sandbox
+        assert sandbox is not None, (
+            f"session create did not return a sandbox: {session!r}"
+        )
+        assert sandbox.status == SandboxStatus.RUNNING, (
+            f"session create returned a non-RUNNING sandbox: {sandbox!r}"
+        )
+        return SessionWithSandbox(
+            session_id=UUID(session.id), sandbox_id=UUID(sandbox.id)
+        )
+
+    @staticmethod
+    def list_sessions(user: DATestUser) -> list[SessionResponse]:
         response = client.get(
             _sessions_url(),
             headers=user.headers,
             cookies=user.cookies,
         )
         response.raise_for_status()
-        body = response.json()
-        # Endpoint returns ``SessionListResponse``; sessions live under
-        # the ``sessions`` key.
-        if isinstance(body, dict) and "sessions" in body:
-            sessions = body["sessions"]
-            assert isinstance(sessions, list)
-            return sessions
-        assert isinstance(body, list)
-        return body
+        return SessionListResponse.model_validate(response.json()).sessions
 
     @staticmethod
-    def get(user: DATestUser, session_id: UUID) -> dict[str, Any]:
-        response = client.get(
-            _sessions_url(str(session_id)),
-            headers=user.headers,
-            cookies=user.cookies,
-        )
-        response.raise_for_status()
-        return response.json()
-
-    @staticmethod
-    def delete(user: DATestUser, session_id: UUID) -> None:
-        response = client.delete(
-            _sessions_url(str(session_id)),
-            headers=user.headers,
-            cookies=user.cookies,
-        )
-        response.raise_for_status()
-
-    @staticmethod
-    def restore(user: DATestUser, session_id: UUID) -> dict[str, Any]:
+    def restore(user: DATestUser, session_id: UUID) -> DetailedSessionResponse:
         response = client.post(
             _sessions_url(str(session_id), "restore"),
             headers=user.headers,
             cookies=user.cookies,
         )
         response.raise_for_status()
-        return response.json()
+        return DetailedSessionResponse.model_validate(response.json())
 
     @staticmethod
-    def send_message(
-        user: DATestUser,
-        session_id: UUID,
-        content: str,
-    ) -> Iterator[dict[str, Any]]:
-        turn = BuildSessionManager.start_turn(user, session_id, content)
-        yield from BuildSessionManager.stream_turn_events(
-            user,
-            session_id,
-            UUID(turn["turn_id"]),
+    def create_snapshot(user: DATestUser, session_id: UUID) -> SnapshotResponse | None:
+        """POST /snapshot; ``None`` on 204 (session has no outputs to snapshot)."""
+        response = client.post(
+            _sessions_url(str(session_id), "snapshot"),
+            headers=user.headers,
+            cookies=user.cookies,
         )
+        if response.status_code == 204:
+            return None
+        response.raise_for_status()
+        return SnapshotResponse.model_validate(response.json())
+
+    @staticmethod
+    def create_opencode_history_snapshot(
+        user: DATestUser, session_id: UUID
+    ) -> OpencodeHistorySnapshotResponse:
+        response = client.post(
+            _sessions_url(str(session_id), "opencode-history-snapshot"),
+            headers=user.headers,
+            cookies=user.cookies,
+        )
+        response.raise_for_status()
+        return OpencodeHistorySnapshotResponse.model_validate(response.json())
 
     @staticmethod
     def start_turn(
@@ -155,7 +158,7 @@ class BuildSessionManager:
         content: str,
         *,
         client_request_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> InteractiveTurnResponse:
         url = _build_url("sessions", str(session_id), "send-message")
         body: dict[str, Any] = {"content": content}
         if client_request_id is not None:
@@ -167,47 +170,33 @@ class BuildSessionManager:
             cookies=user.cookies,
         )
         response.raise_for_status()
-        return response.json()
+        return InteractiveTurnResponse.model_validate(response.json())
 
     @staticmethod
     def get_active_turn(
         user: DATestUser,
         session_id: UUID,
-    ) -> dict[str, Any] | None:
+    ) -> InteractiveTurnResponse | None:
         response = client.get(
             _build_url("sessions", str(session_id), "turns", "active"),
             headers=user.headers,
             cookies=user.cookies,
         )
         response.raise_for_status()
-        return response.json()
+        body = response.json()
+        return (
+            InteractiveTurnResponse.model_validate(body) if body is not None else None
+        )
 
     @staticmethod
-    def stream_turn_events(
-        user: DATestUser,
-        session_id: UUID,
-        turn_id: UUID,
-    ) -> Iterator[dict[str, Any]]:
-        with client.stream(
-            "GET",
-            _build_url("sessions", str(session_id), "turns", str(turn_id), "events"),
-            headers=user.headers,
-            cookies=user.cookies,
-        ) as response:
-            if response.status_code in (404, 409):
-                return
-            response.raise_for_status()
-            yield from _parse_sse_lines(response)
-
-    @staticmethod
-    def list_messages(user: DATestUser, session_id: UUID) -> list[dict[str, Any]]:
+    def list_messages(user: DATestUser, session_id: UUID) -> list[MessageResponse]:
         response = client.get(
             _build_url("sessions", str(session_id), "messages"),
             headers=user.headers,
             cookies=user.cookies,
         )
         response.raise_for_status()
-        return response.json()["messages"]
+        return MessageListResponse.model_validate(response.json()).messages
 
     @staticmethod
     def upload_file(
@@ -215,7 +204,7 @@ class BuildSessionManager:
         session_id: UUID,
         filename: str,
         content: bytes,
-    ) -> dict[str, Any]:
+    ) -> UploadResponse:
         # File-upload endpoints require multipart; the session cookie still
         # works but Content-Type must be left to ``requests``.
         headers = {k: v for k, v in user.headers.items() if k.lower() != "content-type"}
@@ -226,7 +215,7 @@ class BuildSessionManager:
             cookies=user.cookies,
         )
         response.raise_for_status()
-        return response.json()
+        return UploadResponse.model_validate(response.json())
 
     @staticmethod
     def delete_file(
@@ -246,7 +235,7 @@ class BuildSessionManager:
         user: DATestUser,
         session_id: UUID,
         path: str = "",
-    ) -> dict[str, Any]:
+    ) -> DirectoryListing:
         response = client.get(
             _sessions_url(str(session_id), "files"),
             params={"path": path} if path else None,
@@ -254,7 +243,7 @@ class BuildSessionManager:
             cookies=user.cookies,
         )
         response.raise_for_status()
-        return response.json()
+        return DirectoryListing.model_validate(response.json())
 
     @staticmethod
     def download_artifact(

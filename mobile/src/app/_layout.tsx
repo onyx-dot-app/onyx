@@ -5,25 +5,29 @@ import { useEffect } from "react";
 import { useColorScheme } from "react-native";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { vars } from "nativewind";
 import { varsLight, varsDark } from "@onyx-ai/shared/native";
+import { PortalHost } from "@rn-primitives/portal";
 
-import { persister, persistMaxAge, queryClient } from "@/query/client";
+import {
+  dehydrateOptions,
+  persister,
+  persistMaxAge,
+  queryClient,
+} from "@/query/client";
 import { bindAppStateFocus } from "@/query/focus";
 import { bindOnlineManager } from "@/query/online";
+import { SidebarProvider } from "@/components/sidebar";
+import { AuthGate } from "@/components/auth/AuthGate";
 
-// Show the native Onyx splash until the first frame is ready, then reveal the app.
 SplashScreen.preventAutoHideAsync();
 
-// Design tokens flow from @onyx-ai/shared. Web flips CSS variables via the `.dark`
-// class; React Native can't, so we supply the active palette at the app root through
-// NativeWind vars() and swap light/dark with the system color scheme. Semantic
-// classes (e.g. `bg-background-neutral-00`) reference these variables, so they adapt
-// automatically — no `dark:` modifiers at call-sites, exactly like web.
+// RN can't flip CSS vars like web, so the active palette is supplied via NativeWind vars() and swapped on system scheme.
 const lightTheme = vars(varsLight);
 const darkTheme = vars(varsDark);
 
@@ -32,15 +36,10 @@ export default function RootLayout() {
   const themeVars = colorScheme === "dark" ? darkTheme : lightTheme;
 
   useEffect(() => {
-    // Wire React Native connectivity + foreground state into TanStack Query so
-    // queries pause offline and refetch on reconnect / app resume.
     const unbindOnline = bindOnlineManager();
     const unbindFocus = bindAppStateFocus();
 
-    // No async init yet, so hide on the first render.
-    // TODO(Subash-Mohan): once useFonts lands, gate this behind a readiness flag
-    // (return null until ready) so text never flashes in the system font before
-    // custom fonts load.
+    // Fonts are embedded at build time (no runtime useFonts gate), so nothing to await before the first frame.
     void SplashScreen.hideAsync();
 
     return () => {
@@ -51,15 +50,27 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={themeVars} className="flex-1">
-      <SafeAreaProvider>
-        <PersistQueryClientProvider
-          client={queryClient}
-          persistOptions={{ persister, maxAge: persistMaxAge }}
-        >
-          <StatusBar style="auto" />
-          <Stack screenOptions={{ headerShown: false }} />
-        </PersistQueryClientProvider>
-      </SafeAreaProvider>
+      <KeyboardProvider>
+        <SafeAreaProvider>
+          <PersistQueryClientProvider
+            client={queryClient}
+            persistOptions={{
+              persister,
+              maxAge: persistMaxAge,
+              dehydrateOptions,
+            }}
+          >
+            {/* PortalHost is the last child of the themed root so the sidebar overlay renders above all screens while inheriting the vars() theme + insets. */}
+            <SidebarProvider>
+              <StatusBar style="auto" />
+              <AuthGate>
+                <Stack screenOptions={{ headerShown: false }} />
+              </AuthGate>
+              <PortalHost />
+            </SidebarProvider>
+          </PersistQueryClientProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

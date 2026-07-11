@@ -11,7 +11,7 @@ import type { ModelConfiguration } from "@/lib/languageModels/types";
 import * as Yup from "yup";
 import { useInitialValues } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   APIBaseField,
@@ -19,7 +19,7 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
-import { useCustomProviderNames } from "@/hooks/useLanguageModels";
+import { useCustomProviderNames } from "@/lib/languageModels/hooks";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import KeyValueInput, {
   KeyValue,
@@ -241,6 +241,7 @@ export default function CustomModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -263,6 +264,7 @@ export default function CustomModal({
         max_input_tokens: mc.max_input_tokens ?? null,
         supports_image_input: mc.supports_image_input,
         supports_reasoning: mc.supports_reasoning,
+        effectiveDisplayName: mc.effectiveDisplayName,
       })
     ) ?? [
       {
@@ -272,6 +274,7 @@ export default function CustomModal({
         max_input_tokens: null,
         supports_image_input: false,
         supports_reasoning: false,
+        effectiveDisplayName: "",
       },
     ],
     custom_config_list: existingLlmProvider?.custom_config
@@ -322,6 +325,7 @@ export default function CustomModal({
             max_input_tokens: mc.max_input_tokens ?? null,
             supports_image_input: mc.supports_image_input,
             supports_reasoning: false,
+            effectiveDisplayName: mc.display_name || mc.name,
           }));
 
         if (modelConfigurations.length === 0) {
@@ -336,9 +340,11 @@ export default function CustomModal({
         const customConfig = keyValueListToDict(values.custom_config_list);
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: (values as Record<string, unknown>).provider as string,
           values: {
             ...values,

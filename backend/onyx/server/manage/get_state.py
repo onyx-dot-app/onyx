@@ -5,6 +5,7 @@ import requests
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Response
+from fastapi.concurrency import run_in_threadpool
 
 from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled
@@ -16,14 +17,49 @@ from onyx.configs.constants import DEV_VERSION_PATTERN
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import STABLE_VERSION_PATTERN
 from onyx.db.auth import get_user_count
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.enums import SSOProviderType
+from onyx.db.sso_provider import fetch_sso_providers
 from onyx.server.manage.models import AllVersions
 from onyx.server.manage.models import AuthTypeResponse
 from onyx.server.manage.models import ContainerVersions
+from onyx.server.manage.models import SSOProviderOption
 from onyx.server.manage.models import VersionResponse
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
+from shared_configs.configs import MULTI_TENANT
 
 router = APIRouter()
+
+# GOOGLE_OAUTH and OIDC share the /auth/oidc router. SAML has its own. Keep in
+# sync with the router prefixes in oidc_multi.py and saml_multi.py.
+_SSO_AUTHORIZE_ROUTER = {
+    SSOProviderType.GOOGLE_OAUTH: "oidc",
+    SSOProviderType.OIDC: "oidc",
+    SSOProviderType.SAML: "saml",
+}
+
+
+def _fetch_sso_provider_options() -> list[SSOProviderOption]:
+    # Single-tenant BASIC only. /auth/type runs before any tenant context, so a
+    # multi-tenant lookup has no tenant to key on, and only a BASIC deployment
+    # renders the provider buttons (legacy oidc/saml auto-redirect to the one IdP
+    # and never consume this list), so the query is pure overhead elsewhere.
+    if MULTI_TENANT or AUTH_TYPE != AuthType.BASIC:
+        return []
+    with get_session_with_shared_schema() as db_session:
+        return [
+            SSOProviderOption(
+                name=provider.name,
+                display_name=provider.display_name,
+                provider_type=provider.provider_type,
+                authorize_url=(
+                    f"/api/auth/{_SSO_AUTHORIZE_ROUTER[provider.provider_type]}"
+                    f"/{provider.name}/authorize"
+                ),
+            )
+            for provider in fetch_sso_providers(db_session, enabled_only=True)
+        ]
 
 
 @router.get("/health", tags=PUBLIC_API_TAGS)
@@ -44,7 +80,10 @@ async def get_auth_type(response: Response) -> AuthTypeResponse:
     # Cache only after bootstrap; the first user flow depends on a live
     # has_users flag so avoid serving a stale redirect. no-store in that
     # case prevents an intermediate CDN with a default TTL from pinning
-    # has_users=false past the first signup.
+    # has_users=false past the first signup. sso_providers rides this cache
+    # too, so a disabled provider's button can linger up to 60s. Clicking it
+    # still fails closed (authorize resolves enabled_only), so this is a UX
+    # blip, not an access path. Reduce the window if that is too slow.
     response.headers["Cache-Control"] = (
         "public, max-age=60" if has_users else "no-store"
     )
@@ -56,6 +95,7 @@ async def get_auth_type(response: Response) -> AuthTypeResponse:
         password_min_length=get_security_settings().password_min_length,
         has_users=has_users,
         oauth_enabled=OAUTH_ENABLED,
+        sso_providers=await run_in_threadpool(_fetch_sso_provider_options),
     )
 
 

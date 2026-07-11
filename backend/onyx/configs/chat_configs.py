@@ -41,6 +41,27 @@ LLM_FIRST_CHUNK_MAX_RETRIES = max(
 # Socket-read timeout for deep-research report calls — bounds inter-chunk gaps
 # (including a zero-chunk stall), not total generation time.
 DR_REPORT_LLM_TIMEOUT_S = int(os.environ.get("DR_REPORT_LLM_TIMEOUT_S") or "60")
+# Timeout for non-streaming secondary LLM flows (e.g. search section-relevance
+# classification and section-expansion selection). These are short, low-effort
+# calls; the bound exists so a stalled provider connection fails fast into the
+# existing graceful fallback instead of hanging a worker until liveness kills it.
+SECONDARY_LLM_FLOW_TIMEOUT_S = int(
+    os.environ.get("SECONDARY_LLM_FLOW_TIMEOUT_S") or "60"
+)
+# Live buffer TTL. Refreshed per write.
+CHAT_STREAM_BUFFER_TTL_S = int(os.environ.get("CHAT_STREAM_BUFFER_TTL_S") or 3600)
+# Retention after the run is done.
+CHAT_STREAM_BUFFER_DONE_TTL_S = int(
+    os.environ.get("CHAT_STREAM_BUFFER_DONE_TTL_S") or 600
+)
+# Cap on compressed buffer bytes.
+CHAT_STREAM_BUFFER_MAX_BYTES = int(
+    os.environ.get("CHAT_STREAM_BUFFER_MAX_BYTES") or 16 * 1024 * 1024
+)
+# Resume poll cadence.
+CHAT_RESUME_POLL_INTERVAL_S = float(
+    os.environ.get("CHAT_RESUME_POLL_INTERVAL_S") or 0.2
+)
 # Weighting factor between vector and keyword Search; 1 for completely vector
 # search, 0 for keyword. Enforces a valid range of [0, 1]. A supplied value from
 # the env outside of this range will be clipped to the respective end of the

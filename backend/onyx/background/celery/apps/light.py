@@ -70,6 +70,7 @@ def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: AR
 def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
     task_name = getattr(sender, "name", None) or str(sender)
     on_celery_task_revoked(kwargs.get("task_id"), task_name)
+    app_base.on_task_revoked(**kwargs)
 
 
 @signals.task_rejected.connect
@@ -159,8 +160,8 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.doc_permission_syncing",
             "onyx.background.celery.tasks.docprocessing",
             "onyx.background.celery.tasks.opensearch_migration",
-            # Sandbox cleanup tasks (isolated in build feature)
-            "onyx.server.features.build.sandbox.tasks",
+            # Sandbox cleanup tasks (build feature)
+            "onyx.background.celery.tasks.build",
         ]
     )
 )

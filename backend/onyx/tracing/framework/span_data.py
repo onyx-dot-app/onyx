@@ -101,6 +101,7 @@ class GenerationSpanData(SpanData):
         "model_config",
         "usage",
         "time_to_first_action_seconds",
+        "tools",
     )
 
     def __init__(
@@ -112,6 +113,7 @@ class GenerationSpanData(SpanData):
         model_config: Mapping[str, Any] | None = None,
         usage: dict[str, Any] | None = None,
         time_to_first_action_seconds: float | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
     ):
         self.input = input
         self.output = output
@@ -120,6 +122,7 @@ class GenerationSpanData(SpanData):
         self.model_config = model_config
         self.usage = usage
         self.time_to_first_action_seconds = time_to_first_action_seconds
+        self.tools = tools
 
     @property
     def type(self) -> str:
@@ -135,4 +138,5 @@ class GenerationSpanData(SpanData):
             "model_config": self.model_config,
             "usage": self.usage,
             "time_to_first_action_seconds": self.time_to_first_action_seconds,
+            "tools": self.tools,
         }

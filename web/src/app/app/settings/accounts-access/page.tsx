@@ -4,8 +4,8 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { useAuthType } from "@/lib/hooks";
-import { AuthType } from "@/lib/constants";
-import { AccountsAccessSettings } from "@/refresh-pages/SettingsPage";
+import { AuthType } from "@/lib/auth/types";
+import { AccountsAccessSettings } from "@/views/SettingsPage";
 
 export default function AccountsAccessPage() {
   const router = useRouter();

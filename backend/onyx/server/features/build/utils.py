@@ -6,13 +6,16 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NotificationType
+from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.notification import create_notification
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.server.features.build.configs import ENABLE_CRAFT
 from onyx.server.features.build.configs import MAX_UPLOAD_FILE_SIZE_BYTES
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -109,9 +112,9 @@ CRAFT_HAS_USAGE_LIMITS = "craft-has-usage-limits"
 BUILD_MODE_FEATURE_ID = "build_mode"
 
 
-def is_onyx_craft_enabled(user: User) -> bool:
+def is_craft_available_for_deployment(user: User) -> bool:
     """
-    Check if Onyx Craft (Build Mode) is enabled for the user.
+    Check whether Onyx Craft (Build Mode) is available at the deployment level.
 
     Flag logic for "onyx-craft-enabled":
     - Flag = True → enabled (Onyx Craft is available)
@@ -119,6 +122,10 @@ def is_onyx_craft_enabled(user: User) -> bool:
     - Flag = null/not found → disabled (Onyx Craft is not available)
 
     Only explicit True enables the feature.
+
+    On the PostHog path the flag is evaluated for the requesting user, so
+    "deployment-level" assumes tenant-scoped flag targeting; per-user cohort
+    rollouts would make this reflect the requester's own bucket.
     """
     feature_flag_provider = get_default_feature_flag_provider()
 
@@ -126,10 +133,10 @@ def is_onyx_craft_enabled(user: User) -> bool:
     if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
         return ENABLE_CRAFT
 
-    # Use the feature flag provider
-    is_enabled = feature_flag_provider.feature_enabled(
+    is_enabled = feature_flag_provider.feature_enabled_for_user_tenant(
         ONYX_CRAFT_ENABLED_FLAG,
-        user.id,
+        user,
+        get_current_tenant_id(),
     )
 
     if is_enabled:
@@ -140,6 +147,39 @@ def is_onyx_craft_enabled(user: User) -> bool:
         return False
 
 
+def is_craft_enabled_for_user(
+    user: User,
+    deployment_available: bool | None = None,
+    workspace_default: bool | None = None,
+) -> bool:
+    """
+    Check if Onyx Craft (Build Mode) is enabled for the user: the deployment
+    must have Craft available AND the workspace policy must grant it — the
+    per-user override (User.craft_enabled) when set, else the workspace
+    default (Settings.craft_default_enabled).
+
+    Pass ``deployment_available`` / ``workspace_default`` when already
+    evaluated, to avoid redundant flag-provider / KV-store reads.
+    """
+    # Craft is identity-bound (per-user sandbox, library, scheduled tasks);
+    # all anonymous visitors share one identity, so they never get it.
+    if user.account_type == AccountType.ANONYMOUS:
+        return False
+
+    override = user.craft_enabled
+    if override is False:
+        return False
+    if override is None:
+        if workspace_default is None:
+            workspace_default = load_settings().craft_default_enabled
+        if not workspace_default:
+            return False
+
+    if deployment_available is None:
+        deployment_available = is_craft_available_for_deployment(user)
+    return deployment_available
+
+
 def ensure_build_mode_intro_notification(user: User, db_session: Session) -> None:
     """
     Create Build Mode intro notification for user if enabled and not already exists.
@@ -148,7 +188,7 @@ def ensure_build_mode_intro_notification(user: User, db_session: Session) -> Non
     to ensure each user only gets one notification.
     """
     # PostHog feature flag check - only show notification if Onyx Craft is enabled
-    if not is_onyx_craft_enabled(user):
+    if not is_craft_enabled_for_user(user):
         return
 
     # Create notification (will be skipped if already exists due to deduplication)

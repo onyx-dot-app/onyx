@@ -14,6 +14,8 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import DefaultAppMode
+from onyx.db.enums import SSOProviderType
+from onyx.db.enums import SupportedLanguage
 from onyx.db.enums import ThemePreference
 from onyx.db.memory import MAX_MEMORIES_PER_USER
 from onyx.db.models import AllowedAnswerFilters
@@ -49,6 +51,15 @@ class VersionResponse(BaseModel):
     backend_version: str
 
 
+class SSOProviderOption(BaseModel):
+    # No sensitive config. Allowed domains stay server-side so the public login
+    # page does not enumerate the participating companies' domains.
+    name: str
+    display_name: str
+    provider_type: SSOProviderType
+    authorize_url: str
+
+
 class AuthTypeResponse(BaseModel):
     auth_type: AuthType
     # specifies whether the current auth setup requires
@@ -59,6 +70,9 @@ class AuthTypeResponse(BaseModel):
     # whether there are any users in the system
     has_users: bool = True
     oauth_enabled: bool = False
+    # Enabled DB-backed SSO providers, one login button each. Empty on cloud and
+    # on instances with no provider rows, so the page falls back to auth_type.
+    sso_providers: list[SSOProviderOption] = []
 
 
 class UserSpecificAssistantPreference(BaseModel):
@@ -80,6 +94,7 @@ class UserPreferences(BaseModel):
     auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
     theme_preference: ThemePreference | None = None
+    language: str | None = None
     chat_background: str | None = None
     default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
 
@@ -128,9 +143,7 @@ class UserInfo(BaseModel):
     role: UserRole
     preferences: UserPreferences
     personalization: UserPersonalization = Field(default_factory=UserPersonalization)
-    oidc_expiry: datetime | None = None
-    current_token_created_at: datetime | None = None
-    current_token_expiry_length: int | None = None
+    token_expires_at: datetime | None = None
     is_cloud_superuser: bool = False
     team_name: str | None = None
     is_anonymous_user: bool | None = None
@@ -142,9 +155,7 @@ class UserInfo(BaseModel):
         cls,
         user: User,
         *,
-        track_external_idp_expiry: bool,
-        current_token_created_at: datetime | None = None,
-        expiry_length: int | None = None,
+        token_expires_at: datetime | None = None,
         is_cloud_superuser: bool = False,
         team_name: str | None = None,
         is_anonymous_user: bool | None = None,
@@ -171,6 +182,7 @@ class UserInfo(BaseModel):
                     auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,
                     theme_preference=user.theme_preference,
+                    language=user.language,
                     chat_background=user.chat_background,
                     default_app_mode=user.default_app_mode,
                     paste_as_tile=user.paste_as_tile,
@@ -181,13 +193,7 @@ class UserInfo(BaseModel):
                 )
             ),
             team_name=team_name,
-            # set to None if track_external_idp_expiry is False so that we avoid cases
-            # where they previously had this set + used OIDC, and now they switched to
-            # basic auth are now constantly getting redirected back to the login page
-            # since their "oidc_expiry is old"
-            oidc_expiry=user.oidc_expiry if track_external_idp_expiry else None,
-            current_token_created_at=current_token_created_at,
-            current_token_expiry_length=expiry_length,
+            token_expires_at=token_expires_at,
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
             tenant_info=tenant_info,
@@ -210,6 +216,13 @@ class UserRoleUpdateRequest(BaseModel):
     user_email: str
     new_role: UserRole
     explicit_override: bool = False
+
+
+class UserCraftAccessUpdateRequest(BaseModel):
+    user_emails: list[str] = Field(min_length=1)
+    # True/False = explicit override; None = clear the override (follow the
+    # workspace default).
+    craft_enabled: bool | None
 
 
 class UserRoleResponse(BaseModel):
@@ -240,6 +253,10 @@ class AutoScrollRequest(BaseModel):
 
 class ThemePreferenceRequest(BaseModel):
     theme_preference: ThemePreference
+
+
+class LanguageRequest(BaseModel):
+    language: SupportedLanguage
 
 
 class DefaultAppModeRequest(BaseModel):

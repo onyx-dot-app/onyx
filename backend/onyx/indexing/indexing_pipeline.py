@@ -63,10 +63,12 @@ from onyx.hooks.points.document_ingestion import DocumentIngestionOwner
 from onyx.hooks.points.document_ingestion import DocumentIngestionPayload
 from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
 from onyx.hooks.points.document_ingestion import DocumentIngestionSection
-from onyx.hooks.points.document_push import DocumentPushPayload
-from onyx.hooks.points.document_push import DocumentPushResponse
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
+from onyx.indexing.document_push import DocumentPushPayload
+from onyx.indexing.document_push import DocumentPushResponse
+from onyx.indexing.document_push import get_document_push_config
+from onyx.indexing.document_push import push_document_via_config
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
@@ -74,9 +76,10 @@ from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexingBatchAdapter
 from onyx.indexing.models import UpdatableChunkData
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.llm.factory import get_contextual_rag_llm_for_search_settings
 from onyx.llm.factory import get_default_llm_with_vision
-from onyx.llm.factory import get_llm_for_contextual_rag
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import LLMRateLimitError
 from onyx.llm.utils import llm_response_to_string
@@ -101,6 +104,11 @@ logger = setup_logger()
 
 MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
 MAX_IMAGE_WORKERS = 16
+
+# Contextual-RAG doc/chunk summaries are a short, non-reasoning task. On a reasoning
+# model the hidden reasoning tokens consume the small MAX_CONTEXT_TOKENS budget and the
+# visible summary returns empty, so disable reasoning for these calls.
+CONTEXTUAL_RAG_REASONING_EFFORT = ReasoningEffort.OFF
 
 
 class _DocsToUpdateResult(NamedTuple):
@@ -321,6 +329,7 @@ def get_docs_to_update(
     documents: list[Document],
     db_docs: list[DBDocument],
     ignore_timestamp_gate: bool = False,
+    ignore_content_hash_gate: bool = False,
 ) -> _DocsToUpdateResult:
     """Return the subset of documents that need to be re-indexed, plus their pre-computed hashes.
 
@@ -340,6 +349,9 @@ def get_docs_to_update(
       a timestamp advance is authoritative evidence of a change and must not be
       overridden (e.g. GDrive in-place image replacement: same image_file_id, but image
       bytes changed; hash would incorrectly say "skip").
+
+      Also skipped when ignore_content_hash_gate=True: a FUTURE/secondary build
+      must not consult the shared (PRESENT-only) hash, else writes cross-suppress.
 
     The returned doc_id_to_content_hash map contains hashes for all documents that
     will be indexed. These are persisted to the DB after successful vector DB writes
@@ -372,7 +384,7 @@ def get_docs_to_update(
         # A timestamp advance is authoritative evidence of a change — skip the hash
         # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
-        if not timestamp_advanced:
+        if not timestamp_advanced and not ignore_content_hash_gate:
             db_doc = id_to_db_doc_map.get(doc.id)
             if db_doc and db_doc.content_hash == content_hash:
                 logger.debug("Skipping document %r — content hash unchanged", doc.id)
@@ -394,6 +406,7 @@ def index_doc_batch_with_handler(
     tenant_id: str,
     adapter: IndexingBatchAdapter,
     ignore_time_skip: bool = False,
+    index_to_secondary: bool = False,
     from_beginning: bool = False,
     enable_contextual_rag: bool = False,
     llm: LLM | None = None,
@@ -408,6 +421,7 @@ def index_doc_batch_with_handler(
             tenant_id=tenant_id,
             adapter=adapter,
             ignore_time_skip=ignore_time_skip,
+            index_to_secondary=index_to_secondary,
             from_beginning=from_beginning,
             enable_contextual_rag=enable_contextual_rag,
             llm=llm,
@@ -494,6 +508,7 @@ def index_doc_batch_prepare(
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
     ignore_time_skip: bool = False,
+    index_to_secondary: bool = False,
 ) -> DocumentBatchPrepareContext | None:
     """Sets up the documents in the relational DB (source of truth) for permissions, metadata, etc.
     This preceeds indexing it into the actual document index."""
@@ -516,6 +531,7 @@ def index_doc_batch_prepare(
         documents=documents,
         db_docs=db_docs,
         ignore_timestamp_gate=ignore_time_skip,
+        ignore_content_hash_gate=index_to_secondary,
     )
     if len(updatable_docs) != len(documents):
         updatable_doc_ids = [doc.id for doc in updatable_docs]
@@ -732,15 +748,16 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             IndexingDocument(
                 **document.model_dump(),
                 processed_sections=[
-                    Section(
-                        type=section.type,
-                        text="" if isinstance(section, ImageSection) else section.text,
-                        link=section.link,
-                        image_file_id=(
-                            section.image_file_id
-                            if isinstance(section, ImageSection)
-                            else None
-                        ),
+                    (
+                        Section(
+                            type=section.type,
+                            text="",
+                            link=section.link,
+                            image_file_id=section.image_file_id,
+                            heading=section.heading,
+                        )
+                        if isinstance(section, ImageSection)
+                        else section.model_copy()
                     )
                     for section in document.sections
                 ],
@@ -760,14 +777,9 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
 
         for section in document.sections:
             if not isinstance(section, ImageSection):
-                processed_sections.append(
-                    Section(
-                        type=section.type,
-                        text=section.text or "",
-                        link=section.link,
-                        image_file_id=None,
-                    )
-                )
+                # model_copy keeps the concrete section (incl. a TabularSection's
+                # csv_file_id) intact; rebuilding as a base Section would drop it.
+                processed_sections.append(section.model_copy())
                 continue
 
             processed_section = Section(
@@ -775,6 +787,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 link=section.link,
                 image_file_id=section.image_file_id,
                 text="",
+                heading=section.heading,
             )
             processed_sections.append(processed_section)
 
@@ -860,7 +873,11 @@ def add_document_summaries(
         flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
         input_messages=[prompt_msg],
     ) as span_generation:
-        response = llm.invoke(prompt_msg, max_tokens=MAX_CONTEXT_TOKENS)
+        response = llm.invoke(
+            prompt_msg,
+            max_tokens=MAX_CONTEXT_TOKENS,
+            reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+        )
         record_llm_response(span_generation, response)
     doc_summary = llm_response_to_string(response)
 
@@ -909,7 +926,11 @@ def add_chunk_summaries(
             flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
             input_messages=[fallback_prompt],
         ) as span_generation:
-            response = llm.invoke(fallback_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+            response = llm.invoke(
+                fallback_prompt,
+                max_tokens=MAX_CONTEXT_TOKENS,
+                reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+            )
             record_llm_response(span_generation, response)
         doc_info = llm_response_to_string(response)
 
@@ -934,7 +955,11 @@ def add_chunk_summaries(
                 flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
                 input_messages=[processed_prompt],
             ) as span_generation:
-                response = llm.invoke(processed_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+                response = llm.invoke(
+                    processed_prompt,
+                    max_tokens=MAX_CONTEXT_TOKENS,
+                    reasoning_effort=CONTEXTUAL_RAG_REASONING_EFFORT,
+                )
                 record_llm_response(span_generation, response)
             chunk.chunk_context = llm_response_to_string(response)
 
@@ -1154,7 +1179,9 @@ def _maybe_push_documents(
     insertion_records: list[DocumentInsertionRecord],
     from_beginning: bool = False,
 ) -> None:
-    """Fire the DOCUMENT_PUSH hook for each successfully indexed public document.
+    """Push each successfully indexed public document to an external sink:
+    the config-driven endpoint (all editions, from DOCUMENT_PUSH_ENDPOINT_URL)
+    when set, otherwise the DOCUMENT_PUSH hook (EE, from the hook table).
 
     Single-tenant only — multi-tenant deployments would mix documents from
     different organizations into a shared external destination.
@@ -1179,6 +1206,11 @@ def _maybe_push_documents(
         )
         if cc_pair is None or cc_pair.access_type != AccessType.PUBLIC:
             return
+
+        # Either/or: the config-driven endpoint wins when set — checked first
+        # since it is a cached local read, while the hook path does a DB
+        # lookup per document.
+        use_config_push = get_document_push_config() is not None
 
         doc_map = {doc.id: doc for doc in filtered_documents}
         for doc_id in successfully_indexed:
@@ -1209,12 +1241,15 @@ def _maybe_push_documents(
                     for k, v in (doc.metadata or {}).items()
                 },
             )
-            execute_hook(
-                db_session=db_session,
-                hook_point=HookPoint.DOCUMENT_PUSH,
-                payload=payload.model_dump(),
-                response_type=DocumentPushResponse,
-            )
+            if use_config_push:
+                push_document_via_config(payload)
+            else:
+                execute_hook(
+                    db_session=db_session,
+                    hook_point=HookPoint.DOCUMENT_PUSH,
+                    payload=payload.model_dump(),
+                    response_type=DocumentPushResponse,
+                )
 
 
 @log_function_time(debug_only=True)
@@ -1230,6 +1265,7 @@ def index_doc_batch(
     enable_contextual_rag: bool = False,
     llm: LLM | None = None,
     ignore_time_skip: bool = False,
+    index_to_secondary: bool = False,
     from_beginning: bool = False,
     filter_fnc: Callable[
         [list[Document]], tuple[list[Document], list[ConnectorFailure]]
@@ -1267,7 +1303,9 @@ def index_doc_batch(
     filtered_documents, filter_failures = filter_fnc(document_batch)
     filtered_documents = _apply_document_ingestion_hook(filtered_documents)
     with time_stage_if_set(IndexAttemptStage.DOC_DB_PREPARE, attempt_id):
-        context = adapter.prepare(filtered_documents, ignore_time_skip)
+        context = adapter.prepare(
+            filtered_documents, ignore_time_skip, index_to_secondary
+        )
     if not context:
         result = IndexingPipelineResult.empty(len(filtered_documents))
         result.failures.extend(filter_failures)
@@ -1438,7 +1476,9 @@ def index_doc_batch(
             # vector DB. Doing this here (after the write) prevents a failed
             # index from storing a hash that would permanently skip the document
             # on the next sync. Hashes were pre-computed in get_docs_to_update.
-            if primary_doc_idx_insertion_records is not None:
+            # Skipped for FUTURE writes: stamping the PRESENT-only hash would make
+            # the PRESENT poll skip the doc (cross-index suppression).
+            if primary_doc_idx_insertion_records is not None and not index_to_secondary:
                 successfully_indexed_ids = {
                     r.document_id for r in primary_doc_idx_insertion_records
                 }
@@ -1484,9 +1524,14 @@ def run_indexing_pipeline(
     adapter: IndexingBatchAdapter,
     chunker: Chunker | None = None,
     ignore_time_skip: bool = False,
+    index_to_secondary: bool = False,
     from_beginning: bool = False,
 ) -> IndexingPipelineResult:
-    """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
+    """Builds a pipeline which takes in a list (batch) of docs and indexes them.
+
+    index_to_secondary disables the content-hash gate + stamp for FUTURE writes so
+    they don't cross-suppress the PRESENT index's shared hash.
+    """
     if db_session is not None:
         all_search_settings = get_active_search_settings(db_session)
     else:
@@ -1507,16 +1552,7 @@ def run_indexing_pipeline(
     )
     llm = None
     if enable_contextual_rag:
-        mc_id = search_settings.contextual_rag_model_configuration_id
-        if mc_id is None:
-            # Fall back to the global default contextual RAG model (LLMModelFlow).
-            from onyx.db.llm import fetch_default_contextual_rag_model
-
-            with get_session_with_current_tenant() as fallback_session:
-                mc = fetch_default_contextual_rag_model(fallback_session)
-            mc_id = mc.id if mc else None
-        if mc_id is not None:
-            llm = get_llm_for_contextual_rag(mc_id)
+        llm = get_contextual_rag_llm_for_search_settings(search_settings)
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
@@ -1537,5 +1573,6 @@ def run_indexing_pipeline(
         enable_contextual_rag=enable_contextual_rag,
         llm=llm,
         ignore_time_skip=ignore_time_skip,
+        index_to_secondary=index_to_secondary,
         from_beginning=from_beginning,
     )

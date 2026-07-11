@@ -1,31 +1,22 @@
-// TanStack Query client + MMKV-backed persister.
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, type DehydrateOptions } from "@tanstack/react-query";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 
 import { makeMmkvStorage, queryStorage } from "@/state/storage";
 import { isAuthError } from "@/api/errors";
+import { QUERY_KEYS } from "@/api/query-keys";
 
-// How long a restored MMKV snapshot stays valid (24h). gcTime is pinned to this
-// below: an inactive query must live in the in-memory cache at least as long as
-// the persist window, otherwise it's garbage-collected after the default 5 min,
-// the persister rewrites an empty snapshot, and the 24h offline cache silently
-// collapses to ~5 min.
-export const persistMaxAge = 1000 * 60 * 60 * 24; // 24h
+export const persistMaxAge = 1000 * 60 * 60 * 24;
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000, // 30s — fresh enough to skip refetch storms
-      gcTime: persistMaxAge, // keep inactive queries for the full persist window
-      // Don't retry auth/tier errors (401/402/403) — retrying just spams the
-      // backend with requests that can't succeed without re-auth. Otherwise
-      // retry once. Mirrors web's `skipRetryOnAuthError`.
+      staleTime: 30_000,
+      gcTime: persistMaxAge, // must cover the persist window or the offline cache collapses
+      // 401/402/403 can't succeed without re-auth.
       retry: (failureCount, error) => !isAuthError(error) && failureCount < 1,
-      // Refetch stale data when the app returns to the foreground. On RN this is
-      // driven by the AppState -> focusManager bridge in `query/focus.ts`; this
-      // flag must stay true (its default) or that bridge becomes a no-op.
+      // Must stay true or the AppState->focusManager bridge in query/focus.ts no-ops.
       refetchOnWindowFocus: true,
-      refetchOnReconnect: true, // refetch stale data when connectivity returns
+      refetchOnReconnect: true,
     },
   },
 });
@@ -33,3 +24,34 @@ export const queryClient = new QueryClient({
 export const persister = createSyncStoragePersister({
   storage: makeMmkvStorage(queryStorage),
 });
+
+// Keys excluded from the unencrypted MMKV snapshot. Identity (`me`), ALL chat data,
+// workspace-scoped config (agents, settings), and projects (their embedded chat titles
+// are PII) live in memory only and refetch on launch, so nothing personal or
+// workspace-specific lingers after logout or an account switch (the trailing serverUrl
+// varies per instance, so only the leading entity segment matches).
+const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
+  [QUERY_KEYS.me(null)[0]],
+  [QUERY_KEYS.agents(null)[0]],
+  [QUERY_KEYS.workspaceSettings(null)[0]],
+  [QUERY_KEYS.userProjects(null)[0]], // "projects"
+  [QUERY_KEYS.userProject(null, null)[0]], // "project"
+  [QUERY_KEYS.userRecentFiles(null)[0]], // "recent-files" (file names are PII)
+];
+
+function isNonPersistedKey(queryKey: readonly unknown[]): boolean {
+  // Default-deny for chat: any key whose entity segment starts with `chat-` (covers
+  // chat-sessions/chat-session today + future chat-message/history keys) never persists.
+  const head = queryKey[0];
+  if (typeof head === "string" && head.startsWith("chat-")) return true;
+  return NON_PERSISTED_KEY_PREFIXES.some((prefix) =>
+    prefix.every((segment, i) => queryKey[i] === segment),
+  );
+}
+
+export const dehydrateOptions: DehydrateOptions = {
+  shouldDehydrateQuery: (query) => {
+    if (isNonPersistedKey(query.queryKey)) return false;
+    return query.state.status === "success";
+  },
+};

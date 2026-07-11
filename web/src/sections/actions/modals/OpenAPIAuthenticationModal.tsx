@@ -18,7 +18,7 @@ import { OAuthConfig } from "@/lib/tools/interfaces";
 import { getOAuthConfig } from "@/lib/oauth/api";
 import { SvgArrowExchange } from "@opal/icons";
 import { useAuthType } from "@/lib/hooks";
-import { AuthType } from "@/lib/constants";
+import { AuthType } from "@/lib/auth/types";
 
 export type AuthMethod = "oauth" | "custom-header" | "pt-oauth";
 

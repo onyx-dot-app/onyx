@@ -28,6 +28,7 @@ from typing import Any
 
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
+from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from shared_configs.configs import MULTI_TENANT
 
 
@@ -205,6 +206,36 @@ def main() -> None:
             default=os.environ.get("OPENSEARCH_ADMIN_PASSWORD", ""),
         )
         parser.add_argument(
+            "--auth-method",
+            help=(
+                "Authentication method: 'basic' (username/password) or 'iam' (AWS SigV4). Falls back to OPENSEARCH_AUTH_METHOD, "
+                "then 'basic'."
+            ),
+            type=str,
+            choices=[m.value for m in OpenSearchAuthMethod],
+            default=(
+                os.environ.get("OPENSEARCH_AUTH_METHOD")
+                or OpenSearchAuthMethod.BASIC.value
+            ).lower(),
+        )
+        parser.add_argument(
+            "--aws-region",
+            help=(
+                "AWS region for SigV4 signing. Required for --auth-method iam. Falls back to OPENSEARCH_AWS_REGION."
+            ),
+            type=str,
+            default=os.environ.get("OPENSEARCH_AWS_REGION", ""),
+        )
+        parser.add_argument(
+            "--aws-service",
+            help=(
+                "AWS service for SigV4 signing ('es' for managed domains, 'aoss' for Serverless). Falls back to "
+                "OPENSEARCH_AWS_SERVICE, then 'es'."
+            ),
+            type=str,
+            default=os.environ.get("OPENSEARCH_AWS_SERVICE") or "es",
+        )
+        parser.add_argument(
             "--no-ssl", help="Disable SSL.", action="store_true", default=False
         )
         parser.add_argument(
@@ -302,35 +333,46 @@ def main() -> None:
     if not (port := args.port or int(input("Enter the OpenSearch port: "))):
         print("Error: OpenSearch port is required.")
         sys.exit(1)
-    if not (username := args.username or input("Enter the OpenSearch username: ")):
-        print("Error: OpenSearch username is required.")
-        sys.exit(1)
-    if not (password := args.password or input("Enter the OpenSearch password: ")):
-        print("Error: OpenSearch password is required.")
-        sys.exit(1)
+
+    auth_method = OpenSearchAuthMethod(args.auth_method)
+    username = ""
+    password = ""
+    aws_region = args.aws_region or None
+    aws_service = args.aws_service
+    if auth_method == OpenSearchAuthMethod.IAM:
+        # SigV4 credentials come from the boto3 default chain (env vars /
+        # profile / role); only the region is needed here.
+        if not (aws_region := args.aws_region or input("Enter the AWS region: ")):
+            print("Error: AWS region is required for IAM auth.")
+            sys.exit(1)
+    else:
+        if not (username := args.username or input("Enter the OpenSearch username: ")):
+            print("Error: OpenSearch username is required.")
+            sys.exit(1)
+        if not (password := args.password or input("Enter the OpenSearch password: ")):
+            print("Error: OpenSearch password is required.")
+            sys.exit(1)
+    print(f"Auth method: {auth_method.value}")
     print("Using AWS-managed OpenSearch: ", args.use_aws_managed_opensearch)
     print(f"MULTI_TENANT: {MULTI_TENANT}")
     print()
 
     cluster_only_commands = {"list", "health", "reroute-retry-failed"}
 
+    common_kwargs: dict[str, Any] = dict(
+        host=host,
+        port=port,
+        auth=(username, password),
+        use_ssl=not args.no_ssl,
+        verify_certs=not args.no_verify_certs,
+        auth_method=auth_method,
+        aws_region=aws_region,
+        aws_service=aws_service,
+    )
     with (
-        OpenSearchClient(
-            host=host,
-            port=port,
-            auth=(username, password),
-            use_ssl=not args.no_ssl,
-            verify_certs=not args.no_verify_certs,
-        )
+        OpenSearchClient(**common_kwargs)
         if args.command in cluster_only_commands
-        else OpenSearchIndexClient(
-            index_name=args.index,
-            host=host,
-            port=port,
-            auth=(username, password),
-            use_ssl=not args.no_ssl,
-            verify_certs=not args.no_verify_certs,
-        )
+        else OpenSearchIndexClient(index_name=args.index, **common_kwargs)
     ) as client:
         if not client.ping():
             print("Error: Could not connect to OpenSearch.")

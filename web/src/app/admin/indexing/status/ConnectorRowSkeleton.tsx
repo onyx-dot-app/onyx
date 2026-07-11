@@ -8,7 +8,7 @@ import {
   TableHeader,
 } from "@/components/ui/table";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 
 // Staggered loading animation skeleton with proper table column alignment
 export function ConnectorStaggeredSkeleton({

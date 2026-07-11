@@ -1,28 +1,42 @@
+"use client";
+
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
-import { fetchSS } from "@/lib/utilsSS";
+import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hooks";
 import { ErrorCallout } from "@/components/ErrorCallout";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { StandardAnswerCategory } from "@/lib/types";
 
 const route = ADMIN_ROUTES.STANDARD_ANSWERS;
 
-async function Page() {
-  const standardAnswerCategoriesResponse = await fetchSS(
-    "/manage/admin/standard-answer/category"
-  );
+function Body() {
+  const {
+    data: standardAnswerCategories,
+    isLoading,
+    error,
+  } = useStandardAnswerCategories();
 
-  if (!standardAnswerCategoriesResponse.ok) {
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (error || !standardAnswerCategories) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
+        errorMsg="Failed to fetch standard answer categories"
       />
     );
   }
-  const standardAnswerCategories =
-    (await standardAnswerCategoriesResponse.json()) as StandardAnswerCategory[];
 
+  return (
+    <StandardAnswerCreationForm
+      standardAnswerCategories={standardAnswerCategories}
+    />
+  );
+}
+
+export default function Page() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -32,12 +46,8 @@ async function Page() {
         divider
       />
       <SettingsLayouts.Body>
-        <StandardAnswerCreationForm
-          standardAnswerCategories={standardAnswerCategories}
-        />
+        <Body />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
 }
-
-export default Page;

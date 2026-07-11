@@ -2,11 +2,11 @@
 
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
 import { toast } from "@/hooks/useToast";
-import CredentialSection from "@/components/credentials/CredentialSection";
+import CredentialSection from "@/lib/credentials/components/CredentialSection";
 import Text from "@/refresh-components/texts/Text";
 import {
   updateConnectorCredentialPairName,
@@ -246,8 +246,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
       setHasLoadedOnce(true);
     }
 
+    // Redirect only when the cc-pair is genuinely gone — a real 404 (deleted)
+    // or DELETING state — never on a transient poll error.
     if (
-      (hasLoadedOnce && (ccPairError || !ccPair)) ||
+      (hasLoadedOnce && ccPairError?.status === 404) ||
       (ccPair?.status === ConnectorCredentialPairStatus.DELETING &&
         !ccPair.connector)
     ) {
@@ -346,7 +348,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   };
 
   if (isLoadingCCPair || isLoadingIndexAttempts) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (!ccPair || (!hasLoadedOnce && ccPairError)) {

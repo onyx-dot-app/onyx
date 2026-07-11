@@ -83,6 +83,9 @@ class BookstackConnector(LoadConnector, PollConnector):
         updated_at_str = (
             str(book.get("updated_at")) if book.get("updated_at") is not None else None
         )
+        created_at_str = (
+            str(book.get("created_at")) if book.get("created_at") is not None else None
+        )
         return Document(
             id="book__" + str(book.get("id")),
             sections=[TextSection(link=url, text=text)],
@@ -91,6 +94,10 @@ class BookstackConnector(LoadConnector, PollConnector):
             title=title,
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "book"},
         )
@@ -112,6 +119,11 @@ class BookstackConnector(LoadConnector, PollConnector):
             if chapter.get("updated_at") is not None
             else None
         )
+        created_at_str = (
+            str(chapter.get("created_at"))
+            if chapter.get("created_at") is not None
+            else None
+        )
         return Document(
             id="chapter__" + str(chapter.get("id")),
             sections=[TextSection(link=url, text=text)],
@@ -120,6 +132,10 @@ class BookstackConnector(LoadConnector, PollConnector):
             title=title,
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "chapter"},
         )
@@ -136,6 +152,11 @@ class BookstackConnector(LoadConnector, PollConnector):
             if shelf.get("updated_at") is not None
             else None
         )
+        created_at_str = (
+            str(shelf.get("created_at"))
+            if shelf.get("created_at") is not None
+            else None
+        )
         return Document(
             id="shelf:" + str(shelf.get("id")),
             sections=[TextSection(link=url, text=text)],
@@ -144,6 +165,10 @@ class BookstackConnector(LoadConnector, PollConnector):
             title=title,
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "shelf"},
         )
@@ -168,6 +193,11 @@ class BookstackConnector(LoadConnector, PollConnector):
             if page_data.get("updated_at") is not None
             else None
         )
+        created_at_str = (
+            str(page_data.get("created_at"))
+            if page_data.get("created_at") is not None
+            else None
+        )
         time.sleep(0.1)
         return Document(
             id="page:" + page_id,
@@ -177,6 +207,10 @@ class BookstackConnector(LoadConnector, PollConnector):
             title=str(title),
             doc_updated_at=(
                 time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=(
+                time_str_to_utc(created_at_str) if created_at_str is not None else None
             ),
             metadata={"type": "page"},
         )

@@ -129,21 +129,6 @@ def _bootstrap_ca() -> MaterializedCA:
     ).ensure_ca()
 
 
-def _build_lookup() -> SandboxIPLookup:
-    lookup = build_ip_lookup()
-    lookup.start()
-    synced = lookup.wait_for_initial_sync(
-        timeout_seconds=_LOOKUP_INITIAL_SYNC_TIMEOUT_S
-    )
-    if not synced:
-        raise RuntimeError(
-            "Sandbox IP lookup did not complete initial sync within "
-            f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_S:.1f}s; refusing to serve traffic with unbacked "
-            "identity."
-        )
-    return lookup
-
-
 def _build_cache_factory() -> Callable[[str], CacheBackend]:
     """
     tenant_id -> CacheBackend; Must match the API side's namespace to share
@@ -227,17 +212,32 @@ def main() -> int:
     SqlEngine.set_app_name(_DB_APP_NAME)
     SqlEngine.init_engine(pool_size=_DB_POOL_SIZE, max_overflow=_DB_MAX_OVERFLOW)
 
-    materialized_ca = _bootstrap_ca()
-    readiness.ca_ready = True
-    logger.info("CA bootstrapped at %s", materialized_ca.pem_path)
-
-    lookup = _build_lookup()
+    # Bind healthz before the blocking CA bootstrap and informer sync below, so
+    # the probe endpoint answers from t=0 — reporting 503 (not connection-refused)
+    # until startup finishes. Otherwise a slow startup k8s call leaves the port
+    # unbound and the liveness probe SIGKILLs the pod mid-boot. ca_ready and
+    # is_synced() are false pre-startup, so /healthz stays not-ready until
+    # genuinely ready.
+    lookup = build_ip_lookup()
     healthz_server: HTTPServer | None = None
     try:
+        healthz_server = _start_healthz_server(readiness, lookup)
+
+        materialized_ca = _bootstrap_ca()
+        readiness.ca_ready = True
+        logger.info("CA bootstrapped at %s", materialized_ca.pem_path)
+
+        lookup.start()
+        if not lookup.wait_for_initial_sync(
+            timeout_seconds=_LOOKUP_INITIAL_SYNC_TIMEOUT_S
+        ):
+            raise RuntimeError(
+                "Sandbox IP lookup did not complete initial sync within "
+                f"{_LOOKUP_INITIAL_SYNC_TIMEOUT_S:.1f}s; refusing to serve traffic "
+                "with unbacked identity."
+            )
         readiness.lookup_ready = True
         logger.info("Informer initial sync complete.")
-
-        healthz_server = _start_healthz_server(readiness, lookup)
 
         identity = IdentityResolver(ip_lookup=lookup)
         proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())

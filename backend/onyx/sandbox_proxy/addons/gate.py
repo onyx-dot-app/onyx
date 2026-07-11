@@ -7,16 +7,20 @@ Fail-open: `RequestEvaluator` exceptions and non-matching action types.
 import asyncio
 import base64
 import binascii
+import ipaddress
 import operator
+import socket
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
+from urllib.parse import urlparse
 from uuid import UUID
 
 from cachetools import cachedmethod
 from cachetools import TTLCache
 from mitmproxy import http
+from mitmproxy.proxy import server_hooks
 from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
@@ -54,13 +58,104 @@ from onyx.sandbox_proxy.logging_utils import full_log_id
 from onyx.sandbox_proxy.logging_utils import sandbox_log_label
 from onyx.sandbox_proxy.logging_utils import short_log_id
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 # Bodies over this cap are fail-closed (rejected), not parsed by the matcher.
-PARSER_MAX_BODY_BYTES = 1_048_576
+# 32 MiB = Anthropic's Messages API request-body limit, so the proxy is never
+# the false blocker: anything the upstream would accept passes through, and a
+# genuinely oversized request gets the upstream's own 413, not an opaque 403.
+PARSER_MAX_BODY_BYTES = 32 * 1024 * 1024
+
+
+# --- internal-destination egress lockdown: closes the proxy-relay path ---
+# A sandbox can only egress via the proxy, so the proxy is the single layer that can
+# stop it relaying (CONNECT-tunneling) to internal services (databases, caches, search,
+# metadata endpoints) — that destination is invisible at the sandbox's own egress (it sees
+# "TCP to proxy:8080"). Deny any forwarded destination that is, or resolves to, an
+# internal address; allow the one legitimate internal exception (the api-server) plus
+# the public internet. Keying off "not globally routable" — not a hostname allow-list —
+# catches internal services we never enumerated. The proxy's OWN cred-resolution DB
+# client connects directly (not through the mitmproxy listener), so it is unaffected here.
+
+
+# The single allowed internal destination: the api-server the sandbox calls via the
+# proxy (PAT-injected). Matched by host AND port so it works even when it's an
+# in-cluster name resolving to an internal IP, while still denying every other port
+# on that host (e.g. a co-located Redis/Postgres reachable at the same hostname).
+def _parse_api_server() -> tuple[str | None, int | None]:
+    if not SANDBOX_API_SERVER_URL:
+        return None, None
+    parsed = urlparse(SANDBOX_API_SERVER_URL)
+    host = (parsed.hostname or "").lower() or None
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return host, port
+
+
+_API_SERVER_HOST, _API_SERVER_PORT = _parse_api_server()
+
+
+def _is_api_server(host: str, port: int) -> bool:
+    return (
+        _API_SERVER_HOST is not None
+        and host == _API_SERVER_HOST
+        and port == _API_SERVER_PORT
+    )
+
+
+def _ip_is_internal(ip_str: str) -> bool:
+    """True if ``ip_str`` is not a globally-routable public address.
+
+    `is_global` covers far more than RFC1918: CGNAT (100.64.0.0/10 — EKS pod IPs
+    under custom networking), loopback, link-local (incl. cloud metadata / IMDS),
+    IPv6 ULA (fc00::/7) + link-local (fe80::/10) + loopback (::1), and reserved
+    ranges. IPv4-mapped IPv6 (``::ffff:10.0.0.1``) is judged by its embedded IPv4
+    so it can't be used to smuggle an internal v4 address past the check.
+    """
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
+    return not ip.is_global
+
+
+def destination_is_blocked(host: str, port: int) -> bool:
+    """True if the sandbox must not be relayed to ``host:port``.
+
+    Denied: anything that is, or resolves to, an internal address. Allowed: the
+    api-server (host + port) and any public address. Fail closed: a resolution
+    failure denies (with a warning) — a transient resolver error must not become
+    an opening to an internal service. If a name resolves to a mix of public and
+    internal addresses, deny — an attacker could otherwise steer the connection
+    to the internal one.
+    """
+    host = (host or "").strip().lower()
+    if not host:
+        return False
+    if _is_api_server(host, port):
+        return False
+    try:
+        ipaddress.ip_address(host)  # literal-IP destination: check directly, no DNS
+        return _ip_is_internal(host)
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except OSError as exc:
+        logger.warning(
+            "egress_destination_resolution_failed host=%s error=%s", host, exc
+        )
+        return True
+    # getaddrinfo types sockaddr[0] as `str | int`; the address element is always
+    # a str at runtime (AF_INET/AF_INET6), so coerce to satisfy the type checker.
+    return any(_ip_is_internal(str(info[4][0])) for info in infos)
 
 
 class _IdentityResolver(Protocol):
@@ -165,7 +260,7 @@ class GateAddon:
     # mitmproxy hooks
     # ------------------------------------------------------------------
 
-    def http_connect(self, flow: http.HTTPFlow) -> None:
+    async def http_connect(self, flow: http.HTTPFlow) -> None:
         """Capture the per-session tag from the CONNECT's Proxy-Authorization.
 
         For MITM'd HTTPS the header rides on the CONNECT, not the decrypted
@@ -173,6 +268,22 @@ class GateAddon:
         connection id (one tunnel per subprocess = one session); evicted in
         `client_disconnected`. Best-effort.
         """
+        # Refuse to open a tunnel to an internal address, with a clear 403 the
+        # agent can act on. Best-effort early deny on the CONNECT host; the decrypted
+        # inner request is re-checked in `request`, and `server_connect` is the
+        # authoritative rebinding-proof enforcement (resolve-once + IP pin). The check
+        # can do a blocking DNS lookup, so run it off the event loop.
+        if await asyncio.get_running_loop().run_in_executor(
+            None, destination_is_blocked, flow.request.host, flow.request.port
+        ):
+            logger.info(
+                "egress_denied_internal_destination phase=connect host=%s port=%s",
+                flow.request.host,
+                flow.request.port,
+            )
+            flow.response = http_403(SandboxProxyError.DESTINATION_BLOCKED)
+            return
+
         conn_id = getattr(flow.client_conn, "id", None)
         auth_header = flow.request.headers.get("Proxy-Authorization")
         tag = _parse_proxy_auth_username(auth_header)
@@ -197,6 +308,41 @@ class GateAddon:
         if conn_id is not None:
             self._conn_session_tags.pop(conn_id, None)
 
+    async def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
+        """Deny internal destinations at connection-setup time (backstop).
+
+        Last hook before mitmproxy opens the upstream. Re-checking here — closer to
+        the actual connect than the earlier `http_connect`/`request` denies — shrinks
+        the DNS-rebinding window where a host that vetted as public re-resolves to an
+        internal address. A deny is a TCP-level kill (`server.error`); the structured
+        `destination_blocked` 403 is delivered by the `http_connect`/`request` checks
+        for every normal request.
+
+        We deliberately do NOT pin `server.address` to the resolved IP. Under the
+        default `eager` connection strategy mitmproxy completes the upstream TLS
+        handshake before the client's ClientHello is available; connecting by bare IP
+        makes the upstream cert check fail and mitmproxy silently falls back to a raw
+        passthrough tunnel — which skips credential injection (the LLM provider key is
+        never swapped in, so the sandbox's placeholder leaks and the call 401s).
+        Leaving the hostname in place keeps interception (and key injection) working.
+        The cost is a residual rebind window between this resolution and mitmproxy's
+        own: accepted as the safe trade-off versus breaking credential injection.
+        """
+        server = data.server
+        if server.error or not server.address:
+            return
+        host, port = server.address[0], server.address[1]
+        blocked = await asyncio.get_running_loop().run_in_executor(
+            None, destination_is_blocked, host, port
+        )
+        if blocked:
+            logger.info(
+                "egress_denied_internal_destination phase=server_connect host=%s port=%s",
+                host,
+                port,
+            )
+            server.error = "destination_blocked: internal address"
+
     def responseheaders(self, flow: http.HTTPFlow) -> None:
         """
         Streams the response body to the sandbox instead of buffering it whole.
@@ -213,6 +359,22 @@ class GateAddon:
         if task is not None:
             self._inflight_tasks.add(task)
             task.add_done_callback(self._inflight_tasks.discard)
+
+        # Deny forwards to internal addresses with a clear 403 — both plain-HTTP
+        # (GET http://internal/...) and the decrypted inner request of a MITM'd
+        # HTTPS tunnel, so the structured error reaches the agent regardless of
+        # scheme. `server_connect` is the authoritative rebinding-proof backstop +
+        # pin. Resolution can block, so run it off the event loop.
+        if await asyncio.get_running_loop().run_in_executor(
+            None, destination_is_blocked, flow.request.host, flow.request.port
+        ):
+            logger.info(
+                "egress_denied_internal_destination phase=request host=%s port=%s",
+                flow.request.host,
+                flow.request.port,
+            )
+            flow.response = http_403(SandboxProxyError.DESTINATION_BLOCKED)
+            return
 
         gate_target = await self._resolve_and_match(flow)
         # Strip the in-band session tag so it never reaches the origin
@@ -811,7 +973,7 @@ class GateAddon:
         cache = self._cache_factory(ctx.tenant_id)
         try:
             decision = await approval_cache.wait_for_wake(
-                approval_id, approval_cache.WAIT_TIMEOUT_S, cache
+                approval_id, SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS, cache
             )
             if decision is not None:
                 logger.info(

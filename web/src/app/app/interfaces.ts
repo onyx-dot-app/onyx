@@ -207,6 +207,8 @@ export interface BackendChatSession {
 
   owner_name: string | null;
   packets: Packet[][];
+  // Set while a run is in flight and resumable via the resume-stream endpoint
+  current_run?: { run_id: number } | null;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {

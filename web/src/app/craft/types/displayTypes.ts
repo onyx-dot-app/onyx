@@ -96,7 +96,19 @@ export type StreamItem =
   | { type: "thinking"; id: string; content: string; isStreaming: boolean }
   | { type: "tool_call"; id: string; toolCall: ToolCallState }
   | { type: "todo_list"; id: string; todoList: TodoListState }
+  | {
+      type: "connect_app_request";
+      id: string;
+      requestId: string;
+      appSlug: string;
+      reason: string | null;
+    }
+  | { type: "compaction"; id: string; summary: string | null }
   | { type: "error"; id: string; content: string };
+
+export interface ContextUsage {
+  usedTokens: number;
+}
 
 /**
  * Discriminated union of transient tabs that the side panel can render.

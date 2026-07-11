@@ -8,12 +8,14 @@ export type WebSearchProviderType =
   | "exa"
   | "searxng"
   | "brave"
-  | "ollama";
+  | "ollama"
+  | "tavily";
 
 export type WebContentProviderType =
   | "firecrawl"
   | "onyx_web_crawler"
   | "exa"
+  | "tavily"
   | (string & {});
 
 /** Which web-search provider category we are configuring. */

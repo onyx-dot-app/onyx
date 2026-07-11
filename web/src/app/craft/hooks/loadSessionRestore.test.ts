@@ -89,6 +89,23 @@ describe("loadSession restore status", () => {
     expect(session?.sandbox?.status).toBe("running");
   });
 
+  it("remounts the preview on restore, while edits only refresh (HMR handles them)", async () => {
+    mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+    mockedApi.restoreSession.mockResolvedValue(runningSession() as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    let session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.webappNeedsRefresh).toBe(1);
+    expect(session?.webappNeedsRemount).toBe(1);
+
+    // A web/ file edit mid-turn must not remount the iframe.
+    useBuildSessionStore.getState().triggerWebappRefresh(SESSION_ID);
+    session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.webappNeedsRefresh).toBe(2);
+    expect(session?.webappNeedsRemount).toBe(1);
+  });
+
   it("restores persisted agent thought packets as collapsed transcript stream items", async () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     mockedApi.fetchMessages.mockResolvedValue([
@@ -359,6 +376,98 @@ describe("loadSession restore status", () => {
     expect(session?.status).toBe("active");
     expect(session?.activeTurnId).toBeNull();
     expect(session?.activeTurnLocalOwner).toBe(false);
+  });
+});
+
+describe("loadSession preferPersisted (interrupt reconciliation)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useBuildSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: null,
+    } as never);
+    mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
+    mockedApi.fetchArtifacts.mockResolvedValue([] as never);
+    mockedApi.fetchWebappInfo.mockResolvedValue(
+      webappInfo(true, true) as never
+    );
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+  });
+
+  function seedInterruptedSession(): void {
+    useBuildSessionStore.getState().createSession(SESSION_ID, {
+      status: "running",
+      messages: [
+        {
+          id: "local-user",
+          type: "user",
+          content: "Write an essay",
+          timestamp: new Date(),
+        },
+      ],
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 0,
+      activeTurnLocalOwner: true,
+      isLoaded: false,
+    });
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Write an essay",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Write an essay" },
+        },
+      },
+      {
+        id: "thought-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_thought",
+          content: { type: "text", text: "Planning the essay structure." },
+        },
+      },
+    ] as never);
+  }
+
+  it("rehydrates the persisted interrupted transcript while keeping status running", async () => {
+    seedInterruptedSession();
+
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true, preferPersisted: true });
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.status).toBe("running");
+    const assistant = session?.messages.find((m) => m.type === "assistant");
+    expect(assistant?.message_metadata?.streamItems).toEqual([
+      {
+        type: "thinking",
+        id: "thought-1",
+        content: "Planning the essay structure.",
+        isStreaming: false,
+      },
+    ]);
+    expect(session?.streamItems).toEqual([]);
+    expect(session?.activeTurnId).toBeNull();
+    expect(session?.activeTurnLocalOwner).toBe(false);
+  });
+
+  it("keeps the stale local transcript without preferPersisted (the bug)", async () => {
+    seedInterruptedSession();
+
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.messages).toEqual([
+      expect.objectContaining({ id: "local-user", type: "user" }),
+    ]);
   });
 });
 

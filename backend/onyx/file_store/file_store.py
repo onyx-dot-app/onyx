@@ -516,54 +516,36 @@ class S3BackedFileStore(FileStore):
     def change_file_id(
         self, old_file_id: str, new_file_id: str, db_session: Session | None = None
     ) -> None:
+        """Rename a file by repointing its DB record at the existing object.
+
+        The object is not moved — only file_id changes — and reads resolve via
+        the stored object_key, so they still find it. The object keeps its
+        original key, so a file_id must not be reused for a new save_file after
+        it has been renamed (the new write would overwrite the renamed object).
+        """
+        if old_file_id == new_file_id:
+            return
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                # Get the existing file record
                 old_file_record = get_filerecord_by_file_id(
                     file_id=old_file_id, db_session=db_session
                 )
-
-                # Generate new S3 key for the new file ID
-                new_s3_key = self._get_s3_key(new_file_id)
-
-                # Copy S3 object to new key
-                s3_client = self._get_s3_client()
-                bucket_name = self._get_bucket_name()
-
-                copy_source = (
-                    f"{old_file_record.bucket_name}/{old_file_record.object_key}"
-                )
-
-                s3_client.copy_object(
-                    CopySource=copy_source,
-                    Bucket=bucket_name,
-                    Key=new_s3_key,
-                    MetadataDirective="COPY",
-                )
-
-                # Create new file record with new file_id
-                # Cast file_metadata to the expected type
                 file_metadata = cast(
                     dict[Any, Any] | None, old_file_record.file_metadata
                 )
 
+                # Reuse the old record's bucket/object_key — the object stays put.
                 upsert_filerecord(
                     file_id=new_file_id,
                     display_name=old_file_record.display_name,
                     file_origin=old_file_record.file_origin,
                     file_type=old_file_record.file_type,
-                    bucket_name=bucket_name,
-                    object_key=new_s3_key,
+                    bucket_name=old_file_record.bucket_name,
+                    object_key=old_file_record.object_key,
                     db_session=db_session,
                     file_metadata=file_metadata,
                 )
 
-                # Delete old S3 object
-                s3_client.delete_object(
-                    Bucket=old_file_record.bucket_name, Key=old_file_record.object_key
-                )
-
-                # Delete old file record
                 delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
 
                 db_session.commit()

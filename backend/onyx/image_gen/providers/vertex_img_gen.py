@@ -221,7 +221,12 @@ def _parse_to_vertex_credentials(
     if not vertex_location:
         raise ImageProviderCredentialsError("Vertex location is required")
 
-    vertex_json = json.loads(vertex_credentials)
+    try:
+        vertex_json = json.loads(vertex_credentials)
+    except json.JSONDecodeError as e:
+        raise ImageProviderCredentialsError(
+            "Vertex credentials must be valid JSON"
+        ) from e
     vertex_project = vertex_json.get("project_id")
 
     if not vertex_project:

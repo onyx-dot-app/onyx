@@ -16,6 +16,7 @@ from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
 from onyx.utils.variable_functionality import _LICENSE_ENFORCEMENT_ENABLED
 from shared_configs.configs import MULTI_TENANT
 
@@ -69,6 +70,18 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
+        },
+    },
+    {
+        "name": "check-for-port",
+        "task": OnyxCeleryTask.CHECK_FOR_PORT,
+        "schedule": timedelta(seconds=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Intentionally gated (skip_gated defaults True): don't run the port's
+            # expensive re-embed for non-paying tenants; it pauses and self-heals on un-gate.
             "work_gated": True,
         },
     },
@@ -177,18 +190,15 @@ beat_task_templates: list[dict] = [
             "queue": OnyxCeleryQueues.PRIMARY,
         },
     },
-    # Sandbox cleanup tasks
+    # Sandbox sweep: background-snapshot changed sessions, sleep idle sandboxes.
     {
         "name": "cleanup-idle-sandboxes",
         "task": OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
-        # SANDBOX_IDLE_TIMEOUT_SECONDS defaults to 1 hour, so there is no
-        # functional reason to scan more often than every ~15 minutes. In the
-        # cloud this is multiplied by CLOUD_BEAT_MULTIPLIER_DEFAULT (=8) so
-        # the effective cadence becomes ~2 hours, which still meets the
-        # idle-detection SLA. The previous 1-minute base schedule produced
-        # an 8-minute per-tenant fan-out and was the dominant source of
-        # background DB load on the cloud cluster.
-        "schedule": timedelta(minutes=15),
+        # Ticks are cheap (DB-only when nothing is stale); snapshot pacing is
+        # gated inside the task at idle_timeout/4. With the cloud x8 multiplier
+        # the effective interval is SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 8;
+        # keep that product under ~15 min to stay within the data-loss bound.
+        "schedule": timedelta(seconds=SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS),
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
@@ -284,6 +294,7 @@ if (
 # Beat task names that require a vector DB. Filtered out when DISABLE_VECTOR_DB.
 _VECTOR_DB_BEAT_TASK_NAMES: set[str] = {
     "check-for-indexing",
+    "check-for-port",
     "check-for-connector-deletion",
     "check-for-vespa-sync",
     "check-for-pruning",

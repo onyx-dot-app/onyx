@@ -29,6 +29,7 @@
     "./tokens.css": "./dist/tokens.css",
     "./typography.css": "./dist/typography.css",
     "./nativewind-theme": "./dist/nativewind-theme.cjs",
+    "./nativewind-typography": "./dist/nativewind-typography.cjs",
     "./native": {
       "types": "./dist/native.d.ts",
       "import": "./dist/native.js",
@@ -47,7 +48,7 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "style-dictionary": "^4.0.0",
+    "style-dictionary": "^5.5.0",
     "typescript": "^5.9.3"
   }
 }

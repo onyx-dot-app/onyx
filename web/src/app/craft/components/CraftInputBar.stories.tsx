@@ -10,7 +10,7 @@ import {
   builtinFixture,
   customFixture,
 } from "@/lib/skills/__fixtures__/picker";
-import type { SkillsList } from "@/refresh-pages/admin/SkillsPage/interfaces";
+import type { SkillsList } from "@/lib/skills/types";
 import type { PickerEntry } from "@/lib/skills/picker";
 import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
 import type { LibraryEntry } from "@/app/craft/types/user-library";
@@ -111,7 +111,7 @@ const meta: Meta<typeof CraftInputBar> = {
 export default meta;
 type Story = StoryObj<typeof CraftInputBar>;
 
-/** Idle input — + button replaces old paperclip; typing /skill opens the picker. */
+/** Idle input: + button replaces old paperclip; typing /skill opens the picker. */
 export const Default: Story = {};
 
 /** While a response streams: Stop button appears, InterruptHint shows. */

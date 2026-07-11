@@ -37,7 +37,7 @@ import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import { toast } from "@/hooks/useToast";
 import { SvgArrowExchange } from "@opal/icons";
 import { useAuthType } from "@/lib/hooks";
-import { AuthType } from "@/lib/constants";
+import { AuthType } from "@/lib/auth/types";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServer | null;

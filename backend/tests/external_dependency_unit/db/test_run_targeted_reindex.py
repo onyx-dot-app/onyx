@@ -40,7 +40,7 @@ from onyx.db.targeted_reindex import create_targeted_reindex_job
 from onyx.db.targeted_reindex import resolve_error_ids_to_targets
 from onyx.db.targeted_reindex import targets_to_connector_failures
 from onyx.db.targeted_reindex import TargetSpec
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
@@ -150,7 +150,7 @@ def test_unsupported_connector_marks_all_targets_failed(
             cc_pair_id=cc_pair.id,
             targets=target_rows,
             attempts=attempts,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             db_session=db_session,
         )
 
@@ -190,7 +190,7 @@ def test_resolver_yields_all_docs_lands_them_all(
             cc_pair_id=cc_pair.id,
             targets=target_rows,
             attempts=attempts,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             db_session=db_session,
         )
 
@@ -237,7 +237,7 @@ def test_connector_failure_yields_route_to_failed_doc_ids(
             cc_pair_id=cc_pair.id,
             targets=target_rows,
             attempts=attempts,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             db_session=db_session,
         )
 
@@ -279,7 +279,7 @@ def test_doc_never_yielded_is_marked_failed(
             cc_pair_id=cc_pair.id,
             targets=target_rows,
             attempts=attempts,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             db_session=db_session,
         )
 

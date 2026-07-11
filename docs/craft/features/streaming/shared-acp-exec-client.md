@@ -61,11 +61,9 @@ independently of the Docker functional work in the prior PR.
   K8s ACP path must remain byte-for-byte equivalent to its current
   behavior. Verify by reading the resulting K8s subclass + running the
   existing unit tests.
-- The `logger` prefixes differ (`[ACP]` vs `[DOCKER-ACP]`) and the
-  `packet_logger` `context=` argument differs (`"k8s"` vs `"docker"`).
-  The base class takes a `log_prefix` and `log_context` (or wraps them
-  into a single `transport_name` field that derives both) to preserve
-  identical log output on each backend.
+- The `logger` prefixes differ (`[ACP]` vs `[DOCKER-ACP]`). The base
+  class takes a `log_prefix` (or a `transport_name` field that derives
+  it) to preserve identical log output on each backend.
 
 ## Implementation Strategy
 
@@ -86,7 +84,7 @@ Five abstract methods (minimum needed to cover the transport divergence):
 
 ```python
 class ACPExecClientBase(ABC):
-    transport_name: ClassVar[str]  # "k8s" or "docker" — drives log_prefix + packet_logger context
+    transport_name: ClassVar[str]  # "k8s" or "docker" — drives log_prefix
 
     @abstractmethod
     def _open_transport(self, cwd: str) -> None: ...
@@ -124,7 +122,6 @@ class ACPExecClientBase(ABC):
 4. Reset `self._state = ACPClientState()`.
 
 `_enqueue_message(msg)` (helper for subclass readers):
-- Log via `packet_logger.log_jsonrpc_raw_message("IN", msg, context=self.transport_name)`.
 - Put on `self._response_queue`.
 
 `__enter__` / `__exit__` shared.

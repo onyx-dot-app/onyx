@@ -47,6 +47,17 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/reset-password", {"POST"}),
     ("/auth/request-verify-token", {"POST"}),
     ("/auth/verify", {"POST"}),
+    # native mobile bearer-token auth — mirrors the basic-auth routes above,
+    # but the session token is delivered as a Bearer instead of a cookie.
+    # (refresh/logout still enforce the token via their own dependencies;
+    # listing them here only satisfies the startup public-route assertion.)
+    ("/auth/mobile/login", {"POST"}),
+    ("/auth/mobile/refresh", {"POST"}),
+    ("/auth/mobile/logout", {"POST"}),
+    # swaps a one-time SSO code (+ PKCE verifier) for the session token; it has
+    # no user dependency by design (the code IS the credential), so it must be
+    # declared public to satisfy the startup public-route assertion.
+    ("/auth/mobile/sso/exchange", {"POST"}),
     ("/users/me", {"GET"}),
     ("/users/me", {"PATCH"}),
     ("/users/{id}", {"GET"}),
@@ -55,13 +66,21 @@ PUBLIC_ENDPOINT_SPECS = [
     # oauth
     ("/auth/oauth/authorize", {"GET"}),
     ("/auth/oauth/callback", {"GET"}),
+    # dedicated mobile google oauth (callback routes to the api_server, not the web app)
+    ("/auth/mobile/oauth/authorize", {"GET"}),
+    ("/auth/mobile/oauth/callback", {"GET"}),
     # oidc
     ("/auth/oidc/authorize", {"GET"}),
     ("/auth/oidc/callback", {"GET"}),
-    # saml
+    # db-backed multi-provider oidc/google (oidc_multi router)
+    ("/auth/oidc/{provider_name}/authorize", {"GET"}),
+    ("/auth/oidc/{provider_name}/callback", {"GET"}),
+    # saml (single router: legacy-compatible + parametric authorize, one
+    # issuer-resolved callback)
     ("/auth/saml/authorize", {"GET"}),
-    ("/auth/saml/callback", {"POST"}),
+    ("/auth/saml/{provider_name}/authorize", {"GET"}),
     ("/auth/saml/callback", {"GET"}),
+    ("/auth/saml/callback", {"POST"}),
     ("/auth/saml/logout", {"POST"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),

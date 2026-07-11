@@ -1,9 +1,9 @@
 import copy
 import os
+import re
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from contextlib import nullcontext
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -56,8 +56,10 @@ from onyx.llm.well_known_providers.constants import (
 )
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
+from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_generator_function_time
 
 logger = setup_logger()
 
@@ -78,37 +80,22 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
     "claude-opus-4-8",
 )
 
-# Anthropic models that require the adaptive thinking API (thinking.type.adaptive
-# + output_config.effort) instead of the legacy thinking.type.enabled + budget_tokens.
-_ANTHROPIC_ADAPTIVE_THINKING_MODELS = (
-    "claude-opus-4-7",
-    "claude-opus-4-8",
-    "claude-fable-5",
-    "claude-5-fable",
-    "claude-mythos-5",
-    "claude-5-mythos",
-)
+# Starting with Claude Opus 4.7, Anthropic requires the adaptive thinking API
+# (thinking.type.adaptive + output_config.effort) in place of the legacy
+# thinking.type.enabled + budget_tokens, and rejects any non-default sampling
+# parameter (temperature/top_p/top_k) with a 400 invalid_request_error. Every
+# later model — Opus 4.8, the Claude 5 line (fable/mythos/sonnet), and beyond —
+# inherits both behaviors, so we gate on the parsed model version rather than an
+# explicit list. This lets new releases be handled without a code change, and
+# avoids relying on LiteLLM's drop_params (unreliable here, since AnthropicConfig
+# still advertises temperature as supported).
+_ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
 
-# Anthropic models that reject any non-default sampling parameter (temperature,
-# top_p, top_k). For these models we must omit these params entirely from the
-# request payload — passing them returns a 400 invalid_request_error. LiteLLM's
-# drop_params is unreliable here because AnthropicConfig still lists temperature
-# as supported. Match on substring to cover proxy/Vertex naming variants (e.g.
-# "claude-4.7-opus" via litellm_proxy).
-_ANTHROPIC_NO_SAMPLING_PARAMS_MODELS = (
-    "claude-opus-4-7",
-    "claude-opus-4.7",
-    "claude-4-7-opus",
-    "claude-4.7-opus",
-    "claude-opus-4-8",
-    "claude-opus-4.8",
-    "claude-4-8-opus",
-    "claude-4.8-opus",
-    "claude-fable-5",
-    "claude-5-fable",
-    "claude-mythos-5",
-    "claude-5-mythos",
-)
+# Named tiers spanning Claude's naming schemes, including the Claude 5 line whose
+# version digit can precede or follow the tier ("claude-sonnet-5" vs
+# "claude-5-sonnet").
+_ANTHROPIC_MODEL_TIERS = ("opus", "sonnet", "haiku", "fable", "mythos")
+_ANTHROPIC_VERSION_PATTERN = r"\d+(?:[.-]\d+)?"
 
 
 class LLMTimeoutError(Exception):
@@ -271,20 +258,53 @@ def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
     )
 
 
+def _parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
+    """Extract the (major, minor) version from a Claude model name.
+
+    Handles the naming variants that reach LiteLLM: tier-first
+    ("claude-opus-4-8"), version-first ("claude-4-8-opus"), dot-separated
+    ("claude-opus-4.8"), the named Claude 5 tiers ("claude-fable-5",
+    "claude-5-sonnet"), legacy names ("claude-3-5-sonnet-20241022"), and
+    provider-prefixed / date-snapshot forms. Returns None when the name is not a
+    Claude model or carries no parseable version.
+    """
+    name = model_name.lower()
+    if "claude" not in name:
+        return None
+    # Drop any provider prefix (e.g. "anthropic/", "bedrock/anthropic.").
+    name = name[name.index("claude") :]
+    # Drop date/snapshot suffixes ("@20260101", "-20241022") so their digits
+    # can't be mistaken for a version.
+    name = name.split("@")[0]
+    name = re.sub(r"\d{6,}", "", name)
+
+    tier = next((t for t in _ANTHROPIC_MODEL_TIERS if t in name), None)
+    if tier is not None:
+        # The version can sit on either side of the tier depending on scheme.
+        match = re.search(
+            rf"{tier}[.-]?({_ANTHROPIC_VERSION_PATTERN})", name
+        ) or re.search(rf"({_ANTHROPIC_VERSION_PATTERN})[.-]?{tier}", name)
+        version_str = match.group(1) if match else None
+    else:
+        match = re.search(_ANTHROPIC_VERSION_PATTERN, name)
+        version_str = match.group(0) if match else None
+
+    if not version_str:
+        return None
+    parts = re.split(r"[.-]", version_str)
+    major = int(parts[0])
+    minor = int(parts[1]) if len(parts) > 1 else 0
+    return (major, minor)
+
+
 def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
-    normalized_model_name = model_name.lower()
-    return any(
-        adaptive_model in normalized_model_name
-        for adaptive_model in _ANTHROPIC_ADAPTIVE_THINKING_MODELS
-    )
+    version = _parse_anthropic_model_version(model_name)
+    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
 
 
 def _anthropic_omits_sampling_params(model_name: str) -> bool:
-    normalized_model_name = model_name.lower()
-    return any(
-        no_sampling_model in normalized_model_name
-        for no_sampling_model in _ANTHROPIC_NO_SAMPLING_PARAMS_MODELS
-    )
+    version = _parse_anthropic_model_version(model_name)
+    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
 
 
 class LitellmLLM(LLM):
@@ -405,6 +425,7 @@ class LitellmLLM(LLM):
         if model_provider in (
             LlmProviderNames.BIFROST,
             LlmProviderNames.OPENAI_COMPATIBLE,
+            LlmProviderNames.NEBIUS_TOKENFACTORY,
         ):
             self._custom_llm_provider = "openai"
             # LiteLLM's OpenAI client requires an api_key to be set.
@@ -505,6 +526,7 @@ class LitellmLLM(LLM):
         # Flags that modify the final arguments
         #########################
         is_claude_model = "claude" in self.config.model_name.lower()
+        is_qwen_model = "qwen" in self.config.model_name.lower()
         is_reasoning = model_is_reasoning_model(
             self.config.model_name, self.config.model_provider
         )
@@ -533,6 +555,7 @@ class LitellmLLM(LLM):
         is_openai_compatible_proxy = self._model_provider in (
             LlmProviderNames.BIFROST,
             LlmProviderNames.OPENAI_COMPATIBLE,
+            LlmProviderNames.NEBIUS_TOKENFACTORY,
         )
         model_provider = (
             f"{self.config.model_provider}/responses"
@@ -549,9 +572,15 @@ class LitellmLLM(LLM):
             model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
 
         # Tool choice
-        if is_claude_model and tool_choice == ToolChoiceOptions.REQUIRED:
-            # Claude models will not use reasoning if tool_choice is required
-            # let it choose tools automatically so reasoning can still be used
+        # Downgrade tool_choice=required to AUTO for models that mishandle it:
+        # Claude skips reasoning when it's set, and Qwen thinking models reject
+        # it with a 400. The chat loop's fallback tool-call extraction still
+        # enforces the forced tool. Matched by model name rather than
+        # `is_reasoning` because the litellm/local registry lags behind new
+        # Qwen releases (e.g. qwen3.7-plus).
+        if (is_claude_model or is_qwen_model) and (
+            tool_choice == ToolChoiceOptions.REQUIRED
+        ):
             tool_choice = ToolChoiceOptions.AUTO
 
         # If no tools are provided, tool_choice should be None
@@ -720,47 +749,37 @@ class LitellmLLM(LLM):
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
 
-            # We only need to set environment variables if custom config is set
-            env_ctx = (
-                temporary_env_and_lock(self._custom_config)
-                if self._custom_config
-                else nullcontext()
-            )
-            with env_ctx:
-                messages = _prompt_to_dicts(prompt)
+            messages = _prompt_to_dicts(prompt)
 
-                # Bedrock's Converse API requires toolConfig when messages
-                # contain toolUse/toolResult content blocks. When no tools are
-                # provided for this request but the history contains tool
-                # content from previous turns, strip it to plain text.
-                is_bedrock = self._model_provider in {
-                    LlmProviderNames.BEDROCK,
-                    LlmProviderNames.BEDROCK_CONVERSE,
-                }
-                if (
-                    is_bedrock
-                    and not tools
-                    and _messages_contain_tool_content(messages)
-                ):
-                    messages = _strip_tool_content_from_messages(messages)
+            # Bedrock's Converse API requires toolConfig when messages
+            # contain toolUse/toolResult content blocks. When no tools are
+            # provided for this request but the history contains tool
+            # content from previous turns, strip it to plain text.
+            is_bedrock = self._model_provider in {
+                LlmProviderNames.BEDROCK,
+                LlmProviderNames.BEDROCK_CONVERSE,
+            }
+            if is_bedrock and not tools and _messages_contain_tool_content(messages):
+                messages = _strip_tool_content_from_messages(messages)
 
-                # Some models (e.g. Mistral) reject a user message
-                # immediately after a tool message. Insert a synthetic
-                # assistant bridge message to satisfy the ordering
-                # constraint. Check both the provider and the deployment/
-                # model name to catch Mistral hosted on Azure.
-                model_or_deployment = (
-                    self._deployment_name or self._model_version or ""
-                ).lower()
-                is_mistral_model = is_mistral or "mistral" in model_or_deployment
-                if is_mistral_model:
-                    messages = _fix_tool_user_message_ordering(messages)
+            # Some models (e.g. Mistral) reject a user message
+            # immediately after a tool message. Insert a synthetic
+            # assistant bridge message to satisfy the ordering
+            # constraint. Check both the provider and the deployment/
+            # model name to catch Mistral hosted on Azure.
+            model_or_deployment = (
+                self._deployment_name or self._model_version or ""
+            ).lower()
+            is_mistral_model = is_mistral or "mistral" in model_or_deployment
+            if is_mistral_model:
+                messages = _fix_tool_user_message_ordering(messages)
 
-                # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
-                # reject requests where tool_choice is explicitly null.
-                if tools and tool_choice is not None:
-                    optional_kwargs["tool_choice"] = tool_choice
+            # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
+            # reject requests where tool_choice is explicitly null.
+            if tools and tool_choice is not None:
+                optional_kwargs["tool_choice"] = tool_choice
 
+            with temporary_env_and_lock(self._custom_config or {}):
                 response = litellm.completion(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
@@ -1006,12 +1025,23 @@ class LitellmLLM(LLM):
 
 
 @contextmanager
+@log_generator_function_time()
 def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
     """
     Temporarily sets the environment variables to the given values.
-    Code path is locked while the environment variables are set.
-    Then cleans up the environment and frees the lock.
+    _env_lock is held while the environment variables are set, so no concurrent
+    LLM call can observe them. Then cleans up the environment and releases the
+    lock.
     """
+    if env_variables:
+        masked_env = {
+            key: mask_env_value_for_logging(key, value)
+            for key, value in env_variables.items()
+        }
+        logger.info(
+            "temporary_env_and_lock setting custom_config env var(s): %s",
+            masked_env,
+        )
     with _env_lock:
         logger.debug("Acquired lock in temporary_env_and_lock")
         # Store original values (None if key didn't exist)

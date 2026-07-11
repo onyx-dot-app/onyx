@@ -9,6 +9,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CredentialsConnector
@@ -23,6 +24,7 @@ from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.enums import AccessType
 from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback
+from onyx.utils.credential_audit import emit_credential_access
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -120,6 +122,15 @@ def instantiate_connector(
         )
         connector.set_credentials_provider(provider)
     else:
+        if credential.credential_json:
+            # Distinct decrypt site from OnyxDBCredentialsProvider (static /
+            # non-dynamic connectors load creds directly here), so this is not
+            # double-logged. Audit is best-effort and never raises.
+            emit_credential_access(
+                credential_type="connector",
+                provider=str(source),
+                row_id=credential.id,
+            )
         credential_json = (
             credential.credential_json.get_value(apply_mask=False)
             if credential.credential_json
@@ -175,15 +186,15 @@ def validate_ccpair_for_user(
             connector_specific_config=connector.connector_specific_config,
             credential=credential,
         )
-    except ConnectorValidationError as e:
-        raise e
+        runnable_connector.validate_connector_settings()
+        if access_type == AccessType.SYNC:
+            runnable_connector.validate_perm_sync()
+    except ValidationError:
+        raise
     except Exception as e:
         if enforce_creation:
             raise ConnectorValidationError(str(e))
         else:
             return False
 
-    runnable_connector.validate_connector_settings()
-    if access_type == AccessType.SYNC:
-        runnable_connector.validate_perm_sync()
     return True

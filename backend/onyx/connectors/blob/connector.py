@@ -31,9 +31,6 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
 )
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    tabular_file_to_sections,
-)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -506,19 +503,20 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                             tabular_sections = result.sections
                             staged_file_id = result.staged_file_id
                         else:
-                            tabular_sections = tabular_file_to_sections(
-                                BytesIO(downloaded_file),
-                                file_name=file_name,
-                                link=link,
+                            logger.warning(
+                                "Skipping tabular file %s because raw_file_callback is not set",
+                                file_name,
                             )
+                            continue
+                        if not tabular_sections:
+                            logger.warning(
+                                "No content extracted from tabular file %s", file_name
+                            )
+                            continue
                         batch.append(
                             Document(
                                 id=f"{self.bucket_type}:{self.bucket_name}:{key}",
-                                sections=(
-                                    tabular_sections
-                                    if tabular_sections
-                                    else [TabularSection(link=link, text="")]
-                                ),
+                                sections=tabular_sections,
                                 source=DocumentSource(self.bucket_type.value),
                                 semantic_identifier=file_name,
                                 doc_updated_at=last_modified,

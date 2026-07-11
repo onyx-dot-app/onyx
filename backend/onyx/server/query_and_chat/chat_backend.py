@@ -1,5 +1,6 @@
 import datetime
 import json
+import time
 from collections.abc import Generator
 from datetime import timedelta
 from uuid import UUID
@@ -10,6 +11,7 @@ from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from fastapi import Response
+from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -20,6 +22,7 @@ from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.cache.factory import get_cache_backend
+from onyx.chat.chat_processing_checker import get_processing_run_id
 from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import convert_chat_history_basic
@@ -33,7 +36,11 @@ from onyx.chat.process_message import handle_multi_model_stream
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
+from onyx.chat.stream_buffer import has_stream_buffer
+from onyx.chat.stream_buffer import read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
+from onyx.configs.chat_configs import CHAT_RESUME_POLL_INTERVAL_S
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
@@ -74,6 +81,8 @@ from onyx.llm.factory import get_llm_token_counter
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
+from onyx.server.query_and_chat.chat_utils import is_spreadsheet_mime_type
+from onyx.server.query_and_chat.chat_utils import parse_spreadsheet_for_preview
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -85,6 +94,7 @@ from onyx.server.query_and_chat.models import ChatSessionGroup
 from onyx.server.query_and_chat.models import ChatSessionsResponse
 from onyx.server.query_and_chat.models import ChatSessionSummary
 from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
+from onyx.server.query_and_chat.models import CurrentRunInfo
 from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -94,6 +104,7 @@ from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
 from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
+from onyx.server.query_and_chat.streaming_models import heartbeat_packet
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
@@ -337,13 +348,11 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
+    current_run: CurrentRunInfo | None = None
     try:
-        is_processing = is_chat_session_processing(session_id, get_cache_backend())
-        # Edit the last message to indicate loading (Overriding default message value)
-        if is_processing and chat_message_details:
-            last_msg = chat_message_details[-1]
-            if last_msg.message_type == MessageType.ASSISTANT:
-                last_msg.message = "Message is loading... Please refresh the page soon."
+        run_id = get_processing_run_id(session_id, get_cache_backend())
+        if run_id is not None:
+            current_run = CurrentRunInfo(run_id=run_id)
     except Exception:
         logger.exception(
             "An error occurred while checking if the chat session is processing"
@@ -376,6 +385,7 @@ def get_chat_session(
         owner_name=chat_session.user.personal_name if chat_session.user else None,
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
+        current_run=current_run,
     )
 
 
@@ -886,6 +896,7 @@ def seed_chat_from_slack(
 def fetch_chat_file(
     file_id: str,
     request: Request,
+    parsed: bool = Query(False),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> Response:
@@ -905,11 +916,13 @@ def fetch_chat_file(
         raise HTTPException(status_code=404, detail="File not found")
 
     media_type = file_record.file_type
-    file_io = file_store.read_file(file_id, mode="b")
+    # `parsed` only changes behavior for spreadsheet files (xlsx is a binary zip
+    # the frontend cannot render); everything else is served raw as usual.
+    parse_spreadsheet = parsed and is_spreadsheet_mime_type(media_type)
 
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
-    etag = f'"{file_id}"'
+    etag = f'"{file_id}-parsed"' if parse_spreadsheet else f'"{file_id}"'
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
@@ -919,6 +932,16 @@ def fetch_chat_file(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    if parse_spreadsheet:
+        # Use a tempfile since openpyxl needs a seekable file and the workbook
+        # may be large.
+        with file_store.read_file(file_id, mode="b", use_tempfile=True) as xlsx_io:
+            preview = parse_spreadsheet_for_preview(
+                xlsx_io, file_record.display_name or ""
+            )
+        return JSONResponse(content=preview.model_dump(), headers=cache_headers)
+
+    file_io = file_store.read_file(file_id, mode="b")
     return StreamingResponse(file_io, media_type=media_type, headers=cache_headers)
 
 
@@ -1000,6 +1023,91 @@ async def search_chats(
         has_more=has_more,
         next_page=page + 1 if has_more else None,
     )
+
+
+# ~32 KiB decompressed per chunk → ~1 MiB peak per read; a full-buffer replay
+# would otherwise materialize up to the whole decompressed buffer at once.
+_RESUME_MAX_CHUNKS_PER_READ = 32
+
+
+@router.get("/chat-session/{session_id}/resume-stream")
+def resume_chat_stream(
+    session_id: UUID,
+    cursor: int = Query(0, ge=0),
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
+) -> StreamingResponse:
+    """Replay an in-flight run's buffered stream from ``cursor`` and tail it
+    live until the run completes. Serves any pod: the buffer lives in the
+    shared cache. 404 when the session has no resumable run — the client
+    falls back to refetching the session."""
+    # Short-lived session: a Depends(get_session) would stay checked out (idle
+    # in transaction) for the lifetime of the SSE response.
+    with get_session_with_current_tenant() as db_session:
+        try:
+            get_chat_session_by_id(
+                chat_session_id=session_id,
+                user_id=user.id,
+                db_session=db_session,
+            )
+        except ValueError:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND)
+
+    cache = get_cache_backend()
+    run_id = get_processing_run_id(session_id, cache)
+    if run_id is None or not has_stream_buffer(cache, session_id, run_id):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, "No resumable run for this chat session"
+        )
+
+    def stream_buffered_run() -> Generator[str, None, None]:
+        chunk_cursor = cursor
+        last_emit = time.monotonic()
+        while True:
+            read = read_stream_chunks(
+                cache,
+                session_id,
+                run_id,
+                chunk_cursor,
+                max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
+            )
+            # Buffer expired/evicted or sequence broken: end the stream — the
+            # client refetches the session and renders the persisted message.
+            if read is None or read.gap:
+                return
+            if read.blocks:
+                yield "".join(read.blocks)
+                chunk_cursor = read.next_cursor
+                last_emit = time.monotonic()
+                # Drain the backlog before sleeping; done is only trusted once
+                # a read comes back empty (a capped read can precede the tail).
+                continue
+            if read.done:
+                return
+            # A dead writer never marks done; its fence lapsing is the signal.
+            # A final drain catches anything written between the read above
+            # and this check (including the done marker's last chunks).
+            if not is_chat_session_processing(session_id, cache):
+                while True:
+                    read = read_stream_chunks(
+                        cache,
+                        session_id,
+                        run_id,
+                        chunk_cursor,
+                        max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
+                    )
+                    if read is None or read.gap or not read.blocks:
+                        return
+                    yield "".join(read.blocks)
+                    chunk_cursor = read.next_cursor
+            now = time.monotonic()
+            if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:
+                yield get_json_line(heartbeat_packet().model_dump())
+                last_emit = now
+            time.sleep(CHAT_RESUME_POLL_INTERVAL_S)
+
+    return StreamingResponse(stream_buffered_run(), media_type="text/event-stream")
 
 
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)

@@ -27,6 +27,7 @@ class SandboxProxyError(str, Enum):
     INTERNAL_ERROR = "internal_error"
     POLICY_DENIED = "policy_denied"
     CREDENTIAL_ERROR = "credential_error"
+    DESTINATION_BLOCKED = "destination_blocked"
 
     @property
     def message(self) -> str:
@@ -53,7 +54,7 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "action could not be authorized and ask how they want to proceed."
     ),
     SandboxProxyError.BODY_TOO_LARGE: (
-        "The request body is larger than the 1 MiB limit the proxy allows, so it "
+        "The request body is larger than the size limit the proxy allows, so it "
         "was blocked. Shrink the payload and try again — for example, send fewer "
         "items per request, paginate, or break the work into smaller calls. "
         "Large file uploads should go through a dedicated upload flow rather "
@@ -91,6 +92,13 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "its saved credentials have expired or been revoked. Ask the user to "
         "connect or reconnect this integration in their Craft settings, then "
         "retry."
+    ),
+    SandboxProxyError.DESTINATION_BLOCKED: (
+        "This request targets an internal network address that sandboxes are not "
+        "allowed to reach, so it was blocked before any connection was made. Only "
+        "the public internet and the Onyx API server are reachable from here. "
+        "This is a fixed security boundary, not a transient error — do not retry "
+        "against internal hosts (databases, caches, metadata endpoints, etc.)."
     ),
 }
 

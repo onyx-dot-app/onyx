@@ -1,13 +1,28 @@
 {
-  "version": "1.4",
-  "updated_at": "2026-06-04T00:00:00Z",
+  "version": "1.7",
+  "updated_at": "2026-07-10T00:00:00Z",
   "providers": {
     "openai": {
-      "default_model": "gpt-5.5",
+      "default_model": "gpt-5.6-sol",
       "additional_visible_models": [
-        { "name": "gpt-5.5" },
-        { "name": "gpt-5.4" },
-        { "name": "gpt-5.2" }
+        {
+          "name": "gpt-5.6-sol"
+        },
+        {
+          "name": "gpt-5.6-terra"
+        },
+        {
+          "name": "gpt-5.6-luna"
+        },
+        {
+          "name": "gpt-5.5"
+        },
+        {
+          "name": "gpt-5.4"
+        },
+        {
+          "name": "gpt-5.2"
+        }
       ]
     },
     "anthropic": {
@@ -26,8 +41,12 @@
           "display_name": "Claude Opus 4.6"
         },
         {
-          "name": "claude-sonnet-4-6",
-          "display_name": "Claude Sonnet 4.6"
+          "name": "claude-fable-5",
+          "display_name": "Claude Fable 5"
+        },
+        {
+          "name": "claude-sonnet-5",
+          "display_name": "Claude Sonnet 5"
         },
         {
           "name": "claude-haiku-4-5",
@@ -43,25 +62,25 @@
           "display_name": "Gemini 3.1 Pro"
         },
         {
-          "name": "gemini-3-flash-preview",
-          "display_name": "Gemini 3 Flash"
+          "name": "gemini-3.5-flash",
+          "display_name": "Gemini 3.5 Flash"
         }
       ]
     },
     "openrouter": {
-      "default_model": "z-ai/glm-5.1",
+      "default_model": "z-ai/glm-5.2",
       "additional_visible_models": [
         {
-          "name": "z-ai/glm-5.1",
-          "display_name": "GLM 5.1"
+          "name": "z-ai/glm-5.2",
+          "display_name": "GLM 5.2"
         },
         {
           "name": "deepseek/deepseek-v4-pro",
           "display_name": "DeepSeek V4 Pro"
         },
         {
-          "name": "qwen/qwen3.6-plus",
-          "display_name": "Qwen3.6 Plus"
+          "name": "qwen/qwen3.7-plus",
+          "display_name": "Qwen3.7 Plus"
         },
         {
           "name": "moonshotai/kimi-k2.6",

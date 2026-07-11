@@ -1,5 +1,8 @@
-import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
-import { LLMOption } from "./interfaces";
+import {
+  buildLlmOptions,
+  groupLlmOptions,
+  LLMOption,
+} from "@/lib/languageModels/options";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 
@@ -16,6 +19,7 @@ describe("LLMPopover helpers", () => {
             max_input_tokens: null,
             supports_image_input: false,
             supports_reasoning: false,
+            effectiveDisplayName: "shared-model",
           },
         ],
       }),
@@ -29,6 +33,7 @@ describe("LLMPopover helpers", () => {
             max_input_tokens: null,
             supports_image_input: false,
             supports_reasoning: false,
+            effectiveDisplayName: "shared-model",
           },
         ],
       }),
@@ -42,6 +47,7 @@ describe("LLMPopover helpers", () => {
             max_input_tokens: null,
             supports_image_input: false,
             supports_reasoning: false,
+            effectiveDisplayName: "shared-model",
           },
         ],
       }),
@@ -71,6 +77,7 @@ describe("LLMPopover helpers", () => {
             max_input_tokens: null,
             supports_image_input: false,
             supports_reasoning: false,
+            effectiveDisplayName: "shared-model",
           },
         ],
       }),
@@ -103,8 +110,8 @@ describe("LLMPopover helpers", () => {
     const grouped = groupLlmOptions(options);
 
     expect(grouped.map((group) => group.key)).toEqual([
-      "bedrock/anthropic",
-      "openai",
+      "bedrock provider/anthropic",
+      "openai provider",
     ]);
     expect(grouped[0]?.displayName).toBe("Amazon Bedrock/Anthropic");
     expect(grouped[1]?.displayName).toBe("ChatGPT (OpenAI)");

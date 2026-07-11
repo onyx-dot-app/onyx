@@ -7,7 +7,7 @@ Thin HTTP layer over ``onyx.db.scheduled_task``. Every handler:
 3. Optionally enqueues the executor task on the ``scheduled_tasks`` queue.
 
 The router is mounted under the existing ``/build`` prefix (see
-``backend/onyx/server/features/build/api/api.py``), which provides the
+``backend/onyx/server/features/build/api.py``), which provides the
 ``require_onyx_craft_enabled`` gate.
 """
 
@@ -89,9 +89,7 @@ router = APIRouter(prefix="/scheduled-tasks")
 
 
 class _Forbid(BaseModel):
-    """Base model that rejects unknown fields. Matches the convention in
-    ``backend/onyx/server/features/build/api/models.py`` for newer endpoints.
-    """
+    """Base model that rejects unknown fields."""
 
     model_config = ConfigDict(extra="forbid")
 

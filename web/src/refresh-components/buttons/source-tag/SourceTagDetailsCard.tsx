@@ -85,7 +85,7 @@ const SourceTagDetailsCardInner = ({
   );
 
   return (
-    <div className="w-70 bg-background-neutral-00 border border-border-01 rounded-12 shadow-01 overflow-hidden">
+    <div className="w-70 bg-background-neutral-00 border border-border-01 rounded-12 shadow-box-01 overflow-hidden">
       {/* Navigation header - only shown for multiple sources */}
       {showNavigation && (
         <div className="flex items-center justify-between p-2 bg-background-tint-01 border-b border-border-01">

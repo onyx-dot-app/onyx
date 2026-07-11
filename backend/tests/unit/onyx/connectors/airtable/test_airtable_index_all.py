@@ -34,7 +34,12 @@ def _make_table_schema(
 
 
 def _make_record(record_id: str, fields: dict[str, Any]) -> dict[str, Any]:
-    return {"id": record_id, "fields": fields}
+    # Airtable always returns createdTime on every record.
+    return {
+        "id": record_id,
+        "createdTime": "2023-01-01T00:00:00.000Z",
+        "fields": fields,
+    }
 
 
 def _make_base_info(base_id: str, name: str) -> MagicMock:

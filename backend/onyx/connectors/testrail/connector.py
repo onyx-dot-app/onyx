@@ -387,6 +387,13 @@ class TestRailConnector(LoadConnector, PollConnector):
             else None
         )
 
+        created = case.get("created_on")
+        created_dt = (
+            datetime.fromtimestamp(created, tz=timezone.utc)
+            if isinstance(created, (int, float))
+            else None
+        )
+
         text_lines: list[str] = []
         if case.get("title"):
             text_lines.append(f"Title: {case['title']}")
@@ -476,6 +483,8 @@ class TestRailConnector(LoadConnector, PollConnector):
             sections=[TextSection(link=link, text=full_text)],
             metadata=metadata,
             doc_updated_at=updated_dt,
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=created_dt,
         )
 
     def _generate_documents(

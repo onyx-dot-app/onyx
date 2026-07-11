@@ -639,3 +639,57 @@ class TestGongConnectorCheckpoint:
         assert checkpoint.cursor is None
         assert checkpoint.workspace_index == 0
         assert checkpoint.has_more is True
+
+
+_GONG_CREDS = {"gong_access_key": "key", "gong_access_key_secret": "secret"}
+
+
+def test_default_base_url_when_not_overridden() -> None:
+    connector = GongConnector()
+    connector.load_credentials(_GONG_CREDS)
+    assert connector.base_url == "https://api.gong.io"
+    assert connector.make_url("/v2/workspaces") == "https://api.gong.io/v2/workspaces"
+
+
+def test_base_url_override_normalizes_scheme_and_trailing_slash() -> None:
+    connector = GongConnector()
+    # No scheme and a trailing slash — both should be normalized.
+    connector.load_credentials(
+        {**_GONG_CREDS, "gong_base_url": "eu-99999.api.gong.io/"}
+    )
+    assert connector.base_url == "https://eu-99999.api.gong.io"
+    assert (
+        connector.make_url("/v2/calls/transcript")
+        == "https://eu-99999.api.gong.io/v2/calls/transcript"
+    )
+
+
+def test_empty_base_url_falls_back_to_default() -> None:
+    connector = GongConnector()
+    connector.load_credentials({**_GONG_CREDS, "gong_base_url": ""})
+    assert connector.base_url == "https://api.gong.io"
+
+
+def test_base_url_rejects_non_gong_host() -> None:
+    connector = GongConnector()
+    with pytest.raises(ValueError):
+        connector.load_credentials(
+            {**_GONG_CREDS, "gong_base_url": "https://attacker.example.com"}
+        )
+
+
+def test_base_url_rejects_host_spoofing_gong_suffix() -> None:
+    connector = GongConnector()
+    with pytest.raises(ValueError):
+        connector.load_credentials(
+            {**_GONG_CREDS, "gong_base_url": "https://api.gong.io.attacker.com"}
+        )
+
+
+@pytest.mark.parametrize("scheme", ["http", "HTTP", "HtTp"])
+def test_base_url_rejects_http_scheme(scheme: str) -> None:
+    connector = GongConnector()
+    with pytest.raises(ValueError, match="must use https"):
+        connector.load_credentials(
+            {**_GONG_CREDS, "gong_base_url": f"{scheme}://eu-99999.api.gong.io"}
+        )

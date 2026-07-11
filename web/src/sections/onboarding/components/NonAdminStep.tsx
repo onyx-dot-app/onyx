@@ -3,7 +3,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
-import { updateUserPersonalization } from "@/lib/userSettings";
+import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -11,7 +11,7 @@ import { Button } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, InputHorizontal } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 
 export default function NonAdminStep() {
@@ -60,7 +60,7 @@ export default function NonAdminStep() {
     <>
       {showHeader && (
         <div
-          className="flex items-center justify-between w-full min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-01 mb-2"
+          className="flex items-center justify-between w-full min-h-11 py-1 pl-3 pr-2 bg-background-tint-00 rounded-16 shadow-box-01 mb-2"
           aria-label="non-admin-confirmation"
         >
           <ContentAction
@@ -93,35 +93,32 @@ export default function NonAdminStep() {
           role="group"
           aria-label="non-admin-name-prompt"
         >
-          <ContentAction
+          <InputHorizontal
+            responsive
             icon={SvgUser}
             title="What should Onyx call you?"
             description="We will display this name in the app."
-            sizePreset="main-ui"
-            variant="section"
-            padding="fit"
-            rightChildren={
-              <div className="flex items-center justify-end gap-2">
-                <InputTypeIn
-                  ref={inputRef}
-                  placeholder="Your name"
-                  value={name || ""}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setName(e.target.value)
+          >
+            <div className="flex w-full items-center gap-2">
+              <InputTypeIn
+                ref={inputRef}
+                placeholder="Your name"
+                value={name || ""}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setName(e.target.value)
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && name && name.trim().length > 0) {
+                    e.preventDefault();
+                    handleSave();
                   }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && name && name.trim().length > 0) {
-                      e.preventDefault();
-                      handleSave();
-                    }
-                  }}
-                />
-                <Button disabled={name === ""} onClick={handleSave}>
-                  Save
-                </Button>
-              </div>
-            }
-          />
+                }}
+              />
+              <Button disabled={name === ""} onClick={handleSave}>
+                Save
+              </Button>
+            </div>
+          </InputHorizontal>
         </div>
       ) : (
         <Hoverable.Root group="nonAdminName" width="full">

@@ -7,6 +7,7 @@ import os
 from collections.abc import MutableMapping
 from typing import Any
 
+import numpy as np
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import WebSocket
@@ -18,6 +19,7 @@ from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider
 from onyx.db.voice import fetch_default_tts_provider
+from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
 from onyx.voice.interface import StreamingSynthesizerProtocol
@@ -29,10 +31,112 @@ logger = setup_logger()
 router = APIRouter(prefix="/voice")
 
 
-# Transcribe every ~0.5 seconds of audio (webm/opus is ~2-4KB/s, so ~1-2KB per 0.5s)
+# Byte threshold for non-PCM formats, where the audio can't be analyzed server-side
 MIN_CHUNK_BYTES = 1500
+
+# The browser recorder sends raw PCM16 mono at 24kHz
+PCM_SAMPLE_RATE = 24000
+PCM_BYTES_PER_SECOND = PCM_SAMPLE_RATE * 2
+
+# Whisper-style models pad short inputs to a 30s window and hallucinate
+# training-data boilerplate (e.g. broadcast sign-offs) on silence/padding, so
+# PCM audio is transcribed in multi-second windows and windows without speech
+# are dropped without calling the provider.
+PCM_TRANSCRIBE_WINDOW_BYTES = PCM_BYTES_PER_SECOND * 3
+
+# int16 RMS below this (~-46 dBFS) is treated as silence. Speech is typically
+# an order of magnitude above; quiet-room mic noise well below.
+SILENCE_RMS_THRESHOLD = 150.0
+
+# Absolute floor (~-61 dBFS) for the low-gain fallback in
+# _speech_rms_threshold — audio quieter than this everywhere is silence.
+MIN_SPEECH_RMS = 30.0
+
+# Low-gain fallback: quiet audio counts as speech only when its loudest
+# frames stand at least this far (~8dB) above the recording's own noise
+# floor. Speech has strong dynamics (pauses between words); steady mic noise
+# stays near 1x. Below this, an empty transcript (visible, recoverable) is
+# deliberately preferred over risking hallucinated text.
+SPEECH_DYNAMICS_RATIO = 2.5
+
+# Audio kept around detected speech when trimming silence off a full recording
+SILENCE_TRIM_PADDING_SECONDS = 0.5
+
+
+def pcm16_rms(audio: bytes) -> float:
+    """RMS amplitude of raw little-endian PCM16 audio (0.0 for empty input)."""
+    usable = len(audio) - (len(audio) % 2)
+    if usable == 0:
+        return 0.0
+    samples = np.frombuffer(audio[:usable], dtype=np.int16).astype(np.float64)
+    return float(np.sqrt(np.mean(samples * samples)))
+
+
+def _speech_rms_threshold(frame_rms_values: list[float]) -> float | None:
+    """RMS threshold separating speech frames from silence for a recording.
+
+    Uses SILENCE_RMS_THRESHOLD when the recording reaches it. Otherwise falls
+    back to a relative test so quiet input from a low-gain microphone still
+    counts as speech when it stands well out of the recording's own noise
+    floor. Returns None when the recording contains no speech-like content.
+    """
+    if not frame_rms_values:
+        return None
+    peak = max(frame_rms_values)
+    if peak >= SILENCE_RMS_THRESHOLD:
+        return SILENCE_RMS_THRESHOLD
+    if peak < MIN_SPEECH_RMS:
+        return None
+    noise_floor = max(
+        sorted(frame_rms_values)[len(frame_rms_values) // 10], 1.0
+    )  # 10th percentile
+    if peak >= SPEECH_DYNAMICS_RATIO * noise_floor:
+        return max(MIN_SPEECH_RMS, peak / SPEECH_DYNAMICS_RATIO)
+    return None
+
+
+def trim_pcm16_silence(audio: bytes) -> bytes:
+    """Trim leading/trailing silence from raw PCM16 audio.
+
+    Analyzes the audio in 100ms frames and keeps everything from the first to
+    the last speech frame (per _speech_rms_threshold), plus padding. Returns
+    b"" if no frame contains speech.
+    """
+    frame_bytes = PCM_BYTES_PER_SECOND // 10
+    if frame_bytes == 0 or not audio:
+        return audio
+
+    frame_offsets = range(0, len(audio), frame_bytes)
+    frame_rms_values = [
+        pcm16_rms(audio[idx : idx + frame_bytes]) for idx in frame_offsets
+    ]
+    threshold = _speech_rms_threshold(frame_rms_values)
+    if threshold is None:
+        return b""
+
+    speech_frame_indices = [
+        idx
+        for idx, frame_rms in zip(frame_offsets, frame_rms_values)
+        if frame_rms >= threshold
+    ]
+    if not speech_frame_indices:
+        return b""
+
+    padding_bytes = int(PCM_BYTES_PER_SECOND * SILENCE_TRIM_PADDING_SECONDS)
+    start = max(0, speech_frame_indices[0] - padding_bytes)
+    end = min(len(audio), speech_frame_indices[-1] + frame_bytes + padding_bytes)
+    # Keep sample alignment
+    start -= start % 2
+    return audio[start:end]
+
+
 VOICE_DISABLE_STREAMING_FALLBACK = (
     os.environ.get("VOICE_DISABLE_STREAMING_FALLBACK", "").lower() == "true"
+)
+# Force STT onto the chunked/REST path where a provider's native streaming SDK
+# transport is unavailable in the runtime (else it yields empty transcripts).
+VOICE_DISABLE_STREAMING_STT = (
+    os.environ.get("VOICE_DISABLE_STREAMING_STT", "").lower() == "true"
 )
 
 # WebSocket size limits to prevent memory exhaustion attacks
@@ -43,14 +147,24 @@ WS_MAX_TTS_TEXT_LENGTH = 4096  # Max text length per synthesize call (matches RE
 
 
 class ChunkedTranscriber:
-    """Fallback transcriber for providers without streaming support."""
+    """Fallback transcriber for providers without streaming support.
+
+    For raw PCM16 input, audio is transcribed in multi-second windows and
+    silence is never sent to the provider — STT models hallucinate on
+    silent/near-silent audio instead of returning an empty transcript.
+    """
 
     def __init__(self, provider: Any, audio_format: str = "webm"):
         self.provider = provider
         self.audio_format = audio_format
+        self.is_pcm = audio_format == "pcm16"
+        self.window_bytes = (
+            PCM_TRANSCRIBE_WINDOW_BYTES if self.is_pcm else MIN_CHUNK_BYTES
+        )
         self.chunk_buffer = io.BytesIO()
         self.full_audio = io.BytesIO()
         self.chunk_bytes = 0
+        self.window_has_speech = False
         self.transcripts: list[str] = []
 
     async def add_chunk(self, chunk: bytes) -> str | None:
@@ -59,9 +173,28 @@ class ChunkedTranscriber:
         self.full_audio.write(chunk)
         self.chunk_bytes += len(chunk)
 
-        if self.chunk_bytes >= MIN_CHUNK_BYTES:
+        if (
+            self.is_pcm
+            and not self.window_has_speech
+            and pcm16_rms(chunk) >= SILENCE_RMS_THRESHOLD
+        ):
+            self.window_has_speech = True
+
+        if self.chunk_bytes >= self.window_bytes:
+            if self.is_pcm and not self.window_has_speech:
+                logger.debug(
+                    "Chunked transcription: dropping silent window (%s bytes)",
+                    self.chunk_bytes,
+                )
+                self._reset_window()
+                return None
             return await self._transcribe_chunk()
         return None
+
+    def _reset_window(self) -> None:
+        self.chunk_buffer = io.BytesIO()
+        self.chunk_bytes = 0
+        self.window_has_speech = False
 
     async def _transcribe_chunk(self) -> str | None:
         """Transcribe current chunk and append to running transcript."""
@@ -71,8 +204,7 @@ class ChunkedTranscriber:
 
         try:
             transcript = await self.provider.transcribe(audio_data, self.audio_format)
-            self.chunk_buffer = io.BytesIO()
-            self.chunk_bytes = 0
+            self._reset_window()
 
             if transcript and transcript.strip():
                 self.transcripts.append(transcript.strip())
@@ -80,13 +212,18 @@ class ChunkedTranscriber:
             return None
         except Exception as e:
             logger.error("Transcription error: %s", e)
-            self.chunk_buffer = io.BytesIO()
-            self.chunk_bytes = 0
+            self._reset_window()
             return None
 
     async def flush(self) -> str:
         """Get final transcript from full audio for best accuracy."""
         full_audio_data = self.full_audio.getvalue()
+        if self.is_pcm:
+            full_audio_data = trim_pcm16_silence(full_audio_data)
+            if not full_audio_data:
+                # No speech detected in the recording; empty unless earlier
+                # windows produced transcripts
+                return " ".join(self.transcripts)
         if full_audio_data:
             try:
                 transcript = await self.provider.transcribe(
@@ -410,44 +547,36 @@ async def websocket_transcribe(
                 await websocket.send_json({"type": "error", "message": str(e)})
                 return
 
-        # Use native streaming if provider supports it
-        if provider.supports_streaming_stt():
-            logger.info("WebSocket transcribe: using native streaming STT")
+        # Prefer native streaming; use the chunked/REST path when the provider
+        # lacks it or it's disabled via VOICE_DISABLE_STREAMING_STT.
+        use_streaming = (
+            provider.supports_streaming_stt() and not VOICE_DISABLE_STREAMING_STT
+        )
+
+        if use_streaming:
             try:
                 streaming_transcriber = await provider.create_streaming_transcriber()
-                logger.info(
-                    "WebSocket transcribe: streaming transcriber created successfully"
-                )
+                logger.info("WebSocket transcribe: streaming transcriber created")
                 await handle_streaming_transcription(websocket, streaming_transcriber)
+                return
             except Exception as e:
-                logger.error(
-                    "WebSocket transcribe: failed to create streaming transcriber: %s",
-                    e,
-                )
+                logger.error("WebSocket transcribe: streaming STT failed: %s", e)
                 if VOICE_DISABLE_STREAMING_FALLBACK:
                     await websocket.send_json(
                         {"type": "error", "message": f"Streaming STT failed: {e}"}
                     )
                     return
                 logger.info("WebSocket transcribe: falling back to chunked STT")
-                # Browser stream provides raw PCM16 chunks over WebSocket.
-                chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
-                await handle_chunked_transcription(websocket, chunked_transcriber)
-        else:
-            # Fall back to chunked transcription
-            if VOICE_DISABLE_STREAMING_FALLBACK:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": "Provider doesn't support streaming STT",
-                    }
-                )
-                return
-            logger.info(
-                "WebSocket transcribe: using chunked STT (provider doesn't support streaming)"
+        elif VOICE_DISABLE_STREAMING_FALLBACK and not VOICE_DISABLE_STREAMING_STT:
+            # Provider can't stream and chunked fallback is disabled.
+            await websocket.send_json(
+                {"type": "error", "message": "Provider doesn't support streaming STT"}
             )
-            chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
-            await handle_chunked_transcription(websocket, chunked_transcriber)
+            return
+
+        # Chunked/REST path; browser sends raw PCM16 chunks.
+        chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
+        await handle_chunked_transcription(websocket, chunked_transcriber)
 
     except WebSocketDisconnect:
         logger.debug("WebSocket transcribe: client disconnected")
@@ -573,7 +702,7 @@ async def handle_streaming_synthesis(
                                 "Streaming synthesis: forwarding text chunk (%s chars)",
                                 len(text),
                             )
-                            await synthesizer.send_text(text)
+                            await synthesizer.send_text(strip_markdown_for_tts(text))
 
                     elif data.get("type") == "end":
                         logger.info("Streaming synthesis: end signal received")
@@ -707,7 +836,7 @@ async def handle_chunked_synthesis(
                     speed = float(data["speed"])
             elif msg_data_type == "end":
                 logger.info("Chunked synthesis: end signal received")
-                full_text = " ".join(text_buffer).strip()
+                full_text = strip_markdown_for_tts(" ".join(text_buffer))
                 if not full_text:
                     await websocket.send_json({"type": "audio_done"})
                     logger.info("Chunked synthesis: no text, sent audio_done")

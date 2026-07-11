@@ -55,11 +55,16 @@ export {
   type TextFont,
   type TextColor,
 } from "@opal/components/text/components";
+export {
+  default as CompactMarkdown,
+  type CompactMarkdownProps,
+} from "@opal/components/text/CompactMarkdown";
 
 /* Tag */
 export {
   Tag,
   TAG_COLORS,
+  TAG_REMOVE_CLASS,
   type TagProps,
   type TagColor,
 } from "@opal/components/tag/components";
@@ -128,6 +133,13 @@ export {
   type InputTypeInProps,
 } from "@opal/components/inputs/input-type-in/components";
 
+/* InputTags */
+export {
+  InputTags,
+  type InputTagsProps,
+  type TagItem,
+} from "@opal/components/inputs/input-tags/components";
+
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
 
@@ -153,3 +165,9 @@ export {
   type TabsListProps,
   type TabsTriggerProps,
 } from "@opal/components/tabs/components";
+
+/* EndOfList */
+export {
+  EndOfList,
+  type EndOfListProps,
+} from "@opal/components/end-of-list/components";

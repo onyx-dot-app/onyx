@@ -71,21 +71,30 @@ repos:
         types_or: [python]
         # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
         # are sandbox-only scripts importing deps absent from the backend venv
-        # (lxml, PIL, office.*). loadtest/ is a standalone uv project with its
-        # own venv (locust). All are excluded from the full ty run via
+        # (lxml, PIL, office.*). loadtest/ imports locust/gevent, which live in
+        # the non-default `loadtest` dependency group and so aren't in the venv
+        # ty runs against. All are excluded from the full ty run via
         # [tool.ty.src] in pyproject; repeat here because pre-commit passes
         # explicit filenames, which bypass that discovery-time exclude.
         exclude: ^(backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)|loadtest/)
       - id: uv-run
         alias: ruff
         name: ruff
-        args: ["ruff", "check", "--fix"]
+        # Run ruff from an isolated overlay (`--no-project --with`) so the hook
+        # never syncs the dev `.venv` or pulls in the backend toolchain (torch,
+        # nvidia-*, etc.) — a full project sync on a cold CI runner installs
+        # 450+ packages just to lint. Same isolation goal as the zizmor hook
+        # below. ruff discovers `[tool.ruff]` from pyproject.toml independently
+        # of uv's project handling, so config still applies. Keep the pinned
+        # version in sync with `ruff` in the dev dependency group in
+        # pyproject.toml.
+        args: ["--no-project", "--with=ruff==0.12.0", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
         alias: ruff-format
         name: ruff format
-        args: ["ruff", "format"]
+        args: ["--no-project", "--with=ruff==0.12.0", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
@@ -157,6 +166,21 @@ repos:
 
   - repo: local
     hooks:
+      # Regenerate the baseline with `env_inventory.py --write-baseline`.
+      - id: env-drift-baseline
+        name: env drift baseline
+        description: "Fail on new undocumented operator-facing env vars (drift gate)"
+        language: system
+        entry: python3 backend/scripts/env_inventory.py --check-baseline
+        pass_filenames: false
+        stages: [pre-commit]
+        files: >-
+          (?x)^(
+            backend/(onyx|ee|shared_configs|model_server)/.*\.py
+            |backend/scripts/env_inventory(\.py|_baseline\.txt)
+            |deployment/docker_compose/env\.(template|prod\.template)
+            |deployment/helm/charts/onyx/(values\.yaml|templates/configmap\.yaml)
+          )$
       - id: bun-install
         name: bun install
         description: "Automatically run 'bun install' after a checkout, pull or rebase"
@@ -172,6 +196,36 @@ repos:
         entry: bash -c 'cd web && bun install'
         pass_filenames: false
         files: ^web/(package\.json|bun\.lock|lib/opal/package\.json)$
+
+      # `bun install` won't rebuild an already-linked file: dep's gitignored `dist`, so
+      # token / opal-CSS changes from a pull leave opal/dist/root.css stale → the web dev
+      # server serves old radius/spacing/colors (a "boxy" UI). Regenerate it explicitly.
+      # `bun install --frozen-lockfile` first guards the clean-tree case (this hook's file
+      # set is disjoint from bun-install's, so it can fire before node_modules exists).
+      - id: opal-css-rebuild
+        name: rebuild opal token CSS
+        description: "Rebuild opal dist CSS after checkout/pull/rebase so dev gets fresh design tokens"
+        language: system
+        entry: bash -c 'cd web && bun install --frozen-lockfile && bun run --cwd lib/shared build:tokens && bun lib/opal/scripts/bundle-css.mjs'
+        pass_filenames: false
+        files: ^web/lib/(opal/src/.*\.css|opal/scripts/bundle-css\.mjs|shared/(tokens/.*\.json|style-dictionary\.config\.mjs))$
+        stages: [post-checkout, post-merge, post-rewrite]
+
+      # Turbopack's persistent dev cache (.next) tracks file content, but can't see
+      # dependency / build-config changes that cross its boundary: a checkout, pull, or
+      # rebase that changes deps, design tokens, opal CSS, or the Next/Tailwind build
+      # config leaves stale compiled output + CSS in .next — the phantom compile errors
+      # and stale styles that otherwise need a manual `rm -rf .next`. Drop it here, in
+      # lockstep with bun-install / opal-css-rebuild. Plain source edits are left alone:
+      # Turbopack invalidates those incrementally, so same-deps switches keep a warm cache.
+      - id: clear-web-build-cache
+        name: clear stale web build cache
+        description: "Drop the Turbopack .next dev cache after checkout/pull/rebase when deps, tokens, opal CSS, or build config change"
+        language: system
+        entry: bash -c 'rm -rf web/.next'
+        pass_filenames: false
+        files: ^web/(package\.json|bun\.lock|lib/opal/package\.json|lib/opal/src/.*\.css|lib/shared/tokens/.*\.json|next\.config\.js|postcss\.config\.js|tailwind\.config\.js|tailwind-themes/)
+        stages: [post-checkout, post-merge, post-rewrite]
 
       - id: root-bun-install
         name: root bun install
@@ -280,7 +334,11 @@ repos:
 
       - id: mobile-format
         name: mobile format
-        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bunx prettier --write "${@#mobile/}"' _
+        # pass_filenames: false so this runs as a single invocation (like the
+        # mobile lint/typecheck hooks above). Passing filenames makes pre-commit
+        # split them into multiple batches that each re-run `bun install`, which
+        # race on bun's cache (EEXIST locally / FileNotFound on CI).
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bun run format'
         language: system
-        files: ^mobile/
-        types_or: [javascript, jsx, ts, tsx, json, css]
+        pass_filenames: false
+        files: ^mobile/.*\.(ts|tsx|js|jsx|json|css)$

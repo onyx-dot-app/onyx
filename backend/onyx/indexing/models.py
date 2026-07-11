@@ -261,7 +261,10 @@ class IndexingBatchAdapter(Protocol):
     credential_id: int | None
 
     def prepare(
-        self, documents: list[Document], ignore_time_skip: bool
+        self,
+        documents: list[Document],
+        ignore_time_skip: bool,
+        index_to_secondary: bool,
     ) -> Optional["DocumentBatchPrepareContext"]: ...
 
     @contextlib.contextmanager

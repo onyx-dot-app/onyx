@@ -20,7 +20,7 @@ import {
   mergeFetchedModelConfigurations,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   ModelSelectionField,
   DisplayNameField,
@@ -113,7 +113,7 @@ function BedrockModalInternals({
         formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY,
       aws_bearer_token_bedrock:
         formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
-      provider_name: LLMProviderName.BEDROCK,
+      provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
       throw new Error(error);
@@ -259,6 +259,7 @@ export default function BedrockModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
@@ -317,9 +318,11 @@ export default function BedrockModal({
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.BEDROCK,
           values: submitValues,
           initialValues,

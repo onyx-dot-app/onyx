@@ -19,7 +19,7 @@ import {
   mergeFetchedModelConfigurations,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
@@ -32,7 +32,7 @@ import { Card, Tabs } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 const CLOUD_API_BASE = "https://ollama.com";
 
 enum Tab {
@@ -61,7 +61,7 @@ function OllamaModalInternals({
   setTab,
 }: OllamaModalInternalsProps) {
   const formikProps = useFormikContext<OllamaModalValues>();
-  const { settings } = useSettingsContext();
+  const settings = useSettings();
 
   const isFetchDisabled = useMemo(
     () =>
@@ -78,7 +78,7 @@ function OllamaModalInternals({
       : formikProps.values.api_base;
     const { models, error } = await fetchOllamaModels({
       api_base: apiBase,
-      provider_name: existingLlmProvider?.name ?? undefined,
+      provider_id: existingLlmProvider?.id ?? undefined,
       signal,
     });
     if (signal?.aborted) return;
@@ -169,10 +169,11 @@ export default function OllamaModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { settings } = useSettingsContext();
+  const settings = useSettings();
   const defaultApiBase = settings.is_containerized
     ? "http://host.docker.internal:11434"
     : "http://127.0.0.1:11434";
@@ -235,9 +236,11 @@ export default function OllamaModal({
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.OLLAMA_CHAT,
           values: submitValues,
           initialValues,

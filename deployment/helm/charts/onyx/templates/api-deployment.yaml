@@ -70,9 +70,11 @@ spec:
               {{- if or .Values.api.runUpdateCaCertificates (include "onyx.customCACerts.enabled" .) }}
               update-ca-certificates &&
               {{- end }}
+              {{- if or (not (hasKey .Values.api "runStartupMigrations")) .Values.api.runStartupMigrations }}
               alembic upgrade head &&
+              {{- end }}
               echo "Starting Onyx Api Server" &&
-              uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}
+              uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}{{ if gt (int (.Values.api.workers | default 1)) 1 }} --workers {{ .Values.api.workers }}{{ end }}{{ if .Values.api.limitConcurrency }} --limit-concurrency {{ .Values.api.limitConcurrency }}{{ end }}
           ports:
             - name: api-server-port
               containerPort: {{ .Values.api.containerPorts.server }}
@@ -99,6 +101,10 @@ spec:
                 name: {{ . }}
             {{- end }}
           env:
+            {{- if .Values.api.threadpoolSize }}
+            - name: ONYX_API_THREADPOOL_SIZE
+              value: "{{ .Values.api.threadpoolSize }}"
+            {{- end }}
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- include "onyx.envSecretsRestricted" . | nindent 12}}
             {{- with include "onyx.customCACerts.env" . }}

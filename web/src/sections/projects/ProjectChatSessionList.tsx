@@ -5,7 +5,7 @@ import { deleteChatSession } from "@/app/app/services/lib";
 import {
   moveChatSession as moveChatSessionService,
   removeChatSessionFromProject as removeChatSessionFromProjectService,
-} from "@/app/app/projects/projectsService";
+} from "@/lib/projects/svc";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { ChatSession } from "@/app/app/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -291,9 +291,7 @@ export default function ProjectChatSessionList() {
   if (!currentProjectId) return null;
 
   return (
-    <div className="flex flex-col gap-6 mx-auto">
-      <div />
-
+    <div className="flex flex-col gap-6 pt-6 mx-auto">
       <div>
         <div className="px-3 py-2">
           <Text as="p" font="secondary-body" color="text-02">

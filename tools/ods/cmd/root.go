@@ -46,6 +46,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&opts.Project, "project", "", "Docker Compose project name (default: basename of git root)")
 
 	// Add subcommands
+	cmd.AddCommand(NewAuditCommand())
 	cmd.AddCommand(NewBackendCommand())
 	cmd.AddCommand(NewCheckLazyImportsCommand())
 	cmd.AddCommand(NewCherryPickCommand())
@@ -65,6 +66,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewWhoisCommand())
 	cmd.AddCommand(NewTraceCommand())
 	cmd.AddCommand(NewInstallSkillCommand())
+	cmd.AddCommand(NewReleaseCommand())
 
 	return cmd
 }

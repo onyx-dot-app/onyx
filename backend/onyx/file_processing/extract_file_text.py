@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import tempfile
 import zipfile
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -26,6 +27,7 @@ from PIL import Image
 
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_XLSX_CELLS_PER_SHEET
+from onyx.configs.app_configs import PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -36,6 +38,8 @@ from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.utils.logger import setup_logger
+from onyx.utils.process_isolation import IsolatedProcessError
+from onyx.utils.process_isolation import run_in_isolated_process
 
 if TYPE_CHECKING:
     from markitdown import MarkItDown
@@ -269,6 +273,33 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     return text
 
 
+def _extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
+    """Extract all text from a PDF via pypdfium2 (PDFium/C).
+
+    PDFium releases the GIL while parsing, so a large or complex PDF can't pin
+    a worker thread or stall the indexing heartbeat during text extraction.
+    """
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(file_bytes, password=password)
+    try:
+        page_texts: list[str] = []
+        for page in pdf:
+            # Per-page try/finally so a get_textpage() failure still closes the
+            # native page handle instead of leaking it until GC.
+            try:
+                textpage = page.get_textpage()
+                try:
+                    page_texts.append(textpage.get_text_range())
+                finally:
+                    textpage.close()
+            finally:
+                page.close()
+        return TEXT_SECTION_SEPARATOR.join(page_texts)
+    finally:
+        pdf.close()
+
+
 def read_pdf_file(
     file: IO[Any],
     pdf_pass: str | None = None,
@@ -280,12 +311,16 @@ def read_pdf_file(
     """
     from pypdf import PdfReader
     from pypdf.errors import PdfStreamError
+    from pypdfium2 import PdfiumError
 
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
     try:
-        pdf_reader = PdfReader(file)
+        # Read once: the text extractor and the metadata/image reader share these bytes.
+        file_bytes = file.read()
+        pdf_reader = PdfReader(io.BytesIO(file_bytes))
 
+        decrypt_password: str | None = None
         if pdf_reader.is_encrypted:
             # Try the explicit password first, then fall back to an empty
             # string.  Owner-password-only PDFs (permission restrictions but
@@ -297,6 +332,7 @@ def read_pdf_file(
                 try:
                     if pdf_reader.decrypt(pw) != 0:
                         decrypt_success = True
+                        decrypt_password = pw
                         break
                 except Exception:
                     pass
@@ -318,9 +354,23 @@ def read_pdf_file(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        text = TEXT_SECTION_SEPARATOR.join(
-            page.extract_text() for page in pdf_reader.pages
-        )
+        # PDFium can hard-abort or hang on a malformed PDF (uncatchable in-process),
+        # so run it isolated; a crash, timeout, or PdfiumError falls back to pypdf.
+        try:
+            text = run_in_isolated_process(
+                _extract_pdf_text_pdfium,
+                file_bytes,
+                decrypt_password,
+                timeout=PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS,
+            )
+        except (PdfiumError, IsolatedProcessError) as pdfium_err:
+            logger.warning(
+                "PDFium text extraction failed (%s); falling back to pypdf",
+                pdfium_err,
+            )
+            text = TEXT_SECTION_SEPARATOR.join(
+                page.extract_text() for page in pdf_reader.pages
+            )
 
         if extract_images:
             image_cap = MAX_EMBEDDED_IMAGES_PER_FILE
@@ -621,22 +671,19 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     return buf.getvalue().rstrip("\n")
 
 
-def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
-    """
-    Converts each sheet in the excel file to a csv condensed string.
-    Returns a string and the worksheet title for each worksheet
-
-    Returns a list of (csv_text, sheet)
-    """
+def _load_readonly_workbook(file: IO[Any], file_name: str) -> openpyxl.Workbook | None:
+    """Load a read-only workbook, returning None (and logging) for the BadZipFile
+    / known-openpyxl-bug cases the xlsx indexers treat as skip-and-continue rather
+    than a hard failure."""
     try:
-        workbook = openpyxl.load_workbook(file, read_only=True)
+        return openpyxl.load_workbook(file, read_only=True)
     except BadZipFile as e:
         error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
         if file_name.startswith("~"):
             logger.debug(error_str + " (this is expected for files with ~)")
         else:
             logger.warning(error_str)
-        return []
+        return None
     except Exception as e:
         if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
             logger.warning(
@@ -644,8 +691,20 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
                 file_name or "xlsx file",
                 e,
             )
-            return []
+            return None
         raise
+
+
+def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
+    """
+    Converts each sheet in the excel file to a csv condensed string.
+    Returns a string and the worksheet title for each worksheet
+
+    Returns a list of (csv_text, sheet)
+    """
+    workbook = _load_readonly_workbook(file, file_name)
+    if workbook is None:
+        return []
 
     sheets: list[tuple[str, str]] = []
     try:
@@ -658,6 +717,54 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
     finally:
         workbook.close()
 
+    return sheets
+
+
+class StreamedSheet(NamedTuple):
+    """One worksheet rendered to CSV, staged in the file store, and referenced
+    by `csv_file_id`."""
+
+    title: str
+    csv_file_id: str
+
+
+def _row_has_content(row: tuple[Any, ...]) -> bool:
+    return any(v is not None and v != "" for v in row)
+
+
+def _cell(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def stage_xlsx_sheets(
+    file: IO[bytes],
+    stage: Callable[[IO[bytes], str], str],
+    file_name: str = "",
+) -> list[StreamedSheet]:
+    """Stream each non-empty worksheet to a temp CSV row by row (never holding a
+    full sheet in memory), then stage it via `stage` and reference it by
+    `csv_file_id`. Empty rows are dropped; columns are not trimmed."""
+    sheets: list[StreamedSheet] = []
+    workbook = _load_readonly_workbook(file, file_name)
+    if workbook is None:
+        return sheets
+    try:
+        for sheet in workbook.worksheets:
+            ro_sheet = cast(ReadOnlyWorksheet, sheet)
+            ro_sheet.reset_dimensions()
+            with tempfile.TemporaryFile(mode="w+", encoding="utf-8", newline="") as tmp:
+                writer = csv.writer(tmp, lineterminator="\n")
+                for row in ro_sheet.iter_rows(values_only=True):
+                    if _row_has_content(row):
+                        writer.writerow([_cell(v) for v in row])
+                tmp.flush()
+                binary = cast(IO[bytes], tmp.buffer)
+                if binary.seek(0, io.SEEK_END) == 0:
+                    continue
+                binary.seek(0)
+                sheets.append(StreamedSheet(ro_sheet.title, stage(binary, "text/csv")))
+    finally:
+        workbook.close()
     return sheets
 
 

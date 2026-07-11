@@ -7,6 +7,7 @@ Unit tests for lazy loading connector factory to validate:
 """
 
 import importlib
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 from unittest.mock import Mock
 from unittest.mock import patch
@@ -14,15 +15,19 @@ from unittest.mock import patch
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.factory import _connector_cache
 from onyx.connectors.factory import _load_connector_class
 from onyx.connectors.factory import ConnectorMissingException
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.factory import instantiate_connector
+from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.registry import ConnectorMapping
+from onyx.db.enums import AccessType
 
 
 class TestConnectorMappingValidation:
@@ -268,3 +273,105 @@ class TestInstantiateConnectorIntegration:
         # But the class should have been loaded into cache
         assert DocumentSource.WEB in _connector_cache
         assert _connector_cache[DocumentSource.WEB].__name__ == "WebConnector"
+
+
+class TestValidateCCPairForUser:
+    def test_validate_settings_error_raises_connector_validation_error(self) -> None:
+        runnable_connector = MagicMock()
+        runnable_connector.validate_connector_settings.side_effect = RuntimeError(
+            "SSL verification failed"
+        )
+
+        with (
+            patch(
+                "onyx.connectors.factory.fetch_connector_by_id",
+                return_value=SimpleNamespace(
+                    source=DocumentSource.DISCORD,
+                    input_type=InputType.POLL,
+                    connector_specific_config={},
+                ),
+            ),
+            patch(
+                "onyx.connectors.factory.fetch_credential_by_id",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "onyx.connectors.factory.instantiate_connector",
+                return_value=runnable_connector,
+            ),
+            pytest.raises(ConnectorValidationError) as exc_info,
+        ):
+            validate_ccpair_for_user(
+                connector_id=1,
+                credential_id=2,
+                access_type=AccessType.PUBLIC,
+                db_session=MagicMock(),
+            )
+
+        assert "SSL verification failed" in str(exc_info.value)
+
+    def test_validate_settings_error_returns_false_without_enforcing(self) -> None:
+        runnable_connector = MagicMock()
+        runnable_connector.validate_connector_settings.side_effect = RuntimeError(
+            "SSL verification failed"
+        )
+
+        with (
+            patch(
+                "onyx.connectors.factory.fetch_connector_by_id",
+                return_value=SimpleNamespace(
+                    source=DocumentSource.DISCORD,
+                    input_type=InputType.POLL,
+                    connector_specific_config={},
+                ),
+            ),
+            patch(
+                "onyx.connectors.factory.fetch_credential_by_id",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "onyx.connectors.factory.instantiate_connector",
+                return_value=runnable_connector,
+            ),
+        ):
+            valid = validate_ccpair_for_user(
+                connector_id=1,
+                credential_id=2,
+                access_type=AccessType.PUBLIC,
+                db_session=MagicMock(),
+                enforce_creation=False,
+            )
+
+        assert valid is False
+
+    def test_validate_settings_preserves_validation_error_type(self) -> None:
+        runnable_connector = MagicMock()
+        runnable_connector.validate_connector_settings.side_effect = (
+            UnexpectedValidationError("unexpected validation failure")
+        )
+
+        with (
+            patch(
+                "onyx.connectors.factory.fetch_connector_by_id",
+                return_value=SimpleNamespace(
+                    source=DocumentSource.DISCORD,
+                    input_type=InputType.POLL,
+                    connector_specific_config={},
+                ),
+            ),
+            patch(
+                "onyx.connectors.factory.fetch_credential_by_id",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "onyx.connectors.factory.instantiate_connector",
+                return_value=runnable_connector,
+            ),
+            pytest.raises(UnexpectedValidationError),
+        ):
+            validate_ccpair_for_user(
+                connector_id=1,
+                credential_id=2,
+                access_type=AccessType.PUBLIC,
+                db_session=MagicMock(),
+            )

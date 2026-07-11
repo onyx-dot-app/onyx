@@ -9,11 +9,9 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "@/interfaces/onboarding";
-import {
-  LLMProviderFormProps,
-  WellKnownLLMProviderDescriptor,
-} from "@/lib/languageModels/types";
+import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
 import { getProvider } from "@/lib/languageModels";
+import ProviderSetupModal from "@/sections/modals/languageModels/ProviderSetupModal";
 import { Disabled } from "@opal/core";
 import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
@@ -125,25 +123,6 @@ const LLMStep = memo(
         ? "custom"
         : (selectedProvider?.llmDescriptor?.name ?? "custom");
 
-      const { Modal: ModalComponent } = getProvider(providerName);
-
-      const modalProps: LLMProviderFormProps = {
-        variant: "onboarding" as const,
-        shouldMarkAsDefault:
-          (onboardingState?.data.llmProviders ?? []).length === 0,
-        onboardingActions,
-        onOpenChange: handleModalClose,
-        onSuccess: () => {
-          onboardingActions.updateData({
-            llmProviders: [
-              ...(onboardingState?.data.llmProviders ?? []),
-              providerName,
-            ],
-          });
-          onboardingActions.setButtonActive(true);
-        },
-      };
-
       return (
         <Disabled disabled={disabled} allowClick>
           <div
@@ -169,12 +148,12 @@ const LLMStep = memo(
               }
             />
             <Divider />
-            <div className="flex flex-wrap gap-1 [&>*:last-child:nth-child(odd)]:basis-full">
+            <div className="@container/llmcards flex flex-wrap gap-1 w-full max-h-[40vh] overflow-y-auto [&>*:last-child:nth-child(odd)]:basis-full">
               {isLoading ? (
                 Array.from({ length: 8 }).map((_, idx) => (
                   <div
                     key={idx}
-                    className="basis-[calc(50%-(--spacing(1))/2)] grow"
+                    className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
                   >
                     <LLMProviderSkeleton />
                   </div>
@@ -182,9 +161,25 @@ const LLMStep = memo(
               ) : (
                 <>
                   {/* Render the selected provider form */}
-                  {selectedProvider && isModalOpen && (
-                    <ModalComponent {...modalProps} />
-                  )}
+                  <ProviderSetupModal
+                    providerKey={
+                      selectedProvider && isModalOpen ? providerName : null
+                    }
+                    shouldMarkAsDefault={
+                      (onboardingState?.data.llmProviders ?? []).length === 0
+                    }
+                    onboardingActions={onboardingActions}
+                    onOpenChange={handleModalClose}
+                    onSuccess={() => {
+                      onboardingActions.updateData({
+                        llmProviders: [
+                          ...(onboardingState?.data.llmProviders ?? []),
+                          providerName,
+                        ],
+                      });
+                      onboardingActions.setButtonActive(true);
+                    }}
+                  />
 
                   {/* Render provider cards */}
                   {llmDescriptors.map((llmDescriptor) => {
@@ -194,7 +189,7 @@ const LLMStep = memo(
                     return (
                       <div
                         key={llmDescriptor.name}
-                        className="basis-[calc(50%-(--spacing(1))/2)] grow"
+                        className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow"
                       >
                         <LLMProviderCard
                           title={productName}
@@ -213,7 +208,7 @@ const LLMStep = memo(
                   })}
 
                   {/* Custom provider card */}
-                  <div className="basis-[calc(50%-(--spacing(1))/2)] grow">
+                  <div className="basis-full @xl/llmcards:basis-[calc(50%-(--spacing(1))/2)] grow">
                     <LLMProviderCard
                       title="Custom LLM Provider"
                       subtitle="LiteLLM Compatible APIs"

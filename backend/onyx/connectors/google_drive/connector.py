@@ -12,8 +12,8 @@ from typing import Any
 from typing import cast
 from typing import Protocol
 from urllib.parse import parse_qs
+from urllib.parse import ParseResult
 from urllib.parse import urlparse
-from urllib.parse import urlunparse
 
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
@@ -29,10 +29,17 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.google_drive.doc_conversion import (
+    _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE,
+)
+from onyx.connectors.google_drive.doc_conversion import (
+    _FALLBACK_WEB_VIEW_LINK_TEMPLATES,
+)
 from onyx.connectors.google_drive.doc_conversion import build_slim_document
 from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
 from onyx.connectors.google_drive.doc_conversion import onyx_document_id_from_drive_file
 from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
+from onyx.connectors.google_drive.doc_conversion import WEB_VIEW_LINK_KEY
 from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
 from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.file_retrieval import get_all_files_for_oauth
@@ -86,6 +93,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import parallel_yield
@@ -99,7 +107,9 @@ logger = setup_logger()
 
 BATCHES_PER_CHECKPOINT = 1
 
-DRIVE_BATCH_SIZE = 80
+# Documents converted per sub-batch. At up to CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
+# (~10 MB) each, 50 caps resident docs near ~500 MB regardless of drive size.
+DRIVE_CONVERSION_BATCH_SIZE = 50
 
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
@@ -115,6 +125,42 @@ def _extract_str_list_from_comma_str(string: str | None) -> list[str]:
 
 def _extract_ids_from_urls(urls: list[str]) -> list[str]:
     return [urlparse(url).path.strip("/").split("/")[-1] for url in urls]
+
+
+def _extract_drive_file_id(parsed: ParseResult) -> str | None:
+    """Extract the file id from a Drive/Docs URL.
+
+    Covers `?id=<id>`, `/d/<id>/...`, and the multi-account `/u/<N>/d/<id>/...` form.
+    """
+    id_query_param = parse_qs(parsed.query).get("id", [None])[0]
+    if id_query_param:
+        return id_query_param
+
+    path_parts = parsed.path.split("/")
+    for i, part in enumerate(path_parts):
+        if part == "d" and i + 1 < len(path_parts):
+            return path_parts[i + 1]
+    return None
+
+
+def _candidate_document_ids_from_file_id(file_id: str) -> list[str]:
+    """Every canonical Document.id a Drive file id could have been indexed under.
+
+    A file id is globally unique, so at most one of the native Doc/Sheet/Slide forms
+    and the uploaded-binary form is ever indexed; the caller matches whichever exists.
+    """
+    native_doc_links = [
+        template.format(file_id)
+        for template in _FALLBACK_WEB_VIEW_LINK_TEMPLATES.values()
+    ]
+    uploaded_binary_link = _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE.format(file_id)
+
+    candidates: list[str] = []
+    for link in [*native_doc_links, uploaded_binary_link]:
+        doc_id = onyx_document_id_from_drive_file({WEB_VIEW_LINK_KEY: link}).rstrip("/")
+        if doc_id not in candidates:
+            candidates.append(doc_id)
+    return candidates
 
 
 def _clean_requested_drive_ids(
@@ -340,10 +386,12 @@ class GoogleDriveConnector(
     @classmethod
     @override
     def normalize_url(cls, url: str) -> NormalizationResult:
-        """Normalize a Google Drive URL to match the canonical Document.id format.
+        """Normalize a Google Drive URL to candidate Document.id values.
 
-        Reuses the connector's existing document ID creation logic from
-        onyx_document_id_from_drive_file.
+        The pasted URL often doesn't encode the file's type, so the canonical
+        Document.id could take any of several forms; emit them all as candidates and
+        let resolution match whichever is indexed. `normalized_url` is a single best
+        guess for callers that don't consult the candidate list.
         """
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
@@ -354,36 +402,27 @@ class GoogleDriveConnector(
         ):
             return NormalizationResult(normalized_url=None, use_default=False)
 
-        # Handle ?id= query parameter case
-        query_params = parse_qs(parsed.query)
-        doc_id = query_params.get("id", [None])[0]
-        if doc_id:
-            scheme = parsed.scheme or "https"
-            netloc = "drive.google.com"
-            path = f"/file/d/{doc_id}"
-            params = ""
-            query = ""
-            fragment = ""
-            normalized = urlunparse(
-                (scheme, netloc, path, params, query, fragment)
-            ).rstrip("/")
-            return NormalizationResult(normalized_url=normalized, use_default=False)
-
-        # Extract file ID and use connector's function
-        path_parts = parsed.path.split("/")
-        file_id = None
-        for i, part in enumerate(path_parts):
-            if part == "d" and i + 1 < len(path_parts):
-                file_id = path_parts[i + 1]
-                break
-
+        file_id = _extract_drive_file_id(parsed)
         if not file_id:
             return NormalizationResult(normalized_url=None, use_default=False)
 
-        # Create minimal file object for connector function
-        file_obj = {"webViewLink": url, "id": file_id}
-        normalized = onyx_document_id_from_drive_file(file_obj).rstrip("/")
-        return NormalizationResult(normalized_url=normalized, use_default=False)
+        # Best guess: keep the pasted URL's type if it has one; a ?id= link has none.
+        if parse_qs(parsed.query).get("id"):
+            normalized = onyx_document_id_from_drive_file(
+                {
+                    WEB_VIEW_LINK_KEY: _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE.format(
+                        file_id
+                    )
+                }
+            ).rstrip("/")
+        else:
+            normalized = onyx_document_id_from_drive_file(
+                {WEB_VIEW_LINK_KEY: url, "id": file_id}
+            ).rstrip("/")
+        return NormalizationResult(
+            normalized_url=normalized,
+            candidate_document_ids=_candidate_document_ids_from_file_id(file_id),
+        )
 
     # TODO: ensure returned new_creds_dict is actually persisted when this is called?
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, str] | None:
@@ -1677,60 +1716,138 @@ class GoogleDriveConnector(
         )
 
         files_batch: list[RetrievedDriveFile] = []
+        # Files awaiting their parent folder's node, keyed by folder raw id
+        # (lightweight metadata, never documents). Released when the node is
+        # emitted; whatever never resolves falls back to the source root.
+        pending_by_folder: dict[str, list[RetrievedDriveFile]] = {}
         for retrieved_file in drive_files_iter:
             if self.exclude_domain_link_only and has_link_only_permission(
                 retrieved_file.drive_file
             ):
                 continue
-            if retrieved_file.error is None:
-                files_batch.append(retrieved_file)
+            if retrieved_file.error is not None:
+                failure_stage = retrieved_file.completion_stage.value
+                logger.error(
+                    "retrieval failure during stage: %s, user: %s, "
+                    "parent drive/folder: %s, error: %s",
+                    failure_stage,
+                    retrieved_file.user_email,
+                    retrieved_file.parent_id,
+                    retrieved_file.error,
+                )
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=retrieved_file.drive_file.get("id", failure_stage),
+                    ),
+                    failure_message=(
+                        f"retrieval failure during stage: {failure_stage}, "
+                        f"user: {retrieved_file.user_email}, "
+                        f"parent drive/folder: {retrieved_file.parent_id}, "
+                        f"error: {retrieved_file.error}"
+                    ),
+                    exception=retrieved_file.error,
+                )
                 continue
 
-            failure_stage = retrieved_file.completion_stage.value
-            failure_message = f"retrieval failure during stage: {failure_stage},"
-            failure_message += f"user: {retrieved_file.user_email},"
-            failure_message += f"parent drive/folder: {retrieved_file.parent_id},"
-            failure_message += f"error: {retrieved_file.error}"
-            logger.error(failure_message)
-            yield ConnectorFailure(
-                failed_entity=EntityFailure(
-                    entity_id=retrieved_file.drive_file.get("id", failure_stage),
-                ),
-                failure_message=failure_message,
-                exception=retrieved_file.error,
+            files_batch.append(retrieved_file)
+            # Flush in bounded sub-batches so resident converted documents stay
+            # capped (pending metadata is bounded by one checkpoint's fetch).
+            if len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
+                yield from self._convert_files_sub_batch(
+                    files_batch,
+                    checkpoint,
+                    permission_sync_context,
+                    pending_by_folder,
+                )
+                files_batch = []
+
+        if files_batch or pending_by_folder:
+            yield from self._convert_files_sub_batch(
+                files_batch,
+                checkpoint,
+                permission_sync_context,
+                pending_by_folder,
+                force_flush=True,
             )
 
-        new_ancestors = self._get_new_ancestors_for_files(
-            files=files_batch,
-            seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
-            fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
-            failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
-            permission_sync_context=permission_sync_context,
-            add_prefix=True,
+    def _convert_files_sub_batch(
+        self,
+        files_batch: list[RetrievedDriveFile],
+        checkpoint: GoogleDriveCheckpoint,
+        permission_sync_context: PermissionSyncContext | None,
+        pending_by_folder: dict[str, list[RetrievedDriveFile]],
+        force_flush: bool = False,
+    ) -> Iterator[Document | ConnectorFailure | HierarchyNode]:
+        """Emit this sub-batch's new ancestor nodes, then convert the files whose
+        parent node is now in `seen`. Resolution fetches each parent folder by id
+        (file's user + admin), so a parent normally resolves in the file's own
+        sub-batch; parking is only the cross-user case — a folder reachable solely
+        by a later sub-batch's user — held in `pending_by_folder` until its node is
+        emitted. `force_flush` roots whatever never resolves."""
+        new_ancestors = (
+            self._get_new_ancestors_for_files(
+                files=files_batch,
+                seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
+                fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+                failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
+                permission_sync_context=permission_sync_context,
+                add_prefix=True,
+            )
+            if files_batch
+            else []
         )
         if new_ancestors:
             logger.debug("Yielding %s new hierarchy nodes", len(new_ancestors))
             yield from new_ancestors
 
-        func_with_args = [
-            (
-                self._convert_retrieved_file_to_document,
-                (retrieved_file, permission_sync_context),
+        # A folder enters `seen` only when its node is emitted (atomically, in
+        # _get_new_ancestors_for_files), so a parked file is always released the
+        # first time its folder appears below — no "seen but unemitted" stranding.
+        newly_ready: list[RetrievedDriveFile] = []
+        for retrieved_file in files_batch:
+            parent_id = _get_parent_id_from_file(retrieved_file.drive_file)
+            if not parent_id or parent_id in checkpoint.seen_hierarchy_node_raw_ids:
+                newly_ready.append(retrieved_file)
+            else:
+                pending_by_folder.setdefault(parent_id, []).append(retrieved_file)
+
+        # Release parked files whose folder node was just emitted (they came
+        # earlier in the stream), then this sub-batch's own ready files.
+        ready_files: list[RetrievedDriveFile] = []
+        for node in new_ancestors:
+            ready_files.extend(pending_by_folder.pop(node.raw_node_id, []))
+        if force_flush and pending_by_folder:
+            rooted = sum(len(waiters) for waiters in pending_by_folder.values())
+            # Surfaces hierarchy degradation: these files' folders never resolved,
+            # so they index under the source root instead of their real parent.
+            logger.warning(
+                "Rooting %s files under %s folders whose ancestor never resolved",
+                rooted,
+                len(pending_by_folder),
             )
-            for retrieved_file in files_batch
-        ]
-        raw_results = cast(
-            list[Document | ConnectorFailure | None],
-            run_functions_tuples_in_parallel(func_with_args, max_workers=8),
-        )
+            for waiters in pending_by_folder.values():
+                ready_files.extend(waiters)
+            pending_by_folder.clear()
+        ready_files.extend(newly_ready)
 
-        results: list[Document | ConnectorFailure] = [
-            r for r in raw_results if r is not None
-        ]
-        logger.debug("batch has %s docs or failures", len(results))
-        yield from results
-
-        checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
+        # Chunk so resident documents never exceed one chunk, however many resolved.
+        for chunk in batch_generator(ready_files, DRIVE_CONVERSION_BATCH_SIZE):
+            func_with_args = [
+                (
+                    self._convert_retrieved_file_to_document,
+                    (retrieved_file, permission_sync_context),
+                )
+                for retrieved_file in chunk
+            ]
+            raw_results = cast(
+                list[Document | ConnectorFailure | None],
+                run_functions_tuples_in_parallel(func_with_args, max_workers=8),
+            )
+            results: list[Document | ConnectorFailure] = [
+                r for r in raw_results if r is not None
+            ]
+            logger.debug("sub-batch has %s docs or failures", len(results))
+            yield from results
 
     def _convert_retrieved_file_to_document(
         self,

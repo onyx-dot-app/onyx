@@ -362,32 +362,35 @@ def upsert_llm_provider(
 
 def sync_model_configurations(
     db_session: Session,
-    provider_name: str,
+    provider_id: int,
     models: list[SyncModelEntry],
 ) -> int:
     """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama, etc.).
 
-    This inserts NEW models from the source API without overwriting existing ones.
-    User preferences (is_visible, max_input_tokens) are preserved for existing models.
+    Inserts NEW models and, for existing ones, adds any newly-reported capability
+    flag (VISION/REASONING). Flags are only added, never removed; is_visible and
+    max_input_tokens are preserved. Caveat: an admin-removed flow is re-added on
+    the next sync (ENG-4233).
 
     Args:
         db_session: Database session
-        provider_name: Name of the LLM provider
+        provider_id: Id of the LLM provider
         models: List of SyncModelEntry objects describing the fetched models
 
     Returns:
         Number of new models added
     """
-    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
+    provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
     if not provider:
-        raise ValueError(f"LLM Provider '{provider_name}' not found")
+        raise ValueError(f"LLM Provider with id={provider_id} not found")
 
-    # Get existing model names to count new additions
-    existing_names = {mc.name for mc in provider.model_configurations}
+    existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 
     new_count = 0
+    upgraded_flow_count = 0
     for model in models:
-        if model.name not in existing_names:
+        existing = existing_by_name.get(model.name)
+        if existing is None:
             # Insert new model with is_visible=False (user must explicitly enable)
             supported_flows = [LLMModelFlowType.CHAT]
             if model.supports_image_input:
@@ -405,8 +408,29 @@ def sync_model_configurations(
                 display_name=model.display_name,
             )
             new_count += 1
+            continue
 
-    if new_count > 0:
+        # Existing model: add newly-reported capability flags (additive only).
+        # TODO(ENG-4233): durable admin flow removals; avoid per-model lazy-load.
+        existing_flows = set(existing.llm_model_flow_types)
+        missing_flows: list[LLMModelFlowType] = []
+        if model.supports_image_input and LLMModelFlowType.VISION not in existing_flows:
+            missing_flows.append(LLMModelFlowType.VISION)
+        if (
+            model.supports_reasoning
+            and LLMModelFlowType.REASONING not in existing_flows
+        ):
+            missing_flows.append(LLMModelFlowType.REASONING)
+
+        for flow_type in missing_flows:
+            create_new_flow_mapping__no_commit(
+                db_session=db_session,
+                model_configuration_id=existing.id,
+                flow_type=flow_type,
+            )
+            upgraded_flow_count += 1
+
+    if new_count > 0 or upgraded_flow_count > 0:
         db_session.commit()
 
     return new_count

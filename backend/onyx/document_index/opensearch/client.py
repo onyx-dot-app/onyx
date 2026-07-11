@@ -1,28 +1,49 @@
 import json
 import logging
 import time
+from collections import Counter
+from collections.abc import Iterator
 from contextlib import AbstractContextManager
 from contextlib import nullcontext
+from http import HTTPStatus
 from typing import Any
 from typing import Generic
 from typing import TypeVar
 
+import boto3
+from opensearchpy import NotFoundError
 from opensearchpy import OpenSearch
 from opensearchpy import TransportError
+from opensearchpy import Urllib3AWSV4SignerAuth
 from opensearchpy.helpers import bulk
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
+from onyx.configs.app_configs import OPENSEARCH_AUTH_METHOD
+from onyx.configs.app_configs import OPENSEARCH_AWS_REGION
+from onyx.configs.app_configs import OPENSEARCH_AWS_SERVICE
+from onyx.configs.app_configs import OPENSEARCH_CA_CERTS
+from onyx.configs.app_configs import OPENSEARCH_CLIENT_CERT
+from onyx.configs.app_configs import OPENSEARCH_CLIENT_KEY
 from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
 from onyx.configs.app_configs import OPENSEARCH_USE_SSL
+from onyx.configs.app_configs import OPENSEARCH_VERIFY_CERTS
+from onyx.configs.app_configs import PIT_KEEP_ALIVE
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
+from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
+from onyx.document_index.opensearch.schema import CHUNK_INDEX_FIELD_NAME
+from onyx.document_index.opensearch.schema import CONTENT_VECTOR_FIELD_NAME
+from onyx.document_index.opensearch.schema import DOCUMENT_ID_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
+from onyx.document_index.opensearch.schema import MAX_CHUNK_SIZE_FIELD_NAME
+from onyx.document_index.opensearch.schema import TITLE_VECTOR_FIELD_NAME
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.server.metrics.opensearch_search import observe_opensearch_search
 from onyx.server.metrics.opensearch_search import record_opensearch_search_error
@@ -108,10 +129,61 @@ class OpenSearchIndexError(Exception):
     """
 
 
+class OpenSearchDocumentMissingError(Exception):
+    """Target chunks don't exist on an _update (404) and the caller opted to
+    surface this rather than fail (reindex port: doc not in FUTURE yet)."""
+
+    def __init__(
+        self,
+        missing_chunk_ids: list[str],
+        missing_document_ids: list[str] | None = None,
+    ) -> None:
+        self.missing_chunk_ids = missing_chunk_ids
+        # Only the layer that built the chunk ids knows the doc mapping; the
+        # client raises with chunks only and the index layer fills doc ids in.
+        self.missing_document_ids = missing_document_ids or []
+        super().__init__(
+            f"{len(missing_chunk_ids)} document chunk(s) missing during update."
+        )
+
+
+# Server-side error.type strings (not exposed as enums by opensearch-py; cf.
+# _RETRYABLE_UPDATE_ERROR_TYPES above). Status codes use http.HTTPStatus.
+_DOCUMENT_MISSING_ERROR_TYPE = "document_missing_exception"
+_VERSION_CONFLICT_ERROR_TYPE = "version_conflict_engine_exception"
+# Raised by a search whose PIT has expired/been deleted; we re-open and retry.
+_SEARCH_CONTEXT_MISSING_ERROR_TYPE = "search_context_missing"
+# Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
+# one page covers a batch; paging still protects against a pathological doc.
+_PIT_SCAN_PAGE_SIZE = 1000
+
+
 class OpenSearchServerSideTimeout(Exception):
     """
     A server-side timeout occurred when searching an OpenSearch index.
     """
+
+
+def _summarize_bulk_errors(errors: list[dict[str, Any]]) -> str:
+    """Reduce raw bulk per-item errors to (op, status, type) counts.
+
+    error.reason / caused_by echo a preview of the offending document's field
+    values; dumping them into an exception message would leak indexed content
+    into logs, so only op/status/type are surfaced.
+    """
+    counts: Counter[tuple[str, Any, str]] = Counter()
+    for error in errors:
+        op, item = next(iter(error.items()), ("", {}))
+        item = item if isinstance(item, dict) else {}
+        err_obj = item.get("error")
+        err_type = err_obj.get("type", "") if isinstance(err_obj, dict) else ""
+        counts[(op, item.get("status", 0), err_type)] += 1
+    return ", ".join(
+        f"{count}x op={op or 'unknown'} status={status} type={err_type or 'unknown'}"
+        for (op, status, err_type), count in sorted(
+            counts.items(), key=lambda kv: str(kv)
+        )
+    )
 
 
 def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
@@ -144,16 +216,26 @@ class OpenSearchClient(AbstractContextManager):
     Args:
         host: The host of the OpenSearch cluster.
         port: The port of the OpenSearch cluster.
-        auth: The authentication credentials for the OpenSearch cluster. A tuple
-            of (username, password).
+        auth: The basic-auth credentials for the OpenSearch cluster, a tuple of
+            (username, password). Used only when auth_method is BASIC; ignored
+            for IAM.
         use_ssl: Whether to use SSL for the OpenSearch cluster. Defaults to
             True.
-        verify_certs: Whether to verify the SSL certificates for the OpenSearch
-            cluster. Defaults to False.
+        verify_certs: Whether to verify the server certificate. Defaults to
+            OPENSEARCH_VERIFY_CERTS.
+        ca_certs: CA bundle path used to verify the server certificate.
+        client_cert: Client certificate path for mutual TLS.
+        client_key: Client private key path for mutual TLS.
         ssl_show_warn: Whether to show warnings for SSL certificates. Defaults
             to False.
         timeout: The timeout for the OpenSearch cluster. Defaults to
             DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S.
+        auth_method: Whether to authenticate with HTTP basic auth or AWS SigV4
+            (IAM). Defaults to OPENSEARCH_AUTH_METHOD.
+        aws_region: AWS region used for SigV4 signing. Required when auth_method
+            is IAM. Defaults to OPENSEARCH_AWS_REGION.
+        aws_service: AWS service name for SigV4 signing ("es" for managed
+            domains, "aoss" for Serverless). Defaults to OPENSEARCH_AWS_SERVICE.
     """
 
     def __init__(
@@ -162,21 +244,50 @@ class OpenSearchClient(AbstractContextManager):
         port: int = OPENSEARCH_REST_API_PORT,
         auth: tuple[str, str] = (OPENSEARCH_ADMIN_USERNAME, OPENSEARCH_ADMIN_PASSWORD),
         use_ssl: bool = OPENSEARCH_USE_SSL,
-        verify_certs: bool = False,
+        verify_certs: bool = OPENSEARCH_VERIFY_CERTS,
+        ca_certs: str | None = OPENSEARCH_CA_CERTS,
+        client_cert: str | None = OPENSEARCH_CLIENT_CERT,
+        client_key: str | None = OPENSEARCH_CLIENT_KEY,
         ssl_show_warn: bool = False,
         timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
+        auth_method: OpenSearchAuthMethod = OPENSEARCH_AUTH_METHOD,
+        aws_region: str | None = OPENSEARCH_AWS_REGION,
+        aws_service: str = OPENSEARCH_AWS_SERVICE,
     ):
         logger.debug(
-            "Creating OpenSearch client with host %s, port %s and timeout %s seconds.",
+            "Creating OpenSearch client with host %s, port %s, auth method "
+            "%s and timeout %s seconds.",
             host,
             port,
+            auth_method.value,
             timeout,
         )
+        http_auth: tuple[str, str] | Urllib3AWSV4SignerAuth
+        if auth_method == OpenSearchAuthMethod.IAM:
+            if not aws_region:
+                raise ValueError(
+                    "aws_region is required for IAM authentication to OpenSearch."
+                )
+            # SigV4 signing for an AWS managed domain whose FGAC master is an
+            # IAM ARN. Credentials come from the default boto3 chain (env, IRSA,
+            # instance/task role); the signer refreshes them per request.
+            credentials = boto3.Session().get_credentials()
+            if credentials is None:
+                raise ValueError(
+                    "OpenSearch IAM authentication is enabled but no AWS credentials "
+                    "could be resolved from the environment."
+                )
+            http_auth = Urllib3AWSV4SignerAuth(credentials, aws_region, aws_service)
+        else:
+            http_auth = auth
         self._client = OpenSearch(
             hosts=[{"host": host, "port": port}],
-            http_auth=auth,
+            http_auth=http_auth,
             use_ssl=use_ssl,
             verify_certs=verify_certs,
+            ca_certs=ca_certs,
+            client_cert=client_cert,
+            client_key=client_key,
             ssl_show_warn=ssl_show_warn,
             # NOTE: This timeout applies to all requests the client makes,
             # including bulk indexing. When exceeded, the client will raise a
@@ -414,16 +525,26 @@ class OpenSearchIndexClient(OpenSearchClient):
         index_name: The name of the index to interact with.
         host: The host of the OpenSearch cluster.
         port: The port of the OpenSearch cluster.
-        auth: The authentication credentials for the OpenSearch cluster. A tuple
-            of (username, password).
+        auth: The basic-auth credentials for the OpenSearch cluster, a tuple of
+            (username, password). Used only when auth_method is BASIC; ignored
+            for IAM.
         use_ssl: Whether to use SSL for the OpenSearch cluster. Defaults to
             True.
-        verify_certs: Whether to verify the SSL certificates for the OpenSearch
-            cluster. Defaults to False.
+        verify_certs: Whether to verify the server certificate. Defaults to
+            OPENSEARCH_VERIFY_CERTS.
+        ca_certs: CA bundle path used to verify the server certificate.
+        client_cert: Client certificate path for mutual TLS.
+        client_key: Client private key path for mutual TLS.
         ssl_show_warn: Whether to show warnings for SSL certificates. Defaults
             to False.
         timeout: The timeout for the OpenSearch cluster. Defaults to
             DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S.
+        auth_method: Whether to authenticate with HTTP basic auth or AWS SigV4
+            (IAM). Defaults to OPENSEARCH_AUTH_METHOD.
+        aws_region: AWS region used for SigV4 signing. Required when auth_method
+            is IAM. Defaults to OPENSEARCH_AWS_REGION.
+        aws_service: AWS service name for SigV4 signing ("es" for managed
+            domains, "aoss" for Serverless). Defaults to OPENSEARCH_AWS_SERVICE.
     """
 
     def __init__(
@@ -433,10 +554,16 @@ class OpenSearchIndexClient(OpenSearchClient):
         port: int = OPENSEARCH_REST_API_PORT,
         auth: tuple[str, str] = (OPENSEARCH_ADMIN_USERNAME, OPENSEARCH_ADMIN_PASSWORD),
         use_ssl: bool = OPENSEARCH_USE_SSL,
-        verify_certs: bool = False,
+        verify_certs: bool = OPENSEARCH_VERIFY_CERTS,
+        ca_certs: str | None = OPENSEARCH_CA_CERTS,
+        client_cert: str | None = OPENSEARCH_CLIENT_CERT,
+        client_key: str | None = OPENSEARCH_CLIENT_KEY,
         ssl_show_warn: bool = False,
         timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
         emit_metrics: bool = True,
+        auth_method: OpenSearchAuthMethod = OPENSEARCH_AUTH_METHOD,
+        aws_region: str | None = OPENSEARCH_AWS_REGION,
+        aws_service: str = OPENSEARCH_AWS_SERVICE,
     ):
         super().__init__(
             host=host,
@@ -444,8 +571,14 @@ class OpenSearchIndexClient(OpenSearchClient):
             auth=auth,
             use_ssl=use_ssl,
             verify_certs=verify_certs,
+            ca_certs=ca_certs,
+            client_cert=client_cert,
+            client_key=client_key,
             ssl_show_warn=ssl_show_warn,
             timeout=timeout,
+            auth_method=auth_method,
+            aws_region=aws_region,
+            aws_service=aws_service,
         )
         self._index_name = index_name
         self._emit_metrics = emit_metrics
@@ -822,6 +955,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             "documents": len,
             "tenant_state": str,
             "update_if_exists": str,
+            "use_create_only": str,
         },
     )
     def bulk_index_documents(
@@ -829,6 +963,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         documents: list[DocumentChunk],
         tenant_state: TenantState,
         update_if_exists: bool = False,
+        use_create_only: bool = False,
     ) -> None:
         """Bulk indexes documents.
 
@@ -846,6 +981,11 @@ class OpenSearchIndexClient(OpenSearchClient):
             update_if_exists: Whether to update the document if it already
                 exists. If False, will raise an exception if the document
                 already exists. Defaults to False.
+            use_create_only: When True, write each chunk with _op_type=create
+                (don't overwrite if it already exists) and treat the resulting
+                409 as benign. The reindex port uses this so a stale backlog
+                write can never clobber a chunk a live/forward writer already
+                owns in FUTURE. Default False leaves the write path unchanged.
 
         Raises:
             Exception: There was an error during the bulk index. This
@@ -860,10 +1000,12 @@ class OpenSearchIndexClient(OpenSearchClient):
         if not documents:
             return
         logger.debug(
-            "Bulk indexing %s documents for tenant %s. update_if_exists=%s.",
+            "Bulk indexing %s documents for tenant %s. update_if_exists=%s "
+            "use_create_only=%s.",
             len(documents),
             tenant_state.tenant_id,
             update_if_exists,
+            use_create_only,
         )
         data = []
         for document in documents:
@@ -874,29 +1016,83 @@ class OpenSearchIndexClient(OpenSearchClient):
                 max_chunk_size=document.max_chunk_size,
             )
             body: dict[str, Any] = document.model_dump(exclude_none=True)
+            # create-only never overwrites: an existing chunk (a live/forward
+            # writer already owns it) comes back as a benign 409.
+            if use_create_only:
+                op_type = "create"
+            else:
+                op_type = "index" if update_if_exists else "create"
             data_for_document: dict[str, Any] = {
                 "_index": self._index_name,
                 "_id": document_chunk_id,
-                "_op_type": "index" if update_if_exists else "create",
+                "_op_type": op_type,
                 "_source": body,
             }
             data.append(data_for_document)
-        # max_retries is the number of times to retry a request if we get a 429.
-        # Explicitly raise on error and exception; we will not attempt retries.
-        successes, _ = bulk(
-            self._client,
-            data,
-            max_retries=3,
-            raise_on_error=True,
-            raise_on_exception=True,
-        )
-        if successes != len(documents):
-            raise OpenSearchIndexError(
-                "OpenSearch reported no errors during bulk index but the number of successful "
-                f"operations ({successes}) does not match the number of documents "
-                f"({len(documents)})."
+
+        if use_create_only:
+            # a chunk that already exists is owned by a live/forward writer, so
+            # the port yields with a benign 409 instead of failing the batch
+            successes, errors = bulk(
+                self._client,
+                data,
+                max_retries=3,
+                raise_on_error=False,
+                raise_on_exception=True,
             )
-        logger.debug("Successfully bulk indexed %s documents.", len(documents))
+            benign_conflicts = self._benign_create_conflict_count(errors)
+        else:
+            # any error fails the batch (the caller may refresh-retry
+            # on the BulkIndexError that bulk raises)
+            successes, _ = bulk(
+                self._client,
+                data,
+                max_retries=3,
+                raise_on_error=True,
+                raise_on_exception=True,
+            )
+            benign_conflicts = 0
+
+        if successes + benign_conflicts != len(documents):
+            raise OpenSearchIndexError(
+                f"Bulk index for index {self._index_name}: successful operations ({successes}) "
+                f"plus benign version conflicts ({benign_conflicts}) does not match the number "
+                f"of documents ({len(documents)})."
+            )
+        logger.debug(
+            "Successfully bulk indexed %s documents (%s benign version conflicts).",
+            len(documents),
+            benign_conflicts,
+        )
+
+    def _benign_create_conflict_count(self, errors: list[dict[str, Any]]) -> int:
+        """Count benign 409s from create-only writes (the chunk already exists,
+        so a live/forward writer owns it and the port yields); raise
+        OpenSearchIndexError on any other error.
+
+        opensearch-py exposes no typed model for bulk per-item errors (bulk() ->
+        Any, BulkIndexError.errors -> List[Any]); they are raw {op_type: {...}}
+        dicts, so we read the fields directly. A create-conflict is keyed under
+        "create" (the op_type) and reports status 409 / version_conflict.
+        """
+        benign = 0
+        fatal: list[dict[str, Any]] = []
+        for error in errors:
+            item = error.get("create") or {}
+            err_type = (item.get("error") or {}).get("type", "")
+            if (
+                item.get("status") == HTTPStatus.CONFLICT
+                and err_type == _VERSION_CONFLICT_ERROR_TYPE
+            ):
+                benign += 1
+            else:
+                fatal.append(error)
+        if fatal:
+            raise OpenSearchIndexError(
+                f"Failed to bulk index documents for index {self._index_name}. "
+                f"{len(fatal)} fatal error(s) occurred: {_summarize_bulk_errors(fatal)}"
+            )
+        return benign
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
     def delete_document(self, document_chunk_id: str) -> bool:
@@ -1003,7 +1199,10 @@ class OpenSearchIndexClient(OpenSearchClient):
         },
     )
     def update_document(
-        self, document_chunk_id: str, properties_to_update: dict[str, Any]
+        self,
+        document_chunk_id: str,
+        properties_to_update: dict[str, Any],
+        ignore_missing: bool = False,
     ) -> None:
         """Updates an OpenSearch document chunk's properties.
 
@@ -1012,6 +1211,9 @@ class OpenSearchIndexClient(OpenSearchClient):
                 update.
             properties_to_update: The properties of the document to update. Each
                 property should exist in the schema.
+            ignore_missing: If True, silently return instead of raising when the
+                document chunk does not exist (OpenSearch responds with a 404).
+                Defaults to False.
 
         Raises:
             Exception: There was an error updating the document.
@@ -1022,12 +1224,22 @@ class OpenSearchIndexClient(OpenSearchClient):
             self._index_name,
         )
         update_body: dict[str, Any] = {"doc": properties_to_update}
-        result = self._client.update(
-            index=self._index_name,
-            id=document_chunk_id,
-            body=update_body,
-            _source=False,
-        )
+        try:
+            result = self._client.update(
+                index=self._index_name,
+                id=document_chunk_id,
+                body=update_body,
+                _source=False,
+            )
+        except TransportError as e:
+            if ignore_missing and e.status_code == 404:
+                logger.debug(
+                    "Document chunk %s not found in index %s; ignoring as requested.",
+                    document_chunk_id,
+                    self._index_name,
+                )
+                return
+            raise
         result_id = result.get("_id", "")
         # Sanity check.
         if result_id != document_chunk_id:
@@ -1066,7 +1278,11 @@ class OpenSearchIndexClient(OpenSearchClient):
         },
     )
     def bulk_update_documents(
-        self, document_chunk_ids: list[str], properties_to_update: dict[str, Any]
+        self,
+        document_chunk_ids: list[str],
+        properties_to_update: dict[str, Any],
+        ignore_missing: bool = False,
+        surface_document_missing: bool = False,
     ) -> None:
         """Bulk updates OpenSearch document chunks' properties.
 
@@ -1078,6 +1294,14 @@ class OpenSearchIndexClient(OpenSearchClient):
                 update.
             properties_to_update: The properties of the document to update. Each
                 property should exist in the schema.
+            ignore_missing: If True, document chunks that do not exist
+                (OpenSearch reports a 404 ``document_missing_exception``) are
+                skipped instead of being treated as fatal errors. Defaults to
+                False.
+            surface_document_missing: When True and the only fatal errors are 404
+                document_missing, raise OpenSearchDocumentMissingError instead of
+                OpenSearchUpdateError (FUTURE write during a reindex port).
+                Takes precedence over ``ignore_missing``.
 
         Raises:
             Exception: There was an error during the bulk update.
@@ -1088,6 +1312,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 by OpenSearch does not match the number of document chunks to
                 update, or there was at least one other kind of fatal error for
                 a particular document chunk.
+            OpenSearchDocumentMissingError: ``surface_document_missing`` was set
+                and the only fatal errors were 404 document_missing.
         """
         if not document_chunk_ids:
             return
@@ -1120,6 +1346,8 @@ class OpenSearchIndexClient(OpenSearchClient):
             raise_on_exception=True,
         )
 
+        ignored_missing_count = 0
+        missing_chunk_ids: list[str] = []
         if errors:
             retryable_ids = []
             fatal_errors = []
@@ -1135,7 +1363,32 @@ class OpenSearchIndexClient(OpenSearchClient):
                 err_obj = info.get("error", {})
                 err_type = err_obj.get("type", "") if isinstance(err_obj, dict) else ""
 
-                if status >= 500 and err_type in _RETRYABLE_UPDATE_ERROR_TYPES:
+                if (
+                    (ignore_missing or surface_document_missing)
+                    and status == HTTPStatus.NOT_FOUND
+                    and err_type == _DOCUMENT_MISSING_ERROR_TYPE
+                ):
+                    if surface_document_missing:
+                        # doc not in this index yet; surface instead of failing
+                        # (FUTURE write during a reindex port)
+                        missing_chunk_id = info.get("_id", "")
+                        if not missing_chunk_id:
+                            raise OpenSearchUpdateError(
+                                "OpenSearch returned a document_missing error when trying to bulk "
+                                f"update document chunks for index {self._index_name}. Error: {error}. "
+                                "The error did not contain an ID however.",
+                            )
+                        missing_chunk_ids.append(missing_chunk_id)
+                    else:
+                        # ignore_missing: skip silently (benign indexing race)
+                        logger.debug(
+                            "Document chunk %s not found in index %s during bulk update; "
+                            "ignoring as requested.",
+                            info.get("_id", ""),
+                            self._index_name,
+                        )
+                        ignored_missing_count += 1
+                elif status >= 500 and err_type in _RETRYABLE_UPDATE_ERROR_TYPES:
                     # We have seen a bug in OpenSearch version 3.4.0 when using
                     # the knn plugin and when derived_source is enabled (the
                     # default), when OpenSearch is under load sometimes updates
@@ -1162,8 +1415,9 @@ class OpenSearchIndexClient(OpenSearchClient):
 
             if fatal_errors:
                 raise OpenSearchUpdateError(
-                    f"Failed to bulk update document chunks for index {self._index_name}. At least "
-                    f"one fatal error occurred: {fatal_errors[0]}"
+                    f"Failed to bulk update document chunks for index {self._index_name}. "
+                    f"{len(fatal_errors)} fatal error(s) occurred: "
+                    f"{_summarize_bulk_errors(fatal_errors)}"
                 )
 
             data = []
@@ -1195,12 +1449,17 @@ class OpenSearchIndexClient(OpenSearchClient):
                 )
             successes += new_successes
 
-        if successes != len(document_chunk_ids):
+        # ignored-missing are subtracted from the expected total; surfaced-
+        # missing are reported separately and not counted as successes.
+        expected_successes = len(document_chunk_ids) - ignored_missing_count
+        if successes + len(missing_chunk_ids) != expected_successes:
             raise OpenSearchUpdateError(
                 f"OpenSearch reported no errors during bulk update but the number of successful "
-                f"operations ({successes}) does not match the number of document chunks "
-                f"({len(document_chunk_ids)})."
+                f"operations ({successes}) plus missing ({len(missing_chunk_ids)}) does not match "
+                f"the number of document chunks ({expected_successes})."
             )
+        if missing_chunk_ids:
+            raise OpenSearchDocumentMissingError(missing_chunk_ids)
         logger.debug(
             "Successfully bulk updated %s document chunks.", len(document_chunk_ids)
         )
@@ -1443,6 +1702,216 @@ class OpenSearchIndexClient(OpenSearchClient):
             len(document_chunk_ids),
         )
         return document_chunk_ids
+
+    def open_pit(self, keep_alive: str = PIT_KEEP_ALIVE) -> str:
+        """Opens a point-in-time (PIT) over this index for a consistent scan.
+
+        The PIT pins the index across searches so concurrent writes don't shift
+        the result set. The caller passes the returned id into
+        fetch_chunks_for_doc_ids and releases it with close_pit when done.
+
+        Args:
+            keep_alive: How long the PIT lives between uses; each search extends
+                the lease.
+
+        Raises:
+            RuntimeError: OpenSearch returned no pit_id.
+
+        Returns:
+            The point-in-time id.
+        """
+        response = self._client.create_pit(
+            index=self._index_name, params={"keep_alive": keep_alive}
+        )
+        pit_id = response.get("pit_id")
+        if not pit_id:
+            raise RuntimeError(
+                f"create_pit returned no pit_id for index {self._index_name}."
+            )
+        return pit_id
+
+    def close_pit(self, pit_id: str) -> None:
+        """Releases a PIT. Best-effort — a leaked PIT self-expires after keep_alive.
+
+        Args:
+            pit_id: The point-in-time id to delete.
+        """
+        try:
+            self._client.delete_pit(body={"pit_id": [pit_id]})
+        except NotFoundError:
+            pass
+
+    def fetch_chunks_for_doc_ids(
+        self,
+        pit_id: str,
+        doc_ids: list[str],
+        search_after: list[object] | None = None,
+        page_size: int = _PIT_SCAN_PAGE_SIZE,
+        keep_alive: str = PIT_KEEP_ALIVE,
+    ) -> tuple[list[DocumentChunkWithoutVectors], list[object] | None, str]:
+        """Fetches one page of regular chunks for a batch of documents from a PIT.
+
+        Filters to regular chunks (max_chunk_size == DEFAULT_MAX_CHUNK_SIZE),
+        sorts by (document_id, chunk_index), and pages with search_after.
+        Vectors are excluded — the port re-embeds. If the PIT expired the scan
+        re-opens it and retries once.
+
+        Args:
+            pit_id: The point-in-time id from open_pit.
+            doc_ids: The document ids whose chunks to fetch.
+            search_after: The sort cursor from the previous page; None for the
+                first page.
+            page_size: Max chunks per page.
+            keep_alive: PIT lease extension applied on each search.
+
+        Raises:
+            OpenSearchServerSideTimeout: The search timed out server-side; the
+                caller should retry the batch.
+            Exception: There was an error searching the index.
+
+        Returns:
+            A tuple of (chunks, next_search_after, pit_id_in_use). next_search_after
+            is None once the batch is exhausted; pit_id_in_use reflects the new PIT
+            when the scan re-opened, so the caller passes it forward.
+        """
+        if not doc_ids:
+            return [], None, pit_id
+
+        # Background scans intentionally skip the user-search metrics/pipeline that
+        # search() applies; we still detect a server-side timeout below so a
+        # truncated page is never mistaken for the end of the scan.
+        try:
+            result = self._client.search(
+                body=self._pit_scan_body(
+                    pit_id, doc_ids, search_after, page_size, keep_alive
+                )
+            )
+        except NotFoundError as e:
+            if not self._is_pit_expired(e):
+                raise
+            logger.debug(
+                "PIT %s expired mid-scan for index %s; reopening.",
+                pit_id,
+                self._index_name,
+            )
+            pit_id = self.open_pit(keep_alive)
+            result = self._client.search(
+                body=self._pit_scan_body(
+                    pit_id, doc_ids, search_after, page_size, keep_alive
+                )
+            )
+
+        if result.get("timed_out"):
+            # A timed-out page returns partial hits; treating it as a short page
+            # would silently end the scan early, so fail and let the caller retry.
+            raise OpenSearchServerSideTimeout(
+                f"PIT scan of index {self._index_name} timed out server-side."
+            )
+
+        hits: list[dict[str, Any]] = result.get("hits", {}).get("hits", [])
+        chunks: list[DocumentChunkWithoutVectors] = []
+        last_sort: list[object] | None = None
+        for hit in hits:
+            source = hit.get("_source")
+            if not source:
+                raise RuntimeError(
+                    f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
+                )
+            chunks.append(DocumentChunkWithoutVectors.model_validate(source))
+            last_sort = hit.get("sort")
+
+        # A short page means the batch is exhausted; a full page means resume from
+        # the last hit's sort values on the next call.
+        next_search_after = last_sort if len(hits) == page_size else None
+        return chunks, next_search_after, pit_id
+
+    def iter_chunks_for_doc_ids(
+        self,
+        doc_ids: list[str],
+        page_size: int = _PIT_SCAN_PAGE_SIZE,
+        keep_alive: str = PIT_KEEP_ALIVE,
+    ) -> Iterator[list[DocumentChunkWithoutVectors]]:
+        """Scans regular chunks for a batch of documents, one page at a time.
+
+        Owns the whole PIT lifecycle: opens it, pages with search_after, re-opens
+        transparently on expiry, and always closes it (even if the consumer
+        raises). The preferred entry point so callers can't leak a PIT.
+
+        Args:
+            doc_ids: The document ids whose chunks to scan.
+            page_size: Max chunks per page.
+            keep_alive: PIT lease extension applied on each search.
+
+        Yields:
+            One page (list) of chunks at a time.
+        """
+        if not doc_ids:
+            return
+        pit_id = self.open_pit(keep_alive)
+        try:
+            search_after: list[object] | None = None
+            while True:
+                chunks, search_after, pit_id = self.fetch_chunks_for_doc_ids(
+                    pit_id,
+                    doc_ids,
+                    search_after=search_after,
+                    page_size=page_size,
+                    keep_alive=keep_alive,
+                )
+                if chunks:
+                    yield chunks
+                if search_after is None:
+                    return
+        finally:
+            self.close_pit(pit_id)
+
+    def _pit_scan_body(
+        self,
+        pit_id: str,
+        doc_ids: list[str],
+        search_after: list[object] | None,
+        page_size: int,
+        keep_alive: str,
+    ) -> dict[str, Any]:
+        """Builds the PIT search body for one page.
+
+        No index= is sent — the PIT pins the index; keep_alive in the pit block
+        extends the lease on every page.
+        """
+        body: dict[str, Any] = {
+            "pit": {"id": pit_id, "keep_alive": keep_alive},
+            "size": page_size,
+            "_source": {
+                "excludes": [CONTENT_VECTOR_FIELD_NAME, TITLE_VECTOR_FIELD_NAME]
+            },
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"terms": {DOCUMENT_ID_FIELD_NAME: doc_ids}},
+                        # OpenSearch holds no large/mini chunks today, so this
+                        # matches everything; kept as a guard if that changes
+                        {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
+                    ]
+                }
+            },
+            "sort": [
+                {DOCUMENT_ID_FIELD_NAME: "asc"},
+                {CHUNK_INDEX_FIELD_NAME: "asc"},
+            ],
+        }
+        if search_after is not None:
+            body["search_after"] = search_after
+        return body
+
+    @staticmethod
+    def _is_pit_expired(error: NotFoundError) -> bool:
+        """True if the 404 is an expired/deleted PIT (search_context_missing).
+
+        The type can be nested under root_cause, so match the stringified body.
+        """
+        return _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(
+            getattr(error, "info", "")
+        ) or _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(error)
 
     @log_function_time(print_only=True, debug_only=True)
     def refresh_index(self) -> None:

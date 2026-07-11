@@ -2,13 +2,14 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import {
   useSession,
   useSessionId,
   useHasSession,
   useIsRunning,
   useIsInterrupting,
+  useWasInterrupted,
   useOutputPanelOpen,
   useToggleOutputPanel,
   useBuildSessionStore,
@@ -20,6 +21,7 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
+import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
 import { SessionErrorCode } from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
@@ -35,8 +37,11 @@ import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
-import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import {
+  BuildLlmSelection,
+  hasSupportedCraftProvider,
+} from "@/app/craft/onboarding/constants";
 import ScheduledRunBanner, {
   useScheduledRunContext,
 } from "@/app/craft/components/ScheduledRunBanner";
@@ -46,9 +51,10 @@ import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsR
 import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
+import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { SvgSidebar, SvgChevronDown } from "@opal/icons";
+import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
 import { Button as OpalButton, Tooltip } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -88,12 +94,17 @@ export default function BuildChatPanel({
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
+  const wasInterrupted = useWasInterrupted();
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
     useBuildContext();
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
+  const onWakeIntent = useWakeOnIntent();
 
   const { llmProviders } = useLLMProviders();
+  // Sessions can outlive the org's supported providers — gate sends until one
+  // exists (the model picker stays enabled so admins can connect from it).
+  const hasProvider = hasSupportedCraftProvider(llmProviders);
   // Picker shows the session's stored model unless the user picks another.
   // The pick is keyed by session so it can't leak across sessions.
   const sessionModel = useMemo<BuildLlmSelection | null>(() => {
@@ -112,6 +123,25 @@ export default function BuildChatPanel({
   >({});
   const selectedModel =
     (sessionId ? modelBySession[sessionId] : undefined) ?? sessionModel;
+
+  const contextUsage = useMemo(() => {
+    const usage = session?.contextUsage;
+    if (!usage) return null;
+    let limit: number | null = null;
+    if (selectedModel) {
+      const provider = llmProviders?.find(
+        (p) => p.provider === selectedModel.provider
+      );
+      const config = provider?.model_configurations.find(
+        (m) => m.name === selectedModel.modelName
+      );
+      limit = config?.max_input_tokens ?? null;
+    }
+    return {
+      usedTokens: usage.usedTokens,
+      contextLimit: limit,
+    };
+  }, [session?.contextUsage, selectedModel, llmProviders]);
 
   // Main-column view mode: chat (main agent) vs a subagent transcript.
   const viewedSubagentSessionId = useViewedSubagentSessionId();
@@ -635,6 +665,7 @@ export default function BuildChatPanel({
               changes grow leftward into empty space without shifting anything. */}
               <div className="flex flex-row items-center gap-2 shrink-0">
                 <SandboxStatusIndicator />
+                <SandboxAsleepNotice />
                 {/* Output panel toggle — same icon for open and close */}
                 {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
                 <IconButton
@@ -691,9 +722,17 @@ export default function BuildChatPanel({
                       autoScrollEnabled={isAtBottom}
                       scrollContainerRef={scrollContainerRef}
                       trailingAssistantSlot={
-                        <LiveApprovalsRegion
-                          sessionId={sessionId ?? existingSessionId ?? null}
-                        />
+                        <>
+                          {wasInterrupted && !displayIsRunning && (
+                            <div className="flex items-center gap-2 text-sm text-text-03">
+                              <SvgStopCircle className="size-4 shrink-0 stroke-text-03" />
+                              <span>Response stopped</span>
+                            </div>
+                          )}
+                          <LiveApprovalsRegion
+                            sessionId={sessionId ?? existingSessionId ?? null}
+                          />
+                        </>
                       }
                     />
                   )}
@@ -708,7 +747,11 @@ export default function BuildChatPanel({
                 {!videoBackgroundEnabled && (
                   <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
                 )}
-                <div className="max-w-[720px] mx-auto">
+                <div
+                  className="max-w-[720px] mx-auto"
+                  onFocusCapture={onWakeIntent}
+                  onKeyDownCapture={onWakeIntent}
+                >
                   {/* Scroll to bottom button - shown when user has scrolled away */}
                   {showScrollButton && (
                     <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
@@ -719,7 +762,7 @@ export default function BuildChatPanel({
                             "flex items-center justify-center",
                             "w-8 h-8 rounded-full",
                             "bg-background-neutral-inverted-00 border border-border-01",
-                            "shadow-01 hover:shadow-02",
+                            "shadow-box-01 hover:shadow-box-02",
                             "transition-all duration-200",
                             "hover:bg-background-tint-inverted-01"
                           )}
@@ -761,7 +804,9 @@ export default function BuildChatPanel({
                     onInterrupt={
                       scheduledRunInFlight ? undefined : handleInterrupt
                     }
-                    disabled={isViewingSubagent || scheduledRunInFlight}
+                    disabled={
+                      isViewingSubagent || scheduledRunInFlight || !hasProvider
+                    }
                     placeholder={
                       isViewingSubagent
                         ? "Switch to the main agent to send a message"
@@ -772,6 +817,7 @@ export default function BuildChatPanel({
                     queuedMessages={queuedMessages}
                     onQueueMessage={handleQueueMessage}
                     onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                    contextUsage={contextUsage}
                   />
                 </div>
               </div>

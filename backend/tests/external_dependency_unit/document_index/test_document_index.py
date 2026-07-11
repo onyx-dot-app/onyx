@@ -23,7 +23,7 @@ from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.document_index.conftest import EMBEDDING_DIM
 from tests.external_dependency_unit.document_index.conftest import make_chunk
 from tests.external_dependency_unit.document_index.conftest import (
@@ -77,7 +77,9 @@ def opensearch_document_index(
     test_index_name: str,
 ) -> Generator[OpenSearchDocumentIndex, None, None]:
     yield OpenSearchDocumentIndex(
-        tenant_state=TenantState(tenant_id=TEST_TENANT_ID, multitenant=False),
+        tenant_state=TenantState(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, multitenant=False
+        ),
         index_name=test_index_name,
         embedding_dim=EMBEDDING_DIM,
         embedding_precision=EmbeddingPrecision.FLOAT,
@@ -299,7 +301,9 @@ class TestDocumentIndexNew:
             assert mock_verify_and_create_index_if_necessary.call_count == 0
 
             test_index_name = "test_index_name_for_mt_cloud_index_verification"
-            tenant_state = TenantState(tenant_id=TEST_TENANT_ID, multitenant=True)
+            tenant_state = TenantState(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, multitenant=True
+            )
             _ = OpenSearchDocumentIndex(
                 tenant_state=tenant_state,
                 index_name=test_index_name,
@@ -361,7 +365,7 @@ class TestDocumentIndexNew:
             # OpenSearch's ~1s refresh window.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
             retrieved_doc1 = _retrieve_chunks_with_expected_boost(
                 document_index=document_index,
@@ -426,7 +430,7 @@ class TestDocumentIndexNew:
             # OpenSearch's ~1s refresh window.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
             retrieved_doc1 = _retrieve_chunks_with_expected_boost(
                 document_index=document_index,
@@ -480,7 +484,7 @@ class TestDocumentIndexNew:
             # Postcondition - chunks still retrievable with their default boost.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
             retrieved = document_index.id_based_retrieval(
                 chunk_requests=[DocumentSectionRequest(document_id=doc_id)],
@@ -489,3 +493,109 @@ class TestDocumentIndexNew:
             assert len(retrieved) == 2
             for chunk in retrieved:
                 assert chunk.boost == 0
+
+    def test_update_skips_doc_with_unknown_chunk_count(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that a doc whose chunk count is unknown (the perm-synced-but-not-
+        yet-indexed race) is skipped with a warning instead of raising, and that
+        other docs in the same request are still updated.
+        """
+        # Precondition - index one real doc; pair it with a phantom doc whose
+        # chunk count is unknown (absent from doc_id_to_chunk_cnt -> -1).
+        for document_index in document_indices:
+            real_doc = f"test_update_unknown_real_{uuid.uuid4().hex[:8]}"
+            phantom_doc = f"test_update_unknown_phantom_{uuid.uuid4().hex[:8]}"
+            chunks = [
+                make_chunk(real_doc, chunk_id=0),
+                make_chunk(real_doc, chunk_id=1),
+            ]
+            metadata = make_indexing_metadata(
+                [real_doc], old_counts=[0], new_counts=[2]
+            )
+            document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            # Allow OpenSearch refresh interval to settle.
+            time.sleep(1)
+
+            # Under test - phantom_doc has no entry in doc_id_to_chunk_cnt, so
+            # its chunk count resolves to -1 (unknown). This must not raise.
+            update_request = MetadataUpdateRequest(
+                document_ids=[real_doc, phantom_doc],
+                doc_id_to_chunk_cnt={real_doc: 2},
+                boost=5,
+            )
+            document_index.update([update_request])
+
+            # Postcondition - the real doc is still updated despite the phantom
+            # doc being skipped.
+            filters = IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT],
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            )
+            retrieved = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=real_doc,
+                expected_chunk_count=2,
+                expected_boost=5,
+                filters=filters,
+            )
+            assert len(retrieved) == 2
+            for chunk in retrieved:
+                assert chunk.boost == 5
+
+    def test_update_skips_doc_with_zero_chunk_count(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that a doc with a chunk count of 0 (e.g. concurrent delete +
+        metadata sync) is skipped with a warning instead of raising, and that
+        other docs in the same request are still updated.
+        """
+        # Precondition - index one real doc; pair it with a phantom doc whose
+        # chunk count is explicitly 0.
+        for document_index in document_indices:
+            real_doc = f"test_update_zero_real_{uuid.uuid4().hex[:8]}"
+            phantom_doc = f"test_update_zero_phantom_{uuid.uuid4().hex[:8]}"
+            chunks = [
+                make_chunk(real_doc, chunk_id=0),
+                make_chunk(real_doc, chunk_id=1),
+            ]
+            metadata = make_indexing_metadata(
+                [real_doc], old_counts=[0], new_counts=[2]
+            )
+            document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            # Allow OpenSearch refresh interval to settle.
+            time.sleep(1)
+
+            # Under test - phantom_doc has a chunk count of 0. This must not
+            # raise.
+            update_request = MetadataUpdateRequest(
+                document_ids=[real_doc, phantom_doc],
+                doc_id_to_chunk_cnt={real_doc: 2, phantom_doc: 0},
+                boost=6,
+            )
+            document_index.update([update_request])
+
+            # Postcondition - the real doc is still updated despite the phantom
+            # doc being skipped.
+            filters = IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT],
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            )
+            retrieved = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=real_doc,
+                expected_chunk_count=2,
+                expected_boost=6,
+                filters=filters,
+            )
+            assert len(retrieved) == 2
+            for chunk in retrieved:
+                assert chunk.boost == 6

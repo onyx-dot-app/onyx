@@ -25,12 +25,20 @@ OPENCODE_DISABLED_TOOLS: list[str] = [
     t.strip() for t in _disabled_tools_str.split(",") if t.strip()
 ]
 
+
 SANDBOX_IDLE_TIMEOUT_SECONDS = int(
     os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "3600")
 )
 SANDBOX_MAX_CONCURRENT_PER_ORG = int(
     os.environ.get("SANDBOX_MAX_CONCURRENT_PER_ORG", "10")
 )
+SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS = int(
+    os.environ.get("SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS", "180")
+)
+SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS = int(
+    os.environ.get("SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS", "60")
+)
+SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS = 60
 
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
 SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
@@ -50,17 +58,22 @@ ATTACHMENTS_DIRECTORY = "attachments"
 
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
-SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.52"
+SANDBOX_CONTAINER_IMAGE = (
+    os.environ.get("SANDBOX_CONTAINER_IMAGE", "").strip() or "onyxdotapp/sandbox:latest"
 )
 
-# Set to "Always" in environments that pin a mutable tag (e.g. :dev) so nodes
-# re-pull on every pod start; immutable version pins can use the node cache.
+# Set to "Always" only in internal environments that deliberately pin a mutable
+# tag. Non-dev deployments should use app-aligned immutable tags.
 SANDBOX_IMAGE_PULL_POLICY = os.environ.get("SANDBOX_IMAGE_PULL_POLICY", "IfNotPresent")
 
 SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get("SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox")
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
+
+# Gates the built-in `browser` skill. Defaults on to match the sandbox image's
+# build-time ENABLE_BROWSER ARG (also on); a browserless sandbox build must set
+# this false too, else the skill is advertised without its runtime.
+ENABLE_BROWSER = os.environ.get("ENABLE_BROWSER", "true").lower() == "true"
 
 SANDBOX_PUSH_PRIVATE_KEY = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY", "")
 
@@ -151,9 +164,17 @@ SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
 # Wall-clock budget for one user-message turn against opencode-serve.
-SANDBOX_TURN_TIMEOUT_SECONDS = float(
-    os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0")
+OPENCODE_PROMPT_TIMEOUT_SECONDS = float(
+    os.environ.get(
+        "OPENCODE_PROMPT_TIMEOUT_SECONDS",
+        # Legacy name, still honored so existing deployments keep their tuning.
+        os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0"),
+    )
 )
+
+# Prompt-slot lock lease; renewed on every sandbox event/keepalive, so a dead
+# holder strands the slot for at most this long.
+PROMPT_SLOT_LEASE_SECONDS = float(os.environ.get("PROMPT_SLOT_LEASE_SECONDS", "120.0"))
 
 # Match against the EXPOSE directive in the sandbox Dockerfile.
 OPENCODE_SERVE_PORT = int(os.environ.get("OPENCODE_SERVE_PORT", "4096"))

@@ -1,22 +1,25 @@
 import "./globals.css";
 
+import type { Metadata } from "next";
 import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
-import { Metadata } from "next";
+import { generateFaviconMetadata } from "@/lib/app/svcSS";
 import AppProvider from "@/providers/AppProvider";
-import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
-import { Suspense } from "react";
-import PostHogPageView from "./PostHogPageView";
+import {
+  PostHogPageTracker,
+  PostHogRuntimeInitializer,
+  CustomAnalyticsScript,
+  WebVitals,
+} from "@/lib/analytics/shared";
 import Script from "next/script";
 import { DM_Mono, Hanken_Grotesk } from "next/font/google";
-import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import { cn } from "@opal/utils";
-import AppHealthBanner from "@/sections/AppHealthBanner";
-import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
-import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
+import AppHealthBanner from "@/sections/banners/HealthBanner";
+import LicenseExpiryBanner from "@/sections/banners/LicenseExpiryBanner";
+import { AuthenticationShell } from "@/lib/auth/components";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
 
@@ -49,22 +52,19 @@ const dmMono = DM_Mono({
   ],
 });
 
-export const metadata: Metadata = {
-  title: "Onyx",
-  description: "Question answering for your documents",
-};
-
 // force-dynamic prevents Next.js from statically prerendering pages at build
 // time — many child routes use cookies() which requires dynamic rendering.
-// This is safe because the layout itself has no server-side data fetching;
-// all data is fetched client-side via SWR in the provider tree.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
-  children,
-}: {
+export async function generateMetadata(): Promise<Metadata> {
+  return { icons: await generateFaviconMetadata() };
+}
+
+interface LayoutProps {
   children: React.ReactNode;
-}) {
+}
+
+export default function Layout({ children }: LayoutProps) {
   return (
     <html
       lang="en"
@@ -75,6 +75,24 @@ export default function RootLayout({
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, interactive-widget=resizes-content"
+        />
+
+        {/* When running inside the Tauri desktop wrapper, tag <html> as desktop
+            so the native title-bar reservation in css/desktop-titlebar.css
+            engages before paint. Tauri injects its IPC globals via an init
+            script that runs before page scripts, so this synchronous check sees
+            them; the class then persists across client-side navigations. No-op
+            in a browser. */}
+        <Script
+          id="onyx-desktop-detector"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('__TAURI_INTERNALS__' in window || '__TAURI__' in window) {
+                document.documentElement.classList.add('onyx-desktop');
+              }
+            `,
+          }}
         />
 
         {GTM_ENABLED && (
@@ -107,20 +125,20 @@ export default function RootLayout({
                 <SWRConfigProvider>
                   <AppHealthBanner />
                   <LicenseExpiryBanner />
-                  <AppProvider>
-                    <DynamicMetadata />
-                    <CustomAnalyticsScript />
-                    <Suspense fallback={null}>
-                      <PostHogPageView />
-                    </Suspense>
-                    <div id={MODAL_ROOT_ID} className="h-screen w-screen">
-                      <ProductGatingWrapper>{children}</ProductGatingWrapper>
-                    </div>
-                    {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
-                    {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
-                      <StatsOverlayLoader />
-                    )}
-                  </AppProvider>
+                  <AuthenticationShell>
+                    <AppProvider>
+                      <PostHogRuntimeInitializer />
+                      <CustomAnalyticsScript />
+                      <PostHogPageTracker />
+                      <div id={MODAL_ROOT_ID} className="h-screen w-screen">
+                        <ProductGatingWrapper>{children}</ProductGatingWrapper>
+                      </div>
+                      <WebVitals />
+                      {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
+                        <StatsOverlayLoader />
+                      )}
+                    </AppProvider>
+                  </AuthenticationShell>
                 </SWRConfigProvider>
               </PHProvider>
             </TooltipProvider>

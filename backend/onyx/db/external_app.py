@@ -1,9 +1,11 @@
 import re
 from typing import Any
+from typing import cast
 from uuid import UUID
 from uuid import uuid4
 
 from sqlalchemy import delete
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
@@ -14,6 +16,7 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppPolicy
 from onyx.db.models import ExternalAppUserCredential
+from onyx.db.models import User
 from onyx.db.utils import is_set
 from onyx.db.utils import UNSET
 from onyx.db.utils import UnsetType
@@ -146,6 +149,30 @@ def get_external_app_by_skill_id(
     return db_session.scalar(stmt)
 
 
+def get_connectable_apps_for_user(
+    db_session: Session,
+    user: User,
+) -> list[ExternalApp]:
+    """Apps the user could connect but hasn't: enabled, visible to them (public /
+    group-granted / personal), requiring per-user credentials the org hasn't
+    pre-filled, with no complete credential row yet.
+
+    Apps whose skill the user can't see are excluded — they'd never be injected
+    even once connected. Org-credentialed apps (no user-required keys) are usable
+    by everyone, so there's nothing to set up."""
+    # Local import breaks the external_app <-> skill module cycle.
+    from onyx.db.skill import all_skills_for_user_incl_external_apps
+
+    visible_skill_ids = all_skills_for_user_incl_external_apps(user, db_session)
+    user_creds_by_app = get_user_credentials_by_app_id(db_session, user.id)
+    return [
+        app
+        for app in get_external_apps(db_session)
+        if app.skill_id in visible_skill_ids
+        and not is_user_authenticated_for_app(app, user_creds_by_app.get(app.id))
+    ]
+
+
 def get_external_apps(
     db_session: Session,
 ) -> list[ExternalApp]:
@@ -274,7 +301,6 @@ def create_external_app(
             author_user_id=author_user_id,
             db_session=db_session,
         )
-        # `create_skill` hardcodes enabled=True; honour the caller's intent.
         if not enabled:
             skill.enabled = False
 
@@ -443,10 +469,19 @@ def upsert_external_app_user_credential(
     external_app_id: int,
     user_id: UUID,
     user_credentials: dict[str, Any],
+    granted_scopes: list[str] | None | UnsetType = UNSET,
+    resolve_masked_values: bool = False,
 ) -> ExternalAppUserCredential:
     """Create or replace the calling user's credentials for the app, and commit.
     Atomic via ON CONFLICT on (external_app_id, user_id). Raises
-    ``OnyxError(NOT_FOUND)`` if the app doesn't exist.
+    ``OnyxError(NOT_FOUND)`` if the app doesn't exist. ``resolve_masked_values``
+    is for user form submissions that may echo masked display values; internal
+    OAuth writers should store provider-returned values as-is.
+
+    ``granted_scopes`` is the connect-time OAuth grant: a list, or ``None`` when
+    a fresh authorize couldn't determine it — both overwrite the stored value
+    (``None`` clears a now-stale grant to "unknown"). The refresh and form paths
+    leave it ``UNSET`` to keep the stored grant untouched.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
@@ -455,17 +490,39 @@ def upsert_external_app_user_credential(
             f"External app with id {external_app_id} not found.",
         )
 
+    if resolve_masked_values:
+        existing_credential = get_external_app_user_credential(
+            db_session,
+            external_app_id=external_app_id,
+            user_id=user_id,
+        )
+        user_credentials = resolve_masked_credentials(
+            cast(dict[str, str], user_credentials),
+            existing_credential.user_credentials
+            if existing_credential is not None
+            else None,
+        )
+
     stmt = pg_insert(ExternalAppUserCredential).values(
         external_app_id=external_app_id,
         user_id=user_id,
         user_credentials=user_credentials,
+        granted_scopes=granted_scopes if is_set(granted_scopes) else None,
     )
+    # ON CONFLICT DO UPDATE doesn't fire the column's `onupdate`, so bump
+    # `updated_at` explicitly.
+    update_set: dict[str, Any] = {
+        "user_credentials": stmt.excluded.user_credentials,
+        "updated_at": func.now(),
+    }
+    if is_set(granted_scopes):
+        update_set["granted_scopes"] = stmt.excluded.granted_scopes
     stmt = stmt.on_conflict_do_update(
         index_elements=[
             ExternalAppUserCredential.external_app_id,
             ExternalAppUserCredential.user_id,
         ],
-        set_={"user_credentials": stmt.excluded.user_credentials},
+        set_=update_set,
     ).returning(ExternalAppUserCredential)
 
     cred = db_session.scalars(stmt).one()

@@ -86,6 +86,10 @@ class Settings(BaseModel):
     # Default Assistant settings
     disable_default_assistant: bool | None = False
 
+    # Workspace default for Craft access; per-user User.craft_enabled
+    # overrides win. The deployment-level Craft gate still applies on top.
+    craft_default_enabled: bool = True
+
     # Seat usage - populated by license enforcement when seat limit is exceeded
     seat_count: int | None = None
     used_seats: int | None = None
@@ -100,6 +104,9 @@ class UserSettings(Settings):
     tenant_id: str = POSTGRES_DEFAULT_SCHEMA
     # Feature flag for Onyx Craft (Build Mode) - used for server-side redirects
     onyx_craft_enabled: bool = False
+    # Deployment-level Craft availability, ignoring the per-user admin toggle.
+    # Gates visibility of the admin per-user Craft controls.
+    onyx_craft_available: bool = False
     # Dev/debug flag: when true, the FE renders a button that streams the
     # user's sandbox pod's opencode-serve logs. Gated by the
     # ENABLE_OPENCODE_DEBUGGING env var; never set in prod.
@@ -128,3 +135,6 @@ class UserSettings(Settings):
     # The frontend uses this to default local-service URLs (e.g. Ollama,
     # LM Studio) to host.docker.internal instead of localhost.
     is_containerized: bool = False
+    # PostHog client key + host for the web app; None = analytics off.
+    posthog_key: str | None = None
+    posthog_host: str | None = None

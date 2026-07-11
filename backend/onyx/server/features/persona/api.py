@@ -9,6 +9,7 @@ from fastapi import Response
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from pydantic import model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,7 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.enums import PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
 from onyx.db.persona import create_assistant_label
@@ -36,12 +38,17 @@ from onyx.db.persona import get_persona_snapshots_for_user
 from onyx.db.persona import get_persona_snapshots_paginated
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
+from onyx.db.persona import remove_user_from_persona_shares
 from onyx.db.persona import update_persona_featured
 from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared
 from onyx.db.persona import update_persona_visibility
 from onyx.db.persona import update_personas_display_priority
+from onyx.db.persona_sharing import get_persona_access_level
+from onyx.db.persona_sharing import get_user_group_ids_for_user
+from onyx.db.persona_sharing import persona_ownership_is_vacant
+from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -60,6 +67,7 @@ from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
+from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -404,11 +412,36 @@ def delete_label(
     delete_persona_label(label_id=label_id, db_session=db_session)
 
 
+class PersonaUserShareRequest(BaseModel):
+    user_id: UUID
+    permission: PersonaSharePermission
+
+
+class PersonaGroupShareRequest(BaseModel):
+    group_id: int
+    permission: PersonaSharePermission
+
+
 class PersonaShareRequest(BaseModel):
+    # Legacy id-lists: shares keep an existing row's level, new rows get VIEWER
     user_ids: list[UUID] | None = None
     group_ids: list[int] | None = None
+    # Leveled shares: full replacement including permission levels
+    user_shares: list[PersonaUserShareRequest] | None = None
+    group_shares: list[PersonaGroupShareRequest] | None = None
     is_public: bool | None = None
+    public_permission: PersonaSharePermission | None = None
     label_ids: list[int] | None = None
+
+    @model_validator(mode="after")
+    def _reject_legacy_and_leveled(self) -> "PersonaShareRequest":
+        # A stale client sending both forms would silently lose the legacy list
+        # (the leveled map wins downstream); reject the ambiguity at the boundary.
+        if self.user_ids is not None and self.user_shares is not None:
+            raise ValueError("Provide either user_ids or user_shares, not both")
+        if self.group_ids is not None and self.group_shares is not None:
+            raise ValueError("Provide either group_ids or group_shares, not both")
+        return self
 
 
 # We notify each user when a user is shared with them
@@ -419,6 +452,19 @@ def share_persona(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
+    user_shares = (
+        {share.user_id: share.permission for share in persona_share_request.user_shares}
+        if persona_share_request.user_shares is not None
+        else None
+    )
+    group_shares = (
+        {
+            share.group_id: share.permission
+            for share in persona_share_request.group_shares
+        }
+        if persona_share_request.group_shares is not None
+        else None
+    )
     try:
         update_persona_shared(
             persona_id=persona_id,
@@ -426,14 +472,68 @@ def share_persona(
             db_session=db_session,
             user_ids=persona_share_request.user_ids,
             group_ids=persona_share_request.group_ids,
+            user_shares=user_shares,
+            group_shares=group_shares,
             is_public=persona_share_request.is_public,
+            public_permission=persona_share_request.public_permission,
             label_ids=persona_share_request.label_ids,
         )
     except PermissionError as e:
         logger.exception("Failed to share persona")
         raise HTTPException(status_code=403, detail=str(e))
+    except NotImplementedError as e:
+        logger.exception("Failed to share persona")
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         logger.exception("Failed to share persona")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class TransferPersonaOwnershipRequest(BaseModel):
+    new_owner_user_id: UUID | None = None
+    new_owner_group_id: int | None = None
+
+
+@basic_router.post("/{persona_id}/transfer-ownership")
+def transfer_persona_ownership_endpoint(
+    persona_id: int,
+    transfer_request: TransferPersonaOwnershipRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    versioned_transfer = fetch_versioned_implementation(
+        "onyx.db.persona", "transfer_persona_ownership"
+    )
+    try:
+        versioned_transfer(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            new_owner_user_id=transfer_request.new_owner_user_id,
+            new_owner_group_id=transfer_request.new_owner_group_id,
+        )
+    except PermissionError as e:
+        logger.exception("Failed to transfer persona ownership")
+        raise HTTPException(status_code=403, detail=str(e))
+    except (ValueError, NotImplementedError) as e:
+        logger.exception("Failed to transfer persona ownership")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@basic_router.delete("/{persona_id}/share/me")
+def leave_persona_shares(
+    persona_id: int,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    try:
+        remove_user_from_persona_shares(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+        )
+    except ValueError as e:
+        logger.exception("Failed to remove user from persona shares")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -524,11 +624,15 @@ def get_persona(
     user: User = Depends(current_limited_user),
     db_session: Session = Depends(get_session),
 ) -> FullPersonaSnapshot:
+    user_group_ids: set[int] = (
+        get_user_group_ids_for_user(db_session, user.id) if user is not None else set()
+    )
     persona = get_persona_by_id(
         persona_id=persona_id,
         user=user,
         db_session=db_session,
         is_for_edit=False,
+        user_group_ids=user_group_ids,
     )
 
     # Validate and clear the model override if the referenced model is no longer
@@ -541,7 +645,14 @@ def get_persona(
             persona.default_model_configuration_id = None
             db_session.commit()
 
-    return FullPersonaSnapshot.from_model(persona)
+    snapshot = FullPersonaSnapshot.from_model(persona)
+    if user is not None:
+        snapshot.user_permission = get_persona_access_level(
+            persona, user, user_group_ids
+        )
+    snapshot.admin_count = get_active_admin_count(db_session)
+    snapshot.ownership_vacant = persona_ownership_is_vacant(persona)
+    return snapshot
 
 
 @basic_router.get("/{persona_id}/avatar")

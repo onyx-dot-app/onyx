@@ -55,7 +55,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import build_raw_file_callback
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.file_store.staging import reap_prior_attempt_staged_files
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
@@ -153,9 +153,9 @@ def tenant_and_cc_pair_ids(
     synthetic id is sufficient and avoids seeding a full cc_pair just to
     satisfy schema constraints the test doesn't exercise.
     """
-    from tests.external_dependency_unit.constants import TEST_TENANT_ID
+    from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
-    return TEST_TENANT_ID, abs(hash(uuid4().hex)) % 10_000_000
+    return POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, abs(hash(uuid4().hex)) % 10_000_000
 
 
 @pytest.fixture
@@ -567,7 +567,7 @@ def test_run_docfetching_entrypoint_leaves_crash_orphans_for_next_sweep(
             run_docfetching_entrypoint(
                 app=mock_app,
                 index_attempt_id=attempt_id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 connector_credential_pair_id=cc_pair.id,
             )
 
@@ -597,7 +597,7 @@ def test_run_docfetching_entrypoint_leaves_crash_orphans_for_next_sweep(
         reaped = reap_prior_attempt_staged_files(
             current_attempt_id=attempt_id + 1,
             cc_pair_id=cc_pair.id,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             db_session=db_session,
         )
         assert reaped == 1

@@ -1,13 +1,18 @@
+import io
 from collections.abc import Iterable
+from itertools import chain
 
 from pydantic import BaseModel
 
 from onyx.connectors.models import Section
+from onyx.connectors.models import TabularSection
+from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.chunking.section_chunker import AccumulatorState
 from onyx.indexing.chunking.section_chunker import ChunkPayload
 from onyx.indexing.chunking.section_chunker import SectionChunker
 from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
 from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
+from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
 from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
 )
@@ -17,7 +22,7 @@ from onyx.indexing.chunking.tabular_section_chunker.total_descriptor import (
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import count_tokens
 from onyx.natural_language_processing.utils import split_text_by_tokens
-from onyx.utils.csv_utils import parse_csv_string
+from onyx.utils.csv_utils import parse_csv_stream
 from onyx.utils.csv_utils import ParsedRow
 from onyx.utils.csv_utils import read_csv_header
 from onyx.utils.logger import setup_logger
@@ -166,11 +171,13 @@ def parse_to_chunks(
     tokenizer: BaseTokenizer,
     max_tokens: int,
 ) -> list[str]:
-    rows_list = list(rows)
-    if not rows_list:
+    row_iter = iter(rows)
+    try:
+        first_row = next(row_iter)
+    except StopIteration:
         return []
 
-    column_header = format_columns_header(rows_list[0].header)
+    column_header = format_columns_header(first_row.header)
     column_header_tokens = count_tokens(column_header, tokenizer)
     sheet_header_tokens = count_tokens(sheet_header, tokenizer) if sheet_header else 0
 
@@ -178,7 +185,7 @@ def parse_to_chunks(
     current_chunk = ""
     current_chunk_tokens = 0
 
-    for row in rows_list:
+    for row in chain([first_row], row_iter):
         pairs: list[tuple[str, str]] = _row_to_pairs(row.header, row.row)
         formatted = format_row(row.header, row.row)
         row_tokens = count_tokens(formatted, tokenizer)
@@ -234,52 +241,107 @@ class TabularChunker(SectionChunker):
         content_token_limit: int,
     ) -> SectionChunkerOutput:
         payloads = accumulator.flush_to_list()
-
-        text = section.text or ""
-        parsed_rows = list(parse_csv_string(text))
-        headers = parsed_rows[0].header if parsed_rows else read_csv_header(text)
         heading = section.heading or ""
 
+        if not isinstance(section, TabularSection):
+            raise ValueError(
+                "TabularChunker received a non-tabular section: "
+                f"{type(section).__name__}"
+            )
+
+        # The CSV is always staged. One streaming pass over it yields the row
+        # chunks; a second bounded pass through analyze_sheet yields descriptor
+        # and total chunks. The sheet is never fully materialized.
+        file_store = get_default_file_store()
         chunk_texts: list[str] = []
-        if parsed_rows:
+        with file_store.read_file(section.csv_file_id, use_tempfile=True) as raw:
+            rows = io.TextIOWrapper(raw, encoding="utf-8", newline="")
             chunk_texts.extend(
                 parse_to_chunks(
-                    rows=parsed_rows,
+                    rows=parse_csv_stream(rows),
                     sheet_header=heading,
                     tokenizer=self.tokenizer,
                     max_tokens=content_token_limit,
                 )
             )
-
-        if not self.ignore_metadata_chunks and headers:
-            analysis = analyze_sheet(headers, parsed_rows)
+        if not self.ignore_metadata_chunks:
             chunk_texts.extend(
-                build_sheet_descriptor_chunks(
-                    headers=headers,
-                    analysis=analysis,
-                    heading=heading,
-                    tokenizer=self.tokenizer,
-                    max_tokens=content_token_limit,
+                self._streamed_descriptor_chunks(
+                    section.csv_file_id, heading, content_token_limit
                 )
             )
-            chunk_texts.extend(
-                build_total_descriptor_chunks(
-                    headers=headers,
-                    analysis=analysis,
-                    heading=heading,
-                    tokenizer=self.tokenizer,
-                    max_tokens=content_token_limit,
-                )
-            )
+        return self._build_output(chunk_texts, section, payloads)
 
+    def _descriptor_chunks(
+        self,
+        headers: list[str],
+        analysis: SheetAnalysis,
+        heading: str,
+        content_token_limit: int,
+    ) -> list[str]:
+        chunks = list(
+            build_sheet_descriptor_chunks(
+                headers=headers,
+                analysis=analysis,
+                heading=heading,
+                tokenizer=self.tokenizer,
+                max_tokens=content_token_limit,
+            )
+        )
+        chunks.extend(
+            build_total_descriptor_chunks(
+                headers=headers,
+                analysis=analysis,
+                heading=heading,
+                tokenizer=self.tokenizer,
+                max_tokens=content_token_limit,
+            )
+        )
+        return chunks
+
+    def _streamed_descriptor_chunks(
+        self, csv_file_id: str, heading: str, content_token_limit: int
+    ) -> list[str]:
+        """Second bounded streaming pass over the staged CSV: derive descriptor
+        and total chunks via analyze_sheet (one row plus capped per-column state
+        in memory). A header-only sheet still yields a zero-row descriptor."""
+        file_store = get_default_file_store()
+        with file_store.read_file(csv_file_id, use_tempfile=True) as raw:
+            rows = parse_csv_stream(io.TextIOWrapper(raw, encoding="utf-8", newline=""))
+            try:
+                first = next(rows)
+            except StopIteration:
+                first = None
+            if first is not None:
+                headers = first.header
+                analysis = analyze_sheet(headers, chain([first], rows))
+                return self._descriptor_chunks(
+                    headers, analysis, heading, content_token_limit
+                )
+
+        # No data rows — re-read just the header so column names alone still
+        # produce a zero-row descriptor chunk.
+        with file_store.read_file(csv_file_id, use_tempfile=True) as raw:
+            headers = read_csv_header(raw.read().decode("utf-8"))
+        if not headers:
+            return []
+        return self._descriptor_chunks(
+            headers, analyze_sheet(headers, []), heading, content_token_limit
+        )
+
+    def _build_output(
+        self,
+        chunk_texts: list[str],
+        section: Section,
+        payloads: list[ChunkPayload],
+    ) -> SectionChunkerOutput:
         if not chunk_texts:
             logger.warning(
-                "TabularChunker: skipping unparseable section (link=%s)", section.link
+                "TabularChunker: section yielded no chunks (link=%s)", section.link
             )
             return SectionChunkerOutput(
                 payloads=payloads, accumulator=AccumulatorState()
             )
-
         for i, text in enumerate(chunk_texts):
             payloads.append(
                 ChunkPayload(

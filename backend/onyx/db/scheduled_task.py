@@ -22,6 +22,7 @@ from sqlalchemy import and_
 from sqlalchemy import desc
 from sqlalchemy import literal
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ScheduledTaskErrorClass
@@ -267,6 +268,8 @@ def claim_due_scheduled_tasks(
         return []
     stmt = (
         select(ScheduledTask)
+        # The dispatcher gates each task on its owner's Craft access.
+        .options(selectinload(ScheduledTask.user))
         .where(
             ScheduledTask.status == ScheduledTaskStatus.ACTIVE,
             ScheduledTask.deleted.is_(False),

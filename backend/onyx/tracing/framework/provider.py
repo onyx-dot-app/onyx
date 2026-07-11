@@ -304,7 +304,7 @@ class DefaultTraceProvider(TraceProvider):
             parent_id = parent.span_id
             trace_id = parent.trace_id
         else:
-            # This should never happen, but mypy needs it
+            # This should never happen, but type-checking needs it
             raise ValueError(f"Invalid parent type: {type(parent)}")
 
         return SpanImpl(

@@ -33,6 +33,9 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.db.license import get_license
 from ee.onyx.db.license import get_used_seats
+from ee.onyx.server.billing.billing_cache import (
+    invalidate_billing_cache as invalidate_indexing_trial_cache,
+)
 from ee.onyx.server.billing.models import BillingInformationResponse
 from ee.onyx.server.billing.models import CreateCheckoutSessionRequest
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
@@ -257,14 +260,22 @@ def _billing_cache_client() -> TenantRedisClient | None:
 
 
 def _invalidate_billing_cache() -> None:
-    """Drop the cached /billing-information entry. Best-effort."""
+    """Drop the cached billing entries after a subscription mutation.
+
+    Best-effort. Busts the 5-min admin /billing-information entry, plus (cloud
+    only) the 24h per-tenant trial-status entry the indexing path reads via
+    ``cached_is_tenant_on_trial`` — without this a trial→paid conversion keeps
+    usage limits on stale trial status for up to a full TTL.
+    """
     redis_client = _billing_cache_client()
-    if redis_client is None:
-        return
-    try:
-        redis_client.delete(BILLING_INFO_CACHE_KEY)
-    except RedisError as exc:
-        logger.warning("Billing info cache invalidation failed: %s", exc)
+    if redis_client is not None:
+        try:
+            redis_client.delete(BILLING_INFO_CACHE_KEY)
+        except RedisError as exc:
+            logger.warning("Billing info cache invalidation failed: %s", exc)
+
+    if MULTI_TENANT:
+        invalidate_indexing_trial_cache(get_current_tenant_id())
 
 
 @router.get("/billing-information")

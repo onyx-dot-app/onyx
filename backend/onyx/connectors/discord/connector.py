@@ -83,6 +83,8 @@ def _convert_message_to_document(
         source=DocumentSource.DISCORD,
         semantic_identifier=semantic_identifier,
         doc_updated_at=message.edited_at,
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=message.created_at,
         title=title,
         sections=(cast(list[TextSection | ImageSection], sections)),
         metadata=metadata,

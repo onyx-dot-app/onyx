@@ -1,4 +1,5 @@
 import contextlib
+import time
 from collections.abc import Generator
 
 from sqlalchemy.orm import Session
@@ -13,10 +14,13 @@ from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
 from onyx.db.document import prepare_to_modify_documents
 from onyx.db.document import update_docs_chunk_count__no_commit
+from onyx.db.document import update_docs_created_at__no_commit
 from onyx.db.document import update_docs_last_modified__no_commit
 from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document_set import fetch_document_sets_for_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.indexing.models import ChunkEnrichmentContext
@@ -53,7 +57,10 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         self.index_attempt_metadata = index_attempt_metadata
 
     def prepare(
-        self, documents: list[Document], ignore_time_skip: bool
+        self,
+        documents: list[Document],
+        ignore_time_skip: bool,
+        index_to_secondary: bool,
     ) -> DocumentBatchPrepareContext | None:
         """Upsert docs, map CC pairs, return context or mark as indexed if no-op.
 
@@ -66,6 +73,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
                 index_attempt_metadata=self.index_attempt_metadata,
                 db_session=db_session,
                 ignore_time_skip=ignore_time_skip,
+                index_to_secondary=index_to_secondary,
             )
 
             if not context:
@@ -94,6 +102,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             with prepare_to_modify_documents(
                 db_session=db_session,
                 document_ids=[doc.id for doc in documents],
+                index_attempt_id=self.index_attempt_metadata.attempt_id,
             ):
                 yield db_session
                 db_session.commit()
@@ -106,6 +115,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         db_session: Session,
     ) -> "DocumentChunkEnricher":
         """Do all DB lookups once and return a per-chunk enricher."""
+        _enrich_start = time.monotonic()
         updatable_ids = [doc.id for doc in context.updatable_docs]
 
         doc_id_to_new_chunk_cnt: dict[str, int] = {
@@ -123,7 +133,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             is_public=False,
         )
 
-        return DocumentChunkEnricher(
+        enricher = DocumentChunkEnricher(
             doc_id_to_access_info=get_access_for_documents(
                 document_ids=updatable_ids, db_session=db_session
             ),
@@ -148,6 +158,12 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             no_access=no_access,
             tenant_id=tenant_id,
         )
+        safe_record_single_event_if_set(
+            IndexAttemptStage.ENRICHMENT_PREP,
+            self.index_attempt_metadata.attempt_id,
+            max(0, int((time.monotonic() - _enrich_start) * 1000)),
+        )
+        return enricher
 
     def _get_ancestor_ids_for_documents(
         self,
@@ -195,16 +211,25 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         updatable_ids = [doc.id for doc in context.updatable_docs]
         last_modified_ids = []
         ids_to_new_updated_at = {}
+        ids_to_new_created_at = {}
         for doc in context.updatable_docs:
             last_modified_ids.append(doc.id)
             # doc_updated_at is the source's idea (on the other end of the connector)
             # of when the doc was last modified
-            if doc.doc_updated_at is None:
-                continue
-            ids_to_new_updated_at[doc.id] = doc.doc_updated_at
+            if doc.doc_updated_at is not None:
+                ids_to_new_updated_at[doc.id] = doc.doc_updated_at
+            # doc_created_at is written to the index on this path; persist it so the
+            # DB reflects that this doc's creation time is collected (the backfill
+            # sweep keys off doc_created_at IS NULL).
+            if doc.doc_created_at is not None:
+                ids_to_new_created_at[doc.id] = doc.doc_created_at
 
         update_docs_updated_at__no_commit(
             ids_to_new_updated_at=ids_to_new_updated_at, db_session=db_session
+        )
+
+        update_docs_created_at__no_commit(
+            ids_to_new_created_at=ids_to_new_created_at, db_session=db_session
         )
 
         update_docs_last_modified__no_commit(

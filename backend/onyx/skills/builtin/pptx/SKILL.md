@@ -18,6 +18,24 @@ license: Proprietary. LICENSE.txt has complete terms
 
 ---
 
+## Choosing a Template (do this first)
+
+Starting from a well-designed template produces far better decks than building from scratch. There are **two distinct sources** of templates — check both:
+
+```bash
+# User-uploaded templates (the user's own / brand decks) — list these first
+ls user_library/*.pptx attachments/*.pptx 2>/dev/null
+# Built-in templates (generic starting points provided by Onyx)
+ls /workspace/templates/pptx/*.pptx 2>/dev/null
+```
+
+- **If any templates are found**: present them to the user as two clearly labeled groups — **"Your uploaded templates"** (from `user_library/` and `attachments/`) and **"Built-in templates"** (from `/workspace/templates/pptx/`) — listing the user's own templates first. Briefly describe each (use `thumbnail.py` to preview if helpful), then **ask which one to use** — or whether to build from scratch — and wait for their answer before building. Never silently pick one: a user's own brand deck and a generic built-in are not interchangeable, and only the user knows which they want. This is one of the few cases where you should pause and ask rather than act autonomously.
+- **If none are found**: build from scratch, and let the user know they can upload a brand/template `.pptx` for a more polished, on-brand result next time.
+
+Once a template is chosen, follow [editing.md](editing.md). Use the from-scratch path ([pptxgenjs.md](pptxgenjs.md)) only when the user has no template or explicitly opts for it.
+
+---
+
 ## Reading Content
 
 ```bash
@@ -46,11 +64,13 @@ python .opencode/skills/pptx/scripts/office/unpack.py presentation.pptx outputs/
 
 **Read [pptxgenjs.md](pptxgenjs.md) for full details.**
 
-Use when no template or reference presentation is available.
+Use only when no template is available or the user explicitly chooses to build from scratch (see [Choosing a Template](#choosing-a-template-do-this-first)).
 
 ---
 
 ## Design Ideas
+
+> **These ideas are for building from scratch.** When developing on a chosen template, **inherit the template's existing palette, fonts, and layout language** — match it, don't redesign it. Skip the palette/font suggestions below and reuse what the template already defines.
 
 **Don't create boring slides.** Plain bullets on a white background won't impress anyone. Consider ideas from this list for each slide.
 
@@ -101,16 +121,20 @@ Choose colors that match your topic — don't default to generic blue. Use these
 
 **Choose an interesting font pairing** — don't default to Arial. Pick a header font with personality and pair it with a clean body font.
 
-| Header Font | Body Font |
-|-------------|-----------|
-| Georgia | Calibri |
-| Arial Black | Arial |
-| Calibri | Calibri Light |
-| Cambria | Calibri |
-| Trebuchet MS | Calibri |
-| Impact | Arial |
-| Palatino | Garamond |
-| Consolas | Calibri |
+**When building from scratch, use only the fonts below** — any other font name silently falls back and renders wrong. Available: **Inter, Montserrat, Lato, EB Garamond** and **Fira Code** (monospace), plus **Calibri, Cambria, Arial, Times New Roman** (rendered via metric-compatible substitutes — Carlito/Caladea/Liberation).
+
+**When editing a template, this list does not apply — keep the template's own fonts.** A template may use fonts not listed here (e.g. Kabel, Garet); these are typically embedded in the file and render correctly even though they aren't installed system-wide. Do not swap them for an installed font — that destroys the template's design. `clean.py`/`pack.py` preserve embedded fonts (`ppt/fonts/`), so they survive the edit cycle.
+
+| Header Font | Body Font | Feel |
+|-------------|-----------|------|
+| Montserrat | Inter | Modern, geometric — strong default for a contemporary deck |
+| Inter | Inter | Minimal; lean on weight (Bold/Light) for hierarchy |
+| EB Garamond | Inter | Editorial — elegant serif title over a clean sans body |
+| Lato | Lato | Professional, corporate-safe |
+| Cambria | Calibri | Classic Office serif/sans pairing |
+| Arial Black | Inter | Bold, high-impact headlines |
+
+Use **Fira Code** for code samples or dense numeric/stat blocks.
 
 | Element | Size |
 |---------|------|

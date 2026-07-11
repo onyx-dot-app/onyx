@@ -44,6 +44,7 @@ from onyx.db.connector import mark_ccpair_as_pruned
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.document import backfill_docs_created_at__no_commit
 from onyx.db.document import get_documents_for_connector_credential_pair
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
@@ -244,6 +245,14 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
 
                     if not _is_pruning_due(cc_pair):
                         logger.info("CC pair not due for pruning: %s", cc_pair_id)
+                        continue
+
+                    # Skip auto-scheduling during a prune failure backoff; a manual
+                    # prune (API) bypasses this path and can still force a run.
+                    if RedisConnector(tenant_id, cc_pair_id).prune.in_failure_backoff:
+                        logger.info(
+                            "CC pair in pruning failure backoff: %s", cc_pair_id
+                        )
                         continue
 
                     payload_id = try_creating_prune_generator_task(
@@ -660,6 +669,13 @@ def connector_pruning_generator_task(
                 raw_id_to_parent=all_connector_doc_ids,
             )
 
+            # Backfill source creation time collected during enumeration.
+            backfill_docs_created_at__no_commit(
+                ids_to_created_at=extraction_result.id_to_created_at,
+                db_session=db_session,
+            )
+            db_session.commit()
+
             diff_start = time.monotonic()
             try:
                 # a list of docs in our local index
@@ -744,7 +760,19 @@ def connector_pruning_generator_task(
             f"Pruning exceptioned: cc_pair={cc_pair_id} connector={connector_id} payload_id={payload_id}"
         )
 
-        redis_connector.prune.reset()
+        # Back off so a failing prune isn't re-dispatched on the next beat.
+        redis_connector.prune.set_failure_backoff()
+
+        # Only reset (clears the fence + taskset) if cleanup tasks were never
+        # fanned out. If they were, reset would orphan them (it doesn't revoke
+        # them) and the next beat would re-enumerate and re-queue the whole set;
+        # keeping the fence lets the monitor finalize the in-flight taskset, and
+        # generator_failed makes it record a FAILED prune instead of a false success.
+        if redis_connector.prune.generator_complete is None:
+            redis_connector.prune.reset()
+        else:
+            redis_connector.prune.set_generator_failed()
+
         raise e
     finally:
         if lock.owned():
@@ -792,16 +820,25 @@ def monitor_ccpair_pruning_taskset(
         )
         return
 
-    mark_ccpair_as_pruned(int(cc_pair_id), db_session)
-    task_logger.info(
-        f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
-    )
+    # A generator that threw after fan-out still drains its tasks; record FAILED
+    # so the prune retries after the backoff instead of advancing last_pruned.
+    failed = redis_connector.prune.generator_failed
+    if failed:
+        task_logger.warning(
+            f"Connector pruning failed after fan-out: cc_pair={cc_pair_id} num_pruned={initial}"
+        )
+    else:
+        mark_ccpair_as_pruned(int(cc_pair_id), db_session)
+        redis_connector.prune.clear_failure_backoff()
+        task_logger.info(
+            f"Connector pruning finished: cc_pair={cc_pair_id} num_pruned={initial}"
+        )
 
     update_sync_record_status(
         db_session=db_session,
         entity_id=cc_pair_id,
         sync_type=SyncType.PRUNING,
-        sync_status=SyncStatus.SUCCESS,
+        sync_status=SyncStatus.FAILED if failed else SyncStatus.SUCCESS,
         num_docs_synced=initial,
     )
 

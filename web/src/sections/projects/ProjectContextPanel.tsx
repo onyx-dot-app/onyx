@@ -4,10 +4,7 @@ import React, { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import {
-  UserFileStatus,
-  type ProjectFile,
-} from "@/app/app/projects/projectsService";
+import { UserFileStatus, type ProjectFile } from "@/lib/projects/types";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { Button, Divider, LineItemButton, Text } from "@opal/components";
 import { Content, ContentAction } from "@opal/layouts";
@@ -125,7 +122,7 @@ export default function ProjectContextPanel({
         />
       </projectFilesModal.Provider>
 
-      <div className="w-(--app-page-main-content-width) mx-auto flex flex-col gap-6">
+      <div className="w-(--app-page-main-content-width) mx-auto flex flex-col gap-6 pb-6">
         <Content
           icon={SvgFolderOpen}
           title={projectName}
@@ -149,6 +146,7 @@ export default function ProjectContextPanel({
               : currentProjectDetails?.project?.instructions ||
                 "Add instructions to tailor the response in this project."
           }
+          descriptionMaxLines={2}
           padding="fit"
           center
           rightChildren={
@@ -164,7 +162,7 @@ export default function ProjectContextPanel({
         />
 
         <div
-          className="flex flex-col gap-2"
+          className="flex flex-col gap-2 pb-2"
           {...getRootProps({ onClick: (e) => e.stopPropagation() })}
         >
           <ContentAction
@@ -281,13 +279,7 @@ export default function ProjectContextPanel({
               </Text>
             </div>
           )}
-
-          {/* Empty div to add an additional layer of gapping */}
-          <div />
         </div>
-
-        {/* Empty div to add an additional layer of gapping */}
-        <div />
       </div>
     </>
   );

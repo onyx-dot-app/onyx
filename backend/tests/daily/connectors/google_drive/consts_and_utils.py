@@ -34,6 +34,8 @@ SECTIONS_FILE_IDS = [61]
 FOLDER_3_FILE_IDS = list(range(62, 65))
 
 DONWLOAD_REVOKED_FILE_ID = 21
+RESOURCE_KEY_SHORTCUT_TARGET_DOC_ID = "0Bw48MNL4gSBwWEt2V3BURXVnRnM"
+RESOURCE_KEY_SHORTCUT_TARGET_NAME = "config.yml"
 
 PUBLIC_FOLDER_RANGE = FOLDER_1_2_FILE_IDS
 PUBLIC_FILE_IDS = list(range(55, 57))
@@ -301,6 +303,14 @@ ADMIN_MY_DRIVE_ID = "0ABTZwt798K7MUk9PVA"  # Admin's My Drive
 TEST_USER_2_MY_DRIVE = "0ADjBZv2nEvJNUk9PVA"  # Test user 2's My Drive
 TEST_USER_3_MY_DRIVE_ID = "0AKl0e4Wr5NW7Uk9PVA"  # Test user 3's My Drive
 PILL_FOLDER_ID = "1FWzfA369tx9VT8scJ3LCOPBBuTBgt0OH"  # contains file with date pills
+SHORTCUTS_GALORE_FOLDER_ID = "1oBDLgN21c3PX9pPGPWvdp7S1gVqt5-iQ"
+SHORTCUTTED_FOLDER_ID = "1_SzLQFnmMcS6BoB5VqgRYQz_Xg89j0t9"
+SHORTCUTTED_2_FOLDER_ID = "12L8p_dJnaHlPwULuMvWgn9s-zaAmubRw"
+ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS = (
+    SHORTCUTS_GALORE_FOLDER_ID,
+    SHORTCUTTED_FOLDER_ID,
+    SHORTCUTTED_2_FOLDER_ID,
+)
 
 PADDING_DRIVE_URLS = [
     "0AOorXE6AfJRAUk9PVA",
@@ -395,6 +405,24 @@ EXPECTED_TEST_USER_1_EXTRA_FOLDER = _node(
 EXPECTED_PILL_FOLDER = _node(
     PILL_FOLDER_ID, "pill_folder", HierarchyNodeType.FOLDER, ADMIN_MY_DRIVE_ID
 )
+EXPECTED_SHORTCUTS_GALORE_FOLDER = _node(
+    SHORTCUTS_GALORE_FOLDER_ID,
+    "shortcuts galore",
+    HierarchyNodeType.FOLDER,
+    ADMIN_MY_DRIVE_ID,
+)
+EXPECTED_SHORTCUTTED_FOLDER = _node(
+    SHORTCUTTED_FOLDER_ID,
+    "shortcutted",
+    HierarchyNodeType.FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID,
+)
+EXPECTED_SHORTCUTTED_2_FOLDER = _node(
+    SHORTCUTTED_2_FOLDER_ID,
+    "shortcutted2",
+    HierarchyNodeType.FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID,
+)
 EXPECTED_EXTERNAL_SHARED_FOLDER = _node(
     EXTERNAL_SHARED_FOLDER_ID, "Onyx-test", HierarchyNodeType.FOLDER
 )
@@ -419,6 +447,9 @@ ALL_EXPECTED_HIERARCHY_NODES: dict[str, ExpectedHierarchyNode] = {
     TEST_USER_1_EXTRA_DRIVE_2_ID: EXPECTED_TEST_USER_1_EXTRA_DRIVE_2,
     TEST_USER_1_EXTRA_FOLDER_ID: EXPECTED_TEST_USER_1_EXTRA_FOLDER,
     PILL_FOLDER_ID: EXPECTED_PILL_FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID: EXPECTED_SHORTCUTS_GALORE_FOLDER,
+    SHORTCUTTED_FOLDER_ID: EXPECTED_SHORTCUTTED_FOLDER,
+    SHORTCUTTED_2_FOLDER_ID: EXPECTED_SHORTCUTTED_2_FOLDER,
     EXTERNAL_SHARED_FOLDER_ID: EXPECTED_EXTERNAL_SHARED_FOLDER,
 }
 
@@ -588,6 +619,17 @@ def assert_expected_docs_in_retrieved_docs(
         retrieved=valid_retrieved_texts,
     )
     assert expected_file_texts == valid_retrieved_texts
+
+
+def assert_resource_key_shortcut_target_in_retrieved_docs(
+    retrieved_docs: list[Document],
+) -> None:
+    docs_by_name = {doc.semantic_identifier: doc for doc in retrieved_docs}
+    assert RESOURCE_KEY_SHORTCUT_TARGET_NAME in docs_by_name
+    assert (
+        RESOURCE_KEY_SHORTCUT_TARGET_DOC_ID
+        in docs_by_name[RESOURCE_KEY_SHORTCUT_TARGET_NAME].id
+    )
 
 
 def load_connector_outputs(

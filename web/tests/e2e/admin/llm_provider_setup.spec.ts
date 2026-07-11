@@ -352,8 +352,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
 
     const firstProviderName = uniqueName("PW Baseline Provider");
     const secondProviderName = uniqueName("PW Target Provider");
-    const firstModelName = "gpt-4o";
-    const secondModelName = "gpt-4o-mini";
+    // Use unique model names so the search uniquely identifies the test-created
+    // model and doesn't collide with any pre-existing system provider.
+    const ts = Date.now();
+    const firstModelName = `pw-baseline-${ts}`;
+    const secondModelName = `pw-target-${ts}`;
 
     const firstProviderId = await createPublicProvider(
       page,
@@ -373,19 +376,21 @@ test.describe("LLM Provider Setup @exclusive", () => {
       await page.reload();
       await page.waitForLoadState("networkidle");
 
-      // Open the Default Model dropdown and select the model from the
-      // second provider's group (scoped to avoid picking a same-named model
-      // from another provider).
-      await page.getByRole("combobox").click();
-      const targetGroup = page
-        .locator('[role="group"]')
-        .filter({ hasText: secondProviderName });
+      // Open the Default Model dropdown
+      await page.locator('[data-testid="llm-popover-trigger"]').click();
+      const dialog = page.locator('[role="dialog"]').first();
+      await dialog.waitFor({ state: "visible", timeout: 10000 });
+
+      // Search for the target model to filter the list to just its entry
+      await dialog.getByPlaceholder("Search models...").fill(secondModelName);
+
       const defaultResponsePromise = page.waitForResponse(
         (response) =>
           response.url().includes("/api/admin/llm/default") &&
           response.request().method() === "POST"
       );
-      await targetGroup.locator('[role="option"]').click();
+      // After filtering, only the matching model button(s) remain — click the first
+      await dialog.getByRole("button").first().click();
       await defaultResponsePromise;
 
       // Verify the default switched to the second provider

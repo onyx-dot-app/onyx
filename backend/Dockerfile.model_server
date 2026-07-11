@@ -1,17 +1,39 @@
-# Registry prefix for base images. Defaults to Docker Hub; CI overrides this to the ECR
-# pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
-# Hub rate limits.
+# Registry prefix retained for parity with the other Dockerfiles and so the
+# BASE_IMAGE_REGISTRY build-arg (passed by docker-bake.hcl / CI) stays valid.
+# The hardened Python bases below come from dhi.io -- a separate registry not
+# served by the ECR pull-through cache -- so they intentionally bypass this ARG.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# Base stage with dependencies
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:b04b5d7233d2ad9c379e22ea8927cd1378cd15c60d4ef876c065b25ea8fb3bf3 AS base
+# Build stage. The DHI "-dev" variant runs as root and ships a shell, apt, and
+# build tooling -- everything needed to install the wheels.
+# Refresh the digest with: docker buildx imagetools inspect dhi.io/python:3.13-debian13-dev
+FROM dhi.io/python:3.13-debian13-dev@sha256:7933d16e50454c39bca6e935027166d5e5b05c6c03383dc2f58e8fe6e2440b7d AS builder
 
 ENV ONYX_RUNNING_IN_DOCKER="true" \
-    HF_HOME=/app/.cache/huggingface
+    HF_HOME=/app/.cache/huggingface \
+    VIRTUAL_ENV=/app/.venv \
+    PATH="/app/.venv/bin:$PATH" \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PYTHON_PREFERENCE=only-system
 
-COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /bin/
 
-RUN mkdir -p /app/.cache/huggingface
+# Install into a self-contained venv rather than the system site-packages. The
+# venv lives at a fixed path we control (/app/.venv), so the distroless runtime
+# stage can copy it wholesale without depending on the base image's Python layout.
+RUN uv venv /app/.venv --python 3.13
+
+# Pre-create the runtime writable dirs here (the distroless runtime has no shell
+# to mkdir). Left empty in this stage; the model download happens downstream.
+RUN mkdir -p /app/.cache/huggingface /var/log/onyx
+
+# Recreate the `onyx` user (UID 1001) from the previous image so deployments that
+# pin `-u onyx` / `user: onyx` keep resolving and their 1001-owned volumes stay
+# writable. The DHI "-dev" image ships a shell but not the `shadow` tools
+# (groupadd/useradd), so write the passwd/group entries directly; they're copied
+# into the distroless runtime below.
+RUN printf 'onyx:x:1001:\n' >> /etc/group && \
+    printf 'onyx:x:1001:1001::/home/onyx:/usr/sbin/nologin\n' >> /etc/passwd
 
 COPY ./requirements/model_server.txt /tmp/requirements.txt
 
@@ -20,22 +42,25 @@ COPY ./requirements/model_server.txt /tmp/requirements.txt
 # awk extracts each matching package block in full — the package line plus its
 # `--hash=...` continuation lines — so --require-hashes can verify them.
 RUN awk '/^[[:alnum:]]/ { keep = ($0 ~ /^(torch|nvidia-[a-z0-9-]+|triton)==/) } keep' /tmp/requirements.txt \
-        | uv pip install --system --no-cache-dir --no-deps --require-hashes -r /dev/stdin && \
+        | uv pip install --python /app/.venv/bin/python --no-cache-dir --no-deps --require-hashes -r /dev/stdin && \
     rm -rf ~/.cache/uv
 
 # TODO: drop --no-deps once we upgrade to a litellm version with looser dependencies.
-RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
+RUN uv pip install --python /app/.venv/bin/python --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt && \
     rm -rf ~/.cache/uv /tmp/*.txt
 
 # Stage for downloading embedding models. Instantiating SentenceTransformer
 # pulls down both the weights and the custom architecture code.
-FROM base AS embedding-models
+FROM builder AS embedding-models
 RUN python -c "from sentence_transformers import SentenceTransformer; \
 SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
 
-# Final stage - combine all downloads
-FROM base AS final
+# Runtime stage. The DHI runtime variant is near-distroless: no shell or package
+# manager, runs non-root. We run as the `onyx` user (UID 1001, carried over from
+# the previous image; see USER below) and chown everything the runtime writes to it.
+# Refresh the digest with: docker buildx imagetools inspect dhi.io/python:3.13-debian13
+FROM dhi.io/python:3.13-debian13@sha256:05827957dafc7b83633d56f24d9281525d3546a1d600eef90385c7212d3def5e AS final
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is for the Onyx model server which runs all of the \
@@ -43,43 +68,57 @@ AI models for Onyx. This container and all the code is MIT Licensed and free for
 You can find it at https://hub.docker.com/r/onyx/onyx-model-server. For more details, \
 visit https://github.com/onyx-dot-app/onyx."
 
-# Create non-root user for security best practices
-RUN groupadd -g 1001 onyx && \
-    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
-    mkdir -p /var/log/onyx && \
-    chmod 755 /var/log/onyx && \
-    chown onyx:onyx /var/log/onyx
+WORKDIR /app
+
+ENV ONYX_RUNNING_IN_DOCKER="true" \
+    HF_HOME=/app/.cache/huggingface \
+    HOME=/app/.cache/huggingface \
+    PYTHONPATH=/app \
+    VIRTUAL_ENV=/app/.venv \
+    PATH="/app/.venv/bin:$PATH"
+
+# Bring the `onyx` user (1001) into the distroless runtime. The -dev builder's
+# passwd/group are a superset of the runtime's, so copying them preserves the
+# base's own entries while adding `onyx`, letting `USER onyx` and any runtime
+# `-u onyx` override resolve the name.
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/group /etc/group
+
+# Installed dependencies (the venv) plus the writable runtime dirs, owned by the
+# onyx UID (1001) so the process can write the HF cache and logs. When users mount
+# named volumes over these paths, the volume seeds with the same ownership.
+COPY --from=builder --chown=1001:1001 /app/.venv /app/.venv
+COPY --from=builder --chown=1001:1001 /app/.cache/huggingface /app/.cache/huggingface
+COPY --from=builder --chown=1001:1001 /var/log/onyx /var/log/onyx
 
 # In case the user has volumes mounted to /app/.cache/huggingface that they've downloaded while
 # running Onyx, move the current contents of the cache folder to a temporary location to ensure
 # it's preserved in order to combine with the user's cache contents
-COPY --chown=onyx:onyx --from=embedding-models /app/.cache/huggingface /app/.cache/temp_huggingface
-
-WORKDIR /app
+COPY --chown=1001:1001 --from=embedding-models /app/.cache/huggingface /app/.cache/temp_huggingface
 
 # Utils used by model server
-COPY ./onyx/utils/logger.py /app/onyx/utils/logger.py
-COPY ./onyx/utils/platform_utils.py /app/onyx/utils/platform_utils.py
-COPY ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
-COPY ./onyx/utils/tenant.py /app/onyx/utils/tenant.py
+COPY --chown=1001:1001 ./onyx/utils/logger.py /app/onyx/utils/logger.py
+COPY --chown=1001:1001 ./onyx/utils/platform_utils.py /app/onyx/utils/platform_utils.py
+COPY --chown=1001:1001 ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
+COPY --chown=1001:1001 ./onyx/utils/tenant.py /app/onyx/utils/tenant.py
 
 # Sentry configuration (used when SENTRY_DSN is set)
-COPY ./onyx/configs/__init__.py /app/onyx/configs/__init__.py
-COPY ./onyx/configs/sentry.py /app/onyx/configs/sentry.py
+COPY --chown=1001:1001 ./onyx/configs/__init__.py /app/onyx/configs/__init__.py
+COPY --chown=1001:1001 ./onyx/configs/sentry.py /app/onyx/configs/sentry.py
 
 # Place to fetch version information
-COPY ./onyx/__init__.py /app/onyx/__init__.py
+COPY --chown=1001:1001 ./onyx/__init__.py /app/onyx/__init__.py
 
 # Shared between Onyx Backend and Model Server
-COPY ./shared_configs /app/shared_configs
+COPY --chown=1001:1001 ./shared_configs /app/shared_configs
 
 # Model Server main code
-COPY ./model_server /app/model_server
-
-ENV PYTHONPATH=/app
+COPY --chown=1001:1001 ./model_server /app/model_server
 
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
 
-CMD ["uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "9000"]
+USER onyx
+
+CMD ["python", "-m", "model_server"]

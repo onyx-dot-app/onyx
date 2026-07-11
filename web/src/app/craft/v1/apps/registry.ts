@@ -5,6 +5,8 @@ import {
   SvgGithub,
   SvgGoogleCalendar,
   SvgGoogleDrive,
+  SvgHubspot,
+  SvgNotion,
 } from "@opal/logos";
 import { SvgPlug } from "@opal/icons";
 import { IconFunctionComponent } from "@opal/types";
@@ -17,6 +19,8 @@ export type ExternalAppType =
   | "GMAIL"
   | "LINEAR"
   | "GITHUB"
+  | "HUBSPOT"
+  | "NOTION"
   | "CUSTOM";
 
 const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
@@ -27,6 +31,8 @@ const _BUILT_IN_LOGOS: Partial<Record<ExternalAppType, IconFunctionComponent>> =
     GMAIL: SvgGmail,
     LINEAR: SvgLinear,
     GITHUB: SvgGithub,
+    HUBSPOT: SvgHubspot,
+    NOTION: SvgNotion,
   };
 
 /** Logo for a known `app_type`, with a generic fallback for CUSTOM /
@@ -39,7 +45,7 @@ export function getAppTypeLogo(
 }
 
 // Keep in sync with backend Pydantic models in
-// `server/features/build/api/models.py`.
+// `server/features/build/external_apps/models.py`.
 
 export interface OrgCredentialFieldDescriptor {
   key: string;
@@ -102,20 +108,8 @@ export interface ExternalAppUserResponse {
   credential_keys: string[];
   credential_values: Record<string, string>;
   authenticated: boolean;
-}
-
-export function findAppForType(
-  apps: ExternalAppAdminResponse[],
-  app_type: ExternalAppType
-): ExternalAppAdminResponse | null {
-  return apps.find((a) => a.app_type === app_type) ?? null;
-}
-
-export function findUserAppByName(
-  apps: ExternalAppUserResponse[],
-  name: string
-): ExternalAppUserResponse | null {
-  return apps.find((a) => a.name === name) ?? null;
+  // OAuth apps connect via a popup; others via the credential form.
+  supports_oauth: boolean;
 }
 
 /**

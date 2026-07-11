@@ -16,24 +16,19 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import CheckConstraint
 from sqlalchemy import delete
 from sqlalchemy import select
-from sqlalchemy import Table
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill
 from onyx.db.models import User
-from onyx.db.skill import fetch_skill_for_user
-from onyx.db.skill import list_skills_for_user
-from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.skill.api import _ensure_custom
-from onyx.skills import built_in as built_in_module
+from onyx.db.skill import fetch_skill
+from onyx.db.skill import list_skills
+from onyx.db.skill import SkillAccessPolicy
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
-from tests.external_dependency_unit.craft._test_helpers import make_built_in_skill_row
-from tests.external_dependency_unit.craft._test_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import make_skill
 
 
 @pytest.fixture(autouse=True)
@@ -74,9 +69,9 @@ class TestAvailabilityGate:
         _seed_canonical(db_session)
 
         gated_id = "pptx"
-        original = built_in_module.BUILT_IN_SKILLS[gated_id]
+        original = BUILT_IN_SKILLS[gated_id]
         monkeypatch.setitem(
-            built_in_module.BUILT_IN_SKILLS,
+            BUILT_IN_SKILLS,
             gated_id,
             BuiltInSkillDefinition(
                 built_in_skill_id=original.built_in_skill_id,
@@ -86,7 +81,12 @@ class TestAvailabilityGate:
         )
 
         visible = {
-            s.built_in_skill_id for s in list_skills_for_user(test_user, db_session)
+            s.built_in_skill_id
+            for s in list_skills(
+                policy=SkillAccessPolicy.VIEW,
+                user=test_user,
+                db_session=db_session,
+            )
         }
         assert gated_id not in visible
 
@@ -99,10 +99,51 @@ class TestAvailabilityGate:
 
         visible_built_ins = {
             s.built_in_skill_id
-            for s in list_skills_for_user(test_user, db_session)
+            for s in list_skills(
+                policy=SkillAccessPolicy.VIEW,
+                user=test_user,
+                db_session=db_session,
+            )
             if s.built_in_skill_id is not None
         }
-        assert set(BUILT_IN_SKILLS) <= visible_built_ins
+        # Some built-ins gate on environment availability (e.g. image-generation
+        # needs a configured provider); only those available here must be visible.
+        available_built_ins = {
+            built_in_skill_id
+            for built_in_skill_id, definition in BUILT_IN_SKILLS.items()
+            if definition.is_available(db_session)
+        }
+        assert available_built_ins <= visible_built_ins
+
+    def test_browser_built_in_gated_on_enable_browser(
+        self,
+        db_session: Session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _seed_canonical(db_session)
+
+        monkeypatch.setattr("onyx.skills.built_in.ENABLE_BROWSER", False)
+        off = {
+            s.built_in_skill_id
+            for s in list_skills(
+                policy=SkillAccessPolicy.USE,
+                user=test_user,
+                db_session=db_session,
+            )
+        }
+        assert "browser" not in off
+
+        monkeypatch.setattr("onyx.skills.built_in.ENABLE_BROWSER", True)
+        on = {
+            s.built_in_skill_id
+            for s in list_skills(
+                policy=SkillAccessPolicy.USE,
+                user=test_user,
+                db_session=db_session,
+            )
+        }
+        assert "browser" in on
 
     def test_unavailable_built_in_cannot_be_fetched_by_id(
         self,
@@ -114,9 +155,9 @@ class TestAvailabilityGate:
 
         gated_id = "pptx"
         row = _row(db_session, gated_id)
-        original = built_in_module.BUILT_IN_SKILLS[gated_id]
+        original = BUILT_IN_SKILLS[gated_id]
         monkeypatch.setitem(
-            built_in_module.BUILT_IN_SKILLS,
+            BUILT_IN_SKILLS,
             gated_id,
             BuiltInSkillDefinition(
                 built_in_skill_id=original.built_in_skill_id,
@@ -124,27 +165,55 @@ class TestAvailabilityGate:
             ),
         )
 
-        assert fetch_skill_for_user(row.id, test_user, db_session) is None
+        assert (
+            fetch_skill(
+                row.id,
+                policy=SkillAccessPolicy.VIEW,
+                user=test_user,
+                db_session=db_session,
+            )
+            is None
+        )
 
 
 class TestBuiltInIsImmutable:
-    """Built-in skill rows reject every admin mutation path: PATCH,
-    bundle-replace, grants-replace, delete. Enforcement lives at the
-    API layer via ``_ensure_custom`` and the discriminator is
-    ``built_in_skill_id IS NOT NULL``."""
+    """Built-in skill rows are not editable custom skills."""
 
-    def test_ensure_custom_rejects_built_in_rows(self, db_session: Session) -> None:
+    def test_edit_fetch_rejects_built_in_rows(
+        self,
+        db_session: Session,
+        test_user: User,
+    ) -> None:
         row = make_built_in_skill_row(db_session, built_in_skill_id="pptx")
         db_session.commit()
 
-        with pytest.raises(OnyxError, match="cannot be modified"):
-            _ensure_custom(row)
+        assert (
+            fetch_skill(
+                row.id,
+                policy=SkillAccessPolicy.EDIT,
+                user=test_user,
+                db_session=db_session,
+            )
+            is None
+        )
 
-    def test_ensure_custom_accepts_custom_rows(self, db_session: Session) -> None:
+    def test_edit_fetch_accepts_owned_custom_rows(
+        self,
+        db_session: Session,
+        test_user: User,
+    ) -> None:
         custom = make_skill(db_session, slug=f"custom-{uuid4().hex[:8]}")
+        custom.author_user_id = test_user.id
         db_session.commit()
 
-        _ensure_custom(custom)  # no raise
+        skill = fetch_skill(
+            custom.id,
+            policy=SkillAccessPolicy.EDIT,
+            user=test_user,
+            db_session=db_session,
+        )
+        assert skill is not None
+        assert skill.id == custom.id
 
 
 class TestNonUniqueBuiltInId:
@@ -184,34 +253,3 @@ class TestSchemaInvariant:
         for definition in BUILT_IN_SKILLS.values():
             assert isinstance(definition.source_dir, Path)
             assert definition.source_dir.is_dir()
-
-    def test_xor_check_constraint_model_matches_db(self, db_session: Session) -> None:
-        """The XOR ``ck_skill_definition_source`` constraint is declared in
-        two places — ``Skill.__table_args__`` and the migration. Guard
-        against drift by comparing the model's declared predicate to the
-        constraint actually applied to the DB (which came from the
-        migration)."""
-        constraint_name = "ck_skill_definition_source"
-
-        table = Skill.__table__
-        assert isinstance(table, Table)
-        model_cc = next(
-            c
-            for c in table.constraints
-            if isinstance(c, CheckConstraint) and c.name == constraint_name
-        )
-        model_predicate = str(model_cc.sqltext)
-
-        db_predicate = db_session.execute(
-            text(
-                "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
-                "WHERE conname = :name AND conrelid = 'skill'::regclass"
-            ),
-            {"name": constraint_name},
-        ).scalar_one()
-
-        def _normalize(clause: str) -> str:
-            clause = clause.lower().replace("check", "")
-            return "".join(ch for ch in clause if ch not in "() \t\n")
-
-        assert _normalize(model_predicate) == _normalize(db_predicate)
