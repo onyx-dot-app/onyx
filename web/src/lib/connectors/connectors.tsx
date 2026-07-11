@@ -195,6 +195,18 @@ export const connectorConfigs: Record<
         name: "scroll_before_scraping",
         optional: true,
       },
+      {
+        type: "list",
+        query: "Enter URL rewrite rules:",
+        label: "URL Rewrites",
+        name: "url_rewrites",
+        optional: true,
+        description:
+          'Rewrite document URLs before storing. Each entry: "https://source-prefix -> https://target-prefix". ' +
+          "Useful when crawling through an internal mirror while storing the canonical public links, " +
+          "for example: https://internal-mirror.example.com -> https://docs.example.com",
+        default: [],
+      },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
@@ -2076,6 +2088,7 @@ export interface ConnectorSnapshot {
 export interface WebConfig {
   base_url: string;
   web_connector_type?: "recursive" | "single" | "sitemap";
+  url_rewrites?: string[];
 }
 
 export interface GithubConfig {
