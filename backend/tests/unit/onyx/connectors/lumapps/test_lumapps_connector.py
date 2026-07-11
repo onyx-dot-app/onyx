@@ -1,0 +1,83 @@
+from datetime import datetime
+from datetime import timezone
+from typing import Any
+from unittest.mock import MagicMock
+
+from onyx.connectors.lumapps.connector import LumAppsConnector
+from onyx.connectors.models import Document
+from onyx.connectors.models import SlimDocument
+
+
+def _make_connector(list_response: dict[str, Any]) -> LumAppsConnector:
+    connector = LumAppsConnector(
+        base_url="https://example.cell.lumapps.com",
+        organization_id="org-1",
+    )
+    client = MagicMock()
+    client.list_content.return_value = list_response
+    connector._client = client
+    return connector
+
+
+def _item(content_id: str, status: str, updated_at: str) -> dict[str, Any]:
+    return {
+        "id": content_id,
+        "status": status,
+        "title": f"Title {content_id}",
+        "updatedAt": updated_at,
+        "template": None,
+        "properties": None,
+        "metadata": [],
+    }
+
+
+def test_load_from_checkpoint_yields_only_live_content() -> None:
+    """Non-LIVE items must be skipped even if the API-side status filter
+    fails to apply (defense in depth)."""
+    connector = _make_connector(
+        {
+            "items": [
+                _item("live-1", "LIVE", "2026-07-01T12:00:00Z"),
+                _item("draft-1", "DRAFT", "2026-07-01T11:00:00Z"),
+                _item("archive-1", "ARCHIVE", "2026-07-01T10:00:00Z"),
+                _item("live-2", "live", "2026-07-01T09:00:00Z"),  # case-insensitive
+            ],
+            "more": False,
+        }
+    )
+
+    start = datetime(2026, 7, 1, tzinfo=timezone.utc).timestamp()
+    end = datetime(2026, 7, 2, tzinfo=timezone.utc).timestamp()
+    results = list(
+        connector.load_from_checkpoint(start, end, connector.build_dummy_checkpoint())
+    )
+
+    docs = [r for r in results if isinstance(r, Document)]
+    assert [d.id for d in docs] == ["live-1", "live-2"]
+
+
+def test_slim_docs_exclude_non_live_content() -> None:
+    """Pruning enumeration must exclude non-LIVE items so content leaving
+    LIVE gets pruned from the index."""
+    connector = _make_connector(
+        {
+            "items": [
+                {"id": "live-1", "status": "LIVE"},
+                {"id": "draft-1", "status": "DRAFT"},
+                {"id": "no-status"},
+            ],
+            "more": False,
+        }
+    )
+
+    batches = list(connector.retrieve_all_slim_docs())
+
+    assert len(batches) == 1
+    assert [doc.id for doc in batches[0] if isinstance(doc, SlimDocument)] == ["live-1"]
+    assert all(isinstance(doc, SlimDocument) for doc in batches[0])
+
+
+def test_list_body_requests_live_status_from_api() -> None:
+    """The API-side filter stays in place alongside the in-code check."""
+    connector = _make_connector({"items": [], "more": False})
+    assert connector._list_body()["status"] == ["LIVE"]

@@ -51,6 +51,7 @@ export { default as SvgLinear } from "@opal/logos/linear";
 export { default as SvgLitellm } from "@opal/logos/litellm";
 export { default as SvgLmStudio } from "@opal/logos/lm-studio";
 export { default as SvgLoopio } from "@opal/logos/loopio";
+export { default as SvgLumapps } from "@opal/logos/lumapps";
 export { default as SvgMediawiki } from "@opal/logos/mediawiki";
 export { default as SvgMicrosoft } from "@opal/logos/microsoft";
 export { default as SvgMistral } from "@opal/logos/mistral";

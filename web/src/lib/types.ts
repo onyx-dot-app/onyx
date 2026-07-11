@@ -599,6 +599,7 @@ export enum ValidSources {
   Bitbucket = "bitbucket",
   TestRail = "testrail",
   Braintrust = "braintrust",
+  Lumapps = "lumapps",
 
   // Craft-specific sources
   CraftFile = "craft_file",

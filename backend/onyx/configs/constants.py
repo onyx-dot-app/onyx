@@ -263,6 +263,7 @@ class DocumentSource(str, Enum):
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
     BRAINTRUST = "braintrust"
+    LUMAPPS = "lumapps"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -749,4 +750,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.IMAP: "Email messages and threads",
     DocumentSource.TESTRAIL: "Test cases and QA management",
     DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
+    DocumentSource.LUMAPPS: "Intranet pages, news, and content",
 }
