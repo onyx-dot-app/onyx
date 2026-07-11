@@ -282,6 +282,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         slack_context: SlackContext | None = None,
         # Whether to enable Slack federated search
         enable_slack_search: bool = True,
+        # Whether to infer source (and, once implemented, time) filters from the
+        # query. When False, only user/persona-selected filters are applied.
+        auto_detect_filters: bool = True,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -295,6 +298,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.bypass_acl = bypass_acl
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
+        self.auto_detect_filters = auto_detect_filters
 
         self._search_cycles: list[SearchCycle] = []
         self._cached_expansion: tuple[str | None, list[str]] | None = None
@@ -596,7 +600,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         turn, since the conversation cannot introduce one mid-turn.
         """
         expand_queries = not skip_query_expansion
-        decide_scope = not self._scope_decision_settled
+        decide_scope = self.auto_detect_filters and not self._scope_decision_settled
 
         jobs: list[tuple[Callable, tuple]] = []
         scope_job_index: int | None = None

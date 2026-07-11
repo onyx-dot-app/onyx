@@ -874,6 +874,18 @@ export default function ChatPreferencesPage() {
                 </InputHorizontal>
               </Disabled>
               <InputHorizontal
+                title="Auto-Detect Search Filters"
+                description="Automatically apply source and time filters inferred from the search query."
+                withLabel
+              >
+                <Switch
+                  checked={s.auto_detect_search_filters ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ auto_detect_search_filters: checked });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
                 title="Multi-Model Generation"
                 tag={{ title: "beta", color: "blue" }}
                 description="Allow multiple models to generate responses in parallel in chat."

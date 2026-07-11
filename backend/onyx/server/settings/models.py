@@ -48,6 +48,7 @@ class Settings(BaseModel):
     deep_research_enabled: bool | None = None
     multi_model_chat_enabled: bool | None = True
     search_ui_enabled: bool | None = True
+    auto_detect_search_filters: bool | None = True
 
     # Whether EE features are unlocked for use.
     # Depends on license status: True when the user has a valid license
