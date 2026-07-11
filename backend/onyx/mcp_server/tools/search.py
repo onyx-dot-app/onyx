@@ -55,6 +55,13 @@ MCP_SERVER_SEARCH_SOURCES = Counter(
 )
 
 
+def _record_tool_outcome(tool: str, start: float, status: str) -> None:
+    """Record latency + outcome for a tool call. Every return path of a tool
+    must go through this exactly once so failures aren't understated."""
+    MCP_SERVER_TOOL_LATENCY.labels(tool=tool).observe(time.monotonic() - start)
+    MCP_SERVER_TOOL_TOTAL.labels(tool=tool, status=status).inc()
+
+
 async def _post_model(
     url: str,
     body: BaseModel,
@@ -163,10 +170,16 @@ async def search_indexed_documents(
         document_set_names,
     )
 
-    # Track requested source types for product metrics
+    # Track requested source types for product metrics. Only canonical
+    # DocumentSource values become label values — arbitrary client strings
+    # would otherwise mint unbounded Prometheus series.
     if source_types:
         for src in source_types:
-            MCP_SERVER_SEARCH_SOURCES.labels(source_type=src.lower()).inc()
+            try:
+                canonical = DocumentSource(src.lower()).value
+            except ValueError:
+                canonical = "unknown"
+            MCP_SERVER_SEARCH_SOURCES.labels(source_type=canonical).inc()
 
     # Normalize empty list inputs to None so downstream filter construction is
     # consistent — BaseFilters treats [] as "match zero" which differs from
@@ -185,10 +198,12 @@ async def search_indexed_documents(
             err,
             exc_info=True,
         )
+        _record_tool_outcome("search_indexed_documents", _start, "error")
         return _error_payload(f"Failed to check indexed sources: {str(err)}")
 
     if not sources:
         logger.info("Onyx MCP Server: No indexed sources available for tenant")
+        _record_tool_outcome("search_indexed_documents", _start, "error")
         return _error_payload(
             "No document sources are indexed yet. Add connectors or upload data "
             "through Onyx before calling search_indexed_documents."
@@ -232,17 +247,13 @@ async def search_indexed_documents(
     try:
         response = await _post_model(endpoint, request, access_token)
         if not response.is_success:
+            _record_tool_outcome("search_indexed_documents", _start, "error")
             return _error_payload(_extract_error_detail(response))
 
         payload = SearchResponse.model_validate_json(response.content)
         results = [_to_mcp_dict(result) for result in payload.results]
 
-        MCP_SERVER_TOOL_LATENCY.labels(tool="search_indexed_documents").observe(
-            time.monotonic() - _start
-        )
-        MCP_SERVER_TOOL_TOTAL.labels(
-            tool="search_indexed_documents", status="success"
-        ).inc()
+        _record_tool_outcome("search_indexed_documents", _start, "success")
         MCP_SERVER_SEARCH_RESULTS.labels(tool="search_indexed_documents").observe(
             len(results)
         )
@@ -252,12 +263,7 @@ async def search_indexed_documents(
         )
         return {"results": results}
     except Exception as err:
-        MCP_SERVER_TOOL_LATENCY.labels(tool="search_indexed_documents").observe(
-            time.monotonic() - _start
-        )
-        MCP_SERVER_TOOL_TOTAL.labels(
-            tool="search_indexed_documents", status="error"
-        ).inc()
+        _record_tool_outcome("search_indexed_documents", _start, "error")
         logger.error("Onyx MCP Server: Document search error: %s", err, exc_info=True)
         return _error_payload(f"Document search failed: {str(err)}")
 
@@ -294,6 +300,7 @@ async def search_web(
             access_token,
         )
         if not response.is_success:
+            _record_tool_outcome("search_web", _start, "error")
             return {
                 "error": _extract_error_detail(response),
                 "results": [],
@@ -301,10 +308,7 @@ async def search_web(
             }
         payload = WebSearchToolResponse.model_validate_json(response.content)
 
-        MCP_SERVER_TOOL_LATENCY.labels(tool="search_web").observe(
-            time.monotonic() - _start
-        )
-        MCP_SERVER_TOOL_TOTAL.labels(tool="search_web", status="success").inc()
+        _record_tool_outcome("search_web", _start, "success")
         MCP_SERVER_SEARCH_RESULTS.labels(tool="search_web").observe(
             len(payload.results)
         )
@@ -314,10 +318,7 @@ async def search_web(
             "query": query,
         }
     except Exception as e:
-        MCP_SERVER_TOOL_LATENCY.labels(tool="search_web").observe(
-            time.monotonic() - _start
-        )
-        MCP_SERVER_TOOL_TOTAL.labels(tool="search_web", status="error").inc()
+        _record_tool_outcome("search_web", _start, "error")
         logger.error("Onyx MCP Server: Web search error: %s", e, exc_info=True)
         return {
             "error": f"Web search failed: {str(e)}",
@@ -358,21 +359,16 @@ async def open_urls(
             access_token,
         )
         if not response.is_success:
+            _record_tool_outcome("open_urls", _start, "error")
             return _error_payload(_extract_error_detail(response))
         payload = OpenUrlsToolResponse.model_validate_json(response.content)
 
-        MCP_SERVER_TOOL_LATENCY.labels(tool="open_urls").observe(
-            time.monotonic() - _start
-        )
-        MCP_SERVER_TOOL_TOTAL.labels(tool="open_urls", status="success").inc()
+        _record_tool_outcome("open_urls", _start, "success")
 
         return {
             "results": [result.model_dump(mode="json") for result in payload.results],
         }
     except Exception as err:
-        MCP_SERVER_TOOL_LATENCY.labels(tool="open_urls").observe(
-            time.monotonic() - _start
-        )
-        MCP_SERVER_TOOL_TOTAL.labels(tool="open_urls", status="error").inc()
+        _record_tool_outcome("open_urls", _start, "error")
         logger.error("Onyx MCP Server: URL fetch error: %s", err, exc_info=True)
         return _error_payload(f"URL fetch failed: {str(err)}")
