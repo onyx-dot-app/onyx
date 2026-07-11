@@ -282,7 +282,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         slack_context: SlackContext | None = None,
         # Whether to enable Slack federated search
         enable_slack_search: bool = True,
-        # Whether to infer source (and, once implemented, time) filters from the
+        # Whether to infer source and time filters from the
         # query. When False, only user/persona-selected filters are applied.
         auto_detect_filters: bool = True,
     ) -> None:
