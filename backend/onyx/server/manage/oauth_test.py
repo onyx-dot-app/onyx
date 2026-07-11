@@ -15,9 +15,12 @@ from pydantic import BaseModel
 
 from onyx.auth.oauth_claims_capture import get_captured_oauth_claims
 from onyx.auth.oauth_claims_capture import get_idp_profile_fields
+from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import IDP_PROFILE_ENRICHMENT_ENABLED
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 router = APIRouter(prefix="/admin/oauth-test")
 
@@ -52,6 +55,16 @@ async def get_oauth_login_claims(
     logged in through the IdP since capture was enabled.
     """
     target_email = email or user.email
+    # IdP claims can carry sensitive directory attributes/groups: everyone may
+    # inspect their own snapshot, but only full admins may look up other users.
+    if (
+        target_email.lower() != (user.email or "").lower()
+        and user.role != UserRole.ADMIN
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only admins can inspect other users' OAuth claims",
+        )
     snapshot = await get_captured_oauth_claims(target_email)
     if snapshot is None:
         return OAuthClaimsSnapshot(found=False, email=target_email)
