@@ -27,6 +27,7 @@ from mcp.types import InitializeResult
 from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import build_oauth_authorization_url
@@ -428,6 +429,16 @@ def refresh_mcp_oauth_token_if_expired(
     the existing stored header. All failures raise; the caller is expected to
     treat a refresh failure as non-fatal.
     """
+    # Serialize concurrent refreshes for the same connection: providers that
+    # rotate refresh tokens invalidate the old one, so two racing exchanges
+    # would leave the loser with a dead token. The row lock is held until
+    # update_connection_config commits; a blocked second caller then re-reads
+    # a fresh (non-expired) expiry below and returns without refreshing.
+    db_session.execute(
+        select(MCPConnectionConfig)
+        .where(MCPConnectionConfig.id == connection_config_id)
+        .with_for_update()
+    ).scalar_one()
     config = get_connection_config_by_id(connection_config_id, db_session)
     config_data = extract_connection_data(config)
 
@@ -484,7 +495,12 @@ def refresh_mcp_oauth_token_if_expired(
         config_data.pop(MCPOAuthKeys.TOKEN_EXPIRES_AT.value, None)
 
     header_value = f"{new_tokens.token_type} {new_tokens.access_token}"
-    config_data["headers"] = {"Authorization": header_value}
+    # Merge, don't replace: the connection may carry static headers alongside
+    # the OAuth Authorization header.
+    config_data["headers"] = {
+        **config_data.get("headers", {}),
+        "Authorization": header_value,
+    }
     update_connection_config(config.id, db_session, config_data)
 
     logger.info(

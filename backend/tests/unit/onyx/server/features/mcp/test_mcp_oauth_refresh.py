@@ -1,10 +1,10 @@
-"""Unit tests for transport-independent MCP OAuth refresh (DST-1273).
+"""Unit tests for transport-independent MCP OAuth refresh.
 
 The SDK OAuthClientProvider that drives refresh is disabled for SSE transport,
-so an SSE GitLab MCP server's access token never rotated and gitlab_search
-started failing with "no credentials" once the token expired.
-refresh_mcp_oauth_token_if_expired performs the refresh directly. These tests
-mock the DB layer and the token endpoint, so no services are required.
+so an SSE server's access token never rotates and tool calls start failing
+once the token expires. refresh_mcp_oauth_token_if_expired performs the
+refresh directly. These tests mock the DB layer and the token endpoint, so no
+services are required.
 """
 
 import time
@@ -21,6 +21,13 @@ from onyx.server.features.mcp.api import refresh_mcp_oauth_token_if_expired
 from onyx.server.features.mcp.models import MCPOAuthKeys
 
 _TOKEN_ENDPOINT = "https://gitlab.example.com/oauth/token"
+
+
+class _FakeSession:
+    """Just enough Session for the row-lock statement in the refresh path."""
+
+    def execute(self, _stmt: Any) -> Any:
+        return SimpleNamespace(scalar_one=lambda: object())
 
 
 def _server_stub() -> DbMCPServer:
@@ -111,7 +118,7 @@ def test_refreshes_expired_token(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     header = refresh_mcp_oauth_token_if_expired(
-        _server_stub(), 42, db_session=cast(Any, object())
+        _server_stub(), 42, db_session=cast(Any, _FakeSession())
     )
 
     assert header == "Bearer NEW"
@@ -146,7 +153,7 @@ def test_no_refresh_when_token_still_valid(monkeypatch: pytest.MonkeyPatch) -> N
     captured = _install_mocks(monkeypatch, config_data, refresh_response=None)
 
     header = refresh_mcp_oauth_token_if_expired(
-        _server_stub(), 42, db_session=cast(Any, object())
+        _server_stub(), 42, db_session=cast(Any, _FakeSession())
     )
 
     assert header is None
@@ -163,8 +170,44 @@ def test_no_refresh_without_refresh_token(monkeypatch: pytest.MonkeyPatch) -> No
     captured = _install_mocks(monkeypatch, config_data, refresh_response=None)
 
     header = refresh_mcp_oauth_token_if_expired(
-        _server_stub(), 42, db_session=cast(Any, object())
+        _server_stub(), 42, db_session=cast(Any, _FakeSession())
     )
 
     assert header is None
     assert captured["post_called"] is False
+
+
+def test_refresh_preserves_static_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A connection can carry static headers alongside Authorization; a
+    refresh must merge the new header in, not replace the whole map."""
+    config_data: dict[str, Any] = {
+        "headers": {"Authorization": "Bearer OLD", "X-Custom": "static-value"},
+        MCPOAuthKeys.TOKENS.value: {
+            "access_token": "OLD",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "refresh_token": "REFRESH_1",
+        },
+        MCPOAuthKeys.TOKEN_EXPIRES_AT.value: time.time() - 60,
+        MCPOAuthKeys.CLIENT_INFO.value: {"client_id": "cid"},
+    }
+    _install_mocks(
+        monkeypatch,
+        config_data,
+        refresh_response={
+            "access_token": "NEW",
+            "token_type": "Bearer",
+            "expires_in": 7200,
+            "refresh_token": "REFRESH_2",
+        },
+    )
+
+    header = refresh_mcp_oauth_token_if_expired(
+        _server_stub(), 42, db_session=cast(Any, _FakeSession())
+    )
+
+    assert header == "Bearer NEW"
+    assert config_data["headers"] == {
+        "Authorization": "Bearer NEW",
+        "X-Custom": "static-value",
+    }
