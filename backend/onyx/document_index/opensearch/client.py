@@ -589,7 +589,18 @@ class OpenSearchIndexClient(OpenSearchClient):
         )
         # OpenSearch index names must be lowercase; embedding model names (the
         # main input to index naming) can carry uppercase characters, which
-        # would otherwise fail index creation.
+        # would otherwise fail index creation. NOTE: two configured models
+        # whose names differ only by case would collide after normalization —
+        # no real model registry publishes such pairs, and previously the
+        # uppercase variant failed outright, but warn loudly so the
+        # normalization is visible in logs.
+        if index_name != index_name.lower():
+            logger.warning(
+                "OpenSearch index name %s contains uppercase characters; "
+                "normalizing to %s (index names must be lowercase)",
+                index_name,
+                index_name.lower(),
+            )
         self._index_name = index_name.lower()
         self._emit_metrics = emit_metrics
         logger.debug(
