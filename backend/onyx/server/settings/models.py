@@ -94,7 +94,7 @@ class Settings(BaseModel):
     craft_default_enabled: bool = True
 
     # Workspace-wide instructions injected into every Craft agent's AGENTS.md
-    # as an "Organization instructions" section. Applies to new sessions only.
+    # as an "Organization instructions" section.
     craft_instructions: str | None = Field(
         default=None, max_length=CRAFT_INSTRUCTIONS_MAX_LENGTH
     )

@@ -83,7 +83,6 @@ def test_generate_agent_instructions_injects_organization_instructions() -> None
 
     assert "## Organization instructions" in content
     assert "SENTINEL_ORG_RULE: always use the brand kit." in content
-    # Injected between the hard rules and the environment section.
     assert content.index("## Hard rules") < content.index(
         "## Organization instructions"
     )
@@ -94,7 +93,6 @@ def test_generate_agent_instructions_injects_organization_instructions() -> None
 
 
 def test_org_instructions_containing_template_tokens_stay_literal() -> None:
-    """Admin text copy-pasted from the base template must not be expanded."""
     content = agent_instructions.generate_agent_instructions(
         template_path=_template_path(),
         skills_section="SENTINEL_REAL_SKILLS",

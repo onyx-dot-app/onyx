@@ -1,9 +1,3 @@
-"""Preservation semantics of admin_put_settings for craft_instructions.
-
-A PUT from an older client that omits the field must not wipe stored
-instructions; an explicit null must clear them.
-"""
-
 from typing import Any
 from unittest.mock import MagicMock
 

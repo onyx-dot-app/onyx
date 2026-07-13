@@ -10,8 +10,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Canonical location of the base AGENTS.md template (backend/onyx/server/
-# features/build/AGENTS.template.md).
 AGENT_INSTRUCTIONS_TEMPLATE_PATH = (
     Path(__file__).parent.parent.parent / "AGENTS.template.md"
 )
@@ -109,8 +107,6 @@ def build_connectable_apps_list(apps: Iterable[ExternalApp]) -> str:
 
 
 def build_organization_instructions_section(instructions: str | None) -> str:
-    """Render the org-wide instructions admins set for Craft, or an empty
-    string when none are configured."""
     if not instructions or not instructions.strip():
         return ""
     return (

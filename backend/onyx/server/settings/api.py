@@ -85,7 +85,6 @@ def admin_put_settings(
     # older client) must not silently reset it to the pydantic default.
     if "craft_default_enabled" not in settings.model_fields_set:
         settings.craft_default_enabled = existing.craft_default_enabled
-    # Same preservation rule for the Craft workspace instructions.
     if "craft_instructions" not in settings.model_fields_set:
         settings.craft_instructions = existing.craft_instructions
     # Search Mode is Business+; Chat Retention is Enterprise-only.

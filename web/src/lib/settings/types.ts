@@ -68,7 +68,7 @@ export interface Settings {
   craft_default_enabled?: boolean;
 
   // Workspace-wide instructions injected into every Craft agent's system
-  // prompt (AGENTS.md). Applies to new sessions only.
+  // prompt (AGENTS.md).
   craft_instructions?: string | null;
 
   // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
