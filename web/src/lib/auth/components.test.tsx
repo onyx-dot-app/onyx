@@ -91,6 +91,34 @@ describe("Email/Password Login Workflow", () => {
     expect(body.toString()).toContain("password=password123");
   });
 
+  test("submits with a password that would fail signup constraints", async () => {
+    const user = setupUser();
+
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
+
+    render(<EmailPasswordForm label="submit" />);
+
+    await user.type(
+      screen.getByPlaceholderText(/email@yourcompany.com/i),
+      "test@example.com"
+    );
+    await user.type(screen.getByTestId("password"), "weak");
+
+    // Login must not enforce password policy — button stays enabled.
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/auth/login",
+        expect.anything()
+      );
+    });
+  });
+
   test("shows error toast when login fails", async () => {
     const user = setupUser();
 
@@ -167,6 +195,27 @@ describe("Email/Password Signup Workflow", () => {
         expect.objectContaining({ method: "POST" })
       );
     });
+  });
+
+  test("rejects a password that fails signup constraints", async () => {
+    const user = setupUser();
+
+    render(<EmailPasswordForm label="create" />);
+
+    await user.type(
+      screen.getByPlaceholderText(/email@yourcompany.com/i),
+      "newuser@example.com"
+    );
+    await user.type(screen.getByTestId("password"), "weak");
+
+    // Signup enforces password policy — button must be disabled.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /create account/i })
+      ).toBeDisabled();
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   test("shows error toast when email already exists", async () => {
