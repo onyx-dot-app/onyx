@@ -9,8 +9,12 @@ knob: which families are recommendable, how many models to keep, id/display
 name overrides, pinned defaults.
 
 The generated file is live production config — deployments poll it from GitHub
-raw main (AUTO_LLM_CONFIG_URL) — so this script never pushes anything itself;
-the update-recommended-models workflow runs it and opens a reviewed PR.
+raw main (AUTO_LLM_CONFIG_URL) — so this script never pushes anything itself.
+The update-recommended-models workflow runs it and opens a reviewed PR, and
+that PR's CI is the validation gate: the runtime-schema/Craft-coverage unit
+tests and the provider chat tests all run against the regenerated file. The
+script itself stays standalone (pydantic + httpx only, no onyx imports) so CI
+can run it from the tiny `recommended-models` dependency group.
 
 `version`/`updated_at` are bumped only when the model set actually changes, so
 deployments' updated_at watermark is not disturbed by cosmetic diffs, and a
@@ -41,29 +45,38 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
-# Ensure PYTHONPATH is set up for direct script execution
 SCRIPT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = SCRIPT_DIR.parent
-sys.path.append(str(BACKEND_DIR))
-
-from onyx.llm.well_known_providers.auto_update_models import (  # noqa: E402
-    LLMProviderRecommendation,
-)
-from onyx.llm.well_known_providers.auto_update_models import (  # noqa: E402
-    LLMRecommendations,
-)
-from onyx.llm.well_known_providers.models import SimpleKnownModel  # noqa: E402
-from onyx.server.features.build.configs import (  # noqa: E402
-    BUILD_MODE_ALLOWED_PROVIDER_TYPES,
-)
-from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix  # noqa: E402
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 DEFAULT_OUTPUT = (
     BACKEND_DIR / "onyx" / "llm" / "well_known_providers" / "recommended-models.json"
 )
 DEFAULT_RULES = SCRIPT_DIR / "update_recommended_models_rules.json"
-DEFAULT_ENRICHMENTS = BACKEND_DIR / "onyx" / "llm" / "model_metadata_enrichments.json"
+
+
+class RecommendedModel(BaseModel):
+    name: str
+    display_name: str | None = None
+
+
+class ProviderSection(BaseModel):
+    """One provider section, in the on-disk shape of recommended-models.json.
+
+    Deliberately a local mirror rather than the runtime schema
+    (LLMRecommendations): CI validates the generated file against the real
+    schema post-facto, and staying import-free keeps this script runnable
+    with nothing but pydantic + httpx.
+    """
+
+    default_model: str
+    additional_visible_models: list[RecommendedModel] = Field(default_factory=list)
+
+
+class RecommendedModelsFile(BaseModel):
+    version: str
+    updated_at: str
+    providers: dict[str, ProviderSection]
 
 
 class CatalogModel(BaseModel):
@@ -149,7 +162,6 @@ class ChangeReport:
     removed: dict[str, list[str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     unverified: list[str] = field(default_factory=list)
-    enrichment_gaps: list[str] = field(default_factory=list)
 
 
 def load_rules(path: Path) -> CurationRules:
@@ -169,8 +181,8 @@ def load_rules(path: Path) -> CurationRules:
     return rules
 
 
-def load_previous(path: Path) -> LLMRecommendations:
-    return LLMRecommendations.model_validate(json.loads(path.read_text()))
+def load_previous(path: Path) -> RecommendedModelsFile:
+    return RecommendedModelsFile.model_validate(json.loads(path.read_text()))
 
 
 def fetch_catalog(url: str, timeout: float) -> list[CatalogModel]:
@@ -233,21 +245,19 @@ def derive_native_name(model: CatalogModel, section: SectionRules) -> str:
     return bare
 
 
-def _clean_display_name(name: str, model_id: str) -> str:
+def _strip_vendor_prefix(name: str, model_id: str) -> str:
     """Strip the redundant "Vendor: " prefix from a catalog display name.
 
-    Falls back to an alphanumeric-only comparison for vendors the shared
-    helper's normalization misses (e.g. "Z.ai: GLM 5.1" vs vendor "z-ai").
+    Compares alphanumerics only so "Z.ai: GLM 5.2" matches vendor "z-ai".
     """
-    stripped = strip_openrouter_vendor_prefix(name, model_id)
-    if stripped != name or "/" not in model_id or ": " not in name:
-        return stripped
+    if "/" not in model_id or ": " not in name:
+        return name
     prefix, rest = name.split(": ", 1)
     vendor = model_id.split("/")[0]
     normalize = re.compile(r"[^a-z0-9]")
     if normalize.sub("", prefix.lower()) == normalize.sub("", vendor.lower()):
         return rest
-    return stripped
+    return name
 
 
 def derive_display_name(
@@ -258,16 +268,17 @@ def derive_display_name(
     override = section.display_name_overrides.get(native_name)
     if override is not None:
         return override
-    return _clean_display_name(model.name, model.id)
+    return _strip_vendor_prefix(model.name, model.id)
 
 
-def _visible_models(
-    section: LLMProviderRecommendation | None,
-) -> list[SimpleKnownModel]:
+def _visible_models(section: ProviderSection | None) -> list[RecommendedModel]:
     if section is None:
         return []
-    by_name: dict[str, SimpleKnownModel] = {}
-    for model in [section.default_model, *section.additional_visible_models]:
+    by_name: dict[str, RecommendedModel] = {}
+    for model in [
+        RecommendedModel(name=section.default_model),
+        *section.additional_visible_models,
+    ]:
         existing = by_name.get(model.name)
         if existing is None or (model.display_name and not existing.display_name):
             by_name[model.name] = model
@@ -278,11 +289,11 @@ def build_section(
     section_name: str,
     section: SectionRules,
     catalog: list[CatalogModel],
-    previous: LLMProviderRecommendation | None,
+    previous: ProviderSection | None,
     rules: CurationRules,
     now: date,
     report: ChangeReport,
-) -> LLMProviderRecommendation:
+) -> ProviderSection:
     default_name = section.pinned_default
     picks: list[CatalogModel] = []
     for rule in section.rules:
@@ -309,7 +320,7 @@ def build_section(
         )
         return previous
 
-    models: list[SimpleKnownModel] = []
+    models: list[RecommendedModel] = []
     native_to_catalog_id: dict[str, str] = {}
     for pick in picks:
         native_name = derive_native_name(pick, section)
@@ -317,7 +328,7 @@ def build_section(
             continue
         native_to_catalog_id[native_name] = pick.id
         models.append(
-            SimpleKnownModel(
+            RecommendedModel(
                 name=native_name,
                 display_name=derive_display_name(pick, native_name, section),
             )
@@ -335,7 +346,7 @@ def build_section(
             display_name = section.display_name_overrides.get(
                 default_name
             ) or previous_display.get(default_name)
-        models.insert(0, SimpleKnownModel(name=default_name, display_name=display_name))
+        models.insert(0, RecommendedModel(name=default_name, display_name=display_name))
     else:
         models.insert(0, models.pop(default_index))
 
@@ -350,19 +361,19 @@ def build_section(
                     "model ids"
                 )
 
-    return LLMProviderRecommendation(
-        default_model=SimpleKnownModel(name=default_name),
+    return ProviderSection(
+        default_model=default_name,
         additional_visible_models=models,
     )
 
 
-def _sections_equal(a: LLMProviderRecommendation, b: LLMProviderRecommendation) -> bool:
-    # Compare the runtime-visible view (get_visible_models normalizes to
-    # default-first and dedupes), not raw file order: a hand-reordered but
-    # semantically identical section must not bump version/updated_at.
-    def key(section: LLMProviderRecommendation) -> tuple[Any, ...]:
+def _sections_equal(a: ProviderSection, b: ProviderSection) -> bool:
+    # Compare the runtime-visible view (the runtime normalizes to default-first
+    # and dedupes), not raw file order: a hand-reordered but semantically
+    # identical section must not bump version/updated_at.
+    def key(section: ProviderSection) -> tuple[Any, ...]:
         return (
-            section.default_model.name,
+            section.default_model,
             tuple(
                 (model.name, model.display_name) for model in _visible_models(section)
             ),
@@ -382,9 +393,9 @@ def _bump_version(version: str) -> str:
 def build_recommendations(
     rules: CurationRules,
     catalog: list[CatalogModel],
-    previous: LLMRecommendations,
+    previous: RecommendedModelsFile,
     today: date,
-) -> tuple[LLMRecommendations, ChangeReport]:
+) -> tuple[RecommendedModelsFile, ChangeReport]:
     report = ChangeReport()
     providers = {
         section_name: build_section(
@@ -423,84 +434,17 @@ def build_recommendations(
         return previous, report
 
     return (
-        LLMRecommendations(
+        RecommendedModelsFile(
             version=_bump_version(previous.version),
-            updated_at=datetime(
-                today.year, today.month, today.day, tzinfo=timezone.utc
-            ),
+            updated_at=f"{today.isoformat()}T00:00:00Z",
             providers=providers,
         ),
         report,
     )
 
 
-def check_build_mode_coverage(recommendations: LLMRecommendations) -> None:
-    """Mirror of test_recommended_config_covers_allowed_provider_types."""
-    missing = [
-        provider_type
-        for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES
-        if recommendations.get_default_model(provider_type) is None
-    ]
-    if missing:
-        raise ValueError(
-            "Generated config is missing a default_model for Craft-supported "
-            f"provider types: {missing}"
-        )
-
-
-def check_enrichment_gaps(
-    new: LLMRecommendations,
-    previous: LLMRecommendations,
-    enrichments_path: Path,
-) -> list[str]:
-    """Advisory: newly added model names without a model_metadata_enrichments
-    entry fall back to default token limits / vision=False."""
-    if not enrichments_path.exists():
-        return []
-    enrichment_keys: set[str] = set(json.loads(enrichments_path.read_text()).keys())
-
-    def has_entry(name: str) -> bool:
-        return name in enrichment_keys or any(
-            key.endswith(f"/{name}") for key in enrichment_keys
-        )
-
-    gaps = []
-    for section_name, section in new.providers.items():
-        previous_names = {
-            model.name
-            for model in _visible_models(previous.providers.get(section_name))
-        }
-        for model in _visible_models(section):
-            if model.name not in previous_names and not has_entry(model.name):
-                gaps.append(f"{section_name}: `{model.name}`")
-    return gaps
-
-
-def serialize(recommendations: LLMRecommendations) -> str:
-    updated_at = recommendations.updated_at
-    if updated_at.tzinfo is not None:
-        updated_at = updated_at.astimezone(timezone.utc)
-    providers: dict[str, Any] = {}
-    for section_name, section in recommendations.providers.items():
-        models: list[dict[str, str]] = []
-        for model in section.additional_visible_models:
-            entry = {"name": model.name}
-            if model.display_name:
-                entry["display_name"] = model.display_name
-            models.append(entry)
-        providers[section_name] = {
-            "default_model": section.default_model.name,
-            "additional_visible_models": models,
-        }
-    data = {
-        "version": recommendations.version,
-        "updated_at": updated_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "providers": providers,
-    }
-    text = json.dumps(data, indent=2) + "\n"
-    # Self-check: the file we write must round-trip through the runtime schema.
-    LLMRecommendations.model_validate(json.loads(text))
-    return text
+def serialize(recommendations: RecommendedModelsFile) -> str:
+    return json.dumps(recommendations.model_dump(exclude_none=True), indent=2) + "\n"
 
 
 def render_summary(report: ChangeReport, file_stale: bool) -> str:
@@ -520,14 +464,6 @@ def render_summary(report: ChangeReport, file_stale: bool) -> str:
     if report.unverified:
         lines.append("### ⚠️ Verify model ids")
         lines.extend(f"- {item}" for item in report.unverified)
-        lines.append("")
-    if report.enrichment_gaps:
-        lines.append("### Notices")
-        lines.append(
-            "Newly added models without a `model_metadata_enrichments.json` "
-            "entry (they fall back to default token limits / no vision):"
-        )
-        lines.extend(f"- {item}" for item in report.enrichment_gaps)
         lines.append("")
     if report.warnings:
         lines.append("### Warnings")
@@ -557,7 +493,6 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Read the catalog from a JSON file instead of the API",
     )
-    parser.add_argument("--enrichments", type=Path, default=DEFAULT_ENRICHMENTS)
     parser.add_argument(
         "--summary-file",
         type=Path,
@@ -579,10 +514,6 @@ def main(argv: list[str] | None = None) -> int:
 
     today = datetime.now(tz=timezone.utc).date()
     recommendations, report = build_recommendations(rules, catalog, previous, today)
-    check_build_mode_coverage(recommendations)
-    report.enrichment_gaps = check_enrichment_gaps(
-        recommendations, previous, args.enrichments
-    )
 
     serialized = serialize(recommendations)
     file_stale = serialized != args.output.read_text()
