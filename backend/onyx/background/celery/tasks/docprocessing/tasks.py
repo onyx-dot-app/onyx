@@ -85,6 +85,7 @@ from onyx.db.index_attempt import get_stale_not_started_index_attempts
 from onyx.db.index_attempt import IndexAttemptError
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
+from onyx.db.index_attempt import mark_attempt_interrupted
 from onyx.db.index_attempt import mark_attempt_partially_succeeded
 from onyx.db.index_attempt import mark_attempt_succeeded
 from onyx.db.index_attempt_metrics import IndexAttemptStage
@@ -308,34 +309,49 @@ def validate_active_indexing_attempts(
                         f"no pending or in-flight batches — all batches failed or lost"
                     )
             else:
-                # total_batches is None: docfetching is still running but the
-                # worker process died. The heartbeat thread runs independently
-                # of rate limiting, so a stale heartbeat here means a real crash.
+                # total_batches is None: docfetching still running, but the
+                # heartbeat thread (independent of the fetch loop) went stale, which
+                # means the worker process is gone, not merely slow.
                 failure_reason = (
-                    f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
+                    "Indexing was interrupted before completing (the worker was "
+                    "stopped, e.g. by a deploy or autoscaling event). It resumes "
+                    "automatically from the last checkpoint."
                 )
 
             task_logger.warning(
-                f"Invalidating attempt {fresh_attempt.id}: "
-                f"last_heartbeat_time={last_check_time} "
-                f"cutoff_time={cutoff_time} "
-                f"counter={current_counter}"
+                "Invalidating attempt %s: last_heartbeat_time=%s cutoff_time=%s counter=%s",
+                fresh_attempt.id,
+                last_check_time,
+                cutoff_time,
+                current_counter,
             )
 
+            # Mid-fetch death is a resumable interruption, not a failure, so it
+            # doesn't trip the auto-pause. Post-fetch stalls are real failures.
+            interrupted = fresh_attempt.total_batches is None
             try:
-                mark_attempt_failed(
-                    fresh_attempt.id,
-                    db_session,
-                    failure_reason=failure_reason,
-                )
+                if interrupted:
+                    mark_attempt_interrupted(
+                        fresh_attempt.id,
+                        db_session,
+                        reason=failure_reason,
+                    )
+                else:
+                    mark_attempt_failed(
+                        fresh_attempt.id,
+                        db_session,
+                        failure_reason=failure_reason,
+                    )
 
-                task_logger.error(
-                    f"Marked attempt {fresh_attempt.id} as failed due to heartbeat timeout"
+                task_logger.info(
+                    "Finalized stale attempt %s as %s",
+                    fresh_attempt.id,
+                    "interrupted" if interrupted else "failed",
                 )
 
             except Exception:
                 task_logger.exception(
-                    f"Failed to mark attempt {fresh_attempt.id} as failed due to heartbeat timeout"
+                    "Failed to finalize stale attempt %s", fresh_attempt.id
                 )
 
         # Separately handle NOT_STARTED attempts. Their heartbeat_counter never
@@ -426,7 +442,7 @@ def monitor_indexing_attempt_progress(
         db_session, attempt.connector_credential_pair_id
     )
     if not cc_pair:
-        task_logger.warning(f"CC pair not found for attempt {attempt.id}")
+        task_logger.warning("CC pair not found for attempt %s", attempt.id)
         return
 
     # Check if the CC Pair should be moved to INITIAL_INDEXING
@@ -460,7 +476,7 @@ def monitor_indexing_attempt_progress(
         )
 
     if coordination_status.cancellation_requested:
-        task_logger.info(f"Indexing attempt {attempt.id} has been cancelled")
+        task_logger.info("Indexing attempt %s has been cancelled", attempt.id)
         mark_attempt_canceled(attempt.id, db_session)
         return
 
@@ -1162,7 +1178,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 try:
                     monitor_indexing_attempt_progress(attempt, tenant_id, db_session)
                 except Exception:
-                    task_logger.exception(f"Error monitoring attempt {attempt.id}")
+                    task_logger.exception("Error monitoring attempt %s", attempt.id)
 
                 lock_beat.reacquire()
 
@@ -1713,7 +1729,7 @@ def _docprocessing_task(
             IndexAttemptStage.BATCH_LOAD, index_attempt_id, batch_load_ms
         )
         if not documents:
-            task_logger.error(f"No documents found for batch {batch_num}")
+            task_logger.error("No documents found for batch %s", batch_num)
             return
 
         # FIX: Monitor memory after loading documents
@@ -1857,7 +1873,7 @@ def _docprocessing_task(
                     usage_db_session.commit()
             except Exception as e:
                 # Log but don't fail indexing if usage tracking fails
-                task_logger.warning(f"Failed to track chunk indexing usage: {e}")
+                task_logger.warning("Failed to track chunk indexing usage: %s", e)
 
         # Update batch completion and document counts atomically using database coordination
 

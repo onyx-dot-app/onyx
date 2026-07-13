@@ -173,6 +173,7 @@ export type ValidStatuses =
   | "success"
   | "completed_with_errors"
   | "canceled"
+  | "interrupted"
   | "failed"
   | "in_progress"
   | "not_started";
