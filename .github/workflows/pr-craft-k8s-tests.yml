@@ -105,7 +105,17 @@ jobs:
               - 'backend/onyx/server/features/build/**'
               - 'backend/onyx/skills/**'
               - 'backend/shared_configs/**'
-              - 'deployment/helm/**'
+              # Only the sandbox/craft-specific chart bits gate this lane. Generic
+              # chart changes (workers, deps, version bumps) are install-tested by
+              # the `Helm - Lint and Test Charts` lane (`ct install` into kind), so
+              # they don't need the full sandbox suite here.
+              - 'deployment/helm/charts/onyx/templates/sandbox-*'
+              - 'deployment/helm/charts/onyx/templates/sandbox-proxy/**'
+              - 'deployment/helm/charts/onyx/templates/network-policy-sandbox-*'
+              - 'deployment/helm/charts/onyx/templates/craft-*'
+              - 'deployment/helm/charts/onyx/templates/celery-worker-scheduled-tasks*'
+              - 'deployment/helm/charts/onyx/charts/code-interpreter-*'
+              - 'deployment/helm/charts/onyx/values-ci.yaml'
               - 'backend/tests/integration/tests/craft/*.py'
               - 'backend/tests/integration/tests/craft/k8s/**'
               - 'backend/tests/common/craft/**'
