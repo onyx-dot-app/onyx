@@ -85,6 +85,9 @@ def admin_put_settings(
     # older client) must not silently reset it to the pydantic default.
     if "craft_default_enabled" not in settings.model_fields_set:
         settings.craft_default_enabled = existing.craft_default_enabled
+    # Same preservation rule for the Craft workspace instructions.
+    if "craft_instructions" not in settings.model_fields_set:
+        settings.craft_instructions = existing.craft_instructions
     # Search Mode is Business+; Chat Retention is Enterprise-only.
     # Use the same error code (FEATURE_NOT_AVAILABLE / 402) the tier_gate
     # middleware uses, so the FE has one shape to handle for tier-rejected
@@ -146,6 +149,11 @@ def fetch_settings(
         apply_license_status_to_settings,
     )
     general_settings = apply_fn(general_settings)
+
+    # Workspace Craft instructions are admin-configured internal guidance;
+    # non-admins (and anonymous users) don't need them in the settings payload.
+    if not user or not is_user_admin(user):
+        general_settings.craft_instructions = None
 
     # Check if Onyx Craft is enabled for this user (used for server-side
     # redirects). The deployment gate and already-loaded settings are shared.

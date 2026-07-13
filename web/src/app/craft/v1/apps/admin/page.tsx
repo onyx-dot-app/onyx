@@ -1,14 +1,7 @@
-"use client";
+import { redirect } from "next/navigation";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-
-// /craft/v1/apps/admin was the shipped admin apps page before management moved
-// to /craft/v1/apps/manage; redirect so bookmarks to the old path still work.
+// Old admin apps path; management now lives in the admin panel's Craft section.
 export default function ExternalAppsAdminRedirect() {
-  const router = useRouter();
-  useEffect(() => {
-    router.replace("/craft/v1/apps/manage");
-  }, [router]);
-  return null;
+  redirect(ADMIN_ROUTES.CRAFT_APPS.path);
 }

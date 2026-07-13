@@ -22,8 +22,8 @@ import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 
-// The user's own app connections. Org-wide configuration lives at
-// /craft/v1/apps/manage (admin-only); admins get a shortcut button to it here.
+// The user's own app connections. Org-wide configuration lives in the admin
+// panel's Craft section; admins get a shortcut button to it here.
 export default function ExternalAppsPage() {
   const { isAdmin } = useUser();
   const [query, setQuery] = useState("");
@@ -44,15 +44,13 @@ export default function ExternalAppsPage() {
         description="Connect the tools Onyx Craft can use as context while it works."
         rightChildren={
           isAdmin ? (
-            <div className="flex items-center gap-2">
-              <Button
-                href="/craft/v1/apps/manage"
-                prominence="secondary"
-                icon={SvgSettings}
-              >
-                Manage apps
-              </Button>
-            </div>
+            <Button
+              href="/admin/craft/apps"
+              prominence="secondary"
+              icon={SvgSettings}
+            >
+              Manage apps
+            </Button>
           ) : undefined
         }
       >
