@@ -2044,11 +2044,12 @@ def test_progress_counts_bucket_paused_and_partition_total(
         _cleanup_port_report_pairs(db_session, pairs)
 
 
-def test_error_rows_include_paused_with_flag(
+def test_error_rows_exclude_paused_units(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """Error rows carry FAILED (paused=False) and PAUSED (paused=True) with error_msg,
-    and exclude SUCCESS/IN_PROGRESS -- without the PAUSED row there's no Resume/Skip surface."""
+    """PAUSED units are NOT emitted into the FAILED error-row path (the existing modal
+    would render them as ordinary failures); only FAILED appears. Paused units surface
+    via the `paused` progress bucket until the PR3 Resume/Skip modal can distinguish them."""
     _base, future_id = cc_pair_and_future
     statuses: list[PortAttemptStatus | None] = [
         PortAttemptStatus.PAUSED,
@@ -2072,11 +2073,11 @@ def test_error_rows_include_paused_with_flag(
         ):
             rows = get_reindex_error_rows(db_session, future_id)
 
-        by_cc_pair = {r.cc_pair_id: r for r in rows}
-        assert set(by_cc_pair) == {paused_id, failed_id}  # only FAILED + PAUSED
-        assert by_cc_pair[paused_id].paused is True
-        assert by_cc_pair[failed_id].paused is False
-        assert by_cc_pair[failed_id].error_msg == "boom"
+        error_ids = {r.cc_pair_id for r in rows}
+        assert error_ids == {failed_id}  # only FAILED; PAUSED excluded
+        assert paused_id not in error_ids
+        failed_row = next(r for r in rows if r.cc_pair_id == failed_id)
+        assert failed_row.error_msg == "boom"
     finally:
         _cleanup_port_report_pairs(db_session, pairs)
 

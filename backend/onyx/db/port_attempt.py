@@ -263,24 +263,24 @@ def get_reindex_progress_counts(
 
 
 class ReindexErrorRow(BaseModel):
-    """A failed or paused port unit for the error modal; exactly one of cc_pair_id /
-    user_id set, name = connector name or user email. `paused` = auto-paused
-    (Resume/Skip) vs still-auto-retrying FAILED."""
+    """A failed port unit for the error modal; exactly one of cc_pair_id / user_id set,
+    name = connector name or user email."""
 
     scope: PortScope
     cc_pair_id: int | None
     user_id: UUID | None
     name: str
     error_msg: str | None
-    paused: bool
 
 
 def get_reindex_error_rows(
     db_session: Session, search_settings_id: int
 ) -> list[ReindexErrorRow]:
-    """In-scope entities (both scopes) whose latest port attempt is FAILED or PAUSED,
-    with name + error_msg + a `paused` flag. Same scope/latest-per-entity as
-    get_reindex_progress_counts's `failed`/`paused` buckets."""
+    """In-scope entities (both scopes) whose latest port attempt is FAILED, with name +
+    error_msg. Same scope/latest-per-entity as get_reindex_progress_counts's `failed`.
+    PAUSED units are intentionally NOT emitted here yet — they surface via the `paused`
+    progress bucket until the frontend Resume/Skip modal (PR3) can render them distinctly
+    instead of as ordinary failures."""
     cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
 
     rows: list[ReindexErrorRow] = []
@@ -308,7 +308,7 @@ def get_reindex_error_rows(
                 PortAttempt.id.desc(),
             )
         ):
-            if status in (PortAttemptStatus.FAILED, PortAttemptStatus.PAUSED):
+            if status == PortAttemptStatus.FAILED:
                 rows.append(
                     ReindexErrorRow(
                         scope="connector",
@@ -316,7 +316,6 @@ def get_reindex_error_rows(
                         user_id=None,
                         name=name,
                         error_msg=error_msg,
-                        paused=status == PortAttemptStatus.PAUSED,
                     )
                 )
 
@@ -341,7 +340,7 @@ def get_reindex_error_rows(
                 PortAttempt.id.desc(),
             )
         ):
-            if status in (PortAttemptStatus.FAILED, PortAttemptStatus.PAUSED):
+            if status == PortAttemptStatus.FAILED:
                 rows.append(
                     ReindexErrorRow(
                         scope="user_file",
@@ -349,7 +348,6 @@ def get_reindex_error_rows(
                         user_id=user_id,
                         name=email,
                         error_msg=error_msg,
-                        paused=status == PortAttemptStatus.PAUSED,
                     )
                 )
 
