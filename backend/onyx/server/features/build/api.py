@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 from fastapi import Depends
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -19,6 +18,7 @@ from onyx.server.features.build.external_apps.oauth import (
     router as external_apps_oauth_router,
 )
 from onyx.server.features.build.interactive_turns.api import router as turns_router
+from onyx.server.features.build.models import BaseInstructionsResponse
 from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.rate_limit import RateLimitResponse
 from onyx.server.features.build.sandbox.util.agent_instructions import (
@@ -57,10 +57,6 @@ admin_router = APIRouter(
     dependencies=[Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS))],
 )
 admin_router.include_router(external_apps_admin_router, tags=["build"])
-
-
-class BaseInstructionsResponse(BaseModel):
-    content: str
 
 
 @admin_router.get("/base-instructions")

@@ -65,9 +65,6 @@ from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
 
-# Admin-only app management. Mounted under the ungated /build/admin router so
-# admins without personal Craft access can still configure org apps; every
-# route enforces FULL_ADMIN_PANEL_ACCESS itself.
 admin_router = APIRouter()
 
 # Adapters for the structured custom-app form fields, which arrive as JSON
