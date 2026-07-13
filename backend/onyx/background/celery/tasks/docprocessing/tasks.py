@@ -140,6 +140,10 @@ from shared_configs.configs import USAGE_LIMITS_ENABLED
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
+# Bound for waiting on the shared cross-batch DB lock (see usage below).
+CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300
+
+
 logger = setup_logger()
 
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead.
@@ -1864,7 +1868,21 @@ def _docprocessing_task(
         # Time the lock-acquire wait (the contention signal); record it after
         # release (below) so the metric write doesn't extend this shared lock.
         lock_acquire_start = time.monotonic()
-        cross_batch_db_lock.acquire()
+        # Bounded acquire: the lock guards a short DB update (normal hold well
+        # under a second), but a holder killed mid-section (worker restart /
+        # OOM) leaves the key for its full CELERY_INDEXING_LOCK_TIMEOUT (3h15m).
+        # An unbounded acquire() then wedges every docprocessing thread across
+        # all workers until the fossil expires — observed in production. Fail
+        # the task instead; it redelivers and retries against a fresh lock.
+        if not cross_batch_db_lock.acquire(
+            blocking_timeout=CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S
+        ):
+            raise RuntimeError(
+                f"Could not acquire cross-batch DB lock for index attempt "
+                f"{index_attempt_id} within "
+                f"{CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S}s — likely a fossil "
+                f"lock from a killed worker; task will be retried."
+            )
         lock_acquire_ms = max(0, int((time.monotonic() - lock_acquire_start) * 1000))
         try:
             with get_session_with_current_tenant() as db_session:
