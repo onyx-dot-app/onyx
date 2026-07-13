@@ -56,3 +56,13 @@ export const IconColors: Story = {
     </div>
   ),
 };
+
+// color="inherit" applies no class, so the mark takes the ambient text color.
+export const Inherit: Story = {
+  render: () => (
+    <div className="flex items-center gap-6 text-status-error-05">
+      <OnyxLoader color="inherit" />
+      <IconLoader size={32} color="inherit" />
+    </div>
+  ),
+};
