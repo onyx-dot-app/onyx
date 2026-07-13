@@ -257,13 +257,13 @@ repos:
         pass_filenames: false
         types_or: [javascript, ts, tsx]
 
-      # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
-      # This is a preview package - if it breaks:
-      #   1. Try updating: cd web && bun update @typescript/native-preview
-      #   2. Or fallback to tsc: replace 'tsgo' with 'tsc' below
+      # Type checks with the native TypeScript compiler (~10x faster than classic
+      # tsc). web uses the stable typescript@7 release (aliased as `typescript-7`
+      # in web/package.json); the widget/shared hooks below still use tsgo from
+      # @typescript/native-preview in the root workspace.
       - id: typescript-check
         name: TypeScript type check
-        entry: bash -c 'cd web && bunx tsgo --noEmit --project tsconfig.types.json'
+        entry: bash -c 'cd web && bun run types:check'
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$
