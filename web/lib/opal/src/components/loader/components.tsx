@@ -7,9 +7,19 @@ import { SvgLoader } from "@opal/icons";
 // Shared
 // ---------------------------------------------------------------------------
 
-// The mark renders in `currentColor`, so color is set as a text token on the
-// wrapper. Default is the neutral `border-02`; pass `color` to override.
-const COLOR_CLASS = {
+// Marks render in `currentColor`, so color is applied as a text token.
+// Default is the neutral `border-02`. Pass `color` to override.
+type LoaderColor =
+  | "border-02"
+  | "text-02"
+  | "text-03"
+  | "text-04"
+  | "text-05"
+  | "status-error-05"
+  | "status-success-05"
+  | "status-warning-05";
+
+const COLOR_CLASS: Record<LoaderColor, string> = {
   "border-02": "text-border-02",
   "text-02": "text-text-02",
   "text-03": "text-text-03",
@@ -18,9 +28,7 @@ const COLOR_CLASS = {
   "status-error-05": "text-status-error-05",
   "status-success-05": "text-status-success-05",
   "status-warning-05": "text-status-warning-05",
-} as const;
-
-type LoaderColor = keyof typeof COLOR_CLASS;
+};
 
 // ---------------------------------------------------------------------------
 // IconLoader
@@ -69,10 +77,9 @@ interface OnyxLoaderProps {
   color?: LoaderColor;
 }
 
-// Onyx mark geometry (16-unit viewBox), matching the @opal/icons
-// `onyx-octagon` and `onyx-logo` paths. The stroke is defined here rather
-// than reusing those icon components so its weight can be tuned: at the
-// default 64px it renders ~2.5px and scales with `size`.
+// Geometry matches the @opal/icons `onyx-octagon`/`onyx-logo` paths. Stroke
+// is defined here, not reused from them, so weight can be tuned: ~2.5px at
+// the default 64px, scaling with `size`.
 const STROKE_WIDTH = 0.625;
 
 const OUTLINE_PATH =
@@ -97,10 +104,10 @@ const MARK_PATHS = [
 ];
 
 /**
- * Onyx-branded loading mark: rotates a full turn while crossfading between
- * the octagon outline and the diamond logo (2s loop). Both layers use
- * `currentColor`, so the mark adapts to the surrounding theme. For a
- * full-page loading state with a label, use `PageLoader`.
+ * Onyx-branded loading mark: rotates a full turn while crossfading between the
+ * octagon outline and the diamond logo (2s loop), holding the static outline
+ * under `prefers-reduced-motion`. Uses `currentColor`, so `color` themes it.
+ * For a full-page loading state with a label, use `PageLoader`.
  */
 function OnyxLoader({ size = 64, color = "border-02" }: OnyxLoaderProps) {
   return (
