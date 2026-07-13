@@ -1,5 +1,6 @@
 import os
 import time
+import uuid
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -12,11 +13,14 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 import ee.onyx.background.celery.tasks.ttl_management.tasks as ttl_tasks
+from onyx.configs.constants import CELERY_CHAT_TTL_DELETE_TASK_EXPIRES
+from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.chat import delete_chat_session
 from onyx.db.chat import get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
+from onyx.redis.redis_pool import get_redis_client
 from shared_configs.contextvars import get_current_tenant_id
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager
@@ -207,6 +211,29 @@ def _make_old_session(
     return session
 
 
+def _run_perform_ttl(retention_days: int) -> None:
+    """Claim the chain marker with a fresh token, then run one perform task.
+
+    Mirrors how the beat starts a chain: perform only proceeds while it owns the
+    marker, so the token must be claimed before invoking it.
+    """
+    tenant_id = get_current_tenant_id()
+    token = uuid.uuid4().hex
+    get_redis_client(tenant_id=tenant_id).set(
+        OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE,
+        token,
+        ex=CELERY_CHAT_TTL_DELETE_TASK_EXPIRES,
+    )
+    result = ttl_tasks.perform_ttl_management_task.apply(
+        kwargs=dict(
+            retention_limit_days=retention_days,
+            chain_token=token,
+            tenant_id=tenant_id,
+        ),
+    )
+    assert result.successful(), f"TTL task failed: {result.traceback}"
+
+
 @pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Chat retention tests are enterprise only",
@@ -221,12 +248,7 @@ def test_perform_ttl_deletes_oldest_expired(
     retention_days = 30
     sessions = [_make_old_session(admin_user, f"Stale session {i}") for i in range(3)]
 
-    result = ttl_tasks.perform_ttl_management_task.apply(
-        kwargs=dict(
-            retention_limit_days=retention_days, tenant_id=get_current_tenant_id()
-        ),
-    )
-    assert result.successful(), f"TTL task failed: {result.traceback}"
+    _run_perform_ttl(retention_days)
 
     for session in sessions:
         assert _is_session_deleted(session, admin_user), (
@@ -277,12 +299,7 @@ def test_perform_ttl_continues_past_failing_session(
 
     monkeypatch.setattr(ttl_tasks, "delete_chat_session", _delete_or_fail)
 
-    result = ttl_tasks.perform_ttl_management_task.apply(
-        kwargs=dict(
-            retention_limit_days=retention_days, tenant_id=get_current_tenant_id()
-        ),
-    )
-    assert result.successful(), f"TTL task failed: {result.traceback}"
+    _run_perform_ttl(retention_days)
 
     assert not _is_session_deleted(poison_session, admin_user), (
         "The failing session should remain (retried on the next run)"
