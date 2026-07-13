@@ -107,9 +107,7 @@ export {
 /* Loader */
 export {
   OnyxLoader,
-  PageLoader,
   type OnyxLoaderProps,
-  type PageLoaderProps,
 } from "@opal/components/loader/components";
 
 /* Pagination */

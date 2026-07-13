@@ -95,3 +95,9 @@ export {
   type ToastLevel,
   type ToastOptions,
 } from "@opal/layouts/toast/store";
+
+/* PageLoader */
+export {
+  PageLoader,
+  type PageLoaderProps,
+} from "@opal/layouts/page-loader/components";
