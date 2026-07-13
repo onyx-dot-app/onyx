@@ -221,6 +221,7 @@ override-dependencies = [
     # explicit so a future resolver change can't drop back to the <=6.4.2 that
     # mitmproxy 11.x capped to (CVE-2025-47287, multipart logging DoS).
     "tornado>=6.5.0,<7.0",
+    "msgpack>=1.0.0,<2.0",
 ]
 
 [tool.ty.environment]
