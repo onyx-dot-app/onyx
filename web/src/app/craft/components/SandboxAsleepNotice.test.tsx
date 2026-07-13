@@ -81,6 +81,9 @@ describe("SandboxAsleepNotice", () => {
     expect(
       screen.getByRole("button", { name: "Wake sandbox" })
     ).toBeInTheDocument();
+    screen.getAllByRole("button").forEach((button) => {
+      expect(button).toHaveAccessibleName();
+    });
   });
 
   it("hides the modal on dismiss without waking", () => {

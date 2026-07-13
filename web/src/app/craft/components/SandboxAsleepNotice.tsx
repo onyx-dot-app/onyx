@@ -46,7 +46,6 @@ export default function SandboxAsleepNotice() {
           icon={SvgMoon}
           title="Your sandbox fell asleep"
           description="It went to sleep after a period of inactivity — your work is saved. Wake it to keep going."
-          onClose={() => setDismissed(true)}
         />
         <Modal.Footer justifyContent="center">
           <Button
