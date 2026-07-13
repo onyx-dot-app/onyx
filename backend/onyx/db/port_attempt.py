@@ -229,15 +229,13 @@ class ReindexProgressCounts(BaseModel):
     in_progress: int
     completed: int
     failed: int
-    paused: int
 
 
 def get_reindex_progress_counts(
     db_session: Session, search_settings_id: int
 ) -> ReindexProgressCounts:
     """Bucket each in-scope entity (both scopes) by its latest PortAttempt. No attempt /
-    NOT_STARTED / CANCELED → waiting, so the bar never stalls above real remaining work.
-    PAUSED is its own bucket (operator-actionable) and is subtracted out of waiting."""
+    NOT_STARTED / CANCELED → waiting, so the bar never stalls above real remaining work."""
     cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
     total = len(cc_pair_ids) + len(user_ids)
 
@@ -250,15 +248,13 @@ def get_reindex_progress_counts(
     in_progress = sum(1 for s in statuses if s == PortAttemptStatus.IN_PROGRESS)
     completed = sum(1 for s in statuses if s == PortAttemptStatus.SUCCESS)
     failed = sum(1 for s in statuses if s == PortAttemptStatus.FAILED)
-    paused = sum(1 for s in statuses if s == PortAttemptStatus.PAUSED)
 
     return ReindexProgressCounts(
         total=total,
-        waiting=max(0, total - in_progress - completed - failed - paused),
+        waiting=max(0, total - in_progress - completed - failed),
         in_progress=in_progress,
         completed=completed,
         failed=failed,
-        paused=paused,
     )
 
 
@@ -277,10 +273,7 @@ def get_reindex_error_rows(
     db_session: Session, search_settings_id: int
 ) -> list[ReindexErrorRow]:
     """In-scope entities (both scopes) whose latest port attempt is FAILED, with name +
-    error_msg. Same scope/latest-per-entity as get_reindex_progress_counts's `failed`.
-    PAUSED units are intentionally NOT emitted here yet — they surface via the `paused`
-    progress bucket until the frontend Resume/Skip modal (PR3) can render them distinctly
-    instead of as ordinary failures."""
+    error_msg. Same scope/latest-per-entity as get_reindex_progress_counts's `failed`."""
     cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
 
     rows: list[ReindexErrorRow] = []

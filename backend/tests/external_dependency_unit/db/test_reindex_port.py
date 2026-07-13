@@ -78,8 +78,6 @@ from onyx.db.port_attempt import (
     create_port_attempt,
     get_active_port_attempt,
     get_latest_port_attempt,
-    get_reindex_error_rows,
-    get_reindex_progress_counts,
     mark_port_canceled,
     mark_port_failed,
     mark_port_in_progress,
@@ -102,7 +100,6 @@ from onyx.document_index.opensearch import port_copy
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
 from onyx.kg.models import KGStage
-from onyx.server.manage import search_settings as search_settings_api
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -1965,131 +1962,30 @@ def test_pause_port_attempt_noop_from_non_failed(
         cleanup_cc_pair(db_session, pair)
 
 
-def _make_pairs_with_latest_port_status(
-    db_session: Session, statuses: list[PortAttemptStatus | None], future_id: int
-) -> list[ConnectorCredentialPair]:
-    """One cc_pair per entry; a single latest attempt in that status (None = no attempt)."""
-    pairs = []
-    for status in statuses:
-        pair = make_cc_pair(db_session)
-        pairs.append(pair)
-        if status is not None:
-            db_session.add(
-                PortAttempt(
-                    cc_pair_id=pair.id,
-                    search_settings_id=future_id,
-                    status=status,
-                    error_msg="boom" if status == PortAttemptStatus.FAILED else None,
-                )
-            )
-    db_session.commit()
-    return pairs
-
-
-def _cleanup_port_report_pairs(
-    db_session: Session, pairs: list[ConnectorCredentialPair]
-) -> None:
-    db_session.rollback()
-    for p in pairs:
-        db_session.query(PortAttempt).filter(PortAttempt.cc_pair_id == p.id).delete(
-            synchronize_session="fetch"
-        )
-        db_session.commit()
-        cleanup_cc_pair(db_session, p)
-
-
-def test_progress_counts_bucket_paused_and_partition_total(
+def test_commit_port_cursor_stops_on_paused(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """PAUSED is its own bucket, subtracted from waiting, so buckets still partition
-    total and a paused unit isn't hidden as 'waiting'."""
-    _base, future_id = cc_pair_and_future
-    statuses: list[PortAttemptStatus | None] = [
-        PortAttemptStatus.PAUSED,
-        PortAttemptStatus.FAILED,
-        PortAttemptStatus.SUCCESS,
-        PortAttemptStatus.IN_PROGRESS,
-        None,  # no attempt yet -> waiting
-    ]
-    pairs = _make_pairs_with_latest_port_status(db_session, statuses, future_id)
-    scoped_ids = [p.id for p in pairs]
-    try:
-        with (
-            patch.object(
-                port_attempt_db,
-                "fetch_indexable_standard_connector_credential_pair_ids",
-                lambda *_, **__: scoped_ids,
-            ),
-            patch.object(
-                port_attempt_db, "fetch_port_scope_user_ids", lambda *_, **__: []
-            ),
-        ):
-            counts = get_reindex_progress_counts(db_session, future_id)
+    """commit_port_cursor treats PAUSED as a stop: a wedged worker holding a just-paused
+    attempt can't advance its cursor (which would revive it toward SUCCESS). Returns
+    False and leaves the row untouched."""
+    cc_pair, future_id = cc_pair_and_future
+    attempt = create_port_attempt(db_session, cc_pair.id, future_id)
+    mark_port_in_progress(db_session, attempt.id)
+    commit_port_cursor(
+        db_session, attempt.id, last_processed_doc_id="portdoc-003", docs_ported=3
+    )
+    mark_port_failed(db_session, attempt.id, error_msg="boom")
+    assert pause_port_attempt(db_session, attempt.id) is True
 
-        assert counts.total == 5
-        assert counts.in_progress == 1
-        assert counts.completed == 1
-        assert counts.failed == 1
-        assert counts.paused == 1
-        assert counts.waiting == 1  # only the no-attempt cc_pair
-        assert (
-            counts.waiting
-            + counts.in_progress
-            + counts.completed
-            + counts.failed
-            + counts.paused
-            == counts.total
+    assert (
+        commit_port_cursor(
+            db_session, attempt.id, last_processed_doc_id="portdoc-999", docs_ported=99
         )
-    finally:
-        _cleanup_port_report_pairs(db_session, pairs)
-
-
-def test_error_rows_exclude_paused_units(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
-) -> None:
-    """PAUSED units are NOT emitted into the FAILED error-row path (the existing modal
-    would render them as ordinary failures); only FAILED appears. Paused units surface
-    via the `paused` progress bucket until the PR3 Resume/Skip modal can distinguish them."""
-    _base, future_id = cc_pair_and_future
-    statuses: list[PortAttemptStatus | None] = [
-        PortAttemptStatus.PAUSED,
-        PortAttemptStatus.FAILED,
-        PortAttemptStatus.SUCCESS,
-        PortAttemptStatus.IN_PROGRESS,
-    ]
-    pairs = _make_pairs_with_latest_port_status(db_session, statuses, future_id)
-    paused_id, failed_id = pairs[0].id, pairs[1].id
-    scoped_ids = [p.id for p in pairs]
-    try:
-        with (
-            patch.object(
-                port_attempt_db,
-                "fetch_indexable_standard_connector_credential_pair_ids",
-                lambda *_, **__: scoped_ids,
-            ),
-            patch.object(
-                port_attempt_db, "fetch_port_scope_user_ids", lambda *_, **__: []
-            ),
-        ):
-            rows = get_reindex_error_rows(db_session, future_id)
-
-        error_ids = {r.cc_pair_id for r in rows}
-        assert error_ids == {failed_id}  # only FAILED; PAUSED excluded
-        assert paused_id not in error_ids
-        failed_row = next(r for r in rows if r.cc_pair_id == failed_id)
-        assert failed_row.error_msg == "boom"
-    finally:
-        _cleanup_port_report_pairs(db_session, pairs)
-
-
-def test_reindex_progress_no_target_returns_paused_zero(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> None:
-    """The no-active-port early return must pass the new required `paused` field (=0),
-    else it 500s on the common 'no reindex running' path."""
-    with patch.object(search_settings_api, "_active_port_settings", lambda _db: None):
-        counts = search_settings_api.get_reindex_progress(db_session=db_session)
-
-    assert counts.total == 0
-    assert counts.paused == 0
+        is False
+    )
+    db_session.expire_all()
+    row = db_session.get(PortAttempt, attempt.id)
+    assert row is not None
+    assert row.status == PortAttemptStatus.PAUSED
+    assert row.last_processed_doc_id == "portdoc-003"  # cursor not advanced
+    assert row.docs_ported == 3
