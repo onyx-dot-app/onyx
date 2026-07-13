@@ -223,22 +223,13 @@ function InputSelectTrigger({
   ref,
   ...props
 }: InputSelectTriggerProps) {
-  const { variant, selectedItemDisplay } = useInputSelectContext();
+  const { variant, currentValue, selectedItemDisplay } =
+    useInputSelectContext();
 
   // Read every render, the refs already hold the latest children/icon.
   let displayContent: React.ReactNode;
 
-  if (!selectedItemDisplay) {
-    const effectivePlaceholder = placeholder || "Select an option";
-    displayContent =
-      typeof effectivePlaceholder === "string" ? (
-        <Text as="p" color="text-03">
-          {effectivePlaceholder}
-        </Text>
-      ) : (
-        effectivePlaceholder
-      );
-  } else {
+  if (selectedItemDisplay) {
     const Icon = selectedItemDisplay.iconRef.current;
     displayContent = (
       <div className="flex w-full flex-1 flex-row items-center gap-2">
@@ -248,6 +239,27 @@ function InputSelectTrigger({
         </TruncatedDisplay>
       </div>
     );
+  } else if (currentValue) {
+    // Radix mirrors the selected ItemText here, so a preselected value never
+    // shows the placeholder even before the Item's registration effect runs.
+    displayContent = (
+      <SelectPrimitive.Value
+        className={cn(
+          "truncate font-main-ui-body",
+          variant === "disabled" ? "text-text-01" : "text-text-04"
+        )}
+      />
+    );
+  } else {
+    const effectivePlaceholder = placeholder || "Select an option";
+    displayContent =
+      typeof effectivePlaceholder === "string" ? (
+        <Text as="p" color="text-03">
+          {effectivePlaceholder}
+        </Text>
+      ) : (
+        effectivePlaceholder
+      );
   }
 
   return (
