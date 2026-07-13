@@ -69,6 +69,10 @@ function LinkButton({
       <span className="opal-link-button-label font-secondary-body">
         {children}
       </span>
+      {/* The glyph is aria-hidden, so new-window behavior needs a spoken cue. */}
+      {target === "_blank" && (
+        <span className="sr-only">(opens in new tab)</span>
+      )}
       {external && <SvgExternalLink size={12} aria-hidden />}
     </>
   );
