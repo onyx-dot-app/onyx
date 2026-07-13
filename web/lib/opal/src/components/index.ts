@@ -167,12 +167,6 @@ export {
   type ModalProviderProps,
 } from "@opal/components/modal/context";
 
-/* ConfirmationModalLayout */
-export {
-  ConfirmationModalLayout,
-  type ConfirmationModalProps,
-} from "@opal/components/modal/confirmation";
-
 /* InputTypeIn */
 export {
   default as InputTypeIn,

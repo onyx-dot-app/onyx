@@ -1,13 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import {
-  Button,
-  ConfirmationModalLayout,
-  useCreateModal,
-} from "@opal/components";
+import { Button, useCreateModal } from "@opal/components";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { SvgTrash } from "@opal/icons";
 
 const meta: Meta<typeof ConfirmationModalLayout> = {
-  title: "opal/components/ConfirmationModalLayout",
+  title: "opal/layouts/ConfirmationModalLayout",
   component: ConfirmationModalLayout,
   tags: ["autodocs"],
 };
