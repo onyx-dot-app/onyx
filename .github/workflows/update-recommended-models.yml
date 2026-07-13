@@ -39,12 +39,6 @@ jobs:
           ref: main
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
-        with:
-          enable-cache: false
-          version: "0.11.25"
-
       - name: Configure git identity as App
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -55,12 +49,10 @@ jobs:
           git config user.email "${bot_user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
 
       - name: Regenerate recommended-models.json
-        # The `recommended-models` dependency group holds just pydantic + httpx,
-        # resolved from uv.lock — versions track the project lock instead of
-        # hand-pinned overlays, without installing the full backend dep tree.
+        # The script is standard-library-only, so the runner's python3 is all
+        # it needs — no uv, no dependency install.
         run: |
-          uv run --frozen --only-group recommended-models \
-            python backend/scripts/update_recommended_models.py --write \
+          python3 backend/scripts/update_recommended_models.py --write \
             --summary-file /tmp/recommended-models-summary.md
           cat /tmp/recommended-models-summary.md >> "$GITHUB_STEP_SUMMARY"
 

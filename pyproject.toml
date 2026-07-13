@@ -176,12 +176,6 @@ dev = [
 # the rest of the dev toolchain.
 zizmor = ["zizmor==1.25.2"]
 
-# Isolated group for backend/scripts/update_recommended_models.py (the
-# update-recommended-models workflow). Names are deliberately unpinned:
-# uv.lock's single universal resolution forces them to the same versions
-# pinned by the project/backend dependencies.
-recommended-models = ["pydantic", "httpx"]
-
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]
 

@@ -13,8 +13,8 @@ raw main (AUTO_LLM_CONFIG_URL) — so this script never pushes anything itself.
 The update-recommended-models workflow runs it and opens a reviewed PR, and
 that PR's CI is the validation gate: the runtime-schema/Craft-coverage unit
 tests and the provider chat tests all run against the regenerated file. The
-script itself stays standalone (pydantic + httpx only, no onyx imports) so CI
-can run it from the tiny `recommended-models` dependency group.
+script itself is standard-library-only on purpose, so any python3 can run it
+with no environment setup.
 
 `version`/`updated_at` are bumped only when the model set actually changes, so
 deployments' updated_at watermark is not disturbed by cosmetic diffs, and a
@@ -31,6 +31,7 @@ import argparse
 import json
 import re
 import sys
+import urllib.request
 from dataclasses import dataclass
 from dataclasses import field
 from datetime import date
@@ -39,11 +40,6 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 from typing import Literal
-
-import httpx
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = SCRIPT_DIR.parent
@@ -54,42 +50,58 @@ DEFAULT_OUTPUT = (
 )
 DEFAULT_RULES = SCRIPT_DIR / "update_recommended_models_rules.json"
 
+IdTransform = Literal["strip_prefix", "strip_prefix_dots_to_dashes", "keep_full_id"]
+ID_TRANSFORMS = ("strip_prefix", "strip_prefix_dots_to_dashes", "keep_full_id")
 
-class RecommendedModel(BaseModel):
+
+@dataclass
+class RecommendedModel:
     name: str
     display_name: str | None = None
 
 
-class ProviderSection(BaseModel):
+@dataclass
+class ProviderSection:
     """One provider section, in the on-disk shape of recommended-models.json.
 
     Deliberately a local mirror rather than the runtime schema
     (LLMRecommendations): CI validates the generated file against the real
     schema post-facto, and staying import-free keeps this script runnable
-    with nothing but pydantic + httpx.
+    with a bare python3.
     """
 
     default_model: str
-    additional_visible_models: list[RecommendedModel] = Field(default_factory=list)
+    additional_visible_models: list[RecommendedModel]
 
 
-class RecommendedModelsFile(BaseModel):
+@dataclass
+class RecommendedModelsFile:
     version: str
     updated_at: str
     providers: dict[str, ProviderSection]
 
 
-class CatalogModel(BaseModel):
+@dataclass
+class CatalogModel:
     """One entry of the OpenRouter /api/v1/models catalog (fields we use)."""
-
-    model_config = ConfigDict(extra="ignore")
 
     id: str
     name: str
-    created: int = 0
-    pricing: dict[str, Any] = Field(default_factory=dict)
-    architecture: dict[str, Any] = Field(default_factory=dict)
-    expiration_date: str | None = None
+    created: int
+    pricing: dict[str, Any]
+    architecture: dict[str, Any]
+    expiration_date: str | None
+
+    @classmethod
+    def from_json(cls, entry: dict[str, Any]) -> "CatalogModel":
+        return cls(
+            id=entry["id"],
+            name=entry["name"],
+            created=entry.get("created") or 0,
+            pricing=entry.get("pricing") or {},
+            architecture=entry.get("architecture") or {},
+            expiration_date=entry.get("expiration_date"),
+        )
 
     @property
     def output_modalities(self) -> list[str]:
@@ -113,43 +125,43 @@ class CatalogModel(BaseModel):
             return False
 
 
-IdTransform = Literal["strip_prefix", "strip_prefix_dots_to_dashes", "keep_full_id"]
-
-
-class FamilyRule(BaseModel):
+@dataclass
+class FamilyRule:
     """Selects the newest N catalog models of one model family."""
 
     label: str
     vendor_prefix: str
     include_regex: str
-    exclude_regex: str | None = None
-    limit: int = 1
+    exclude_regex: str | None
+    limit: int
     # The rule whose newest pick becomes the section's default_model.
-    is_default_source: bool = False
+    is_default_source: bool
 
 
-class SectionRules(BaseModel):
+@dataclass
+class SectionRules:
     """Curation rules for one provider section of recommended-models.json."""
 
     id_transform: IdTransform
     # False => every model added to this section is flagged for human
     # verification in the summary (the OpenRouter id -> native id mapping is a
     # heuristic for this provider).
-    transform_is_reliable: bool = True
-    emit_display_name: bool = True
+    transform_is_reliable: bool
+    emit_display_name: bool
     # OpenRouter id -> native model name, taking precedence over id_transform.
-    id_overrides: dict[str, str] = Field(default_factory=dict)
+    id_overrides: dict[str, str]
     # Native model name -> display name, taking precedence over the
     # catalog-derived display name.
-    display_name_overrides: dict[str, str] = Field(default_factory=dict)
+    display_name_overrides: dict[str, str]
     # Forces the section's default_model regardless of what the rules select.
-    pinned_default: str | None = None
+    pinned_default: str | None
     rules: list[FamilyRule]
 
 
-class CurationRules(BaseModel):
+@dataclass
+class CurationRules:
     global_exclude_regex: str
-    require_text_output: bool = True
+    require_text_output: bool
     sections: dict[str, SectionRules]
 
 
@@ -164,8 +176,43 @@ class ChangeReport:
     unverified: list[str] = field(default_factory=list)
 
 
+def _parse_section_rules(section_name: str, payload: dict[str, Any]) -> SectionRules:
+    id_transform = payload["id_transform"]
+    if id_transform not in ID_TRANSFORMS:
+        raise ValueError(
+            f"Section '{section_name}' has unknown id_transform {id_transform!r}"
+        )
+    return SectionRules(
+        id_transform=id_transform,
+        transform_is_reliable=payload.get("transform_is_reliable", True),
+        emit_display_name=payload.get("emit_display_name", True),
+        id_overrides=payload.get("id_overrides") or {},
+        display_name_overrides=payload.get("display_name_overrides") or {},
+        pinned_default=payload.get("pinned_default"),
+        rules=[
+            FamilyRule(
+                label=rule["label"],
+                vendor_prefix=rule["vendor_prefix"],
+                include_regex=rule["include_regex"],
+                exclude_regex=rule.get("exclude_regex"),
+                limit=rule.get("limit", 1),
+                is_default_source=rule.get("is_default_source", False),
+            )
+            for rule in payload["rules"]
+        ],
+    )
+
+
 def load_rules(path: Path) -> CurationRules:
-    rules = CurationRules.model_validate(json.loads(path.read_text()))
+    payload = json.loads(path.read_text())
+    rules = CurationRules(
+        global_exclude_regex=payload["global_exclude_regex"],
+        require_text_output=payload.get("require_text_output", True),
+        sections={
+            section_name: _parse_section_rules(section_name, section)
+            for section_name, section in payload["sections"].items()
+        },
+    )
     for section_name, section in rules.sections.items():
         default_sources = [r.label for r in section.rules if r.is_default_source]
         if len(default_sources) > 1:
@@ -182,13 +229,35 @@ def load_rules(path: Path) -> CurationRules:
 
 
 def load_previous(path: Path) -> RecommendedModelsFile:
-    return RecommendedModelsFile.model_validate(json.loads(path.read_text()))
+    payload = json.loads(path.read_text())
+    return RecommendedModelsFile(
+        version=payload["version"],
+        updated_at=payload["updated_at"],
+        providers={
+            section_name: ProviderSection(
+                default_model=section["default_model"],
+                additional_visible_models=[
+                    RecommendedModel(
+                        name=model["name"], display_name=model.get("display_name")
+                    )
+                    for model in section.get("additional_visible_models", [])
+                ],
+            )
+            for section_name, section in payload["providers"].items()
+        },
+    )
 
 
 def fetch_catalog(url: str, timeout: float) -> list[CatalogModel]:
-    response = httpx.get(url, timeout=timeout)
-    response.raise_for_status()
-    return _parse_catalog(response.json())
+    if not url.startswith(("http://", "https://")):
+        raise ValueError(f"Refusing non-HTTP catalog URL: {url!r}")
+    request = urllib.request.Request(  # noqa: S310
+        url, headers={"Accept": "application/json"}
+    )
+    # Non-2xx responses raise HTTPError.
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        payload = json.loads(response.read())
+    return _parse_catalog(payload)
 
 
 def load_catalog_file(path: Path) -> list[CatalogModel]:
@@ -199,7 +268,7 @@ def _parse_catalog(payload: Any) -> list[CatalogModel]:
     entries = payload.get("data") if isinstance(payload, dict) else payload
     if not isinstance(entries, list):
         raise ValueError("Catalog payload is not a model list")
-    return [CatalogModel.model_validate(entry) for entry in entries]
+    return [CatalogModel.from_json(entry) for entry in entries]
 
 
 def passes_global_filters(model: CatalogModel, rules: CurationRules, now: date) -> bool:
@@ -444,7 +513,24 @@ def build_recommendations(
 
 
 def serialize(recommendations: RecommendedModelsFile) -> str:
-    return json.dumps(recommendations.model_dump(exclude_none=True), indent=2) + "\n"
+    providers: dict[str, Any] = {}
+    for section_name, section in recommendations.providers.items():
+        models: list[dict[str, str]] = []
+        for model in section.additional_visible_models:
+            entry = {"name": model.name}
+            if model.display_name:
+                entry["display_name"] = model.display_name
+            models.append(entry)
+        providers[section_name] = {
+            "default_model": section.default_model,
+            "additional_visible_models": models,
+        }
+    data = {
+        "version": recommendations.version,
+        "updated_at": recommendations.updated_at,
+        "providers": providers,
+    }
+    return json.dumps(data, indent=2) + "\n"
 
 
 def render_summary(report: ChangeReport, file_stale: bool) -> str:
