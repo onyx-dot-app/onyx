@@ -10,6 +10,7 @@ export interface InputTypeInFieldProps extends Omit<InputTypeInProps, "value"> {
 
 export function InputTypeInField({
   name,
+  id,
   onChange: onChangeProp,
   onBlur: onBlurProp,
   ...inputProps
@@ -24,7 +25,7 @@ export function InputTypeInField({
   return (
     <InputTypeIn
       {...inputProps}
-      id={name}
+      id={id ?? name}
       name={name}
       value={field.value ?? ""}
       onChange={onChange}

@@ -109,11 +109,10 @@ export function FormFieldControl({ asChild, children }: ControlProps) {
   }
 
   if (React.isValidElement(children)) {
-    // Child props win, matching the asChild Slot branch: a child's own id
-    // takes precedence over the injected control id.
+    // Injected wiring wins so the control's id matches the label's htmlFor.
     return React.cloneElement(children, {
-      ...ariaAttributes,
       ...(children.props as any),
+      ...ariaAttributes,
     });
   }
 
