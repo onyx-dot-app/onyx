@@ -12,8 +12,7 @@ interface OnyxLoaderProps {
 // Onyx mark geometry (16-unit viewBox), matching the @opal/icons
 // `onyx-octagon` and `onyx-logo` paths. The stroke is defined here rather
 // than reusing those icon components so its weight can be tuned: at the
-// default 64px it renders ~2.5px (Figma Weight/Icon/Headline) and scales
-// with `size`.
+// default 64px it renders ~2.5px and scales with `size`.
 const STROKE_WIDTH = 0.625;
 
 const OUTLINE_PATH =
@@ -38,11 +37,10 @@ const MARK_PATHS = [
 ];
 
 /**
- * Onyx-branded loading mark: the mark rotates a full turn while crossfading
- * between the octagon outline and the diamond logo (2s loop), per the Onyx
- * UI Library design. Both layers use `currentColor`, so the mark adapts to
- * the surrounding theme. This is just the mark. For a full-page loading
- * state with a label, use `PageLoader`.
+ * Onyx-branded loading mark: rotates a full turn while crossfading between
+ * the octagon outline and the diamond logo (2s loop). Both layers use
+ * `currentColor`, so the mark adapts to the surrounding theme. For a
+ * full-page loading state with a label, use `PageLoader`.
  */
 function OnyxLoader({ size = 64 }: OnyxLoaderProps) {
   return (
