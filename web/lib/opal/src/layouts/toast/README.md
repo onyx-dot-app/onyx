@@ -1,6 +1,6 @@
 # Toast
 
-**Import:** `import { ToastProvider, useToast } from "@opal/components";` (imperative API: `import { toast } from "@opal/components";`)
+**Import:** `import { ToastProvider, useToast } from "@opal/layouts";` (imperative API: `import { toast } from "@opal/layouts";`)
 
 Bottom-right toast stack (no Figma design exists yet). Toasts render as `MessageCard`s driven by a module-level store, so `toast(...)` works from anywhere: components, hooks, or plain TypeScript. Long messages truncate at 150 characters and expand on click, which restarts auto-dismiss at 30s for auto-dismissing toasts. Persistent toasts stay persistent.
 

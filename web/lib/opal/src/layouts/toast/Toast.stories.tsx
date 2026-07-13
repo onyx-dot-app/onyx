@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Button, ToastProvider, toast } from "@opal/components";
+import { Button } from "@opal/components";
+import { ToastProvider, toast } from "@opal/layouts";
 
 // Each story needs a mounted ToastProvider for fired toasts to render. The
 // decorator supplies it and forwards the story-level errorAppendix parameter.
 const meta: Meta<typeof ToastProvider> = {
-  title: "opal/components/Toast",
+  title: "opal/layouts/Toast",
   component: ToastProvider,
   tags: ["autodocs"],
   decorators: [
