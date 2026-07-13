@@ -1,7 +1,6 @@
 "use client";
 
 import "@opal/components/inputs/shared.css";
-import "@opal/components/inputs/input-date-picker/styles.css";
 import React from "react";
 import type { InputVariants } from "@opal/types";
 import { Button, Calendar, Popover, Text } from "@opal/components";
@@ -193,7 +192,7 @@ function InputDatePicker({
   }
 
   const segmentProps = {
-    className: "opal-input-date-picker-segment",
+    className: "opal-input-segment",
     type: "text" as const,
     inputMode: "numeric" as const,
     autoComplete: "off",
@@ -207,20 +206,20 @@ function InputDatePicker({
   );
 
   return (
-    <div className="opal-input-date-picker-root">
+    <div className="opal-input-segmented-root">
       <Popover open={open} onOpenChange={setOpen}>
         <div
-          className="opal-input opal-input-date-picker"
+          className="opal-input opal-input-segmented"
           data-variant={variant}
           role="group"
           aria-label="Date"
           onBlur={handleRootBlur}
         >
-          <div className="opal-input-date-picker-content">
+          <div className="opal-input-segmented-content">
             {SEGMENT_FIELDS.map((field, i) => (
               <React.Fragment key={field.part}>
                 {i > 0 && separator}
-                {/* raw-ok: segmented numeric fields have no Opal input primitive; the field chrome is the surrounding .opal-input */}
+                {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
                 <input
                   {...segmentProps}
                   ref={segmentRefs[field.part]}
@@ -228,7 +227,7 @@ function InputDatePicker({
                   aria-label={field.label}
                   placeholder={field.placeholder}
                   maxLength={field.maxLen}
-                  data-year={field.part === "year" ? true : undefined}
+                  data-wide={field.part === "year" ? true : undefined}
                   value={segments[field.part]}
                   onChange={handleSegmentChange(
                     field.part,
@@ -246,7 +245,7 @@ function InputDatePicker({
             ))}
           </div>
 
-          <div className="opal-input-date-picker-actions">
+          <div className="opal-input-segmented-actions">
             {clearable && value && !disabled && (
               <Button
                 icon={SvgX}
