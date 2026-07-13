@@ -10,7 +10,6 @@ import {
   SvgClock,
   SvgCpu,
   SvgDashboard,
-  SvgDocFile,
   SvgPaperclip,
   SvgShield,
   SvgUsers,
@@ -18,6 +17,7 @@ import {
 import {
   SvgGithub,
   SvgGmail,
+  SvgGoogleDocs,
   SvgGoogleDrive,
   SvgLinear,
   SvgSlack,
@@ -254,8 +254,7 @@ const OUTPUT_CARDS: OutputCardSpec[] = [
     y: 170,
     label: "Google Doc",
     caption: "Written to your Drive",
-    icon: SvgDocFile,
-    tint: true,
+    icon: SvgGoogleDocs,
   },
   {
     y: 280,
