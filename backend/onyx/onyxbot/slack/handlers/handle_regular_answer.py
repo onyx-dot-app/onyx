@@ -170,8 +170,7 @@ def handle_regular_answer(
     # to public docs.
 
     if message_info.email:
-        found_user = get_user_by_email(message_info.email, db_session)
-        user = found_user if found_user else get_anonymous_user()
+        user = get_user_by_email(message_info.email, db_session) or get_anonymous_user()
     else:
         user = get_anonymous_user()
 
