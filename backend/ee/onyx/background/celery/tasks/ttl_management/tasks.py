@@ -54,6 +54,11 @@ def perform_ttl_management_task(
         logger.info("Chat TTL cleanup already in progress; skipping this run.")
         return
 
+    # Sessions that failed to delete are excluded from subsequent batches so a
+    # few undeletable rows can't block the rest of the (oldest-first) backlog.
+    # Every fetched session is either deleted or added here, so the eligible set
+    # shrinks each iteration and the loop always terminates.
+    failed_session_ids: set[UUID] = set()
     user_id: UUID | None = None
     session_id: UUID | None = None
     try:
@@ -61,13 +66,15 @@ def perform_ttl_management_task(
             lock.reacquire()
             with get_session_with_current_tenant() as db_session:
                 old_chat_sessions = get_chat_sessions_older_than(
-                    retention_limit_days, db_session, limit=_TTL_DELETE_BATCH_SIZE
+                    retention_limit_days,
+                    db_session,
+                    limit=_TTL_DELETE_BATCH_SIZE,
+                    exclude_session_ids=failed_session_ids,
                 )
 
             if not old_chat_sessions:
                 break
 
-            deleted_count = 0
             for user_id, session_id in old_chat_sessions:
                 lock.reacquire()
                 try:
@@ -79,27 +86,20 @@ def perform_ttl_management_task(
                             include_deleted=True,
                             hard_delete=True,
                         )
-                    deleted_count += 1
                 except Exception:
                     logger.exception(
                         "Failed to delete chat session user_id=%s session_id=%s, continuing with remaining sessions",
                         user_id,
                         session_id,
                     )
+                    failed_session_ids.add(session_id)
 
-            # If a full batch was fetched but nothing could be deleted, the same
-            # rows would be re-fetched forever. Stop and let the next scheduled
-            # check retry rather than spin.
-            if deleted_count == 0:
-                logger.error(
-                    "Chat TTL cleanup made no progress on a full batch of %d sessions; stopping.",
-                    len(old_chat_sessions),
-                )
-                break
-
-            # A partial batch means we've reached the tail of the backlog.
-            if len(old_chat_sessions) < _TTL_DELETE_BATCH_SIZE:
-                break
+        if failed_session_ids:
+            logger.error(
+                "Chat TTL cleanup finished but %d session(s) could not be deleted; "
+                "they will be retried on the next scheduled run.",
+                len(failed_session_ids),
+            )
 
     except Exception:
         logger.exception(

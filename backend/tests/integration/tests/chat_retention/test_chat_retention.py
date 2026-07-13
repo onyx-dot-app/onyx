@@ -9,6 +9,7 @@ import httpx
 import pytest
 from pytest import MonkeyPatch
 from sqlalchemy import update
+from sqlalchemy.orm import Session
 
 import ee.onyx.background.celery.tasks.ttl_management.tasks as ttl_tasks
 from onyx.db.chat import delete_chat_session
@@ -236,4 +237,95 @@ def test_chat_retention_batched_deletion(
     for session in old_sessions:
         assert _is_session_deleted(session, admin_user), (
             f"Session {session.id} should have been deleted by batched cleanup"
+        )
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Chat retention tests are enterprise only",
+)
+def test_chat_retention_skips_failing_session(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """A single undeletable session must not block the rest of the backlog.
+
+    The oldest session is made to fail deletion. Because cleanup runs oldest
+    first, a naive stop-on-no-progress guard would strand every newer session
+    behind it. The failed session should be skipped and all others deleted.
+    """
+
+    retention_days = 30
+    settings = DATestSettings(maximum_chat_retention_days=retention_days)
+    SettingsManager.update_settings(settings, user_performing_action=admin_user)
+
+    monkeypatch.setattr(ttl_tasks, "_TTL_DELETE_BATCH_SIZE", 2)
+
+    # Oldest session (largest last_message_days_ago) is fetched first.
+    poison_session = ChatSessionManager.create(
+        persona_id=0,
+        description="Undeletable oldest session",
+        user_performing_action=admin_user,
+    )
+    poison_response = ChatSessionManager.send_message(
+        chat_session_id=poison_session.id,
+        message="This session's deletion will fail",
+        user_performing_action=admin_user,
+    )
+    assert poison_response.error is None
+    _backdate_session(poison_session.id, created_days_ago=90, last_message_days_ago=90)
+
+    deletable_sessions: list[DATestChatSession] = []
+    for i in range(4):
+        session = ChatSessionManager.create(
+            persona_id=0,
+            description=f"Deletable session {i}",
+            user_performing_action=admin_user,
+        )
+        response = ChatSessionManager.send_message(
+            chat_session_id=session.id,
+            message="This session should be cleaned up",
+            user_performing_action=admin_user,
+        )
+        assert response.error is None
+        _backdate_session(session.id, created_days_ago=60, last_message_days_ago=60)
+        deletable_sessions.append(session)
+
+    real_delete_chat_session = ttl_tasks.delete_chat_session
+
+    def _delete_or_fail(
+        user_id: UUID | None,
+        chat_session_id: UUID,
+        db_session: Session,
+        include_deleted: bool = False,
+        hard_delete: bool = False,
+    ) -> None:
+        if str(chat_session_id) == str(poison_session.id):
+            raise RuntimeError("Simulated delete failure")
+        real_delete_chat_session(
+            user_id,
+            chat_session_id,
+            db_session,
+            include_deleted=include_deleted,
+            hard_delete=hard_delete,
+        )
+
+    monkeypatch.setattr(ttl_tasks, "delete_chat_session", _delete_or_fail)
+
+    result = ttl_tasks.perform_ttl_management_task.apply(
+        kwargs=dict(
+            retention_limit_days=retention_days,
+            tenant_id=get_current_tenant_id(),
+        ),
+    )
+    assert result.successful(), f"TTL task failed: {result.traceback}"
+
+    assert not _is_session_deleted(poison_session, admin_user), (
+        "The failing session should remain (retried on the next run)"
+    )
+    for session in deletable_sessions:
+        assert _is_session_deleted(session, admin_user), (
+            f"Session {session.id} should be deleted despite an older failing session"
         )
