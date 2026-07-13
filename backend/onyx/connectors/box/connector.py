@@ -1,3 +1,4 @@
+from collections import deque
 from collections.abc import Generator
 from copy import deepcopy
 from datetime import datetime
@@ -10,20 +11,20 @@ from box_sdk_gen import BoxCCGAuth
 from box_sdk_gen import BoxClient
 from box_sdk_gen import CCGConfig
 from box_sdk_gen.box.errors import BoxAPIError
-from box_sdk_gen.schemas.collaboration import Collaboration
-from box_sdk_gen.schemas.collaboration import CollaborationStatusField
 from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_mini import FolderMini
-from box_sdk_gen.schemas.group_mini import GroupMini
-from box_sdk_gen.schemas.user_collaborations import UserCollaborations
-from box_sdk_gen.schemas.user_mini import UserMini
+from box_sdk_gen.schemas.user_full import UserFull
 from box_sdk_gen.schemas.web_link import WebLink
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import BOX_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.box.models import BoxAccessContext
+from onyx.connectors.box.access import resolve_box_ancestor_access
+from onyx.connectors.box.access import resolve_box_file_access
+from onyx.connectors.box.access import resolve_box_folder_access
+from onyx.connectors.box.access import resolve_box_web_link_access
 from onyx.connectors.box.models import BoxConnectorCheckpoint
 from onyx.connectors.box.models import BoxFolderFrontierEntry
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import datetime_to_utc
@@ -64,11 +65,12 @@ BOX_APP_BASE_URL = "https://app.box.com"
 # Items per Box folder-items page; also the checkpoint granularity (one page
 # of one folder is processed per load_from_checkpoint call).
 _BOX_PAGE_SIZE = 200
-_BOX_COLLABORATIONS_PAGE_SIZE = 1000
 _SLIM_BATCH_SIZE = 500
+_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+_MAX_PAGINATION_ITERATIONS = 10_000
 
-_FILE_DOCUMENT_ID_PREFIX = "box-file-"
-_WEB_LINK_DOCUMENT_ID_PREFIX = "box-weblink-"
+_FILE_DOCUMENT_ID_PREFIX = "box-file"
+_WEB_LINK_DOCUMENT_ID_PREFIX = "box-weblink"
 
 # Fields requested on folder-items listings. Extra fields that don't apply to
 # an entry type are ignored by the API.
@@ -86,21 +88,13 @@ _ITEM_FIELDS = [
     "description",
 ]
 
-# Every Box collaboration role except "uploader" can read/preview content;
-# "uploader" is upload-only. Pinned as an allowlist so an unrecognized role
-# fails closed.
-_READ_ACCESS_COLLABORATION_ROLES = {
-    "editor",
-    "viewer",
-    "previewer",
-    "previewer uploader",
-    "viewer uploader",
-    "co-owner",
-    "owner",
-}
-
 BOX_GROUP_ID_PREFIX = "box-group"
 BOX_ALL_ENTERPRISE_USERS_GROUP_PREFIX = "box-enterprise-all-users"
+
+BOX_CLIENT_ID_CREDENTIAL_KEY = "box_client_id"
+BOX_CLIENT_SECRET_CREDENTIAL_KEY = "box_client_secret"
+BOX_ENTERPRISE_ID_CREDENTIAL_KEY = "box_enterprise_id"
+BOX_USER_EMAIL_CREDENTIAL_KEY = "box_user_email"
 
 
 def box_group_id(group_id: str) -> str:
@@ -114,11 +108,15 @@ def box_all_enterprise_users_group_id(enterprise_id: str) -> str:
 
 
 def box_file_document_id(file_id: str) -> str:
-    return f"{_FILE_DOCUMENT_ID_PREFIX}{file_id}"
+    return f"{_FILE_DOCUMENT_ID_PREFIX}-{file_id}"
 
 
 def box_web_link_document_id(web_link_id: str) -> str:
-    return f"{_WEB_LINK_DOCUMENT_ID_PREFIX}{web_link_id}"
+    return f"{_WEB_LINK_DOCUMENT_ID_PREFIX}-{web_link_id}"
+
+
+def box_file_image_id(file_id: str, image_index: int) -> str:
+    return f"{box_file_document_id(file_id)}-img-{image_index}"
 
 
 def box_file_link(file_id: str) -> str:
@@ -126,20 +124,27 @@ def box_file_link(file_id: str) -> str:
 
 
 def parse_box_folder_id(folder_id_or_url: str) -> str:
-    """Accepts a raw Box folder ID or a Box folder URL like
-    https://app.box.com/folder/123456789 and returns the folder ID."""
+    """Return a validated numeric Box folder ID from an ID or folder URL."""
     value = folder_id_or_url.strip()
-    if not value.startswith(("http://", "https://")):
-        return value
+    folder_id = value
+    if value.startswith(("http://", "https://")):
+        parsed = urlparse(value)
+        hostname = (parsed.hostname or "").lower()
+        if hostname != "box.com" and not hostname.endswith(".box.com"):
+            raise ConnectorValidationError(f"Not a Box folder URL: {folder_id_or_url}")
+        path_parts = [part for part in parsed.path.split("/") if part]
+        # Box uses both /folder/<id> and /folders/<id> in its URLs.
+        if len(path_parts) < 2 or path_parts[-2] not in ("folder", "folders"):
+            raise ConnectorValidationError(
+                f"Could not extract a folder ID from Box URL: {folder_id_or_url}"
+            )
+        folder_id = path_parts[-1]
 
-    parsed = urlparse(value)
-    path_parts = [part for part in parsed.path.split("/") if part]
-    # Box uses both /folder/<id> and /folders/<id> in its URLs.
-    if len(path_parts) >= 2 and path_parts[-2] in ("folder", "folders"):
-        return path_parts[-1]
-    raise ConnectorValidationError(
-        f"Could not extract a folder ID from Box URL: {folder_id_or_url}"
-    )
+    if not folder_id.isdigit():
+        raise ConnectorValidationError(
+            f"Box folder ID must contain only digits: {folder_id_or_url}"
+        )
+    return folder_id
 
 
 def normalize_box_login(login: str) -> str:
@@ -148,7 +153,7 @@ def normalize_box_login(login: str) -> str:
     return login.strip().lower()
 
 
-def _box_api_status_code(error: BoxAPIError) -> int | None:
+def box_api_status_code(error: BoxAPIError) -> int | None:
     if error.response_info is None:
         return None
     return error.response_info.status_code
@@ -174,76 +179,30 @@ def _in_time_window(
     return True
 
 
-def _collaboration_grants_read(collaboration: Collaboration) -> bool:
-    if collaboration.status != CollaborationStatusField.ACCEPTED:
-        return False
-    if collaboration.role is None:
-        return False
-    role_value = str(collaboration.role.value)
-    if role_value not in _READ_ACCESS_COLLABORATION_ROLES:
-        if role_value != "uploader":
-            logger.warning("Unrecognized Box collaboration role: %s", role_value)
-        return False
-    return True
-
-
-def apply_collaborations_to_access(
-    access: BoxAccessContext,
-    collaborations: list[Collaboration],
-) -> BoxAccessContext:
-    """Fold a list of Box collaborations into an access context. Only accepted
-    collaborations with a read-capable role grant access."""
-    user_emails = set(access.user_emails)
-    group_ids = set(access.group_ids)
-    for collaboration in collaborations:
-        if not _collaboration_grants_read(collaboration):
-            continue
-        accessible_by = collaboration.accessible_by
-        if isinstance(accessible_by, UserCollaborations):
-            if accessible_by.login:
-                user_emails.add(normalize_box_login(accessible_by.login))
-        elif isinstance(accessible_by, GroupMini):
-            group_ids.add(box_group_id(accessible_by.id))
-    return BoxAccessContext(
-        user_emails=user_emails,
-        group_ids=group_ids,
-        is_public=access.is_public,
-    )
-
-
-def shared_link_access_level(shared_link: Any) -> str | None:
-    """Prefer `effective_access` over raw `access`: enterprise policy can
-    downgrade an "open" link, and only `effective_access` reflects that (so we
-    don't treat a restricted link as public)."""
-    if shared_link is None:
-        return None
-    if shared_link.effective_access is not None:
-        return shared_link.effective_access.value
-    return shared_link.access.value if shared_link.access else None
-
-
-def apply_shared_link_to_access(
-    access: BoxAccessContext,
-    shared_link_access: str | None,
-    is_password_enabled: bool | None,
-    enterprise_users_group_id: str,
-) -> BoxAccessContext:
-    """Fold a Box shared link into an access context.
-
-    - "open" links are world-readable -> public (unless password protected).
-    - "company" links are readable by any logged-in enterprise user -> the
-      (enterprise-scoped) synthetic all-users group, populated by group sync.
-    - "collaborators" links grant nothing beyond existing collaborations.
-    """
-    if shared_link_access is None:
-        return access
-    if shared_link_access == "open" and not is_password_enabled:
-        return access.merged_with(BoxAccessContext(is_public=True))
-    if shared_link_access == "company":
-        return access.merged_with(
-            BoxAccessContext(group_ids={enterprise_users_group_id})
+def iter_box_enterprise_users(
+    client: BoxClient, filter_term: str | None = None
+) -> Generator[UserFull, None, None]:
+    marker: str | None = None
+    for _ in range(_MAX_PAGINATION_ITERATIONS):
+        users = client.users.get_users(
+            filter_term=filter_term,
+            fields=["login"],
+            limit=1000,
+            usemarker=True,
+            marker=marker,
         )
-    return access
+        yield from users.entries or []
+        marker = users.next_marker
+        if not marker:
+            return
+    raise RuntimeError("Box enterprise-user pagination did not terminate")
+
+
+def _required_string_credential(credentials: dict[str, Any], key: str) -> str:
+    value = credentials.get(key)
+    if not isinstance(value, str) or not value:
+        raise ConnectorMissingCredentialError("Box")
+    return value
 
 
 class BoxConnector(
@@ -265,57 +224,72 @@ class BoxConnector(
         self.allow_images = False
         self.size_threshold = BOX_CONNECTOR_SIZE_THRESHOLD
 
-        self._client: BoxClient | None = None
+        self._content_client: BoxClient | None = None
         self._enterprise_client: BoxClient | None = None
+        self._auth: BoxCCGAuth | None = None
         self._enterprise_id: str | None = None
+        self._user_email: str | None = None
 
     def set_allow_images(self, value: bool) -> None:
         self.allow_images = value
 
     @property
-    def client(self) -> BoxClient:
+    def content_client(self) -> BoxClient:
         """Client used for content reads. Uses the impersonated user when
         box_user_email is configured, else the app's service account."""
-        if self._client is None:
-            raise ConnectorMissingCredentialError("Box")
-        return self._client
+        if self._content_client is None:
+            if self._auth is None:
+                raise ConnectorMissingCredentialError("Box")
+            if self._user_email:
+                user_id = self._resolve_user_id_from_email(self._user_email)
+                self._content_client = BoxClient(
+                    auth=self._auth.with_user_subject(user_id)
+                )
+            else:
+                self._content_client = self.enterprise_client
+        return self._content_client
 
     @property
     def enterprise_client(self) -> BoxClient:
         """Enterprise-subject (service account) client, used for admin-scoped
         APIs like group and user enumeration."""
         if self._enterprise_client is None:
-            raise ConnectorMissingCredentialError("Box")
+            if self._auth is None:
+                raise ConnectorMissingCredentialError("Box")
+            self._enterprise_client = BoxClient(auth=self._auth)
         return self._enterprise_client
 
-    def _all_enterprise_users_group_id(self) -> str:
+    @property
+    def enterprise_id(self) -> str:
         if self._enterprise_id is None:
             raise ConnectorMissingCredentialError("Box")
-        return box_all_enterprise_users_group_id(self._enterprise_id)
+        return self._enterprise_id
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        client_id = credentials.get("box_client_id")
-        client_secret = credentials.get("box_client_secret")
-        enterprise_id = credentials.get("box_enterprise_id")
-        if not client_id or not client_secret or not enterprise_id:
-            raise ConnectorMissingCredentialError("Box")
+        client_id = _required_string_credential(
+            credentials, BOX_CLIENT_ID_CREDENTIAL_KEY
+        )
+        client_secret = _required_string_credential(
+            credentials, BOX_CLIENT_SECRET_CREDENTIAL_KEY
+        )
+        enterprise_id = _required_string_credential(
+            credentials, BOX_ENTERPRISE_ID_CREDENTIAL_KEY
+        )
 
-        auth = BoxCCGAuth(
+        self._auth = BoxCCGAuth(
             config=CCGConfig(
                 client_id=client_id,
                 client_secret=client_secret,
                 enterprise_id=enterprise_id,
             )
         )
-        self._enterprise_client = BoxClient(auth=auth)
         self._enterprise_id = enterprise_id
-
-        user_email = credentials.get("box_user_email")
-        if user_email:
-            user_id = self._resolve_user_id_from_email(user_email)
-            self._client = BoxClient(auth=auth.with_user_subject(user_id))
-        else:
-            self._client = self._enterprise_client
+        user_email = credentials.get(BOX_USER_EMAIL_CREDENTIAL_KEY)
+        if user_email is not None and not isinstance(user_email, str):
+            raise ConnectorMissingCredentialError("Box")
+        self._user_email = user_email or None
+        self._enterprise_client = None
+        self._content_client = None
         return None
 
     def _resolve_user_id_from_email(self, email: str) -> str:
@@ -324,20 +298,19 @@ class BoxConnector(
         'Manage users' scope (the enterprise-subject client)."""
         normalized = normalize_box_login(email)
         try:
-            users = self.enterprise_client.users.get_users(
-                filter_term=normalized, fields=["login"], limit=100
-            )
-        except BoxAPIError as e:
-            if _box_api_status_code(e) == 403:
+            for user in iter_box_enterprise_users(
+                self.enterprise_client, filter_term=normalized
+            ):
+                if user.login and normalize_box_login(user.login) == normalized:
+                    return user.id
+        except BoxAPIError as error:
+            if box_api_status_code(error) == 403:
                 raise InsufficientPermissionsError(
                     "The Box app cannot look up users by email. Impersonation "
                     "requires the 'Manage users' application scope; enable it and "
                     "reauthorize the app in the Box Admin Console."
-                )
+                ) from error
             raise
-        for user in users.entries or []:
-            if user.login and normalize_box_login(user.login) == normalized:
-                return user.id
         raise ConnectorValidationError(
             f"No Box user found with email '{email}'. Enter the email of a user "
             "in this Box enterprise for the connector to impersonate."
@@ -359,133 +332,18 @@ class BoxConnector(
             )
         return NormalizationResult(normalized_url=None, use_default=False)
 
-    def _fetch_collaborations_access(
-        self,
-        base_access: BoxAccessContext,
-        item_id: str,
-        is_folder: bool,
-    ) -> BoxAccessContext:
-        manager = self.client.list_collaborations
-        fetch = (
-            manager.get_folder_collaborations
-            if is_folder
-            else manager.get_file_collaborations
-        )
-        access = base_access
-        marker: str | None = None
-        while True:
-            collaborations = fetch(
-                item_id, limit=_BOX_COLLABORATIONS_PAGE_SIZE, marker=marker
-            )
-            access = apply_collaborations_to_access(
-                access, collaborations.entries or []
-            )
-            marker = collaborations.next_marker
-            if not marker:
-                break
-        return access
-
-    def _apply_owner(
-        self, access: BoxAccessContext, owned_by: UserMini | None
-    ) -> BoxAccessContext:
-        if owned_by is None or not owned_by.login:
-            return access
-        return access.merged_with(
-            BoxAccessContext(user_emails={normalize_box_login(owned_by.login)})
-        )
-
-    def _apply_shared_link(
-        self, access: BoxAccessContext, shared_link: Any
-    ) -> BoxAccessContext:
-        # folder/file/web-link shared links are distinct SDK types that all
-        # expose access / effective_access / is_password_enabled.
-        if shared_link is None:
-            return access
-        return apply_shared_link_to_access(
-            access,
-            shared_link_access_level(shared_link),
-            shared_link.is_password_enabled,
-            self._all_enterprise_users_group_id(),
-        )
-
-    def _resolve_folder_access(
-        self,
-        folder_id: str,
-        inherited_access: BoxAccessContext,
-    ) -> BoxAccessContext:
-        """Access to a folder's subtree: inherited ancestor access plus the
-        folder's own collaborations, shared link, and owner."""
-        access = inherited_access
-        # Box's root folder (id 0) can't be collaborated; asking for its
-        # collaborations returns HTTP 400, so skip that call for root.
-        if folder_id != BOX_ROOT_FOLDER_ID:
-            access = self._fetch_collaborations_access(
-                access, folder_id, is_folder=True
-            )
-        folder = self.client.folders.get_folder_by_id(
-            folder_id, fields=["shared_link", "owned_by"]
-        )
-        access = self._apply_owner(access, folder.owned_by)
-        return self._apply_shared_link(access, folder.shared_link)
-
-    def _resolve_ancestor_access(
-        self, path_entries: list[FolderMini] | None
-    ) -> BoxAccessContext:
-        """Union of collaborations/shared links on a chain of ancestor folders
-        (a Box path_collection). Ancestors the credential can't read are
-        skipped. Root is excluded."""
-        access = BoxAccessContext()
-        for ancestor in path_entries or []:
-            if ancestor.id == BOX_ROOT_FOLDER_ID:
-                continue
-            try:
-                access = self._resolve_folder_access(ancestor.id, access)
-            except BoxAPIError as e:
-                status = _box_api_status_code(e)
-                if status not in (403, 404):
-                    # Fail loud: swallowing a transient error would under-
-                    # permission every descendant of this ancestor.
-                    raise
-                # 403/404 just means the user can't see an ancestor above the
-                # configured root; skip it.
-                logger.warning(
-                    "Cannot read ancestor folder %s while resolving inherited "
-                    "access (status=%s); skipping it.",
-                    ancestor.id,
-                    status,
-                )
-        return access
-
-    def _resolve_file_access(
-        self,
-        file: FileFull,
-        folder_access: BoxAccessContext,
-    ) -> BoxAccessContext:
-        access = self._apply_owner(folder_access, file.owned_by)
-        if file.has_collaborations:
-            access = self._fetch_collaborations_access(access, file.id, is_folder=False)
-        return self._apply_shared_link(access, file.shared_link)
-
-    def _resolve_web_link_access(
-        self,
-        web_link: WebLink,
-        folder_access: BoxAccessContext,
-    ) -> BoxAccessContext:
-        # A bookmark's access is the inherited folder access plus its own shared
-        # link (no owner or collaborations). Shared with the full and slim paths
-        # so perm sync can't revoke link-granted access.
-        return self._apply_shared_link(folder_access, web_link.shared_link)
-
     def _seed_frontier(self, include_permissions: bool) -> list[BoxFolderFrontierEntry]:
         frontier: list[BoxFolderFrontierEntry] = []
         for folder_id in self.entry_folder_ids:
-            folder = self.client.folders.get_folder_by_id(
+            folder = self.content_client.folders.get_folder_by_id(
                 folder_id, fields=["name", "path_collection"]
             )
-            access: BoxAccessContext | None = None
+            access: ExternalAccess | None = None
             if include_permissions:
-                access = self._resolve_ancestor_access(
-                    folder.path_collection.entries if folder.path_collection else None
+                access = resolve_box_ancestor_access(
+                    self.content_client,
+                    folder.path_collection.entries if folder.path_collection else None,
+                    self.enterprise_id,
                 )
             display_name = folder.name or folder_id
             frontier.append(
@@ -500,11 +358,23 @@ class BoxConnector(
         return frontier
 
     def _download_file(self, file: FileFull) -> bytes | None:
-        stream = self.client.downloads.download_file(file_id=file.id)
+        stream = self.content_client.downloads.download_file(file_id=file.id)
         if stream is None:
             return None
         try:
-            return stream.read()
+            chunks: list[bytes] = []
+            bytes_read = 0
+            while chunk := stream.read(_DOWNLOAD_CHUNK_SIZE):
+                bytes_read += len(chunk)
+                if bytes_read > self.size_threshold:
+                    logger.warning(
+                        "Skipping %s: downloaded content exceeds threshold %s",
+                        file.name or file.id,
+                        self.size_threshold,
+                    )
+                    return None
+                chunks.append(chunk)
+            return b"".join(chunks)
         finally:
             stream.close()
 
@@ -522,7 +392,7 @@ class BoxConnector(
             )
             return False
         extension = get_file_ext(file_name)
-        if extension in OnyxFileExtensions.IMAGE_EXTENSIONS:
+        if extension in OnyxFileExtensions.IMAGE_EXTENSIONS and self.allow_images:
             return self.allow_images
         if extension not in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
             logger.debug("Skipping %s: unsupported extension %s", file_name, extension)
@@ -568,7 +438,7 @@ class BoxConnector(
             ):
                 image_section, _ = store_image_and_create_section(
                     image_data=image_data,
-                    file_id=f"{box_file_document_id(file.id)}-img-{index}",
+                    file_id=box_file_image_id(file.id, index),
                     display_name=image_name or f"{file_name} - image {index}",
                     file_origin=FileOrigin.CONNECTOR,
                 )
@@ -589,9 +459,9 @@ class BoxConnector(
 
             external_access = None
             if include_permissions and folder.access is not None:
-                external_access = self._resolve_file_access(
-                    file, folder.access
-                ).to_external_access()
+                external_access = resolve_box_file_access(
+                    self.content_client, file, folder.access, self.enterprise_id
+                )
 
             primary_owners = None
             if file.owned_by is not None:
@@ -638,9 +508,9 @@ class BoxConnector(
 
         external_access = None
         if include_permissions and folder.access is not None:
-            external_access = self._resolve_web_link_access(
-                web_link, folder.access
-            ).to_external_access()
+            external_access = resolve_box_web_link_access(
+                web_link, folder.access, self.enterprise_id
+            )
 
         return Document(
             id=box_web_link_document_id(web_link.id),
@@ -663,13 +533,13 @@ class BoxConnector(
         external_access = None
         if include_permissions and folder.access is not None:
             if isinstance(item, FileFull):
-                external_access = self._resolve_file_access(
-                    item, folder.access
-                ).to_external_access()
+                external_access = resolve_box_file_access(
+                    self.content_client, item, folder.access, self.enterprise_id
+                )
             else:
-                external_access = self._resolve_web_link_access(
-                    item, folder.access
-                ).to_external_access()
+                external_access = resolve_box_web_link_access(
+                    item, folder.access, self.enterprise_id
+                )
         document_id = (
             box_file_document_id(item.id)
             if isinstance(item, FileFull)
@@ -681,17 +551,60 @@ class BoxConnector(
             parent_hierarchy_raw_node_id=folder.folder_id,
         )
 
-    def _folder_hierarchy_node(self, folder: BoxFolderFrontierEntry) -> HierarchyNode:
-        return HierarchyNode(
-            raw_node_id=folder.folder_id,
-            raw_parent_id=folder.parent_folder_id,
-            display_name=folder.display_name,
-            link=f"{BOX_APP_BASE_URL}/folder/{folder.folder_id}",
+    def _pick_current_from_todos(
+        self,
+        checkpoint: BoxConnectorCheckpoint,
+        include_permissions: bool,
+    ) -> Generator[
+        HierarchyNode | ConnectorFailure,
+        None,
+        BoxConnectorCheckpoint,
+    ]:
+        if not checkpoint.todo:
+            checkpoint.has_more = False
+            return checkpoint
+
+        todo = deque(checkpoint.todo)
+        entry = todo.popleft()
+        checkpoint.todo = list(todo)
+        if entry.folder_id in checkpoint.seen_folder_ids:
+            checkpoint.has_more = bool(checkpoint.todo)
+            return checkpoint
+
+        checkpoint.seen_folder_ids.add(entry.folder_id)
+        if include_permissions:
+            try:
+                entry.access = resolve_box_folder_access(
+                    self.content_client,
+                    entry.folder_id,
+                    entry.access,
+                    self.enterprise_id,
+                )
+            except BoxAPIError as error:
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(entity_id=entry.folder_id),
+                    failure_message=(
+                        f"Failed to resolve access for Box folder "
+                        f"{entry.folder_id} (status={box_api_status_code(error)}): "
+                        f"{error.message}"
+                    ),
+                    exception=error,
+                )
+                checkpoint.has_more = bool(checkpoint.todo)
+                return checkpoint
+
+        yield HierarchyNode(
+            raw_node_id=entry.folder_id,
+            raw_parent_id=entry.parent_folder_id,
+            display_name=entry.display_name,
+            link=f"{BOX_APP_BASE_URL}/folder/{entry.folder_id}",
             node_type=HierarchyNodeType.FOLDER,
-            external_access=(
-                folder.access.to_external_access() if folder.access else None
-            ),
+            external_access=entry.access,
         )
+        checkpoint.current = entry
+        checkpoint.current_marker = None
+        checkpoint.has_more = True
+        return checkpoint
 
     def _load_one_page(
         self,
@@ -716,41 +629,15 @@ class BoxConnector(
             return checkpoint
 
         if checkpoint.current is None:
-            if not checkpoint.todo:
-                checkpoint.has_more = False
-                return checkpoint
-            entry = checkpoint.todo.pop(0)
-            if entry.folder_id in checkpoint.seen_folder_ids:
-                # Already processed via another (overlapping) root; skip so it
-                # isn't indexed twice.
-                checkpoint.has_more = bool(checkpoint.todo)
-                return checkpoint
-            checkpoint.seen_folder_ids.add(entry.folder_id)
-            if include_permissions:
-                try:
-                    entry.access = self._resolve_folder_access(
-                        entry.folder_id, entry.access or BoxAccessContext()
-                    )
-                except BoxAPIError as e:
-                    yield ConnectorFailure(
-                        failed_entity=EntityFailure(entity_id=entry.folder_id),
-                        failure_message=(
-                            f"Failed to resolve access for Box folder "
-                            f"{entry.folder_id} (status={_box_api_status_code(e)}): {e.message}"
-                        ),
-                        exception=e,
-                    )
-                    checkpoint.has_more = bool(checkpoint.todo)
-                    return checkpoint
-            yield self._folder_hierarchy_node(entry)
-            checkpoint.current = entry
-            checkpoint.current_marker = None
-            checkpoint.has_more = True
-            return checkpoint
+            return (
+                yield from self._pick_current_from_todos(
+                    checkpoint, include_permissions
+                )
+            )
 
         entry = checkpoint.current
         try:
-            items = self.client.folders.get_folder_items(
+            items = self.content_client.folders.get_folder_items(
                 entry.folder_id,
                 fields=_ITEM_FIELDS,
                 usemarker=True,
@@ -762,7 +649,7 @@ class BoxConnector(
                 failed_entity=EntityFailure(entity_id=entry.folder_id),
                 failure_message=(
                     f"Failed to list Box folder {entry.folder_id} "
-                    f"(status={_box_api_status_code(e)}): {e.message}"
+                    f"(status={box_api_status_code(e)}): {e.message}"
                 ),
                 exception=e,
             )
@@ -920,68 +807,67 @@ class BoxConnector(
         return BoxConnectorCheckpoint.model_validate_json(checkpoint_json)
 
     def probe_group_listing_permission(self) -> None:
-        """Group sync enumerates enterprise groups and users, which requires
-        the app's 'Manage groups' / 'Manage users' scopes."""
+        """Verify the scopes required by Box permission group sync."""
         try:
             self.enterprise_client.groups.get_groups(limit=1)
             self.enterprise_client.users.get_users(limit=1)
-        except BoxAPIError as e:
-            if _box_api_status_code(e) == 403:
+        except BoxAPIError as error:
+            if box_api_status_code(error) == 403:
                 raise InsufficientPermissionsError(
                     "The Box app cannot enumerate groups/users. Permission sync "
                     "requires the 'Manage groups' and 'Manage users' application "
                     "scopes; enable them and reauthorize the app in the Box "
                     "Admin Console."
-                )
+                ) from error
             raise
 
     def validate_connector_settings(self) -> None:
-        if self._client is None:
+        if self._auth is None:
             raise ConnectorMissingCredentialError("Box")
 
         # Identity check in its own block so its failure reports a credential
         # problem, not the folder-not-found message below.
         try:
-            self.client.users.get_user_me()
+            self.content_client.users.get_user_me()
         except BoxAPIError as e:
-            status = _box_api_status_code(e)
+            status = box_api_status_code(e)
             if status in (401, 404):
                 raise CredentialExpiredError(
                     "Box credentials are invalid, or the impersonated user could "
                     f"not be authenticated (HTTP {status}). Verify the client "
                     "ID/secret, that the app is authorized in the Box Admin "
                     "Console, and that the impersonated user exists."
-                )
+                ) from e
             if status == 403:
                 raise InsufficientPermissionsError(
                     "The Box app lacks the scopes needed to authenticate (HTTP 403)."
-                )
+                ) from e
             raise UnexpectedValidationError(
                 f"Unexpected Box API error during validation (status={status}): "
                 f"{e.message}"
-            )
+            ) from e
 
         try:
             for folder_id in self.entry_folder_ids:
-                self.client.folders.get_folder_by_id(folder_id, fields=["id"])
+                self.content_client.folders.get_folder_by_id(folder_id, fields=["id"])
         except BoxAPIError as e:
-            status = _box_api_status_code(e)
+            status = box_api_status_code(e)
             if status == 403:
                 raise InsufficientPermissionsError(
                     "The Box app lacks permission to read a configured folder "
                     "(HTTP 403)."
-                )
+                ) from e
             if status == 404:
                 raise ConnectorValidationError(
                     "A configured Box folder was not found or is not visible to "
                     "the authenticated user (HTTP 404). If using the service "
                     "account (no impersonated user), it must be added as a "
                     "collaborator on the folder."
-                )
+                ) from e
             raise UnexpectedValidationError(
                 f"Unexpected Box API error during validation (status={status}): "
                 f"{e.message}"
-            )
+            ) from e
 
 
 if __name__ == "__main__":
@@ -999,10 +885,10 @@ if __name__ == "__main__":
     )
     connector.load_credentials(
         {
-            "box_client_id": environ["BOX_CLIENT_ID"],
-            "box_client_secret": environ["BOX_CLIENT_SECRET"],
-            "box_enterprise_id": environ["BOX_ENTERPRISE_ID"],
-            "box_user_email": environ.get("BOX_USER_EMAIL"),
+            BOX_CLIENT_ID_CREDENTIAL_KEY: environ["BOX_CLIENT_ID"],
+            BOX_CLIENT_SECRET_CREDENTIAL_KEY: environ["BOX_CLIENT_SECRET"],
+            BOX_ENTERPRISE_ID_CREDENTIAL_KEY: environ["BOX_ENTERPRISE_ID"],
+            BOX_USER_EMAIL_CREDENTIAL_KEY: environ.get("BOX_USER_EMAIL"),
         }
     )
 

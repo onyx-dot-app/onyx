@@ -5,8 +5,10 @@ from box_sdk_gen import BoxClient
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.connectors.box.connector import box_all_enterprise_users_group_id
+from onyx.connectors.box.connector import BOX_ENTERPRISE_ID_CREDENTIAL_KEY
 from onyx.connectors.box.connector import box_group_id
 from onyx.connectors.box.connector import BoxConnector
+from onyx.connectors.box.connector import iter_box_enterprise_users
 from onyx.connectors.box.connector import normalize_box_login
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -24,9 +26,10 @@ class BoxGroupTooLargeError(Exception):
 
 
 def _fetch_group_member_emails(client: BoxClient, group_id: str) -> set[str]:
+    # The Box group-memberships endpoint only supports offset pagination.
     emails: set[str] = set()
     offset = 0
-    while True:
+    for _ in range(_MAX_OFFSET):
         memberships = client.memberships.get_group_memberships(
             group_id=group_id, limit=_PAGE_SIZE, offset=offset
         )
@@ -43,22 +46,7 @@ def _fetch_group_member_emails(client: BoxClient, group_id: str) -> set[str]:
             # replace membership and revoke access for everyone omitted, so treat
             # it as unpageable and let the caller preserve prior membership.
             raise BoxGroupTooLargeError(group_id)
-
-
-def _fetch_all_enterprise_user_emails(client: BoxClient) -> set[str]:
-    # The users listing is marker-paginated, so it has no offset ceiling.
-    emails: set[str] = set()
-    marker: str | None = None
-    while True:
-        users = client.users.get_users(
-            fields=["login"], limit=_PAGE_SIZE, usemarker=True, marker=marker
-        )
-        for user in users.entries or []:
-            if user.login:
-                emails.add(normalize_box_login(user.login))
-        marker = users.next_marker
-        if not marker:
-            return emails
+    raise RuntimeError(f"Box group-membership pagination did not terminate: {group_id}")
 
 
 def box_group_sync(
@@ -66,17 +54,13 @@ def box_group_sync(
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
     creds = credential_json(cc_pair)
-    enterprise_id = creds["box_enterprise_id"]
+    enterprise_id = creds[BOX_ENTERPRISE_ID_CREDENTIAL_KEY]
     connector = BoxConnector(**cc_pair.connector.connector_specific_config)
-    # Group sync only uses the enterprise client; drop the impersonation email so
-    # a deactivated/renamed impersonation user can't fail the whole sync.
-    connector.load_credentials(
-        {k: v for k, v in creds.items() if k != "box_user_email"}
-    )
+    connector.load_credentials(creds)
     client = connector.enterprise_client
 
     offset = 0
-    while True:
+    for _ in range(_MAX_OFFSET):
         groups = client.groups.get_groups(limit=_PAGE_SIZE, offset=offset)
         entries = groups.entries or []
         for group in entries:
@@ -93,13 +77,6 @@ def box_group_sync(
                     _MAX_OFFSET,
                 )
                 continue
-            except Exception:
-                # Skip (don't yield) on failure: one bad group must not abort the
-                # sync, and yielding it empty would wipe its last-synced members.
-                logger.exception(
-                    "Failed to fetch members for Box group %s; skipping", group.id
-                )
-                continue
             if not member_emails:
                 logger.info("Box group %s has no members with logins", group.id)
             yield ExternalUserGroup(
@@ -111,16 +88,21 @@ def box_group_sync(
         if not entries or (total is not None and offset >= total):
             break
         if offset >= _MAX_OFFSET:
-            logger.warning(
-                "Box enterprise has more than %d groups; syncing only the first "
-                "%d (Box offset-pagination ceiling).",
-                _MAX_OFFSET,
-                offset,
+            raise RuntimeError(
+                "Box enterprise exceeds the group-listing offset ceiling "
+                f"of {_MAX_OFFSET}"
             )
-            break
+    else:
+        raise RuntimeError("Box group pagination did not terminate")
 
     # Backs "company"-scope shared links: every logged-in enterprise user.
     yield ExternalUserGroup(
         id=box_all_enterprise_users_group_id(enterprise_id),
-        user_emails=list(_fetch_all_enterprise_user_emails(client)),
+        user_emails=list(
+            {
+                normalize_box_login(user.login)
+                for user in iter_box_enterprise_users(client)
+                if user.login
+            }
+        ),
     )

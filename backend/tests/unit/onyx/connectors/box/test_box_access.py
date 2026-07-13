@@ -14,13 +14,18 @@ from box_sdk_gen.schemas.group_mini import GroupMini
 from box_sdk_gen.schemas.items import Items
 from box_sdk_gen.schemas.user_collaborations import UserCollaborations
 from box_sdk_gen.schemas.user_mini import UserMini
+from box_sdk_gen.schemas.web_link import WebLinkSharedLinkEffectiveAccessField
+from box_sdk_gen.schemas.web_link import WebLinkSharedLinkEffectivePermissionField
+from box_sdk_gen.schemas.web_link import WebLinkSharedLinkField
 
-from onyx.connectors.box.connector import apply_collaborations_to_access
-from onyx.connectors.box.connector import apply_shared_link_to_access
+from ee.onyx.external_permissions.box.access import apply_collaborations_to_access
+from ee.onyx.external_permissions.box.access import apply_shared_link_to_access
+from ee.onyx.external_permissions.box.access import BoxAccessContext
 from onyx.connectors.box.connector import BoxConnector
-from onyx.connectors.box.models import BoxAccessContext
 from onyx.connectors.models import Document
 from tests.unit.onyx.connectors.box.fake_box_client import FakeBoxClient
+
+pytestmark = pytest.mark.usefixtures("enable_ee")
 
 # Pinned spec: every Box collaboration role that can read/preview content.
 # "uploader" is the single upload-only role and must NOT grant read access.
@@ -111,25 +116,46 @@ def test_group_collaboration_maps_to_prefixed_group_id() -> None:
 
 
 _ENTERPRISE_GROUP_ID = "box-enterprise-all-users-ent42"
+_ENTERPRISE_ID = "ent42"
+
+
+def _shared_link(
+    access: WebLinkSharedLinkEffectiveAccessField,
+    is_password_enabled: bool = False,
+) -> WebLinkSharedLinkField:
+    return WebLinkSharedLinkField(
+        url="https://app.box.com/s/example",
+        effective_access=access,
+        effective_permission=WebLinkSharedLinkEffectivePermissionField.CAN_PREVIEW,
+        is_password_enabled=is_password_enabled,
+        download_count=0,
+        preview_count=0,
+    )
 
 
 def test_shared_link_open_is_public() -> None:
     access = apply_shared_link_to_access(
-        BoxAccessContext(), "open", False, _ENTERPRISE_GROUP_ID
+        BoxAccessContext(),
+        _shared_link(WebLinkSharedLinkEffectiveAccessField.OPEN),
+        _ENTERPRISE_ID,
     )
     assert access.is_public is True
 
 
 def test_shared_link_open_with_password_is_not_public() -> None:
     access = apply_shared_link_to_access(
-        BoxAccessContext(), "open", True, _ENTERPRISE_GROUP_ID
+        BoxAccessContext(),
+        _shared_link(WebLinkSharedLinkEffectiveAccessField.OPEN, True),
+        _ENTERPRISE_ID,
     )
     assert access.is_public is False
 
 
 def test_shared_link_company_maps_to_enterprise_group() -> None:
     access = apply_shared_link_to_access(
-        BoxAccessContext(), "company", False, _ENTERPRISE_GROUP_ID
+        BoxAccessContext(),
+        _shared_link(WebLinkSharedLinkEffectiveAccessField.COMPANY),
+        _ENTERPRISE_ID,
     )
     assert access.is_public is False
     assert access.group_ids == {_ENTERPRISE_GROUP_ID}
@@ -137,7 +163,9 @@ def test_shared_link_company_maps_to_enterprise_group() -> None:
 
 def test_shared_link_collaborators_grants_nothing() -> None:
     access = apply_shared_link_to_access(
-        BoxAccessContext(), "collaborators", False, _ENTERPRISE_GROUP_ID
+        BoxAccessContext(),
+        _shared_link(WebLinkSharedLinkEffectiveAccessField.COLLABORATORS),
+        _ENTERPRISE_ID,
     )
     assert access.is_public is False
     assert access.group_ids == set()
@@ -212,8 +240,9 @@ def _perm_sync_fake_client() -> FakeBoxClient:
 def test_perm_sync_traversal_inherits_ancestor_collaborations() -> None:
     fake_client = _perm_sync_fake_client()
     connector = BoxConnector(folder_ids=["100"])
-    connector._client = cast(BoxClient, fake_client)
+    connector._content_client = cast(BoxClient, fake_client)
     connector._enterprise_client = cast(BoxClient, fake_client)
+    connector._enterprise_id = "ent42"
 
     checkpoint = connector.build_dummy_checkpoint()
     documents: list[Document] = []
@@ -260,7 +289,7 @@ def test_perm_sync_traversal_inherits_ancestor_collaborations() -> None:
 def test_non_perm_sync_traversal_makes_no_permission_calls() -> None:
     fake_client = _perm_sync_fake_client()
     connector = BoxConnector(folder_ids=["100"])
-    connector._client = cast(BoxClient, fake_client)
+    connector._content_client = cast(BoxClient, fake_client)
     connector._enterprise_client = cast(BoxClient, fake_client)
 
     checkpoint = connector.build_dummy_checkpoint()

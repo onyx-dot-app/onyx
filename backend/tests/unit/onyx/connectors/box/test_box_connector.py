@@ -1,8 +1,10 @@
 from datetime import datetime
 from datetime import timezone
 from typing import cast
+from unittest.mock import MagicMock
 
 import pytest
+from box_sdk_gen import BoxCCGAuth
 from box_sdk_gen import BoxClient
 from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_full import FolderFull
@@ -14,17 +16,20 @@ from box_sdk_gen.schemas.web_link import WebLinkSharedLinkEffectiveAccessField
 from box_sdk_gen.schemas.web_link import WebLinkSharedLinkEffectivePermissionField
 from box_sdk_gen.schemas.web_link import WebLinkSharedLinkField
 
+from onyx.access.models import ExternalAccess
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.box.connector import parse_box_folder_id
-from onyx.connectors.box.models import BoxAccessContext
 from onyx.connectors.box.models import BoxFolderFrontierEntry
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from tests.unit.onyx.connectors.box.fake_box_client import FakeBoxClient
+from tests.unit.onyx.connectors.box.fake_box_client import make_box_api_error
 
 _OWNER = UserMini(id="u1", name="Alice", login="alice@example.com")
 
@@ -116,7 +121,7 @@ def _make_connector(
     connector = BoxConnector(
         folder_ids=folder_ids or ["100"], include_web_links=include_web_links
     )
-    connector._client = cast(BoxClient, fake_client)
+    connector._content_client = cast(BoxClient, fake_client)
     connector._enterprise_client = cast(BoxClient, fake_client)
     return connector
 
@@ -319,6 +324,32 @@ def test_unsupported_and_oversized_files_are_skipped() -> None:
     assert not failures
 
 
+def test_download_stops_when_stream_exceeds_size_threshold() -> None:
+    fake_client = FakeBoxClient(
+        folders_by_id={"100": FolderFull(id="100", name="Root")},
+        pages={
+            ("100", None): Items(
+                entries=[
+                    _file(
+                        "1",
+                        "underreported.txt",
+                        datetime(2024, 6, 1, tzinfo=timezone.utc),
+                        size=1,
+                    )
+                ],
+                next_marker=None,
+            )
+        },
+        file_contents={"1": b"content larger than metadata"},
+    )
+    connector = _make_connector(fake_client)
+    connector.size_threshold = 4
+
+    outputs = _run_to_completion(connector)
+
+    assert not [output for output in outputs if isinstance(output, Document)]
+
+
 def _mixed_indexability_client() -> FakeBoxClient:
     return FakeBoxClient(
         folders_by_id={"100": FolderFull(id="100", name="Root")},
@@ -371,7 +402,7 @@ def test_perm_sync_skips_root_folder_collaborations() -> None:
         file_contents={"1": b"hi"},
     )
     connector = BoxConnector()  # no folder_ids -> whole-enterprise (root "0")
-    connector._client = cast(BoxClient, fake_client)
+    connector._content_client = cast(BoxClient, fake_client)
     connector._enterprise_client = cast(BoxClient, fake_client)
     connector._enterprise_id = "ent"
 
@@ -387,6 +418,7 @@ def test_perm_sync_skips_root_folder_collaborations() -> None:
     assert "0" not in fake_client.list_collaborations.folder_collaboration_calls
 
 
+@pytest.mark.usefixtures("enable_ee")
 def test_web_link_shared_link_access_consistent_full_vs_slim() -> None:
     """The slim (perm-sync) path must apply a web link's own shared link the same
     as the full path; otherwise perm sync overwrites and revokes the link-granted
@@ -412,7 +444,7 @@ def test_web_link_shared_link_access_consistent_full_vs_slim() -> None:
         display_name="Root",
         parent_folder_id=None,
         path="Root",
-        access=BoxAccessContext(),
+        access=ExternalAccess.empty(),
     )
 
     full = connector._convert_web_link(web_link, folder, include_permissions=True)
@@ -443,6 +475,15 @@ def test_parse_box_folder_id(value: str, expected: str) -> None:
 def test_parse_box_folder_id_rejects_non_folder_url() -> None:
     with pytest.raises(ConnectorValidationError):
         parse_box_folder_id("https://app.box.com/file/123456789")
+
+    with pytest.raises(ConnectorValidationError):
+        parse_box_folder_id("https://example.com/folder/123456789")
+
+
+@pytest.mark.parametrize("value", ["", "abc123", "123-456"])
+def test_parse_box_folder_id_rejects_non_numeric_id(value: str) -> None:
+    with pytest.raises(ConnectorValidationError):
+        parse_box_folder_id(value)
 
 
 def test_normalize_url() -> None:
@@ -499,8 +540,81 @@ def test_resolve_user_id_not_found() -> None:
 
 def test_resolve_user_id_maps_403_to_insufficient_permissions() -> None:
     connector = _connector_with_users({}, users_fail_status=403)
-    with pytest.raises(InsufficientPermissionsError):
+    with pytest.raises(InsufficientPermissionsError) as exc_info:
         connector._resolve_user_id_from_email("admin@example.com")
+    assert exc_info.value.__cause__ is not None
+
+
+@pytest.mark.parametrize(
+    "status,expected_error",
+    [
+        (401, CredentialExpiredError),
+        (404, CredentialExpiredError),
+        (403, InsufficientPermissionsError),
+        (500, UnexpectedValidationError),
+    ],
+)
+def test_identity_validation_preserves_box_api_error(
+    status: int,
+    expected_error: type[Exception],
+) -> None:
+    connector = BoxConnector()
+    client = MagicMock()
+    box_error = make_box_api_error(status)
+    client.users.get_user_me.side_effect = box_error
+    connector._auth = cast(BoxCCGAuth, MagicMock())
+    connector._content_client = cast(BoxClient, client)
+
+    with pytest.raises(expected_error) as exc_info:
+        connector.validate_connector_settings()
+
+    assert exc_info.value.__cause__ is box_error
+
+
+@pytest.mark.parametrize(
+    "status,expected_error",
+    [
+        (403, InsufficientPermissionsError),
+        (404, ConnectorValidationError),
+        (500, UnexpectedValidationError),
+    ],
+)
+def test_folder_validation_preserves_box_api_error(
+    status: int,
+    expected_error: type[Exception],
+) -> None:
+    connector = BoxConnector()
+    client = MagicMock()
+    box_error = make_box_api_error(status)
+    client.folders.get_folder_by_id.side_effect = box_error
+    connector._auth = cast(BoxCCGAuth, MagicMock())
+    connector._content_client = cast(BoxClient, client)
+
+    with pytest.raises(expected_error) as exc_info:
+        connector.validate_connector_settings()
+
+    assert exc_info.value.__cause__ is box_error
+
+
+def test_load_credentials_defers_clients_and_impersonation_lookup() -> None:
+    connector = BoxConnector()
+    connector.load_credentials(
+        {
+            "box_client_id": "client",
+            "box_client_secret": "secret",
+            "box_enterprise_id": "enterprise",
+            "box_user_email": "user@example.com",
+        }
+    )
+
+    assert connector._enterprise_client is None
+    assert connector._content_client is None
+    assert connector._user_email == "user@example.com"
+
+    connector.enterprise_client
+
+    assert connector._enterprise_client is not None
+    assert connector._content_client is None
 
 
 def test_fresh_connector_resumes_from_serialized_checkpoint() -> None:

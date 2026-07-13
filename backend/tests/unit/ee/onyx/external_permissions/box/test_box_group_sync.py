@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from box_sdk_gen import BoxClient
+from box_sdk_gen.box.errors import BoxAPIError
 from box_sdk_gen.schemas.group_full import GroupFull
 from box_sdk_gen.schemas.user_mini import UserMini
 
@@ -77,10 +78,7 @@ def test_group_sync_paginates_groups_members_and_enterprise_users() -> None:
     assert enterprise == sorted(all_users)
 
 
-def test_group_sync_skips_group_whose_membership_fetch_fails() -> None:
-    # One group's membership fetch errors; the sync must skip just that group
-    # (not blank it, not abort) and still emit the healthy group + the
-    # enterprise-all-users group.
+def test_group_sync_fails_when_membership_fetch_fails() -> None:
     groups = [GroupFull(id=f"g{i}", name=f"Group {i}") for i in range(1, 3)]
     fake = FakeBoxClient(
         folders_by_id={},
@@ -92,12 +90,8 @@ def test_group_sync_skips_group_whose_membership_fetch_fails() -> None:
         page_size=2,
     )
 
-    result = _run_group_sync(fake)
-
-    assert result[box_group_id("g1")] == ["g1u@x.com"]
-    # the failing group is omitted entirely, not yielded with empty members
-    assert box_group_id("g2") not in result
-    assert box_all_enterprise_users_group_id(_ENTERPRISE_ID) in result
+    with pytest.raises(BoxAPIError, match="fake box error"):
+        _run_group_sync(fake)
 
 
 def test_group_sync_skips_group_exceeding_offset_ceiling(
