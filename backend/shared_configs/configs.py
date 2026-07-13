@@ -91,6 +91,16 @@ JSON_LOGGING = LOG_FORMAT == "json"
 # allow us to specify a custom timeout
 API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", "600"))
 
+# Timeouts for requests to the self-hosted model server (embedding / rerank /
+# intent). The connect timeout fails fast on an unreachable server; the read
+# timeout bounds silent hangs — without one, a model-server pod restarting
+# mid-request leaves the calling worker thread blocked forever inside
+# requests.post (observed wedging every docprocessing thread for hours during
+# an upgrade). Reads are generous because CPU embedding of large batches can
+# legitimately take minutes.
+MODEL_SERVER_CONNECT_TIMEOUT = int(os.environ.get("MODEL_SERVER_CONNECT_TIMEOUT", "30"))
+MODEL_SERVER_READ_TIMEOUT = int(os.environ.get("MODEL_SERVER_READ_TIMEOUT", "600"))
+
 # Local batch size for VertexAI embedding models currently calibrated for item size of 512 tokens
 # NOTE: increasing this value may lead to API errors due to token limit exhaustion per call.
 VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(

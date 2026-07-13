@@ -58,8 +58,10 @@ from onyx.utils.timing import log_function_time
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 from shared_configs.configs import INDEXING_ONLY
+from shared_configs.configs import MODEL_SERVER_CONNECT_TIMEOUT
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import MODEL_SERVER_READ_TIMEOUT
 from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
 from shared_configs.configs import SKIP_WARM_UP
 from shared_configs.configs import VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
@@ -895,6 +897,7 @@ class EmbeddingModel:
                 endpoint,
                 headers=headers,
                 json=embed_request.model_dump(),
+                timeout=(MODEL_SERVER_CONNECT_TIMEOUT, MODEL_SERVER_READ_TIMEOUT),
             )
             # signify that this is a rate limit error
             if response.status_code == 429:
@@ -1300,7 +1303,9 @@ class RerankingModel:
                 )
 
                 response = requests.post(
-                    self.rerank_server_endpoint, json=rerank_request.model_dump()
+                    self.rerank_server_endpoint,
+                    json=rerank_request.model_dump(),
+                    timeout=(MODEL_SERVER_CONNECT_TIMEOUT, MODEL_SERVER_READ_TIMEOUT),
                 )
                 response.raise_for_status()
 
@@ -1338,7 +1343,9 @@ class QueryAnalysisModel:
             provider="model_server",
         ):
             response = requests.post(
-                self.intent_server_endpoint, json=intent_request.model_dump()
+                self.intent_server_endpoint,
+                json=intent_request.model_dump(),
+                timeout=(MODEL_SERVER_CONNECT_TIMEOUT, MODEL_SERVER_READ_TIMEOUT),
             )
             response.raise_for_status()
 
