@@ -125,8 +125,11 @@ function PasswordInputTypeIn({
       // `shrinkPlaceholder` (masked-style ● placeholder), so it matches the
       // dots. Custom text placeholders stay full-size. Only while hidden, so
       // revealed text is full-size.
+      // ph-no-capture is posthog-js's native replay blockClass, so revealed
+      // secrets stay out of session replay without server-side config.
       className={cn(
         "contents",
+        "ph-no-capture",
         isHidden && "[&_input]:!text-[0.6rem]",
         isHidden && shrinkPlaceholder && "[&_input::placeholder]:!text-[0.6rem]"
       )}

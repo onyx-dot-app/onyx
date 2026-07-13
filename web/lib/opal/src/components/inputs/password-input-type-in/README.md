@@ -18,4 +18,4 @@ A native password field on `InputTypeIn` with a reveal/hide toggle. The native `
 - `isNonRevealable` disables the toggle for stored backend values that cannot be revealed. A value of all bullet characters (the backend's stored-secret placeholder) is treated as non-revealable automatically. The field stays editable for typing a replacement.
 - While masked, the field shrinks the native mask dots for tighter spacing. `shrinkPlaceholder` opts the placeholder into the same size. Intended only for masked-style all-bullet placeholders, text placeholders stay legible at full size.
 - `disabled` and `error` map onto the `InputTypeIn` chrome variants. All other `InputTypeIn` props pass through except `type`, `rightChildren`, `searchIcon`, `variant`, and `clearButton`, which the component owns.
-- Fields carry `data-ph-no-capture` so replay tooling configured to block that selector excludes them.
+- Fields carry the `ph-no-capture` class (posthog-js's native replay blockClass), keeping masked and revealed secrets out of session replay, plus `data-ph-no-capture` for selector-configured tooling.
