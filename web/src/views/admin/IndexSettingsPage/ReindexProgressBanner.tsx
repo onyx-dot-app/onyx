@@ -87,7 +87,12 @@ export default function ReindexProgressBanner({
                   )}
                 </div>
               </div>
-              <ProgressBar value={completed} max={total} color="blue" />
+              <ProgressBar
+                value={completed}
+                max={total}
+                color="blue"
+                aria-label="Re-indexing progress"
+              />
             </div>
             <div className="shrink-0">
               <Button variant="danger" prominence="primary" onClick={onCancel}>

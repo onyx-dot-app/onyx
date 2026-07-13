@@ -1061,7 +1061,10 @@ export default function IndexSettingsPage() {
 
                   {/* Inner Disabled/CloudDisabled wrappers AND !isReindexing so opal's
                       disabled opacity doesn't compound to 25% under this one. */}
-                  <Disabled disabled={isReindexing}>
+                  <Disabled
+                    disabled={isReindexing}
+                    tooltip="A re-index is in progress. Cancel it to make changes."
+                  >
                     <div className="flex w-full flex-col gap-8">
                       {/* ── Embedding Model ── */}
                       <GeneralLayouts.Section
