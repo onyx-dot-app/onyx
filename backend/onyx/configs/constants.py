@@ -201,16 +201,13 @@ CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
 
-# Chat-retention (TTL) cleanup fan-out tuning. The beat dispatcher enqueues
-# bounded batches of expired chat sessions onto the light queue instead of
-# draining the whole backlog in one long task, so deletion interleaves with the
-# other light-queue work.
+# Chat-retention (TTL) cleanup tuning. Each delete task removes the oldest
+# CHAT_TTL_DELETE_BATCH_SIZE expired sessions and chains the next task, so
+# deletion drains one batch at a time on the light queue and interleaves with
+# the other light-queue work instead of running as one long task.
 CHAT_TTL_DELETE_BATCH_SIZE = 100
-# Max queue depth before the dispatcher stops enqueuing more delete batches.
-CHAT_TTL_DELETE_MAX_QUEUE_DEPTH = 50
-# How long a queued delete batch is valid before workers discard it. Long
-# enough to absorb queue wait; the per-session guard shares this TTL so a task
-# that expires unprocessed can be re-enqueued on a later cycle.
+# How long a queued delete task is valid before workers discard it. Bounds queue
+# growth; if a task expires the beat starts a fresh chain on its next run.
 CELERY_CHAT_TTL_DELETE_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
@@ -447,8 +444,8 @@ class OnyxCeleryQueues:
     CONNECTOR_HIERARCHY_FETCHING = "connector_hierarchy_fetching"
     CSV_GENERATION = "csv_generation"
 
-    # Chat retention (TTL) hard-deletion queue. Kept off the primary "celery"
-    # queue so long backlog-cleanup runs never starve check_for_indexing.
+    # Chat retention (TTL) hard-deletion queue, consumed by the light worker.
+    # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.
     CHAT_TTL_DELETION = "chat_ttl_deletion"
 
     # User file processing queue
@@ -497,10 +494,8 @@ class OnyxRedisLocks:
     SECURITY_SETTINGS = "da_lock:security_settings"
 
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
-    # Beat-dispatcher lock: only one chat-TTL fan-out runs per tenant at a time.
+    # Beat-dispatcher lock: only one chat-TTL chain is started per tenant at a time.
     CHAT_TTL_MANAGEMENT_LOCK = "da_lock:chat_ttl_management"
-    # Per-session queued guard so an in-flight session isn't re-enqueued.
-    CHAT_TTL_QUEUED_PREFIX = "da_lock:chat_ttl_queued"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
