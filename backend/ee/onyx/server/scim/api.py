@@ -252,6 +252,17 @@ def _assign_default_groups_or_error(
     """
     try:
         assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
+    except IntegrityError:
+        # A concurrent SCIM provisioning request (e.g. an IdP batch retry) already
+        # created this user; the duplicate INSERT is deferred and surfaces here via
+        # autoflush rather than at ``add_user``. This is an expected provisioning
+        # race, not a server error — surface a clean 409 like the create path does.
+        dal.rollback()
+        logger.info(
+            "SCIM user %s already exists (concurrent provisioning); returning 409",
+            email,
+        )
+        return _scim_error_response(409, f"User with email {email} already exists")
     except Exception:
         dal.rollback()
         logger.exception("Failed to assign SCIM user %s to default groups", email)

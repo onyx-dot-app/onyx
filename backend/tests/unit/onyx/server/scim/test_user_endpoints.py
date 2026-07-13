@@ -446,6 +446,34 @@ class TestCreateUser:
         assert_scim_error(result, 409)
         mock_dal.rollback.assert_called_once()
 
+    @patch("ee.onyx.server.scim.api.assign_user_to_default_groups__no_commit")
+    @patch("ee.onyx.server.scim.api._check_seat_availability", return_value=None)
+    def test_assign_default_groups_integrity_error_returns_409(
+        self,
+        mock_seats: MagicMock,  # noqa: ARG002
+        mock_assign: MagicMock,
+        mock_db_session: MagicMock,
+        mock_token: MagicMock,
+        mock_dal: MagicMock,
+        provider: ScimProvider,
+    ) -> None:
+        """A concurrent duplicate create can surface as an IntegrityError during
+        default-group assignment (deferred autoflush) rather than at ``add_user``.
+        It must return a clean 409, not a misleading 500."""
+        mock_dal.get_user_by_email.return_value = None
+        mock_assign.side_effect = IntegrityError("dup", {}, Exception())
+
+        result = create_user(
+            user_resource=make_scim_user(),
+            _token=mock_token,
+            provider=provider,
+            db_session=mock_db_session,
+        )
+
+        assert_scim_error(result, 409)
+        mock_dal.rollback.assert_called_once()
+        mock_dal.commit.assert_not_called()
+
     @patch("ee.onyx.server.scim.api._check_seat_availability")
     def test_seat_limit_returns_403(
         self,
