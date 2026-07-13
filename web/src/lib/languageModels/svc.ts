@@ -30,6 +30,8 @@ import {
   type OpenAICompatibleModelResponse,
   type NebiusTokenfactoryFetchParams,
   type NebiusTokenfactoryModelResponse,
+  type PortkeyFetchParams,
+  type PortkeyModelResponse,
 } from "@/lib/languageModels/types";
 
 /**
@@ -604,6 +606,13 @@ export const fetchModels = async (
         provider_id: formValues.id,
         signal,
       });
+    case LLMProviderName.PORTKEY:
+      return fetchPortkeyModels({
+        api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_id: formValues.id,
+        signal,
+      });
     default:
       return { models: [], error: `Unknown provider: ${providerName}` };
   }
@@ -665,6 +674,65 @@ export const fetchNebiusTokenfactoryModels = async (
       country_code: modelData.country_code,
       requests_per_minute: modelData.requests_per_minute,
       supported_features: modelData.supported_features,
+      effectiveDisplayName: modelData.display_name || modelData.name,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
+ * Fetches models from a Portkey gateway (/v1/models). The listing endpoint is
+ * the same across Portkey's Chat Completions, Responses, and Messages surfaces.
+ */
+export const fetchPortkeyModels = async (
+  params: PortkeyFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  const apiBase = params.api_base;
+  if (!apiBase) {
+    return { models: [], error: "API Base is required" };
+  }
+
+  try {
+    const response = await fetch("/api/admin/llm/portkey/available-models", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_base: apiBase,
+        api_key: params.api_key,
+        provider_id: params.provider_id,
+      }),
+      signal: params.signal,
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch (jsonError) {
+        console.warn(
+          "Failed to parse Portkey model fetch error response",
+          jsonError
+        );
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: PortkeyModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: true,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+      supports_reasoning: modelData.supports_reasoning,
       effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
