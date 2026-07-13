@@ -77,3 +77,6 @@ export type {
   SubmitProps as AuthSubmitProps,
   SubmitLabel as AuthSubmitLabel,
 } from "@opal/layouts/auth/components";
+
+/* TagList */
+export { TagList, type TagListProps } from "@opal/layouts/tag-list/components";

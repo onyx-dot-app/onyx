@@ -1022,6 +1022,9 @@ mcpServer:
 celery_worker_docfetching:
   extraEnv: []
   replicaCount: 1
+  # Grace for the watchdog to mark its in-flight attempt INTERRUPTED and stop its
+  # subprocess on SIGTERM. Must exceed the watchdog poll interval + subprocess grace.
+  terminationGracePeriodSeconds: 60
   # Per-worker log level override. Empty (default) means use the global
   # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
   # this worker only — this becomes `--loglevel=<value>` on the celery worker

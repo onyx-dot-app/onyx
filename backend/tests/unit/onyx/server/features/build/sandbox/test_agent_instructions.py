@@ -73,6 +73,52 @@ def test_generate_agent_instructions_omits_optional_sections_when_values_absent(
     assert _unresolved_placeholders(content) == set()
 
 
+def test_generate_agent_instructions_injects_organization_instructions() -> None:
+    content = agent_instructions.generate_agent_instructions(
+        template_path=_template_path(),
+        skills_section="",
+        connectable_apps_section="",
+        organization_instructions="SENTINEL_ORG_RULE: always use the brand kit.",
+    )
+
+    assert "## Organization instructions" in content
+    assert "SENTINEL_ORG_RULE: always use the brand kit." in content
+    assert content.index("## Hard rules") < content.index(
+        "## Organization instructions"
+    )
+    assert content.index("## Organization instructions") < content.index(
+        "## Environment"
+    )
+    assert _unresolved_placeholders(content) == set()
+
+
+def test_org_instructions_containing_template_tokens_stay_literal() -> None:
+    content = agent_instructions.generate_agent_instructions(
+        template_path=_template_path(),
+        skills_section="SENTINEL_REAL_SKILLS",
+        connectable_apps_section="",
+        organization_instructions="Refer to {{AVAILABLE_SKILLS_SECTION}} above.",
+    )
+
+    assert "Refer to {{AVAILABLE_SKILLS_SECTION}} above." in content
+    assert "Refer to SENTINEL_REAL_SKILLS above." not in content
+
+
+@pytest.mark.parametrize("instructions", [None, "", "   \n  "])
+def test_generate_agent_instructions_omits_org_section_when_blank(
+    instructions: str | None,
+) -> None:
+    content = agent_instructions.generate_agent_instructions(
+        template_path=_template_path(),
+        skills_section="",
+        connectable_apps_section="",
+        organization_instructions=instructions,
+    )
+
+    assert "## Organization instructions" not in content
+    assert _unresolved_placeholders(content) == set()
+
+
 def test_build_connectable_apps_list_empty_renders_fallback() -> None:
     """No connectable apps → a fallback line, mirroring ``build_skills_section_
     from_data``'s "No skills available." (the template blurb stays either way)."""
