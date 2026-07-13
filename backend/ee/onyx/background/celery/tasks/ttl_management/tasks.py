@@ -61,7 +61,10 @@ def _release_chain_if_owned(redis_client: TenantRedisClient, chain_token: str) -
 def perform_ttl_management_task(
     self: Task,
     retention_limit_days: float,
-    chain_token: str,
+    # Defaulted for rollout compatibility: a message enqueued by the pre-upgrade
+    # code carries no chain_token. An empty token never matches the marker, so
+    # such a message harmlessly no-ops below and the beat starts a fresh chain.
+    chain_token: str = "",
     *,
     tenant_id: str,
 ) -> None:
