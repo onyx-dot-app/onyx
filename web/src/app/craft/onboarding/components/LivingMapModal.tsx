@@ -1,22 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Modal from "@/refresh-components/Modal";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgArrowLeft, SvgArrowRight } from "@opal/icons";
 import { cn } from "@opal/utils";
 import LivingMapDiagram, {
+  LIVING_MAP_DIVE_MS,
   LIVING_MAP_STAGES,
   LivingMapStageId,
 } from "@/app/craft/onboarding/components/LivingMapDiagram";
 
 // ---------------------------------------------------------------------------
-// The Living Map — an onboarding tour that teaches Craft as a system, not a
-// single build. One fixed title ("Meet Craft") spans all stages; each stage's
-// description carries the narrative. Stage 1 covers the core loop (prompt →
-// Craft in its workspace → output); later stages attach the ecosystem — apps,
-// skills, scheduled tasks, team sharing — one piece at a time, ending on the
-// complete constellation. Clicking any node jumps to its stage.
+// The Living Map tour — one fixed "Meet Craft" title, four camera framings of
+// one world. Each Next pulls the camera back and refocuses; the final CTA
+// dives back into the prompt and hands off to the real input. Clicking any
+// map node jumps to its stage.
 // ---------------------------------------------------------------------------
 
 function stageIndex(id: LivingMapStageId): number {
@@ -37,19 +37,44 @@ export default function LivingMapModal({
   open,
   onComplete,
   onDismiss = onComplete,
-  initialStage = "loop",
+  initialStage = "prompt",
 }: LivingMapModalProps) {
+  const reduceMotion = useReducedMotion() ?? false;
   const [stageIdx, setStageIdx] = useState(() => stageIndex(initialStage));
+  const [diving, setDiving] = useState(false);
+  const diveTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    if (open) setStageIdx(stageIndex(initialStage));
+    if (open) {
+      setStageIdx(stageIndex(initialStage));
+      setDiving(false);
+    }
   }, [open, initialStage]);
+
+  useEffect(
+    () => () => {
+      if (diveTimer.current !== null) window.clearTimeout(diveTimer.current);
+    },
+    []
+  );
 
   if (!open) return null;
 
   const stage = LIVING_MAP_STAGES[stageIdx]!;
   const isFirstStage = stageIdx === 0;
   const isLastStage = stageIdx === LIVING_MAP_STAGES.length - 1;
+
+  // The completion shot: dive the camera back into the prompt, then hand off
+  // to the real input.
+  function finish() {
+    if (diving) return;
+    if (reduceMotion) {
+      onComplete();
+      return;
+    }
+    setDiving(true);
+    diveTimer.current = window.setTimeout(onComplete, LIVING_MAP_DIVE_MS);
+  }
 
   return (
     <Modal open onOpenChange={(o) => !o && onDismiss()}>
@@ -62,16 +87,37 @@ export default function LivingMapModal({
       >
         {/* The X routes through Radix → onOpenChange, which owns dismissal;
             a real handler here would double-fire onDismiss. */}
-        <Modal.Header
-          title="Meet Craft"
-          description={stage.description}
-          onClose={() => {}}
-        />
+        <Modal.Header title="Meet Craft" onClose={() => {}} />
         <Modal.Body padding={1.5}>
-          <LivingMapDiagram
-            stage={stage.id}
-            onSelectStage={(id) => setStageIdx(stageIndex(id))}
-          />
+          <div className="flex w-full flex-col gap-3">
+            {/* Stage copy crossfades above a scene that never unmounts. */}
+            <div className="relative h-14">
+              <AnimatePresence initial={false}>
+                <motion.div
+                  key={stage.id}
+                  initial={reduceMotion ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={reduceMotion ? undefined : { opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 text-center"
+                >
+                  <Text font="heading-h3" color="text-05">
+                    {stage.title}
+                  </Text>
+                  <Text font="secondary-body" color="text-03">
+                    {stage.caption}
+                  </Text>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+            <LivingMapDiagram
+              stage={stage.id}
+              diving={diving}
+              onSelectStage={(id) => {
+                if (!diving) setStageIdx(stageIndex(id));
+              }}
+            />
+          </div>
         </Modal.Body>
         <Modal.Footer justifyContent="between">
           <div className="flex-1 flex justify-start">
@@ -79,6 +125,7 @@ export default function LivingMapModal({
               <Button
                 prominence="secondary"
                 icon={SvgArrowLeft}
+                disabled={diving}
                 onClick={() => setStageIdx(stageIdx - 1)}
               >
                 Back
@@ -98,7 +145,9 @@ export default function LivingMapModal({
           </div>
           <div className="flex-1 flex justify-end">
             {isLastStage ? (
-              <Button onClick={onComplete}>Put Craft to work</Button>
+              <Button disabled={diving} onClick={finish}>
+                Put Craft to work
+              </Button>
             ) : (
               <Button
                 rightIcon={SvgArrowRight}
