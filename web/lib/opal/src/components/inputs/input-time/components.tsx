@@ -62,7 +62,7 @@ function parseSegments(
     seconds: Number(seconds),
   };
   const valid = (Object.keys(SEGMENT_LIMITS) as (keyof TimeSegments)[]).every(
-    (part) => time[part] <= SEGMENT_LIMITS[part]
+    (part) => time[part] >= 0 && time[part] <= SEGMENT_LIMITS[part]
   );
   return valid ? time : null;
 }
