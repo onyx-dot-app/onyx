@@ -61,7 +61,7 @@ _PROVIDER_CUSTOM_CONFIG_KWARGS: dict[str, dict[str, str]] = {
 }
 
 # UI form state stored in custom_config; exempt from validation, env injection, and drop warnings.
-UI_ONLY_CONFIG_KEYS = frozenset({"BEDROCK_AUTH_METHOD"})
+UI_ONLY_CONFIG_KEYS = frozenset({"BEDROCK_AUTH_METHOD", "portkey_api_mode"})
 
 
 class CustomConfigMapping(BaseModel):
