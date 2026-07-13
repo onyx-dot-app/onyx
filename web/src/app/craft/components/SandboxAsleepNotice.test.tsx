@@ -118,13 +118,18 @@ describe("SandboxAsleepNotice", () => {
     expect(screen.getByText(TITLE)).toBeInTheDocument();
   });
 
-  it("dismisses on backdrop click", () => {
+  it("dismisses on backdrop click", async () => {
     seedSession(SESSION_A, sandbox());
-    const { container } = render(<SandboxAsleepNotice />);
+    render(<SandboxAsleepNotice />);
 
-    const backdrop = container.firstElementChild?.firstElementChild;
-    expect(backdrop).not.toBeNull();
-    fireEvent.click(backdrop as Element);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent.pointerDown(document.body, {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
 
     expect(screen.queryByText(TITLE)).toBeNull();
     expect(loadSession).not.toHaveBeenCalled();
