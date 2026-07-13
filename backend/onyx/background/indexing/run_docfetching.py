@@ -507,17 +507,14 @@ def connector_document_extraction(
             None,
         )
 
-        # if the last attempt failed, try and use the same window. This is necessary
-        # to ensure correctness with checkpointing. If we don't do this, things like
-        # new slack channels could be missed (since existing slack channels are
-        # cached as part of the checkpoint).
+        # if the last attempt didn't complete cleanly, reuse the same window. This
+        # is necessary to ensure correctness with checkpointing. If we don't do this,
+        # things like new slack channels could be missed (since existing slack
+        # channels are cached as part of the checkpoint).
         if (
             most_recent_attempt
             and most_recent_attempt.poll_range_end
-            and (
-                most_recent_attempt.status == IndexingStatus.FAILED
-                or most_recent_attempt.status == IndexingStatus.CANCELED
-            )
+            and most_recent_attempt.status.should_reuse_checkpoint()
         ):
             window_end = most_recent_attempt.poll_range_end
         else:
@@ -912,14 +909,12 @@ def connector_document_extraction(
 
         else:
             with get_session_with_current_tenant() as db_session_temp:
-                # don't overwrite attempts that are already failed/canceled for another reason
+                # don't overwrite an attempt already in a terminal state for
+                # another reason (e.g. INTERRUPTED by a worker shutdown)
                 index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
-                if index_attempt and index_attempt.status in [
-                    IndexingStatus.CANCELED,
-                    IndexingStatus.FAILED,
-                ]:
+                if index_attempt and index_attempt.status.is_terminal():
                     logger.info(
-                        "Attempt %s is already failed/canceled, skipping marking as failed.",
+                        "Attempt %s is already terminal, skipping marking as failed.",
                         index_attempt_id,
                     )
                     raise e

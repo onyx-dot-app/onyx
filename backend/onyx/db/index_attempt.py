@@ -478,6 +478,57 @@ def mark_attempt_failed(
         raise
 
 
+def mark_attempt_interrupted(
+    index_attempt_id: int,
+    db_session: Session,
+    reason: str = "Unknown",
+) -> None:
+    """Terminal-but-resumable: worker stopped mid-run by infrastructure, not by an
+    error. Distinct from FAILED (so it doesn't trip the repeated-error auto-pause)
+    and from CANCELED (so the UI doesn't imply a user did it)."""
+    try:
+        attempt = db_session.execute(
+            select(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+        ).scalar_one()
+
+        # Re-check under the lock: another writer (e.g. the subprocess finishing
+        # SUCCESS) may have set a terminal status between the caller's pre-check
+        # and this lock. Don't overwrite it.
+        if attempt.status.is_terminal():
+            return
+
+        if not attempt.time_started:
+            attempt.time_started = datetime.now(timezone.utc)
+        attempt.status = IndexingStatus.INTERRUPTED
+        attempt.error_msg = reason
+        attempt.celery_task_id = None
+        db_session.commit()
+
+        optional_telemetry(
+            record_type=RecordType.INDEX_ATTEMPT_STATUS,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "status": IndexingStatus.INTERRUPTED.value,
+                "cc_pair_id": attempt.connector_credential_pair_id,
+            },
+        )
+        # Stale counter keys left by a failed cleanup() are harmless: the monitor
+        # skips attempts that are already in a terminal state before reading Redis.
+        try:
+            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+        except Exception:
+            logger.debug(
+                "Failed to clean up docprocessing counters for attempt %s",
+                index_attempt_id,
+                exc_info=True,
+            )
+    except Exception:
+        db_session.rollback()
+        raise
+
+
 def update_docs_indexed(
     db_session: Session,
     index_attempt_id: int,
