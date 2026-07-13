@@ -29,13 +29,7 @@ export function InputTypeInField({
       value={field.value ?? ""}
       onChange={onChange}
       onBlur={onBlur}
-      variant={
-        isNonEditable
-          ? inputProps.variant
-          : hasError
-            ? "error"
-            : inputProps.variant
-      }
+      variant={!isNonEditable && hasError ? "error" : inputProps.variant}
     />
   );
 }

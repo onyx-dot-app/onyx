@@ -137,15 +137,12 @@ export function FormFieldDescription({ id, children }: DescriptionProps) {
 
 export function FormFieldMessage({ className, messages }: MessageProps) {
   const { baseId, state } = useFieldContext();
-  let tempState = state;
-  let content = messages?.[tempState];
   // Success with no explicit message falls back to the idle message.
-  if (tempState === "success" && !content) {
-    tempState = "idle";
-    content = messages?.idle;
-  }
+  const effectiveState =
+    state === "success" && !messages?.[state] ? "idle" : state;
+  const content = messages?.[effectiveState];
   return content ? (
-    <FieldMessage variant={tempState} className={className}>
+    <FieldMessage variant={effectiveState} className={className}>
       <FieldMessage.Content id={`${baseId}-msg`}>
         {content}
       </FieldMessage.Content>
