@@ -435,6 +435,10 @@ class OnyxCeleryQueues:
     CONNECTOR_HIERARCHY_FETCHING = "connector_hierarchy_fetching"
     CSV_GENERATION = "csv_generation"
 
+    # Chat retention (TTL) hard-deletion queue. Kept off the primary "celery"
+    # queue so long backlog-cleanup runs never starve check_for_indexing.
+    CHAT_TTL_DELETION = "chat_ttl_deletion"
+
     # User file processing queue
     USER_FILE_PROCESSING = "user_file_processing"
     USER_FILE_PROJECT_SYNC = "user_file_project_sync"
@@ -481,6 +485,7 @@ class OnyxRedisLocks:
     SECURITY_SETTINGS = "da_lock:security_settings"
 
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
+    CHAT_TTL_MANAGEMENT_LOCK = "da_lock:chat_ttl_management"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 

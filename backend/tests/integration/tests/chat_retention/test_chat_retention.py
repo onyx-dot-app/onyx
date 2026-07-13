@@ -7,13 +7,16 @@ from uuid import UUID
 
 import httpx
 import pytest
+from pytest import MonkeyPatch
 from sqlalchemy import update
 
+import ee.onyx.background.celery.tasks.ttl_management.tasks as ttl_tasks
 from onyx.db.chat import delete_chat_session
 from onyx.db.chat import get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
+from shared_configs.contextvars import get_current_tenant_id
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.test_models import DATestChatSession
@@ -178,3 +181,59 @@ def test_chat_retention_uses_last_message_time(
     assert _is_session_deleted(stale_session, admin_user), (
         "Session with no recent activity should be deleted"
     )
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Chat retention tests are enterprise only",
+)
+def test_chat_retention_batched_deletion(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """The real TTL task drains a backlog spanning multiple batches.
+
+    Forces a small batch size so several sessions require more than one batch,
+    then runs the actual Celery task to verify the drain loop deletes every old
+    session and terminates.
+    """
+
+    retention_days = 30
+    settings = DATestSettings(maximum_chat_retention_days=retention_days)
+    SettingsManager.update_settings(settings, user_performing_action=admin_user)
+
+    monkeypatch.setattr(ttl_tasks, "_TTL_DELETE_BATCH_SIZE", 2)
+
+    old_sessions: list[DATestChatSession] = []
+    for i in range(5):
+        session = ChatSessionManager.create(
+            persona_id=0,
+            description=f"Stale session {i}",
+            user_performing_action=admin_user,
+        )
+        response = ChatSessionManager.send_message(
+            chat_session_id=session.id,
+            message="This session should be cleaned up",
+            user_performing_action=admin_user,
+        )
+        assert response.error is None, (
+            f"Chat response should not have an error: {response.error}"
+        )
+        _backdate_session(session.id, created_days_ago=60, last_message_days_ago=60)
+        old_sessions.append(session)
+
+    # Run the real task (eager) so the batched drain loop + Redis lock execute.
+    result = ttl_tasks.perform_ttl_management_task.apply(
+        kwargs=dict(
+            retention_limit_days=retention_days,
+            tenant_id=get_current_tenant_id(),
+        ),
+    )
+    assert result.successful(), f"TTL task failed: {result.traceback}"
+
+    for session in old_sessions:
+        assert _is_session_deleted(session, admin_user), (
+            f"Session {session.id} should have been deleted by batched cleanup"
+        )
