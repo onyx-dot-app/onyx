@@ -222,7 +222,7 @@ export function useToastFromQuery(messages: ToastFromQueryMessages) {
       window.history.replaceState(
         null,
         "",
-        window.location.pathname + newSearch
+        window.location.pathname + newSearch + window.location.hash
       );
       const spec = messages[messageValue];
       if (spec !== undefined) {
