@@ -452,8 +452,11 @@ def _construct_tools_impl(
 
             # Extract additional MCP headers from config
             additional_mcp_headers = None
-            if custom_tool_config and custom_tool_config.mcp_headers:
-                additional_mcp_headers = custom_tool_config.mcp_headers
+            mcp_chat_session_id = None
+            if custom_tool_config:
+                if custom_tool_config.mcp_headers:
+                    additional_mcp_headers = custom_tool_config.mcp_headers
+                mcp_chat_session_id = custom_tool_config.chat_session_id
 
             mcp_tool_cache[db_tool_model.mcp_server_id] = {}
             # Find the matching tool definition
@@ -471,6 +474,8 @@ def _construct_tools_impl(
                     user_id=str(user.id),
                     user_oauth_token=mcp_user_oauth_token,
                     additional_headers=additional_mcp_headers,
+                    chat_session_id=mcp_chat_session_id,
+                    persona_id=persona.id,
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
 
