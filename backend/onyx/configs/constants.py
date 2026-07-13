@@ -201,6 +201,18 @@ CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
 
+# Chat-retention (TTL) cleanup fan-out tuning. The beat dispatcher enqueues
+# bounded batches of expired chat sessions onto the light queue instead of
+# draining the whole backlog in one long task, so deletion interleaves with the
+# other light-queue work.
+CHAT_TTL_DELETE_BATCH_SIZE = 100
+# Max queue depth before the dispatcher stops enqueuing more delete batches.
+CHAT_TTL_DELETE_MAX_QUEUE_DEPTH = 50
+# How long a queued delete batch is valid before workers discard it. Long
+# enough to absorb queue wait; the per-session guard shares this TTL so a task
+# that expires unprocessed can be re-enqueued on a later cycle.
+CELERY_CHAT_TTL_DELETE_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
+
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
 TMP_DRALPHA_PERSONA_NAME = "KG Beta"
@@ -485,7 +497,10 @@ class OnyxRedisLocks:
     SECURITY_SETTINGS = "da_lock:security_settings"
 
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
+    # Beat-dispatcher lock: only one chat-TTL fan-out runs per tenant at a time.
     CHAT_TTL_MANAGEMENT_LOCK = "da_lock:chat_ttl_management"
+    # Per-session queued guard so an in-flight session isn't re-enqueued.
+    CHAT_TTL_QUEUED_PREFIX = "da_lock:chat_ttl_queued"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 

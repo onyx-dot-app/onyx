@@ -184,59 +184,45 @@ def test_chat_retention_uses_last_message_time(
     )
 
 
+def _make_session(admin_user: DATestUser, description: str) -> DATestChatSession:
+    session = ChatSessionManager.create(
+        persona_id=0,
+        description=description,
+        user_performing_action=admin_user,
+    )
+    response = ChatSessionManager.send_message(
+        chat_session_id=session.id,
+        message="This session should be cleaned up",
+        user_performing_action=admin_user,
+    )
+    assert response.error is None, (
+        f"Chat response should not have an error: {response.error}"
+    )
+    return session
+
+
 @pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Chat retention tests are enterprise only",
 )
-def test_chat_retention_batched_deletion(
+def test_perform_ttl_deletes_batch(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
-    monkeypatch: MonkeyPatch,
 ) -> None:
-    """The real TTL task drains a backlog spanning multiple batches.
+    """The batch worker hard-deletes every session in the batch it's given."""
 
-    Forces a small batch size so several sessions require more than one batch,
-    then runs the actual Celery task to verify the drain loop deletes every old
-    session and terminates.
-    """
+    sessions = [_make_session(admin_user, f"Stale session {i}") for i in range(3)]
+    session_batch = [(str(admin_user.id), str(s.id)) for s in sessions]
 
-    retention_days = 30
-    settings = DATestSettings(maximum_chat_retention_days=retention_days)
-    SettingsManager.update_settings(settings, user_performing_action=admin_user)
-
-    monkeypatch.setattr(ttl_tasks, "_TTL_DELETE_BATCH_SIZE", 2)
-
-    old_sessions: list[DATestChatSession] = []
-    for i in range(5):
-        session = ChatSessionManager.create(
-            persona_id=0,
-            description=f"Stale session {i}",
-            user_performing_action=admin_user,
-        )
-        response = ChatSessionManager.send_message(
-            chat_session_id=session.id,
-            message="This session should be cleaned up",
-            user_performing_action=admin_user,
-        )
-        assert response.error is None, (
-            f"Chat response should not have an error: {response.error}"
-        )
-        _backdate_session(session.id, created_days_ago=60, last_message_days_ago=60)
-        old_sessions.append(session)
-
-    # Run the real task (eager) so the batched drain loop + Redis lock execute.
     result = ttl_tasks.perform_ttl_management_task.apply(
-        kwargs=dict(
-            retention_limit_days=retention_days,
-            tenant_id=get_current_tenant_id(),
-        ),
+        kwargs=dict(session_batch=session_batch, tenant_id=get_current_tenant_id()),
     )
     assert result.successful(), f"TTL task failed: {result.traceback}"
 
-    for session in old_sessions:
+    for session in sessions:
         assert _is_session_deleted(session, admin_user), (
-            f"Session {session.id} should have been deleted by batched cleanup"
+            f"Session {session.id} should have been deleted by the batch worker"
         )
 
 
@@ -244,54 +230,22 @@ def test_chat_retention_batched_deletion(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Chat retention tests are enterprise only",
 )
-def test_chat_retention_skips_failing_session(
+def test_perform_ttl_skips_failing_session_in_batch(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     monkeypatch: MonkeyPatch,
 ) -> None:
-    """A single undeletable session must not block the rest of the backlog.
+    """One undeletable session must not block the rest of its batch.
 
-    The oldest session is made to fail deletion. Because cleanup runs oldest
-    first, a naive stop-on-no-progress guard would strand every newer session
-    behind it. The failed session should be skipped and all others deleted.
+    The worker logs and continues past a failing delete, so every other session
+    in the same batch is still removed and the task itself succeeds.
     """
 
-    retention_days = 30
-    settings = DATestSettings(maximum_chat_retention_days=retention_days)
-    SettingsManager.update_settings(settings, user_performing_action=admin_user)
-
-    monkeypatch.setattr(ttl_tasks, "_TTL_DELETE_BATCH_SIZE", 2)
-
-    # Oldest session (largest last_message_days_ago) is fetched first.
-    poison_session = ChatSessionManager.create(
-        persona_id=0,
-        description="Undeletable oldest session",
-        user_performing_action=admin_user,
-    )
-    poison_response = ChatSessionManager.send_message(
-        chat_session_id=poison_session.id,
-        message="This session's deletion will fail",
-        user_performing_action=admin_user,
-    )
-    assert poison_response.error is None
-    _backdate_session(poison_session.id, created_days_ago=90, last_message_days_ago=90)
-
-    deletable_sessions: list[DATestChatSession] = []
-    for i in range(4):
-        session = ChatSessionManager.create(
-            persona_id=0,
-            description=f"Deletable session {i}",
-            user_performing_action=admin_user,
-        )
-        response = ChatSessionManager.send_message(
-            chat_session_id=session.id,
-            message="This session should be cleaned up",
-            user_performing_action=admin_user,
-        )
-        assert response.error is None
-        _backdate_session(session.id, created_days_ago=60, last_message_days_ago=60)
-        deletable_sessions.append(session)
+    poison_session = _make_session(admin_user, "Undeletable session")
+    deletable_sessions = [
+        _make_session(admin_user, f"Deletable session {i}") for i in range(3)
+    ]
 
     real_delete_chat_session = ttl_tasks.delete_chat_session
 
@@ -314,13 +268,23 @@ def test_chat_retention_skips_failing_session(
 
     monkeypatch.setattr(ttl_tasks, "delete_chat_session", _delete_or_fail)
 
+    # Poison session first in the batch, to prove later sessions still delete.
+    session_batch = [(str(admin_user.id), str(poison_session.id))] + [
+        (str(admin_user.id), str(s.id)) for s in deletable_sessions
+    ]
+
     result = ttl_tasks.perform_ttl_management_task.apply(
-        kwargs=dict(
-            retention_limit_days=retention_days,
-            tenant_id=get_current_tenant_id(),
-        ),
+        kwargs=dict(session_batch=session_batch, tenant_id=get_current_tenant_id()),
     )
     assert result.successful(), f"TTL task failed: {result.traceback}"
+
+    assert not _is_session_deleted(poison_session, admin_user), (
+        "The failing session should remain (retried on the next cycle)"
+    )
+    for session in deletable_sessions:
+        assert _is_session_deleted(session, admin_user), (
+            f"Session {session.id} should be deleted despite a failing session in the batch"
+        )
 
     assert not _is_session_deleted(poison_session, admin_user), (
         "The failing session should remain (retried on the next run)"

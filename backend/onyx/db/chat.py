@@ -1,4 +1,3 @@
-from collections.abc import Collection
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
@@ -371,10 +370,7 @@ def delete_chat_session(
 
 
 def get_chat_sessions_older_than(
-    days_old: int,
-    db_session: Session,
-    limit: int | None = None,
-    exclude_session_ids: Collection[UUID] | None = None,
+    days_old: float, db_session: Session, limit: int | None = None
 ) -> list[tuple[UUID | None, UUID]]:
     """
     Retrieves chat sessions whose last activity is older than a specified number of days.
@@ -389,9 +385,6 @@ def get_chat_sessions_older_than(
         limit: Optional cap on the number of sessions returned. When set, the
             oldest sessions are returned first so callers can drain the backlog
             in bounded batches without loading every matching row at once.
-        exclude_session_ids: Session ids to skip. Callers draining in oldest-first
-            batches use this to advance past sessions that failed to delete so a
-            few undeletable rows don't block the rest of the backlog.
 
     Returns:
         A list of tuples, where each tuple contains the user_id (can be None) and the chat_session_id of an old chat session.
@@ -407,8 +400,6 @@ def get_chat_sessions_older_than(
         .group_by(ChatSession.id, ChatSession.user_id)
         .having(last_activity < cutoff_time)
     )
-    if exclude_session_ids:
-        stmt = stmt.where(ChatSession.id.notin_(exclude_session_ids))
     if limit is not None:
         stmt = stmt.order_by(last_activity.asc()).limit(limit)
     old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
