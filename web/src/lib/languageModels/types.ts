@@ -44,6 +44,7 @@ export enum LLMProviderName {
   LITELLM_PROXY = "litellm_proxy",
   BIFROST = "bifrost",
   OPENAI_COMPATIBLE = "openai_compatible",
+  MINIMAX = "minimax",
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
   CUSTOM = "custom",
 }

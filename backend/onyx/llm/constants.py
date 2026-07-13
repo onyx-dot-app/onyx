@@ -27,6 +27,7 @@ class LlmProviderNames(str, Enum):
     LITELLM_PROXY = "litellm_proxy"
     BIFROST = "bifrost"
     OPENAI_COMPATIBLE = "openai_compatible"
+    MINIMAX = "minimax"
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
 
     def __str__(self) -> str:
@@ -49,6 +50,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.LITELLM_PROXY,
     LlmProviderNames.BIFROST,
     LlmProviderNames.OPENAI_COMPATIBLE,
+    LlmProviderNames.MINIMAX,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
 ]
 
@@ -69,6 +71,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
     LlmProviderNames.BIFROST: "Bifrost",
     LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI-Compatible",
+    LlmProviderNames.MINIMAX: "MiniMax",
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     "groq": "Groq",
     "anyscale": "Anyscale",
@@ -113,7 +116,6 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "lambda_ai": "Lambda AI",
     "llamagate": "LlamaGate",
     "meta_llama": "Meta Llama",
-    "minimax": "MiniMax",
     "nlp_cloud": "NLP Cloud",
     "nvidia_nim": "NVIDIA NIM",
     "oci": "OCI",

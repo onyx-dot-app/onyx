@@ -51,6 +51,63 @@ _TWELVE_LABS_PEGASUS_MODEL_NAMES = [
     "twelvelabs/us.twelvelabs.pegasus-1-2-v1",
 ]
 _TWELVE_LABS_PEGASUS_OUTPUT_TOKENS = max(512, GEN_AI_MODEL_FALLBACK_MAX_TOKENS // 4)
+_MINIMAX_MODEL_METADATA: dict[str, dict[str, Any]] = {
+    "MiniMax-M3": {
+        "input_cost_per_token": 0.3 / ONE_MILLION,
+        "output_cost_per_token": 1.2 / ONE_MILLION,
+        "cache_read_input_token_cost": 0.06 / ONE_MILLION,
+        "cache_creation_input_token_cost": None,
+        "input_cost_per_token_above_512k_tokens": 0.6 / ONE_MILLION,
+        "output_cost_per_token_above_512k_tokens": 2.4 / ONE_MILLION,
+        "cache_read_input_token_cost_above_512k_tokens": 0.12 / ONE_MILLION,
+        "input_cost_per_token_priority": 0.45 / ONE_MILLION,
+        "output_cost_per_token_priority": 1.8 / ONE_MILLION,
+        "cache_read_input_token_cost_priority": 0.09 / ONE_MILLION,
+        "input_cost_per_token_above_512k_tokens_priority": 0.9 / ONE_MILLION,
+        "output_cost_per_token_above_512k_tokens_priority": 3.6 / ONE_MILLION,
+        "cache_read_input_token_cost_above_512k_tokens_priority": 0.18 / ONE_MILLION,
+        "max_input_tokens": 1_000_000,
+        "max_output_tokens": 524_288,
+        "max_tokens": 524_288,
+        "litellm_provider": "minimax",
+        "mode": "chat",
+        "source": "https://platform.minimax.io/docs/api-reference/api-overview",
+        "supports_adaptive_thinking": True,
+        "supports_function_calling": True,
+        "supports_none_reasoning_effort": True,
+        "supports_prompt_caching": True,
+        "supports_reasoning": True,
+        "supports_system_messages": True,
+        "supports_tool_choice": True,
+        "supports_video_input": True,
+        "supports_vision": True,
+    },
+    "MiniMax-M2.7": {
+        "input_cost_per_token": 0.3 / ONE_MILLION,
+        "output_cost_per_token": 1.2 / ONE_MILLION,
+        "cache_read_input_token_cost": 0.06 / ONE_MILLION,
+        "cache_creation_input_token_cost": 0.375 / ONE_MILLION,
+        "max_input_tokens": 204_800,
+        "max_output_tokens": 204_800,
+        "max_tokens": 204_800,
+        "litellm_provider": "minimax",
+        "mode": "chat",
+        "source": "https://platform.minimax.io/docs/api-reference/api-overview",
+        "supports_function_calling": True,
+        "supports_none_reasoning_effort": False,
+        "supports_prompt_caching": True,
+        "supports_reasoning": True,
+        "supports_system_messages": True,
+        "supports_tool_choice": True,
+        "supports_video_input": False,
+        "supports_vision": False,
+    },
+}
+_MINIMAX_MODEL_OVERRIDES = {
+    alias: metadata
+    for model_name, metadata in _MINIMAX_MODEL_METADATA.items()
+    for alias in (model_name, f"{LlmProviderNames.MINIMAX}/{model_name}")
+}
 CUSTOM_LITELLM_MODEL_OVERRIDES: dict[str, dict[str, Any]] = {
     model_name: {
         "max_input_tokens": GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
@@ -477,6 +534,12 @@ def get_model_map() -> dict:
         if model_name in starting_map:
             continue
         starting_map[model_name] = copy.deepcopy(model_metadata)
+
+    for model_name, model_metadata in _MINIMAX_MODEL_OVERRIDES.items():
+        starting_map[model_name] = {
+            **copy.deepcopy(starting_map.get(model_name, {})),
+            **copy.deepcopy(model_metadata),
+        }
 
     # NOTE: outside of the explicit CUSTOM_LITELLM_MODEL_OVERRIDES,
     # we avoid hard-coding additional models here. Ollama, for example,
