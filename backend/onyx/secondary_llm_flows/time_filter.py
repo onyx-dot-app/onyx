@@ -1,16 +1,68 @@
+import re
 from datetime import datetime
+from datetime import time
+from datetime import timedelta
 from datetime import timezone
 
 from dateutil.parser import parse
+from dateutil.relativedelta import relativedelta
 
+from onyx.configs.constants import MessageType
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ChatCompletionMessage
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.models import UserMessage
+from onyx.prompts.filter_extration import TIME_SCOPE_DECISION_PROMPT
+from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import llm_generation_span
+from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Only the most recent user turns carry time intent; older turns add tokens and
+# stale directives. Mirrors MAX_SOURCE_FILTER_USER_TURNS in source_filter.py.
+MAX_TIME_FILTER_USER_TURNS = 5
+
+
+# An inclusive (start, end) bound on a document's last-updated date, detected
+# from the conversation. Either side may be None, meaning that bound is not
+# applied; (None, None) means search across all time.
+TimeFilter = tuple[datetime | None, datetime | None]
+
+# Matches the model's "(start, end)" output. Each side is captured as a token
+# (a date, a relative "-P<N><unit>" offset, or "None"); neither may contain a
+# comma or parenthesis.
+_TIME_FILTER_PAIR_RE = re.compile(r"\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)")
+
+# A relative offset the model emits for a plain numeric "N units ago" / "last N
+# units" phrasing, as a signed ISO-8601 duration (e.g. "-P15W" = 15 weeks before
+# today). Resolved in code so the model never does the error-prone date
+# arithmetic itself. The leading minus is optional — every offset we accept is in
+# the past. Unit: D=days, W=weeks, M=months, Y=years.
+_RELATIVE_BOUND_RE = re.compile(r"^-?\s*P\s*(\d+)\s*([DWMY])$", re.IGNORECASE)
+
+
+def _resolve_relative_bound(token: str, now: datetime) -> datetime | None:
+    """Resolve a "-P<N><unit>" ISO-8601 duration token to an absolute datetime N
+    units before `now`, or None if the token isn't a relative offset."""
+    match = _RELATIVE_BOUND_RE.match(token)
+    if match is None:
+        return None
+    amount = int(match.group(1))
+    unit = match.group(2).upper()
+    if unit == "D":
+        return now - timedelta(days=amount)
+    if unit == "W":
+        return now - timedelta(weeks=amount)
+    if unit == "M":
+        return now - relativedelta(months=amount)
+    return now - relativedelta(years=amount)
+
 
 def best_match_time(time_str: str) -> datetime | None:
-    preferred_formats = ["%m/%d/%Y", "%m-%d-%Y"]
+    preferred_formats = ["%m/%d/%Y", "%m-%d-%Y", "%Y-%m-%d"]
 
     for fmt in preferred_formats:
         try:
@@ -30,121 +82,101 @@ def best_match_time(time_str: str) -> datetime | None:
             if dt.tzinfo
             else dt.replace(tzinfo=timezone.utc)
         )
-    except ValueError:
+    except (ValueError, OverflowError):
         return None
 
 
-def extract_time_filter(query: str, llm: LLM) -> tuple[datetime | None, bool]:
-    """Returns a datetime if a hard time filter should be applied for the given query
-    Additionally returns a bool, True if more recently updated Documents should be
-    heavily favored"""
-    raise NotImplementedError("This function should not be getting called right now")
+def _parse_bound(token: str, now: datetime) -> datetime | None:
+    """Parse one side of the model's pair: a "YYYY-MM-DD" date, a relative
+    "-P<N><unit>" ISO-8601 offset (resolved against `now`), or None."""
+    token = token.strip().strip("'\"")
+    if token.lower() in ("none", "null"):
+        return None
+    relative = _resolve_relative_bound(token, now)
+    if relative is not None:
+        return relative
+    return best_match_time(token)
 
 
-#     def _get_time_filter_messages(query: str) -> list[dict[str, str]]:
-#         messages = [
-#             {
-#                 "role": "system",
-#                 "content": TIME_FILTER_PROMPT.format(
-#                     current_day_time_str=get_current_llm_day_time()
-#                 ),
-#             },
-#             {
-#                 "role": "user",
-#                 "content": "What documents in Confluence were written in the last two quarters",
-#             },
-#             {
-#                 "role": "assistant",
-#                 "content": json.dumps(
-#                     {
-#                         "filter_type": "hard cutoff",
-#                         "filter_value": "quarter",
-#                         "value_multiple": 2,
-#                     }
-#                 ),
-#             },
-#             {"role": "user", "content": "What's the latest on project Corgies?"},
-#             {
-#                 "role": "assistant",
-#                 "content": json.dumps({"filter_type": "favor recent"}),
-#             },
-#             {
-#                 "role": "user",
-#                 "content": "Which customer asked about security features in February of 2022?",
-#             },
-#             {
-#                 "role": "assistant",
-#                 "content": json.dumps(
-#                     {"filter_type": "hard cutoff", "date": "02/01/2022"}
-#                 ),
-#             },
-#             {"role": "user", "content": query},
-#         ]
-#         return messages
+def _parse_time_decision(
+    content: str | None, now: datetime | None = None
+) -> TimeFilter:
+    """Parse the model's "(start, end)" output into an inclusive (start, end)
+    window. Each side is a "YYYY-MM-DD" date, a "-P<N><unit>" relative offset,
+    or None. Returns (None, None) on anything unparseable so the caller searches
+    across all time."""
+    now = now or datetime.now(timezone.utc)
+    if not content:
+        return (None, None)
+    # Tolerates code fences / stray text some models wrap the pair in.
+    match = _TIME_FILTER_PAIR_RE.search(content)
+    if match is None:
+        logger.warning("Time filter output was not a (start, end) pair: %s", content)
+        return (None, None)
 
-#     def _extract_time_filter_from_llm_out(
-#         model_out: str,
-#     ) -> tuple[datetime | None, bool]:
-#         """Returns a datetime for a hard cutoff and a bool for if the"""
-#         try:
-#             model_json = json.loads(model_out, strict=False)
-#         except json.JSONDecodeError:
-#             return None, False
+    start = _parse_bound(match.group(1), now)
+    # The upper bound is inclusive of the whole named day, so push it to the end
+    # of that day before comparing against second-granularity document times.
+    end_day = _parse_bound(match.group(2), now)
+    end = (
+        datetime.combine(end_day.date(), time.max, tzinfo=timezone.utc)
+        if end_day
+        else None
+    )
 
-#         # If filter type is not present, just assume something has gone wrong
-#         # Potentially model has identified a date and just returned that but
-#         # better to be conservative and not identify the wrong filter.
-#         if "filter_type" not in model_json:
-#             return None, False
+    return (start, end)
 
-#         if "hard" in model_json["filter_type"] or "recent" in model_json["filter_type"]:
-#             favor_recent = "recent" in model_json["filter_type"]
 
-#             if "date" in model_json:
-#                 extracted_time = best_match_time(model_json["date"])
-#                 if extracted_time is not None:
-#                     # LLM struggles to understand the concept of not sensitive within a time range
-#                     # So if a time is extracted, just go with that alone
-#                     return extracted_time, False
+def decide_time_filter(
+    history: list[ChatMinimalTextMessage],
+    llm: LLM,
+) -> TimeFilter:
+    """Detect, in one LLM call, the time window this turn's internal search should
+    be restricted to, from the conversation.
 
-#             time_diff = None
-#             multiplier = 1.0
+    Returns an inclusive (start, end) window; either side is None to leave that
+    bound unset, and (None, None) means search across all time. Fails open to
+    (None, None) on any error. The decision is conversation-derived and stable
+    across the repeated search cycles within a turn, so the caller computes it
+    once and caches it.
+    """
+    user_turns = [
+        msg.message.strip()
+        for msg in history
+        if msg.message_type == MessageType.USER and msg.message.strip()
+    ]
+    if not user_turns:
+        return (None, None)
+    user_turns = user_turns[-MAX_TIME_FILTER_USER_TURNS:]
 
-#             if "value_multiple" in model_json:
-#                 try:
-#                     multiplier = float(model_json["value_multiple"])
-#                 except ValueError:
-#                     pass
+    last_user_query = user_turns[-1]
+    prior_turns = user_turns[:-1]
+    conversation_history = (
+        "\n".join(prior_turns)
+        if prior_turns
+        else "N/A, this is the first message in the conversation."
+    )
+    now = datetime.now(timezone.utc)
+    current_day_time_str = now.strftime("%A %B %d, %Y")
 
-#             if "filter_value" in model_json:
-#                 filter_value = model_json["filter_value"]
-#                 if "day" in filter_value:
-#                     time_diff = timedelta(days=multiplier)
-#                 elif "week" in filter_value:
-#                     time_diff = timedelta(weeks=multiplier)
-#                 elif "month" in filter_value:
-#                     # Have to just use the average here, too complicated to calculate exact day
-#                     # based on current day etc.
-#                     time_diff = timedelta(days=multiplier * 30.437)
-#                 elif "quarter" in filter_value:
-#                     time_diff = timedelta(days=multiplier * 91.25)
-#                 elif "year" in filter_value:
-#                     time_diff = timedelta(days=multiplier * 365)
+    prompt = TIME_SCOPE_DECISION_PROMPT.format(
+        current_day_time_str=current_day_time_str,
+        conversation_history=conversation_history,
+        last_user_query=last_user_query,
+    )
+    messages: list[ChatCompletionMessage] = [UserMessage(content=prompt)]
 
-#             if time_diff is not None:
-#                 current = datetime.now(timezone.utc)
-#                 # LLM struggles to understand the concept of not sensitive within a time range
-#                 # So if a time is extracted, just go with that alone
-#                 return current - time_diff, False
+    try:
+        with llm_generation_span(
+            llm=llm,
+            flow=LLMFlow.TIME_FILTER_EXTRACTION,
+            input_messages=messages,
+        ) as span_generation:
+            response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
+            record_llm_response(span_generation, response)
+            content = response.choice.message.content
+    except Exception:
+        logger.exception("Time filter decision failed; searching across all time")
+        return (None, None)
 
-#             # If we failed to extract a hard filter, just pass back the value of favor recent
-#             return None, favor_recent
-
-#         return None, False
-
-#     messages = _get_time_filter_messages(query)
-#     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
-#     model_output = message_to_string(llm.invoke_langchain(filled_llm_prompt))
-#     logger.debug(model_output)
-
-#     return _extract_time_filter_from_llm_out(model_output)
+    return _parse_time_decision(content, now)
