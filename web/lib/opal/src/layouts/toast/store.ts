@@ -212,13 +212,12 @@ interface ToastFromQueryMessages {
 export function useToastFromQuery(messages: ToastFromQueryMessages) {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
-    const messageValue = searchParams?.get("message");
+    const messageValue = searchParams.get("message");
 
     if (messageValue && messageValue in messages) {
       searchParams.delete("message");
-      const newSearch = searchParams.toString()
-        ? "?" + searchParams.toString()
-        : "";
+      const query = searchParams.toString();
+      const newSearch = query ? `?${query}` : "";
       window.history.replaceState(
         null,
         "",
