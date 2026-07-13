@@ -12,6 +12,7 @@ import requests
 from requests import JSONDecodeError
 
 from onyx.chat.emitter import Emitter
+from onyx.configs.app_configs import CUSTOM_TOOL_CALL_TIMEOUT_SECONDS
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.query_and_chat.placement import Placement
@@ -194,7 +195,11 @@ class CustomTool(Tool[None]):
         method = self._method_spec.method
 
         response = requests.request(
-            method, url, json=request_body, headers=self.headers
+            method,
+            url,
+            json=request_body,
+            headers=self.headers,
+            timeout=CUSTOM_TOOL_CALL_TIMEOUT_SECONDS,
         )
         content_type = response.headers.get("Content-Type", "")
 

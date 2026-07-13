@@ -164,7 +164,7 @@ def run_remote(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=payload, timeout=30)
 
     response.raise_for_status()
     return response.json()

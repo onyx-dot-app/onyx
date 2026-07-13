@@ -618,6 +618,7 @@ def get_tenant_by_domain_from_control_plane(
             f"{CONTROL_PLANE_API_BASE_URL}/tenant-by-domain",
             headers=headers,
             json={"domain": domain, "tenant_id": tenant_id},
+            timeout=30,
         )
 
         if response.status_code != 200:

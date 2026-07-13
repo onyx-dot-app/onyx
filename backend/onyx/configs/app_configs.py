@@ -1475,6 +1475,12 @@ MCP_TOOL_CALL_TIMEOUT_SECONDS = int(
     os.environ.get("MCP_TOOL_CALL_TIMEOUT_SECONDS") or 300
 )
 
+# Per-call timeout for custom (OpenAPI) tool actions; configurable since
+# user-defined actions can run longer than typical API calls.
+CUSTOM_TOOL_CALL_TIMEOUT_SECONDS = int(
+    os.environ.get("CUSTOM_TOOL_CALL_TIMEOUT_SECONDS") or 300
+)
+
 
 #####
 # Miscellaneous

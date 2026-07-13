@@ -34,7 +34,7 @@ def _fetch_public_key_payload() -> tuple[str | dict[str, Any], PublicKeyFormat] 
         return None
 
     try:
-        response = requests.get(JWT_PUBLIC_KEY_URL)
+        response = requests.get(JWT_PUBLIC_KEY_URL, timeout=30)
         response.raise_for_status()
     except requests.RequestException as exc:
         logger.error("Failed to fetch JWT public key: %s", str(exc))

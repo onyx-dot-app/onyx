@@ -244,7 +244,7 @@ def validate_user_files_ownership(
 
 
 def save_file_from_url(url: str) -> str:
-    response = requests.get(url)
+    response = requests.get(url, timeout=30)
     response.raise_for_status()
 
     file_io = BytesIO(response.content)

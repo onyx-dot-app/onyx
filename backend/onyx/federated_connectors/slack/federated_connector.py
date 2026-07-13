@@ -263,6 +263,7 @@ class SlackFederatedConnector(FederatedConnector):
                 "code": code,
                 "redirect_uri": redirect_uri,
             },
+            timeout=30,
         )
         response.raise_for_status()
         return response.json()

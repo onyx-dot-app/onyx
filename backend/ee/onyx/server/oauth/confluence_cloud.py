@@ -203,6 +203,7 @@ def confluence_oauth_callback(
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
+            timeout=30,
         )
 
         token_response: ConfluenceCloudOAuth.TokenResponse | None = None
@@ -286,6 +287,7 @@ def confluence_oauth_accessible_resources(
                 "Authorization": f"Bearer {access_token}",
                 "Accept": "application/json",
             },
+            timeout=30,
         )
 
         response.raise_for_status()

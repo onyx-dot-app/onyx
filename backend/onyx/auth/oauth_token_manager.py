@@ -111,7 +111,10 @@ def exchange_oauth_code_for_token(
 
     validate_oauth_endpoint_url(params.token_url)
     response = requests.post(
-        params.token_url, data=data, headers={"Accept": "application/json"}
+        params.token_url,
+        data=data,
+        headers={"Accept": "application/json"},
+        timeout=30,
     )
     response.raise_for_status()
 
@@ -185,6 +188,7 @@ class OAuthTokenManager:
             self.oauth_config.token_url,
             data=data,
             headers={"Accept": "application/json"},
+            timeout=30,
         )
         response.raise_for_status()
 

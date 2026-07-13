@@ -93,6 +93,10 @@ httpx_logger.setLevel(logging.WARNING)
 
 VESPA_SCHEMA_JINJA_FILENAME = "danswer_chunk.sd.jinja"
 
+# App-package deploys validate and activate schemas, so they run much longer
+# than regular document requests.
+VESPA_APP_DEPLOY_TIMEOUT_SECONDS = 120
+
 
 class KGVespaChunkUpdateRequest(BaseModel):
     document_id: str
@@ -274,7 +278,12 @@ def deploy_vespa_schemas(
 
     zip_file = _in_memory_zip_from_file_bytes(zip_dict)
     headers = {"Content-Type": "application/zip"}
-    response = requests.post(deploy_url, headers=headers, data=zip_file)
+    response = requests.post(
+        deploy_url,
+        headers=headers,
+        data=zip_file,
+        timeout=VESPA_APP_DEPLOY_TIMEOUT_SECONDS,
+    )
     if response.status_code != 200:
         logger.error("Failed to prepare Vespa Onyx Index. Response: %s", response.text)
         raise RuntimeError(
@@ -363,7 +372,12 @@ def register_multitenant_vespa_indices(
 
     zip_file = _in_memory_zip_from_file_bytes(zip_dict)
     headers = {"Content-Type": "application/zip"}
-    response = requests.post(deploy_url, headers=headers, data=zip_file)
+    response = requests.post(
+        deploy_url,
+        headers=headers,
+        data=zip_file,
+        timeout=VESPA_APP_DEPLOY_TIMEOUT_SECONDS,
+    )
     if response.status_code != 200:
         raise RuntimeError(
             f"Failed to prepare Vespa Onyx Indexes. Response: {response.text}"

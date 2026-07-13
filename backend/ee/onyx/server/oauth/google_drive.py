@@ -166,6 +166,7 @@ def handle_google_drive_oauth_callback(
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
+            timeout=30,
         )
 
         response.raise_for_status()
