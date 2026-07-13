@@ -20,6 +20,8 @@ interface ProgressBarProps {
   max?: number;
   /** @default "blue" */
   color?: ProgressBarColor;
+  /** Accessible label. @default "Progress" */
+  "aria-label"?: string;
   ref?: React.Ref<HTMLDivElement>;
 }
 
@@ -32,6 +34,7 @@ function ProgressBar({
   value,
   max = 100,
   color = "blue",
+  "aria-label": ariaLabel = "Progress",
   ref,
 }: ProgressBarProps) {
   const fraction = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
@@ -41,6 +44,7 @@ function ProgressBar({
       ref={ref}
       className="opal-progress-bar bg-background-tint-00"
       role="progressbar"
+      aria-label={ariaLabel}
       aria-valuenow={value}
       aria-valuemin={0}
       aria-valuemax={max}
