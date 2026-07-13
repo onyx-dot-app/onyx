@@ -86,7 +86,7 @@
     "react-dropzone": "^14.2.3",
     "react-icons": "^4.8.0",
     "react-markdown": "^9.0.1",
-    "recharts": "^2.13.1",
+    "recharts": "^3.9.2",
     "rehype-highlight": "^7.0.2",
     "rehype-katex": "^7.0.1",
     "rehype-sanitize": "^6.0.0",
