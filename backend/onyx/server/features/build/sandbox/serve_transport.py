@@ -27,6 +27,7 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheLock
 from onyx.cache.interface import CacheLockLostError
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import PROMPT_SLOT_LEASE_SECONDS
@@ -541,6 +542,7 @@ class _ServeMixin:
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
         should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream sandbox events via the in-sandbox ``opencode serve``. Preflight
         ``opencode_session_id`` via :meth:`ensure_opencode_session` to avoid
@@ -589,6 +591,11 @@ class _ServeMixin:
                     directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
+                    timeout=(
+                        turn_timeout_seconds
+                        if turn_timeout_seconds is not None
+                        else OPENCODE_PROMPT_TIMEOUT_SECONDS
+                    ),
                     should_interrupt=should_interrupt,
                 ):
                     events_count += 1

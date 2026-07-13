@@ -1,18 +1,23 @@
 import { useState } from "react";
-import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import { ValidSources, AccessType } from "@/lib/types";
-import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@/hooks/useToast";
 import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
 import { Connector } from "@/lib/connectors/connectors";
-import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
+import {
+  Credential,
+  CredentialTemplateWithAuth,
+  credentialTemplates,
+} from "@/lib/connectors/credentials";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
-import { ActionType, dictionaryType } from "../types";
-import { createValidationSchema } from "../lib";
+import type {
+  CredentialActionType,
+  CredentialFieldValues,
+} from "@/lib/credentials/types";
+import { createValidationSchema } from "@/lib/credentials/utils";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
@@ -22,7 +27,7 @@ import {
 } from "@/components/IsPublicGroupSelector";
 import { useUser } from "@/providers/UserProvider";
 import CardSection from "@/components/admin/CardSection";
-import { CredentialFieldsRenderer } from "./CredentialFieldsRenderer";
+import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import { SvgPlusCircle } from "@opal/icons";
@@ -46,9 +51,9 @@ const CreateButton = ({
   </OpalButton>
 );
 
-type formType = IsPublicGroupSelectorFormType & {
+type CreateCredentialFormValues = IsPublicGroupSelectorFormType & {
   name: string;
-  [key: string]: any; // For additional credential fields
+  [key: string]: unknown;
 };
 
 export default function CreateCredential({
@@ -94,9 +99,9 @@ export default function CreateCredential({
   const { isAdmin } = useUser();
 
   const handleSubmit = async (
-    values: formType,
-    formikHelpers: FormikHelpers<formType>,
-    action: ActionType
+    values: CreateCredentialFormValues,
+    formikHelpers: FormikHelpers<CreateCredentialFormValues>,
+    action: CredentialActionType
   ) => {
     const { setSubmitting, validateForm } = formikHelpers;
 
@@ -178,11 +183,13 @@ export default function CreateCredential({
     return <GDriveMain />;
   }
 
-  const credentialTemplate: dictionaryType = credentialTemplates[sourceType];
+  const credentialTemplate: CredentialFieldValues =
+    credentialTemplates[sourceType];
   const validationSchema = createValidationSchema(credentialTemplate);
 
   // Set initial auth method for templates with multiple auth methods
-  const templateWithAuth = credentialTemplate as any;
+  const templateWithAuth =
+    credentialTemplate as CredentialTemplateWithAuth<CredentialFieldValues>;
   const initialAuthMethod =
     templateWithAuth?.authMethods?.[0]?.value || undefined;
 
@@ -196,7 +203,7 @@ export default function CreateCredential({
           ...(initialAuthMethod && {
             authentication_method: initialAuthMethod,
           }),
-        } as formType
+        } as CreateCredentialFormValues
       }
       validationSchema={validationSchema}
       onSubmit={() => {}} // This will be overridden by our custom submit handlers
@@ -226,53 +233,40 @@ export default function CreateCredential({
                 setAuthMethod={setAuthMethod}
               />
 
-              {!swapConnector && (
-                <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
-                  <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
-                    {businessTier && (
-                      <div className="flex flex-col items-start">
-                        {isAdmin && (
-                          <AdvancedOptionsToggle
-                            showAdvancedOptions={showAdvancedOptions}
-                            setShowAdvancedOptions={setShowAdvancedOptions}
-                          />
-                        )}
-                        {(showAdvancedOptions || !isAdmin) && (
-                          <IsPublicGroupSelector
-                            formikProps={formikProps}
-                            objectName="credential"
-                            publicToWhom="Curators"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <CreateButton
-                    onClick={() =>
-                      handleSubmit(formikProps.values, formikProps, "create")
-                    }
-                    isSubmitting={formikProps.isSubmitting}
-                    isAdmin={isAdmin}
-                    groups={formikProps.values.groups}
-                  />
+              <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
+                <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
+                  {businessTier && (
+                    <div className="flex flex-col items-start">
+                      {isAdmin && (
+                        <AdvancedOptionsToggle
+                          showAdvancedOptions={showAdvancedOptions}
+                          setShowAdvancedOptions={setShowAdvancedOptions}
+                        />
+                      )}
+                      {(showAdvancedOptions || !isAdmin) && (
+                        <IsPublicGroupSelector
+                          formikProps={formikProps}
+                          objectName="credential"
+                          publicToWhom="Curators"
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
+                <CreateButton
+                  onClick={() =>
+                    handleSubmit(
+                      formikProps.values,
+                      formikProps,
+                      swapConnector ? "createAndSwap" : "create"
+                    )
+                  }
+                  isSubmitting={formikProps.isSubmitting}
+                  isAdmin={isAdmin}
+                  groups={formikProps.values.groups}
+                />
+              </div>
             </CardSection>
-            {swapConnector && (
-              // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-              <Button
-                className="bg-rose-500 hover:bg-rose-400"
-                onClick={() =>
-                  handleSubmit(formikProps.values, formikProps, "createAndSwap")
-                }
-                disabled={formikProps.isSubmitting}
-                leftIcon={() => (
-                  <FaAccusoft className="fill-text-inverted-05" />
-                )}
-              >
-                Create
-              </Button>
-            )}
           </Form>
         );
       }}

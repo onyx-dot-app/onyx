@@ -8,6 +8,7 @@ from typing import TypeAlias
 from typing import TypeVar
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import ConnectorCheckpoint
@@ -34,10 +35,14 @@ class NormalizationResult(BaseModel):
     Attributes:
         normalized_url: The normalized URL string, or None if normalization failed
         use_default: If True, fall back to default normalizer. If False, return None.
+        candidate_document_ids: Additional canonical Document.id values a single URL
+            may map to (e.g. a Google Drive file id whose type isn't encoded in the
+            pasted URL). Resolution matches whichever candidate exists in the index.
     """
 
     normalized_url: str | None
     use_default: bool = False
+    candidate_document_ids: list[str] = Field(default_factory=list)
 
 
 class BaseConnector(abc.ABC, Generic[CT]):

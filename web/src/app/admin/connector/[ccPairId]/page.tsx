@@ -6,7 +6,7 @@ import { PageLoader } from "@/refresh-components/PageLoader";
 import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
 import { toast } from "@/hooks/useToast";
-import CredentialSection from "@/components/credentials/CredentialSection";
+import CredentialSection from "@/lib/credentials/components/CredentialSection";
 import Text from "@/refresh-components/texts/Text";
 import {
   updateConnectorCredentialPairName,

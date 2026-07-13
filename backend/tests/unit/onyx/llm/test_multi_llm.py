@@ -22,6 +22,7 @@ from onyx.llm.models import FunctionCall
 from onyx.llm.models import LanguageModelInput
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolCall
+from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.models import UserMessage
 from onyx.llm.multi_llm import _parse_anthropic_model_version
 from onyx.llm.multi_llm import LitellmLLM
@@ -1776,6 +1777,78 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         assert "tool_choice" not in kwargs, (
             "tool_choice must not be sent to providers when no tools are provided"
         )
+
+
+_TOOL_CHOICE_DOWNGRADE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {"location": {"type": "string"}},
+                "required": ["location"],
+            },
+        },
+    }
+]
+
+
+@pytest.mark.parametrize(
+    "model_provider, model_name",
+    [
+        (LlmProviderNames.OPENROUTER, "qwen/qwen3.7-plus"),
+        (LlmProviderNames.ANTHROPIC, "claude-sonnet-5"),
+    ],
+)
+def test_required_tool_choice_downgraded_to_auto(
+    model_provider: str, model_name: str
+) -> None:
+    """Claude and Qwen thinking models reject/degrade required tool_choice, so
+    it must be sent to the provider as AUTO instead."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=32000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=ToolChoiceOptions.REQUIRED,
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["tool_choice"] == ToolChoiceOptions.AUTO
+
+
+def test_required_tool_choice_preserved_for_other_models(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    """Models without the thinking-mode constraint must keep required."""
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            default_multi_llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=ToolChoiceOptions.REQUIRED,
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["tool_choice"] == ToolChoiceOptions.REQUIRED
 
 
 def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:
