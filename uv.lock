@@ -721,13 +721,14 @@ wheels = [
 
 [[package]]
 name = "braintrust"
-version = "0.3.9"
+version = "0.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "chevron" },
     { name = "exceptiongroup" },
     { name = "gitpython" },
-    { name = "python-dotenv" },
+    { name = "jsonschema" },
+    { name = "packaging" },
     { name = "python-slugify" },
     { name = "requests" },
     { name = "sseclient-py" },
@@ -735,9 +736,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fb/5c/d4086bcf843a49916cefdd0379a138d9024d5fe75e6cea1e672da19cb272/braintrust-0.3.9.tar.gz", hash = "sha256:8c56ccb214bb102291968cdda67d7bf36a4b01fefc6b1998e53c272379eacab3", size = 237224, upload-time = "2025-11-25T22:20:24.368Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/26/29/ea990d46e9756ef8bd606d33c98bb21fed40c3a4b1d74be3910845d82bb0/braintrust-0.26.0.tar.gz", hash = "sha256:91148838a0ff69733daa076d7dbbfddf75aec9432d47dc924c73d529b998d470", size = 684268, upload-time = "2026-06-30T18:03:00.849Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ed/b6/e21ddf4e815c3fc845c61b5084bd4d35b882700d78ec054e9e9803aa04db/braintrust-0.3.9-py3-none-any.whl", hash = "sha256:2b903671837dea85d74e984403f154b60b77a3dde4c0bffa17121fdcb24f18d0", size = 280622, upload-time = "2025-11-25T22:20:22.553Z" },
+    { url = "https://files.pythonhosted.org/packages/71/88/e8a894fd0e3875d9295edcae3f9af57117fa5387e7eff7a0e7dd94b476c0/braintrust-0.26.0-py3-none-any.whl", hash = "sha256:c4837282aeb7de28313598e21d66614de6a0d7ef1a5dcd1bde545ff59fa9c487", size = 797723, upload-time = "2026-06-30T18:02:58.716Z" },
 ]
 
 [[package]]
@@ -4378,7 +4379,7 @@ backend = [
     { name = "azure-cognitiveservices-speech", specifier = "==1.50.0" },
     { name = "beautifulsoup4", specifier = "==4.12.3" },
     { name = "boto3", specifier = "==1.39.11" },
-    { name = "braintrust", specifier = "==0.3.9" },
+    { name = "braintrust", specifier = "==0.26.0" },
     { name = "celery", specifier = "==5.5.1" },
     { name = "chardet", specifier = "==5.2.0" },
     { name = "chonkie", specifier = "==1.0.10" },
