@@ -315,7 +315,7 @@ def get_reindex_progress(
     target = _active_port_settings(db_session)
     if target is None:
         return ReindexProgressCounts(
-            total=0, waiting=0, in_progress=0, completed=0, failed=0, paused=0
+            total=0, waiting=0, in_progress=0, completed=0, failed=0
         )
     return get_reindex_progress_counts(db_session, target.id)
 
