@@ -88,6 +88,7 @@ export default function CraftInstructionsPage() {
       toast.success("Craft instructions saved");
       return true;
     } catch (err) {
+      console.error("Failed to save Craft instructions", err);
       toast.error(
         err instanceof Error ? err.message : "Failed to save instructions"
       );

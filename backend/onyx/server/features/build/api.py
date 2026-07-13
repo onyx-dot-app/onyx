@@ -51,7 +51,11 @@ router = APIRouter(prefix="/build", dependencies=[Depends(require_onyx_craft_ena
 
 # Admin-only Craft endpoints. Deliberately NOT behind the craft-enabled-for-user
 # gate: an admin configuring Craft may not have Craft enabled for themselves.
-admin_router = APIRouter(prefix="/build/admin")
+# The router-level permission guard backstops every route added here.
+admin_router = APIRouter(
+    prefix="/build/admin",
+    dependencies=[Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS))],
+)
 admin_router.include_router(external_apps_admin_router, tags=["build"])
 
 
