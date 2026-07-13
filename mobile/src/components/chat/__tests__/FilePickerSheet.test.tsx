@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 
 import { FilePickerSheet } from "@/components/chat/FilePickerSheet";
 import { makeProjectFile } from "@/chat/__tests__/fixtures";
-import type { ProjectFile } from "@/chat/contracts/projects";
+import { UserFileStatus, type ProjectFile } from "@/chat/contracts/projects";
 
 jest.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -54,5 +54,35 @@ describe("FilePickerSheet", () => {
   it("shows an empty state when there are no recent files", () => {
     renderSheet({ recentFiles: [] });
     expect(screen.getByText("No recent files to add.")).toBeTruthy();
+  });
+
+  it("shows in-flight files with a status hint; an uploading one is not tappable", () => {
+    const props = renderSheet({
+      recentFiles: [
+        makeProjectFile({
+          id: "up",
+          name: "uploading.pdf",
+          file_id: "up",
+          status: UserFileStatus.UPLOADING,
+        }),
+        makeProjectFile({
+          id: "idx",
+          name: "indexing.pdf",
+          file_id: "idx",
+          status: UserFileStatus.INDEXING,
+        }),
+      ],
+    });
+
+    expect(screen.getByText("Uploading…")).toBeTruthy();
+    expect(screen.getByText("Indexing…")).toBeTruthy();
+
+    // No server id yet → not pickable.
+    fireEvent.press(screen.getByText("uploading.pdf"));
+    expect(props.onPickRecent).not.toHaveBeenCalled();
+
+    // Indexing (has a server id) → pickable.
+    fireEvent.press(screen.getByText("indexing.pdf"));
+    expect(props.onPickRecent).toHaveBeenCalledWith("idx");
   });
 });

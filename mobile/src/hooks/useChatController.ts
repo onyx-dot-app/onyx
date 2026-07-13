@@ -1,6 +1,6 @@
 // Send → stream → ~50ms batched flush → stop, plus hydration. runChatStream is module-scope so the stream
 // keeps writing by sessionId after the landing screen unmounts navigating into /chat/[id].
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { router } from "expo-router";
 import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -146,11 +146,14 @@ async function runChatStream(
 export interface ChatController {
   messages: ReturnType<typeof getLatestMessageChain>;
   chatState: ChatState;
-  input: string;
-  setInput: (value: string) => void;
-  // `overrideMessage` sends a specific string (e.g. a tapped starter prompt) instead of
-  // the composer's current input. `files` are the message's attachment descriptors.
-  submit: (overrideMessage?: string, files?: FileDescriptor[]) => void;
+  // `text` is the message to send (the composer text now lives in ComposerDraftContext, not
+  // here). `onAccepted` fires once, past every early return and before the session-create await,
+  // so the caller can clear the draft optimistically yet only on a committed send.
+  submit: (
+    text: string,
+    files?: FileDescriptor[],
+    onAccepted?: () => void,
+  ) => void;
   stop: () => void;
   isHydrating: boolean;
 }
@@ -165,9 +168,7 @@ export function useChatController(
   // report a new session here instead of navigating, so a host can transition in place
   onSessionCreated?: (sessionId: string) => void,
 ): ChatController {
-  const [input, setInput] = useState("");
-  // Re-entry guard. The composer path is guarded by clearing input, but the starter override
-  // skips that — without this, two rapid starter taps race through createChatSession (two sessions).
+  // Re-entry guard: without this, two rapid taps race through createChatSession (two sessions).
   const submittingRef = useRef(false);
   const serverUrl = useSession((state) => state.serverUrl);
   const queryClient = useQueryClient();
@@ -206,22 +207,27 @@ export function useChatController(
   const chatState: ChatState = sessionData?.chatState ?? "input";
 
   const submit = useCallback(
-    async (overrideMessage?: string, files?: FileDescriptor[]) => {
-      const text = (overrideMessage ?? input).trim();
+    async (
+      overrideText: string,
+      files?: FileDescriptor[],
+      onAccepted?: () => void,
+    ) => {
+      const text = overrideText.trim();
       if (!text) return;
       const fileDescriptors = files ?? [];
       if (submittingRef.current) return;
       submittingRef.current = true;
       try {
-        // A starter override leaves the composer untouched.
-        if (overrideMessage == null) setInput("");
-
         const isNewSession = sessionId == null;
         let activeId = sessionId;
         if (activeId != null) {
           const current = useChatSessionStore.getState().sessions.get(activeId);
           if (current && current.chatState !== "input") return; // a run is already active
-        } else {
+        }
+        // Committed past every synchronous early return → clear the draft optimistically (before
+        // the createChatSession await) but only on a send that will actually happen.
+        onAccepted?.();
+        if (activeId == null) {
           activeId = await createChatSession(personaId, projectId);
           // refresh the project (we've navigated away) so the new chat shows on reopen
           if (projectId != null) {
@@ -299,15 +305,7 @@ export function useChatController(
         submittingRef.current = false;
       }
     },
-    [
-      input,
-      sessionId,
-      personaId,
-      projectId,
-      onSessionCreated,
-      serverUrl,
-      queryClient,
-    ],
+    [sessionId, personaId, projectId, onSessionCreated, serverUrl, queryClient],
   );
 
   const stop = useCallback(() => {
@@ -320,8 +318,6 @@ export function useChatController(
   return {
     messages,
     chatState,
-    input,
-    setInput,
     submit,
     stop,
     isHydrating: needsHydration && hydration.isLoading,
