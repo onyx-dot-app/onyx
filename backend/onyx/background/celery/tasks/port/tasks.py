@@ -230,9 +230,9 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         if attempt is None:
             log.warning("PortAttempt not found, dropping task")
             return
-        if attempt.status.is_terminal():
+        if attempt.status.is_resting():
             log.info(
-                "PortAttempt already terminal (%s), dropping task",
+                "PortAttempt already resting (%s), dropping task",
                 attempt.status.value,
             )
             return
@@ -304,7 +304,7 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             attempt = get_port_attempt(db_session, port_attempt_id)
             if (
                 attempt is None
-                or attempt.status.is_terminal()
+                or attempt.status.is_resting()
                 or attempt.cancel_requested
             ):
                 return True
@@ -316,8 +316,8 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
         # and re-reads the row so a CANCEL or stall-FAIL committed elsewhere is seen.
         with get_session_with_current_tenant() as db_session:
             attempt = get_port_attempt(db_session, port_attempt_id)
-            if attempt is None or attempt.status.is_terminal():
-                log.info("PortAttempt gone/terminal, stopping")
+            if attempt is None or attempt.status.is_resting():
+                log.info("PortAttempt gone/resting, stopping")
                 return
             if attempt.cancel_requested:
                 # ack between batches, after our last write: this unblocks the waiting
