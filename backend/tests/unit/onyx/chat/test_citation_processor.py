@@ -832,6 +832,36 @@ def test_citation_outside_code_block_processed(
     assert "code here" in output
 
 
+def test_unlabeled_fence_does_not_corrupt_following_labeled_fence(
+    mock_search_docs: CitationMapping,  # noqa: ARG001
+) -> None:
+    """An unlabeled opening fence must not relabel a later ```lang fence that
+    lands in the same buffered segment."""
+    processor = DynamicCitationProcessor()
+
+    # First token opens a code block (odd backtick count). The second token
+    # carries both the unlabeled opening fence and a following labeled fence.
+    tokens: list[str | None] = ["```python\n", "```\nplain\n```bash\n"]
+    output, _ = process_tokens(processor, tokens)
+
+    assert "```plaintextbash" not in output
+    assert "```bash" in output
+
+
+def test_unlabeled_fence_does_not_corrupt_closing_fence(
+    mock_search_docs: CitationMapping,  # noqa: ARG001
+) -> None:
+    """An unlabeled opening fence must not turn its closing ``` into a spurious
+    second plaintext block when both live in the same buffered segment."""
+    processor = DynamicCitationProcessor()
+
+    tokens: list[str | None] = ["```python\n", "```\ncode\n```\n"]
+    output, _ = process_tokens(processor, tokens)
+
+    # Only the unlabeled opening fence should gain a plaintext label.
+    assert output.count("```plaintext") == 1
+
+
 def test_multiple_code_blocks(mock_search_docs: CitationMapping) -> None:
     """Test handling of multiple code blocks."""
     processor = DynamicCitationProcessor()
