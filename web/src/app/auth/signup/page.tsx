@@ -3,8 +3,7 @@ import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 import { redirect } from "next/navigation";
-import EmailPasswordForm from "../login/EmailPasswordForm";
-import SignInButton from "@/app/auth/login/SignInButton";
+import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
@@ -98,7 +97,7 @@ const Page = async (props: {
           )}
 
           <EmailPasswordForm
-            isSignup
+            label="create"
             shouldVerify={authTypeMetadata?.requiresVerification}
             nextUrl={nextUrl}
             defaultEmail={defaultEmail}
