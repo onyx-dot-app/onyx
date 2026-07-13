@@ -8,8 +8,10 @@ import { SvgLoader } from "@opal/icons";
 // ---------------------------------------------------------------------------
 
 // Marks render in `currentColor`, so color is applied as a text token.
-// Default is the neutral `border-02`. Pass `color` to override.
+// Default is the neutral `border-02`. Pass `color` to override, or
+// `"inherit"` to set no class and let the ambient text color flow through.
 type LoaderColor =
+  | "inherit"
   | "border-02"
   | "text-02"
   | "text-03"
@@ -20,6 +22,7 @@ type LoaderColor =
   | "status-warning-05";
 
 const COLOR_CLASS: Record<LoaderColor, string> = {
+  inherit: "",
   "border-02": "text-border-02",
   "text-02": "text-text-02",
   "text-03": "text-text-03",
