@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Button, Divider, Text } from "@opal/components";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { SvgArrowLeft, SvgPlug, SvgPlus, SvgTrash } from "@opal/icons";
 import {
@@ -20,7 +20,6 @@ import {
   deleteExternalApp,
   setExternalAppEnabled,
 } from "@/app/craft/services/externalAppsService";
-import { toast } from "@/hooks/useToast";
 
 interface ModalState {
   descriptor: BuiltInExternalAppDescriptor;

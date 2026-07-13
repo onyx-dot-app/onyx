@@ -7,7 +7,7 @@ import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 import { createCustomSkill } from "@/lib/skills/api";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import type { CustomSkill } from "@/lib/skills/types";
 
 interface UploadSkillModalProps {

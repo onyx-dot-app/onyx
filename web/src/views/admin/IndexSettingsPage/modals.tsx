@@ -7,7 +7,7 @@ import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import {
   EmbeddingModelRequest,
   EmbeddingProviderName,

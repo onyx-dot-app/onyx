@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { PageLoader } from "@/refresh-components/PageLoader";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { Content, IllustrationContent } from "@opal/layouts";
+import { Content, IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
@@ -76,7 +76,6 @@ import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useSettings } from "@/lib/settings/hooks";
 import { Settings, toSettings } from "@/lib/settings/types";
-import { toast } from "@/hooks/useToast";
 import {
   useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,

@@ -4,7 +4,7 @@ import { ValidSources, AccessType } from "@/lib/types";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
 import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
 import { Connector } from "@/lib/connectors/connectors";
 import {

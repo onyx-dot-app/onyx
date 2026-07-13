@@ -7,7 +7,7 @@ import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import { disconnectProvider } from "@/lib/webSearch/svc";
 import type { DisconnectTargetState } from "@/lib/webSearch/types";

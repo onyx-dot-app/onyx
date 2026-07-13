@@ -38,7 +38,7 @@ jest.mock("@/lib/settings/hooks", () => ({
   }),
 }));
 
-jest.mock("@/hooks/useToast", () => ({
+jest.mock("@opal/layouts/toast/store", () => ({
   toast: {
     warning: (...args: unknown[]) => mockToastWarning(...args),
     error: jest.fn(),

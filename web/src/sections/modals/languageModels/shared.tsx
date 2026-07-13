@@ -32,6 +32,7 @@ import {
   InputHorizontal,
   InputPadder,
   InputVertical,
+  toast,
 } from "@opal/layouts";
 import {
   SvgArrowExchange,
@@ -51,7 +52,6 @@ import { Card, EmptyMessageCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
-import { toast } from "@/hooks/useToast";
 import { UserRole } from "@/lib/types";
 import Modal from "@/refresh-components/Modal";
 import { getProvider } from "@/lib/languageModels";

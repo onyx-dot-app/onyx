@@ -9,9 +9,9 @@ import {
   ContentAction,
   IllustrationContent,
   SettingsLayouts,
+  toast,
 } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import { toast } from "@/hooks/useToast";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";

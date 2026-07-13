@@ -19,7 +19,7 @@ import {
 import { Popover, PopoverMenu } from "@opal/components";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Text from "@/refresh-components/texts/Text";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { useRouter } from "next/navigation";
 import {
   deleteAgent,

@@ -6,7 +6,7 @@ import { SvgUploadCloud } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import { createCustomSkill } from "@/lib/skills/api";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 interface CreatePersonalSkillModalProps {
   open: boolean;
