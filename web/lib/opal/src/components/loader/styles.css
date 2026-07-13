@@ -4,8 +4,7 @@
    OnyxLoader animation
 
    The Onyx mark rotates a full turn while crossfading between the octagon
-   outline and the diamond logo, then briefly holds before looping. Timing
-   mirrors the Onyx UI Library design:
+   outline and the diamond logo, then briefly holds before looping. Timing:
      0ms to 900ms: rotate 0deg to 180deg (ease in), outline to logo
      900ms to 1800ms: rotate 180deg to 360deg (ease out), logo to outline
      1800ms to 2000ms: hold at 360deg (equal to 0deg) before the loop resets
