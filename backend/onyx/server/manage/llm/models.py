@@ -11,9 +11,6 @@ from pydantic import Field
 from pydantic import field_validator
 
 from onyx.db.enums import LLMModelFlowType
-from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import litellm_thinks_model_supports_image_input
-from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.manage.llm.utils import DYNAMIC_LLM_PROVIDERS
 from onyx.server.manage.llm.utils import extract_vendor_from_model_name
 from onyx.server.manage.llm.utils import filter_model_configurations
@@ -242,6 +239,13 @@ class ModelConfigurationView(BaseModel):
         provider_name: str,
         use_stored_display_name: bool = False,
     ) -> "ModelConfigurationView":
+        # Imported lazily: onyx.llm.utils pulls in sqlalchemy/litellm, and this
+        # pydantic-view module must stay importable without them (e.g. the
+        # dependency-light recommended-models generator script).
+        from onyx.llm.utils import get_max_input_tokens
+        from onyx.llm.utils import litellm_thinks_model_supports_image_input
+        from onyx.llm.utils import model_is_reasoning_model
+
         # For dynamic providers (OpenRouter, Bedrock, Ollama) and custom-config
         # providers, use the display_name stored in DB. Skip LiteLLM parsing.
         if (

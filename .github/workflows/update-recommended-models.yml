@@ -55,10 +55,11 @@ jobs:
           git config user.email "${bot_user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
 
       - name: Regenerate recommended-models.json
-        # Isolated overlay instead of `uv sync`: the script only needs pydantic
-        # + httpx (pins match pyproject.toml), not the full backend dep tree.
+        # The `recommended-models` dependency group holds just pydantic + httpx,
+        # resolved from uv.lock — versions track the project lock instead of
+        # hand-pinned overlays, without installing the full backend dep tree.
         run: |
-          uv run --no-project --with pydantic==2.11.7 --with httpx==0.28.1 \
+          uv run --frozen --only-group recommended-models \
             python backend/scripts/update_recommended_models.py --write \
             --summary-file /tmp/recommended-models-summary.md
           cat /tmp/recommended-models-summary.md >> "$GITHUB_STEP_SUMMARY"
