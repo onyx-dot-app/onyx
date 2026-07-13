@@ -117,6 +117,7 @@ function InputDatePicker({
   const dayRef = React.useRef<HTMLInputElement>(null);
   const yearRef = React.useRef<HTMLInputElement>(null);
   const segmentRefs = { month: monthRef, day: dayRef, year: yearRef };
+  const popoverContentRef = React.useRef<HTMLDivElement>(null);
 
   const valueTime = value ? value.getTime() : null;
   React.useEffect(() => {
@@ -175,9 +176,13 @@ function InputDatePicker({
     };
   }
 
-  // Commit when focus leaves the whole field, not on intra-field tabbing.
+  // Commit when focus leaves the whole field. The calendar content is
+  // portaled, so containment is checked against it too or opening the
+  // popover would commit (or revert) a half-typed draft.
   function handleRootBlur(e: React.FocusEvent<HTMLDivElement>) {
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    const next = e.relatedTarget as Node | null;
+    if (e.currentTarget.contains(next)) return;
+    if (next && popoverContentRef.current?.contains(next)) return;
     commit(segments);
   }
 
@@ -263,7 +268,7 @@ function InputDatePicker({
           </div>
         </div>
 
-        <Popover.Content align="end">
+        <Popover.Content ref={popoverContentRef} align="end">
           <Calendar
             mode="single"
             selected={value ?? undefined}
