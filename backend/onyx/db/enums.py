@@ -105,6 +105,9 @@ class PortAttemptStatus(str, PyEnum):
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
     CANCELED = "CANCELED"
+    # Auto-parked failing unit; non-terminal + non-settled so it blocks the swap until
+    # the operator resumes or skips.
+    PAUSED = "PAUSED"
 
     def is_terminal(self) -> bool:
         return self in {
@@ -115,6 +118,11 @@ class PortAttemptStatus(str, PyEnum):
 
     def is_successful(self) -> bool:
         return self == PortAttemptStatus.SUCCESS
+
+    def is_resting(self) -> bool:
+        # terminal + PAUSED: the owning task must stop, else a stall-failed-then-paused
+        # worker could drive a paused attempt back to SUCCESS
+        return self.is_terminal() or self == PortAttemptStatus.PAUSED
 
 
 class IndexingMode(str, PyEnum):

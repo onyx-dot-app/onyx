@@ -229,13 +229,15 @@ class ReindexProgressCounts(BaseModel):
     in_progress: int
     completed: int
     failed: int
+    paused: int
 
 
 def get_reindex_progress_counts(
     db_session: Session, search_settings_id: int
 ) -> ReindexProgressCounts:
     """Bucket each in-scope entity (both scopes) by its latest PortAttempt. No attempt /
-    NOT_STARTED / CANCELED → waiting, so the bar never stalls above real remaining work."""
+    NOT_STARTED / CANCELED → waiting, so the bar never stalls above real remaining work.
+    PAUSED is its own bucket (operator-actionable) and is subtracted out of waiting."""
     cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
     total = len(cc_pair_ids) + len(user_ids)
 
@@ -248,32 +250,37 @@ def get_reindex_progress_counts(
     in_progress = sum(1 for s in statuses if s == PortAttemptStatus.IN_PROGRESS)
     completed = sum(1 for s in statuses if s == PortAttemptStatus.SUCCESS)
     failed = sum(1 for s in statuses if s == PortAttemptStatus.FAILED)
+    paused = sum(1 for s in statuses if s == PortAttemptStatus.PAUSED)
 
     return ReindexProgressCounts(
         total=total,
-        waiting=max(0, total - in_progress - completed - failed),
+        waiting=max(0, total - in_progress - completed - failed - paused),
         in_progress=in_progress,
         completed=completed,
         failed=failed,
+        paused=paused,
     )
 
 
 class ReindexErrorRow(BaseModel):
-    """A failed port unit for the error modal; exactly one of cc_pair_id / user_id set,
-    name = connector name or user email."""
+    """A failed or paused port unit for the error modal; exactly one of cc_pair_id /
+    user_id set, name = connector name or user email. `paused` = auto-paused
+    (Resume/Skip) vs still-auto-retrying FAILED."""
 
     scope: PortScope
     cc_pair_id: int | None
     user_id: UUID | None
     name: str
     error_msg: str | None
+    paused: bool
 
 
 def get_reindex_error_rows(
     db_session: Session, search_settings_id: int
 ) -> list[ReindexErrorRow]:
-    """In-scope entities (both scopes) whose latest port attempt is FAILED, with name +
-    error_msg. Same scope/latest-per-entity as get_reindex_progress_counts's `failed`."""
+    """In-scope entities (both scopes) whose latest port attempt is FAILED or PAUSED,
+    with name + error_msg + a `paused` flag. Same scope/latest-per-entity as
+    get_reindex_progress_counts's `failed`/`paused` buckets."""
     cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
 
     rows: list[ReindexErrorRow] = []
@@ -301,7 +308,7 @@ def get_reindex_error_rows(
                 PortAttempt.id.desc(),
             )
         ):
-            if status == PortAttemptStatus.FAILED:
+            if status in (PortAttemptStatus.FAILED, PortAttemptStatus.PAUSED):
                 rows.append(
                     ReindexErrorRow(
                         scope="connector",
@@ -309,6 +316,7 @@ def get_reindex_error_rows(
                         user_id=None,
                         name=name,
                         error_msg=error_msg,
+                        paused=status == PortAttemptStatus.PAUSED,
                     )
                 )
 
@@ -333,7 +341,7 @@ def get_reindex_error_rows(
                 PortAttempt.id.desc(),
             )
         ):
-            if status == PortAttemptStatus.FAILED:
+            if status in (PortAttemptStatus.FAILED, PortAttemptStatus.PAUSED):
                 rows.append(
                     ReindexErrorRow(
                         scope="user_file",
@@ -341,6 +349,7 @@ def get_reindex_error_rows(
                         user_id=user_id,
                         name=email,
                         error_msg=error_msg,
+                        paused=status == PortAttemptStatus.PAUSED,
                     )
                 )
 
@@ -586,13 +595,13 @@ def commit_port_cursor(
     last_processed_doc_id: str,
     docs_ported: int,
 ) -> bool:
-    """Per-batch durability point: advance the resume cursor + progress clock.
-    `docs_ported` is the cumulative count so far. Returns False without writing if
-    the attempt already terminalized under the lock (a cancel/stall-FAIL that landed
-    mid-batch) so the caller stops rather than writing behind cleanup's back."""
+    """Per-batch durability point: advance the resume cursor + progress clock. Returns
+    False without writing if the attempt is at rest under the lock (terminal, or a
+    paused row a wedged worker still holds) so it can't write behind cleanup or revive
+    a paused row."""
     try:
         attempt = _get_locked(db_session, port_attempt_id)
-        if attempt.status.is_terminal():
+        if attempt.status.is_resting():
             db_session.rollback()
             return False
         attempt.last_processed_doc_id = last_processed_doc_id
@@ -633,6 +642,28 @@ def mark_port_failed(
 
 def mark_port_canceled(db_session: Session, port_attempt_id: int) -> None:
     _mark_terminal(db_session, port_attempt_id, PortAttemptStatus.CANCELED)
+
+
+def pause_port_attempt(db_session: Session, port_attempt_id: int) -> bool:
+    """Flip a FAILED attempt to PAUSED (auto-pause); returns True if it flipped.
+
+    Acts only while the status is still FAILED, so a resume or cancel that already moved
+    the row wins (no-op). Can't reuse mark_port_* here: those go through _mark_terminal,
+    which refuses to change an already-terminal row -- and FAILED is terminal, so it would
+    silently do nothing. Leaves last_processed_doc_id (resume cursor) and error_msg (shown
+    to the operator) untouched."""
+    try:
+        attempt = _get_locked(db_session, port_attempt_id)
+        if attempt.status != PortAttemptStatus.FAILED:
+            db_session.rollback()
+            return False
+        attempt.status = PortAttemptStatus.PAUSED
+        attempt.time_completed = func.now()
+        db_session.commit()
+        return True
+    except Exception:
+        db_session.rollback()
+        raise
 
 
 def request_port_cancel(db_session: Session, port_attempt_id: int) -> None:
