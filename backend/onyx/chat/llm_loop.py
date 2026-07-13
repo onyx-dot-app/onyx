@@ -40,7 +40,7 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.utils import is_true_openai_model
+from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER
 from onyx.prompts.chat_prompts import OPEN_URL_REMINDER
 from onyx.prompts.prompt_utils import substitute_user_placeholders

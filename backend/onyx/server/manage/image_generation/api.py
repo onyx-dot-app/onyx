@@ -20,7 +20,7 @@ from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.factory import get_image_generation_provider
 from onyx.image_gen.factory import validate_credentials
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.server.manage.image_generation.models import ImageGenerationConfigCreate
 from onyx.server.manage.image_generation.models import ImageGenerationConfigUpdate
 from onyx.server.manage.image_generation.models import ImageGenerationConfigView
