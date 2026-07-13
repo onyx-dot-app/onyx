@@ -21,7 +21,7 @@ from onyx.db.llm import (
     update_default_contextual_model,
     update_no_default_contextual_rag_provider,
 )
-from onyx.db.models import IndexModelStatus, User
+from onyx.db.models import IndexModelStatus, SearchSettings, User
 from onyx.db.port_attempt import (
     ReindexErrorRow,
     ReindexProgressCounts,
@@ -297,17 +297,31 @@ def get_secondary_search_settings_endpoint(
     return SavedSearchSettings.from_db_model(secondary_search_settings)
 
 
+def _active_port_settings(db_session: Session) -> SearchSettings | None:
+    secondary = get_secondary_search_settings(db_session)
+    if secondary is not None and secondary.use_port_flow:
+        return secondary
+    present = get_current_search_settings(db_session)
+    if (
+        present.use_port_flow
+        and present.port_backfill_source_id is not None
+        and port_backfill_has_pending_work(db_session, present.id)
+    ):
+        return present
+    return None
+
+
 @router.get("/reindex-progress")
 def get_reindex_progress(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ReindexProgressCounts:
-    secondary = get_secondary_search_settings(db_session)
-    if secondary is None:
+    target = _active_port_settings(db_session)
+    if target is None:
         return ReindexProgressCounts(
             total=0, waiting=0, in_progress=0, completed=0, failed=0
         )
-    return get_reindex_progress_counts(db_session, secondary.id)
+    return get_reindex_progress_counts(db_session, target.id)
 
 
 @router.get("/reindex-errors")
@@ -315,10 +329,10 @@ def get_reindex_errors(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ReindexErrorRow]:
-    secondary = get_secondary_search_settings(db_session)
-    if secondary is None:
+    target = _active_port_settings(db_session)
+    if target is None:
         return []
-    return get_reindex_error_rows(db_session, secondary.id)
+    return get_reindex_error_rows(db_session, target.id)
 
 
 @router.get("/get-all-search-settings")
