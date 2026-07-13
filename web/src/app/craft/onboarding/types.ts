@@ -1,17 +1,12 @@
 import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 
-// Intro modal visibility
-export type OnboardingModalMode =
-  | { type: "initial-onboarding" } // First-visit intro
-  | { type: "closed" }; // Modal not visible
-
 export interface OnboardingModalController {
-  mode: OnboardingModalMode;
-  isOpen: boolean;
-
-  // Intro actions
-  close: () => void;
-  completeOnboarding: () => Promise<void>;
+  // Intro tour
+  introOpen: boolean;
+  /** Explicit finish (final CTA): marks seen, tracks completion, closes. */
+  completeOnboarding: () => void;
+  /** Bail-out (Escape / X): marks seen and closes without tracking. */
+  dismissOnboarding: () => void;
 
   // Shared provider-setup modal (any well-known provider type)
   activeProviderKey: string | null;
