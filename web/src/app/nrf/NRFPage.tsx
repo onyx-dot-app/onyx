@@ -634,10 +634,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <Modal.Content width="sm" height="sm">
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
-              {authTypeMetadata.authType === AuthType.BASIC ? (
+              {authTypeMetadata?.authType === AuthType.BASIC ? (
                 <LoginPage
                   authUrl={null}
-                  authTypeMetadata={authTypeMetadata}
+                  authTypeMetadata={authTypeMetadata ?? null}
                   nextUrl="/nrf"
                 />
               ) : (

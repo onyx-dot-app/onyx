@@ -21,6 +21,11 @@ export interface AuthTypeMetadata {
   requiresVerification: boolean;
   anonymousUserEnabled: boolean | null;
   passwordMinLength: number;
+  passwordMaxLength: number;
+  passwordRequireUppercase: boolean;
+  passwordRequireLowercase: boolean;
+  passwordRequireDigit: boolean;
+  passwordRequireSpecialChar: boolean;
   hasUsers: boolean;
   oauthEnabled: boolean;
   // DB-backed SSO providers, one login button each. Absent on the client-hook

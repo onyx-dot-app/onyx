@@ -67,6 +67,11 @@ class AuthTypeResponse(BaseModel):
     requires_verification: bool
     anonymous_user_enabled: bool | None = None
     password_min_length: int
+    password_max_length: int
+    password_require_uppercase: bool = False
+    password_require_lowercase: bool = False
+    password_require_digit: bool = False
+    password_require_special_char: bool = False
     # whether there are any users in the system
     has_users: bool = True
     oauth_enabled: bool = False

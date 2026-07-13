@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
-import { useAuthType } from "@/lib/hooks";
+import { useAuthType } from "@/lib/auth/hooks";
 import { AuthType } from "@/lib/auth/types";
 import { AccountsAccessSettings } from "@/views/SettingsPage";
 
