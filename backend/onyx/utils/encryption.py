@@ -196,6 +196,61 @@ def _mask_list(items: list[Any]) -> list[Any]:
     return masked
 
 
+def _restore_masked_value(incoming: Any, stored: Any, masked_stored: Any) -> Any:
+    if (
+        isinstance(incoming, dict)
+        and isinstance(stored, dict)
+        and isinstance(masked_stored, dict)
+    ):
+        restored = dict(incoming)
+        for key, value in incoming.items():
+            if key not in stored or key not in masked_stored:
+                continue
+            restored[key] = _restore_masked_value(
+                value, stored[key], masked_stored[key]
+            )
+        return restored
+
+    if (
+        isinstance(incoming, list)
+        and isinstance(stored, list)
+        and isinstance(masked_stored, list)
+    ):
+        restored_list = list(incoming)
+        for index, value in enumerate(incoming):
+            if index >= len(stored) or index >= len(masked_stored):
+                continue
+            restored_list[index] = _restore_masked_value(
+                value,
+                stored[index],
+                masked_stored[index],
+            )
+        return restored_list
+
+    if incoming == masked_stored:
+        return stored
+
+    return incoming
+
+
+def restore_masked_credentials(
+    incoming: dict[str, Any], stored: dict[str, Any]
+) -> dict[str, Any]:
+    """Inverse of ``mask_credential_dict`` for edit round-trips: any incoming
+    value that equals the masked form of the stored value is replaced with the
+    stored value, recursing through nested dicts and lists. Values the caller
+    changed pass through untouched.
+    """
+    restored = _restore_masked_value(
+        incoming,
+        stored,
+        mask_credential_dict(stored),
+    )
+    if not isinstance(restored, dict):
+        return incoming
+    return restored
+
+
 def encrypt_string_to_bytes(intput_str: str, key: str | None = None) -> bytes:
     versioned_encryption_fn = fetch_versioned_implementation(
         "onyx.utils.encryption", "_encrypt_string"

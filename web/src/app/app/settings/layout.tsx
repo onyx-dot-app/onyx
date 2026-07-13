@@ -7,7 +7,7 @@ import { SidebarTab, Text } from "@opal/components";
 import { SvgSliders } from "@opal/icons";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useUser } from "@/providers/UserProvider";
-import { useAuthType } from "@/lib/hooks";
+import { useAuthType } from "@/lib/auth/hooks";
 import { Section } from "@/layouts/general-layouts";
 
 interface LayoutProps {

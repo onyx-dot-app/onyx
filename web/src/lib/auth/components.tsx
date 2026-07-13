@@ -185,6 +185,73 @@ export function SignInButton({ authorizeUrl, authType }: SignInButtonProps) {
 }
 
 // ---------------------------------------------------------------------------
+// PasswordRequirements
+// ---------------------------------------------------------------------------
+
+interface PasswordRequirementsProps {
+  password: string;
+}
+
+export function PasswordRequirements({ password }: PasswordRequirementsProps) {
+  const { authTypeMetadata } = useUser();
+
+  if (!authTypeMetadata) return null;
+
+  const {
+    passwordMinLength,
+    passwordMaxLength,
+    passwordRequireUppercase,
+    passwordRequireLowercase,
+    passwordRequireDigit,
+    passwordRequireSpecialChar,
+  } = authTypeMetadata;
+
+  const rules = (
+    [
+      {
+        label: `${passwordMinLength}–${passwordMaxLength} characters`,
+        met: passwordMeetsLengthRequirements(
+          password,
+          passwordMinLength,
+          passwordMaxLength
+        ),
+      },
+      passwordRequireUppercase && {
+        label: "Contains uppercase letter.",
+        met: passwordHasUppercase(password),
+      },
+      passwordRequireLowercase && {
+        label: "Contains lowercase letter.",
+        met: passwordHasLowercase(password),
+      },
+      passwordRequireDigit && {
+        label: "Contains number.",
+        met: passwordHasDigit(password),
+      },
+      passwordRequireSpecialChar && {
+        label: "Contains special character.",
+        met: passwordHasSpecialChar(password),
+      },
+    ] as const
+  ).filter((r): r is { label: string; met: boolean } => Boolean(r));
+
+  return (
+    <div className="flex flex-col gap-1">
+      {rules.map((rule) => (
+        <Content
+          key={rule.label}
+          sizePreset="secondary"
+          variant="body"
+          icon={rule.met ? SvgCheckCircle : SvgXCircle}
+          color={rule.met ? "success" : "muted"}
+          title={rule.label}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // EmailPasswordForm
 // ---------------------------------------------------------------------------
 
@@ -211,55 +278,38 @@ export function EmailPasswordForm({
   const isSignup = label !== "submit";
   const isJoin = label === "join";
 
-  const {
-    user,
-    authTypeMetadata: {
-      passwordMaxLength,
-      passwordMinLength,
-      passwordRequireDigit,
-      passwordRequireLowercase,
-      passwordRequireSpecialChar,
-      passwordRequireUppercase,
-    },
-  } = useUser();
+  const { user, authTypeMetadata } = useUser();
   const { getCaptchaToken } = useCaptcha();
 
-  const initialValues: FormValues = {
-    email: defaultEmail?.toLowerCase() ?? "",
-    password: "",
-  };
-
   const validationSchema = useMemo(() => {
+    const minLength = authTypeMetadata?.passwordMinLength ?? 0;
+    const maxLength = authTypeMetadata?.passwordMaxLength ?? Infinity;
+
     let passwordSchema = Yup.string().test(
       "length",
-      `Password must be between ${passwordMinLength}-${passwordMaxLength} characters`,
-      (v) =>
-        passwordMeetsLengthRequirements(
-          v ?? "",
-          passwordMinLength,
-          passwordMaxLength
-        )
+      `Password must be between ${minLength}–${maxLength} characters`,
+      (v) => passwordMeetsLengthRequirements(v ?? "", minLength, maxLength)
     );
 
-    if (passwordRequireUppercase)
+    if (authTypeMetadata?.passwordRequireUppercase)
       passwordSchema = passwordSchema.test(
         "uppercase",
         "Password must contain at least one uppercase letter",
         (v) => passwordHasUppercase(v ?? "")
       );
-    if (passwordRequireLowercase)
+    if (authTypeMetadata?.passwordRequireLowercase)
       passwordSchema = passwordSchema.test(
         "lowercase",
         "Password must contain at least one lowercase letter",
         (v) => passwordHasLowercase(v ?? "")
       );
-    if (passwordRequireDigit)
+    if (authTypeMetadata?.passwordRequireDigit)
       passwordSchema = passwordSchema.test(
         "digit",
         "Password must contain at least one number",
         (v) => passwordHasDigit(v ?? "")
       );
-    if (passwordRequireSpecialChar)
+    if (authTypeMetadata?.passwordRequireSpecialChar)
       passwordSchema = passwordSchema.test(
         "special-char",
         "Password must contain at least one special character",
@@ -273,14 +323,12 @@ export function EmailPasswordForm({
         .transform((value: string) => value.toLowerCase()),
       password: passwordSchema.required(),
     });
-  }, [
-    passwordMinLength,
-    passwordMaxLength,
-    passwordRequireUppercase,
-    passwordRequireLowercase,
-    passwordRequireDigit,
-    passwordRequireSpecialChar,
-  ]);
+  }, [authTypeMetadata]);
+
+  const initialValues: FormValues = {
+    email: defaultEmail?.toLowerCase() ?? "",
+    password: "",
+  };
 
   async function handleSubmit(values: FormValues) {
     const email = values.email.toLowerCase();
@@ -295,7 +343,7 @@ export function EmailPasswordForm({
       );
 
       if (!response.ok) {
-        const errorBody: any = await response.json();
+        const errorBody: any = await response.json().catch(() => ({}));
         const errorDetail = errorBody.detail;
         let errorMsg = "Unknown error";
         if (response.status === 429) {
@@ -308,6 +356,20 @@ export function EmailPasswordForm({
         toast.error(errorMsg);
         return;
       }
+
+      // On verification-required deployments the server blocks login until the
+      // email is confirmed, so we must NOT call basicLogin first — it would
+      // fail and leave the user stranded even though the account was created.
+      if (shouldVerify) {
+        try {
+          await requestEmailVerification(email);
+        } catch (e) {
+          // Best-effort: the account already exists, so redirect regardless.
+          console.warn("requestEmailVerification failed:", e);
+        }
+        window.location.href = "/auth/waiting-on-verification";
+        return;
+      }
     }
 
     const loginCaptchaToken = await getCaptchaToken("login");
@@ -318,17 +380,13 @@ export function EmailPasswordForm({
     );
 
     if (loginResponse.ok) {
-      if (isSignup && shouldVerify) {
-        await requestEmailVerification(email);
-        window.location.href = "/auth/send-email-verification";
-      } else {
-        const validatedNextUrl = validateInternalRedirect(nextUrl);
-        window.location.href =
-          validatedNextUrl ??
-          `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
-      }
+      const validatedNextUrl = validateInternalRedirect(nextUrl);
+      window.location.href =
+        validatedNextUrl ??
+        `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
     } else {
-      const errorDetail: any = (await loginResponse.json()).detail;
+      const errorBody: any = await loginResponse.json().catch(() => ({}));
+      const errorDetail = errorBody.detail;
       let errorMsg = "Unknown error";
       if (loginResponse.status === 429) {
         errorMsg = "Too many requests. Please try again later.";
@@ -346,6 +404,7 @@ export function EmailPasswordForm({
   return (
     <Formik
       initialValues={initialValues}
+      enableReinitialize
       validateOnChange={true}
       validateOnBlur={true}
       validationSchema={validationSchema}
@@ -400,7 +459,7 @@ export function EmailPasswordForm({
             <AuthLayouts.Submit
               label={label}
               isSubmitting={isSubmitting}
-              isValid={isValid}
+              isValid={isValid && (!isSignup || Boolean(authTypeMetadata))}
               dirty={dirty}
             />
 
@@ -418,70 +477,5 @@ export function EmailPasswordForm({
         );
       }}
     </Formik>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// PasswordRequirements
-// ---------------------------------------------------------------------------
-
-interface PasswordRequirementsProps {
-  password: string;
-}
-
-export function PasswordRequirements({ password }: PasswordRequirementsProps) {
-  const {
-    authTypeMetadata: {
-      passwordMinLength,
-      passwordMaxLength,
-      passwordRequireUppercase,
-      passwordRequireLowercase,
-      passwordRequireDigit,
-      passwordRequireSpecialChar,
-    },
-  } = useUser();
-
-  const rules = (
-    [
-      {
-        label: `${passwordMinLength}~${passwordMaxLength} characters`,
-        met: passwordMeetsLengthRequirements(
-          password,
-          passwordMinLength,
-          passwordMaxLength
-        ),
-      },
-      passwordRequireUppercase && {
-        label: "Contains uppercase letter.",
-        met: passwordHasUppercase(password),
-      },
-      passwordRequireLowercase && {
-        label: "Contains lowercase letter.",
-        met: passwordHasLowercase(password),
-      },
-      passwordRequireDigit && {
-        label: "Contains number.",
-        met: passwordHasDigit(password),
-      },
-      passwordRequireSpecialChar && {
-        label: "Contains special character.",
-        met: passwordHasSpecialChar(password),
-      },
-    ] as const
-  ).filter((r): r is { label: string; met: boolean } => Boolean(r));
-
-  return (
-    <div className="flex flex-col gap-1">
-      {rules.map((rule) => (
-        <Content
-          key={rule.label}
-          sizePreset="secondary"
-          variant="body"
-          icon={rule.met ? SvgCheckCircle : SvgXCircle}
-          color={rule.met ? "success" : "muted"}
-          title={rule.label}
-        />
-      ))}
-    </div>
   );
 }

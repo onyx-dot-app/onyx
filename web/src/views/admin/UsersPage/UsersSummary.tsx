@@ -112,8 +112,8 @@ export default function UsersSummary({
   const { authTypeMetadata } = useAuthTypeMetadata();
   const showInviteOnly =
     !showScim &&
-    (authTypeMetadata.authType === AuthType.BASIC ||
-      authTypeMetadata.authType === AuthType.GOOGLE_OAUTH);
+    (authTypeMetadata?.authType === AuthType.BASIC ||
+      authTypeMetadata?.authType === AuthType.GOOGLE_OAUTH);
   const showRequests = requests !== null && requests > 0;
 
   const statsCard = (

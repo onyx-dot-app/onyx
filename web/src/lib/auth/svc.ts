@@ -1,3 +1,48 @@
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+
+interface AuthTypeAPIResponse {
+  auth_type: string;
+  requires_verification: boolean;
+  anonymous_user_enabled: boolean | null;
+  password_min_length: number;
+  password_max_length: number;
+  password_require_uppercase: boolean;
+  password_require_lowercase: boolean;
+  password_require_digit: boolean;
+  password_require_special_char: boolean;
+  has_users: boolean;
+  oauth_enabled: boolean;
+}
+
+export async function fetchAuthTypeMetadata(
+  url: string
+): Promise<AuthTypeMetadata> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error(`fetchAuthTypeMetadata: ${res.status} ${res.statusText}`);
+    throw new Error("Failed to fetch auth type metadata");
+  }
+  const data: AuthTypeAPIResponse = await res.json();
+  const authType = NEXT_PUBLIC_CLOUD_ENABLED
+    ? AuthType.CLOUD
+    : (data.auth_type as AuthType);
+  return {
+    authType,
+    autoRedirect: authType === AuthType.OIDC || authType === AuthType.SAML,
+    requiresVerification: data.requires_verification,
+    anonymousUserEnabled: data.anonymous_user_enabled,
+    passwordMinLength: data.password_min_length,
+    passwordMaxLength: data.password_max_length,
+    passwordRequireUppercase: data.password_require_uppercase,
+    passwordRequireLowercase: data.password_require_lowercase,
+    passwordRequireDigit: data.password_require_digit,
+    passwordRequireSpecialChar: data.password_require_special_char,
+    hasUsers: data.has_users,
+    oauthEnabled: data.oauth_enabled,
+  };
+}
+
 export async function forgotPassword(email: string): Promise<void> {
   const response = await fetch(`/api/auth/forgot-password`, {
     method: "POST",
@@ -6,7 +51,10 @@ export async function forgotPassword(email: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch((e) => {
+      console.warn("forgotPassword: failed to parse error response", e);
+      return {};
+    });
     const errorMessage =
       error?.detail || "An error occurred during password reset.";
     throw new Error(errorMessage);
@@ -24,7 +72,10 @@ export async function resetPassword(
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch((e) => {
+      console.warn("resetPassword: failed to parse error response", e);
+      return {};
+    });
     if (error?.detail?.code === "RESET_PASSWORD_INVALID_PASSWORD") {
       throw new Error(error.detail.reason || "Invalid password");
     }
@@ -34,14 +85,23 @@ export async function resetPassword(
   }
 }
 
-export async function requestEmailVerification(
-  email: string
-): Promise<Response> {
-  return fetch("/api/auth/request-verify-token", {
+export async function requestEmailVerification(email: string): Promise<void> {
+  const response = await fetch("/api/auth/request-verify-token", {
     headers: { "Content-Type": "application/json" },
     method: "POST",
     body: JSON.stringify({ email }),
   });
+
+  if (!response.ok) {
+    const error = await response.json().catch((e) => {
+      console.warn(
+        "requestEmailVerification: failed to parse error response",
+        e
+      );
+      return {};
+    });
+    throw new Error(error?.detail || "Failed to request email verification.");
+  }
 }
 
 export async function verifyEmail(token: string): Promise<void> {
@@ -71,7 +131,10 @@ export async function verifyCaptchaForOAuth(token: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
+    const body = await response.json().catch((e) => {
+      console.warn("verifyCaptchaForOAuth: failed to parse error response", e);
+      return {};
+    });
     throw new Error(
       `Captcha verify rejected: status=${response.status} detail=${body.detail ?? "(none)"}`
     );
@@ -93,7 +156,10 @@ export async function impersonateUser(
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch((e) => {
+      console.warn("impersonateUser: failed to parse error response", e);
+      return {};
+    });
     throw new Error(error?.detail || "Failed to impersonate user");
   }
 }

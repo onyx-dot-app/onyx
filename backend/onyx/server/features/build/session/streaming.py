@@ -486,6 +486,7 @@ def yield_sandbox_events(
     agent_model: str | None,
     should_interrupt: Callable[[], bool] | None = None,
     should_abort_on_teardown: Callable[[], bool] | None = None,
+    turn_timeout_seconds: float | None = None,
 ) -> Generator[Any, None, None]:
     """Drive the agent to completion, yielding raw sandbox events.
 
@@ -520,6 +521,7 @@ def yield_sandbox_events(
         on_opencode_session_resolved=_persist_resolved_id,
         should_interrupt=should_interrupt,
         should_abort_on_teardown=should_abort_on_teardown,
+        turn_timeout_seconds=turn_timeout_seconds,
     )
     try:
         for sandbox_event in event_stream:

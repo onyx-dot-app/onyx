@@ -63,10 +63,12 @@ from onyx.hooks.points.document_ingestion import DocumentIngestionOwner
 from onyx.hooks.points.document_ingestion import DocumentIngestionPayload
 from onyx.hooks.points.document_ingestion import DocumentIngestionResponse
 from onyx.hooks.points.document_ingestion import DocumentIngestionSection
-from onyx.hooks.points.document_push import DocumentPushPayload
-from onyx.hooks.points.document_push import DocumentPushResponse
 from onyx.indexing.chunk_batch_store import ChunkBatchStore
 from onyx.indexing.chunker import Chunker
+from onyx.indexing.document_push import DocumentPushPayload
+from onyx.indexing.document_push import DocumentPushResponse
+from onyx.indexing.document_push import get_document_push_config
+from onyx.indexing.document_push import push_document_via_config
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
@@ -1177,7 +1179,9 @@ def _maybe_push_documents(
     insertion_records: list[DocumentInsertionRecord],
     from_beginning: bool = False,
 ) -> None:
-    """Fire the DOCUMENT_PUSH hook for each successfully indexed public document.
+    """Push each successfully indexed public document to an external sink:
+    the config-driven endpoint (all editions, from DOCUMENT_PUSH_ENDPOINT_URL)
+    when set, otherwise the DOCUMENT_PUSH hook (EE, from the hook table).
 
     Single-tenant only — multi-tenant deployments would mix documents from
     different organizations into a shared external destination.
@@ -1202,6 +1206,11 @@ def _maybe_push_documents(
         )
         if cc_pair is None or cc_pair.access_type != AccessType.PUBLIC:
             return
+
+        # Either/or: the config-driven endpoint wins when set — checked first
+        # since it is a cached local read, while the hook path does a DB
+        # lookup per document.
+        use_config_push = get_document_push_config() is not None
 
         doc_map = {doc.id: doc for doc in filtered_documents}
         for doc_id in successfully_indexed:
@@ -1232,12 +1241,15 @@ def _maybe_push_documents(
                     for k, v in (doc.metadata or {}).items()
                 },
             )
-            execute_hook(
-                db_session=db_session,
-                hook_point=HookPoint.DOCUMENT_PUSH,
-                payload=payload.model_dump(),
-                response_type=DocumentPushResponse,
-            )
+            if use_config_push:
+                push_document_via_config(payload)
+            else:
+                execute_hook(
+                    db_session=db_session,
+                    hook_point=HookPoint.DOCUMENT_PUSH,
+                    payload=payload.model_dump(),
+                    response_type=DocumentPushResponse,
+                )
 
 
 @log_function_time(debug_only=True)

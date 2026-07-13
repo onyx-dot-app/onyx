@@ -1,49 +1,18 @@
-from pydantic import BaseModel
-from pydantic import Field
-
 from onyx.db.enums import HookFailStrategy
 from onyx.db.enums import HookPoint
 from onyx.hooks.points.base import HookPointSpec
+from onyx.indexing.document_push import DocumentPushPayload
+from onyx.indexing.document_push import DocumentPushResponse
 
-
-class DocumentPushPayload(BaseModel):
-    """Payload sent to a Document Push hook endpoint after a document is indexed.
-
-    Unlike Document Ingestion (which fires before indexing and can modify content),
-    this hook fires after successful indexing and is fire-and-forget — the response
-    is not used to alter the document or pipeline behavior.
-    """
-
-    document_id: str = Field(description="Unique identifier for the document.")
-    title: str | None = Field(description="Title of the document.")
-    content: str = Field(
-        description="Full text content of the document (all text sections concatenated)."
-    )
-    source: str = Field(
-        description=(
-            "Connector source type (e.g. confluence, slack, google_drive). "
-            "Full list: https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/configs/constants.py#L195"
-        )
-    )
-    url: str | None = Field(
-        description="Canonical URL of the document at its source, if available."
-    )
-    doc_updated_at: str | None = Field(
-        description="ISO 8601 UTC timestamp of the last update at the source, or null if unknown."
-    )
-    metadata: dict[str, list[str]] = Field(
-        description="Key-value metadata attached to the document. Values are always a list of strings."
-    )
-
-
-class DocumentPushResponse(BaseModel):
-    """Response from a Document Push hook endpoint. The body is not used — any 2xx
-    response is treated as success. This model exists only to satisfy the hook
-    framework's type requirements."""
+__all__ = ["DocumentPushPayload", "DocumentPushResponse", "DocumentPushSpec"]
 
 
 class DocumentPushSpec(HookPointSpec):
     """Hook point that fires after a document is successfully indexed.
+
+    The payload/response models are owned by onyx.indexing.document_push — the
+    hook is one of two delivery mechanisms for the same payload (the other is
+    the env-config-driven sink, which takes precedence when set).
 
     Call site: immediately after the document is written to the index, before
     the next document in the batch. Runs only for public connectors in

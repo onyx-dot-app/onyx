@@ -634,7 +634,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <Modal.Content width="sm" height="sm">
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
-              {authTypeMetadata.authType === AuthType.BASIC ? (
+              {authTypeMetadata?.authType === AuthType.BASIC ? (
                 <EmailPasswordForm label="submit" nextUrl="/nrf" />
               ) : (
                 <div className="flex flex-col items-center">

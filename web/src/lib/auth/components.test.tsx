@@ -1,25 +1,48 @@
 /**
  * Integration Test: Email/Password Authentication Workflow
  *
- * Tests the complete user journey for logging in.
+ * Tests the complete user journey for logging in and signing up.
  * This tests the full workflow: form → validation → API call → redirect
  */
 import React from "react";
 import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
 import { toast } from "@/hooks/useToast";
 import { EmailPasswordForm } from "@/lib/auth/components";
+import { AuthType } from "@/lib/auth/types";
 
-// Mock next/navigation (not used by this component, but required by dependencies)
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: jest.fn(),
-    refresh: jest.fn(),
+  useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }),
+}));
+
+jest.mock("@/hooks/useToast", () => ({
+  toast: { error: jest.fn(), success: jest.fn() },
+}));
+
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({
+    user: null,
+    authTypeMetadata: {
+      authType: AuthType.BASIC,
+      autoRedirect: false,
+      requiresVerification: false,
+      anonymousUserEnabled: null,
+      passwordMinLength: 8,
+      passwordMaxLength: 64,
+      passwordRequireUppercase: false,
+      passwordRequireLowercase: false,
+      passwordRequireDigit: false,
+      passwordRequireSpecialChar: false,
+      hasUsers: true,
+      oauthEnabled: false,
+    },
   }),
 }));
 
-// Inline fns so the factory doesn't capture an uninitialized variable
-jest.mock("@/hooks/useToast", () => ({
-  toast: { error: jest.fn(), success: jest.fn() },
+jest.mock("@/lib/hooks/useCaptcha", () => ({
+  useCaptcha: () => ({
+    getCaptchaToken: async () => undefined,
+    isCaptchaEnabled: false,
+  }),
 }));
 
 describe("Email/Password Login Workflow", () => {
@@ -37,7 +60,6 @@ describe("Email/Password Login Workflow", () => {
   test("allows user to login with valid credentials", async () => {
     const user = setupUser();
 
-    // Mock POST /api/auth/login
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({}),
@@ -54,21 +76,17 @@ describe("Email/Password Login Workflow", () => {
     const loginButton = screen.getByRole("button", { name: /sign in/i });
     await user.click(loginButton);
 
-    // Verify API was called with correct credentials
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/auth/login",
         expect.objectContaining({
           method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
         })
       );
     });
 
-    const callArgs = fetchSpy.mock.calls[0];
-    const body = callArgs[1].body;
+    const body = fetchSpy.mock.calls[0][1].body;
     expect(body.toString()).toContain("username=test%40example.com");
     expect(body.toString()).toContain("password=password123");
   });
@@ -84,14 +102,12 @@ describe("Email/Password Login Workflow", () => {
 
     render(<EmailPasswordForm label="submit" />);
 
-    const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByTestId("password");
-
-    await user.type(emailInput, "wrong@example.com");
-    await user.type(passwordInput, "wrongpassword");
-
-    const loginButton = screen.getByRole("button", { name: /sign in/i });
-    await user.click(loginButton);
+    await user.type(
+      screen.getByPlaceholderText(/email@yourcompany.com/i),
+      "wrong@example.com"
+    );
+    await user.type(screen.getByTestId("password"), "wrongpassword");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith("Invalid email or password");
@@ -114,32 +130,19 @@ describe("Email/Password Signup Workflow", () => {
   test("allows user to sign up and login with valid credentials", async () => {
     const user = setupUser();
 
-    // Mock POST /api/auth/register
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({}),
-    } as Response);
-
-    // Mock POST /api/auth/login (after successful signup)
-    fetchSpy.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({}),
-    } as Response);
+    fetchSpy
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) } as Response);
 
     render(<EmailPasswordForm label="create" />);
 
-    const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByTestId("password");
+    await user.type(
+      screen.getByPlaceholderText(/email@yourcompany.com/i),
+      "newuser@example.com"
+    );
+    await user.type(screen.getByTestId("password"), "Securepassword1");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
-    await user.type(emailInput, "newuser@example.com");
-    await user.type(passwordInput, "securepassword123");
-
-    const signupButton = screen.getByRole("button", {
-      name: /create account/i,
-    });
-    await user.click(signupButton);
-
-    // Verify signup API was called
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/auth/register",
@@ -150,16 +153,14 @@ describe("Email/Password Signup Workflow", () => {
       );
     });
 
-    const signupCallArgs = fetchSpy.mock.calls[0];
-    const signupBody = JSON.parse(signupCallArgs[1].body);
+    const signupBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
     expect(signupBody).toEqual({
       email: "newuser@example.com",
       username: "newuser@example.com",
-      password: "securepassword123",
+      password: "Securepassword1",
       referral_source: undefined,
     });
 
-    // Verify login API was called after successful signup
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
         "/api/auth/login",
@@ -179,16 +180,12 @@ describe("Email/Password Signup Workflow", () => {
 
     render(<EmailPasswordForm label="create" />);
 
-    const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByTestId("password");
-
-    await user.type(emailInput, "existing@example.com");
-    await user.type(passwordInput, "password123");
-
-    const signupButton = screen.getByRole("button", {
-      name: /create account/i,
-    });
-    await user.click(signupButton);
+    await user.type(
+      screen.getByPlaceholderText(/email@yourcompany.com/i),
+      "existing@example.com"
+    );
+    await user.type(screen.getByTestId("password"), "Securepassword1");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
@@ -208,16 +205,12 @@ describe("Email/Password Signup Workflow", () => {
 
     render(<EmailPasswordForm label="create" />);
 
-    const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
-    const passwordInput = screen.getByTestId("password");
-
-    await user.type(emailInput, "user@example.com");
-    await user.type(passwordInput, "password123");
-
-    const signupButton = screen.getByRole("button", {
-      name: /create account/i,
-    });
-    await user.click(signupButton);
+    await user.type(
+      screen.getByPlaceholderText(/email@yourcompany.com/i),
+      "user@example.com"
+    );
+    await user.type(screen.getByTestId("password"), "Securepassword1");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith(
@@ -234,9 +227,10 @@ describe("Email/Password autofill attributes", () => {
   test("login form exposes password-manager-friendly attributes", () => {
     render(<EmailPasswordForm label="submit" />);
 
-    const emailInput = screen.getByTestId("email");
-    expect(emailInput).toHaveAttribute("autocomplete", "username");
-
+    expect(screen.getByTestId("email")).toHaveAttribute(
+      "autocomplete",
+      "username"
+    );
     const passwordInput = screen.getByTestId("password");
     expect(passwordInput).toHaveAttribute("type", "password");
     expect(passwordInput).toHaveAttribute("autocomplete", "current-password");

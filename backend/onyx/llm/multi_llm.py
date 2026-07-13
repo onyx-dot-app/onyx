@@ -526,6 +526,7 @@ class LitellmLLM(LLM):
         # Flags that modify the final arguments
         #########################
         is_claude_model = "claude" in self.config.model_name.lower()
+        is_qwen_model = "qwen" in self.config.model_name.lower()
         is_reasoning = model_is_reasoning_model(
             self.config.model_name, self.config.model_provider
         )
@@ -571,9 +572,15 @@ class LitellmLLM(LLM):
             model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
 
         # Tool choice
-        if is_claude_model and tool_choice == ToolChoiceOptions.REQUIRED:
-            # Claude models will not use reasoning if tool_choice is required
-            # let it choose tools automatically so reasoning can still be used
+        # Downgrade tool_choice=required to AUTO for models that mishandle it:
+        # Claude skips reasoning when it's set, and Qwen thinking models reject
+        # it with a 400. The chat loop's fallback tool-call extraction still
+        # enforces the forced tool. Matched by model name rather than
+        # `is_reasoning` because the litellm/local registry lags behind new
+        # Qwen releases (e.g. qwen3.7-plus).
+        if (is_claude_model or is_qwen_model) and (
+            tool_choice == ToolChoiceOptions.REQUIRED
+        ):
             tool_choice = ToolChoiceOptions.AUTO
 
         # If no tools are provided, tool_choice should be None

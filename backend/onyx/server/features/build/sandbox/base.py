@@ -349,6 +349,7 @@ class SandboxManager(_ServeMixin, ABC):
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
         should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream typed sandbox events for one user message via
         opencode-serve.
@@ -371,6 +372,7 @@ class SandboxManager(_ServeMixin, ABC):
             on_opencode_session_resolved=on_opencode_session_resolved,
             should_interrupt=should_interrupt,
             should_abort_on_teardown=should_abort_on_teardown,
+            turn_timeout_seconds=turn_timeout_seconds,
         )
 
     def send_subagent_message(

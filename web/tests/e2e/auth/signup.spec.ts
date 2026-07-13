@@ -56,10 +56,8 @@ test.describe("Signup flow", () => {
     // Trigger validation by blurring the password field
     await page.getByTestId("password").blur();
 
-    // Wait for validation error to appear (the Yup error below the field)
-    await expect(
-      page.getByText(/must be at least 8 characters/i).first()
-    ).toBeVisible();
+    // Wait for validation error to appear
+    await expect(page.getByText(/must be between \d/i)).toBeVisible();
 
     // Verify submit button is disabled
     await expect(

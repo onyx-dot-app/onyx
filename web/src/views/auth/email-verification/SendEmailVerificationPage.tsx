@@ -31,21 +31,12 @@ export default function SendEmailVerificationPage() {
     if (!searchParams.get("resend") || !user) return;
     router.replace("/auth/send-email-verification" as Route);
     requestEmailVerification(user.email)
-      .then((response) => {
-        if (response.ok) {
-          toast.success("Verification email resent!");
-        } else {
-          response
-            .json()
-            .then((body) =>
-              toast.error(
-                `Failed to resend verification email — ${body.detail}`
-              )
-            )
-            .catch(() => toast.error("Failed to resend verification email."));
-        }
-      })
-      .catch(() => toast.error("Failed to resend verification email."));
+      .then(() => toast.success("Verification email resent!"))
+      .catch((e: Error) =>
+        toast.error(
+          `Failed to resend verification email — ${e.message || "unknown error"}`
+        )
+      );
   }, [searchParams, user, router]);
 
   if (isLoading) return <PageLoader />;

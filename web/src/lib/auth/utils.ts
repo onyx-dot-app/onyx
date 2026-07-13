@@ -20,7 +20,9 @@ export function getAuthUrl(
     case AuthType.OIDC:
       return `/api/auth/oidc/authorize?${params}`;
     case AuthType.SAML:
-      return `/api/auth/saml/authorize?${params}`;
+      // SAML authorize returns JSON ({authorization_url}), not a redirect —
+      // the IdP URL must be resolved server-side via getAuthUrlSS.
+      return null;
     default:
       return null;
   }
@@ -50,8 +52,9 @@ export function passwordHasDigit(password: string): boolean {
   return /\d/.test(password);
 }
 
+// Mirrors backend PASSWORD_SPECIAL_CHARS = "!@#$%^&*()_+-=[]{}|;:,.<>?"
 export function passwordHasSpecialChar(password: string): boolean {
-  return /[^A-Za-z0-9]/.test(password);
+  return /[!@#$%^&*()_+\-=[\]{}|;:,.<>?]/.test(password);
 }
 
 // ---------------------------------------------------------------------------

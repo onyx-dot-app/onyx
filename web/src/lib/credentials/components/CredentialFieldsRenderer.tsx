@@ -11,11 +11,11 @@ import {
   getDisplayNameForCredentialKey,
   CredentialTemplateWithAuth,
 } from "@/lib/connectors/credentials";
-import { dictionaryType } from "../types";
 import { isTypedFileField } from "@/lib/connectors/fileTypes";
+import type { CredentialFieldValues } from "@/lib/credentials/types";
 
 interface CredentialFieldsRendererProps {
-  credentialTemplate: dictionaryType;
+  credentialTemplate: CredentialFieldValues;
   authMethod?: string;
   setAuthMethod?: (method: string) => void;
 }
@@ -107,7 +107,7 @@ export function CredentialFieldsRenderer({
                   <TextFormField
                     key={key}
                     name={key}
-                    placeholder={val}
+                    placeholder={typeof val === "string" ? val : undefined}
                     label={getDisplayNameForCredentialKey(key)}
                     type={
                       key.toLowerCase().includes("token") ||
@@ -157,7 +157,7 @@ export function CredentialFieldsRenderer({
           <TextFormField
             key={key}
             name={key}
-            placeholder={val as string}
+            placeholder={typeof val === "string" ? val : undefined}
             label={getDisplayNameForCredentialKey(key)}
             type={
               key.toLowerCase().includes("token") ||

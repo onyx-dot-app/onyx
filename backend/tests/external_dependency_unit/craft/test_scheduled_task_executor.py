@@ -367,6 +367,44 @@ def test_prompt_response_marks_run_succeeded(
     assert stub_sandbox_manager.last_prompt_slot.extend_calls >= 1
 
 
+def test_scheduled_run_threads_budget_as_turn_timeout(
+    db_session: Session,
+    test_user: User,
+    sandbox: Any,  # noqa: ARG001
+    session_manager_with_stub: SessionManager,  # noqa: ARG001
+    stub_sandbox_manager: StubSandboxManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """budget_seconds must thread through as the serve client's per-turn
+    timeout so the generic 15-min prompt timeout can't undercut the run budget."""
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        lambda *_: ("", "", {}),
+    )
+
+    sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    _, run = _seed_task_and_queued_run(db_session, test_user)
+
+    stub_sandbox_manager.health_check_returns = True
+    stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+    stub_sandbox_manager.send_message_events = [
+        PromptResponse.model_validate({"stopReason": "end_turn"}),
+    ]
+
+    run_scheduled_task_logic(run.id, budget_seconds=1234)
+
+    send_message_payload = stub_sandbox_manager.last_send_message_payload
+    assert send_message_payload is not None
+    assert send_message_payload["turn_timeout_seconds"] == 1234.0
+
+    db_session.expire_all()
+    refreshed = db_session.get(ScheduledTaskRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == ScheduledTaskRunStatus.SUCCEEDED
+
+
 def test_cancelled_prompt_response_marks_run_failed(
     db_session: Session,
     test_user: User,
