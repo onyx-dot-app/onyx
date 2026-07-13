@@ -1209,8 +1209,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             logger.error(
                 "Email is not configured. Please configure email in the admin panel"
             )
-            raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
                 "Your admin has not enabled this feature.",
             )
         tenant_id = await fetch_ee_implementation_or_noop(
@@ -1244,6 +1244,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token: str,
         request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
+        if not EMAIL_CONFIGURED:
+            logger.error(
+                "Email is not configured. Please configure email in the admin panel"
+            )
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Your admin has not enabled this feature.",
+            )
+
         verify_email_domain(
             user.email,
             valid_email_domains=get_security_settings().valid_email_domains,
