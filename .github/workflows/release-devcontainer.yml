@@ -57,7 +57,7 @@ jobs:
 
       - name: Build and push AMD64
         id: build
-        uses: docker/bake-action@6614cfa25eff9a0b2b2697efb0b6159e7680d584
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b
         with:
           targets: devcontainer
           no-cache: ${{ inputs.no_cache }}
@@ -118,7 +118,7 @@ jobs:
 
       - name: Build and push ARM64
         id: build
-        uses: docker/bake-action@6614cfa25eff9a0b2b2697efb0b6159e7680d584
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b
         with:
           targets: devcontainer
           no-cache: ${{ inputs.no_cache }}
