@@ -1,7 +1,3 @@
-[build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "onyx"
 version = "0.0.0"
@@ -168,7 +164,6 @@ dev = [
     "types-pytz==2023.3.1.1",
     "types-regex==2023.3.23.1",
     "types-requests==2.32.0.20250328",
-    "types-setuptools==68.0.0.3",
     { include-group = "zizmor" },
 ]
 
@@ -207,6 +202,11 @@ model_server = [
 ]
 
 [tool.uv]
+# uv is used for dependency management only. The onyx "project" is never built
+# or installed as a package: Docker images copy the source tree and install
+# deps from the requirements exports, and local imports resolve via cwd /
+# PYTHONPATH conventions (see backend/pytest.ini).
+package = false
 default-groups = ["backend", "dev", "ee", "model_server"]
 
 # Loosen mitmproxy's over-tight upper caps so the resolver keeps the
@@ -301,8 +301,3 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # pipe shell commands, and build ad-hoc SQL against trusted internal inputs
 # (tenant IDs, schema names). Other S rules still apply.
 "backend/scripts/**" = ["S108", "S602", "S608"]
-
-[tool.setuptools.packages.find]
-where = ["backend"]
-include = ["onyx*", "tests*"]
-# Main backend application dependencies
