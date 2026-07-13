@@ -172,21 +172,6 @@ export {
 /* Code */
 export { Code } from "@opal/components/code/components";
 
-/* Toast */
-export {
-  ToastProvider,
-  type ToastProviderProps,
-} from "@opal/components/toast/components";
-export {
-  toast,
-  useToast,
-  useToastFromQuery,
-  MAX_VISIBLE_TOASTS,
-  type Toast,
-  type ToastLevel,
-  type ToastOptions,
-} from "@opal/components/toast/store";
-
 /* Tabs */
 export {
   Tabs,
