@@ -1,13 +1,27 @@
 """Tests for Slack channel reference resolution and tag filtering
 in handle_regular_answer.py."""
 
+from collections.abc import Callable
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
+import pytest
 from slack_sdk.errors import SlackApiError
 
+from onyx.chat.models import ChatBasicResponse
 from onyx.context.search.models import Tag
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
+from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
 from onyx.onyxbot.slack.handlers.handle_regular_answer import resolve_channel_references
+from onyx.onyxbot.slack.handlers.handle_regular_answer import (
+    SLACK_PERSONA_ACCESS_DENIED_MESSAGE,
+)
+from onyx.onyxbot.slack.models import ChannelType
+from onyx.onyxbot.slack.models import SlackContext
+from onyx.onyxbot.slack.models import SlackMessageInfo
+from onyx.onyxbot.slack.models import ThreadMessage
+
+_HANDLE_REGULAR_ANSWER = "onyx.onyxbot.slack.handlers.handle_regular_answer"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -40,6 +54,115 @@ def _mock_client_with_channels(
 
 def _mock_logger() -> MagicMock:
     return MagicMock()
+
+
+def _make_slack_message_info(
+    channel_type: ChannelType,
+    is_slash_command: bool = False,
+    is_bot_dm: bool = False,
+    sender_id: str | None = "U123",
+) -> SlackMessageInfo:
+    message_ts = None if is_slash_command else "111.222"
+    return SlackMessageInfo(
+        thread_messages=[ThreadMessage(message="answer this?", sender="User")],
+        channel_to_respond="C123",
+        msg_to_respond=message_ts,
+        thread_to_respond=message_ts,
+        sender_id=sender_id,
+        email="user@test.com",
+        bypass_filters=True,
+        is_slash_command=is_slash_command,
+        is_bot_dm=is_bot_dm,
+        slack_context=SlackContext(
+            channel_type=channel_type,
+            channel_id="C123",
+            user_id="U123",
+            message_ts=message_ts,
+        ),
+    )
+
+
+def _identity_decorator(
+    *_args: object, **_kwargs: object
+) -> Callable[[Callable[..., object]], Callable[..., object]]:
+    def _decorate(func: Callable[..., object]) -> Callable[..., object]:
+        return func
+
+    return _decorate
+
+
+def _make_slack_channel_config(
+    is_ephemeral: bool = False,
+) -> MagicMock:
+    persona = MagicMock()
+    persona.id = 123
+    persona.name = "Scoped Agent"
+    persona.document_sets = []
+
+    slack_channel_config = MagicMock()
+    slack_channel_config.persona = persona
+    slack_channel_config.persona_id = persona.id
+    slack_channel_config.channel_config = {"is_ephemeral": is_ephemeral}
+    return slack_channel_config
+
+
+def _assert_access_denied_response(
+    message_info: SlackMessageInfo,
+    slack_channel_config: MagicMock,
+    expected_receiver_ids: list[str] | None,
+    expected_thread_ts: str | None,
+    expected_send_as_ephemeral: bool,
+    expect_reaction_removal: bool,
+) -> None:
+    user = MagicMock()
+    client = MagicMock()
+    db_session = MagicMock()
+    logger = _mock_logger()
+
+    with (
+        patch(f"{_HANDLE_REGULAR_ANSWER}.get_user_by_email", return_value=user),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.get_persona_by_id",
+            side_effect=ValueError("persona access denied"),
+        ) as mock_get_persona_by_id,
+        patch(f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel") as mock_respond,
+        patch(f"{_HANDLE_REGULAR_ANSWER}.update_emote_react") as mock_update_react,
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects"
+        ) as mock_handle_stream_message_objects,
+    ):
+        result = handle_regular_answer(
+            message_info=message_info,
+            slack_channel_config=slack_channel_config,
+            receiver_ids=None,
+            client=client,
+            channel="C123",
+            logger=logger,
+            db_session=db_session,
+            feedback_reminder_id=None,
+            should_respond_with_error_msgs=False,
+        )
+
+    assert result is False
+    mock_get_persona_by_id.assert_called_once_with(
+        persona_id=slack_channel_config.persona_id,
+        user=user,
+        db_session=db_session,
+        is_for_edit=False,
+    )
+    mock_respond.assert_called_once_with(
+        client=client,
+        channel="C123",
+        receiver_ids=expected_receiver_ids,
+        text=SLACK_PERSONA_ACCESS_DENIED_MESSAGE,
+        thread_ts=expected_thread_ts,
+        send_as_ephemeral=expected_send_as_ephemeral,
+    )
+    if expect_reaction_removal:
+        assert mock_update_react.call_args.kwargs["remove"] is True
+    else:
+        mock_update_react.assert_not_called()
+    mock_handle_stream_message_objects.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -201,3 +324,233 @@ class TestResolveChannelReferences:
         assert "#eng-infra" in message
         assert "#random" in message
         assert len(tags) == 2
+
+
+@pytest.mark.parametrize(
+    (
+        "channel_type",
+        "is_ephemeral",
+        "is_slash_command",
+        "is_bot_dm",
+        "expected_receiver_ids",
+        "expected_thread_ts",
+        "expected_send_as_ephemeral",
+        "expect_reaction_removal",
+    ),
+    [
+        pytest.param(
+            ChannelType.PUBLIC_CHANNEL,
+            False,
+            False,
+            False,
+            ["U123"],
+            "111.222",
+            True,
+            True,
+            id="public-channel",
+        ),
+        pytest.param(
+            ChannelType.PRIVATE_CHANNEL,
+            False,
+            False,
+            False,
+            ["U123"],
+            "111.222",
+            True,
+            True,
+            id="private-channel",
+        ),
+        pytest.param(
+            ChannelType.PRIVATE_CHANNEL,
+            True,
+            False,
+            False,
+            ["U123"],
+            None,
+            True,
+            True,
+            id="configured-ephemeral",
+        ),
+        pytest.param(
+            ChannelType.PUBLIC_CHANNEL,
+            False,
+            True,
+            False,
+            ["U123"],
+            None,
+            True,
+            False,
+            id="slash-command",
+        ),
+        pytest.param(
+            ChannelType.IM,
+            False,
+            False,
+            True,
+            None,
+            "111.222",
+            False,
+            True,
+            id="dm",
+        ),
+    ],
+)
+def test_persona_access_denied_response(
+    channel_type: ChannelType,
+    is_ephemeral: bool,
+    is_slash_command: bool,
+    is_bot_dm: bool,
+    expected_receiver_ids: list[str] | None,
+    expected_thread_ts: str | None,
+    expected_send_as_ephemeral: bool,
+    expect_reaction_removal: bool,
+) -> None:
+    _assert_access_denied_response(
+        message_info=_make_slack_message_info(
+            channel_type=channel_type,
+            is_slash_command=is_slash_command,
+            is_bot_dm=is_bot_dm,
+        ),
+        slack_channel_config=_make_slack_channel_config(is_ephemeral=is_ephemeral),
+        expected_receiver_ids=expected_receiver_ids,
+        expected_thread_ts=expected_thread_ts,
+        expected_send_as_ephemeral=expected_send_as_ephemeral,
+        expect_reaction_removal=expect_reaction_removal,
+    )
+
+
+def test_persona_access_denied_without_sender_falls_back_to_channel_message() -> None:
+    _assert_access_denied_response(
+        message_info=_make_slack_message_info(
+            channel_type=ChannelType.PUBLIC_CHANNEL,
+            sender_id=None,
+        ),
+        slack_channel_config=_make_slack_channel_config(),
+        expected_receiver_ids=None,
+        expected_thread_ts="111.222",
+        expected_send_as_ephemeral=False,
+        expect_reaction_removal=True,
+    )
+
+
+def test_configured_persona_missing_uses_configured_id_for_denial() -> None:
+    slack_channel_config = _make_slack_channel_config()
+    slack_channel_config.persona = None
+    slack_channel_config.persona_id = 456
+
+    _assert_access_denied_response(
+        message_info=_make_slack_message_info(ChannelType.PUBLIC_CHANNEL),
+        slack_channel_config=slack_channel_config,
+        expected_receiver_ids=["U123"],
+        expected_thread_ts="111.222",
+        expected_send_as_ephemeral=True,
+        expect_reaction_removal=True,
+    )
+
+
+def test_persona_access_denied_cancels_feedback_reminder() -> None:
+    client = MagicMock()
+    db_session = MagicMock()
+
+    with (
+        patch(f"{_HANDLE_REGULAR_ANSWER}.get_user_by_email", return_value=MagicMock()),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.get_persona_by_id",
+            side_effect=ValueError("persona access denied"),
+        ),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel"),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.update_emote_react"),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects"),
+    ):
+        result = handle_regular_answer(
+            message_info=_make_slack_message_info(ChannelType.PUBLIC_CHANNEL),
+            slack_channel_config=_make_slack_channel_config(),
+            receiver_ids=None,
+            client=client,
+            channel="C123",
+            logger=_mock_logger(),
+            db_session=db_session,
+            feedback_reminder_id="scheduled-reminder",
+            should_respond_with_error_msgs=False,
+        )
+
+    assert result is False
+    client.chat_deleteScheduledMessage.assert_called_once_with(
+        channel="U123",
+        scheduled_message_id="scheduled-reminder",
+    )
+
+
+def test_private_channel_non_ephemeral_generates_after_persona_access_check() -> None:
+    user = MagicMock()
+    anonymous_user = MagicMock()
+    client = MagicMock()
+    db_session = MagicMock()
+    logger = _mock_logger()
+
+    with (
+        patch(f"{_HANDLE_REGULAR_ANSWER}.get_user_by_email", return_value=user),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.get_anonymous_user", return_value=anonymous_user
+        ),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.get_persona_by_id",
+            return_value=_make_slack_channel_config().persona,
+        ) as mock_get_persona_by_id,
+        patch(f"{_HANDLE_REGULAR_ANSWER}.rate_limits", side_effect=_identity_decorator),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.retry_builder", side_effect=_identity_decorator
+        ),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.get_channel_name_from_id",
+            return_value=("private-channel", False),
+        ),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.gather_stream",
+            return_value=ChatBasicResponse(
+                answer="answer",
+                answer_citationless="answer",
+                top_documents=[],
+                error_msg=None,
+                message_id=1,
+                citation_info=[],
+            ),
+        ),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.build_slack_response_blocks",
+            return_value=[],
+        ),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects",
+            return_value=iter(()),
+        ) as mock_handle_stream_message_objects,
+        patch(f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel") as mock_respond,
+        patch(f"{_HANDLE_REGULAR_ANSWER}.update_emote_react") as mock_update_react,
+    ):
+        result = handle_regular_answer(
+            message_info=_make_slack_message_info(ChannelType.PRIVATE_CHANNEL),
+            slack_channel_config=_make_slack_channel_config(),
+            receiver_ids=None,
+            client=client,
+            channel="C123",
+            logger=logger,
+            db_session=db_session,
+            feedback_reminder_id=None,
+        )
+
+    assert result is False
+    mock_get_persona_by_id.assert_called_once_with(
+        persona_id=123,
+        user=user,
+        db_session=db_session,
+        is_for_edit=False,
+    )
+
+    stream_call_kwargs = mock_handle_stream_message_objects.call_args.kwargs
+    assert stream_call_kwargs["user"] is anonymous_user
+    assert stream_call_kwargs["new_msg_req"].chat_session_info.persona_id == 123
+
+    mock_respond.assert_called_once()
+    assert mock_respond.call_args.kwargs["receiver_ids"] is None
+    mock_update_react.assert_called_once()
+    assert mock_update_react.call_args.kwargs["remove"] is True

@@ -184,6 +184,7 @@ def handle_generate_answer_button(
             client=client.web_client,
             channel=channel_id,
             logger=logger,
+            db_session=db_session,
             feedback_reminder_id=None,
         )
 

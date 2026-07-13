@@ -95,6 +95,8 @@ HIDDEN_PATTERNS = {
     "opencode.json",
     ".env",
     ".gitignore",
+    "nextjs.log",
+    "nextjs.pid",
 }
 
 
