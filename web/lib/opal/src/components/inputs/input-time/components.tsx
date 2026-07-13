@@ -39,8 +39,15 @@ const SEGMENT_META: Record<
   seconds: { label: "Seconds", placeholder: "SS" },
 };
 
+function isValidTime(time: TimeValue): boolean {
+  return (Object.keys(SEGMENT_LIMITS) as (keyof TimeSegments)[]).every(
+    (part) => time[part] >= 0 && time[part] <= SEGMENT_LIMITS[part]
+  );
+}
+
+// Out-of-range controlled values render empty instead of an impossible time.
 function toSegments(time: TimeValue | null): TimeSegments {
-  if (!time) return EMPTY_SEGMENTS;
+  if (!time || !isValidTime(time)) return EMPTY_SEGMENTS;
   return {
     hours: String(time.hours).padStart(2, "0"),
     minutes: String(time.minutes).padStart(2, "0"),
@@ -61,10 +68,7 @@ function parseSegments(
     minutes: Number(minutes),
     seconds: Number(seconds),
   };
-  const valid = (Object.keys(SEGMENT_LIMITS) as (keyof TimeSegments)[]).every(
-    (part) => time[part] >= 0 && time[part] <= SEGMENT_LIMITS[part]
-  );
-  return valid ? time : null;
+  return isValidTime(time) ? time : null;
 }
 
 // Equality at the editable granularity: with seconds hidden they are not
