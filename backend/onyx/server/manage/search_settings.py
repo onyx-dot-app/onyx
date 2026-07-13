@@ -1,10 +1,15 @@
+from uuid import UUID
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.background.celery.tasks.port.tasks import resume_paused_port_unit
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
@@ -53,6 +58,7 @@ from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import ALT_INDEX_SUFFIX
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/search-settings")
 logger = setup_logger()
@@ -329,6 +335,47 @@ def get_reindex_errors(
     if target is None:
         return []
     return get_reindex_error_rows(db_session, target.id)
+
+
+class PortActionRequest(BaseModel):
+    """Resume one paused port unit — exactly one scope set."""
+
+    cc_pair_id: int | None = None
+    user_id: UUID | None = None
+
+
+class PortActionResponse(BaseModel):
+    ok: bool
+
+
+@router.post("/reindex/port/resume")
+def resume_paused_port(
+    request: PortActionRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> PortActionResponse:
+    if (request.cc_pair_id is None) == (request.user_id is None):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Exactly one of cc_pair_id / user_id must be set.",
+        )
+    target = _active_port_settings(db_session)
+    if target is None:
+        raise OnyxError(OnyxErrorCode.CONFLICT, "No reindex port is currently active.")
+    resumed = resume_paused_port_unit(
+        client_app,
+        get_current_tenant_id(),
+        request.cc_pair_id,
+        request.user_id,
+        target.id,
+    )
+    if not resumed:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "That unit is not paused (it may have already been resumed or is still "
+            "retrying).",
+        )
+    return PortActionResponse(ok=True)
 
 
 @router.get("/get-all-search-settings")

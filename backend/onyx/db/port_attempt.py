@@ -19,6 +19,7 @@ from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.db.connector_credential_pair import (
@@ -668,6 +669,77 @@ def pause_port_attempt(db_session: Session, port_attempt_id: int) -> bool:
         raise
 
 
+def resume_paused_port_attempt(
+    db_session: Session,
+    *,
+    cc_pair_id: int | None,
+    port_user_id: UUID | None,
+    search_settings_id: int,
+) -> PortAttempt | None:
+    """Operator Resume: if the scope's latest attempt is still PAUSED, mint a fresh
+    NOT_STARTED resuming from its cursor. The PAUSED row stays as history — it's a streak
+    barrier, so the resumed unit gets a fresh failure budget before it can re-pause.
+
+    Returns the new attempt, or None when there is nothing to resume: the latest isn't
+    PAUSED (a racing resume/supersede moved it), the FUTURE is no longer the port target, or
+    a concurrent resume already created the active attempt (active-unique IntegrityError).
+    Holds the row lock on the PAUSED row across the insert so concurrent resumes serialize
+    — whichever locks first wins; the other sees a newer latest under the lock and no-ops."""
+    # Local imports break the port_attempt <-> search_settings cycle (search_settings
+    # lazily imports this module).
+    from onyx.db.port_orphan_candidate import port_target_settings_id
+    from onyx.db.search_settings import get_current_search_settings
+    from onyx.db.search_settings import get_secondary_search_settings
+
+    _scope_where(cc_pair_id, port_user_id)
+    latest = get_latest_port_attempt(
+        db_session, cc_pair_id, search_settings_id, port_user_id=port_user_id
+    )
+    if latest is None or latest.status != PortAttemptStatus.PAUSED:
+        return None
+    try:
+        locked = _get_locked(db_session, latest.id)
+        # Re-read latest under the lock: a resume that raced in already minted a newer
+        # attempt (the active-unique index alone wouldn't catch it once that sibling was
+        # canceled, e.g. by connector deletion, in the commit->insert window).
+        current_latest = get_latest_port_attempt(
+            db_session, cc_pair_id, search_settings_id, port_user_id=port_user_id
+        )
+        if (
+            locked.status != PortAttemptStatus.PAUSED
+            or current_latest is None
+            or current_latest.id != locked.id
+        ):
+            db_session.rollback()
+            return None
+        # Refuse if this FUTURE is no longer the port target (superseded/promoted).
+        target_id = port_target_settings_id(
+            get_current_search_settings(db_session),
+            get_secondary_search_settings(db_session),
+        )
+        if target_id != search_settings_id:
+            db_session.rollback()
+            return None
+        fresh = PortAttempt(
+            cc_pair_id=cc_pair_id,
+            port_user_id=port_user_id,
+            search_settings_id=search_settings_id,
+            status=PortAttemptStatus.NOT_STARTED,
+            last_processed_doc_id=locked.last_processed_doc_id,
+            up_to_doc_id=locked.up_to_doc_id,
+        )
+        db_session.add(fresh)
+        db_session.commit()
+        return fresh
+    except IntegrityError:
+        # concurrent resume already minted the active attempt
+        db_session.rollback()
+        return None
+    except Exception:
+        db_session.rollback()
+        raise
+
+
 def request_port_cancel(db_session: Session, port_attempt_id: int) -> None:
     """Ask a port to stop so a waiter (connector deletion) can be the last writer.
     Under the row lock (serializes vs mark_port_in_progress):
@@ -701,11 +773,14 @@ def _mark_terminal(
 ) -> None:
     try:
         attempt = _get_locked(db_session, port_attempt_id)
-        if attempt.status.is_terminal():
-            # First terminal write wins: the row lock makes the watchdog-vs-task
-            # race deterministic, so a late SUCCESS can't clobber a watchdog FAILED.
+        if attempt.status.is_resting():
+            # First terminal write wins (the row lock makes the watchdog-vs-task race
+            # deterministic, so a late SUCCESS can't clobber a watchdog FAILED). PAUSED is
+            # resting too: a wedged worker that un-wedges after its attempt was auto-paused
+            # must NOT drive it back to SUCCESS/FAILED and silently unblock the swap — only
+            # an operator Resume may move a PAUSED row (by minting a fresh attempt).
             logger.debug(
-                "PortAttempt %s already terminal (%s); ignoring %s",
+                "PortAttempt %s already resting (%s); ignoring %s",
                 port_attempt_id,
                 attempt.status.value,
                 status.value,
