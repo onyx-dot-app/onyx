@@ -104,6 +104,14 @@ export {
   type MessageCardProps,
 } from "@opal/components/cards/message-card/components";
 
+/* Loader */
+export {
+  OnyxLoader,
+  PageLoader,
+  type OnyxLoaderProps,
+  type PageLoaderProps,
+} from "@opal/components/loader/components";
+
 /* Pagination */
 export {
   Pagination,
