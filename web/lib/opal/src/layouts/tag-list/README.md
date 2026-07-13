@@ -1,6 +1,6 @@
 # TagList
 
-**Import:** `import { TagList, type TagListProps } from "@opal/components";`
+**Import:** `import { TagList, type TagListProps } from "@opal/layouts";`
 
 Wrap-flowing row of `Tag`s outside an input, for any labelled list. Use it instead of hand-mapping `Tag`s at call sites.
 

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
-import { TagList, type TagItem } from "@opal/components";
+import { type TagItem } from "@opal/components";
+import { TagList } from "@opal/layouts";
 import { SvgTag } from "@opal/icons";
 
 const meta: Meta<typeof TagList> = {
-  title: "opal/components/TagList",
+  title: "opal/layouts/TagList",
   component: TagList,
   tags: ["autodocs"],
 };

@@ -69,12 +69,6 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
-/* TagList */
-export {
-  TagList,
-  type TagListProps,
-} from "@opal/components/tag-list/components";
-
 /* Divider */
 export {
   Divider,
