@@ -150,9 +150,9 @@ def fetch_settings(
     )
     general_settings = apply_fn(general_settings)
 
-    # Workspace Craft instructions are admin-configured internal guidance;
-    # non-admins (and anonymous users) don't need them in the settings payload.
-    if not user or not is_user_admin(user):
+    # Craft workspace instructions are visible to authenticated users (they
+    # appear in sandbox AGENTS.md anyway) but not to anonymous visitors.
+    if user is None:
         general_settings.craft_instructions = None
 
     # Check if Onyx Craft is enabled for this user (used for server-side
