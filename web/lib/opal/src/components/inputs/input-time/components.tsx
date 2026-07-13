@@ -41,7 +41,10 @@ const SEGMENT_META: Record<
 
 function isValidTime(time: TimeValue): boolean {
   return (Object.keys(SEGMENT_LIMITS) as (keyof TimeSegments)[]).every(
-    (part) => time[part] >= 0 && time[part] <= SEGMENT_LIMITS[part]
+    (part) =>
+      Number.isInteger(time[part]) &&
+      time[part] >= 0 &&
+      time[part] <= SEGMENT_LIMITS[part]
   );
 }
 
