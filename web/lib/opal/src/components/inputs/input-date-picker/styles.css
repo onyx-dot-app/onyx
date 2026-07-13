@@ -1,0 +1,54 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   InputDatePicker (Figma Input/Date)
+
+   The field reuses the shared .opal-input chrome. Inside it: mono MM/DD/YYYY
+   segments with text-02 separators and placeholders, then 24px internal
+   action buttons (clear, calendar). Segment inputs are chromeless, the box
+   around them is the field.
+   --------------------------------------------------------------------------- */
+
+.opal-input-date-picker-root {
+  @apply relative w-full;
+  min-width: var(--block-width-form-input-min);
+}
+
+.opal-input-date-picker {
+  @apply gap-1;
+}
+
+.opal-input-date-picker-content {
+  @apply flex min-h-6 flex-1 items-center p-0.5;
+}
+
+.opal-input-date-picker-segment {
+  @apply border-0 bg-transparent p-0 text-center font-main-ui-mono text-text-04 outline-hidden;
+  width: 2ch;
+}
+
+.opal-input-date-picker-segment[data-year] {
+  width: 4ch;
+}
+
+.opal-input-date-picker-segment::placeholder {
+  color: var(--text-02);
+}
+
+.opal-input-date-picker-segment:first-child {
+  @apply pl-0.5;
+}
+
+.opal-input-date-picker[data-variant="disabled"]
+  .opal-input-date-picker-segment {
+  @apply cursor-not-allowed text-text-01;
+}
+
+.opal-input-date-picker[data-variant="disabled"]
+  .opal-input-date-picker-segment::placeholder {
+  color: var(--text-01);
+}
+
+.opal-input-date-picker-actions {
+  @apply flex h-6 items-center justify-end;
+}
