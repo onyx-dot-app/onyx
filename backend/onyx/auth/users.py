@@ -1211,7 +1211,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
             raise OnyxError(
                 OnyxErrorCode.SERVICE_UNAVAILABLE,
-                "Your admin has not enabled this feature.",
+                "Email sending has not been configured for this deployment.",
             )
         tenant_id = await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
@@ -1250,7 +1250,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
             raise OnyxError(
                 OnyxErrorCode.SERVICE_UNAVAILABLE,
-                "Your admin has not enabled this feature.",
+                "Email sending has not been configured for this deployment.",
             )
 
         verify_email_domain(
