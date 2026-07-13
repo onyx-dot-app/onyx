@@ -1219,7 +1219,14 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             async_return_default_schema,
         )(email=user.email)
 
-        send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
+        try:
+            send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
+        except Exception as e:
+            logger.error("Failed to send password reset email to %s: %s", user.email, e)
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Failed to send the password reset email.",
+            ) from e
 
         emit_audit_event(
             AuditAction.PASSWORD_FORGOT,
@@ -1262,9 +1269,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             "Verification requested for user %s. Verification token: %s", user.id, token
         )
         user_count = await get_user_count()
-        send_user_verification_email(
-            user.email, token, new_organization=user_count == 1
-        )
+        try:
+            send_user_verification_email(
+                user.email, token, new_organization=user_count == 1
+            )
+        except Exception as e:
+            logger.error("Failed to send verification email to %s: %s", user.email, e)
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Failed to send the verification email.",
+            ) from e
 
         emit_audit_event(
             AuditAction.EMAIL_VERIFY,
