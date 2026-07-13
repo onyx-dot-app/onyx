@@ -7,7 +7,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { Button, Divider, Text } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
-import { SvgArrowUpRight, SvgPlug, SvgPlus, SvgTrash } from "@opal/icons";
+import { SvgArrowLeft, SvgPlug, SvgPlus, SvgTrash } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   availableBuiltInDescriptors,
@@ -40,9 +40,9 @@ export default function ExternalAppsPage() {
           <Button
             href="/craft/v1/apps"
             prominence="secondary"
-            rightIcon={SvgArrowUpRight}
+            icon={SvgArrowLeft}
           >
-            Your apps in Craft
+            Back to Craft
           </Button>
         }
       />

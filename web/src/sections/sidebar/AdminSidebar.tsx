@@ -326,7 +326,7 @@ export default function AdminSidebar() {
         {!folded && <Divider paddingPerpendicular="sm" />}
         <SidebarTab
           icon={SvgX}
-          href="/app"
+          href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}
           variant="sidebar-light"
           folded={folded}
         >
