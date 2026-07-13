@@ -24,11 +24,13 @@
 
 .opal-input-date-picker-segment {
   @apply border-0 bg-transparent p-0 text-center font-main-ui-mono text-text-04 outline-hidden;
-  width: 2ch;
+  /* ch is the "0" advance, but DM Mono digit ink is a hair wider, so an exact
+     Nch box clips the last digit. The +4px fits the ink for any digits. */
+  width: calc(2ch + 4px);
 }
 
 .opal-input-date-picker-segment[data-year] {
-  width: 4ch;
+  width: calc(4ch + 4px);
 }
 
 .opal-input-date-picker-segment::placeholder {
