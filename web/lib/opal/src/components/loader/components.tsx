@@ -1,4 +1,61 @@
 import "@opal/components/loader/styles.css";
+import { cn } from "@opal/utils";
+import type { IconFunctionComponent } from "@opal/types";
+import { SvgLoader } from "@opal/icons";
+
+// ---------------------------------------------------------------------------
+// Shared
+// ---------------------------------------------------------------------------
+
+// The mark renders in `currentColor`, so color is set as a text token on the
+// wrapper. Default is the neutral `border-02`; pass `color` to override.
+const COLOR_CLASS = {
+  "border-02": "text-border-02",
+  "text-02": "text-text-02",
+  "text-03": "text-text-03",
+  "text-04": "text-text-04",
+  "text-05": "text-text-05",
+  "status-error-05": "text-status-error-05",
+  "status-success-05": "text-status-success-05",
+  "status-warning-05": "text-status-warning-05",
+} as const;
+
+type LoaderColor = keyof typeof COLOR_CLASS;
+
+// ---------------------------------------------------------------------------
+// IconLoader
+// ---------------------------------------------------------------------------
+
+interface IconLoaderProps {
+  /** Icon to spin. @default the generic `SvgLoader` spinner */
+  icon?: IconFunctionComponent;
+
+  /** Size of the icon, in pixels. @default 24 */
+  size?: number;
+
+  /** Mark color token. @default "border-02" */
+  color?: LoaderColor;
+}
+
+/**
+ * Generic loader: continuously spins the given icon. Pass any `@opal/icons`
+ * icon, or use the default spinner. Holds still under `prefers-reduced-motion`.
+ * For the Onyx-branded octagon mark, use `OnyxLoader`.
+ */
+function IconLoader({
+  icon: Icon = SvgLoader,
+  size = 24,
+  color = "border-02",
+}: IconLoaderProps) {
+  return (
+    <Icon
+      size={size}
+      role="status"
+      aria-label="Loading"
+      className={cn("shrink-0 motion-safe:animate-spin", COLOR_CLASS[color])}
+    />
+  );
+}
 
 // ---------------------------------------------------------------------------
 // OnyxLoader
@@ -7,6 +64,9 @@ import "@opal/components/loader/styles.css";
 interface OnyxLoaderProps {
   /** Size of the animated mark, in pixels. @default 64 */
   size?: number;
+
+  /** Mark color token. @default "border-02" */
+  color?: LoaderColor;
 }
 
 // Onyx mark geometry (16-unit viewBox), matching the @opal/icons
@@ -42,12 +102,12 @@ const MARK_PATHS = [
  * `currentColor`, so the mark adapts to the surrounding theme. For a
  * full-page loading state with a label, use `PageLoader`.
  */
-function OnyxLoader({ size = 64 }: OnyxLoaderProps) {
+function OnyxLoader({ size = 64, color = "border-02" }: OnyxLoaderProps) {
   return (
     <div
       role="status"
       aria-label="Loading"
-      className="relative shrink-0 text-border-02"
+      className={cn("relative shrink-0", COLOR_CLASS[color])}
       style={{ width: size, height: size }}
     >
       <div className="opal-loader-rotator">
@@ -81,4 +141,10 @@ function OnyxLoader({ size = 64 }: OnyxLoaderProps) {
   );
 }
 
-export { OnyxLoader, type OnyxLoaderProps };
+export {
+  IconLoader,
+  type IconLoaderProps,
+  OnyxLoader,
+  type OnyxLoaderProps,
+  type LoaderColor,
+};
