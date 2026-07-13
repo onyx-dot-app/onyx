@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it } from "@jest/globals";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 
 import { UserFileStatus, type ProjectFile } from "@/chat/contracts/projects";
 import { ChatFileType } from "@/chat/interfaces";
 import {
+  setUploadCancel,
   useUserFileStore,
   type FileRecord,
   type UploadTarget,
@@ -119,10 +120,29 @@ describe("userFileStore", () => {
 
   it("removeFile drops the record + task", () => {
     useUserFileStore.getState().beginUpload(DRAFT, [record()]);
-    useUserFileStore.getState().removeFile("tmp-1");
+    useUserFileStore.getState().removeFile("tmp-1", DRAFT);
     const state = useUserFileStore.getState();
     expect(state.filesById["tmp-1"]).toBeUndefined();
     expect(state.tasksById["tmp-1"]).toBeUndefined();
+  });
+
+  it("removeFile from a non-owning target neither cancels nor deletes the owner's upload", () => {
+    const draftB: UploadTarget = { kind: "draft", draftKey: "chat-2:" };
+    useUserFileStore.getState().beginUpload(DRAFT, [record()]);
+    const cancel = jest.fn();
+    setUploadCancel("tmp-1", cancel);
+
+    // non-owner (recent-attached elsewhere) removes it → no-op
+    useUserFileStore.getState().removeFile("tmp-1", draftB);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(useUserFileStore.getState().filesById["tmp-1"]).toBeDefined();
+    expect(useUserFileStore.getState().tasksById["tmp-1"]).toBeDefined();
+
+    // owner removes it → cancels + drops
+    useUserFileStore.getState().removeFile("tmp-1", DRAFT);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(useUserFileStore.getState().filesById["tmp-1"]).toBeUndefined();
+    expect(useUserFileStore.getState().tasksById["tmp-1"]).toBeUndefined();
   });
 
   it("registerExisting adds a recent file with no task (idempotent)", () => {
@@ -229,7 +249,7 @@ describe("userFileStore", () => {
       .getState()
       .registerExisting(file({ id: "r1", status: UserFileStatus.COMPLETED }));
     expect(useUserFileStore.getState().serverIdToClientId["r1"]).toBe("r1");
-    useUserFileStore.getState().removeFile("r1");
+    useUserFileStore.getState().removeFile("r1", DRAFT);
     expect(
       useUserFileStore.getState().serverIdToClientId["r1"],
     ).toBeUndefined();

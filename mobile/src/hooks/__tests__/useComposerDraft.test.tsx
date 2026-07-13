@@ -15,7 +15,7 @@ import { ChatFileType } from "@/chat/interfaces";
 import { makeProjectFile } from "@/chat/__tests__/fixtures";
 import { ComposerDraftProvider } from "@/components/chat/ComposerDraftProvider";
 import { useComposerDraft } from "@/hooks/useComposerDraft";
-import { useUserFileStore } from "@/state/userFileStore";
+import { setUploadCancel, useUserFileStore } from "@/state/userFileStore";
 
 let mockTransportResult: Promise<CategorizedFiles>;
 
@@ -165,6 +165,53 @@ describe("useComposerDraft", () => {
     expect(result.current.files).toEqual([]);
     // ...but the shared store record survives for other surfaces (recent picker, other drafts).
     expect(useUserFileStore.getState().filesById["shared"]).toBeDefined();
+  });
+
+  it("removing a recent-attached upload owned by another draft doesn't abort that upload", () => {
+    // conversation 1 owns an in-flight upload (live cancel handle)
+    const cancel = jest.fn();
+    useUserFileStore
+      .getState()
+      .beginUpload({ kind: "draft", draftKey: "chat-1:" }, [
+        {
+          clientId: "tmp-1",
+          file: recent({
+            id: "tmp-1",
+            temp_id: "tmp-1",
+            status: UserFileStatus.UPLOADING,
+          }),
+        },
+      ]);
+    setUploadCancel("tmp-1", cancel);
+
+    // conversation 2 recent-attaches the same still-uploading file, then removes it
+    const { result } = renderHook(() => useComposerDraft("chat-2:"), {
+      wrapper,
+    });
+    act(() =>
+      result.current.addRecent(
+        recent({
+          id: "tmp-1",
+          temp_id: "tmp-1",
+          status: UserFileStatus.UPLOADING,
+        }),
+      ),
+    );
+    expect(result.current.files.map((f) => f.id)).toEqual(["tmp-1"]);
+
+    act(() => result.current.removeFile("tmp-1"));
+    expect(result.current.files).toEqual([]);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(useUserFileStore.getState().filesById["tmp-1"]).toBeDefined();
+    expect(useUserFileStore.getState().tasksById["tmp-1"]).toBeDefined();
+
+    // owner can still cancel its own upload (also proves the handle was live)
+    act(() =>
+      useUserFileStore
+        .getState()
+        .removeFile("tmp-1", { kind: "draft", draftKey: "chat-1:" }),
+    );
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it("consume clears text + attachments; consumeAttachments keeps the text", () => {

@@ -98,13 +98,13 @@ export function useComposerDraft(draftKey: string): UseComposerDraft {
   const removeFile = useCallback(
     (id: string) => {
       ctxRemoveFile(draftKey, id);
-      // Abort an in-flight upload owned by this draft; a shared record (recent-attached or an
-      // already-uploaded library file) is only de-referenced, never deleted from the shared store.
+      // Only hard-delete an upload this draft owns (the store gates on task target); a shared or
+      // recent-attached record is just de-referenced above.
       if (useUserFileStore.getState().tasksById[id]?.status === "uploading") {
-        upload.remove(id);
+        upload.remove(id, target);
       }
     },
-    [ctxRemoveFile, draftKey, upload],
+    [ctxRemoveFile, draftKey, upload, target],
   );
 
   const consume = useCallback(() => {

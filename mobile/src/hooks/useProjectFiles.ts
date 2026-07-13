@@ -104,6 +104,7 @@ export function useProjectFiles(
         await linkFileToProject(projectId, fileId);
         await invalidateProject();
       } catch (error) {
+        console.warn("link file to project failed", error);
         toast.error(getErrorMessage(error, "Couldn't add that file."));
       }
     },
@@ -117,6 +118,7 @@ export function useProjectFiles(
         await unlinkFileFromProject(projectId, fileId);
         await invalidateProject();
       } catch (error) {
+        console.warn("unlink file from project failed", error);
         toast.error(getErrorMessage(error, "Couldn't remove that file."));
       }
     },

@@ -141,4 +141,23 @@ describe("useUpload", () => {
     );
     expect(useUserFileStore.getState().filesById["tmp-1"]).toBeUndefined();
   });
+
+  it("stays silent when an in-flight attachment is removed before the transfer rejects", async () => {
+    // rejecting the transport promise mimics controller.abort()
+    mockTransportResult = Promise.reject(new Error("aborted"));
+
+    const { result } = renderHook(() => useUpload(), { wrapper });
+    act(() => {
+      result.current.upload([asset("a.pdf", 10)], DRAFT);
+      // remove before the rejection lands, clearing the task
+      result.current.remove("tmp-1", DRAFT);
+    });
+    expect(useUserFileStore.getState().tasksById["tmp-1"]).toBeUndefined();
+
+    // drain microtasks: catch sees no task → no toast
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(toastError).not.toHaveBeenCalled();
+  });
 });

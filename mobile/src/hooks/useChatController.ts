@@ -224,9 +224,6 @@ export function useChatController(
           const current = useChatSessionStore.getState().sessions.get(activeId);
           if (current && current.chatState !== "input") return; // a run is already active
         }
-        // Committed past every synchronous early return → clear the draft optimistically (before
-        // the createChatSession await) but only on a send that will actually happen.
-        onAccepted?.();
         if (activeId == null) {
           activeId = await createChatSession(personaId, projectId);
           // refresh the project (we've navigated away) so the new chat shows on reopen
@@ -239,6 +236,9 @@ export function useChatController(
             });
           }
         }
+        // Committed: the session exists and the rest of this path is synchronous → clear the draft.
+        // A failed createChatSession above throws first, so the draft (text + file refs) survives.
+        onAccepted?.();
 
         const store = useChatSessionStore.getState();
         store.ensureSession(activeId);

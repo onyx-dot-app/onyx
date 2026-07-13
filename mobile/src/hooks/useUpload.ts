@@ -27,7 +27,8 @@ export interface UseUpload {
     target: UploadTarget,
   ) => Promise<string[]>;
   registerExisting: (file: ProjectFile) => string;
-  remove: (clientId: string) => void;
+  // `target` is the removing surface; the store only cancels/deletes an upload its target owns.
+  remove: (clientId: string, target: UploadTarget) => void;
 }
 
 // The only place upload logic lives; the engine store owns files + tasks + reconcile.
@@ -69,13 +70,16 @@ export function useUpload(): UseUpload {
                 store.reconcile(result.user_files, epoch);
               }
               if (result.rejected_files.length > 0) {
-                store.removeFile(tempId);
+                store.removeFile(tempId, target);
                 result.rejected_files.forEach((file) =>
                   uploadRejections.push(`${file.file_name}: ${file.reason}`),
                 );
               }
             } catch {
-              store.removeFile(tempId);
+              // Absent task = the user already removed this attachment, aborting the transfer
+              // (which rejects here). Intentional cancel, not a failure — don't toast.
+              if (useUserFileStore.getState().tasksById[tempId] == null) return;
+              store.removeFile(tempId, target);
               uploadRejections.push(`${asset.name} could not be uploaded`);
             }
           }),
@@ -125,7 +129,8 @@ export function useUpload(): UseUpload {
   );
 
   const remove = useCallback(
-    (clientId: string) => useUserFileStore.getState().removeFile(clientId),
+    (clientId: string, target: UploadTarget) =>
+      useUserFileStore.getState().removeFile(clientId, target),
     [],
   );
 

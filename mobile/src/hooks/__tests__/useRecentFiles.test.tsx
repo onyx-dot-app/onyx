@@ -96,4 +96,18 @@ describe("useRecentFiles", () => {
       expect(result.current.data?.map((f) => f.id)).toEqual(["f1"]),
     );
   });
+
+  it("logs a fetch failure and still surfaces it as an error (not a silent empty picker)", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    apiFetchMock.mockRejectedValue(new Error("boom"));
+
+    const { result } = renderHook(() => useRecentFiles(true), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(warnSpy).toHaveBeenCalledWith(
+      "recent files fetch failed",
+      expect.any(Error),
+    );
+    warnSpy.mockRestore();
+  });
 });

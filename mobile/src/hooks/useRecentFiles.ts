@@ -23,8 +23,16 @@ export function useRecentFiles(enabled: boolean) {
   const query = useQuery({
     queryKey: QUERY_KEYS.userRecentFiles(serverUrl),
     enabled: enabled && serverUrl !== null,
-    queryFn: ({ signal }) =>
-      apiFetch<ProjectFile[]>("/user/files/recent", { signal }),
+    queryFn: async ({ signal }) => {
+      try {
+        return await apiFetch<ProjectFile[]>("/user/files/recent", { signal });
+      } catch (error) {
+        // Log real failures (an empty picker is otherwise silent); skip aborts (picker closed /
+        // server switch). Rethrow so TanStack Query keeps its error/retry state.
+        if (!signal.aborted) console.warn("recent files fetch failed", error);
+        throw error;
+      }
+    },
   });
 
   const upsert = useUserFileStore((state) => state.upsert);

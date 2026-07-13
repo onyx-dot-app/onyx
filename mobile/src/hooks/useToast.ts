@@ -35,7 +35,9 @@ function subscribe(cb: () => void): () => void {
   };
 }
 
-function getSnapshot(): Toast[] {
+// Readonly view of the live array. A defensive copy would break useSyncExternalStore's
+// stable-snapshot contract, so the readonly *type* is what stops consumers mutating store state.
+function getSnapshot(): readonly Readonly<Toast>[] {
   return toasts;
 }
 
@@ -106,6 +108,6 @@ export const toast: ToastFn = Object.assign(
 );
 
 // Subscribes a component (the ToastHost) to the live toast list.
-export function useToasts(): Toast[] {
+export function useToasts(): readonly Readonly<Toast>[] {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

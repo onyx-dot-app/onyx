@@ -58,7 +58,9 @@ interface UserFileState {
   // that target's finished (succeeded) tasks for the upserted files, so a committed upload can't
   // resurrect as a phantom optimistic row.
   upsert: (files: ProjectFile[], clearTasksForTarget?: UploadTarget) => void;
-  removeFile: (clientId: string) => void;
+  // `target` = the removing surface. Only the target that owns an in-flight upload may cancel +
+  // delete it; a non-owner (recent-attached elsewhere) is a no-op.
+  removeFile: (clientId: string, target: UploadTarget) => void;
   reset: () => void; // wipe all state on identity change (logout / account switch)
 }
 
@@ -214,7 +216,10 @@ export const useUserFileStore = create<UserFileState>((set, get) => ({
       };
     }),
 
-  removeFile: (clientId) => {
+  removeFile: (clientId, target) => {
+    // Skip if a non-owner is removing (recent-attached the file) — don't touch the owner's upload.
+    const task = get().tasksById[clientId];
+    if (task && !sameTarget(task.target, target)) return;
     cancelHandles.get(clientId)?.();
     cancelHandles.delete(clientId);
     set((state) => {

@@ -191,6 +191,24 @@ describe("useChatController", () => {
     await waitFor(() => expect(renameSessionMock).toHaveBeenCalled());
   });
 
+  it("keeps the draft (onAccepted not fired) if createChatSession fails", async () => {
+    createSessionMock.mockRejectedValue(new Error("offline"));
+    const onAccepted = jest.fn();
+
+    const { result } = renderHook(() => useChatController(null), { wrapper });
+    await act(async () => {
+      try {
+        await result.current.submit("unsent text", [], onAccepted);
+      } catch {
+        // create rejected; production drops the promise (fire-and-forget)
+      }
+    });
+
+    expect(createSessionMock).toHaveBeenCalledTimes(1);
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(streamMock).not.toHaveBeenCalled();
+  });
+
   it("auto-names a new session once its first answer completes", async () => {
     createSessionMock.mockResolvedValue("new-session");
     streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
