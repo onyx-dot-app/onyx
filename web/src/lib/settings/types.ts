@@ -40,6 +40,7 @@ export interface Settings {
   deep_research_enabled?: boolean;
   multi_model_chat_enabled?: boolean;
   search_ui_enabled?: boolean;
+  auto_detect_search_filters?: boolean;
 
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;
