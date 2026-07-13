@@ -36,7 +36,7 @@ interface ReindexErrorsModalProps {
 export default function ReindexErrorsModal({
   onClose,
 }: ReindexErrorsModalProps) {
-  const { data: errors, isLoading } = useReindexErrors(true);
+  const { data: errors, isLoading, error } = useReindexErrors(true);
 
   return (
     <Modal open onOpenChange={onClose}>
@@ -51,6 +51,10 @@ export default function ReindexErrorsModal({
           {isLoading ? (
             <Text as="p" color="text-03">
               Loading…
+            </Text>
+          ) : error ? (
+            <Text as="p" color="status-error-05">
+              Couldn&apos;t load re-index errors. Please try again.
             </Text>
           ) : !errors || errors.length === 0 ? (
             <Text as="p" color="text-03">

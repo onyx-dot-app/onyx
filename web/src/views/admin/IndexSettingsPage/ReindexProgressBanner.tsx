@@ -87,6 +87,8 @@ export default function ReindexProgressBanner({
                   )}
                 </div>
               </div>
+              {/* SUCCESS only: FAILED isn't settled — the port retries it — so a
+                  failed unit stays out of the bar until it succeeds (red tag shows it). */}
               <ProgressBar
                 value={completed}
                 max={total}
