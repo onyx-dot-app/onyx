@@ -42,9 +42,11 @@ def perform_ttl_management_task(
     if not task_id:
         raise RuntimeError("No task id defined for this task; cannot identify it")
 
-    # A per-tenant lock ensures only one cleanup run drains the backlog at a
-    # time. Without it the hourly check would stack a new full run on top of any
-    # still-draining one, compounding queue congestion on large backlogs.
+    # Only one cleanup run should drain the backlog at a time; without this the
+    # hourly check would stack a new full run on top of any still-draining one,
+    # compounding queue congestion on large backlogs. get_redis_client()
+    # tenant-prefixes the lock key, so this is per-tenant despite the constant
+    # name (same pattern as the other beat locks).
     r = get_redis_client()
     lock: RedisLock = r.lock(
         OnyxRedisLocks.CHAT_TTL_MANAGEMENT_LOCK,
