@@ -10,10 +10,7 @@
   "disabledLabels": [],
   "excludeAuthors": [
     "dependabot[bot]",
-    "renovate[bot]",
-    "pre-commit-ci[bot]",
     "github-actions[bot]",
-    "allcontributors[bot]",
     "onyx-cherry-pick[bot]"
   ],
   "ignoreKeywords": "",
