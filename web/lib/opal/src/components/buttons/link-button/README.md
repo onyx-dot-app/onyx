@@ -2,7 +2,7 @@
 
 **Import:** `import { LinkButton, type LinkButtonProps } from "@opal/components";`
 
-A compact, anchor-styled link with an underlined label and an optional trailing external-link glyph. Intended for **inline references** — "Pricing", "Docs", "Learn more" — not for interactive surfaces that need hover backgrounds or prominence tiers. Use [`Button`](../button/README.md) for those.
+A compact, anchor-styled link with an underlined label and an optional trailing external-link glyph. Intended for **inline references** like "Pricing", "Docs", and "Learn more", not for interactive surfaces that need hover backgrounds or prominence tiers. Use [`Button`](../button/README.md) for those.
 
 ## Architecture
 

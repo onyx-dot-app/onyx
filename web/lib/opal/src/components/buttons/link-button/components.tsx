@@ -69,7 +69,7 @@ function LinkButton({
       <span className="opal-link-button-label font-secondary-body">
         {children}
       </span>
-      {external && <SvgExternalLink size={12} />}
+      {external && <SvgExternalLink size={12} aria-hidden />}
     </>
   );
 
