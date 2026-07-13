@@ -6,19 +6,22 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Text } from "@opal/components";
 import {
   SvgAlertCircle,
-  SvgBranch,
   SvgBubbleText,
   SvgClock,
   SvgCpu,
   SvgDashboard,
   SvgDocFile,
-  SvgFolder,
-  SvgMail,
   SvgPaperclip,
   SvgShield,
-  SvgSlack,
   SvgUsers,
 } from "@opal/icons";
+import {
+  SvgGithub,
+  SvgGmail,
+  SvgGoogleDrive,
+  SvgLinear,
+  SvgSlack,
+} from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
 import CometEdge from "@/app/craft/components/CometEdge";
@@ -98,7 +101,7 @@ const STAGE_CAMERA: Record<LivingMapStageId, Camera> = {
 const DIVE_CAMERA: Camera = { cx: 130, cy: 280, w: 240 };
 
 /** How long the dive-out shot runs before the modal should hand off. */
-export const LIVING_MAP_DIVE_MS = 620;
+export const LIVING_MAP_DIVE_MS = 450;
 
 type MapGroupId =
   | "prompt"
@@ -194,11 +197,11 @@ const EDGES: MapEdge[] = [
     group: "schedule",
     d: "M 320 472 C 300 420, 190 380, 150 335",
   },
-  // Finished work reaches the team.
+  // The hosted app reaches the team — one link shares it.
   {
     id: "team-share",
     group: "team",
-    d: "M 745 424 C 756 444, 760 460, 760 482",
+    d: "M 806 310 C 862 352, 858 438, 800 484",
   },
 ];
 
@@ -219,20 +222,22 @@ const EXAMPLE_PROMPTS: string[] = [
   "“Fill out the RFP in my email with our security details.”",
 ];
 
-const PROMPT_ROTATION_MS = 4200;
+const PROMPT_ROTATION_MS = 3000;
 
 interface SourceChipSpec {
   x: number;
   label: string;
   icon: IconFunctionComponent;
+  /** Token-tinted line icon (not a full-color brand logo). */
+  tint?: boolean;
 }
 
 const SOURCE_CHIPS: SourceChipSpec[] = [
   { x: 280, label: "Slack", icon: SvgSlack },
-  { x: 390, label: "Drive", icon: SvgFolder },
-  { x: 500, label: "Linear", icon: SvgBranch },
-  { x: 610, label: "Gmail", icon: SvgMail },
-  { x: 720, label: "Your files", icon: SvgPaperclip },
+  { x: 390, label: "Drive", icon: SvgGoogleDrive },
+  { x: 500, label: "Linear", icon: SvgLinear },
+  { x: 610, label: "Gmail", icon: SvgGmail },
+  { x: 720, label: "Your files", icon: SvgPaperclip, tint: true },
 ];
 
 interface OutputCardSpec {
@@ -240,6 +245,8 @@ interface OutputCardSpec {
   label: string;
   caption: string;
   icon: IconFunctionComponent;
+  /** Token-tinted line icon (not a full-color brand logo). */
+  tint?: boolean;
 }
 
 const OUTPUT_CARDS: OutputCardSpec[] = [
@@ -248,14 +255,16 @@ const OUTPUT_CARDS: OutputCardSpec[] = [
     label: "Google Doc",
     caption: "Written to your Drive",
     icon: SvgDocFile,
+    tint: true,
   },
   {
     y: 280,
     label: "Live app",
     caption: "Hosted — share by link",
     icon: SvgDashboard,
+    tint: true,
   },
-  { y: 390, label: "GitHub PR", caption: "Open for review", icon: SvgBranch },
+  { y: 390, label: "GitHub PR", caption: "Open for review", icon: SvgGithub },
 ];
 
 // ---------------------------------------------------------------------------
@@ -456,12 +465,19 @@ export default function LivingMapDiagram({
         transition={
           reduceMotion
             ? { duration: 0 }
-            : {
-                scale: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-                x: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-                y: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-                opacity: { duration: 0.35, delay: diving ? 0.2 : 0 },
-              }
+            : (() => {
+                // Stage moves settle with a long ease-out; the dive is a fast
+                // accelerating shot that finishes inside the handoff window.
+                const cameraEase = diving
+                  ? { duration: 0.45, ease: [0.7, 0, 0.84, 0] as const }
+                  : { duration: 0.8, ease: [0.16, 1, 0.3, 1] as const };
+                return {
+                  scale: cameraEase,
+                  x: cameraEase,
+                  y: cameraEase,
+                  opacity: { duration: 0.3, delay: diving ? 0.15 : 0 },
+                };
+              })()
         }
       >
         <EdgeLayer sharpGroups={sharpGroups} reduceMotion={reduceMotion} />
@@ -484,7 +500,9 @@ export default function LivingMapDiagram({
               onSelect={select("sources")}
             >
               <div className="flex items-center gap-1.5 rounded-08 border border-border-01 bg-background-tint-00 px-3 py-1.5">
-                <SourceIcon className="h-3.5 w-3.5 stroke-text-04" />
+                <SourceIcon
+                  className={cn("h-3.5 w-3.5", source.tint && "stroke-text-04")}
+                />
                 <Text font="secondary-action" color="text-04" nowrap>
                   {source.label}
                 </Text>
@@ -515,8 +533,14 @@ export default function LivingMapDiagram({
                   key={examplePrompt}
                   initial={reduceMotion ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  exit={reduceMotion ? undefined : { opacity: 0 }}
-                  transition={{ duration: 0.4 }}
+                  // Incoming fades faster than the outgoing leaves, so the
+                  // card always shows a prompt — no blank dip mid-crossfade.
+                  exit={
+                    reduceMotion
+                      ? undefined
+                      : { opacity: 0, transition: { duration: 0.4 } }
+                  }
+                  transition={{ duration: 0.25 }}
                   className="absolute inset-0 flex"
                 >
                   <Text font="secondary-body" color="text-03">
@@ -631,7 +655,12 @@ export default function LivingMapDiagram({
             >
               <div className="flex w-[170px] flex-col gap-1 rounded-12 border border-border-01 bg-background-tint-00 p-3">
                 <div className="flex items-center gap-1.5">
-                  <OutputIcon className="h-3.5 w-3.5 shrink-0 stroke-text-05" />
+                  <OutputIcon
+                    className={cn(
+                      "h-3.5 w-3.5 shrink-0",
+                      output.tint && "stroke-text-05"
+                    )}
+                  />
                   <Text font="secondary-action" color="text-04" nowrap>
                     {output.label}
                   </Text>
