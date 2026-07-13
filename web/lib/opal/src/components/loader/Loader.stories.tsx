@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { OnyxLoader, PageLoader } from "@opal/components";
-import { markdown } from "@opal/utils";
+import { OnyxLoader } from "@opal/components";
 
 const meta: Meta<typeof OnyxLoader> = {
   title: "opal/components/Loader",
@@ -21,30 +20,6 @@ export const Sizes: Story = {
       <OnyxLoader size={24} />
       <OnyxLoader size={40} />
       <OnyxLoader size={64} />
-    </div>
-  ),
-};
-
-export const FullPage: Story = {
-  render: () => (
-    <div className="h-96 w-full">
-      <PageLoader />
-    </div>
-  ),
-};
-
-export const CustomLabel: Story = {
-  render: () => (
-    <div className="h-96 w-full">
-      <PageLoader text="Fetching documents …" />
-    </div>
-  ),
-};
-
-export const MarkdownLabel: Story = {
-  render: () => (
-    <div className="h-96 w-full">
-      <PageLoader text={markdown("**Indexing** your documents …")} />
     </div>
   ),
 };
