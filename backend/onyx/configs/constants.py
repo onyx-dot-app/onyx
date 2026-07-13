@@ -201,6 +201,15 @@ CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
 
+# Chat-retention (TTL) cleanup tuning. Each delete task removes the oldest
+# CHAT_TTL_DELETE_BATCH_SIZE expired sessions and chains the next task, so
+# deletion drains one batch at a time on the light queue and interleaves with
+# the other light-queue work instead of running as one long task.
+CHAT_TTL_DELETE_BATCH_SIZE = 100
+# How long a queued delete task is valid before workers discard it. Bounds queue
+# growth; if a task expires the beat starts a fresh chain on its next run.
+CELERY_CHAT_TTL_DELETE_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
+
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
 TMP_DRALPHA_PERSONA_NAME = "KG Beta"
@@ -435,6 +444,10 @@ class OnyxCeleryQueues:
     CONNECTOR_HIERARCHY_FETCHING = "connector_hierarchy_fetching"
     CSV_GENERATION = "csv_generation"
 
+    # Chat retention (TTL) hard-deletion queue, consumed by the light worker.
+    # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.
+    CHAT_TTL_DELETION = "chat_ttl_deletion"
+
     # User file processing queue
     USER_FILE_PROCESSING = "user_file_processing"
     USER_FILE_PROJECT_SYNC = "user_file_project_sync"
@@ -481,6 +494,9 @@ class OnyxRedisLocks:
     SECURITY_SETTINGS = "da_lock:security_settings"
 
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
+    # In-flight marker: set while a chat-TTL cleanup chain is active (spanning
+    # its chained tasks) so the beat won't start a second chain per tenant.
+    CHAT_TTL_CHAIN_ACTIVE = "da_lock:chat_ttl_chain_active"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
