@@ -2,14 +2,12 @@
 
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { cn } from "@opal/utils";
-import type { StatusVariants } from "@opal/types";
 import { MessageCard, Text } from "@opal/components";
 import {
   MAX_VISIBLE_TOASTS,
   toast,
   toastStore,
   type Toast,
-  type ToastLevel,
 } from "@opal/layouts/toast/store";
 
 const ANIMATION_DURATION = 200; // matches tailwind fade-out-scale (0.2s)
@@ -17,14 +15,6 @@ const MAX_TOAST_MESSAGE_LENGTH = 150;
 // How long a toast lingers after the user clicks to expand it. Long enough to
 // read a multi-line stack trace or API error without forcing a manual dismiss.
 const EXPANDED_DURATION_MS = 30000;
-
-const LEVEL_TO_VARIANT: Record<ToastLevel, StatusVariants> = {
-  success: "success",
-  error: "error",
-  warning: "warning",
-  info: "info",
-  default: "default",
-};
 
 function buildDescription(
   t: Toast,
@@ -130,7 +120,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
             }
           >
             <MessageCard
-              variant={LEVEL_TO_VARIANT[t.level ?? "info"]}
+              variant={t.level ?? "info"}
               title={truncatedTitle}
               description={buildDescription(t, errorAppendix)}
               padding="xs"
