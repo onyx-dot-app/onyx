@@ -1862,9 +1862,9 @@ orjson==3.11.6 ; platform_python_implementation != 'PyPy' \
     --hash=sha256:fe515bb89d59e1e4b48637a964f480b35c0a2676de24e65e55310f6016cca7ce \
     --hash=sha256:fe71f6b283f4f1832204ab8235ce07adad145052614f77c876fcf0dac97bc06f
     # via langsmith
-packaging==24.2 \
-    --hash=sha256:09abb1bccd265c01f4a3aa3f7a7db064b36514d2cba19a2f694fe6150451a759 \
-    --hash=sha256:c228a6dc5e932d346bc5739379109d49e8853dd8223571c7c5b55260edc0b97f
+packaging==25.0 \
+    --hash=sha256:29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484 \
+    --hash=sha256:d443872c98d677bf60f6a1f2f8c1cb748e8fe762d2bf9d3148b5599295b0fc4f
     # via
     #   dask
     #   distributed
@@ -2421,9 +2421,9 @@ pytz==2025.2 \
     #   dateparser
     #   office365-rest-python-client
     #   pandas
-pywikibot==9.0.0 \
-    --hash=sha256:09b786b2159d6e443d8447fc56b5f9bfa5478fbb7f587487ac7b3f42ba4cd51a \
-    --hash=sha256:82120dd4dd275a48c0eaa2a459faad928211e7b43cf6efe4110ad95e805e7317
+pywikibot==11.4.2 \
+    --hash=sha256:19d9630973e5ecf1997306cf7a2257095022a73305a6ff215f11f35c4a3a2400 \
+    --hash=sha256:6d0f201d40587f944a961a3c6b68a95f2d854eafcf035496b732feed3c2f3169
 pywin32==311 ; sys_platform == 'win32' \
     --hash=sha256:3aca44c046bd2ed8c90de9cb8427f581c479e594e99b5c0bb19b29c10fd6cb87 \
     --hash=sha256:718a38f7e5b058e76aee1c56ddd06908116d35147e133427e59a3983f703a20d \
