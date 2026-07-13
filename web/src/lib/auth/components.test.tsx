@@ -197,6 +197,27 @@ describe("Email/Password Signup Workflow", () => {
     });
   });
 
+  test("rejects a password that fails signup constraints", async () => {
+    const user = setupUser();
+
+    render(<EmailPasswordForm label="create" />);
+
+    await user.type(
+      screen.getByPlaceholderText(/email@yourcompany.com/i),
+      "newuser@example.com"
+    );
+    await user.type(screen.getByTestId("password"), "weak");
+
+    // Signup enforces password policy — button must be disabled.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /create account/i })
+      ).toBeDisabled();
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   test("shows error toast when email already exists", async () => {
     const user = setupUser();
 
