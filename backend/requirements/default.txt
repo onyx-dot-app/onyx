@@ -375,9 +375,9 @@ botocore==1.39.11 \
     #   aiobotocore
     #   boto3
     #   s3transfer
-braintrust==0.3.9 \
-    --hash=sha256:2b903671837dea85d74e984403f154b60b77a3dde4c0bffa17121fdcb24f18d0 \
-    --hash=sha256:8c56ccb214bb102291968cdda67d7bf36a4b01fefc6b1998e53c272379eacab3
+braintrust==0.26.0 \
+    --hash=sha256:91148838a0ff69733daa076d7dbbfddf75aec9432d47dc924c73d529b998d470 \
+    --hash=sha256:c4837282aeb7de28313598e21d66614de6a0d7ef1a5dcd1bde545ff59fa9c487
 brotli==1.2.0 \
     --hash=sha256:0cf8c3b8ba93d496b2fae778039e2f5ecc7cff99df84df337ca31d8f2252896c \
     --hash=sha256:1b1d6a4efedd53671c793be6dd760fcf2107da3a52331ad9ea429edf0902f27a \
@@ -1301,6 +1301,7 @@ jsonschema==4.25.1 \
     --hash=sha256:3fba0169e345c7175110351d456342c364814cfcf3b964ba4587f22915230a63 \
     --hash=sha256:e4a9655ce0da0c0b67a085847e00a3a51449e1157f4f75e9fb5aa545e122eb85
     # via
+    #   braintrust
     #   litellm
     #   mcp
 jsonschema-path==0.4.6 \
@@ -1866,6 +1867,7 @@ packaging==24.2 \
     --hash=sha256:09abb1bccd265c01f4a3aa3f7a7db064b36514d2cba19a2f694fe6150451a759 \
     --hash=sha256:c228a6dc5e932d346bc5739379109d49e8853dd8223571c7c5b55260edc0b97f
     # via
+    #   braintrust
     #   dask
     #   distributed
     #   fastmcp
@@ -2368,7 +2370,6 @@ python-dotenv==1.2.2 \
     --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
     # via
-    #   braintrust
     #   fastmcp
     #   litellm
     #   magika
