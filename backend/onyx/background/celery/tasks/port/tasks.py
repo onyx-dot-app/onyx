@@ -17,6 +17,7 @@ from collections.abc import MutableMapping
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -808,17 +809,26 @@ def run_check_for_port(tenant_id: str, celery_app: Celery) -> int | None:
     return tasks_created
 
 
+class PortResumeResult(Enum):
+    NOT_PAUSED = "not_paused"  # nothing to resume (not paused / superseded / raced)
+    RESUMED = "resumed"  # fresh attempt minted AND dispatched now
+    DISPATCH_FAILED = "dispatch_failed"  # minted, but the immediate enqueue failed
+
+
 def resume_paused_port_unit(
     celery_app: Celery,
     tenant_id: str,
     cc_pair_id: int | None,
     port_user_id: UUID | None,
     search_settings_id: int,
-) -> bool:
+) -> PortResumeResult:
     """Operator Resume: mint a fresh attempt from the paused cursor and enqueue it now,
-    rather than waiting a TTL for the scheduler to notice the NOT_STARTED. Returns True if
-    a unit was resumed (False if it wasn't PAUSED / the target was superseded / a
-    concurrent resume won)."""
+    rather than waiting a TTL for the scheduler to notice the NOT_STARTED.
+
+    NOT_PAUSED if there was nothing to resume. DISPATCH_FAILED if the fresh attempt was
+    committed but the immediate enqueue failed (broker down) — the caller must NOT report
+    an immediate resume; the row is a committed NOT_STARTED that the scheduler re-enqueues
+    once its TTL lapses, so the resume isn't lost, just delayed. RESUMED otherwise."""
     scope: PortScope = "user_file" if port_user_id is not None else "connector"
     with get_session_with_current_tenant() as db_session:
         attempt = resume_paused_port_attempt(
@@ -828,17 +838,16 @@ def resume_paused_port_unit(
             search_settings_id=search_settings_id,
         )
         if attempt is None:
-            return False
+            return PortResumeResult.NOT_PAUSED
         attempt_id = attempt.id
     try:
         _enqueue_run_port_attempt(celery_app, attempt_id, tenant_id, scope)
     except Exception:
-        # The row is a committed NOT_STARTED; the scheduler re-enqueues it once its TTL
-        # lapses, so a broker hiccup here only delays the resume, it doesn't lose it.
         task_logger.exception(
             "resume_paused_port_unit: enqueue failed for PortAttempt %s", attempt_id
         )
-    return True
+        return PortResumeResult.DISPATCH_FAILED
+    return PortResumeResult.RESUMED
 
 
 @shared_task(

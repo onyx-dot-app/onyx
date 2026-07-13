@@ -952,7 +952,8 @@ MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS = max(
     1, _non_negative_int_env("MAX_CONCURRENT_USER_FILE_PORT_ATTEMPTS", 1)
 )
 
-# MUST stay below _MAX_TRACKED_FAILED_RETRIES (db/port_attempt.py) or pause never fires.
+# Auto-pause a port unit after this many consecutive same-cursor failures. Any value works:
+# _MAX_TRACKED_FAILED_RETRIES (db/port_attempt.py) sizes its streak history to cover it.
 MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
 )

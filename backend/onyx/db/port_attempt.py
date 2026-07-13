@@ -22,6 +22,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
 )
@@ -57,9 +58,11 @@ def _scope_where(
 # (none / active / FAILED) is still pending work.
 _SETTLED_STATUSES = frozenset({PortAttemptStatus.SUCCESS, PortAttemptStatus.CANCELED})
 
-# Reads enough recent attempts to reach the streak where retry backoff caps (9 at
-# the current 30s base / 1h cap); 10 = small margin. Raise if that cap is raised.
-_MAX_TRACKED_FAILED_RETRIES = 10
+# How many recent attempts the same-cursor streak query reads. Must cover BOTH consumers
+# of that streak: retry backoff (caps ~9 at the 30s base / 1h cap) and the auto-pause gate
+# (fires at MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE). Taking the max means a pause
+# threshold above the backoff window still fires -- a fixed 10 would silently never pause.
+_MAX_TRACKED_FAILED_RETRIES = max(10, MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE)
 
 
 def _get_locked(db_session: Session, port_attempt_id: int) -> PortAttempt:

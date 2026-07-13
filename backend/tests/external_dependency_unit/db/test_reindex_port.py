@@ -2226,3 +2226,100 @@ def test_mark_terminal_refuses_paused_attempt(
     db_session.expire_all()
     row = db_session.get(PortAttempt, paused_id)
     assert row is not None and row.status == PortAttemptStatus.PAUSED
+
+
+def test_resume_paused_port_unit_dispatches_and_reports_resumed(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The happy path: the orchestrator mints a fresh NOT_STARTED at the cursor, enqueues
+    it, and reports RESUMED."""
+    cc_pair, future_id = cc_pair_and_future
+    _paused_unit(db_session, cc_pair.id, future_id, "doc-4")
+
+    celery_app = MagicMock()
+    with patch(
+        "onyx.db.port_orphan_candidate.port_target_settings_id", lambda *_: future_id
+    ):
+        result = port_task.resume_paused_port_unit(
+            celery_app, get_current_tenant_id(), cc_pair.id, None, future_id
+        )
+
+    assert result is port_task.PortResumeResult.RESUMED
+    celery_app.send_task.assert_called_once()
+    db_session.expire_all()
+    latest = get_latest_port_attempt(db_session, cc_pair.id, future_id)
+    assert latest is not None
+    assert latest.status == PortAttemptStatus.NOT_STARTED
+    assert latest.last_processed_doc_id == "doc-4"
+
+
+def test_resume_paused_port_unit_reports_dispatch_failure(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A broker enqueue failure is surfaced as DISPATCH_FAILED (not masked as success), so
+    the endpoint doesn't tell the operator a wedged unit resumed immediately. The minted
+    NOT_STARTED stays for the scheduler to re-enqueue within a TTL -- the resume isn't lost."""
+    cc_pair, future_id = cc_pair_and_future
+    _paused_unit(db_session, cc_pair.id, future_id, "doc-4")
+
+    celery_app = MagicMock()
+    celery_app.send_task.side_effect = RuntimeError("broker down")
+    with patch(
+        "onyx.db.port_orphan_candidate.port_target_settings_id", lambda *_: future_id
+    ):
+        result = port_task.resume_paused_port_unit(
+            celery_app, get_current_tenant_id(), cc_pair.id, None, future_id
+        )
+
+    assert result is port_task.PortResumeResult.DISPATCH_FAILED
+    db_session.expire_all()
+    latest = get_latest_port_attempt(db_session, cc_pair.id, future_id)
+    assert latest is not None
+    assert (
+        latest.status == PortAttemptStatus.NOT_STARTED
+    )  # committed; self-heals via TTL
+
+
+def test_resume_paused_port_unit_not_paused(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Nothing to resume (latest is FAILED, not PAUSED) -> NOT_PAUSED, no enqueue."""
+    cc_pair, future_id = cc_pair_and_future
+    _fail_port_at(db_session, cc_pair.id, future_id, "doc-1")
+
+    celery_app = MagicMock()
+    with patch(
+        "onyx.db.port_orphan_candidate.port_target_settings_id", lambda *_: future_id
+    ):
+        result = port_task.resume_paused_port_unit(
+            celery_app, get_current_tenant_id(), cc_pair.id, None, future_id
+        )
+
+    assert result is port_task.PortResumeResult.NOT_PAUSED
+    celery_app.send_task.assert_not_called()
+
+
+def test_tracked_retries_covers_pause_threshold() -> None:
+    """The streak history the pause gate reads must cover the configured pause threshold,
+    else a threshold above the old fixed cap (10) would silently never fire."""
+    assert (
+        port_attempt_db._MAX_TRACKED_FAILED_RETRIES
+        >= MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE
+    )
+
+
+def test_streak_counts_beyond_default_cap_when_limit_allows(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The same-cursor streak can exceed the default backoff window (10) when the tracked-
+    history limit covers it -- so a pause threshold > 10 actually reaches its trigger."""
+    cc_pair, future_id = cc_pair_and_future
+    with patch.object(port_attempt_db, "_MAX_TRACKED_FAILED_RETRIES", 12):
+        for _ in range(12):
+            _fail_port_at(db_session, cc_pair.id, future_id, "doc-1")
+        assert (
+            count_consecutive_failed_port_attempts_no_progress(
+                db_session, cc_pair.id, future_id
+            )
+            == 12
+        )

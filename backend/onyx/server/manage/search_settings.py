@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.background.celery.tasks.port.tasks import PortResumeResult
 from onyx.background.celery.tasks.port.tasks import resume_paused_port_unit
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
@@ -362,18 +363,27 @@ def resume_paused_port(
     target = _active_port_settings(db_session)
     if target is None:
         raise OnyxError(OnyxErrorCode.CONFLICT, "No reindex port is currently active.")
-    resumed = resume_paused_port_unit(
+    result = resume_paused_port_unit(
         client_app,
         get_current_tenant_id(),
         request.cc_pair_id,
         request.user_id,
         target.id,
     )
-    if not resumed:
+    if result is PortResumeResult.NOT_PAUSED:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
             "That unit is not paused (it may have already been resumed or is still "
             "retrying).",
+        )
+    if result is PortResumeResult.DISPATCH_FAILED:
+        # The unit WAS resumed (a fresh attempt is committed), but the task broker was
+        # unavailable so it wasn't dispatched now. Don't report an immediate resume — the
+        # scheduler re-enqueues it within a few minutes.
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "The unit was resumed but could not be dispatched right now (the task queue is "
+            "unavailable). It will start automatically within a few minutes.",
         )
     return PortActionResponse(ok=True)
 
