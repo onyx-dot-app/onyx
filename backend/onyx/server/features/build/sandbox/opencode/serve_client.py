@@ -1566,9 +1566,8 @@ class OpencodeServeClient:
                 fetch_message,
                 parent_resolver=parent_resolver,
                 children_resolver=children_resolver,
-                fetch_message_by_session=lambda session_id,
-                message_id: self.get_message(
-                    session_id, message_id, directory=directory
+                fetch_message_by_session=lambda session_id, message_id: (
+                    self.get_message(session_id, message_id, directory=directory)
                 ),
             ):
                 if isinstance(sandbox_event, (Error, PromptResponse)):

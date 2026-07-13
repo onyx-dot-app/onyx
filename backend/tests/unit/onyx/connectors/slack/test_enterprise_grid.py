@@ -116,7 +116,7 @@ class TestFetchTeamUrl:
     def test_returns_none_when_url_missing(self) -> None:
         client = MagicMock()
         client.team_info.return_value = MagicMock(
-            get=lambda key, default=None: ({} if key == "team" else default)
+            get=lambda key, default=None: {} if key == "team" else default
         )
         assert fetch_team_url(client, "T1") is None
 
