@@ -155,12 +155,14 @@ function InputTime({
     : (["hours", "minutes"] as const);
 
   const valueKey = value
-    ? value.hours * 3600 + value.minutes * 60 + value.seconds
+    ? `${value.hours}:${value.minutes}:${value.seconds}`
     : null;
   React.useEffect(() => {
     setSegments(toSegments(value));
-    // Key on the second-of-day, not object identity, so parent re-renders
-    // that recreate an equal value don't clobber in-progress typing.
+    // Key on the field triple, not object identity, so parent re-renders
+    // that recreate an equal value don't clobber in-progress typing. The
+    // string form keeps distinct triples distinct (a second count would
+    // collapse 01:00:00 and 00:60:00).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueKey]);
 
