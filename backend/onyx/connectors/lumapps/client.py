@@ -112,6 +112,8 @@ class OnyxLumApps:
     ) -> dict[str, Any]:
         url = f"{self.base_url}{path}"
         last_network_error: requests.RequestException | None = None
+        last_http_status: int | None = None
+        last_http_text: str = ""
         for attempt in range(_MAX_RETRIES):
             try:
                 response = self._session.request(
@@ -144,6 +146,8 @@ class OnyxLumApps:
                 self._token = None  # expired/invalid; next _bearer() re-mints
                 continue
             if response.status_code == 429 or response.status_code >= 500:
+                last_http_status = response.status_code
+                last_http_text = response.text
                 delay = _backoff_seconds(response, attempt)
                 logger.warning(
                     "LumApps %s on %s; retry %d in %.1fs",
@@ -157,6 +161,13 @@ class OnyxLumApps:
             if response.status_code != 200:
                 raise LumAppsClientError(response.status_code, response.text)
             return response.json()
+        # Surface the real upstream status (429/5xx) when the last failure was an
+        # HTTP error, so callers (validation included) can translate it; fall back
+        # to 503 only for pure network exhaustion.
+        if last_http_status is not None:
+            raise LumAppsClientError(
+                last_http_status, f"Exhausted retries calling {path}: {last_http_text}"
+            )
         detail = f": {last_network_error}" if last_network_error else ""
         raise LumAppsClientError(503, f"Exhausted retries calling {path}{detail}")
 

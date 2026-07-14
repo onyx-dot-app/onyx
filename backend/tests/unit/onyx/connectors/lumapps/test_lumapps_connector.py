@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.lumapps.connector import _parse_dt
 from onyx.connectors.lumapps.connector import LumAppsConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
@@ -123,3 +124,25 @@ def test_list_body_requests_live_status_from_api() -> None:
     """The API-side filter stays in place alongside the in-code check."""
     connector = _make_connector({"items": [], "more": False})
     assert connector._list_body()["status"] == ["LIVE"]
+
+
+def test_parse_dt_handles_iso_and_epoch() -> None:
+    """updatedAt drives the incremental early-break; both ISO-8601 and numeric
+    epochs (seconds or milliseconds) must parse to the same instant so an
+    unexpected format doesn't silently force a full re-scan."""
+    expected = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+    iso = _parse_dt("2026-07-01T12:00:00Z")
+    epoch_s = _parse_dt(int(expected.timestamp()))
+    epoch_ms = _parse_dt(int(expected.timestamp()) * 1000)
+    epoch_str = _parse_dt(str(int(expected.timestamp())))
+
+    assert iso == expected
+    assert epoch_s == expected
+    assert epoch_ms == expected
+    assert epoch_str == expected
+
+    # Unparseable / non-timestamp values are ignored (never crash the walk).
+    assert _parse_dt("not-a-date") is None
+    assert _parse_dt(None) is None
+    assert _parse_dt("") is None
+    assert _parse_dt(True) is None

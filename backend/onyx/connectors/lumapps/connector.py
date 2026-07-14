@@ -55,13 +55,33 @@ def _is_live(content: dict[str, Any]) -> bool:
     return str(content.get("status") or "").upper() == _LIVE_STATUS
 
 
+def _epoch_to_dt(epoch: float) -> datetime | None:
+    # Values too large to be plausible seconds (>1e11 ≈ year 5138) are milliseconds.
+    if epoch > 1e11:
+        epoch /= 1000.0
+    try:
+        return datetime.fromtimestamp(epoch, tz=timezone.utc)
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
 def _parse_dt(value: Any) -> datetime | None:
+    # LumApps returns ISO-8601 timestamps in practice, but tolerate numeric epochs
+    # (seconds or milliseconds) as well: an unparseable value would silently disable
+    # the incremental early-break and force a full re-scan on every run.
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return _epoch_to_dt(float(value))
     if not isinstance(value, str) or not value:
         return None
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
-        return None
+        try:
+            return _epoch_to_dt(float(value))
+        except ValueError:
+            return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
@@ -73,6 +93,13 @@ class LumAppsConnector(CheckpointedConnector[LumAppsCheckpoint], SlimConnector):
     Carries over **all** LumApps metadata families as Onyx metadata
     (``{family_key: [labels]}``), so whatever HR tags — country or otherwise — becomes a
     filterable tag without any connector change.
+
+    Permissions: this is a public-only connector — every piece of LIVE content the
+    service user can read is indexed with no per-document access controls, so it is
+    visible to all Onyx users regardless of the original LumApps audience. It is not a
+    ``CheckpointedConnectorWithPermSync`` and has no entry in the EE permission-sync
+    registry. Scope the service user (and optionally ``instance_ids``) to only content
+    that is safe to expose org-wide.
     """
 
     def __init__(

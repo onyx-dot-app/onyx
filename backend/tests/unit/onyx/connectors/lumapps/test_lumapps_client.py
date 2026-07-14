@@ -68,6 +68,23 @@ def test_exhausted_network_errors_raise_client_error() -> None:
     assert "down" in exc_info.value.message
 
 
+def test_exhausted_http_errors_preserve_upstream_status() -> None:
+    """When retries are exhausted on an HTTP error, the real upstream status is
+    surfaced (not a generic 503) so callers can translate 429/5xx correctly."""
+    client, session = _client_with_token()
+    session.request.side_effect = [_response(503) for _ in range(5)]
+
+    with pytest.raises(LumAppsClientError) as exc_info:
+        client.list_content({})
+    assert exc_info.value.status_code == 503
+
+    client, session = _client_with_token()
+    session.request.side_effect = [_response(429) for _ in range(5)]
+    with pytest.raises(LumAppsClientError) as exc_info:
+        client.list_content({})
+    assert exc_info.value.status_code == 429
+
+
 def test_429_retry_does_not_remint_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """Rate-limit/server-error retries must reuse the cached token; only a 401
     invalidates it."""
