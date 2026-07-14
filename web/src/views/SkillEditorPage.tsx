@@ -4,9 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type ChangeEvent,
   type FormEvent,
 } from "react";
 import useSWR, { useSWRConfig } from "swr";
@@ -29,7 +27,6 @@ import {
   SvgShare,
   SvgSimpleLoader,
   SvgTrash,
-  SvgUploadCloud,
 } from "@opal/icons";
 import {
   Content,
@@ -47,12 +44,14 @@ import {
   replaceUserSkillBundle,
 } from "@/lib/skills/api";
 import type { CustomSkill, SkillEditableDetail } from "@/lib/skills/types";
+import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 import { toast } from "@/hooks/useToast";
 import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
 
 interface SkillEditorPageProps {
   skillId: string;
@@ -95,7 +94,6 @@ function getSharingStatus(skill: SkillEditableDetail): {
 export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
-  const replaceFileRef = useRef<HTMLInputElement>(null);
   const {
     data: skill,
     error,
@@ -115,7 +113,10 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const [shareOpen, setShareOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPreparingBundle, setIsPreparingBundle] = useState(false);
   const [isReplacingFiles, setIsReplacingFiles] = useState(false);
+  const [replacementBundle, setReplacementBundle] =
+    useState<PreparedSkillBundle | null>(null);
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -146,11 +147,12 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   // A bundle upload rewrites name/description/instructions from SKILL.md, so
   // lock the detail fields while one is in flight: edits made mid-upload
   // would be clobbered by the post-upload sync (or race it via Save).
-  const fieldsLocked = !canManageSkill || isReplacingFiles;
+  const fieldsLocked = !canManageSkill || isPreparingBundle || isReplacingFiles;
 
   const canSave =
     !!skill &&
     canManageSkill &&
+    !isPreparingBundle &&
     !isReplacingFiles &&
     isDirty &&
     !!name.trim() &&
@@ -210,18 +212,13 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     await refreshSkillList();
   }
 
-  function handleReplaceFilesClick() {
-    replaceFileRef.current?.click();
-  }
+  async function handleReplaceFiles(bundle: PreparedSkillBundle) {
+    if (!skill || !canManageSkill || isDirty) return;
 
-  async function handleReplaceFiles(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!skill || !file || !canManageSkill || isDirty) return;
-
+    setReplacementBundle(bundle);
     setIsReplacingFiles(true);
     try {
-      const updated = await replaceUserSkillBundle(skill.id, file);
+      const updated = await replaceUserSkillBundle(skill.id, bundle.file);
       await refreshSkillList();
       const refreshed = await refreshSkill();
       if (refreshed) {
@@ -235,6 +232,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
       );
     } finally {
       setIsReplacingFiles(false);
+      setReplacementBundle(null);
     }
   }
 
@@ -295,7 +293,11 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
   const sharingStatus = skill ? getSharingStatus(skill) : null;
   const replaceFilesDisabled =
-    !canManageSkill || isReplacingFiles || isSaving || isDirty;
+    !canManageSkill ||
+    isPreparingBundle ||
+    isReplacingFiles ||
+    isSaving ||
+    isDirty;
   const replaceFilesTooltip = isDirty
     ? "Save detail changes before replacing skill files."
     : isReplacingFiles
@@ -463,21 +465,23 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                     {canManageSkill && (
                       <InputHorizontal
                         title="Skill files"
-                        description="Replace the ZIP bundle for this skill. The slug stays the same; name, description, and instructions are read from the new SKILL.md."
+                        description="Replace this skill from a ZIP or folder. The slug stays the same; name, description, and instructions are read from the new SKILL.md."
                         center
                       >
                         <Tooltip tooltip={replaceFilesTooltip} side="bottom">
-                          <Button
-                            type="button"
-                            prominence="secondary"
-                            icon={SvgUploadCloud}
-                            disabled={replaceFilesDisabled}
-                            onClick={handleReplaceFilesClick}
-                          >
-                            {isReplacingFiles
-                              ? "Replacing..."
-                              : "Replace files"}
-                          </Button>
+                          <div>
+                            <SkillBundlePicker
+                              value={replacementBundle}
+                              compact
+                              disabled={replaceFilesDisabled}
+                              busyLabel={
+                                isReplacingFiles ? "Replacing..." : undefined
+                              }
+                              onChange={handleReplaceFiles}
+                              onError={(message) => toast.error(message)}
+                              onPreparingChange={setIsPreparingBundle}
+                            />
+                          </div>
                         </Tooltip>
                       </InputHorizontal>
                     )}
@@ -533,14 +537,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
           )}
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
-
-      <input
-        ref={replaceFileRef}
-        type="file"
-        accept=".zip,application/zip,application/x-zip-compressed"
-        className="hidden"
-        onChange={handleReplaceFiles}
-      />
 
       <ShareSkillModal
         skill={shareOpen ? (skill ?? null) : null}

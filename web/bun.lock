@@ -32,6 +32,7 @@
         "@radix-ui/react-visually-hidden": "^1.2.3",
         "@sentry/nextjs": "^10.54.0",
         "@tanstack/react-table": "^8.21.3",
+        "@zip.js/zip.js": "^2.8.26",
         "class-variance-authority": "^0.7.0",
         "clsx": "^2.1.1",
         "copy-to-clipboard": "^3.3.3",

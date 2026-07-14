@@ -8,6 +8,8 @@ promotion to org-wide, and admin disable as a reversible mute.
 
 from __future__ import annotations
 
+import io
+import zipfile
 from uuid import uuid4
 
 import httpx
@@ -60,6 +62,28 @@ def test_create_personal_skill_visibility(
     admin_match = [skill for skill in admin_customs if skill.slug == slug]
     assert len(admin_match) == 1
     assert admin_match[0].is_personal is True
+
+
+def test_create_personal_skill_accepts_wrapped_directory(
+    basic_user: DATestUser,
+) -> None:
+    slug = f"personal-wrapped-{uuid4().hex[:6]}"
+    bundle = io.BytesIO()
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            f"{slug}/SKILL.md",
+            "---\nname: Wrapped Skill\ndescription: Wrapped directory\n---\n\n"
+            "Use the supporting script.",
+        )
+
+    skill = SkillManager.create_personal(
+        basic_user,
+        slug=slug,
+        bundle_bytes=bundle.getvalue(),
+    )
+
+    assert skill.name == "Wrapped Skill"
+    assert skill.description == "Wrapped directory"
 
 
 def test_owner_can_fetch_own_personal_skill(basic_user: DATestUser) -> None:
