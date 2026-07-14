@@ -9,8 +9,8 @@ import { PageLoader } from "@/refresh-components/PageLoader";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { requestEmailVerification } from "@/lib/auth/svc";
+import { logout } from "@/lib/users/svc";
 import { toast } from "@/hooks/useToast";
-import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
 import { Logo } from "@/lib/app/components";
 
 export default function SendEmailVerificationPage() {
@@ -19,8 +19,15 @@ export default function SendEmailVerificationPage() {
   const { user, isLoading, mutateUser } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
 
-  // Poll for verification status so the original tab auto-advances to /app
-  // once the user verifies in a different tab.
+  // Redirect immediately when the verification tab signals success.
+  useEffect(() => {
+    const channel = new BroadcastChannel("email-verification");
+    channel.onmessage = () => router.replace("/app" as Route);
+    return () => channel.close();
+  }, [router]);
+
+  // Poll as a fallback in case the BroadcastChannel message is missed
+  // (e.g. the verification happened in a different browser or device).
   useEffect(() => {
     const interval = setInterval(() => mutateUser(), 3000);
     return () => clearInterval(interval);
@@ -39,6 +46,11 @@ export default function SendEmailVerificationPage() {
       );
   }, [searchParams, user, router]);
 
+  async function handleLogout() {
+    await logout();
+    router.replace("/auth/login" as Route);
+  }
+
   if (isLoading) return <PageLoader />;
   if (!user) redirect("/auth/login");
   if (user.is_verified || !authTypeMetadata.requiresVerification)
@@ -48,7 +60,6 @@ export default function SendEmailVerificationPage() {
     <AuthLayouts.Card
       title="Check your inbox"
       description="We've sent a verification link to your email address."
-      bottomPrompt={backToLoginOrSignupCopy()}
       icon={Logo}
     >
       <AuthLayouts.Message
@@ -57,6 +68,8 @@ export default function SendEmailVerificationPage() {
           "Didn't receive an email? [Resend](/auth/send-email-verification?resend=true)"
         )}
       />
+      <AuthLayouts.OrSeparator />
+      <AuthLayouts.Submit label="logout" onClick={handleLogout} />
     </AuthLayouts.Card>
   );
 }

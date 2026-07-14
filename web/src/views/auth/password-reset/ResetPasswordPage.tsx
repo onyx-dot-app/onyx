@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { redirect } from "next/navigation";
+import { redirect, useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import { resetPassword } from "@/lib/auth/svc";
 import { AuthLayouts, InputVertical } from "@opal/layouts";
 import { Formik } from "formik";
@@ -14,6 +14,7 @@ import {
   NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED,
   TENANT_ID_COOKIE_NAME,
 } from "@/lib/constants";
+import { AUTH_SUCCESS_REDIRECT_DELAY_MS } from "@/lib/auth/constants";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
 import { Logo } from "@/lib/app/components";
 
@@ -27,11 +28,15 @@ const validationSchema = Yup.object().shape({
 });
 
 export default function ResetPasswordPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
   const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
   const email = searchParams?.get("email");
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(
+    AUTH_SUCCESS_REDIRECT_DELAY_MS / 1000
+  );
 
   useEffect(() => {
     if (tenantId) {
@@ -43,6 +48,22 @@ export default function ResetPasswordPage() {
       });
     }
   }, [tenantId]);
+
+  useEffect(() => {
+    if (!resetSuccess) return;
+    const id = setInterval(
+      () => setSecondsLeft((s) => Math.max(0, s - 1)),
+      1000
+    );
+    const timer = setTimeout(
+      () => router.replace("/auth/login" as Route),
+      AUTH_SUCCESS_REDIRECT_DELAY_MS
+    );
+    return () => {
+      clearInterval(id);
+      clearTimeout(timer);
+    };
+  }, [resetSuccess, router]);
 
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED || !token || !email)
     redirect("/auth/login");
@@ -74,7 +95,7 @@ export default function ResetPasswordPage() {
         <AuthLayouts.Message
           messageType="success"
           title="Password updated"
-          description={`The password for the account ${email} was successfully updated. You can close this tab now.`}
+          description={`The password for the account ${email} was successfully updated. Redirecting to login in ${secondsLeft}s…`}
         />
       ) : (
         <Formik
