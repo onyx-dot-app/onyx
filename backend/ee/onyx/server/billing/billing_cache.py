@@ -150,17 +150,20 @@ def cached_is_tenant_on_trial(tenant_id: str) -> bool:
     return info.status in _TRIAL_STATUSES
 
 
-def invalidate_billing_cache(tenant_id: str) -> None:
-    """Drop the cached entry for one tenant. Safe to call even when no entry
-    exists. Used by call sites that just mutated the tenant's subscription
-    (e.g. admin panel → control plane) and want the next read to refresh.
+def invalidate_billing_cache(tenant_id: str) -> bool:
+    """Drop the cached entry for one tenant so the next read refreshes from the
+    control plane. Safe to call even when no entry exists. Returns False if the
+    delete failed and the stale entry may survive until its TTL, True otherwise
+    (including the single-tenant no-op).
     """
     if not MULTI_TENANT:
-        return
+        return True
 
     try:
         get_shared_redis_client().delete(_cache_key(tenant_id))
+        return True
     except RedisError as e:
         logger.warning(
             "billing cache invalidate failed for tenant %s: %s", tenant_id, e
         )
+        return False

@@ -29,6 +29,10 @@ class TierUpdateRequest(BaseModel):
     tenant_id: str
     customer_tier: CustomerTier
     trial_end: datetime | None = None
+    # False for a lapsed subscription (canceled/past_due/unpaid). Lets tier
+    # resolution refuse the trial promotion even if a stale future trial_end
+    # leaks. Defaults True for back-compat with older control-plane builds.
+    subscribed: bool = True
 
 
 class TierUpdateResponse(BaseModel):

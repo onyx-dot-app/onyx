@@ -24,6 +24,9 @@ logger = setup_logger()
 class CachedTier(NamedTuple):
     customer_tier: CustomerTier
     trial_end: datetime | None
+    # False for a lapsed subscription. Tier resolution then refuses the trial
+    # promotion regardless of trial_end.
+    subscribed: bool
 
 
 def _parse_trial_end(raw: object, tenant_id: str) -> datetime | None:
@@ -56,12 +59,14 @@ def update_tenant_tier(
     tenant_id: str,
     customer_tier: CustomerTier,
     trial_end: datetime | None = None,
+    subscribed: bool = True,
 ) -> None:
     redis_client = get_redis_client(tenant_id=tenant_id)
     payload = json.dumps(
         {
             "customer_tier": customer_tier.value,
             "trial_end": trial_end.isoformat() if trial_end is not None else None,
+            "subscribed": subscribed,
         }
     )
     redis_client.set(TENANT_TIER_KEY, payload, ex=TENANT_TIER_CACHE_TTL_SECONDS)
@@ -114,4 +119,11 @@ def get_cached_tier(tenant_id: str) -> CachedTier | None:
 
     trial_end = _parse_trial_end(parsed.get("trial_end"), tenant_id)
 
-    return CachedTier(customer_tier=customer_tier, trial_end=trial_end)
+    # Older cache entries predate this field. Absent or non-bool means treat as
+    # subscribed so we don't wrongly strip a valid tenant's promotion.
+    raw_subscribed = parsed.get("subscribed", True)
+    subscribed = raw_subscribed if isinstance(raw_subscribed, bool) else True
+
+    return CachedTier(
+        customer_tier=customer_tier, trial_end=trial_end, subscribed=subscribed
+    )

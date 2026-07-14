@@ -24,6 +24,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.billing.api import update_seats as _admin_update_seats
+from ee.onyx.server.billing.billing_cache import invalidate_billing_cache
 from ee.onyx.server.billing.models import SeatUpdateRequest
 from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.tenants.access import control_plane_dep
@@ -116,11 +117,23 @@ def update_tier(
             tier_update_request.tenant_id,
             tier_update_request.customer_tier,
             tier_update_request.trial_end,
+            tier_update_request.subscribed,
         )
-        return TierUpdateResponse(updated=True, error=None)
     except Exception as e:
         logger.exception("Failed to update tenant tier")
         return TierUpdateResponse(updated=False, error=str(e))
+
+    # Drop the cached billing lookup that gates indexing usage limits so a new
+    # tier or trial status takes effect immediately instead of after the
+    # BILLING_CACHE_TTL_SECONDS backstop. Report failure so the control plane
+    # does not treat a still-stale cache as refreshed.
+    if not invalidate_billing_cache(tier_update_request.tenant_id):
+        return TierUpdateResponse(
+            updated=False,
+            error="tier updated but billing cache invalidation failed",
+        )
+
+    return TierUpdateResponse(updated=True, error=None)
 
 
 @router.get("/billing-information")
