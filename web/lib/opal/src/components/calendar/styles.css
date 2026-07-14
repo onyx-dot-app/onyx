@@ -14,7 +14,7 @@
 }
 
 .opal-calendar-months {
-  @apply relative flex flex-row;
+  @apply relative flex flex-row gap-4;
 }
 
 .opal-calendar-month {
