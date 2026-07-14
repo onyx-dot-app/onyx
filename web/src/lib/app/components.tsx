@@ -9,6 +9,7 @@ import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
+import type { IconFunctionComponent } from "@opal/types";
 
 export interface LogoProps {
   folded?: boolean;
