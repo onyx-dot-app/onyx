@@ -183,7 +183,6 @@ describe("useChatSessionController", () => {
     renderHook(() => useChatSessionController("s1"), { wrapper });
 
     expect(resumeMock).toHaveBeenCalledWith("s1", 0, expect.anything());
-    // After the run ends we refetch and settle from the persisted snapshot.
     await waitFor(() => expect(getSessionMock).toHaveBeenCalledWith("s1"));
     await waitFor(() => expect(assistantText("s1", 2)).toBe("final answer"));
     await waitFor(() =>
@@ -363,7 +362,6 @@ describe("useChatSessionController", () => {
 
     renderHook(() => useChatSessionController("s1"), { wrapper });
 
-    // Resume streamed, then began the settle-refetch.
     await waitFor(() => expect(assistantText("s1", 2)).toBe("resumed"));
     await waitFor(() => expect(getSessionMock).toHaveBeenCalled());
 

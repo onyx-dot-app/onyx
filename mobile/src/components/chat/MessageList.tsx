@@ -1,8 +1,6 @@
-// FlashList v2 chat pattern, top-anchored to mirror web: a new/short conversation reads top→down
-// (startRenderingFromBottom off), MVCP.autoscrollToBottomThreshold keeps the view pinned to the
-// latest turn while streaming *only when the user is already near the bottom*, opening an existing
-// chat jumps to the newest turn (web scrolls to bottom on session load), and a floating chevron
-// returns there after the user scrolls up.
+// Top-anchored FlashList mirroring web: short chats read top→down; MVCP autoscroll pins to the
+// latest turn while streaming only when the user is near the bottom; a floating chevron returns
+// after scrolling up.
 import { useCallback, useRef, useState } from "react";
 import {
   NativeScrollEvent,
@@ -20,11 +18,11 @@ import SvgChevronDown from "@/icons/chevron-down";
 
 interface MessageListProps {
   messages: Message[];
-  // session agent, for the assistant-message avatar
+  // for the assistant-message avatar
   agent: MinimalAgent | null;
 }
 
-// Newest turn this far below the viewport → treat as "scrolled up" and reveal the button (web: 32px).
+// Newest turn this far below viewport → "scrolled up", reveal the button (web uses 32px).
 const AT_BOTTOM_THRESHOLD_PX = 48;
 
 const FAB_SHADOW = {
@@ -49,9 +47,8 @@ export function MessageList({ messages, agent }: MessageListProps) {
     [agent],
   );
 
-  // Opening an existing chat lands on the newest turn (web's session-load scroll-to-bottom). A
-  // short/new chat is already fully visible, so this is a no-op that leaves the first turn at top.
-  // Reset per session by keying this list on sessionId (see ChatSurface).
+  // Land on newest turn when opening a chat (web's session-load scroll-to-bottom); no-op for short
+  // chats. Reset per session by keying this list on sessionId (see ChatSurface).
   const handleLoad = useCallback(() => {
     if (didInitialScroll.current) return;
     didInitialScroll.current = true;

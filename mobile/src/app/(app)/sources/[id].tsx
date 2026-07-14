@@ -14,9 +14,7 @@ import { ProjectFileList } from "@/components/chat/ProjectFileList";
 import SvgChevronLeft from "@/icons/chevron-left";
 import SvgPlus from "@/icons/plus";
 
-// Full-screen project-sources manager, opened from the project panel's "View sources" row. Lives
-// off the /chat and /projects prefixes so deriveFocus returns null and the ChatSurface overlay
-// hides. Owns the add ("+") button + file picker; the panel is now just an entry point.
+// Lives off the /chat and /projects prefixes so deriveFocus returns null and the ChatSurface overlay hides.
 export default function SourcesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const parsed = Number(id);

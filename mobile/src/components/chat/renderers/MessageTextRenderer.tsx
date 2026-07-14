@@ -1,5 +1,4 @@
-// MESSAGE_START/DELTA content concatenated into one markdown string, then revealed at a steady
-// pace (useTypewriter) so a fast/bursty response still animates in like other AI chat apps.
+// Reveals concatenated stream content at a steady pace (useTypewriter) so bursty responses still animate in.
 import { useMemo, useState } from "react";
 
 import {
@@ -28,8 +27,7 @@ function accumulateContent(packets: Packet[]): string {
       packet.obj.type === PacketType.MESSAGE_START ||
       packet.obj.type === PacketType.MESSAGE_DELTA
     ) {
-      // `?? ""`: a message_start packet can arrive with no `content`; without the guard the
-      // template appends the literal string "undefined" before the first delta.
+      // message_start can arrive with no content; guard prevents appending literal "undefined".
       content += (packet.obj as MessageStart | MessageDelta).content ?? "";
     }
   }
@@ -37,9 +35,9 @@ function accumulateContent(packets: Packet[]): string {
 }
 
 function MessageText({ packets, isComplete }: MessageRendererProps) {
-  // Stable between packet flushes so the typewriter target only grows when content actually does.
+  // Stable across packet flushes so the typewriter target grows only when content does.
   const content = useMemo(() => accumulateContent(packets), [packets]);
-  // Captured once at mount: animate live messages; a hydrated/historical one mounts complete → snap.
+  // Captured once at mount: live messages animate; historical ones mount complete and snap.
   const [animate] = useState(() => !isComplete);
   const { displayed } = useTypewriter(content, animate, isComplete);
   return <StreamingMarkdown content={displayed} isStreaming={!isComplete} />;

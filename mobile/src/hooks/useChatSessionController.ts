@@ -96,8 +96,7 @@ async function runResumeStream(
       0,
       controller.signal,
     )) {
-      // re-check focus/abort on every event (heartbeats included) so navigate-away unwinds during
-      // quiet phases; heartbeats carry no content, so they aren't rendered
+      // re-check focus/abort on every event (heartbeats included) so navigate-away unwinds during quiet phases
       if (!stillCurrent()) break;
       if (isStreamError(event)) {
         // Errored run: show it immediately rather than waiting on (or getting stuck if it fails)

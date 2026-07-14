@@ -1,6 +1,4 @@
-// Human-readable title for a backend StreamingError.error_code. Ported verbatim from web's
-// message/errorHelpers.tsx getErrorTitle. Mobile shows a single alert icon rather than web's
-// per-code icon set (getErrorIcon), so only the title map is ported.
+// Mobile shows one alert icon, so web's per-code getErrorIcon is not ported — only this title map.
 export function getErrorTitle(errorCode?: string | null): string {
   switch (errorCode) {
     case "RATE_LIMIT":

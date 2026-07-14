@@ -22,8 +22,7 @@ interface ProjectFileListProps {
   onRemove: (id: string) => void;
 }
 
-// Project files as a grouped, hairline-divided list (icon box + name + type + remove) — the
-// mobile-appropriate shape for a vertical document list, vs the composer's chip-style FileCard.
+// Vertical document-list shape, deliberately distinct from the composer's chip-style FileCard.
 export function ProjectFileList({ files, onRemove }: ProjectFileListProps) {
   return (
     <View className="overflow-hidden rounded-12 border border-border-01">

@@ -16,15 +16,12 @@ import SvgArrowUp from "@/icons/arrow-up";
 import SvgPaperclip from "@/icons/paperclip";
 import SvgStop from "@/icons/stop";
 
-// Fixed input height: Enter inserts a newline that scrolls *inside* the field instead of growing
-// the composer. Clamped via native min===max sizing — never a JS-computed height — so the caret
-// can't escape the frame (a content-driven fixed height let a fast double-Enter paint the caret
-// behind the toolbar).
+// Fixed height via native min===max sizing, never a JS-computed height: a content-driven height
+// let a fast double-Enter paint the caret behind the toolbar.
 const INPUT_HEIGHT = 44;
 
-// web `shadow-box-01` (tokens/shadow.json): `0px 2px 12px 0px var(--shadow-02)` + a tight
-// `0px 0px 4px 1px` layer; `--shadow-02` = 10% black in both light & dark. RN renders one layer,
-// so we mirror the primary blur; Android uses `elevation`.
+// Mirrors web `shadow-box-01` (tokens/shadow.json); RN renders one layer so we keep the primary
+// blur, Android uses `elevation`.
 const SHADOW_BOX_01 = {
   shadowColor: "#000000",
   shadowOffset: { width: 0, height: 2 },
@@ -42,11 +39,6 @@ interface InputBarProps {
   attachments: UseComposerDraft;
 }
 
-// Web-parity composer (mirrors web's Base/AppInputBar): a shadowed, borderless rounded card holding
-// an attachment chip strip, an auto-growing multi-line input, and a bottom toolbar with the attach
-// control (left) and stop/send (right). The left group is a slot — actions popover, model selector,
-// deep research, mic, etc. drop in beside the paperclip as those features land. ChatScreen's
-// KeyboardStickyView lifts the whole thing over the keyboard.
 export function InputBar({
   value,
   onChangeText,
@@ -62,7 +54,6 @@ export function InputBar({
   const canSend =
     value.trim().length > 0 && !isBusy && !attachments.hasBlockingFiles;
 
-  // Recent library files (fetched only while the picker is open), minus what's already attached.
   const { data: recentFiles = [], isLoading: isLoadingRecent } =
     useRecentFiles(pickerOpen);
   const linkableRecent = useMemo(() => {
@@ -78,9 +69,8 @@ export function InputBar({
       className="bg-background-neutral-00 px-12 pt-8"
       style={{ paddingBottom: insets.bottom }}
     >
-      {/* Borderless-with-shadow on web; RN also keeps a hairline border — in dark mode the card and
-          the page behind it are both near-black, where the black shadow is invisible, so the border
-          guarantees the card reads in both themes. The shadow supplies the light-mode depth. */}
+      {/* Hairline border (web is borderless): in dark mode card and page are both near-black and the
+          shadow is invisible, so the border guarantees the card reads. */}
       <View
         className="rounded-16 border border-border-01 bg-background-neutral-00"
         style={SHADOW_BOX_01}
@@ -115,8 +105,7 @@ export function InputBar({
           ]}
         />
 
-        {/* Only surface the actionable failed-attachment hint; an in-progress upload shows its
-            spinner on the chip, so no "Attaching files…" line. */}
+        {/* Only the actionable failed hint; in-progress uploads show a spinner on the chip. */}
         {hasFailed ? (
           <Text
             font="secondary-body"
@@ -128,7 +117,6 @@ export function InputBar({
         ) : null}
 
         <View className="min-h-40 flex-row items-center justify-between p-4">
-          {/* Left group — attach today; actions popover / model / deep research mount here later. */}
           <View className="flex-row items-center gap-8">
             <Button
               prominence="tertiary"
@@ -163,8 +151,7 @@ export function InputBar({
       <FilePickerSheet
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        // The sheet closes itself (choose→onClose) and defers the action past the modal dismiss,
-        // so these are just the actions — no setPickerOpen here.
+        // Sheet closes itself (choose→onClose) and defers the action past dismiss — no setPickerOpen here.
         onUploadDocuments={() => void attachments.addDocuments()}
         onUploadPhotos={() => void attachments.addImages()}
         recentFiles={linkableRecent}

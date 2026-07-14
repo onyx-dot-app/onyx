@@ -1,5 +1,4 @@
-// Memoized on packetCount (not array identity): a row re-renders only when its own packets grow, so
-// streaming one message doesn't re-render the list.
+// Memoized on packet count, not array identity: a row re-renders only when its own packets grow.
 import { memo } from "react";
 import { View } from "react-native";
 
@@ -26,10 +25,9 @@ function UserMessage({ node }: { node: Message }) {
         </View>
       ) : null}
       {node.message.length > 0 ? (
-        // Web parity (HumanMessage): tint bubble, px-3/py-2, asymmetric corners (square bottom-right).
+        // Web parity: HumanMessage bubble with asymmetric corners (square bottom-right).
         <View className="max-w-[85%] rounded-t-16 rounded-bl-16 bg-background-tint-02 px-12 py-8">
-          {/* main-ui-body (14px): deliberate reduction from web's main-content-body (16px) — 16px
-              reads oversized on a phone. Assistant markdown (StreamingMarkdown) matches. */}
+          {/* 14px body: deliberate reduction from web's 16px, which reads oversized on a phone. */}
           <Text font="main-ui-body" color="text-05">
             {node.message}
           </Text>
@@ -39,8 +37,7 @@ function UserMessage({ node }: { node: Message }) {
   );
 }
 
-// Web parity: the ErrorBanner (red Alert "broken" box) — code-derived title + the raw error text.
-// Mobile port shows one alert icon (web varies it by code) and no stack-trace/regenerate yet.
+// Web parity: ErrorBanner — code-derived title + raw error. Single alert icon; no regenerate yet.
 function ErrorMessage({ node }: { node: Message }) {
   return (
     <View className="py-6">
@@ -74,14 +71,12 @@ function AssistantMessage({
   const Renderer = renderer?.Component;
   const hasContent = Renderer != null && packets.length > 0;
 
-  // Web AgentMessage: vertical stack of the timeline (avatar + status) then the answer. The timeline
-  // owns the "Thinking…" loader, so the bare "…" placeholder is gone.
+  // Web AgentMessage: timeline (avatar + status) above the answer; the timeline owns the loader.
   return (
     <View className="gap-12 py-6">
       <AgentTimeline agent={agent} isLoading={!hasContent && !isComplete} />
       {hasContent ? (
-        // web AgentMessage answer wrapper is px-3 (12px) — inset so the text lines up under the
-        // avatar rail instead of sticking out to its left.
+        // Inset (px-12) aligns the answer under the avatar rail, matching web's px-3.
         <View className="px-12">
           <Renderer packets={packets} isComplete={isComplete} />
         </View>
@@ -111,8 +106,8 @@ export const MessageRow = memo(
     prev.node.messageId === next.node.messageId &&
     prev.node.errorCode === next.node.errorCode &&
     prev.node.packets.length === next.node.packets.length &&
-    // user rows render attachment chips from node.files; re-render if that array is replaced
+    // user attachment chips: re-render if the files array is replaced
     prev.node.files === next.node.files &&
-    // assistant rows show the agent avatar; re-render if the session's agent resolves/changes
+    // assistant avatar: re-render if the session's agent changes
     prev.agent === next.agent,
 );

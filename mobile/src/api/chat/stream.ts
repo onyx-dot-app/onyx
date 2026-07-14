@@ -48,8 +48,7 @@ export function isMessageIdInfo(
   return "user_message_id" in event;
 }
 
-// Root-level backend error (StreamingError): a top-level `error` string, not a wrapped packet.
-// Matches web's `Object.hasOwn(packet, "error") && packet.error != null` check.
+// Root-level StreamingError: a top-level `error` string, not a wrapped packet (mirrors web's error check).
 export function isStreamError(event: StreamEvent): event is StreamingError {
   return (
     "error" in event && typeof (event as StreamingError).error === "string"

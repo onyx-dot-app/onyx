@@ -16,8 +16,7 @@ interface ProjectContextPanelProps {
   isLoading: boolean;
 }
 
-// Project overview. A "View sources" row shows the file count and opens the dedicated
-// /sources/[id] screen, which owns all file management.
+// File management lives on the dedicated /sources/[id] screen, not here.
 export function ProjectContextPanel({
   projectId,
   details,

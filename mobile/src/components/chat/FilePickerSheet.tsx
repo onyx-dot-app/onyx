@@ -29,8 +29,7 @@ interface FilePickerSheetProps {
   isLoadingRecent: boolean;
 }
 
-// Add-files chooser (mirrors web's FilePickerPopover). Web uses a hover popover;
-// mobile uses a bottom sheet.
+// Mirrors web's FilePickerPopover, as a bottom sheet instead of a hover popover.
 export function FilePickerSheet({
   visible,
   onClose,
@@ -42,9 +41,8 @@ export function FilePickerSheet({
 }: FilePickerSheetProps) {
   const insets = useSafeAreaInsets();
 
-  // iOS drops a picker presented while this Modal is still dismissing ("presentation in progress"),
-  // so a chosen action is deferred to onDismiss (after the sheet is gone). Android has no such
-  // conflict (and no onDismiss), so it runs immediately.
+  // iOS drops a picker presented while this Modal is still dismissing, so defer the action to
+  // onDismiss (after the sheet is gone); Android has no such conflict and runs immediately.
   const pendingRef = useRef<(() => void) | null>(null);
   const choose = (action: () => void) => {
     onClose();

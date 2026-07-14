@@ -25,7 +25,7 @@ jest.mock("@/state/session", () => ({
   useSession: (selector: (s: { serverUrl: string | null }) => unknown) =>
     selector({ serverUrl: "https://example.test" }),
 }));
-// Mock the transport; re-implement the trivial discriminators so we don't pull in expo/fetch.
+// Re-implement the trivial discriminators inline so we don't pull in expo/fetch.
 jest.mock("@/api/chat/stream", () => ({
   streamChatMessage: jest.fn(),
   isPacket: (event: { obj?: unknown; placement?: unknown }) =>
@@ -312,8 +312,7 @@ describe("useChatController", () => {
       })(),
     );
 
-    // The hook stays bound to null; after create+navigate the store owns the new session, so drive
-    // and inspect it there (mirrors stop() aborting once the screen has navigated to the new id).
+    // Hook stays null-bound; after create the store owns the new session, so drive and inspect it there.
     const { result } = renderHook(() => useChatController(null), { wrapper });
     await act(async () => {
       await result.current.submit("first message");
@@ -410,7 +409,6 @@ describe("useChatController", () => {
     });
 
     expect(createSessionMock).toHaveBeenCalledWith(0, 7);
-    // From a project we navigate (push), not replace, so Back returns to it.
     expect(router.navigate).toHaveBeenCalledWith({
       pathname: "/chat/[id]",
       params: { id: "proj-session" },
@@ -439,7 +437,6 @@ describe("useChatController", () => {
   it("stop aborts the stream and stops the backend run", async () => {
     useChatSessionStore.getState().ensureSession("s1");
     stopSessionMock.mockResolvedValue();
-    // Keeps streaming until the controller's signal is aborted.
     streamMock.mockImplementation((_body, signal) =>
       (async function* () {
         yield startPacket("Hello");

@@ -33,8 +33,8 @@ export interface UseComposerDraft {
   consumeAttachments: () => void; // accepted starter send: clear attachments, keep text
 }
 
-// The composer draft lens: the sole ComposerDraftContext consumer, composed with the userFileStore
-// engine (text/refs from the context, file records from the store, uploads via useUpload).
+// Sole ComposerDraftContext consumer: text/refs from context, file records from the store,
+// uploads via useUpload.
 export function useComposerDraft(draftKey: string): UseComposerDraft {
   const ctx = useContext(ComposerDraftContext);
   if (!ctx) {

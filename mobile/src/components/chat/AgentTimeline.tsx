@@ -1,10 +1,5 @@
-// Simple port of web's AgentTimeline (web/src/app/app/message/messageComponents/timeline). The
-// assistant message is a vertical stack: this timeline — the agent avatar in a 36px rail plus a
-// status header — sits above the answer text. Web-faithful minus the rich step content: the
-// reasoning/tool STEP rows are scaffolded (rail dot + 1px connector + label) but fed no data yet,
-// since the mobile stream doesn't parse reasoning/tool packets. The loading state mirrors web's
-// shimmering "Thinking…" label (web uses a CSS gradient sweep; RN approximates it with an opacity
-// pulse on the reanimated UI thread).
+// Port of web's AgentTimeline (web/src/app/app/message/messageComponents/timeline): the agent
+// avatar in a 36px rail plus a status header, sitting above the answer text.
 import { useEffect } from "react";
 import { View } from "react-native";
 import Animated, {
@@ -22,7 +17,7 @@ import { MinimalAgent } from "@/chat/agents";
 import { cn } from "@/lib/utils";
 import type { IconFunctionComponent } from "@/icons/types";
 
-// web timeline rail width (--timeline-rail-width = 2.25rem = 36px) and header avatar size (24).
+// Mirrors web's --timeline-rail-width (36px); on mobile w-36 = 36px.
 const RAIL = "w-36";
 const AVATAR_SIZE = 24;
 
@@ -32,15 +27,14 @@ export interface TimelineStepData {
   key: string;
   label: string;
   status: TimelineStepStatus;
-  // Tool/step icon when available; falls back to a status-colored dot.
   icon?: IconFunctionComponent;
 }
 
 interface AgentTimelineProps {
   agent: MinimalAgent | null;
-  // web's EMPTY state: the run has begun but no answer content has arrived → shimmer "Thinking…".
+  // EMPTY state (web): run started but no answer content yet → shimmer "Thinking…".
   isLoading: boolean;
-  // Reasoning/tool steps; empty until the mobile stream parses those packets (kept as a seam).
+  // Empty until the mobile stream parses reasoning/tool packets (seam).
   steps?: TimelineStepData[];
 }
 
@@ -51,7 +45,6 @@ export function AgentTimeline({
 }: AgentTimelineProps) {
   return (
     <View>
-      {/* Header row (web TimelineHeaderRow): avatar centered in the rail + status label beside it. */}
       <View className="h-36 flex-row items-center">
         <View className={cn("h-36 items-center justify-center", RAIL)}>
           {agent ? <AgentAvatar agent={agent} size={AVATAR_SIZE} /> : null}
@@ -71,7 +64,7 @@ export function AgentTimeline({
   );
 }
 
-// web `.shimmer-text` gradient sweep → an opacity breathe (no masked-gradient dep for the simple port).
+// Approximates web's .shimmer-text gradient sweep with an opacity pulse (no masked-gradient dep).
 function ThinkingLabel() {
   const opacity = useSharedValue(0.5);
   useEffect(() => {
@@ -91,7 +84,6 @@ function ThinkingLabel() {
   );
 }
 
-// One reasoning/tool step: web TimelineRow (rail = 1px connector + a 12px icon/dot) + a muted label.
 function TimelineStep({
   step,
   isFirst,
@@ -105,7 +97,6 @@ function TimelineStep({
   return (
     <View className="flex-row">
       <View className={cn("items-center", RAIL)}>
-        {/* connector above (web `bg-border-01`, `w-px`); hidden on the first step */}
         <View
           className={cn("h-8 w-[1px] bg-border-01", isFirst && "opacity-0")}
         />
@@ -123,7 +114,6 @@ function TimelineStep({
             )}
           />
         )}
-        {/* connector below (flex-1); hidden on the last step */}
         <View
           className={cn("w-[1px] flex-1 bg-border-01", isLast && "opacity-0")}
         />

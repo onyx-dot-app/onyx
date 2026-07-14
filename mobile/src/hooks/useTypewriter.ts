@@ -1,29 +1,25 @@
-// Paced character reveal for the streaming "typewriter" feel — ported from web's
-// hooks/useTypewriter.ts. Decouples what's shown from how fast/bursty tokens actually arrive:
-// reveals `target` a few chars per frame so a fast or chunked response still animates in. Pure
-// React + requestAnimationFrame; the only platform swap from web is AppState (RN) in place of
+// Paced "typewriter" reveal: decouples what's shown from how bursty tokens actually arrive by
+// revealing `target` a few chars per frame. Platform swap from web: AppState (RN) replaces
 // document.visibilitychange for the return-to-foreground snap.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 // Mid-stream reveal rate, in chars per 60fps frame. 3 ≈ 180 cps.
 const CHARS_PER_FRAME = 3;
-// Once the stream is finished, the rate becomes adaptive so a long backlog drains within
-// ~CATCHUP_FRAMES frames — bursty rendering after the final packet is fine (the user is reading
-// along, not watching new content arrive).
+// Once the stream finishes the rate goes adaptive to drain a long backlog within ~CATCHUP_FRAMES
+// frames — bursty rendering after the final packet is fine (user is reading, not watching new content).
 const CATCHUP_FRAMES = 30;
 
 export interface UseTypewriterResult {
   displayed: string;
-  // True while the post-finish adaptive drain is running (callers can pause auto-scroll).
+  // True while the post-finish adaptive drain runs (callers can pause auto-scroll).
   isDraining: boolean;
 }
 
 /**
- * Reveals `target` one chunk at a time on each animation frame. When `enabled` is false
- * (historical messages) it snaps to full on mount. The rAF loop pauses once caught up and resumes
- * when `target` grows. `streamFinished` lets it drain a bursty backlog faster once the backend is
- * done, so callers gating on "fully displayed" don't sit on a long tail.
+ * Reveals `target` a chunk per animation frame; `enabled=false` snaps to full (historical messages).
+ * The loop pauses when caught up and resumes when `target` grows. `streamFinished` drains a bursty
+ * backlog faster so callers gating on "fully displayed" don't sit on a long tail.
  */
 export function useTypewriter(
   target: string,
@@ -41,8 +37,8 @@ export function useTypewriter(
     streamFinishedRef.current = streamFinished;
   });
 
-  // Captured once when the post-finish drain begins so the per-frame step stays constant instead
-  // of decaying with the shrinking backlog (dividing the current backlog each tick overshoots).
+  // Captured once when the drain begins so the step stays constant instead of decaying with the
+  // shrinking backlog (re-dividing the backlog each tick overshoots).
   const drainStepRef = useRef<number | null>(null);
 
   const [isDraining, setIsDraining] = useState(false);
@@ -136,14 +132,13 @@ export function useTypewriter(
     };
   }, []);
 
-  // Restart the loop when target grows past what's currently displayed.
   useEffect(() => {
     if (target.length > displayedLength && startLoopRef.current) {
       startLoopRef.current();
     }
   }, [target.length, displayedLength]);
 
-  // Returning to the foreground snaps to full so the user sees the whole response immediately.
+  // Returning to foreground snaps to full so the user sees the whole response immediately.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {

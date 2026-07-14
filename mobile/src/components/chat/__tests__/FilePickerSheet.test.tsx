@@ -14,8 +14,7 @@ function recent(id: string, name: string): ProjectFile {
   return makeProjectFile({ id, name, file_id: id });
 }
 
-// A chosen action is deferred past the sheet's modal dismiss (iOS presentation-conflict guard),
-// so a tap only fires the callback once the modal reports it has dismissed.
+// Chosen action fires only after the modal reports dismissal (iOS presentation-conflict guard).
 function fireDismiss() {
   fireEvent(screen.UNSAFE_getByType(Modal), "dismiss");
 }

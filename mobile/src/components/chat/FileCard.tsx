@@ -20,7 +20,7 @@ import SvgX from "@/icons/x";
 
 const IMAGE_SIZE = 64;
 
-// web `shadow-xs` on the remove control.
+// Mirrors web `shadow-xs` on the remove control.
 const REMOVE_SHADOW = {
   shadowColor: "#000000",
   shadowOffset: { width: 0, height: 1 },
@@ -39,13 +39,8 @@ function isImage(file: ProjectFile): boolean {
   return file.chat_file_type === ChatFileType.IMAGE || isImageName(file.name);
 }
 
-// The single file-display card (mirrors web's FileCard), used by the composer strip, a
-// sent message's attachments, and the project panel. Images render as a square thumbnail;
-// everything else — and any failed upload — as a bordered pill. Removable once the upload
-// lands (matches web); a file stuck INDEXING/FAILED stays removable so the user can unblock
-// send.
-// Memoized so it skips the composer strip's per-keystroke re-renders. Progress is read from the
-// store by this card's own atomic selector, so a tick re-renders only this card.
+// Memoized + atomic progress selector so a store tick re-renders only this card, not the whole
+// composer strip. Stays removable while INDEXING/FAILED so the user can unblock send.
 export const FileCard = memo(function FileCard({
   file,
   onRemove,
@@ -69,9 +64,7 @@ export const FileCard = memo(function FileCard({
           )}
         </View>
         {canRemove ? (
-          // Web parity (FileCard `Removable`): a small rounded-square at the top-left, inverted
-          // fill + muted X + a subtle shadow. Web reveals it on hover; touch has no hover, so it
-          // stays visible.
+          // Web reveals this on hover; touch has no hover, so it stays visible.
           <Pressable
             onPress={() => onRemove(file.id)}
             hitSlop={8}

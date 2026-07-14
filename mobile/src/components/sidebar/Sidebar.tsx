@@ -30,13 +30,13 @@ function SidebarRoot({ children }: SidebarRootProps) {
   const { folded, setFolded } = useSidebar();
   const insets = useSafeAreaInsets();
 
-  // Derived from `folded` so the slide stays state-driven (no effect mutation): 1 = open, 0 = closed.
+  // State-driven so the slide needs no effect mutation; 1 = open, 0 = closed.
   const progress = useDerivedValue(
     () => withTiming(folded ? 0 : 1, { duration: SIDEBAR_ANIM_MS }),
     [folded],
   );
 
-  // Live swipe offset, mutated only in the Pan worklet; layers on `progress` for 1:1 finger tracking.
+  // Live swipe offset (Pan worklet only); layers on progress for 1:1 finger tracking.
   const drag = useSharedValue(0);
 
   const columnStyle = useAnimatedStyle(() => {
@@ -51,7 +51,7 @@ function SidebarRoot({ children }: SidebarRootProps) {
 
   const close = React.useCallback(() => setFolded(true), [setFolded]);
 
-  // Swipe-left-to-close; `activeOffsetX` gates to horizontal so vertical scroll falls through to Body.
+  // activeOffsetX gates to horizontal so vertical scroll falls through to Body.
   const pan = Gesture.Pan()
     .activeOffsetX([-15, 15])
     .onUpdate((e) => {
@@ -70,7 +70,7 @@ function SidebarRoot({ children }: SidebarRootProps) {
         pointerEvents={folded ? "none" : "auto"}
         className="absolute inset-0 z-50"
       >
-        {/* Tap-to-close backdrop. Web's ~1px backdrop-blur is dropped — no mobile token. */}
+        {/* Web's ~1px backdrop-blur is dropped — no mobile token. */}
         <Animated.View style={backdropStyle} className="absolute inset-0">
           <Pressable className="flex-1 bg-mask-03" onPress={close} />
         </Animated.View>

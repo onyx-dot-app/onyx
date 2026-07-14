@@ -6,13 +6,12 @@ import SvgLoader from "@/icons/loader";
 
 interface SpinnerProps {
   size?: number;
-  // Onyx text-color class for the arc (default muted). e.g. "text-text-03", "text-status-error-05".
+  // Onyx text-color class for the arc, e.g. "text-status-error-05".
   className?: string;
 }
 
-// Design-system loader — web's SvgLoader (a 3/4-circle arc) + animate-spin, ported to RN. Uses the
-// RN Animated driver (native transform) rather than a platform ActivityIndicator so on-screen
-// spinners match the rest of the icon set. RN Animated (not reanimated) keeps it jest-safe.
+// RN Animated native transform (not ActivityIndicator) so spinners match the icon set;
+// Animated (not reanimated) keeps it jest-safe.
 export function Spinner({
   size = 16,
   className = "text-text-03",
