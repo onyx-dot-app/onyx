@@ -8,7 +8,7 @@ from onyx.file_store.file_store import FileStore
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import parse_skill_md_metadata
 from onyx.skills.bundle import slug_from_filename
-from onyx.skills.bundle import validate_custom_bundle
+from onyx.skills.bundle import validate_and_normalize_custom_bundle
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -45,8 +45,8 @@ def ingest_skill_bundle(
 ) -> IngestedBundle:
     """Validate, parse, hash, and store a custom skill bundle.
 
-    Validates the zip structure, parses ``(name, description)`` from SKILL.md
-    frontmatter, hashes the bytes, and saves the blob.
+    Validates and normalizes the zip structure, parses ``(name, description)``
+    from SKILL.md frontmatter, hashes the stored bytes, and saves the blob.
 
     Pass ``slug`` to keep an existing row's slug when replacing a bundle on
     update; when omitted the slug is derived from ``filename`` (create path).
@@ -56,7 +56,7 @@ def ingest_skill_bundle(
     """
     if slug is None:
         slug = slug_from_filename(filename)
-    validate_custom_bundle(bundle_bytes, slug=slug)
+    bundle_bytes = validate_and_normalize_custom_bundle(bundle_bytes, slug=slug)
     name, description = parse_skill_md_metadata(bundle_bytes)
     sha = compute_bundle_sha256(bundle_bytes)
 

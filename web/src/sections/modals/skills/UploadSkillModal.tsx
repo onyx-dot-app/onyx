@@ -1,14 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Button } from "@opal/components";
+import { useState } from "react";
+import { Button, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
-import Text from "@/refresh-components/texts/Text";
-import { Section } from "@/layouts/general-layouts";
 import { createCustomSkill } from "@/lib/skills/api";
+import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 import { toast } from "@/hooks/useToast";
 import type { CustomSkill } from "@/lib/skills/types";
+import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
 
 interface UploadSkillModalProps {
   open: boolean;
@@ -22,17 +22,13 @@ export default function UploadSkillModal({
   onClose,
   onUploaded,
 }: UploadSkillModalProps) {
-  const [file, setFile] = useState<File | null>(null);
+  const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   function reset() {
-    setFile(null);
-    // Clear the native input too — otherwise re-selecting the same file
-    // after a cancel fires no change event.
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    setBundle(null);
+    setErrorMessage(null);
   }
 
   function handleClose() {
@@ -41,66 +37,51 @@ export default function UploadSkillModal({
     onClose();
   }
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0] ?? null;
-    setFile(selected);
-  }
-
   async function handleSubmit() {
-    if (!file) return;
+    if (!bundle) return;
     setSubmitting(true);
     try {
-      const created = await createCustomSkill(file);
+      const created = await createCustomSkill(bundle.file);
       toast.success(`Uploaded "${created.name}"`);
       reset();
       onUploaded(created);
       onClose();
     } catch (err) {
       console.error("Failed to upload skill bundle", err);
-      toast.error(err instanceof Error ? err.message : "Upload failed", {
-        description: "Skill bundle was not saved.",
-      });
+      setErrorMessage(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setSubmitting(false);
     }
   }
 
-  const submitDisabled = submitting || !file;
+  const submitDisabled = submitting || !bundle;
 
   return (
     <Modal open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <Modal.Content width="md">
+      <Modal.Content width="sm">
         <Modal.Header
           icon={SvgUploadCloud}
           title="Upload skill"
-          description="Upload a zip bundle. The zip filename becomes the slug, and SKILL.md frontmatter provides the name + description."
+          description="Add a skill from a ZIP file or folder. SKILL.md provides its name and description."
           onClose={handleClose}
         />
         <Modal.Body>
-          <Section gap={0.25} alignItems="stretch">
-            <Text as="span" mainUiAction text05>
-              Bundle (.zip)
-            </Text>
-            <div className="flex items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".zip,application/zip"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <Button
-                icon={SvgUploadCloud}
-                prominence="secondary"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {file ? "Change file" : "Choose zip"}
-              </Button>
-              <Text as="span" mainUiBody text03>
-                {file ? file.name : "No file selected"}
+          <SkillBundlePicker
+            value={bundle}
+            disabled={submitting}
+            onChange={(nextBundle) => {
+              setBundle(nextBundle);
+              setErrorMessage(null);
+            }}
+            onError={setErrorMessage}
+          />
+          {errorMessage && (
+            <div className="mt-2">
+              <Text as="p" font="secondary-body" color="status-error-05">
+                {errorMessage}
               </Text>
             </div>
-          </Section>
+          )}
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={handleClose}>

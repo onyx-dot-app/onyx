@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
-import { Section } from "@/layouts/general-layouts";
 import { createCustomSkill } from "@/lib/skills/api";
+import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 import { toast } from "@/hooks/useToast";
+import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
 
 interface CreatePersonalSkillModalProps {
   open: boolean;
@@ -20,13 +21,12 @@ export default function CreatePersonalSkillModal({
   onClose,
   onCreated,
 }: CreatePersonalSkillModalProps) {
-  const [file, setFile] = useState<File | null>(null);
+  const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
-    setFile(null);
+    setBundle(null);
     setErrorMessage(null);
   }
 
@@ -36,18 +36,12 @@ export default function CreatePersonalSkillModal({
     onClose();
   }
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0] ?? null;
-    setFile(selected);
-    setErrorMessage(null);
-  }
-
   async function handleSubmit() {
-    if (!file) return;
+    if (!bundle) return;
     setSubmitting(true);
     setErrorMessage(null);
     try {
-      const created = await createCustomSkill(file);
+      const created = await createCustomSkill(bundle.file);
       toast.success(`Created "${created.name}"`);
       reset();
       onCreated();
@@ -64,50 +58,34 @@ export default function CreatePersonalSkillModal({
     }
   }
 
-  const submitDisabled = submitting || !file;
+  const submitDisabled = submitting || !bundle;
 
   return (
     <Modal open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <Modal.Content width="md">
+      <Modal.Content width="sm">
         <Modal.Header
           icon={SvgUploadCloud}
           title="Create skill"
-          description="Upload a zip bundle. The zip filename becomes the slug, and SKILL.md frontmatter provides the name + description. Personal skills are only visible to you."
+          description="Add a personal skill from a ZIP file or folder. Only you can access it."
           onClose={handleClose}
         />
         <Modal.Body>
-          <Section gap={0.5} alignItems="stretch">
-            <Section gap={0.25} alignItems="stretch">
-              <Text font="main-ui-action" color="text-05">
-                Bundle (.zip)
-              </Text>
-              <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".zip,application/zip"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                <Button
-                  icon={SvgUploadCloud}
-                  prominence="secondary"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {file ? "Change file" : "Choose zip"}
-                </Button>
-                <Text font="main-ui-body" color="text-03">
-                  {file ? file.name : "No file selected"}
-                </Text>
-              </div>
-            </Section>
-
-            {errorMessage && (
+          <SkillBundlePicker
+            value={bundle}
+            disabled={submitting}
+            onChange={(nextBundle) => {
+              setBundle(nextBundle);
+              setErrorMessage(null);
+            }}
+            onError={setErrorMessage}
+          />
+          {errorMessage && (
+            <div className="mt-2">
               <Text as="p" font="secondary-body" color="status-error-05">
                 {errorMessage}
               </Text>
-            )}
-          </Section>
+            </div>
+          )}
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={handleClose}>
