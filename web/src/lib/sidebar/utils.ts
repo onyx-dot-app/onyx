@@ -8,9 +8,7 @@ import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { Logo } from "@/lib/app/components";
 import type { IconFunctionComponent } from "@opal/types";
 
-export function renderSidebarLogo(
-  folded: boolean = false
-): IconFunctionComponent {
+export function renderSidebarLogo(folded: boolean): IconFunctionComponent {
   return (props) => React.createElement(Logo, { ...props, folded });
 }
 
