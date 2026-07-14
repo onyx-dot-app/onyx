@@ -62,7 +62,11 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const { user: fetchedUser, mutateUser, isLoading } = useCurrentUser();
+  const {
+    user: fetchedUser,
+    mutateUser,
+    isLoading: isUserLoading,
+  } = useCurrentUser();
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
   const updatedSettingsData = useSettings();
@@ -95,10 +99,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   );
 
   const [upToDateUser, setUpToDateUser] = useState<User | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     setUpToDateUser(mergeUserPreferences(fetchedUser ?? null));
+    setIsInitialized(true);
   }, [fetchedUser, mergeUserPreferences]);
+
+  // isLoading stays true until after the first setUpToDateUser fires; SWR's
+  // isLoading alone isn't enough because upToDateUser is updated in an effect
+  // that runs one render after SWR resolves, causing a window where isLoading
+  // is false but user is still null.
+  const isLoading = isUserLoading || !isInitialized;
 
   useEffect(() => {
     if (!posthog) return;
