@@ -7,7 +7,7 @@
  */
 import React from "react";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
-import PasswordInputTypeIn from "./PasswordInputTypeIn";
+import { PasswordInputTypeIn } from "@opal/components";
 
 interface ControlledPasswordProps {
   initialValue?: string;
