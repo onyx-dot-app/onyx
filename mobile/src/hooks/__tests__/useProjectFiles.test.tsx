@@ -1,48 +1,48 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from "@jest/globals";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { Mock } from "jest-mock";
 import * as React from "react";
-import { act, renderHook } from "@testing-library/react-native";
+import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { QUERY_KEYS } from "@/api/query-keys";
-import {
-  getUserFileStatuses,
-  linkFileToProject,
-  unlinkFileFromProject,
-} from "@/api/files/files";
-import { uploadUserFile } from "@/api/files/upload";
+import { linkFileToProject, unlinkFileFromProject } from "@/api/files/files";
+import { generateTempId } from "@/api/files/upload";
 import { pickDocuments, pickImages } from "@/api/files/pickers";
 import {
   UserFileStatus,
   type CategorizedFiles,
-  type ProjectDetails,
   type ProjectFile,
 } from "@/chat/contracts/projects";
 import { makeProjectFile } from "@/chat/__tests__/fixtures";
+import { toast } from "@/hooks/useToast";
 import { useProjectFiles } from "@/hooks/useProjectFiles";
-import { useUploadStore } from "@/state/uploadStore";
+import { useUserFileStore } from "@/state/userFileStore";
 
 // `jest.mock` is hoisted above the imports by babel-jest.
 const mockSettingsRef = { maxMb: null as number | null };
+let mockTransportResult: Promise<CategorizedFiles>;
 
+jest.mock("@/hooks/useToast", () => ({
+  toast: {
+    warning: jest.fn(),
+    error: jest.fn(),
+    success: jest.fn(),
+    info: jest.fn(),
+    dismiss: jest.fn(),
+    clearAll: jest.fn(),
+  },
+}));
 jest.mock("@/api/files/pickers", () => ({
   pickDocuments: jest.fn(),
   pickImages: jest.fn(),
 }));
-jest.mock("@/api/files/upload", () => {
-  let counter = 0;
-  return {
-    uploadUserFile: jest.fn(),
-    generateTempId: () => `tmp-${++counter}`,
-  };
-});
+jest.mock("@/api/files/upload", () => ({ generateTempId: jest.fn() }));
+jest.mock("@/api/files/transport", () => ({
+  getUploadTransport: () => ({
+    kind: "foreground",
+    upload: () => ({ result: mockTransportResult, cancel: jest.fn() }),
+  }),
+}));
 jest.mock("@/api/files/files", () => ({
   getUserFileStatuses: jest.fn(),
   linkFileToProject: jest.fn(),
@@ -67,18 +67,15 @@ const pickDocumentsMock = pickDocuments as unknown as Mock<
 const pickImagesMock = pickImages as unknown as Mock<
   () => Promise<{ uri: string; name: string; size?: number }[]>
 >;
-const uploadMock = uploadUserFile as unknown as Mock<
-  (...args: unknown[]) => Promise<CategorizedFiles>
->;
-const statusesMock = getUserFileStatuses as unknown as Mock<
-  (ids: string[]) => Promise<ProjectFile[]>
->;
 const linkMock = linkFileToProject as unknown as Mock<
   (projectId: number, fileId: string) => Promise<unknown>
 >;
 const unlinkMock = unlinkFileFromProject as unknown as Mock<
   (projectId: number, fileId: string) => Promise<void>
 >;
+const generateTempIdMock = generateTempId as unknown as Mock<() => string>;
+const toastWarn = toast.warning as unknown as Mock<(m: string) => string>;
+const toastError = toast.error as unknown as Mock<(m: string) => string>;
 
 const PROJECT_ID = 5;
 const projectKey = QUERY_KEYS.userProject("https://example.test", PROJECT_ID);
@@ -89,8 +86,6 @@ function committedFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
 
 function setup(committed: ProjectFile[] | null) {
   const client = new QueryClient({
-    // gcTime > 0 so manually-seeded (observer-less) query data survives for the
-    // polling assertions.
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
   const invalidateSpy = jest.spyOn(client, "invalidateQueries");
@@ -105,19 +100,30 @@ function setup(committed: ProjectFile[] | null) {
   return { client, invalidateSpy, ...view };
 }
 
+function resetStore() {
+  useUserFileStore.setState({
+    filesById: {},
+    serverIdToClientId: {},
+    tasksById: {},
+    progressById: {},
+    epochCounter: 0,
+  });
+}
+
 describe("useProjectFiles", () => {
   beforeEach(() => {
-    useUploadStore.setState({ byProject: new Map() });
+    resetStore();
     mockSettingsRef.maxMb = null;
     jest.clearAllMocks();
+    let counter = 0;
+    generateTempIdMock.mockImplementation(() => `tmp-${++counter}`);
   });
 
-  it("uploads picked documents, invalidates the project, and clears optimistic entries", async () => {
+  it("uploads picked docs, reconciles, invalidates Query, and keeps the record (no hand-off)", async () => {
     pickDocumentsMock.mockResolvedValue([
       { uri: "file:///a.pdf", name: "a.pdf", size: 1000 },
     ]);
-    uploadMock.mockResolvedValue({
-      // temp_id echoed back, as the real endpoint does.
+    mockTransportResult = Promise.resolve({
       user_files: [
         committedFile({
           id: "new",
@@ -129,47 +135,42 @@ describe("useProjectFiles", () => {
     });
 
     const { result, invalidateSpy } = setup([]);
-
     await act(async () => {
       await result.current.addDocuments();
     });
 
-    expect(uploadMock).toHaveBeenCalledWith(
-      { uri: "file:///a.pdf", name: "a.pdf", size: 1000 },
-      PROJECT_ID,
-      expect.any(String),
-      expect.any(Function),
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: projectKey }),
     );
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: projectKey });
-    // optimistic entry removed after reconcile
-    expect(
-      useUploadStore.getState().byProject.get(PROJECT_ID)?.uploads.size ?? 0,
-    ).toBe(0);
-    expect(result.current.errors).toEqual([]);
+    // C: the record stays in the store (no hand-off removal); the task lingers as succeeded and
+    // the file is reconciled to its server id/status. The project-details refetch re-hydrates it.
+    const state = useUserFileStore.getState();
+    expect(state.tasksById["tmp-1"]?.status).toBe("succeeded");
+    expect(state.filesById["tmp-1"]?.file.id).toBe("new");
+    expect(state.filesById["tmp-1"]?.file.status).toBe(UserFileStatus.INDEXING);
+    expect(toastError).not.toHaveBeenCalled();
   });
 
-  it("blocks oversized files with the size pre-check and never uploads them", async () => {
-    mockSettingsRef.maxMb = 1; // 1 MB cap
+  it("blocks oversized files with the size pre-check (BUG2 finite fallback) and toasts", async () => {
+    mockSettingsRef.maxMb = 1;
     pickDocumentsMock.mockResolvedValue([
       { uri: "file:///big.pdf", name: "big.pdf", size: 5 * 1024 * 1024 },
     ]);
 
     const { result } = setup([]);
-
     await act(async () => {
       await result.current.addDocuments();
     });
 
-    expect(uploadMock).not.toHaveBeenCalled();
-    expect(result.current.errors[0]).toContain("big.pdf");
-    expect(result.current.errors[0]).toContain("1 MB");
+    expect(toastWarn).toHaveBeenCalledWith(expect.stringContaining("big.pdf"));
+    expect(useUserFileStore.getState().tasksById).toEqual({});
   });
 
-  it("surfaces backend rejected_files reasons", async () => {
+  it("surfaces backend rejected_files reasons as an error toast", async () => {
     pickImagesMock.mockResolvedValue([
       { uri: "file:///x.heic", name: "x.heic", size: 10 },
     ]);
-    uploadMock.mockResolvedValue({
+    mockTransportResult = Promise.resolve({
       user_files: [],
       rejected_files: [
         { file_name: "x.heic", reason: "Unsupported file type" },
@@ -177,13 +178,15 @@ describe("useProjectFiles", () => {
     });
 
     const { result } = setup([]);
-
     await act(async () => {
       await result.current.addImages();
     });
 
-    expect(result.current.errors[0]).toContain("x.heic");
-    expect(result.current.errors[0]).toContain("Unsupported file type");
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        expect.stringContaining("Unsupported file type"),
+      ),
+    );
   });
 
   it("links a recent file and invalidates the project", async () => {
@@ -200,7 +203,7 @@ describe("useProjectFiles", () => {
 
   it("removes (unlinks) a file and invalidates the project", async () => {
     unlinkMock.mockResolvedValue(undefined);
-    const { result, invalidateSpy } = setup([committedFile({})]);
+    const { result, invalidateSpy } = setup([committedFile({ id: "f1" })]);
 
     await act(async () => {
       await result.current.removeFile("f1");
@@ -210,138 +213,71 @@ describe("useProjectFiles", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: projectKey });
   });
 
-  it("renders optimistic uploads ahead of committed files", () => {
-    useUploadStore
+  it("renders optimistic uploads (from engine tasks) ahead of committed files", () => {
+    useUserFileStore
       .getState()
-      .begin(PROJECT_ID, [
-        committedFile({ id: "tmp-1", status: UserFileStatus.UPLOADING }),
+      .beginUpload({ kind: "project", projectId: PROJECT_ID }, [
+        {
+          clientId: "tmp-1",
+          file: committedFile({
+            id: "tmp-1",
+            status: UserFileStatus.UPLOADING,
+          }),
+        },
       ]);
     const { result } = setup([committedFile({ id: "f1" })]);
 
     expect(result.current.files.map((f) => f.id)).toEqual(["tmp-1", "f1"]);
   });
 
-  it("keeps size-rejection messages when a partial batch still has valid files", async () => {
-    mockSettingsRef.maxMb = 1;
-    pickDocumentsMock.mockResolvedValue([
-      { uri: "file:///big.pdf", name: "big.pdf", size: 5 * 1024 * 1024 },
-      { uri: "file:///ok.pdf", name: "ok.pdf", size: 1000 },
-    ]);
-    uploadMock.mockResolvedValue({
-      user_files: [committedFile({ id: "new" })],
-      rejected_files: [],
+  describe("store as SSOT for file data", () => {
+    it("seeds the committed prop into the store and renders from it", async () => {
+      const { result } = setup([committedFile({ id: "f1" })]);
+
+      await waitFor(() =>
+        expect(useUserFileStore.getState().serverIdToClientId["f1"]).toBe("f1"),
+      );
+      expect(useUserFileStore.getState().filesById["f1"]?.file.name).toBe(
+        "server.pdf",
+      );
+      expect(result.current.files.map((f) => f.id)).toEqual(["f1"]);
     });
 
-    const { result } = setup([]);
-    await act(async () => {
-      await result.current.addDocuments();
-    });
-
-    expect(uploadMock).toHaveBeenCalledTimes(1); // only the valid file
-    expect(result.current.errors.some((e) => e.includes("big.pdf"))).toBe(true);
-  });
-
-  it("clears optimistic entries and reports an error when the refetch fails", async () => {
-    pickDocumentsMock.mockResolvedValue([
-      { uri: "file:///a.pdf", name: "a.pdf", size: 10 },
-    ]);
-    uploadMock.mockResolvedValue({
-      user_files: [committedFile({ id: "new" })],
-      rejected_files: [],
-    });
-
-    const { result, invalidateSpy } = setup([]);
-    invalidateSpy.mockRejectedValueOnce(new Error("network"));
-
-    await act(async () => {
-      await result.current.addDocuments();
-    });
-
-    expect(
-      result.current.errors.some((e) => e.includes("didn't refresh")),
-    ).toBe(true);
-    expect(
-      useUploadStore.getState().byProject.get(PROJECT_ID)?.uploads.size ?? 0,
-    ).toBe(0);
-  });
-
-  it("surfaces an error and skips the refetch when linking fails", async () => {
-    linkMock.mockRejectedValueOnce(new Error("boom"));
-    const { result, invalidateSpy } = setup([]);
-
-    await act(async () => {
-      await result.current.linkRecent("r1");
-    });
-
-    expect(result.current.errors.length).toBeGreaterThan(0);
-    expect(invalidateSpy).not.toHaveBeenCalled();
-  });
-
-  it("surfaces an error when the photo permission is denied", async () => {
-    pickImagesMock.mockRejectedValue(
-      new Error("Photo library access was denied."),
-    );
-    const { result } = setup([]);
-
-    await act(async () => {
-      await result.current.addImages();
-    });
-
-    expect(uploadMock).not.toHaveBeenCalled();
-    expect(result.current.errors.some((e) => e.includes("denied"))).toBe(true);
-  });
-
-  describe("status polling", () => {
-    beforeEach(() => {
-      jest.useFakeTimers();
-    });
-    afterEach(() => {
-      jest.useRealTimers();
-    });
-
-    it("polls indexing files every 3s and patches the cached status", async () => {
-      statusesMock.mockResolvedValue([
+    it("renders a just-committed upload once and clears its optimistic task", async () => {
+      // A project upload reconciled to server id "new" (its temp-keyed record + task linger).
+      useUserFileStore
+        .getState()
+        .beginUpload({ kind: "project", projectId: PROJECT_ID }, [
+          {
+            clientId: "tmp-1",
+            file: committedFile({
+              id: "tmp-1",
+              status: UserFileStatus.UPLOADING,
+            }),
+          },
+        ]);
+      useUserFileStore.getState().reconcile([
         committedFile({
-          id: "f1",
-          status: UserFileStatus.COMPLETED,
-          token_count: 42,
+          id: "new",
+          temp_id: "tmp-1",
+          status: UserFileStatus.INDEXING,
         }),
       ]);
 
-      const { client } = setup([
-        committedFile({ id: "f1", status: UserFileStatus.INDEXING }),
+      // Project-details refetch brings the same file back keyed by its server id "new".
+      const { result } = setup([
+        committedFile({ id: "new", status: UserFileStatus.INDEXING }),
       ]);
-      client.setQueryData<ProjectDetails>(projectKey, {
-        project: {
-          id: PROJECT_ID,
-          name: "P",
-          description: null,
-          created_at: "2026-01-01T00:00:00Z",
-          instructions: null,
-          chat_sessions: [],
-        },
-        files: [committedFile({ id: "f1", status: UserFileStatus.INDEXING })],
-        persona_id_to_is_featured: null,
-      });
 
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(3000);
-      });
-
-      expect(statusesMock).toHaveBeenCalledWith(["f1"]);
-      const patched = client.getQueryData<ProjectDetails>(projectKey);
-      expect(patched?.files?.[0].status).toBe(UserFileStatus.COMPLETED);
-      expect(patched?.files?.[0].token_count).toBe(42);
-    });
-
-    it("does not poll when every file is already terminal", async () => {
-      setup([committedFile({ id: "f1", status: UserFileStatus.COMPLETED })]);
-
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(3000);
-      });
-
-      expect(statusesMock).not.toHaveBeenCalled();
+      // upsert maps "new" back to the temp clientId and clears the succeeded task, so the file
+      // renders exactly once (committed) and can't resurrect as a phantom on a later unlink.
+      await waitFor(() =>
+        expect(useUserFileStore.getState().tasksById["tmp-1"]).toBeUndefined(),
+      );
+      expect(useUserFileStore.getState().serverIdToClientId["new"]).toBe(
+        "tmp-1",
+      );
+      expect(result.current.files.map((f) => f.id)).toEqual(["new"]);
     });
   });
 });

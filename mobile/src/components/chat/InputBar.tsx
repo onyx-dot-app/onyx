@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { Pressable, View, type TextStyle } from "react-native";
+import { View, type TextStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { textPresets } from "@onyx-ai/shared/native";
 
-import { useRecentFiles } from "@/api/files/files";
+import { useRecentFiles } from "@/hooks/useRecentFiles";
 import { FileCard } from "@/components/chat/FileCard";
 import { FilePickerSheet } from "@/components/chat/FilePickerSheet";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Text } from "@/components/ui/text";
 import { FieldTextInput as ComposerInput } from "@/components/ui/text-input";
 import { ChatState } from "@/chat/interfaces";
 import { isFailedFile } from "@/lib/files";
-import type { UseMessageAttachments } from "@/hooks/useMessageAttachments";
+import type { UseComposerDraft } from "@/hooks/useComposerDraft";
 import SvgArrowUp from "@/icons/arrow-up";
 import SvgPaperclip from "@/icons/paperclip";
 import SvgStop from "@/icons/stop";
@@ -26,7 +26,7 @@ interface InputBarProps {
   onSend: () => void;
   onStop: () => void;
   chatState: ChatState;
-  attachments: UseMessageAttachments;
+  attachments: UseComposerDraft;
 }
 
 // Web-parity composer (mirrors web's AppInputBar shape): a rounded container holding an
@@ -72,22 +72,6 @@ export function InputBar({
       className="bg-background-neutral-00 px-16 pt-8"
       style={{ paddingBottom: insets.bottom + 8 }}
     >
-      {attachments.errors.length > 0 ? (
-        <Pressable
-          onPress={attachments.dismissErrors}
-          className="mb-8 gap-4 rounded-12 border border-border-01 px-12 py-8"
-        >
-          {attachments.errors.map((message) => (
-            <Text key={message} font="secondary-body" color="status-error-05">
-              {message}
-            </Text>
-          ))}
-          <Text font="secondary-body" color="text-03">
-            Tap to dismiss
-          </Text>
-        </Pressable>
-      ) : null}
-
       <View className="rounded-16 border border-border-01 bg-background-neutral-00 pt-8">
         {attachments.files.length > 0 ? (
           <View className="flex-row flex-wrap gap-8 px-12 pb-8">
@@ -95,7 +79,6 @@ export function InputBar({
               <FileCard
                 key={file.id}
                 file={file}
-                progress={attachments.progressById.get(file.id)}
                 onRemove={attachments.removeFile}
               />
             ))}

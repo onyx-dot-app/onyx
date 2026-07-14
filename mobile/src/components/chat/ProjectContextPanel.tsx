@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 
-import { useRecentFiles } from "@/api/files/files";
+import { useRecentFiles } from "@/hooks/useRecentFiles";
 import { Button } from "@/components/ui/button";
 import { Content, ContentAction } from "@/components/ui/content";
 import { Text } from "@/components/ui/text";
@@ -30,17 +30,15 @@ export function ProjectContextPanel({
   const loadingDetails = isLoading && !details;
 
   const [pickerOpen, setPickerOpen] = useState(false);
-  const {
-    files,
-    progressById,
-    errors,
-    isBusy,
-    addDocuments,
-    addImages,
-    linkRecent,
-    removeFile,
-    dismissErrors,
-  } = useProjectFiles(projectId, details?.files);
+  const { files, addDocuments, addImages, linkRecent, removeFile } =
+    useProjectFiles(projectId, details?.files);
+
+  const onRemoveFile = useCallback(
+    (id: string) => {
+      void removeFile(id);
+    },
+    [removeFile],
+  );
 
   // Recent library files, fetched only while the picker is open.
   const { data: recentFiles = [], isLoading: isLoadingRecent } =
@@ -76,31 +74,11 @@ export function ProjectContextPanel({
               prominence="secondary"
               size="sm"
               accessibilityLabel="Add files"
-              disabled={projectId == null || loadingDetails || isBusy}
+              disabled={projectId == null || loadingDetails}
               onPress={() => setPickerOpen(true)}
             />
           }
         />
-
-        {errors.length > 0 ? (
-          <Pressable
-            onPress={dismissErrors}
-            className="gap-4 rounded-12 border border-border-01 px-12 py-8"
-          >
-            {errors.map((message, index) => (
-              <Text
-                key={`${index}:${message}`}
-                font="secondary-body"
-                color="status-error-05"
-              >
-                {message}
-              </Text>
-            ))}
-            <Text font="secondary-body" color="text-03">
-              Tap to dismiss
-            </Text>
-          </Pressable>
-        ) : null}
 
         {loadingDetails ? (
           <ActivityIndicator size="small" />
@@ -113,14 +91,7 @@ export function ProjectContextPanel({
         ) : (
           <View className="flex-row flex-wrap gap-8">
             {files.map((file) => (
-              <FileCard
-                key={file.id}
-                file={file}
-                progress={progressById.get(file.id)}
-                onRemove={(id) => {
-                  void removeFile(id);
-                }}
-              />
+              <FileCard key={file.id} file={file} onRemove={onRemoveFile} />
             ))}
           </View>
         )}

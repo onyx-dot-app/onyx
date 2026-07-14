@@ -11,7 +11,11 @@ import { Button } from "@/components/ui/button";
 import { LineItemButton } from "@/components/ui/line-item-button";
 import { Separator } from "@/components/ui/separator";
 import { Text } from "@/components/ui/text";
-import type { ProjectFile } from "@/chat/contracts/projects";
+import {
+  UserFileStatus,
+  isProcessingStatus,
+  type ProjectFile,
+} from "@/chat/contracts/projects";
 import { extensionOf, isImageName } from "@/lib/files";
 import SvgFileSmall from "@/icons/file-small";
 import SvgFileText from "@/icons/file-text";
@@ -98,7 +102,7 @@ export function FilePickerSheet({
             Recent files
           </Text>
 
-          {isLoadingRecent ? (
+          {isLoadingRecent && recentFiles.length === 0 ? (
             <View className="py-16">
               <ActivityIndicator size="small" />
             </View>
@@ -113,18 +117,36 @@ export function FilePickerSheet({
               className="max-h-[280px]"
               keyboardShouldPersistTaps="handled"
             >
-              {recentFiles.map((file) => (
-                <LineItemButton
-                  key={file.id}
-                  icon={isImageName(file.name) ? SvgImageSmall : SvgFileText}
-                  title={file.name}
-                  description={extensionOf(file.name) || "File"}
-                  titleMaxLines={1}
-                  sizePreset="main-ui"
-                  variant="section"
-                  onPress={() => onPickRecent(file.id)}
-                />
-              ))}
+              {recentFiles.map((file) => {
+                const processing = isProcessingStatus(file.status);
+                const uploading =
+                  String(file.status).toUpperCase() ===
+                  UserFileStatus.UPLOADING;
+                return (
+                  <LineItemButton
+                    key={file.id}
+                    leading={
+                      processing ? (
+                        <ActivityIndicator size="small" />
+                      ) : undefined
+                    }
+                    icon={isImageName(file.name) ? SvgImageSmall : SvgFileText}
+                    title={file.name}
+                    description={
+                      uploading
+                        ? "Uploading…"
+                        : processing
+                          ? "Indexing…"
+                          : extensionOf(file.name) || "File"
+                    }
+                    titleMaxLines={1}
+                    sizePreset="main-ui"
+                    variant="section"
+                    disabled={uploading}
+                    onPress={() => onPickRecent(file.id)}
+                  />
+                );
+              })}
             </ScrollView>
           )}
         </Pressable>

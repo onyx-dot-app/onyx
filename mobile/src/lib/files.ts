@@ -41,18 +41,27 @@ export function buildOptimisticFile(
   };
 }
 
-// Client-side upload size guard (mirrors web). Splits picked assets into those within the
-// limit and a rejection message per oversized file. Shared by the project + per-message flows.
+// Finite fallback when the server setting is missing/0 (mirrors the backend default), so an
+// oversize file fails the client precheck instead of only server-side.
+export const DEFAULT_MAX_UPLOAD_MB = 100;
+
+export function resolveMaxUploadMb(maxUploadMb: number | null): number {
+  return maxUploadMb != null && maxUploadMb > 0
+    ? maxUploadMb
+    : DEFAULT_MAX_UPLOAD_MB;
+}
+
+// Client-side upload size guard (mirrors web). Shared by the project + per-message flows.
 export function partitionBySize(
   assets: NormalizedAsset[],
   maxUploadMb: number | null,
 ): { valid: NormalizedAsset[]; rejections: string[] } {
-  const maxBytes =
-    maxUploadMb != null && maxUploadMb > 0 ? maxUploadMb * 1024 * 1024 : null;
+  const limitMb = resolveMaxUploadMb(maxUploadMb);
+  const maxBytes = limitMb * 1024 * 1024;
   const rejections: string[] = [];
   const valid = assets.filter((asset) => {
-    if (maxBytes != null && asset.size != null && asset.size > maxBytes) {
-      rejections.push(`${asset.name} exceeds the ${maxUploadMb} MB limit`);
+    if (asset.size != null && asset.size > maxBytes) {
+      rejections.push(`${asset.name} exceeds the ${limitMb} MB limit`);
       return false;
     }
     return true;
