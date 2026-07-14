@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState, useEffect, useCallback } from "react";
+import { memo, useState, useEffect, useCallback, useRef } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -25,7 +25,13 @@ import {
 import { getFileIcon } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
-import { SvgGlobe, SvgHardDrive, SvgFiles, SvgX } from "@opal/icons";
+import {
+  SvgGlobe,
+  SvgHardDrive,
+  SvgFiles,
+  SvgX,
+  SvgTerminal,
+} from "@opal/icons";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
 
@@ -56,12 +62,17 @@ const FilePreviewContent = dynamic(
     ),
   { ssr: false }
 );
+const TerminalTab = dynamic(
+  () => import("@/app/craft/components/output-panel/TerminalTab"),
+  { ssr: false }
+);
 
 type TabValue = OutputTabType;
 
 const tabs: { value: TabValue; label: string; icon: React.FC<IconProps> }[] = [
   { value: "preview", label: "Preview", icon: SvgGlobe },
   { value: "files", label: "Files", icon: SvgHardDrive },
+  { value: "terminal", label: "Terminal", icon: SvgTerminal },
   { value: "artifacts", label: "Artifacts", icon: SvgFiles },
 ];
 
@@ -119,6 +130,14 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   // Determine which tab is visually active
   const isFilePreviewActive = activePanelTabId !== null;
   const activeTab = isFilePreviewActive ? null : activeOutputTab;
+
+  // Per session, not panel-wide: else browsing to another session opens a PTY.
+  const openedTerminalSessionsRef = useRef<Set<string>>(new Set());
+  if (activeOutputTab === "terminal" && session?.id) {
+    openedTerminalSessionsRef.current.add(session.id);
+  }
+  const showTerminal =
+    !!session?.id && openedTerminalSessionsRef.current.has(session.id);
 
   const handlePinnedTabClick = (tab: TabValue) => {
     if (session?.id) {
@@ -555,7 +574,9 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                     : isPreProvisioning
                       ? "provisioning-sandbox://..."
                       : "no-sandbox://"
-                : "artifacts://"
+                : activeOutputTab === "terminal"
+                  ? "terminal://sandbox"
+                  : "artifacts://"
         }
         showNavigation={true}
         canGoBack={canGoBack}
@@ -643,6 +664,17 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
               />
             )}
           </>
+        )}
+        {showTerminal && (
+          <div
+            className={cn(
+              "h-full",
+              (activeOutputTab !== "terminal" || isFilePreviewActive) &&
+                "hidden"
+            )}
+          >
+            <TerminalTab sessionId={session?.id} />
+          </div>
         )}
       </div>
     </div>

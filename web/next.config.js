@@ -64,6 +64,14 @@ const nextConfig = {
         }/build/sessions/:sessionId/webapp/_next/webpack-hmr`,
       },
       {
+        // WS upgrades can't go through the App Router BFF (HTTP-only) — this
+        // rewrite proxies the terminal socket straight to the backend.
+        source: "/api/build/sessions/:sessionId/terminal",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/build/sessions/:sessionId/terminal`,
+      },
+      {
         source: "/ph_ingest/static/:path*",
         destination: "https://us-assets.i.posthog.com/static/:path*",
       },
