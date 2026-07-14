@@ -8,7 +8,7 @@ import { Modal } from "@opal/components";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import { Section } from "@/layouts/general-layouts";
 import { FormField } from "@/refresh-components/form/FormField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import {
   Button,
   CopyButton,

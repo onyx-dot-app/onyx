@@ -117,7 +117,6 @@ export default function CreateRateLimitModal({
                       { name: "User", value: Scope.USER },
                       { name: "User Group", value: Scope.USER_GROUP },
                     ]}
-                    includeDefault={false}
                     onSelect={(selected) => {
                       setFieldValue("target_scope", selected);
                       if (selected === Scope.USER_GROUP) {
@@ -132,7 +131,6 @@ export default function CreateRateLimitModal({
                       name="user_group_id"
                       label="User Group"
                       options={modalUserGroups}
-                      includeDefault={false}
                     />
                   )}
                 <TextFormField

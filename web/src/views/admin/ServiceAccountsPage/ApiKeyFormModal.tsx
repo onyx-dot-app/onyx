@@ -9,7 +9,7 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { InputVertical, toast } from "@opal/layouts";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";

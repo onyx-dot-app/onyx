@@ -18,7 +18,7 @@ import { Checkbox } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { InputTypeIn } from "@opal/components";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Switch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";

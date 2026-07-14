@@ -11,7 +11,7 @@ import InputComboBoxField from "@/refresh-components/form/InputComboBoxField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import { InputVertical, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { SvgArrowExchange, SvgUnplug, SvgSimpleLoader } from "@opal/icons";

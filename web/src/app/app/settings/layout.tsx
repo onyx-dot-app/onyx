@@ -3,9 +3,9 @@
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { SettingsLayouts } from "@opal/layouts";
-import { SidebarTab, Text } from "@opal/components";
+import { SidebarTab } from "@opal/components";
 import { SvgSliders } from "@opal/icons";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useIsMultiTenant } from "@/lib/auth/hooks";
 import { Section } from "@/layouts/general-layouts";
@@ -38,12 +38,6 @@ export default function Layout({ children }: LayoutProps) {
     { href: "/app/settings/connectors", label: "Connectors" },
   ];
 
-  // Derive the trigger label from the pathname directly. InputSelect normally
-  // surfaces the selected label via item registration, but its items are
-  // unmounted while the dropdown is closed, so the label would otherwise be
-  // missing on initial load.
-  const activeTab = tabs.find((tab) => tab.href === pathname);
-
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header icon={SvgSliders} title="Settings" divider />
@@ -67,13 +61,7 @@ export default function Layout({ children }: LayoutProps) {
                 router.push(href as Route, { scroll: false })
               }
             >
-              <InputSelect.Trigger placeholder="Select a section">
-                {activeTab && (
-                  <Text font="main-ui-body" color="text-04" nowrap>
-                    {activeTab.label}
-                  </Text>
-                )}
-              </InputSelect.Trigger>
+              <InputSelect.Trigger placeholder="Select a section" />
               <InputSelect.Content>
                 {tabs.map((tab) => (
                   <InputSelect.Item key={tab.href} value={tab.href}>

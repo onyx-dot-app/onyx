@@ -1,9 +1,7 @@
 "use client";
 
 import { useField } from "formik";
-import InputSelect, {
-  InputSelectRootProps,
-} from "@/refresh-components/inputs/InputSelect";
+import { InputSelect, type InputSelectRootProps } from "@opal/components";
 import { useOnChangeValue } from "@/hooks/formHooks";
 
 export interface InputSelectFieldProps extends Omit<

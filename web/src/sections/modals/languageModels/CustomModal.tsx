@@ -26,7 +26,7 @@ import KeyValueInput, {
 } from "@/refresh-components/inputs/InputKeyValue";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { InputTypeIn } from "@opal/components";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Card, EmptyMessageCard } from "@opal/components";
 import { SvgMinusCircle, SvgPlusCircle } from "@opal/icons";

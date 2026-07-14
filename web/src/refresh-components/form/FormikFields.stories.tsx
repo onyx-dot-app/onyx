@@ -28,7 +28,7 @@ import InputTextAreaField from "./InputTextAreaField";
 import InputSelectField from "./InputSelectField";
 import InputDatePickerField from "./InputDatePickerField";
 import PasswordInputTypeInField from "./PasswordInputTypeInField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSelect } from "@opal/components";
 
 // ---------------------------------------------------------------------------
 // Helpers
