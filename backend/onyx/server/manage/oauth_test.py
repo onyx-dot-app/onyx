@@ -15,9 +15,9 @@ from pydantic import BaseModel
 
 from onyx.auth.oauth_claims_capture import get_captured_oauth_claims
 from onyx.auth.oauth_claims_capture import get_idp_profile_fields
-from onyx.auth.schemas import UserRole
-from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import IDP_PROFILE_ENRICHMENT_ENABLED
+from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -46,24 +46,20 @@ class OAuthClaimsSnapshot(BaseModel):
 @router.get("/claims")
 async def get_oauth_login_claims(
     email: str | None = None,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> OAuthClaimsSnapshot:
     """Last captured IdP claims for the given user (defaults to the caller).
 
-    Claims are captured on every OAuth/OIDC login (when
-    IDP_PROFILE_ENRICHMENT_ENABLED); if nothing is found the user has not
-    logged in through the IdP since capture was enabled.
+    Admin-only: the raw id_token/userinfo claims can carry sensitive directory
+    attributes and group memberships. Claims are captured on every OAuth/OIDC
+    login when IDP_PROFILE_ENRICHMENT_ENABLED is set. If nothing is found, the
+    user has not logged in through the IdP since capture was enabled.
     """
     target_email = email or user.email
-    # IdP claims can carry sensitive directory attributes/groups: everyone may
-    # inspect their own snapshot, but only full admins may look up other users.
-    if (
-        target_email.lower() != (user.email or "").lower()
-        and user.role != UserRole.ADMIN
-    ):
+    if not target_email:
         raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only admins can inspect other users' OAuth claims",
+            OnyxErrorCode.VALIDATION_ERROR,
+            "An email is required to inspect OAuth claims",
         )
     snapshot = await get_captured_oauth_claims(target_email)
     if snapshot is None:

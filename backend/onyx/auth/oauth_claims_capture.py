@@ -21,6 +21,7 @@ login flow can never break because of it. No tokens are persisted — only
 claims and token metadata (key names, scope, expiry).
 """
 
+import asyncio
 import json
 from datetime import datetime
 from datetime import timezone
@@ -41,6 +42,12 @@ _OAUTH_CLAIMS_KEY_PREFIX = "oauth_login_claims"
 # Long enough that an admin can log in and inspect at leisure; short enough
 # that stale directory data doesn't linger forever.
 _OAUTH_CLAIMS_TTL_SECONDS = 60 * 60 * 24 * 30
+
+# Hard ceiling on the whole best-effort capture. It runs inline in the login
+# flow, so a slow userinfo/Graph endpoint or an unreachable Redis must never
+# hold the login open indefinitely. Capture is refreshed on every login, so
+# dropping one is harmless.
+_OAUTH_CLAIMS_CAPTURE_TIMEOUT_SECONDS = 10
 
 # Entra ID hosts its OIDC userinfo endpoint on Microsoft Graph; when we see
 # that host we can also query the Graph profile, which carries directory
@@ -123,10 +130,27 @@ async def capture_oauth_login_claims(
     ``oauth_client`` is the httpx_oauth client used for the login (its
     ``openid_configuration`` — present on OpenID clients — supplies the
     userinfo endpoint). No-op unless IDP_PROFILE_ENRICHMENT_ENABLED.
-    Never raises.
+    Never raises, and never holds the login open past
+    _OAUTH_CLAIMS_CAPTURE_TIMEOUT_SECONDS.
     """
     if not IDP_PROFILE_ENRICHMENT_ENABLED:
         return
+    try:
+        await asyncio.wait_for(
+            _capture_oauth_login_claims(oauth_client, email, token),
+            timeout=_OAUTH_CLAIMS_CAPTURE_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "OAuth claims capture timed out for %s (login unaffected)", email
+        )
+
+
+async def _capture_oauth_login_claims(
+    oauth_client: Any,
+    email: str,
+    token: dict[str, Any],
+) -> None:
     try:
         id_token_claims: dict[str, Any] = {}
         raw_id_token = token.get("id_token")

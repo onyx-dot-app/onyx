@@ -98,7 +98,10 @@ function Main() {
     data: snapshot,
     error,
     isLoading,
-  } = useSWR<OAuthClaimsSnapshot>(SWR_KEYS.adminOAuthTestClaims, errorHandlingFetcher);
+  } = useSWR<OAuthClaimsSnapshot>(
+    SWR_KEYS.adminOAuthTestClaims,
+    errorHandlingFetcher
+  );
 
   if (isLoading) {
     return <PageLoader />;
