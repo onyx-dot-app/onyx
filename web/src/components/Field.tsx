@@ -41,10 +41,11 @@ import {
 } from "@/lib/connectors/fileTypes";
 import Text from "@/refresh-components/texts/Text";
 
-import { Tooltip } from "@opal/components";
-import InputTextArea, {
-  InputTextAreaProps,
-} from "@/refresh-components/inputs/InputTextArea";
+import {
+  InputTextArea,
+  type InputTextAreaProps,
+  Tooltip,
+} from "@opal/components";
 import { SvgEye, SvgEyeClosed, SvgPlusCircle } from "@opal/icons";
 
 export function SectionHeader({

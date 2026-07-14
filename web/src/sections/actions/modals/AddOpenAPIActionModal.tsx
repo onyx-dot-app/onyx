@@ -270,12 +270,13 @@ function FormContent({
                   </Hoverable.Item>
                 </div>
               )}
-              <InputTextAreaField
-                name="definition"
-                rows={14}
-                placeholder="Enter your OpenAPI schema here"
-                className="font-main-ui-mono"
-              />
+              <div className="font-main-ui-mono">
+                <InputTextAreaField
+                  name="definition"
+                  rows={14}
+                  placeholder="Enter your OpenAPI schema here"
+                />
+              </div>
             </div>
           </Hoverable.Root>
         </InputVertical>
