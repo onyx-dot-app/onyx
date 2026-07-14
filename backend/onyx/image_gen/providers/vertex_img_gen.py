@@ -99,7 +99,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
 
         # In Workload Identity mode, omit vertex_credentials so LiteLLM falls back
         # to google.auth.default() (the GKE metadata server / ambient credentials).
-        if self._vertex_credentials is not None:
+        if not self._use_workload_identity and self._vertex_credentials is not None:
             kwargs["vertex_credentials"] = self._vertex_credentials
 
         with traced_llm_call(
