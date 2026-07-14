@@ -182,7 +182,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
           exiting={FadeOut.duration(TRANSITION_MS)}
           className="flex-1"
         >
-          <MessageList messages={messages} />
+          <MessageList key={sessionId ?? "new"} messages={messages} />
         </Animated.View>
       )}
     </ChatScreen>

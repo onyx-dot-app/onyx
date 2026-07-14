@@ -79,8 +79,8 @@ export function InputBar({
 
   return (
     <View
-      className="bg-background-neutral-00 px-16 pt-8"
-      style={{ paddingBottom: insets.bottom + 8 }}
+      className="bg-background-neutral-00 px-12 pt-8"
+      style={{ paddingBottom: insets.bottom }}
     >
       {/* Borderless-with-shadow on web; RN also keeps a hairline border — in dark mode the card and
           the page behind it are both near-black, where the black shadow is invisible, so the border
