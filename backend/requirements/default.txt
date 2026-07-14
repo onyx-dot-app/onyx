@@ -2529,6 +2529,9 @@ rapidfuzz==3.14.5 \
     --hash=sha256:f4c1bca487a17fe4226b4ffb2d30e799d2b274d692cffa76bd0746f56235fca3 \
     --hash=sha256:feedf219672eef83ea6be6f3bb093bba396a8560fc75be85ba225f082903df0a
     # via unstructured
+readerwriterlock==1.0.9 \
+    --hash=sha256:8c4b704e60d15991462081a27ef46762fea49b478aa4426644f2146754759ca7 \
+    --hash=sha256:b7c4cc003435d7a8ff15b312b0a62a88d9800ba6164af88991f87f8b748f9bea
 redis==5.0.8 \
     --hash=sha256:0c5b10d387568dfe0698c6fad6615750c24170e548ca2deac10c649d463e9870 \
     --hash=sha256:56134ee08ea909106090934adc36f65c9bcbbaecea5b21ba704ba6fb561f8eb4
@@ -3016,6 +3019,7 @@ typing-extensions==4.15.0 \
     #   pygithub
     #   python-docx
     #   python-oxmsg
+    #   readerwriterlock
     #   simple-salesforce
     #   sqlalchemy
     #   stripe
