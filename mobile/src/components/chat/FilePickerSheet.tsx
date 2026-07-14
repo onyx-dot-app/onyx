@@ -1,15 +1,11 @@
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
-  View,
-} from "react-native";
+import { useRef } from "react";
+import { Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
 import { LineItemButton } from "@/components/ui/line-item-button";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import {
   UserFileStatus,
@@ -17,9 +13,9 @@ import {
   type ProjectFile,
 } from "@/chat/contracts/projects";
 import { extensionOf, isImageName } from "@/lib/files";
-import SvgFileSmall from "@/icons/file-small";
 import SvgFileText from "@/icons/file-text";
-import SvgImageSmall from "@/icons/image-small";
+import SvgImage from "@/icons/image";
+import SvgUploadSquare from "@/icons/upload-square";
 import SvgX from "@/icons/x";
 
 interface FilePickerSheetProps {
@@ -46,12 +42,27 @@ export function FilePickerSheet({
 }: FilePickerSheetProps) {
   const insets = useSafeAreaInsets();
 
+  // iOS drops a picker presented while this Modal is still dismissing ("presentation in progress"),
+  // so a chosen action is deferred to onDismiss (after the sheet is gone). Android has no such
+  // conflict (and no onDismiss), so it runs immediately.
+  const pendingRef = useRef<(() => void) | null>(null);
+  const choose = (action: () => void) => {
+    onClose();
+    if (Platform.OS === "ios") pendingRef.current = action;
+    else action();
+  };
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="slide"
       onRequestClose={onClose}
+      onDismiss={() => {
+        const action = pendingRef.current;
+        pendingRef.current = null;
+        action?.();
+      }}
       statusBarTranslucent
     >
       <Pressable
@@ -78,20 +89,20 @@ export function FilePickerSheet({
           </View>
 
           <LineItemButton
-            icon={SvgFileSmall}
+            icon={SvgUploadSquare}
             title="Upload from device"
             description="Documents, text, PDFs"
             sizePreset="main-ui"
             variant="section"
-            onPress={onUploadDocuments}
+            onPress={() => choose(onUploadDocuments)}
           />
           <LineItemButton
-            icon={SvgImageSmall}
+            icon={SvgImage}
             title="Choose photos"
             description="From your photo library"
             sizePreset="main-ui"
             variant="section"
-            onPress={onUploadPhotos}
+            onPress={() => choose(onUploadPhotos)}
           />
 
           <View className="py-8">
@@ -103,8 +114,8 @@ export function FilePickerSheet({
           </Text>
 
           {isLoadingRecent && recentFiles.length === 0 ? (
-            <View className="py-16">
-              <ActivityIndicator size="small" />
+            <View className="items-center py-16">
+              <Spinner size={20} />
             </View>
           ) : recentFiles.length === 0 ? (
             <View className="px-8 py-12">
@@ -125,12 +136,8 @@ export function FilePickerSheet({
                 return (
                   <LineItemButton
                     key={file.id}
-                    leading={
-                      processing ? (
-                        <ActivityIndicator size="small" />
-                      ) : undefined
-                    }
-                    icon={isImageName(file.name) ? SvgImageSmall : SvgFileText}
+                    leading={processing ? <Spinner size={16} /> : undefined}
+                    icon={isImageName(file.name) ? SvgImage : SvgFileText}
                     title={file.name}
                     description={
                       uploading
@@ -143,7 +150,7 @@ export function FilePickerSheet({
                     sizePreset="main-ui"
                     variant="section"
                     disabled={uploading}
-                    onPress={() => onPickRecent(file.id)}
+                    onPress={() => choose(() => onPickRecent(file.id))}
                   />
                 );
               })}

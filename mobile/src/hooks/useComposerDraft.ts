@@ -97,11 +97,16 @@ export function useComposerDraft(draftKey: string): UseComposerDraft {
 
   const removeFile = useCallback(
     (id: string) => {
-      ctxRemoveFile(draftKey, id);
+      // A chip renders with file.id — a tempId before reconcile, its SERVER id after. The draft is
+      // keyed by clientId (tempId), so resolve back through the store's server→client index (a
+      // no-op for an already-client id), else a completed upload can't be removed.
+      const store = useUserFileStore.getState();
+      const clientId = store.serverIdToClientId[id] ?? id;
+      ctxRemoveFile(draftKey, clientId);
       // Only hard-delete an upload this draft owns (the store gates on task target); a shared or
       // recent-attached record is just de-referenced above.
-      if (useUserFileStore.getState().tasksById[id]?.status === "uploading") {
-        upload.remove(id, target);
+      if (store.tasksById[clientId]?.status === "uploading") {
+        upload.remove(clientId, target);
       }
     },
     [ctxRemoveFile, draftKey, upload, target],

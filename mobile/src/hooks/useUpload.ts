@@ -67,7 +67,18 @@ export function useUpload(): UseUpload {
               setUploadCancel(tempId, handle.cancel);
               const result = await handle.result;
               if (result.user_files.length > 0) {
-                store.reconcile(result.user_files, epoch);
+                // The backend echoes temp_id only when its file-key (`size|name` from the received
+                // multipart) matches ours — mobile picks routinely differ (image URIs are UUIDs,
+                // size can be absent), so temp_id comes back null and reconcile can't match. This
+                // upload is 1:1 (one asset → one request), so the returned file IS this record's:
+                // stamp our known tempId when the server didn't echo one.
+                store.reconcile(
+                  result.user_files.map((file) => ({
+                    ...file,
+                    temp_id: file.temp_id ?? tempId,
+                  })),
+                  epoch,
+                );
               }
               if (result.rejected_files.length > 0) {
                 store.removeFile(tempId, target);

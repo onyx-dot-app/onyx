@@ -16,12 +16,11 @@ import SvgArrowUp from "@/icons/arrow-up";
 import SvgPaperclip from "@/icons/paperclip";
 import SvgStop from "@/icons/stop";
 
-// Auto-grow bounds (web parity: input `min-h-[44px]`, scrolls once it fills). We let the native
-// multiline TextInput size itself between these — never a JS-computed fixed height — so the caret
-// can't escape the frame (the old fixed-height approach let a fast double-Enter paint the caret
+// Fixed input height: Enter inserts a newline that scrolls *inside* the field instead of growing
+// the composer. Clamped via native min===max sizing — never a JS-computed height — so the caret
+// can't escape the frame (a content-driven fixed height let a fast double-Enter paint the caret
 // behind the toolbar).
-const INPUT_MIN_HEIGHT = 44;
-const INPUT_MAX_HEIGHT = 160;
+const INPUT_HEIGHT = 44;
 
 // web `shadow-box-01` (tokens/shadow.json): `0px 2px 12px 0px var(--shadow-02)` + a tight
 // `0px 0px 4px 1px` layer; `--shadow-02` = 10% black in both light & dark. RN renders one layer,
@@ -73,9 +72,6 @@ export function InputBar({
 
   const hasFiles = attachments.files.length > 0;
   const hasFailed = attachments.files.some(isFailedFile);
-  const blockingMessage = hasFailed
-    ? "Remove the failed attachment to send."
-    : "Attaching files…";
 
   return (
     <View
@@ -110,22 +106,24 @@ export function InputBar({
           multiline
           className="px-12 pb-8 pt-12 text-text-04"
           style={[
-            textPresets["main-content-body"] as TextStyle,
+            textPresets["main-ui-body"] as TextStyle,
             {
-              minHeight: INPUT_MIN_HEIGHT,
-              maxHeight: INPUT_MAX_HEIGHT,
+              minHeight: INPUT_HEIGHT,
+              maxHeight: INPUT_HEIGHT,
               textAlignVertical: "top",
             },
           ]}
         />
 
-        {attachments.hasBlockingFiles ? (
+        {/* Only surface the actionable failed-attachment hint; an in-progress upload shows its
+            spinner on the chip, so no "Attaching files…" line. */}
+        {hasFailed ? (
           <Text
             font="secondary-body"
-            color={hasFailed ? "status-error-05" : "text-02"}
+            color="status-error-05"
             className="px-12 pb-4"
           >
-            {blockingMessage}
+            Remove the failed attachment to send.
           </Text>
         ) : null}
 
@@ -165,17 +163,12 @@ export function InputBar({
       <FilePickerSheet
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        onUploadDocuments={() => {
-          setPickerOpen(false);
-          void attachments.addDocuments();
-        }}
-        onUploadPhotos={() => {
-          setPickerOpen(false);
-          void attachments.addImages();
-        }}
+        // The sheet closes itself (choose→onClose) and defers the action past the modal dismiss,
+        // so these are just the actions — no setPickerOpen here.
+        onUploadDocuments={() => void attachments.addDocuments()}
+        onUploadPhotos={() => void attachments.addImages()}
         recentFiles={linkableRecent}
         onPickRecent={(fileId) => {
-          setPickerOpen(false);
           const file = linkableRecent.find((item) => item.id === fileId);
           if (file) attachments.addRecent(file);
         }}

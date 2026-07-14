@@ -1,8 +1,9 @@
 import { memo } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { AttachmentImage } from "@/components/chat/AttachmentImage";
 import { Icon } from "@/components/ui/icon";
+import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
 import {
   isProcessingStatus,
@@ -18,6 +19,15 @@ import SvgFileText from "@/icons/file-text";
 import SvgX from "@/icons/x";
 
 const IMAGE_SIZE = 64;
+
+// web `shadow-xs` on the remove control.
+const REMOVE_SHADOW = {
+  shadowColor: "#000000",
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.06,
+  shadowRadius: 2,
+  elevation: 1,
+} as const;
 
 interface FileCardProps {
   file: ProjectFile;
@@ -53,21 +63,27 @@ export const FileCard = memo(function FileCard({
           style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }}
         >
           {uploading ? (
-            <ActivityIndicator size="small" />
+            <Spinner size={20} />
           ) : (
             <AttachmentImage fileId={file.file_id} size={IMAGE_SIZE} />
           )}
         </View>
         {canRemove ? (
+          // Web parity (FileCard `Removable`): a small rounded-square at the top-left, inverted
+          // fill + muted X + a subtle shadow. Web reveals it on hover; touch has no hover, so it
+          // stays visible.
           <Pressable
             onPress={() => onRemove(file.id)}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={`Remove ${file.name}`}
-            style={{ top: -6, right: -6 }}
-            className="bg-background-inverted-05 absolute h-20 w-20 items-center justify-center rounded-full border border-border-01"
+            style={[
+              { top: -8, left: -8, width: 16, height: 16, zIndex: 10 },
+              REMOVE_SHADOW,
+            ]}
+            className="absolute items-center justify-center rounded-04 border border-border-01 bg-background-neutral-inverted-01"
           >
-            <Icon as={SvgX} size={12} className="text-text-inverted-05" />
+            <Icon as={SvgX} size={12} className="text-text-inverted-03" />
           </Pressable>
         ) : null}
       </View>
@@ -85,7 +101,7 @@ export const FileCard = memo(function FileCard({
       )}
     >
       {processing ? (
-        <ActivityIndicator size="small" />
+        <Spinner size={16} />
       ) : (
         <Icon
           as={failed ? SvgAlertCircle : SvgFileText}
