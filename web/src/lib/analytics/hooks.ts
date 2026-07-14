@@ -13,6 +13,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useSettings } from "@/lib/settings/hooks";
+import { useUser } from "@/providers/UserProvider";
 import { EE_ENABLED } from "@/lib/constants";
 
 // ─── Feature Flag Registry ─────────────────────────────────────────────────
@@ -82,13 +83,18 @@ export function usePHFeatureFlag(flag: PHFeatureFlag): boolean {
 /**
  * Fetches the admin-configured custom analytics script string.
  *
- * Self-gated on EE availability. Returns `null` when EE is disabled or no
- * script is configured.
+ * Self-gated on EE availability and on an authenticated session. Returns
+ * `null` when EE is disabled, no user is logged in, or no script is
+ * configured. Gating on a session avoids firing the request on pre-auth page
+ * loads (e.g. the login page), which on multi-tenant deployments arrive with
+ * no tenant context resolved and would otherwise 500.
  */
 export function useCustomAnalyticsScript(): string | null {
   const { isLoading, error, ee_features_enabled } = useSettings();
+  const { user } = useUser();
   const shouldFetch =
-    EE_ENABLED || (!isLoading && !error && ee_features_enabled !== false);
+    !!user &&
+    (EE_ENABLED || (!isLoading && !error && ee_features_enabled !== false));
 
   const { data } = useSWR<string>(
     shouldFetch ? SWR_KEYS.customAnalyticsScript : null,
