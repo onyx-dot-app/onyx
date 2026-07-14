@@ -141,6 +141,39 @@ def test_normalizer_rejects_file_descendant_path_collisions(
         validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
 
 
+@pytest.mark.parametrize(
+    "supporting_entries",
+    [
+        [("hello/scripts/", b""), ("hello/scripts", b"file")],
+        [("hello/scripts", b"file"), ("hello/scripts/", b"")],
+        [("hello/scripts/nested/", b""), ("hello/scripts", b"file")],
+        [("hello/scripts", b"file"), ("hello/scripts/nested/", b"")],
+    ],
+)
+def test_normalizer_rejects_explicit_directory_file_collisions(
+    supporting_entries: list[tuple[str, bytes]],
+) -> None:
+    zip_bytes = _build_zip([("hello/SKILL.md", VALID_SKILL_MD), *supporting_entries])
+
+    with pytest.raises(OnyxError, match="conflicting path"):
+        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+
+
+def test_normalizer_accepts_file_beneath_explicit_directory() -> None:
+    zip_bytes = _build_zip(
+        [
+            ("hello/SKILL.md", VALID_SKILL_MD),
+            ("hello/scripts/", b""),
+            ("hello/scripts/run.sh", b"script"),
+        ]
+    )
+
+    normalized = validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+
+    with zipfile.ZipFile(io.BytesIO(normalized)) as zf:
+        assert set(zf.namelist()) == {"SKILL.md", "scripts/run.sh"}
+
+
 def test_normalizer_ignores_operating_system_metadata() -> None:
     zip_bytes = _build_zip(
         [

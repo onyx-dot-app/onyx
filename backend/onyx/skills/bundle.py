@@ -452,6 +452,26 @@ def validate_and_normalize_custom_bundle(
         output_directory_paths: set[str] = set()
         saw_skill_md = False
 
+        for info, normalized in normalized_infos:
+            if not info.is_dir() or _is_ignored_bundle_path(normalized):
+                continue
+
+            output_directory_path = normalized
+            if wrapper_prefix is not None:
+                if normalized == wrapper_prefix:
+                    continue
+                wrapper_path_prefix = f"{wrapper_prefix}/"
+                if not normalized.startswith(wrapper_path_prefix):
+                    continue
+                output_directory_path = normalized.removeprefix(wrapper_path_prefix)
+
+            directory_parts = output_directory_path.split("/")
+            output_directory_paths.add(output_directory_path)
+            output_directory_paths.update(
+                "/".join(directory_parts[:index])
+                for index in range(1, len(directory_parts))
+            )
+
         try:
             for info, normalized in normalized_infos:
                 if info.is_dir() or _is_ignored_bundle_path(normalized):
