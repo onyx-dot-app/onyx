@@ -384,7 +384,7 @@ export function EmailPasswordForm({
           // Best-effort: the account already exists, so redirect regardless.
           console.warn("requestEmailVerification failed:", e);
         }
-        window.location.href = "/auth/send-email-verification";
+        window.location.href = `/auth/send-email-verification?email=${encodeURIComponent(email)}`;
         return;
       }
     }

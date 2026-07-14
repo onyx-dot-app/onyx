@@ -35,9 +35,11 @@ export default function SendEmailVerificationPage() {
 
   // Resend flow: fire-and-forget, then strip the ?resend param.
   useEffect(() => {
-    if (!searchParams.get("resend") || !user) return;
-    router.replace("/auth/send-email-verification" as Route);
-    requestEmailVerification(user.email)
+    const emailForResend = user?.email ?? searchParams.get("email");
+    if (!searchParams.get("resend") || !emailForResend) return;
+    const base = `/auth/send-email-verification${emailForResend ? `?email=${encodeURIComponent(emailForResend)}` : ""}`;
+    router.replace(base as Route);
+    requestEmailVerification(emailForResend)
       .then(() => toast.success("Verification email resent!"))
       .catch((e: Error) =>
         toast.error(
@@ -51,10 +53,15 @@ export default function SendEmailVerificationPage() {
     router.replace("/auth/login" as Route);
   }
 
+  const emailParam = searchParams.get("email");
+  const displayEmail = user?.email ?? emailParam;
+
   if (isLoading) return <PageLoader />;
-  if (!user) redirect("/auth/login");
-  if (user.is_verified || !authTypeMetadata.requiresVerification)
+  if (!displayEmail) redirect("/auth/login");
+  if (user?.is_verified || !authTypeMetadata?.requiresVerification)
     redirect("/app");
+
+  const resendUrl = `/auth/send-email-verification?resend=true${emailParam ? `&email=${encodeURIComponent(emailParam)}` : ""}`;
 
   return (
     <AuthLayouts.Card
@@ -63,9 +70,9 @@ export default function SendEmailVerificationPage() {
       icon={Logo}
     >
       <AuthLayouts.Message
-        title={`Email sent to ${user.email}`}
+        title={`Email sent to ${displayEmail}`}
         description={markdown(
-          "Didn't receive an email? [Resend](/auth/send-email-verification?resend=true)"
+          `Didn't receive an email? [Resend](${resendUrl})`
         )}
       />
       <AuthLayouts.OrSeparator />
