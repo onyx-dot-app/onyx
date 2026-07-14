@@ -23,8 +23,6 @@ re-run against an unchanged catalog produces zero diff.
 Usage:
     python backend/scripts/update_recommended_models.py            # check only
     python backend/scripts/update_recommended_models.py --write
-    python backend/scripts/update_recommended_models.py --write \
-        --summary-file /tmp/summary.md
 """
 
 import argparse
@@ -33,7 +31,6 @@ import re
 import sys
 import urllib.request
 from dataclasses import dataclass
-from dataclasses import field
 from datetime import date
 from datetime import datetime
 from datetime import timezone
@@ -143,10 +140,6 @@ class SectionRules:
     """Curation rules for one provider section of recommended-models.json."""
 
     id_transform: IdTransform
-    # False => every model added to this section is flagged for human
-    # verification in the summary (the OpenRouter id -> native id mapping is a
-    # heuristic for this provider).
-    transform_is_reliable: bool
     emit_display_name: bool
     # OpenRouter id -> native model name, taking precedence over id_transform.
     id_overrides: dict[str, str]
@@ -165,17 +158,6 @@ class CurationRules:
     sections: dict[str, SectionRules]
 
 
-@dataclass
-class ChangeReport:
-    # True when the model set differs from the current file (as opposed to a
-    # formatting-only rewrite).
-    models_changed: bool = False
-    added: dict[str, list[str]] = field(default_factory=dict)
-    removed: dict[str, list[str]] = field(default_factory=dict)
-    warnings: list[str] = field(default_factory=list)
-    unverified: list[str] = field(default_factory=list)
-
-
 def _parse_section_rules(section_name: str, payload: dict[str, Any]) -> SectionRules:
     id_transform = payload["id_transform"]
     if id_transform not in ID_TRANSFORMS:
@@ -184,7 +166,6 @@ def _parse_section_rules(section_name: str, payload: dict[str, Any]) -> SectionR
         )
     return SectionRules(
         id_transform=id_transform,
-        transform_is_reliable=payload.get("transform_is_reliable", True),
         emit_display_name=payload.get("emit_display_name", True),
         id_overrides=payload.get("id_overrides") or {},
         display_name_overrides=payload.get("display_name_overrides") or {},
@@ -361,14 +342,14 @@ def build_section(
     previous: ProviderSection | None,
     rules: CurationRules,
     now: date,
-    report: ChangeReport,
+    warnings: list[str],
 ) -> ProviderSection:
     default_name = section.pinned_default
     picks: list[CatalogModel] = []
     for rule in section.rules:
         matches = select_for_rule(rule, catalog, rules, now)
         if not matches:
-            report.warnings.append(
+            warnings.append(
                 f"{section_name}: rule '{rule.label}' matched no catalog models"
             )
         picks.extend(matches)
@@ -383,19 +364,19 @@ def build_section(
                 f"{section_name}: no default model could be selected and there "
                 "is no existing section to fall back to"
             )
-        report.warnings.append(
+        warnings.append(
             f"{section_name}: no default model could be selected; keeping the "
             "section unchanged"
         )
         return previous
 
     models: list[RecommendedModel] = []
-    native_to_catalog_id: dict[str, str] = {}
+    seen_names: set[str] = set()
     for pick in picks:
         native_name = derive_native_name(pick, section)
-        if native_name in native_to_catalog_id:
+        if native_name in seen_names:
             continue
-        native_to_catalog_id[native_name] = pick.id
+        seen_names.add(native_name)
         models.append(
             RecommendedModel(
                 name=native_name,
@@ -418,17 +399,6 @@ def build_section(
         models.insert(0, RecommendedModel(name=default_name, display_name=display_name))
     else:
         models.insert(0, models.pop(default_index))
-
-    if not section.transform_is_reliable:
-        previous_names = {model.name for model in _visible_models(previous)}
-        for model in models:
-            catalog_id = native_to_catalog_id.get(model.name)
-            if model.name not in previous_names and catalog_id is not None:
-                report.unverified.append(
-                    f"{section_name}: `{catalog_id}` → `{model.name}` — the id "
-                    "mapping is heuristic; verify against the provider's native "
-                    "model ids"
-                )
 
     return ProviderSection(
         default_model=default_name,
@@ -464,8 +434,8 @@ def build_recommendations(
     catalog: list[CatalogModel],
     previous: RecommendedModelsFile,
     today: date,
-) -> tuple[RecommendedModelsFile, ChangeReport]:
-    report = ChangeReport()
+) -> tuple[RecommendedModelsFile, list[str]]:
+    warnings: list[str] = []
     providers = {
         section_name: build_section(
             section_name,
@@ -474,33 +444,20 @@ def build_recommendations(
             previous.providers.get(section_name),
             rules,
             today,
-            report,
+            warnings,
         )
         for section_name, section in rules.sections.items()
     }
 
-    for section_name, new_section in providers.items():
-        previous_names = [
-            model.name
-            for model in _visible_models(previous.providers.get(section_name))
-        ]
-        new_names = [model.name for model in _visible_models(new_section)]
-        added = [name for name in new_names if name not in previous_names]
-        removed = [name for name in previous_names if name not in new_names]
-        if added:
-            report.added[section_name] = added
-        if removed:
-            report.removed[section_name] = removed
-
-    report.models_changed = set(providers) != set(previous.providers) or any(
+    models_changed = set(providers) != set(previous.providers) or any(
         not _sections_equal(new_section, previous.providers[section_name])
         for section_name, new_section in providers.items()
         if section_name in previous.providers
     )
-    if not report.models_changed:
+    if not models_changed:
         # Return the previous object untouched so version/updated_at (and the
         # deployments' updated_at watermark) only move on real model changes.
-        return previous, report
+        return previous, warnings
 
     return (
         RecommendedModelsFile(
@@ -508,7 +465,7 @@ def build_recommendations(
             updated_at=f"{today.isoformat()}T00:00:00Z",
             providers=providers,
         ),
-        report,
+        warnings,
     )
 
 
@@ -533,31 +490,6 @@ def serialize(recommendations: RecommendedModelsFile) -> str:
     return json.dumps(data, indent=2) + "\n"
 
 
-def render_summary(report: ChangeReport, file_stale: bool) -> str:
-    lines = ["## Recommended models update", ""]
-    if report.models_changed:
-        for section_name in sorted(set(report.added) | set(report.removed)):
-            lines.append(f"### {section_name}")
-            for name in report.added.get(section_name, []):
-                lines.append(f"- Added: `{name}`")
-            for name in report.removed.get(section_name, []):
-                lines.append(f"- Removed: `{name}`")
-            lines.append("")
-    elif file_stale:
-        lines.extend(["No model changes — formatting normalization only.", ""])
-    else:
-        lines.extend(["No changes.", ""])
-    if report.unverified:
-        lines.append("### ⚠️ Verify model ids")
-        lines.extend(f"- {item}" for item in report.unverified)
-        lines.append("")
-    if report.warnings:
-        lines.append("### Warnings")
-        lines.extend(f"- {item}" for item in report.warnings)
-        lines.append("")
-    return "\n".join(lines)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -579,12 +511,6 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Read the catalog from a JSON file instead of the API",
     )
-    parser.add_argument(
-        "--summary-file",
-        type=Path,
-        default=None,
-        help="Write a markdown change summary (used as the PR body)",
-    )
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args(argv)
     if args.write and args.check:
@@ -599,15 +525,13 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     today = datetime.now(tz=timezone.utc).date()
-    recommendations, report = build_recommendations(rules, catalog, previous, today)
+    recommendations, warnings = build_recommendations(rules, catalog, previous, today)
 
     serialized = serialize(recommendations)
     file_stale = serialized != args.output.read_text()
 
-    for warning in report.warnings:
+    for warning in warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
-    if args.summary_file:
-        args.summary_file.write_text(render_summary(report, file_stale))
 
     if not file_stale:
         print(f"{args.output} is up to date.")

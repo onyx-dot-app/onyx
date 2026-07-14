@@ -4,7 +4,6 @@
   "sections": {
     "openai": {
       "id_transform": "strip_prefix",
-      "transform_is_reliable": true,
       "emit_display_name": false,
       "id_overrides": {},
       "display_name_overrides": {},
@@ -46,7 +45,6 @@
     },
     "anthropic": {
       "id_transform": "strip_prefix_dots_to_dashes",
-      "transform_is_reliable": false,
       "emit_display_name": true,
       "id_overrides": {},
       "display_name_overrides": {},
@@ -88,7 +86,6 @@
     },
     "vertex_ai": {
       "id_transform": "strip_prefix",
-      "transform_is_reliable": false,
       "emit_display_name": true,
       "id_overrides": {},
       "display_name_overrides": {
@@ -117,7 +114,6 @@
     },
     "openrouter": {
       "id_transform": "keep_full_id",
-      "transform_is_reliable": true,
       "emit_display_name": true,
       "id_overrides": {},
       "display_name_overrides": {},
