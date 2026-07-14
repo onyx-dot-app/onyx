@@ -5,7 +5,7 @@ import { SettingsLayouts, toast } from "@opal/layouts";
 import { Content } from "@opal/layouts";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
-import { PageLoader } from "@/refresh-components/PageLoader";
+import { PageLoader } from "@opal/layouts";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { SvgGlobe } from "@opal/icons";
