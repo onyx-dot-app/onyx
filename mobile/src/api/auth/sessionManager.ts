@@ -3,8 +3,10 @@ import type { ProviderDescriptor } from "@/api/auth/providers";
 import { apiFetch } from "@/api/client";
 import { getToken, setToken } from "@/api/auth/tokenStore";
 import { isAuthError } from "@/api/errors";
+import { toast } from "@/hooks/useToast";
 import { persister, queryClient } from "@/query/client";
 import { useSession } from "@/state/session";
+import { useUserFileStore } from "@/state/userFileStore";
 
 export interface BearerTokenResponse {
   access_token: string;
@@ -26,9 +28,12 @@ const REGISTER_PATH = "/auth/register";
 // unchanged, so it can't resurrect a logged-out or cross-contaminate a new session.
 let sessionEpoch = 0;
 
-// Drop in-memory + on-disk cache so a new identity can't read a prior user's data.
+// Drop in-memory + on-disk cache so a new identity can't read a prior user's data. Includes the
+// userFileStore (holds committed file records now), which lives outside the Query cache.
 async function purgeCache(): Promise<void> {
   queryClient.clear();
+  useUserFileStore.getState().reset();
+  toast.clearAll();
   await persister.removeClient();
 }
 

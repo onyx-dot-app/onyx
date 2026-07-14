@@ -12,6 +12,7 @@ import {
 import { ChatFileType } from "@/chat/interfaces";
 import { attachmentStatusLabel, isFailedFile, isImageName } from "@/lib/files";
 import { cn } from "@/lib/utils";
+import { useUploadProgress } from "@/state/userFileStore";
 import SvgAlertCircle from "@/icons/alert-circle";
 import SvgFileText from "@/icons/file-text";
 import SvgX from "@/icons/x";
@@ -22,7 +23,6 @@ interface FileCardProps {
   file: ProjectFile;
   // Omit for a read-only card (a sent message's files).
   onRemove?: (id: string) => void;
-  progress?: number; // 0..1 while UPLOADING
 }
 
 function isImage(file: ProjectFile): boolean {
@@ -34,13 +34,13 @@ function isImage(file: ProjectFile): boolean {
 // everything else — and any failed upload — as a bordered pill. Removable once the upload
 // lands (matches web); a file stuck INDEXING/FAILED stays removable so the user can unblock
 // send.
-// Memoized: it sits in the composer strip, which re-renders on every keystroke; its props
-// (file identity, the stable removeFile callback, per-file progress) only change on real edits.
+// Memoized so it skips the composer strip's per-keystroke re-renders. Progress is read from the
+// store by this card's own atomic selector, so a tick re-renders only this card.
 export const FileCard = memo(function FileCard({
   file,
   onRemove,
-  progress,
 }: FileCardProps) {
+  const progress = useUploadProgress(file.id);
   const uploading =
     String(file.status).toUpperCase() === UserFileStatus.UPLOADING;
   const canRemove = onRemove != null && !uploading;

@@ -1,10 +1,11 @@
-import { describe, expect, it, jest } from "@jest/globals";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react-native";
 
 import { FileCard } from "@/components/chat/FileCard";
 import { makeProjectFile } from "@/chat/__tests__/fixtures";
 import { UserFileStatus, type ProjectFile } from "@/chat/contracts/projects";
 import { ChatFileType } from "@/chat/interfaces";
+import { useUserFileStore } from "@/state/userFileStore";
 
 // The bearer image pulls the config→storage(MMKV) chain; stub it (the image card's own
 // View carries the testID we assert on). `() => null` avoids JSX in the factory.
@@ -17,6 +18,10 @@ function makeFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
 }
 
 describe("FileCard", () => {
+  beforeEach(() => {
+    useUserFileStore.setState({ progressById: {} });
+  });
+
   it("shows a document as a pill with its extension label + a remove control", () => {
     const onRemove = jest.fn();
     render(<FileCard file={makeFile({ id: "u1" })} onRemove={onRemove} />);
@@ -39,11 +44,11 @@ describe("FileCard", () => {
     expect(screen.getByLabelText("Remove doc.pdf")).toBeTruthy();
   });
 
-  it("renders upload progress and blocks removal while UPLOADING", () => {
+  it("renders upload progress (from the store) and blocks removal while UPLOADING", () => {
+    useUserFileStore.setState({ progressById: { up1: 0.42 } });
     render(
       <FileCard
-        file={makeFile({ status: UserFileStatus.UPLOADING })}
-        progress={0.42}
+        file={makeFile({ id: "up1", status: UserFileStatus.UPLOADING })}
         onRemove={jest.fn()}
       />,
     );
