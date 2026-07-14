@@ -19,6 +19,7 @@ import { PasswordCondition, PasswordConditions } from "@/lib/auth/components";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
 import { Logo } from "@/lib/app/components";
 import { useCurrentUser } from "@/lib/users/hooks";
+import { markdown } from "@opal/utils";
 
 const initialValues = { password: "", confirmPassword: "" };
 
@@ -99,7 +100,10 @@ export default function ResetPasswordPage() {
         <AuthLayouts.Message
           messageType="success"
           title="Password updated"
-          description={`The password for the account ${email} was successfully updated. Redirecting to login in ${secondsLeft}s or [go there now](/auth/login).`}
+          description={markdown(
+            `Your password has been successfully updated.`,
+            `Redirecting to login in ${secondsLeft}s or [go there now](/auth/login).`
+          )}
         />
       ) : (
         <Formik
