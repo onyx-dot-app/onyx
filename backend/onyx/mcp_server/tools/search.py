@@ -1,5 +1,6 @@
 """Search tools for MCP server - document and web search."""
 
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -9,7 +10,6 @@ from pydantic import TypeAdapter
 from pydantic import ValidationError
 
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import TimeRange
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import get_http_client
 from onyx.mcp_server.utils import get_indexed_sources
@@ -79,7 +79,7 @@ def _error_payload(error: str) -> dict[str, Any]:
     return {"error": error, "results": []}
 
 
-_TIME_RANGE_ADAPTER: TypeAdapter[TimeRange | None] = TypeAdapter(TimeRange | None)
+_TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
 
 
 @mcp_server.tool()
@@ -87,8 +87,7 @@ async def search_indexed_documents(
     query: str,
     source_types: list[str] | None = None,
     document_set_names: list[str] | None = None,
-    created_at_range: dict[str, Any] | None = None,
-    updated_at_range: dict[str, Any] | None = None,
+    time_cutoff: str | None = None,
     skip_query_expansion: bool = False,
 ) -> dict[str, Any]:
     """
@@ -105,11 +104,9 @@ async def search_indexed_documents(
     Document Sets — useful for scoping queries to a curated subset of the
     knowledge base (e.g. to isolate knowledge between agents). Use the
     `document_sets` resource to discover accessible set names.
-    `created_at_range` / `updated_at_range` are inclusive time windows of the
-    form ``{"start": <ISO 8601 | null>, "end": <ISO 8601 | null>}`` on when a
-    document was created / last updated; both may be combined, and either bound
-    may be null (open). Naive (timezone-less) timestamps are treated as UTC
-    server-side.
+    `time_cutoff` accepts an ISO 8601 timestamp; only documents updated on or
+    after that moment are returned. Naive (timezone-less) timestamps are
+    treated as UTC server-side.
     `skip_query_expansion` bypasses the LLM query-expansion step; useful when
     you already know the exact phrase to search for (faster, no LLM call for
     expansion).
@@ -126,7 +123,7 @@ async def search_indexed_documents(
         "query": "What is the latest status of PROJ-1234 and what is the next development item?",
         "source_types": ["jira", "google_drive", "github"],
         "document_set_names": ["Engineering Wiki"],
-        "updated_at_range": {"start": "2025-11-24T00:00:00Z", "end": null},
+        "time_cutoff": "2025-11-24T00:00:00Z",
     }
     ```
     """
@@ -175,26 +172,24 @@ async def search_indexed_documents(
                     source_str,
                 )
 
-    # Bad LLM-generated time ranges fall back to no filter so they can't break
-    # the whole call.
-    def _parse_time_range(name: str, value: dict[str, Any] | None) -> TimeRange | None:
-        try:
-            return _TIME_RANGE_ADAPTER.validate_python(value)
-        except ValidationError as err:
-            logger.warning(
-                "Onyx MCP Server: invalid %s %s (%s); continuing without it",
-                name,
-                value,
-                err,
-            )
-            return None
+    # Parse time_cutoff via Pydantic (accepts ISO 8601 with offset, "Z",
+    # naive, and date-only). Bad LLM-generated cutoffs fall back to no filter
+    # so they can't break the whole call.
+    try:
+        parsed_cutoff = _TIME_CUTOFF_ADAPTER.validate_python(time_cutoff)
+    except ValidationError as err:
+        logger.warning(
+            "Onyx MCP Server: invalid time_cutoff '%s' (%s); continuing without time filter",
+            time_cutoff,
+            err,
+        )
+        parsed_cutoff = None
 
     request = SearchRequest(
         query=query,
         sources=source_type_enums,
         document_sets=document_set_names,
-        created_at_range=_parse_time_range("created_at_range", created_at_range),
-        updated_at_range=_parse_time_range("updated_at_range", updated_at_range),
+        time_cutoff=parsed_cutoff,
         skip_query_expansion=skip_query_expansion,
     )
 
