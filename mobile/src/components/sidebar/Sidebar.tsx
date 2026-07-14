@@ -110,7 +110,7 @@ function SidebarHeader({ logo, children }: SidebarHeaderProps) {
   return (
     <View className="gap-4 pb-2">
       {logoEl != null && (
-        <View className="flex-row items-start justify-between px-2 pt-3">
+        <View className="flex-row items-start justify-between px-8 pt-3">
           {logoEl}
           <Button
             prominence="internal"
@@ -120,7 +120,7 @@ function SidebarHeader({ logo, children }: SidebarHeaderProps) {
           />
         </View>
       )}
-      {children != null && <View className="px-2">{children}</View>}
+      {children != null && <View className="px-8">{children}</View>}
     </View>
   );
 }
@@ -133,7 +133,7 @@ interface SidebarBodyProps {
 function SidebarBody({ children }: SidebarBodyProps) {
   return (
     <ScrollView className="min-h-0 flex-1" showsVerticalScrollIndicator={false}>
-      <View className="gap-2 px-2 pb-8">{children}</View>
+      <View className="gap-2 px-8 pb-8">{children}</View>
     </ScrollView>
   );
 }
@@ -143,7 +143,7 @@ interface SidebarFooterProps {
 }
 
 function SidebarFooter({ children }: SidebarFooterProps) {
-  return <View className="px-2 pt-4">{children}</View>;
+  return <View className="px-8 pt-4">{children}</View>;
 }
 
 interface SidebarSectionProps {
