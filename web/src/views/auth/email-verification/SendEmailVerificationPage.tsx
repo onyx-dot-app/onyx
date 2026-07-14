@@ -33,36 +33,35 @@ export default function SendEmailVerificationPage() {
     return () => clearInterval(interval);
   }, [user, mutateUser]);
 
+  const email = searchParams.get("email");
+
   // Resend flow: fire-and-forget, then strip the ?resend param.
   useEffect(() => {
-    const emailForResend = user?.email ?? searchParams.get("email");
-    if (!searchParams.get("resend") || !emailForResend) return;
-    const base = `/auth/send-email-verification?email=${encodeURIComponent(emailForResend)}`;
-    router.replace(base as Route);
-    requestEmailVerification(emailForResend)
+    if (!searchParams.get("resend") || !email) return;
+    router.replace(
+      `/auth/send-email-verification?email=${encodeURIComponent(email)}` as Route
+    );
+    requestEmailVerification(email)
       .then(() => toast.success("Verification email resent!"))
       .catch((e: Error) =>
         toast.error(
           `Failed to resend verification email — ${e.message || "unknown error"}`
         )
       );
-  }, [searchParams, user, router]);
+  }, [searchParams, email, router]);
 
   async function handleLogout() {
     await logout();
     router.replace("/auth/login" as Route);
   }
 
-  const emailParam = searchParams.get("email");
-  const displayEmail = user?.email ?? emailParam;
-
   // Wait for auth state before potentially skipping verified users to /app.
   if (isLoading) return <PageLoader />;
+  if (!email) redirect("/auth/login");
   if (user?.is_verified || !authTypeMetadata?.requiresVerification)
     redirect("/app");
-  if (!displayEmail) redirect("/auth/login");
 
-  const resendUrl = `/auth/send-email-verification?resend=true&email=${encodeURIComponent(displayEmail)}`;
+  const resendUrl = `/auth/send-email-verification?resend=true&email=${encodeURIComponent(email)}`;
 
   return (
     <AuthLayouts.Card
@@ -71,7 +70,7 @@ export default function SendEmailVerificationPage() {
       icon={Logo}
     >
       <AuthLayouts.Message
-        title={`Email sent to ${displayEmail}`}
+        title={`Email sent to ${email}`}
         description={markdown(
           `Didn't receive an email? [Resend](${resendUrl})`
         )}

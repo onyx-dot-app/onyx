@@ -13,7 +13,7 @@ export function getAuthRedirect(
 
   if (isAuthenticated) {
     if (authTypeMetadata.requiresVerification && !user.is_verified) {
-      return "/auth/send-email-verification";
+      return `/auth/send-email-verification?email=${encodeURIComponent(user.email)}`;
     }
     return "/app";
   }
