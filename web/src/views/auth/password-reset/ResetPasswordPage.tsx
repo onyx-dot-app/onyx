@@ -96,9 +96,8 @@ export default function ResetPasswordPage() {
       {resetSuccess ? (
         <AuthLayouts.Message
           messageType="success"
-          title="Password updated"
+          title={`Password updated for ${email}`}
           description={markdown(
-            `The password for the account ${email} was successfully updated.`,
             `Redirecting to login in ${secondsLeft}s or [go there now](/auth/login).`
           )}
         />
