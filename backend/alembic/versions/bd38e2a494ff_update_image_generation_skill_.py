@@ -27,6 +27,7 @@ _NEW_DESCRIPTION = (
 
 _skill_table = sa.table(
     "skill",
+    sa.column("slug", sa.String),
     sa.column("description", sa.Text),
     sa.column("built_in_skill_id", sa.String),
 )
@@ -35,6 +36,7 @@ _skill_table = sa.table(
 def _set_description(description: str) -> None:
     op.get_bind().execute(
         sa.update(_skill_table)
+        .where(_skill_table.c.slug == _BUILT_IN_SKILL_ID)
         .where(_skill_table.c.built_in_skill_id == _BUILT_IN_SKILL_ID)
         .values(description=description)
     )
