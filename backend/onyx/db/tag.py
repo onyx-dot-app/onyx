@@ -295,9 +295,12 @@ def delete_orphan_tags_batched(
     batch_count = 0
     while True:
         num_deleted = _delete_orphan_tags_batch(db_session, batch_size)
-        db_session.commit()
         if num_deleted == 0:
+            # nothing to persist, but the probe opened a transaction — end it
+            # rather than leaving the session idle-in-transaction
+            db_session.rollback()
             break
+        db_session.commit()
         total_deleted += num_deleted
         batch_count += 1
 
