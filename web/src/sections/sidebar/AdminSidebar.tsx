@@ -9,7 +9,7 @@ import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import { Settings, Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
-import { Divider, InputTypeIn, Spacer, SidebarTab } from "@opal/components";
+import { Divider, InputTypeIn, SidebarTab } from "@opal/components";
 import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
@@ -21,7 +21,7 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import { renderAppLogo } from "@/lib/app/utils";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { markdown } from "@opal/utils";
 
@@ -248,7 +248,7 @@ export default function AdminSidebar() {
   return (
     <SidebarLayouts.Root>
       <SidebarLayouts.Header
-        renderAppLogo={renderAppLogo}
+        renderAppLogo={renderSidebarLogo}
         showLogoWhenFolded={showLogoWhenFolded}
       >
         {folded ? (
