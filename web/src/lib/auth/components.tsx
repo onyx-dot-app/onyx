@@ -185,14 +185,34 @@ export function SignInButton({ authorizeUrl, authType }: SignInButtonProps) {
 }
 
 // ---------------------------------------------------------------------------
-// PasswordRequirements
+// PasswordCondition
 // ---------------------------------------------------------------------------
 
-interface PasswordRequirementsProps {
+interface PasswordConditionProps {
+  label: string;
+  met: boolean;
+}
+
+export function PasswordCondition({ label, met }: PasswordConditionProps) {
+  return (
+    <Content
+      sizePreset="secondary"
+      variant="body"
+      icon={met ? SvgCheckCircle : SvgXCircle}
+      color={met ? "success" : "muted"}
+      title={label}
+    />
+  );
+}
+
+// PasswordConditions
+// ---------------------------------------------------------------------------
+
+interface PasswordConditionsProps {
   password: string;
 }
 
-export function PasswordRequirements({ password }: PasswordRequirementsProps) {
+export function PasswordConditions({ password }: PasswordConditionsProps) {
   const { authTypeMetadata } = useUser();
 
   if (!authTypeMetadata) return null;
@@ -238,14 +258,7 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
   return (
     <div className="flex flex-col gap-1">
       {rules.map((rule) => (
-        <Content
-          key={rule.label}
-          sizePreset="secondary"
-          variant="body"
-          icon={rule.met ? SvgCheckCircle : SvgXCircle}
-          color={rule.met ? "success" : "muted"}
-          title={rule.label}
-        />
+        <PasswordCondition key={rule.label} label={rule.label} met={rule.met} />
       ))}
     </div>
   );
@@ -454,9 +467,7 @@ export function EmailPasswordForm({
                     }
                   />
                 </InputVertical>
-                {isSignup && (
-                  <PasswordRequirements password={values.password} />
-                )}
+                {isSignup && <PasswordConditions password={values.password} />}
               </div>
             </AuthLayouts.Fields>
 

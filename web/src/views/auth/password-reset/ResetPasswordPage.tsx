@@ -15,6 +15,7 @@ import {
   TENANT_ID_COOKIE_NAME,
 } from "@/lib/constants";
 import { AUTH_SUCCESS_REDIRECT_DELAY_MS } from "@/lib/auth/constants";
+import { PasswordCondition, PasswordConditions } from "@/lib/auth/components";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
 import { Logo } from "@/lib/app/components";
 
@@ -103,7 +104,7 @@ export default function ResetPasswordPage() {
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({ isSubmitting, isValid, dirty }) => (
+          {({ isSubmitting, isValid, dirty, values }) => (
             <AuthLayouts.FormBody>
               <AuthLayouts.Fields>
                 <InputVertical title="New Password" withLabel="password">
@@ -112,6 +113,7 @@ export default function ResetPasswordPage() {
                     placeholder="Choose your password"
                   />
                 </InputVertical>
+                <PasswordConditions password={values.password} />
                 <InputVertical
                   title="Confirm Password"
                   withLabel="confirmPassword"
@@ -121,6 +123,14 @@ export default function ResetPasswordPage() {
                     placeholder="Repeat your password"
                   />
                 </InputVertical>
+                <PasswordCondition
+                  label="Passwords match"
+                  met={
+                    values.password.length > 0 &&
+                    values.confirmPassword.length > 0 &&
+                    values.password === values.confirmPassword
+                  }
+                />
               </AuthLayouts.Fields>
               <AuthLayouts.Submit
                 label="reset"
