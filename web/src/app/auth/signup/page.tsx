@@ -2,6 +2,7 @@ import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import { redirect } from "next/navigation";
 import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
@@ -43,16 +44,16 @@ const Page = async (props: {
     }
     return redirect("/auth/waiting-on-verification");
   }
-  const cloud = authTypeMetadata?.authType === AuthType.CLOUD;
+  const cloud = NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD;
 
   // only enable this page if basic login is enabled
-  if (authTypeMetadata?.authType !== AuthType.BASIC && !cloud) {
+  if (NEXT_PUBLIC_AUTH_TYPE !== AuthType.BASIC && !cloud) {
     return redirect("/app");
   }
 
   let authUrl: string | null = null;
-  if (cloud && authTypeMetadata) {
-    authUrl = await getAuthUrlSS(authTypeMetadata.authType, null);
+  if (cloud) {
+    authUrl = await getAuthUrlSS(NEXT_PUBLIC_AUTH_TYPE, null);
   }
 
   return (

@@ -16,7 +16,6 @@ export interface SSOProviderOption {
 }
 
 export interface AuthTypeMetadata {
-  authType: AuthType;
   autoRedirect: boolean;
   requiresVerification: boolean;
   anonymousUserEnabled: boolean | null;

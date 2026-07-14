@@ -105,26 +105,8 @@ export function useSessionWatcher(): boolean {
   );
 }
 
-export function useAuthType(): AuthType | null {
-  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
-  // camelCase-mapped shape — a raw fetcher here would poison the cache for
-  // every other consumer of the key.
-  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
-
-  if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return NEXT_PUBLIC_AUTH_TYPE;
-  }
-
-  if (error || isLoading) {
-    return null;
-  }
-
-  return authTypeMetadata?.authType ?? null;
-}
-
 export function useTokenRefresh(
   user: User | null,
-  authTypeMetadata: AuthTypeMetadata | undefined,
   authTypeMetadataLoading: boolean,
   onRefreshFail: () => Promise<void>
 ) {
@@ -141,8 +123,8 @@ export function useTokenRefresh(
       !user ||
       user.id === NO_AUTH_USER_ID ||
       user.is_anonymous_user ||
-      authTypeMetadata?.authType === AuthType.OIDC ||
-      authTypeMetadata?.authType === AuthType.SAML
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.OIDC ||
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.SAML
     ) {
       return;
     }
@@ -198,5 +180,5 @@ export function useTokenRefresh(
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [user, authTypeMetadata, authTypeMetadataLoading, onRefreshFail]);
+  }, [user, authTypeMetadataLoading, onRefreshFail]);
 }

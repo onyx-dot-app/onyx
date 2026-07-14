@@ -2,6 +2,7 @@ import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
@@ -42,7 +43,7 @@ export default async function Page(props: PageProps) {
     authTypeMetadata &&
     !authTypeMetadata.hasUsers &&
     !autoRedirectToSignupDisabled &&
-    authTypeMetadata.authType === AuthType.BASIC
+    NEXT_PUBLIC_AUTH_TYPE === AuthType.BASIC
   ) {
     return redirect("/auth/signup");
   }
@@ -68,7 +69,7 @@ export default async function Page(props: PageProps) {
   let authUrl: string | null = null;
   if (authTypeMetadata) {
     try {
-      authUrl = await getAuthUrlSS(authTypeMetadata.authType, nextUrl);
+      authUrl = await getAuthUrlSS(NEXT_PUBLIC_AUTH_TYPE, nextUrl);
     } catch (e) {
       console.log(`Some fetch failed for the login page - ${e}`);
     }
@@ -80,9 +81,9 @@ export default async function Page(props: PageProps) {
 
   const ssoLoginFooterContent =
     authTypeMetadata &&
-    (authTypeMetadata.authType === AuthType.GOOGLE_OAUTH ||
-      authTypeMetadata.authType === AuthType.OIDC ||
-      authTypeMetadata.authType === AuthType.SAML) ? (
+    (NEXT_PUBLIC_AUTH_TYPE === AuthType.GOOGLE_OAUTH ||
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.OIDC ||
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.SAML) ? (
       <>Need access? Reach out to your IT admin to get access.</>
     ) : undefined;
 

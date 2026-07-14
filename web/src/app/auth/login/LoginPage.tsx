@@ -4,7 +4,10 @@ import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 import LoginText from "@/app/auth/login/LoginText";
 import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
 import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
-import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
+import {
+  NEXT_PUBLIC_AUTH_TYPE,
+  NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED,
+} from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import Text from "@/refresh-components/texts/Text";
 import { Button, MessageCard } from "@opal/components";
@@ -44,26 +47,26 @@ export default function LoginPage({
       )}
       {authUrl &&
         authTypeMetadata &&
-        authTypeMetadata.authType !== AuthType.CLOUD &&
+        NEXT_PUBLIC_AUTH_TYPE !== AuthType.CLOUD &&
         // basic auth is handled below w/ the EmailPasswordForm
-        authTypeMetadata.authType !== AuthType.BASIC && (
+        NEXT_PUBLIC_AUTH_TYPE !== AuthType.BASIC && (
           <div className="flex flex-col w-full gap-4">
             <LoginText />
             <SignInButton
               authorizeUrl={authUrl}
-              authType={authTypeMetadata?.authType}
+              authType={NEXT_PUBLIC_AUTH_TYPE}
             />
           </div>
         )}
 
-      {authTypeMetadata?.authType === AuthType.CLOUD && (
+      {NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD && (
         <div className="w-full justify-center flex flex-col gap-6">
           <LoginText />
           {authUrl && authTypeMetadata && (
             <>
               <SignInButton
                 authorizeUrl={authUrl}
-                authType={authTypeMetadata?.authType}
+                authType={NEXT_PUBLIC_AUTH_TYPE}
               />
               <div className="flex flex-row items-center w-full gap-2">
                 <div className="flex-1 border-t border-text-01" />
@@ -85,7 +88,7 @@ export default function LoginPage({
         </div>
       )}
 
-      {authTypeMetadata?.authType === AuthType.BASIC && (
+      {NEXT_PUBLIC_AUTH_TYPE === AuthType.BASIC && (
         <div className="flex flex-col w-full gap-6">
           <LoginText />
           {ssoProviders.length > 0 && (

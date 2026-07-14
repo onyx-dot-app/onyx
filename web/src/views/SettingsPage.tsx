@@ -37,7 +37,7 @@ import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useLlmManager } from "@/lib/hooks";
-import { useAuthType } from "@/lib/auth/hooks";
+import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import useChatSessions from "@/hooks/useChatSessions";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -1304,7 +1304,6 @@ function ChatPreferencesSettings() {
 
 function AccountsAccessSettings() {
   const { user, authTypeMetadata } = useUser();
-  const authType = useAuthType();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // TODO(auth-refresh): only passwordMinLength is enforced here; the remaining
@@ -1337,7 +1336,7 @@ function AccountsAccessSettings() {
   const canCreateTokens = useCloudSubscription();
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType !== null;
+  const showTokensSection = true;
 
   // Fetch PATs with SWR
   const {

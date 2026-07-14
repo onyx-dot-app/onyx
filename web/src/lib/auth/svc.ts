@@ -2,7 +2,6 @@ import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 
 interface AuthTypeAPIResponse {
-  auth_type: string;
   requires_verification: boolean;
   anonymous_user_enabled: boolean | null;
   password_min_length: number;
@@ -24,10 +23,10 @@ export async function fetchAuthTypeMetadata(
     throw new Error("Failed to fetch auth type metadata");
   }
   const data: AuthTypeAPIResponse = await res.json();
-  const authType = NEXT_PUBLIC_AUTH_TYPE;
   return {
-    authType,
-    autoRedirect: authType === AuthType.OIDC || authType === AuthType.SAML,
+    autoRedirect:
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.OIDC ||
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.SAML,
     requiresVerification: data.requires_verification,
     anonymousUserEnabled: data.anonymous_user_enabled,
     passwordMinLength: data.password_min_length,

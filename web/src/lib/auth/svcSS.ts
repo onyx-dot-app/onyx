@@ -19,7 +19,6 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
   }
 
   const data: {
-    auth_type: string;
     requires_verification: boolean;
     anonymous_user_enabled: boolean | null;
     password_min_length: number;
@@ -38,13 +37,10 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
     }[];
   } = await res.json();
 
-  const authType: AuthType = NEXT_PUBLIC_AUTH_TYPE;
-
   return {
-    authType,
-    // for SAML / OIDC, we auto-redirect the user to the IdP when the user visits
-    // Onyx in an un-authenticated state
-    autoRedirect: authType === AuthType.OIDC || authType === AuthType.SAML,
+    autoRedirect:
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.OIDC ||
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.SAML,
     requiresVerification: data.requires_verification,
     anonymousUserEnabled: data.anonymous_user_enabled,
     passwordMinLength: data.password_min_length,
