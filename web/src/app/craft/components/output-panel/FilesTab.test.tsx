@@ -54,6 +54,7 @@ describe("FilesTab", () => {
     const sessionId = "session-1";
     const oldFile = file("old.txt", "outputs/old.txt");
     const newFile = file("new.txt", "outputs/new.txt");
+    const onRefreshingChange = jest.fn();
     let resolveRefreshedOutputs: (listing: DirectoryListing) => void = () => {};
     const refreshedOutputs = new Promise<DirectoryListing>((resolve) => {
       resolveRefreshedOutputs = resolve;
@@ -76,9 +77,12 @@ describe("FilesTab", () => {
     });
     useBuildSessionStore.getState().setCurrentSession(sessionId);
 
-    render(
+    const { unmount } = render(
       <SWRConfig value={{ provider: () => new Map() }}>
-        <FilesTab sessionId={sessionId} />
+        <FilesTab
+          sessionId={sessionId}
+          onRefreshingChange={onRefreshingChange}
+        />
       </SWRConfig>
     );
 
@@ -94,6 +98,7 @@ describe("FilesTab", () => {
         "outputs"
       )
     );
+    expect(onRefreshingChange).toHaveBeenCalledWith(true);
     expect(screen.getByText("old.txt")).toBeInTheDocument();
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
 
@@ -103,9 +108,25 @@ describe("FilesTab", () => {
 
     expect(await screen.findByText("new.txt")).toBeInTheDocument();
     expect(screen.queryByText("old.txt")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(onRefreshingChange).toHaveBeenLastCalledWith(false)
+    );
+
+    unmount();
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <FilesTab sessionId={sessionId} />
+      </SWRConfig>
+    );
+    expect(await screen.findByText("new.txt")).toBeInTheDocument();
+    expect(
+      mockedFetchDirectoryListing.mock.calls.filter(
+        ([, path]) => path === "outputs"
+      )
+    ).toHaveLength(1);
   });
 
-  it("ignores an older directory response that finishes last", async () => {
+  it("coalesces overlapping refreshes into one trailing refresh", async () => {
     const sessionId = "session-1";
     const oldFile = file("old.txt", "outputs/old.txt");
     const staleFile = file("stale.txt", "outputs/stale.txt");
@@ -148,6 +169,18 @@ describe("FilesTab", () => {
 
     act(() => {
       useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
+      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
+    });
+    await waitFor(() =>
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+          ?.filesNeedsRefresh
+      ).toBe(3)
+    );
+    expect(outputResolvers).toHaveLength(1);
+
+    act(() => {
+      outputResolvers[0]?.({ path: "outputs", entries: [staleFile] });
     });
     await waitFor(() => expect(outputResolvers).toHaveLength(2));
 
@@ -155,13 +188,94 @@ describe("FilesTab", () => {
       outputResolvers[1]?.({ path: "outputs", entries: [newestFile] });
     });
     expect(await screen.findByText("newest.txt")).toBeInTheDocument();
-
-    act(() => {
-      outputResolvers[0]?.({ path: "outputs", entries: [staleFile] });
-    });
     await waitFor(() => {
       expect(screen.getByText("newest.txt")).toBeInTheDocument();
       expect(screen.queryByText("stale.txt")).not.toBeInTheDocument();
+      expect(outputResolvers).toHaveLength(2);
+    });
+  });
+
+  it("refreshes expanded directories sequentially", async () => {
+    const sessionId = "session-1";
+    const oldFile = file("old.txt", "outputs/old.txt");
+    const newFile = file("new.txt", "outputs/new.txt");
+    const webDirectory: FileSystemEntry = {
+      name: "web",
+      path: "outputs/web",
+      is_directory: true,
+      size: null,
+      mime_type: null,
+    };
+    let resolveOutputs: (listing: DirectoryListing) => void = () => {};
+    let resolveWeb: (listing: DirectoryListing) => void = () => {};
+
+    mockedFetchDirectoryListing.mockImplementation((_sessionId, path) => {
+      if (path === "") {
+        return Promise.resolve({ path: "", entries: [outputsDirectory] });
+      }
+      if (path === "outputs") {
+        return new Promise<DirectoryListing>((resolve) => {
+          resolveOutputs = resolve;
+        });
+      }
+      if (path === "outputs/web") {
+        return new Promise<DirectoryListing>((resolve) => {
+          resolveWeb = resolve;
+        });
+      }
+      return Promise.resolve({ path: path ?? "", entries: [] });
+    });
+
+    useBuildSessionStore.getState().createSession(sessionId, {
+      filesTabState: {
+        expandedPaths: ["outputs", "outputs/web"],
+        scrollTop: 0,
+        directoryCache: {
+          outputs: [webDirectory, oldFile],
+          "outputs/web": [],
+        },
+      },
+    });
+    useBuildSessionStore.getState().setCurrentSession(sessionId);
+
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <FilesTab sessionId={sessionId} />
+      </SWRConfig>
+    );
+
+    expect(await screen.findByText("old.txt")).toBeInTheDocument();
+
+    act(() => {
+      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
+    });
+    await waitFor(() =>
+      expect(mockedFetchDirectoryListing).toHaveBeenCalledWith(
+        sessionId,
+        "outputs"
+      )
+    );
+    expect(mockedFetchDirectoryListing).not.toHaveBeenCalledWith(
+      sessionId,
+      "outputs/web"
+    );
+
+    act(() => {
+      resolveOutputs({ path: "outputs", entries: [webDirectory, newFile] });
+    });
+
+    expect(await screen.findByText("new.txt")).toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(mockedFetchDirectoryListing).toHaveBeenCalledWith(
+        sessionId,
+        "outputs/web"
+      )
+    );
+
+    await act(async () => {
+      resolveWeb({ path: "outputs/web", entries: [] });
+      await Promise.resolve();
     });
   });
 

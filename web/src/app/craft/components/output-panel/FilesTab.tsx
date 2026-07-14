@@ -28,6 +28,7 @@ import { InlineFilePreview } from "@/app/craft/components/output-panel/FilePrevi
 interface FilesTabProps {
   sessionId: string | null;
   onFileClick?: (path: string, fileName: string) => void;
+  onRefreshingChange?: (isRefreshing: boolean) => void;
   /** True when showing pre-provisioned sandbox (read-only, no file clicks) */
   isPreProvisioned?: boolean;
   /** True when sandbox is still being provisioned */
@@ -37,6 +38,7 @@ interface FilesTabProps {
 export default function FilesTab({
   sessionId,
   onFileClick,
+  onRefreshingChange,
   isPreProvisioned = false,
   isProvisioning = false,
 }: FilesTabProps) {
@@ -84,7 +86,12 @@ export default function FilesTab({
 
   // Scroll container ref for position tracking
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const refreshGenerationRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const handledRefreshGenerationRef = useRef(
+    filesTabState.lastRefreshGeneration ?? 0
+  );
+  const refreshInFlightRef = useRef(false);
+  const refreshQueuedRef = useRef(false);
 
   // Fetch root directory
   const {
@@ -99,6 +106,19 @@ export default function FilesTab({
       dedupingInterval: 2000,
     }
   );
+  const mutateRootRef = useRef(mutate);
+  useEffect(() => {
+    mutateRootRef.current = mutate;
+  }, [mutate]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      refreshQueuedRef.current = false;
+      onRefreshingChange?.(false);
+    };
+  }, [onRefreshingChange]);
 
   // Refresh files list when outputs/ directory changes
   const filesNeedsRefresh = useFilesNeedsRefresh();
@@ -110,69 +130,94 @@ export default function FilesTab({
       : filesTabState.expandedPaths;
   }, [isPreProvisioned, localExpandedPaths, filesTabState.expandedPaths]);
 
-  useEffect(() => {
-    if (filesNeedsRefresh > 0 && sessionId && mutate) {
-      const refreshGeneration = ++refreshGenerationRef.current;
-      const expandedPathsToRefresh = expandedPathsRef.current;
-      const retainedPaths = new Set(["", ...expandedPathsToRefresh]);
+  const performFilesRefresh = useCallback(async () => {
+    if (!sessionId) return;
 
-      // Keep the current tree visible while updated listings are fetched.
-      // Clearing the cache here makes every expanded directory briefly render
-      // as "Loading..." whenever an agent writes a file.
+    const refreshSessionId = sessionId;
+    const expandedPathsToRefresh = [...expandedPathsRef.current];
+    const retainedPaths = new Set(["", ...expandedPathsToRefresh]);
+
+    // Retain visible listings during revalidation. Hidden listings are removed
+    // so a collapsed directory fetches fresh contents when it is reopened.
+    if (isPreProvisioned) {
+      setLocalDirectoryCache(
+        (prev) =>
+          new Map(Array.from(prev).filter(([path]) => retainedPaths.has(path)))
+      );
+    } else {
+      retainFilesTabDirectoryCache(refreshSessionId, retainedPaths);
+    }
+
+    // The sandbox filesystem transport stalls when multiple listings are in
+    // flight. Refresh serially while applying each result as it arrives.
+    await mutateRootRef.current().catch(() => undefined);
+    for (const path of expandedPathsToRefresh) {
+      const listing = await fetchDirectoryListing(refreshSessionId, path).catch(
+        () => null
+      );
+      if (!listing || !isMountedRef.current) continue;
+
       if (isPreProvisioned) {
-        setLocalDirectoryCache(
-          (prev) =>
-            new Map(
-              Array.from(prev).filter(([path]) => retainedPaths.has(path))
-            )
-        );
+        setLocalDirectoryCache((prev) => {
+          const next = new Map(prev);
+          next.set(path, listing.entries);
+          return next;
+        });
       } else {
-        retainFilesTabDirectoryCache(sessionId, retainedPaths);
-      }
-      void mutate();
-
-      if (expandedPathsToRefresh.length > 0) {
-        void Promise.allSettled(
-          expandedPathsToRefresh.map((p) => fetchDirectoryListing(sessionId, p))
-        ).then((settled) => {
-          if (refreshGeneration !== refreshGenerationRef.current) return;
-
-          // Collect only the successful fetches into a path → entries map
-          const fetched = new Map<string, FileSystemEntry[]>();
-          settled.forEach((r, i) => {
-            const p = expandedPathsToRefresh[i];
-            if (p && r.status === "fulfilled" && r.value) {
-              fetched.set(p, r.value.entries);
-            }
-          });
-
-          if (isPreProvisioned) {
-            setLocalDirectoryCache((prev) => {
-              const next = new Map(prev);
-              fetched.forEach((entries, p) => next.set(p, entries));
-              return next;
-            });
-          } else {
-            const listings: Record<string, FileSystemEntry[]> = {};
-            fetched.forEach((entries, p) => {
-              listings[p] = entries;
-            });
-            mergeFilesTabDirectoryCache(sessionId, listings);
-          }
+        mergeFilesTabDirectoryCache(refreshSessionId, {
+          [path]: listing.entries,
         });
       }
-
-      return () => {
-        refreshGenerationRef.current += 1;
-      };
     }
   }, [
-    filesNeedsRefresh,
     sessionId,
-    mutate,
     isPreProvisioned,
     mergeFilesTabDirectoryCache,
     retainFilesTabDirectoryCache,
+  ]);
+
+  const runRefreshQueue = useCallback(async () => {
+    if (refreshInFlightRef.current) {
+      refreshQueuedRef.current = true;
+      return;
+    }
+
+    refreshInFlightRef.current = true;
+    onRefreshingChange?.(true);
+    try {
+      do {
+        refreshQueuedRef.current = false;
+        await performFilesRefresh();
+      } while (refreshQueuedRef.current && isMountedRef.current);
+    } finally {
+      refreshInFlightRef.current = false;
+      if (isMountedRef.current) onRefreshingChange?.(false);
+    }
+  }, [performFilesRefresh, onRefreshingChange]);
+
+  useEffect(() => {
+    if (!sessionId || filesNeedsRefresh <= 0) return;
+
+    handledRefreshGenerationRef.current = Math.max(
+      handledRefreshGenerationRef.current,
+      filesTabState.lastRefreshGeneration ?? 0
+    );
+    if (filesNeedsRefresh <= handledRefreshGenerationRef.current) return;
+
+    handledRefreshGenerationRef.current = filesNeedsRefresh;
+    if (!isPreProvisioned) {
+      updateFilesTabState(sessionId, {
+        lastRefreshGeneration: filesNeedsRefresh,
+      });
+    }
+    void runRefreshQueue();
+  }, [
+    filesNeedsRefresh,
+    sessionId,
+    isPreProvisioned,
+    filesTabState.lastRefreshGeneration,
+    updateFilesTabState,
+    runRefreshQueue,
   ]);
 
   // Update cache when root listing changes
@@ -227,15 +272,9 @@ export default function FilesTab({
           if (!directoryCache.has(path)) {
             const listing = await fetchDirectoryListing(sessionId, path);
             if (listing) {
-              const newCache = {
-                ...filesTabState.directoryCache,
+              mergeFilesTabDirectoryCache(sessionId, {
                 [path]: listing.entries,
-              };
-              updateFilesTabState(sessionId, {
-                expandedPaths: Array.from(newExpanded),
-                directoryCache: newCache,
               });
-              return;
             }
           }
           updateFilesTabState(sessionId, {
@@ -251,8 +290,8 @@ export default function FilesTab({
       localDirectoryCache,
       expandedPaths,
       directoryCache,
-      filesTabState.directoryCache,
       updateFilesTabState,
+      mergeFilesTabDirectoryCache,
     ]
   );
 

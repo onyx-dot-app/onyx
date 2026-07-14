@@ -239,34 +239,19 @@ export function useBuildStreaming() {
     (state) => state.appendSubagentThinkingChunk
   );
 
-  // ── Output file detector registry ──────────────────────────────────────
-  // Ordered by priority — first match wins.
-  // To add a new output type, add an entry here + a store action.
-  const OUTPUT_FILE_DETECTORS = useMemo(
-    () => [
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          (fp.includes("/web/") || fp.startsWith("web/")),
-        onDetect: (sid: string) => triggerWebappRefresh(sid),
-      },
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          fp.endsWith(".md") &&
-          (fp.includes("/outputs/") || fp.startsWith("outputs/")),
-        onDetect: (sid: string, fp: string) => {
-          openMarkdownPreview(sid, fp);
-          triggerFilesRefresh(sid);
-        },
-      },
-      {
-        match: (fp: string, k: string) =>
-          (k === "edit" || k === "write") &&
-          (fp.includes("/outputs/") || fp.startsWith("outputs/")),
-        onDetect: (sid: string) => triggerFilesRefresh(sid),
-      },
-    ],
+  const handleCompletedFileChange = useCallback(
+    (sid: string, filePath: string) => {
+      const isWebFile =
+        filePath.includes("/web/") || filePath.startsWith("web/");
+      const isOutputFile =
+        filePath.includes("/outputs/") || filePath.startsWith("outputs/");
+
+      if (isWebFile) triggerWebappRefresh(sid);
+      if (isOutputFile) {
+        if (filePath.endsWith(".md")) openMarkdownPreview(sid, filePath);
+        triggerFilesRefresh(sid);
+      }
+    },
     [triggerWebappRefresh, triggerFilesRefresh, openMarkdownPreview]
   );
 
@@ -516,6 +501,14 @@ export function useBuildStreaming() {
           }
 
           case "tool_call_progress": {
+            if (
+              parsed.status === "completed" &&
+              parsed.kind === "edit" &&
+              parsed.filePath
+            ) {
+              handleCompletedFileChange(sessionId, parsed.filePath);
+            }
+
             const subagentClass = classifySubagentEvent(parsed);
 
             // Child (subagent-internal) event: route to the subagent's own
@@ -532,14 +525,6 @@ export function useBuildStreaming() {
                 null,
                 ""
               );
-              if (parsed.filePath && parsed.kind) {
-                for (const detector of OUTPUT_FILE_DETECTORS) {
-                  if (detector.match(parsed.filePath, parsed.kind)) {
-                    detector.onDetect(sessionId, parsed.filePath);
-                    break;
-                  }
-                }
-              }
               break;
             }
 
@@ -631,14 +616,6 @@ export function useBuildStreaming() {
               }),
             });
 
-            if (parsed.filePath && parsed.kind) {
-              for (const detector of OUTPUT_FILE_DETECTORS) {
-                if (detector.match(parsed.filePath, parsed.kind)) {
-                  detector.onDetect(sessionId, parsed.filePath);
-                  break;
-                }
-              }
-            }
             break;
           }
 
@@ -674,6 +651,9 @@ export function useBuildStreaming() {
           }
 
           case "prompt_response": {
+            // Shell commands and scripts can mutate the workspace without
+            // emitting structured file paths. Reconcile once when the turn ends.
+            triggerFilesRefresh(sessionId);
             finalizeStreaming();
             const isInterrupting = useBuildSessionStore
               .getState()
@@ -805,7 +785,8 @@ export function useBuildStreaming() {
       upsertTodoListStreamItem,
       addArtifactToSession,
       appendMessageToSession,
-      OUTPUT_FILE_DETECTORS,
+      handleCompletedFileChange,
+      triggerFilesRefresh,
       globalMutate,
       recordSubagentToolCall,
       seedSubagentMeta,

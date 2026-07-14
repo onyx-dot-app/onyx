@@ -568,6 +568,8 @@ export interface FilesTabState {
   scrollTop: number;
   /** Cached directory listings by path - avoids refetch on tab switch */
   directoryCache: Record<string, FileSystemEntry[]>;
+  /** Last refresh generation accepted by the Files tab. */
+  lastRefreshGeneration?: number;
 }
 
 /** Tab history entry - can be a pinned tab or a transient panel tab */
@@ -888,7 +890,12 @@ const createInitialSessionData = (
   viewedSubagentSessionId: null,
   activeOutputTab: "preview",
   activePanelTabId: null,
-  filesTabState: { expandedPaths: [], scrollTop: 0, directoryCache: {} },
+  filesTabState: {
+    expandedPaths: [],
+    scrollTop: 0,
+    directoryCache: {},
+    lastRefreshGeneration: 0,
+  },
   tabHistory: {
     entries: [{ type: "pinned", tab: "preview" }],
     currentIndex: 0,
@@ -2176,11 +2183,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const session = state.sessions.get(sessionId);
       if (!session) return state;
 
-      const directoryCache = Object.fromEntries(
-        Object.entries(session.filesTabState.directoryCache).filter(([path]) =>
-          retainedPaths.has(path)
-        )
+      const cachedListings = Object.entries(
+        session.filesTabState.directoryCache
       );
+      const retainedListings = cachedListings.filter(([path]) =>
+        retainedPaths.has(path)
+      );
+      if (retainedListings.length === cachedListings.length) return state;
+
+      const directoryCache = Object.fromEntries(retainedListings);
       const updatedSession: BuildSessionData = {
         ...session,
         filesTabState: {
@@ -2608,6 +2619,7 @@ const EMPTY_FILES_TAB_STATE: FilesTabState = {
   expandedPaths: [],
   scrollTop: 0,
   directoryCache: {},
+  lastRefreshGeneration: 0,
 };
 const EMPTY_TAB_HISTORY: TabNavigationHistory = {
   entries: [],
