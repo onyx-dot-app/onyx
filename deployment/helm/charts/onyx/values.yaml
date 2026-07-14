@@ -1481,6 +1481,13 @@ configMap:
   AUTH_TYPE: "basic"
   # Enable PKCE for OIDC login flow. Leave empty/false for backward compatibility.
   OIDC_PKCE_ENABLED: ""
+  # Opt-in: capture IdP directory claims at OAuth/OIDC login and use them to
+  # enrich chat prompts and resolve {{user.<key>}} agent placeholders. Sends
+  # directory data to the configured LLM, so off by default. Single-tenant only.
+  IDP_PROFILE_ENRICHMENT_ENABLED: ""
+  # Optional JSON overriding the directory claim aliases per profile field, e.g.
+  # '{"department": ["dept", "division"], "country": ["c"]}'.
+  IDP_PROFILE_CLAIM_MAP: ""
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check

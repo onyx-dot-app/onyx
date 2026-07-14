@@ -129,6 +129,7 @@ from onyx.server.manage.image_generation.api import (
 )
 from onyx.server.manage.llm.api import admin_router as llm_admin_router
 from onyx.server.manage.llm.api import basic_router as llm_router
+from onyx.server.manage.oauth_test import router as oauth_test_admin_router
 from onyx.server.manage.opensearch_migration.api import (
     admin_router as opensearch_migration_admin_router,
 )
@@ -519,6 +520,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, document_router)
     include_router_with_global_prefix_prepended(application, user_router)
+    include_router_with_global_prefix_prepended(application, oauth_test_admin_router)
     include_router_with_global_prefix_prepended(application, admin_query_router)
     include_router_with_global_prefix_prepended(application, admin_router)
     include_router_with_global_prefix_prepended(application, connector_router)

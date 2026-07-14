@@ -12,6 +12,7 @@ import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import InsertUserVariableMenu from "@/sections/agents/InsertUserVariableMenu";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
 import {
@@ -1402,6 +1403,9 @@ export default function AgentEditorPage({
                           <InputTextAreaField
                             name="instructions"
                             placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
+                            rightSection={
+                              <InsertUserVariableMenu fieldName="instructions" />
+                            }
                           />
                         </InputVertical>
 
@@ -1764,6 +1768,9 @@ export default function AgentEditorPage({
                                 <InputTextAreaField
                                   name="reminders"
                                   placeholder="Remember, I want you to always format your response as a numbered list."
+                                  rightSection={
+                                    <InsertUserVariableMenu fieldName="reminders" />
+                                  }
                                 />
                               </InputVertical>
                               <Text text03 secondaryBody>
