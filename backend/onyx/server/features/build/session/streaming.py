@@ -33,7 +33,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
-from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
 from onyx.server.features.build.configs import (
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
 )
@@ -854,7 +854,7 @@ def stream_subagent_turn(
             target=slot.keep_alive,
             name=f"prompt-slot-renewal-{session_id}",
             daemon=True,
-            args=(slot_renewal_stop, OPENCODE_PROMPT_TIMEOUT_SECONDS),
+            args=(slot_renewal_stop, PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS),
         )
 
         # Routing metadata merged into every forwarded subagent event and
