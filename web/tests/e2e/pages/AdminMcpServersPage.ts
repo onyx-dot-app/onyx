@@ -38,8 +38,10 @@ export class AdminMcpServersPage {
     this.descriptionInput = page.locator("textarea#description");
     this.serverUrlInput = page.locator("input#server_url");
     this.submitButton = page.getByRole("button", { name: "Add Server" });
-    // The IsPublicGroupSelector "public" control on the add/edit modal.
-    this.accessControlSelector = page.getByText(/public/i).first();
+    // BooleanFormField aria-label from "Make this MCP server Public?"
+    this.accessControlSelector = page.getByRole("checkbox", {
+      name: /make-this mcp server public/i,
+    });
 
     this.authMethodSelect = page.getByTestId("mcp-auth-method-select");
     this.apiTokenInput = page.locator('input[name="api_token"]');

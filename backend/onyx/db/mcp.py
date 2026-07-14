@@ -63,7 +63,9 @@ def get_mcp_servers_for_persona(
     db_session: Session,
     user: User,  # noqa: ARG001
 ) -> list[MCPServer]:
-    """Get all MCP servers associated with a persona via its tools"""
+    """Servers already on a persona's tools. No attach ACL — chat users of the
+    persona must see/auth these. ``user`` is for callers enforcing persona visibility.
+    """
     # Get the persona and its tools
     persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
     if not persona:
@@ -86,12 +88,11 @@ def get_mcp_servers_for_persona(
     return list(mcp_servers)
 
 
-def _add_mcp_server_access_filter(stmt: Select, user: User | None) -> Select:
-    """Restrict a `select(MCPServer)` to servers the user may add to agents:
-    public servers, plus (for a concrete user) servers shared directly or via
-    one of the user's groups. System operations (``user is None``) and admins
-    bypass the filter."""
-    if user is None or user.role == UserRole.ADMIN:
+def _add_mcp_server_access_filter(stmt: Select, user: User) -> Select:
+    """Servers the user may add to an agent (public / direct / group). Admins bypass.
+    Does not control chat use of agent-attached servers.
+    """
+    if user.role == UserRole.ADMIN:
         return stmt
 
     stmt = stmt.distinct()
@@ -115,19 +116,16 @@ def _add_mcp_server_access_filter(stmt: Select, user: User | None) -> Select:
 
 
 def get_mcp_servers_accessible_to_user(
-    user: User | None, db_session: Session
+    user: User, db_session: Session
 ) -> list[MCPServer]:
-    """Get all MCP servers a user may add to their agents (public, or shared
-    directly / through one of their groups)."""
+    """MCP servers the user may attach to personas (public, or shared with them)."""
     stmt = _add_mcp_server_access_filter(
         select(MCPServer).order_by(MCPServer.created_at), user
     )
     return list(db_session.scalars(stmt).all())
 
 
-def user_can_access_mcp_server(
-    user: User | None, server_id: int, db_session: Session
-) -> bool:
+def user_can_access_mcp_server(user: User, server_id: int, db_session: Session) -> bool:
     """Whether the user may add this server's tools to an agent."""
     stmt = _add_mcp_server_access_filter(
         select(MCPServer.id).where(MCPServer.id == server_id), user

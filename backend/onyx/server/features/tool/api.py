@@ -255,8 +255,7 @@ def list_tools(
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session, only_enabled=True, only_connected_mcp=True)
 
-    # Only surface MCP tools whose server the user may access; otherwise a
-    # private server's tool metadata would leak to any authenticated user.
+    # Attach catalog: omit MCP tools the user cannot put on a persona.
     accessible_mcp_server_ids = {
         server.id for server in get_mcp_servers_accessible_to_user(user, db_session)
     }

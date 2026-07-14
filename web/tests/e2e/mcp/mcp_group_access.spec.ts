@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
@@ -6,11 +6,10 @@ import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
 /**
  * Group/public access control for MCP servers (CE surface).
  *
- * Public-server creation and the create/edit form's access selector work in
- * CE; the group/user restriction write is EE-only, so the CE API returns a
- * clean `EE_REQUIRED` instead of persisting. The group read/filter behaviour
- * is covered by the external-dependency unit tests, which seed access rows
- * directly.
+ * On CE, private / group-restricted creates are coerced to public (no EE write
+ * path). Group read/filter behaviour is covered by external-dependency unit
+ * tests that seed access rows directly. The create/edit access selector is
+ * EE/business-tier only.
  */
 test.describe("MCP server group access control", () => {
   test.describe.configure({ mode: "serial" });
@@ -36,28 +35,33 @@ test.describe("MCP server group access control", () => {
     expect(body.groups).toEqual([]);
   });
 
-  test("restricting to a group requires EE (clean error in CE)", async ({
+  test("CE coerces private+groups create to public", async ({
     page,
+    eeEnabled,
   }) => {
+    test.skip(eeEnabled, "CE-only: EE persists private + group grants");
     await loginAs(page, "admin");
     const res = await page.request.post("/api/admin/mcp/server", {
       data: {
         name: `Restricted MCP ${suffix}`,
-        description: "should require EE in CE",
+        description: "coerced public on CE",
         server_url: "https://example.com/mcp",
         is_public: false,
         groups: [999999],
       },
     });
-    // CE has no group-write path: a clean 403, not a 500.
-    expect(res.status()).toBe(403);
+    expect(res.ok()).toBeTruthy();
     const body = await res.json();
-    expect(body.error_code).toBe("EE_REQUIRED");
+    createdServerIds.push(body.id);
+    expect(body.is_public).toBe(true);
+    expect(body.groups).toEqual([]);
   });
 
   test("Add-Server modal exposes the access (public/groups) selector", async ({
     page,
+    eeEnabled,
   }) => {
+    test.skip(!eeEnabled, "IsPublicGroupSelector requires business/EE tier");
     await loginAs(page, "admin");
     const mcpPage = new AdminMcpServersPage(page);
     await mcpPage.goto();

@@ -103,6 +103,7 @@ from onyx.utils.url import BLOCKED_HOSTNAMES
 from onyx.utils.url import SSRFException
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
+from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -1595,12 +1596,9 @@ def get_mcp_servers_for_user(
     db: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPServersResponse:
-    """List all MCP servers for use in agent configuration and chat UI.
+    """Attach catalog: servers this user may put on a persona (public / direct / group).
 
-    This endpoint is intentionally available to all authenticated users so they
-    can attach MCP actions to assistants. Only servers the user may access
-    (public, or shared with them directly / via a group) are returned, and
-    sensitive admin credentials are never returned.
+    Chat uses ``/servers/persona/{id}`` for servers already on a persona.
     """
     db_mcp_servers = get_mcp_servers_accessible_to_user(user, db)
     mcp_servers = [
@@ -1795,8 +1793,7 @@ def _list_mcp_tools_by_id(
     if is_admin:
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
     elif not user_can_access_mcp_server(user, server_id, db):
-        # Non-admin callers may only list tools of servers they can access;
-        # otherwise this IDORs a private server and triggers an outbound connect.
+        # Attach-catalog only: don't IDOR private servers / outbound-connect.
         raise OnyxError(
             OnyxErrorCode.UNAUTHORIZED,
             "You do not have access to this MCP server.",
@@ -1936,6 +1933,8 @@ def _apply_mcp_server_access(
         object_is_public=is_public,
         object_is_new=is_new,
     )
+    # all CE MCP servers are public
+    is_public = is_public or not global_version.is_ee_version()
     mcp_server.is_public = is_public
     try:
         fetch_versioned_implementation("onyx.db.mcp", "make_mcp_server_private")(

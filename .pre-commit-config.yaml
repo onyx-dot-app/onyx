@@ -262,9 +262,12 @@ repos:
       # aliases it as `typescript-7` since Next.js still needs typescript@5); the
       # widget hooks below still use tsgo from @typescript/native-preview in the
       # root workspace.
+      # `next typegen` refreshes `.next/types` (typedRoutes) from the current app
+      # tree so commits aren't blocked by a stale `.next/dev` cache after new routes.
       - id: typescript-check
         name: TypeScript type check
-        entry: bash -c 'cd web && bun run types:check'
+        entry: bash -c 'cd web && bunx next typegen && bun run types:check'
+
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$

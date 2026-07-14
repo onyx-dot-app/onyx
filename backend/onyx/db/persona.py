@@ -1333,8 +1333,7 @@ def upsert_persona(
         if not tools and tool_ids:
             raise ValueError("Tools not found")
 
-        # A user may only attach tools from MCP servers they can access
-        # (public, or shared with them / their groups). Admin/system ops bypass.
+        # Attach ACL: cannot put inaccessible MCP tools on a persona.
         if user is not None:
             # local import to avoid circular import (mirrors built_in_tools below)
             from onyx.db.mcp import user_can_access_mcp_server
