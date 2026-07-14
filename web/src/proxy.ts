@@ -53,7 +53,7 @@ const sentryConnectSrc = (() => {
 // NEXT_PUBLIC_* and NODE_ENV are inlined at build, so this stays build-time —
 // only the frame-ancestors flag above is runtime.
 const upgradeInsecureRequests =
-  process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" &&
+  process.env.NEXT_PUBLIC_AUTH_TYPE === "cloud" &&
   process.env.NODE_ENV !== "development";
 
 const CSP_HEADER = [

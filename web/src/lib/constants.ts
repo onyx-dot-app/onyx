@@ -66,14 +66,17 @@ export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
 export const GTM_ENABLED =
   process.env.NEXT_PUBLIC_GTM_ENABLED?.toLowerCase() === "true";
 
+export const NEXT_PUBLIC_AUTH_TYPE: AuthType =
+  (process.env.NEXT_PUBLIC_AUTH_TYPE as AuthType) ?? AuthType.BASIC;
+
 export const NEXT_PUBLIC_CLOUD_ENABLED =
-  process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
+  NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD;
 
 export const REGISTRATION_URL =
   process.env.INTERNAL_URL || "http://127.0.0.1:3001";
 
 export const SERVER_SIDE_ONLY__CLOUD_ENABLED =
-  process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
+  NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD;
 
 export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
   process.env.NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED?.toLowerCase() === "true" &&

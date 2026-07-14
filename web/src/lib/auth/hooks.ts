@@ -6,7 +6,10 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import {
+  NEXT_PUBLIC_AUTH_TYPE,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+} from "@/lib/constants";
 import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
@@ -109,7 +112,7 @@ export function useAuthType(): AuthType | null {
   const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
 
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return AuthType.CLOUD;
+    return NEXT_PUBLIC_AUTH_TYPE;
   }
 
   if (error || isLoading) {

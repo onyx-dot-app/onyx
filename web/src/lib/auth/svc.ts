@@ -1,4 +1,4 @@
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 
 interface AuthTypeAPIResponse {
@@ -24,9 +24,7 @@ export async function fetchAuthTypeMetadata(
     throw new Error("Failed to fetch auth type metadata");
   }
   const data: AuthTypeAPIResponse = await res.json();
-  const authType = NEXT_PUBLIC_CLOUD_ENABLED
-    ? AuthType.CLOUD
-    : (data.auth_type as AuthType);
+  const authType = NEXT_PUBLIC_AUTH_TYPE;
   return {
     authType,
     autoRedirect: authType === AuthType.OIDC || authType === AuthType.SAML,
