@@ -56,8 +56,15 @@ function Calendar(props: CalendarProps) {
   return (
     <DayPicker
       // Spread first so the Opal-owned chrome below wins even against
-      // untyped callers that smuggle in stripped props.
+      // untyped callers that smuggle in stripped props. Every key in the
+      // CalendarProps omit list is re-pinned here so none survive the spread.
       {...props}
+      className={undefined}
+      style={undefined}
+      styles={undefined}
+      formatters={undefined}
+      modifiersClassNames={undefined}
+      modifiersStyles={undefined}
       // Outside days render as empty fixed-width cells, never as numerals.
       showOutsideDays={false}
       classNames={{
