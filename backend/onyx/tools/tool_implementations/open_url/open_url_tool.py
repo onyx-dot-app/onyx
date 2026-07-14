@@ -572,6 +572,16 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                     sections=[], missing_document_ids=[]
                 )
                 crawled_sections, failed_web_fetches = crawled_result or ([], [])
+
+                if (
+                    timeout_occurred[0]
+                    and not indexed_result.sections
+                    and not crawled_sections
+                ):
+                    return ToolResponse(
+                        rich_response=None,
+                        llm_facing_response="The call to open_url timed out",
+                    )
             else:
                 url_requests, unresolved_urls = _resolve_urls_to_document_ids(
                     urls, db_session
@@ -612,6 +622,17 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 )
                 crawled_sections, failed_web_fetches = crawled_result or ([], [])
 
+                # Before link-based fallback (retries index retrieval with no timeout).
+                if (
+                    timeout_occurred[0]
+                    and not indexed_result.sections
+                    and not crawled_sections
+                ):
+                    return ToolResponse(
+                        rich_response=None,
+                        llm_facing_response="The call to open_url timed out",
+                    )
+
                 # Last-resort: link-based lookup when doc-ID resolve + crawl both fail.
                 failed_web_fetches = self._fallback_link_lookup(
                     unresolved_urls=unresolved_urls,
@@ -620,16 +641,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                     indexed_result=indexed_result,
                     url_to_doc_id=url_to_doc_id,
                     filters=filters,
-                )
-
-            if (
-                timeout_occurred[0]
-                and not indexed_result.sections
-                and not crawled_sections
-            ):
-                return ToolResponse(
-                    rich_response=None,
-                    llm_facing_response="The call to open_url timed out",
                 )
 
             # Prefer indexed when available, else crawled
