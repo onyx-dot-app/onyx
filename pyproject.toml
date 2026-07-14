@@ -96,6 +96,7 @@ backend = [
     "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
     "pywikibot==9.0.0",
+    "readerwriterlock==1.0.9",
     "redis==5.0.8",
     "requests==2.33.0",
     "requests-oauthlib==1.3.1",
