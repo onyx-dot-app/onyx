@@ -22,6 +22,7 @@ export default function CreatePersonalSkillModal({
   onCreated,
 }: CreatePersonalSkillModalProps) {
   const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
+  const [preparing, setPreparing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -31,7 +32,7 @@ export default function CreatePersonalSkillModal({
   }
 
   function handleClose() {
-    if (submitting) return;
+    if (preparing || submitting) return;
     reset();
     onClose();
   }
@@ -73,6 +74,7 @@ export default function CreatePersonalSkillModal({
           <SkillBundlePicker
             value={bundle}
             disabled={submitting}
+            onPreparingChange={setPreparing}
             onChange={(nextBundle) => {
               setBundle(nextBundle);
               setErrorMessage(null);
@@ -88,11 +90,15 @@ export default function CreatePersonalSkillModal({
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button prominence="secondary" onClick={handleClose}>
+          <Button
+            prominence="secondary"
+            disabled={preparing || submitting}
+            onClick={handleClose}
+          >
             Cancel
           </Button>
           <Button
-            disabled={submitDisabled}
+            disabled={preparing || submitDisabled}
             onClick={handleSubmit}
             icon={SvgUploadCloud}
           >

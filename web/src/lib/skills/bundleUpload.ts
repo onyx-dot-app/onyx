@@ -1,4 +1,3 @@
-import { BlobReader, BlobWriter, ZipWriter } from "@zip.js/zip.js";
 import type { FileWithPath } from "react-dropzone";
 
 const ZIP_MIME_TYPE = "application/zip";
@@ -85,6 +84,7 @@ async function packageSkillDirectory(
   directoryName: string,
   entries: readonly SkillDirectoryEntry[]
 ): Promise<File> {
+  const { BlobReader, BlobWriter, ZipWriter } = await import("@zip.js/zip.js");
   const blobWriter = new BlobWriter(ZIP_MIME_TYPE);
   const zipWriter = new ZipWriter(blobWriter, {
     useWebWorkers: typeof Worker !== "undefined",

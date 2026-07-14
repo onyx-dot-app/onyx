@@ -24,12 +24,50 @@ function dropFile(file: File): void {
   });
 }
 
+function directoryFileEntry(path: string, file: File) {
+  return {
+    isDirectory: false,
+    fullPath: path,
+    file: (resolve: (value: File) => void) => resolve(file),
+  };
+}
+
+function dropDirectory(files: Array<{ path: string; file: File }>): void {
+  let readCount = 0;
+  const directoryEntry = {
+    isDirectory: true,
+    createReader: () => ({
+      readEntries: (resolve: (entries: unknown[]) => void) => {
+        resolve(
+          readCount++ === 0
+            ? files.map(({ path, file }) => directoryFileEntry(path, file))
+            : []
+        );
+      },
+    }),
+  };
+
+  fireEvent.drop(screen.getByTestId("skill-bundle-dropzone"), {
+    dataTransfer: {
+      files: [],
+      items: [
+        {
+          kind: "file",
+          type: "",
+          webkitGetAsEntry: () => directoryEntry,
+        },
+      ],
+      types: ["Files"],
+    },
+  });
+}
+
 describe("SkillBundlePicker", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it("prepares a dropped upload and remains locked until the consumer finishes", async () => {
+  it("owns preparation state without waiting for consumer work", async () => {
     const zip = new File(["zip"], "example.zip", { type: "application/zip" });
     const prepared = {
       file: zip,
@@ -38,13 +76,7 @@ describe("SkillBundlePicker", () => {
     };
     mockedPrepareSkillBundleUpload.mockResolvedValue(prepared);
 
-    let finishUpload: () => void = () => undefined;
-    const onChange = jest.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          finishUpload = resolve;
-        })
-    );
+    const onChange = jest.fn(() => new Promise<void>(() => undefined));
     const onPreparingChange = jest.fn();
 
     render(
@@ -62,12 +94,7 @@ describe("SkillBundlePicker", () => {
       expect(mockedPrepareSkillBundleUpload).toHaveBeenCalledWith([zip]);
       expect(onChange).toHaveBeenCalledWith(prepared);
     });
-    expect(
-      screen.getByRole("button", { name: "Preparing upload..." })
-    ).toBeDisabled();
     expect(onPreparingChange).toHaveBeenCalledWith(true);
-
-    finishUpload();
 
     await waitFor(() => {
       expect(
@@ -99,5 +126,37 @@ describe("SkillBundlePicker", () => {
       );
     });
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("passes recursively dropped directory files with their full paths", async () => {
+    const skillMd = new File(["instructions"], "SKILL.md");
+    const helper = new File(["print('hello')"], "helper.py");
+    mockedPrepareSkillBundleUpload.mockResolvedValue({
+      file: new File(["zip"], "example.zip"),
+      displayName: "example",
+      source: "folder",
+    });
+
+    render(
+      <SkillBundlePicker
+        value={null}
+        onChange={jest.fn()}
+        onError={jest.fn()}
+      />
+    );
+
+    dropDirectory([
+      { path: "/example/SKILL.md", file: skillMd },
+      { path: "/example/scripts/helper.py", file: helper },
+    ]);
+
+    await waitFor(() => {
+      expect(mockedPrepareSkillBundleUpload).toHaveBeenCalledTimes(1);
+    });
+    const droppedFiles = mockedPrepareSkillBundleUpload.mock.calls[0]![0];
+    expect(droppedFiles.map((file) => file.path)).toEqual([
+      "/example/SKILL.md",
+      "/example/scripts/helper.py",
+    ]);
   });
 });

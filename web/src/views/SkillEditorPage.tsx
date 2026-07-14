@@ -113,6 +113,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const [shareOpen, setShareOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPreparingBundle, setIsPreparingBundle] = useState(false);
   const [isReplacingFiles, setIsReplacingFiles] = useState(false);
   const [replacementBundle, setReplacementBundle] =
     useState<PreparedSkillBundle | null>(null);
@@ -146,11 +147,12 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   // A bundle upload rewrites name/description/instructions from SKILL.md, so
   // lock the detail fields while one is in flight: edits made mid-upload
   // would be clobbered by the post-upload sync (or race it via Save).
-  const fieldsLocked = !canManageSkill || isReplacingFiles;
+  const fieldsLocked = !canManageSkill || isPreparingBundle || isReplacingFiles;
 
   const canSave =
     !!skill &&
     canManageSkill &&
+    !isPreparingBundle &&
     !isReplacingFiles &&
     isDirty &&
     !!name.trim() &&
@@ -291,7 +293,11 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
   const sharingStatus = skill ? getSharingStatus(skill) : null;
   const replaceFilesDisabled =
-    !canManageSkill || isReplacingFiles || isSaving || isDirty;
+    !canManageSkill ||
+    isPreparingBundle ||
+    isReplacingFiles ||
+    isSaving ||
+    isDirty;
   const replaceFilesTooltip = isDirty
     ? "Save detail changes before replacing skill files."
     : isReplacingFiles
@@ -468,9 +474,12 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                               value={replacementBundle}
                               compact
                               disabled={replaceFilesDisabled}
+                              busyLabel={
+                                isReplacingFiles ? "Replacing..." : undefined
+                              }
                               onChange={handleReplaceFiles}
                               onError={(message) => toast.error(message)}
-                              onPreparingChange={setIsReplacingFiles}
+                              onPreparingChange={setIsPreparingBundle}
                             />
                           </div>
                         </Tooltip>

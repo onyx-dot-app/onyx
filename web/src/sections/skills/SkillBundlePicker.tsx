@@ -14,7 +14,8 @@ interface SkillBundlePickerProps {
   value: PreparedSkillBundle | null;
   compact?: boolean;
   disabled?: boolean;
-  onChange: (bundle: PreparedSkillBundle) => void | Promise<void>;
+  busyLabel?: string;
+  onChange: (bundle: PreparedSkillBundle) => void;
   onError: (message: string) => void;
   onPreparingChange?: (preparing: boolean) => void;
 }
@@ -23,6 +24,7 @@ export default function SkillBundlePicker({
   value,
   compact = false,
   disabled = false,
+  busyLabel,
   onChange,
   onError,
   onPreparingChange,
@@ -35,7 +37,8 @@ export default function SkillBundlePicker({
       setPreparing(true);
       onPreparingChange?.(true);
       try {
-        await onChange(await prepareSkillBundleUpload(files));
+        const bundle = await prepareSkillBundleUpload(files);
+        onChange(bundle);
       } catch (error) {
         onError(
           error instanceof Error ? error.message : "Could not read the upload."
@@ -50,6 +53,8 @@ export default function SkillBundlePicker({
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     disabled: disabled || preparing,
+    // Folder entries can contain any file type. The input-level accept below
+    // limits only the system file picker to ZIP files.
     multiple: true,
     noClick: true,
     noKeyboard: true,
@@ -90,9 +95,11 @@ export default function SkillBundlePicker({
         >
           {preparing
             ? "Preparing upload..."
-            : value
-              ? "Choose a different ZIP file"
-              : "Choose a ZIP file"}
+            : busyLabel
+              ? busyLabel
+              : value
+                ? "Choose a different ZIP file"
+                : "Choose a ZIP file"}
         </Button>
         {(value || compact) && (
           <Text font="main-ui-body" color="text-03">
