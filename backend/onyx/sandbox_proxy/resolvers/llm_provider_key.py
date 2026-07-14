@@ -14,14 +14,13 @@ from mitmproxy import http
 from onyx.auth.constants import API_KEY_HEADER_NAME
 from onyx.auth.constants import BEARER_PREFIX
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.llm import fetch_first_accessible_llm_provider_by_type
 from onyx.db.users import fetch_user_by_id
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
 from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.logging_utils import short_log_id
-from onyx.server.features.build.db.build_session import (
-    fetch_all_supported_build_llm_providers,
-)
+from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -54,11 +53,10 @@ class LLMProviderKeyResolver(CredentialResolver):
                 raise CredentialUnavailableError(
                     f"sandbox user {short_log_id(user_id)} not found"
                 )
-            providers = fetch_all_supported_build_llm_providers(db, user)
+            provider = fetch_first_accessible_llm_provider_by_type(
+                provider_type, user, db
+            )
 
-        # First accessible provider of the type, matching how provisioning picks
-        # the key (get_all_build_mode_llm_configs dedups by type, first wins).
-        provider = next((p for p in providers if p.provider == provider_type), None)
         if provider is None:
             raise CredentialUnavailableError(
                 f"no accessible {provider_type} provider for user {short_log_id(user_id)}"
@@ -67,10 +65,17 @@ class LLMProviderKeyResolver(CredentialResolver):
             raise CredentialUnavailableError(
                 f"{provider_type} provider for user {short_log_id(user_id)} has no api_key"
             )
+        emit_credential_access(
+            credential_type="llm_provider",
+            provider=provider_type,
+            row_id=provider.id,
+            user_id=str(user_id),
+        )
+        api_key = provider.api_key.get_value(apply_mask=False)
 
         logger.debug(
             "llm_provider_key_resolver.resolved provider=%s host=%s",
             provider_type,
             request.host,
         )
-        return {header: f"{prefix}{provider.api_key}"}
+        return {header: f"{prefix}{api_key}"}
