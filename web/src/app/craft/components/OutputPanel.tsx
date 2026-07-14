@@ -114,6 +114,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   // Counters to force-reload previews
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [filePreviewRefreshKey, setFilePreviewRefreshKey] = useState(0);
+  const [filesRefreshing, setFilesRefreshing] = useState(false);
 
   // Determine which tab is visually active
   const isFilePreviewActive = activePanelTabId !== null;
@@ -351,7 +352,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
       // Web preview tab: remount the iframe
       setPreviewRefreshKey((k) => k + 1);
     } else if (activeOutputTab === "files" && session?.id) {
-      // Files tab: clear cache and re-fetch directory listing
+      // Files tab: revalidate the visible directory listings
       triggerFilesRefresh(session.id);
     }
   }, [isFilePreviewActive, activeOutputTab, session?.id, triggerFilesRefresh]);
@@ -584,6 +585,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}
         onRefresh={handleRefresh}
+        isRefreshing={activeOutputTab === "files" && filesRefreshing}
         sessionId={
           !isFilePreviewActive &&
           activeOutputTab === "preview" &&
@@ -626,8 +628,10 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
               ))}
             {activeOutputTab === "files" && (
               <FilesTab
+                key={session?.id ?? preProvisionedSessionId}
                 sessionId={session?.id ?? preProvisionedSessionId}
                 onFileClick={session ? handleFileClick : undefined}
+                onRefreshingChange={setFilesRefreshing}
                 isPreProvisioned={!session && !!preProvisionedSessionId}
                 isProvisioning={!session && isPreProvisioning}
               />

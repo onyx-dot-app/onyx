@@ -8,6 +8,7 @@ import {
   Artifact,
   ArtifactType,
   BuildMessage,
+  FileSystemEntry,
   SessionHistoryItem,
   SessionOrigin,
   SessionStatus,
@@ -566,7 +567,9 @@ export interface FilesTabState {
   expandedPaths: string[];
   scrollTop: number;
   /** Cached directory listings by path - avoids refetch on tab switch */
-  directoryCache: Record<string, unknown[]>;
+  directoryCache: Record<string, FileSystemEntry[]>;
+  /** Last refresh generation completed by the Files tab. */
+  lastRefreshGeneration?: number;
 }
 
 /** Tab history entry - can be a pinned tab or a transient panel tab */
@@ -784,6 +787,14 @@ interface BuildSessionStore {
     sessionId: string,
     updates: Partial<FilesTabState>
   ) => void;
+  mergeFilesTabDirectoryCache: (
+    sessionId: string,
+    listings: Record<string, FileSystemEntry[]>
+  ) => void;
+  retainFilesTabDirectoryCache: (
+    sessionId: string,
+    retainedPaths: ReadonlySet<string>
+  ) => void;
 
   // Subagent Actions
   /** Swap the main column to show a subagent's transcript in place of the chat. */
@@ -879,7 +890,12 @@ const createInitialSessionData = (
   viewedSubagentSessionId: null,
   activeOutputTab: "preview",
   activePanelTabId: null,
-  filesTabState: { expandedPaths: [], scrollTop: 0, directoryCache: {} },
+  filesTabState: {
+    expandedPaths: [],
+    scrollTop: 0,
+    directoryCache: {},
+    lastRefreshGeneration: 0,
+  },
   tabHistory: {
     entries: [{ type: "pinned", tab: "preview" }],
     currentIndex: 0,
@@ -1868,17 +1884,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const session = get().sessions.get(sessionId);
     if (session) {
       // Increment refresh counter to trigger files list refresh
-      // Using a counter ensures each write/edit triggers a new refresh
-      // Also collapse the attachments directory to show fresh state
-      const collapsedExpandedPaths = session.filesTabState.expandedPaths.filter(
-        (path) => path !== "attachments" && !path.startsWith("attachments/")
-      );
+      // Using a counter ensures each filesystem change triggers a new refresh
       get().updateSessionData(sessionId, {
         filesNeedsRefresh: (session.filesNeedsRefresh || 0) + 1,
-        filesTabState: {
-          ...session.filesTabState,
-          expandedPaths: collapsedExpandedPaths,
-        },
       });
     }
   },
@@ -2126,6 +2134,62 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         filesTabState: { ...session.filesTabState, ...updates },
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  mergeFilesTabDirectoryCache: (
+    sessionId: string,
+    listings: Record<string, FileSystemEntry[]>
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        filesTabState: {
+          ...session.filesTabState,
+          directoryCache: {
+            ...session.filesTabState.directoryCache,
+            ...listings,
+          },
+        },
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  retainFilesTabDirectoryCache: (
+    sessionId: string,
+    retainedPaths: ReadonlySet<string>
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const cachedListings = Object.entries(
+        session.filesTabState.directoryCache
+      );
+      const retainedListings = cachedListings.filter(([path]) =>
+        retainedPaths.has(path)
+      );
+      if (retainedListings.length === cachedListings.length) return state;
+
+      const directoryCache = Object.fromEntries(retainedListings);
+      const updatedSession: BuildSessionData = {
+        ...session,
+        filesTabState: {
+          ...session.filesTabState,
+          directoryCache,
+        },
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -2547,6 +2611,7 @@ const EMPTY_FILES_TAB_STATE: FilesTabState = {
   expandedPaths: [],
   scrollTop: 0,
   directoryCache: {},
+  lastRefreshGeneration: 0,
 };
 const EMPTY_TAB_HISTORY: TabNavigationHistory = {
   entries: [],
