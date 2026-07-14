@@ -21,8 +21,7 @@ _OLD_DESCRIPTION = "Generate images using nano banana."
 
 _NEW_DESCRIPTION = (
     "Generate or edit images with onyx-cli using the image generation provider "
-    "configured in Onyx. An admin has to set up a provider at "
-    "/admin/configuration/image-generation before you can use this skill."
+    "configured in Onyx."
 )
 
 _skill_table = sa.table(
