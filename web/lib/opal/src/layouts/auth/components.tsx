@@ -129,7 +129,6 @@ interface SubmitProps {
   isValid?: boolean;
   dirty?: boolean;
   onClick?: () => void;
-  type?: "submit" | "button";
 }
 
 const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
@@ -141,17 +140,10 @@ const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
   logout: "Sign Out",
 };
 
-function Submit({
-  label,
-  isSubmitting,
-  isValid,
-  dirty,
-  onClick,
-  type = "submit",
-}: SubmitProps) {
+function Submit({ label, isSubmitting, isValid, dirty, onClick }: SubmitProps) {
   return (
     <Button
-      type={type}
+      type="submit"
       width="full"
       onClick={onClick}
       disabled={
