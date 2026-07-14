@@ -3,6 +3,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   EmbeddingModel,
   EmbeddingProviderName,
+  ReindexErrorRow,
   SavedSearchSettings,
   SwitchoverType,
 } from "@/lib/indexing/interfaces";
@@ -144,6 +145,36 @@ export async function cancelNewEmbedding(): Promise<Response> {
   return await fetch("/api/search-settings/cancel-new-embedding", {
     method: "POST",
   });
+}
+
+export interface ResumePausedPortResult {
+  /** Resumed, but the queue was down (503) so it starts within minutes, not now. */
+  delayed: boolean;
+}
+
+/**
+ * Resume a paused re-index unit from its cursor. Throws on a hard failure; a 503 is
+ * treated as success-but-delayed (the scheduler re-dispatches it).
+ */
+export async function resumePausedPort(
+  row: Pick<ReindexErrorRow, "cc_pair_id" | "user_id">
+): Promise<ResumePausedPortResult> {
+  const response = await fetch("/api/search-settings/reindex/port/resume", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cc_pair_id: row.cc_pair_id, user_id: row.user_id }),
+  });
+  if (response.status === 503) {
+    return { delayed: true };
+  }
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((body) => body?.detail as string | undefined)
+      .catch(() => undefined);
+    throw new Error(detail ?? "Failed to resume the paused unit.");
+  }
+  return { delayed: false };
 }
 
 interface SetNewSearchSettingsArgs {

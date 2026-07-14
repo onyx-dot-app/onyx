@@ -244,13 +244,15 @@ class ReindexProgressCounts(BaseModel):
     in_progress: int
     completed: int
     failed: int
+    paused: int
 
 
 def get_reindex_progress_counts(
     db_session: Session, search_settings_id: int
 ) -> ReindexProgressCounts:
     """Bucket each in-scope entity (both scopes) by its latest PortAttempt. No attempt /
-    NOT_STARTED / CANCELED → waiting, so the bar never stalls above real remaining work."""
+    NOT_STARTED / CANCELED → waiting; an auto-paused unit is its own `paused` bucket.
+    Buckets partition `total`."""
     cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
     total = len(cc_pair_ids) + len(user_ids)
 
@@ -263,32 +265,36 @@ def get_reindex_progress_counts(
     in_progress = sum(1 for s in statuses if s == PortAttemptStatus.IN_PROGRESS)
     completed = sum(1 for s in statuses if s == PortAttemptStatus.SUCCESS)
     failed = sum(1 for s in statuses if s == PortAttemptStatus.FAILED)
+    paused = sum(1 for s in statuses if s == PortAttemptStatus.PAUSED)
 
     return ReindexProgressCounts(
         total=total,
-        waiting=max(0, total - in_progress - completed - failed),
+        waiting=max(0, total - in_progress - completed - failed - paused),
         in_progress=in_progress,
         completed=completed,
         failed=failed,
+        paused=paused,
     )
 
 
 class ReindexErrorRow(BaseModel):
-    """A failed port unit for the error modal; exactly one of cc_pair_id / user_id set,
-    name = connector name or user email."""
+    """A port unit needing attention (FAILED or PAUSED) for the modal; exactly one of
+    cc_pair_id / user_id set, name = connector name or user email. `paused` = Resume-able."""
 
     scope: PortScope
     cc_pair_id: int | None
     user_id: UUID | None
     name: str
     error_msg: str | None
+    paused: bool
 
 
 def get_reindex_error_rows(
     db_session: Session, search_settings_id: int
 ) -> list[ReindexErrorRow]:
-    """In-scope entities (both scopes) whose latest port attempt is FAILED, with name +
-    error_msg. Same scope/latest-per-entity as get_reindex_progress_counts's `failed`."""
+    """In-scope entities (both scopes) whose latest port attempt is FAILED (auto-retrying)
+    or PAUSED (awaiting operator Resume), with name + error_msg. Same scope/latest-per-entity
+    as get_reindex_progress_counts's `failed` + `paused` buckets."""
     cc_pair_ids, user_ids = _reindex_port_scope(db_session, search_settings_id)
 
     rows: list[ReindexErrorRow] = []
@@ -316,7 +322,7 @@ def get_reindex_error_rows(
                 PortAttempt.id.desc(),
             )
         ):
-            if status == PortAttemptStatus.FAILED:
+            if status in (PortAttemptStatus.FAILED, PortAttemptStatus.PAUSED):
                 rows.append(
                     ReindexErrorRow(
                         scope="connector",
@@ -324,6 +330,7 @@ def get_reindex_error_rows(
                         user_id=None,
                         name=name,
                         error_msg=error_msg,
+                        paused=status == PortAttemptStatus.PAUSED,
                     )
                 )
 
@@ -348,7 +355,7 @@ def get_reindex_error_rows(
                 PortAttempt.id.desc(),
             )
         ):
-            if status == PortAttemptStatus.FAILED:
+            if status in (PortAttemptStatus.FAILED, PortAttemptStatus.PAUSED):
                 rows.append(
                     ReindexErrorRow(
                         scope="user_file",
@@ -356,6 +363,7 @@ def get_reindex_error_rows(
                         user_id=user_id,
                         name=email,
                         error_msg=error_msg,
+                        paused=status == PortAttemptStatus.PAUSED,
                     )
                 )
 
