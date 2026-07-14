@@ -38,7 +38,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
-from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import create_build_session__no_commit
 from onyx.server.features.build.db.build_session import delete_build_session__no_commit
@@ -629,7 +629,7 @@ class SessionManager:
                 target=slot.keep_alive,
                 name=f"delete-slot-renewal-{session_id}",
                 daemon=True,
-                args=(slot_renewal_stop, OPENCODE_PROMPT_TIMEOUT_SECONDS),
+                args=(slot_renewal_stop, PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS),
             )
 
             if sandbox and sandbox.status.is_active():
