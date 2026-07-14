@@ -4201,7 +4201,7 @@ wheels = [
 [[package]]
 name = "onyx"
 version = "0.0.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "aioboto3" },
@@ -4347,7 +4347,6 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-regex" },
     { name = "types-requests" },
-    { name = "types-setuptools" },
     { name = "zizmor" },
 ]
 ee = [
@@ -4518,7 +4517,6 @@ dev = [
     { name = "types-pyyaml", specifier = "==6.0.12.11" },
     { name = "types-regex", specifier = "==2023.3.23.1" },
     { name = "types-requests", specifier = "==2.32.0.20250328" },
-    { name = "types-setuptools", specifier = "==68.0.0.3" },
     { name = "zizmor", specifier = "==1.25.2" },
 ]
 ee = [{ name = "posthog", specifier = "==3.7.4" }]
@@ -7295,15 +7293,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/8e/9b/8913198b7fc700acc1dcb84827137bb2922052e43dde0f4fb0ed2dc6f118/types_s3transfer-0.14.0.tar.gz", hash = "sha256:17f800a87c7eafab0434e9d87452c809c290ae906c2024c24261c564479e9c95", size = 14218, upload-time = "2025-10-11T21:11:27.892Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/92/c3/4dfb2e87c15ca582b7d956dfb7e549de1d005c758eb9a305e934e1b83fda/types_s3transfer-0.14.0-py3-none-any.whl", hash = "sha256:108134854069a38b048e9b710b9b35904d22a9d0f37e4e1889c2e6b58e5b3253", size = 19697, upload-time = "2025-10-11T21:11:26.749Z" },
-]
-
-[[package]]
-name = "types-setuptools"
-version = "68.0.0.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b6/52/af336255375b438b6580af48d6a4f4a0638f6e9f3e210c3497281720298f/types-setuptools-68.0.0.3.tar.gz", hash = "sha256:d57ae6076100b5704b3cc869fdefc671e1baf4c2cd6643f84265dfc0b955bf05", size = 32656, upload-time = "2023-07-20T15:17:01.196Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/e9/810aea674967eb6e6064928dea9c61b0bfb0147b5d7c56533f30ac32f4b0/types_setuptools-68.0.0.3-py3-none-any.whl", hash = "sha256:fec09e5c18264c5c09351c00be01a34456fb7a88e457abe97401325f84ad9d36", size = 50440, upload-time = "2023-07-20T15:16:59.867Z" },
 ]
 
 [[package]]
