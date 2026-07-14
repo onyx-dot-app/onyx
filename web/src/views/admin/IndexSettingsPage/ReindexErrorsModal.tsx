@@ -11,25 +11,21 @@ import type { ReindexErrorRow } from "@/lib/indexing/interfaces";
 function ResumeButton({ row }: { row: ReindexErrorRow }) {
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [delayed, setDelayed] = useState(false);
 
   async function onResume() {
     setBusy(true);
     setErrorMsg(null);
-    let result;
     try {
-      result = await resumePausedPort(row);
+      await resumePausedPort(row);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Failed to resume.");
       setBusy(false);
       return;
     }
-    if (result.delayed) {
-      // resumed but the queue was down (503); the poll clears the row once it starts
-      setDelayed(true);
-      return;
-    }
-    // fire-and-forget: a refetch failure is harmless, the banner polls anyway
+    // Resumed (a 503 just means it starts within minutes): the unit is no longer
+    // paused/failed, so it drops off the list on refetch. Re-enable in case the
+    // refetch itself fails, so the button never stays stuck on "Resuming…".
+    setBusy(false);
     void Promise.all([
       mutate(SWR_KEYS.reindexProgress),
       mutate(SWR_KEYS.reindexErrors),
@@ -51,11 +47,6 @@ function ResumeButton({ row }: { row: ReindexErrorRow }) {
       {errorMsg && (
         <Text font="secondary-body" color="status-error-05">
           {errorMsg}
-        </Text>
-      )}
-      {delayed && (
-        <Text font="secondary-body" color="text-03">
-          Queued — it will start shortly.
         </Text>
       )}
     </div>
