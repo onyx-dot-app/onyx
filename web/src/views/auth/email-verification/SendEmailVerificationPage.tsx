@@ -26,18 +26,18 @@ export default function SendEmailVerificationPage() {
     return () => channel.close();
   }, [router]);
 
-  // Poll as a fallback in case the BroadcastChannel message is missed
-  // (e.g. the verification happened in a different browser or device).
+  // Poll only when a session exists — pointless without one.
   useEffect(() => {
+    if (!user) return;
     const interval = setInterval(() => mutateUser(), 3000);
     return () => clearInterval(interval);
-  }, [mutateUser]);
+  }, [user, mutateUser]);
 
   // Resend flow: fire-and-forget, then strip the ?resend param.
   useEffect(() => {
     const emailForResend = user?.email ?? searchParams.get("email");
     if (!searchParams.get("resend") || !emailForResend) return;
-    const base = `/auth/send-email-verification${emailForResend ? `?email=${encodeURIComponent(emailForResend)}` : ""}`;
+    const base = `/auth/send-email-verification?email=${encodeURIComponent(emailForResend)}`;
     router.replace(base as Route);
     requestEmailVerification(emailForResend)
       .then(() => toast.success("Verification email resent!"))
@@ -56,12 +56,13 @@ export default function SendEmailVerificationPage() {
   const emailParam = searchParams.get("email");
   const displayEmail = user?.email ?? emailParam;
 
+  // Wait for auth state before potentially skipping verified users to /app.
   if (isLoading) return <PageLoader />;
-  if (!displayEmail) redirect("/auth/login");
   if (user?.is_verified || !authTypeMetadata?.requiresVerification)
     redirect("/app");
+  if (!displayEmail) redirect("/auth/login");
 
-  const resendUrl = `/auth/send-email-verification?resend=true${emailParam ? `&email=${encodeURIComponent(emailParam)}` : ""}`;
+  const resendUrl = `/auth/send-email-verification?resend=true&email=${encodeURIComponent(displayEmail)}`;
 
   return (
     <AuthLayouts.Card
@@ -75,8 +76,12 @@ export default function SendEmailVerificationPage() {
           `Didn't receive an email? [Resend](${resendUrl})`
         )}
       />
-      <AuthLayouts.OrSeparator />
-      <AuthLayouts.Submit label="logout" onClick={handleLogout} />
+      {user && (
+        <>
+          <AuthLayouts.OrSeparator />
+          <AuthLayouts.Submit label="logout" onClick={handleLogout} />
+        </>
+      )}
     </AuthLayouts.Card>
   );
 }
