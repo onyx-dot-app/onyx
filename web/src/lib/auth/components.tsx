@@ -435,6 +435,7 @@ export function EmailPasswordForm({
                   placeholder="email@yourcompany.com"
                   data-testid="email"
                   autoComplete="username"
+                  variant={defaultEmail ? "disabled" : undefined}
                 />
               </InputVertical>
 
