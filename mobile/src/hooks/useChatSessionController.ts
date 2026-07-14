@@ -101,6 +101,11 @@ async function runResumeStream(
       if (isStreamError(event)) {
         // Errored run: show it immediately rather than waiting on (or getting stuck if it fails)
         // the snapshot settle below. Matches the live-send path in useChatController.
+        console.warn("resume-stream received a backend error", {
+          sessionId,
+          errorCode: event.error_code ?? null,
+          error: event.error,
+        });
         pending = [];
         if (flushTimer) {
           clearTimeout(flushTimer);

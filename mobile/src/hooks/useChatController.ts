@@ -115,6 +115,11 @@ async function runChatStream(
       if (isStreamError(event)) {
         // Backend errored mid-stream: convert the assistant turn to an error node instead of leaving the "…" placeholder stuck.
         hadError = true;
+        console.warn("chat stream returned a backend error", {
+          sessionId,
+          errorCode: event.error_code ?? null,
+          error: event.error,
+        });
         pending = [];
         if (flushTimer) {
           clearTimeout(flushTimer);
