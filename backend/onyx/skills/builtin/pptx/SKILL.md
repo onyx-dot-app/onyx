@@ -15,6 +15,7 @@ license: Proprietary. LICENSE.txt has complete terms
 | Read/analyze content | `python -m markitdown presentation.pptx` |
 | Edit or create from template | Read [editing.md](editing.md) |
 | Create from scratch | Read [pptxgenjs.md](pptxgenjs.md) |
+| Lint layout (QA step 0) | `python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx` |
 
 ---
 
@@ -170,6 +171,19 @@ Use **Fira Code** for code samples or dense numeric/stat blocks.
 
 Your first render is almost never correct. Approach QA as a bug hunt, not a confirmation step. If you found zero issues on first inspection, you weren't looking hard enough.
 
+### Layout Lint (run first)
+
+Before any render or vision pass, run the deterministic layout linter — it catches the mechanical defects (off-slide shapes, sub-margin text, text overflow, overlapping text frames, low-contrast explicit colors, unknown fonts) with exact slide/shape references:
+
+```bash
+python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx
+```
+
+- Exit 0 with `LINT_CLEAN` means no findings; nonzero means ERRORs exist.
+- **Fix every ERROR** before moving on. Review each WARN and fix it unless the layout is genuinely intentional (e.g., a deliberate design overlap).
+- Re-run after each fix batch — it's instant, so lint until clean before spending time on rendering.
+- The linter checks contrast only for explicit solid colors; text over images/gradients is skipped and noted — verify those visually.
+
 ### Content QA
 
 ```bash
@@ -196,17 +210,15 @@ Convert slides to images (see [Converting to Images](#converting-to-images)), th
 Visually inspect these slides. Assume there are issues — find them.
 
 Look for:
-- Overlapping elements (text through shapes, lines through words, stacked elements)
-- Text overflow or cut off at edges/box boundaries
 - Decorative lines positioned for single-line text but title wrapped to two lines
 - Source citations or footers colliding with content above
 - Elements too close (< 0.3" gaps) or cards/sections nearly touching
 - Uneven gaps (large empty area in one place, cramped in another)
-- Insufficient margin from slide edges (< 0.5")
 - Columns or similar elements not aligned consistently
-- Low-contrast text (e.g., light gray text on cream-colored background)
+- Low-contrast text over images or gradients (the linter can't check these)
 - Low-contrast icons (e.g., dark icons on dark backgrounds without a contrasting circle)
 - Text boxes too narrow causing excessive wrapping
+- Inconsistent styling across slides (fonts, colors, motifs drifting)
 - Leftover placeholder content
 
 For each slide, list issues or areas of concern, even if minor.
@@ -220,11 +232,12 @@ Report ALL issues found, including minor ones.
 
 ### Verification Loop
 
-1. Generate slides → Convert to images → Inspect
-2. **List issues found** (if none found, look again more critically)
-3. Fix issues
-4. **Re-verify affected slides** — one fix often creates another problem
-5. Repeat until a full pass reveals no new issues
+1. Generate slides → **Run `lint.py`** → fix every ERROR (and unjustified WARNs)
+2. Re-run lint after each fix batch — it's instant — until clean
+3. Convert to images → Inspect (subagent vision pass for the final aesthetic check)
+4. **List issues found** (if none found, look again more critically)
+5. Fix issues → **re-run lint** (one fix often creates another problem), then re-verify affected slides
+6. Repeat until lint is clean and a full visual pass reveals no new issues
 
 **Do not declare success until you've completed at least one fix-and-verify cycle.**
 
