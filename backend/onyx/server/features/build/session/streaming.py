@@ -28,10 +28,15 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import MessageType
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
+from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
+)
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import update_session_activity
@@ -55,6 +60,7 @@ from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
 from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
+from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
@@ -458,6 +464,16 @@ def load_turn_session(
     return build_session
 
 
+def _refresh_sandbox_heartbeat_best_effort(sandbox_id: UUID) -> None:
+    try:
+        with get_session_with_current_tenant() as hb_session:
+            update_sandbox_heartbeat(hb_session, sandbox_id)
+    except Exception:
+        logger.warning(
+            "Failed to refresh heartbeat for sandbox %s", sandbox_id, exc_info=True
+        )
+
+
 def yield_sandbox_events(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
@@ -469,6 +485,8 @@ def yield_sandbox_events(
     agent_provider: str | None,
     agent_model: str | None,
     should_interrupt: Callable[[], bool] | None = None,
+    should_abort_on_teardown: Callable[[], bool] | None = None,
+    turn_timeout_seconds: float | None = None,
 ) -> Generator[Any, None, None]:
     """Drive the agent to completion, yielding raw sandbox events.
 
@@ -490,7 +508,10 @@ def yield_sandbox_events(
         # opencode session (dropping conversation history).
         _persist_opencode_session_id(db_session, session_id, new_id)
 
-    yield from sandbox_manager.send_message(
+    # The idle reaper keys off last_heartbeat; a turn can outlast the idle timeout.
+    _refresh_sandbox_heartbeat_best_effort(sandbox_id)
+    last_heartbeat_refresh = time.monotonic()
+    event_stream = sandbox_manager.send_message(
         sandbox_id,
         session_id,
         user_message_content,
@@ -499,7 +520,22 @@ def yield_sandbox_events(
         agent_model=agent_model,
         on_opencode_session_resolved=_persist_resolved_id,
         should_interrupt=should_interrupt,
+        should_abort_on_teardown=should_abort_on_teardown,
+        turn_timeout_seconds=turn_timeout_seconds,
     )
+    try:
+        for sandbox_event in event_stream:
+            if (
+                time.monotonic() - last_heartbeat_refresh
+                >= SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS
+            ):
+                _refresh_sandbox_heartbeat_best_effort(sandbox_id)
+                last_heartbeat_refresh = time.monotonic()
+            yield sandbox_event
+    finally:
+        # close() must reach the transport generator deterministically — its
+        # GeneratorExit handler aborts the opencode turn.
+        event_stream.close()
 
 
 def _ensure_opencode_session_id(
@@ -760,7 +796,8 @@ def stream_subagent_turn(
     """
     events_emitted = 0
     state: BuildStreamingState | None = None
-    prompt_slot_cm: contextlib.AbstractContextManager[bool] | None = None
+    prompt_slot_cm: contextlib.AbstractContextManager[PromptSlot] | None = None
+    slot_renewal_stop: threading.Event | None = None
     # parentSessionId is filled in once we resolve the build session.
     routing_meta: dict[str, Any] = {"sessionId": subagent_opencode_session_id}
 
@@ -794,7 +831,8 @@ def stream_subagent_turn(
         # (the parent turn and a subagent follow-up share the same pod
         # directory + event bus).
         candidate_cm = sandbox_manager.prompt_slot(sandbox_id, session_id)
-        if not candidate_cm.__enter__():
+        slot = candidate_cm.__enter__()
+        if not slot.acquired:
             candidate_cm.__exit__(None, None, None)
             error_packet = ErrorPacket(
                 message=(
@@ -807,6 +845,18 @@ def stream_subagent_turn(
             return
         prompt_slot_cm = candidate_cm
 
+        # This generator advances at the SSE client's pace, so a stalled (but
+        # not disconnected) client would stop per-event lease renewal and let
+        # a live turn's slot expire. Renew on a wall clock instead, capped so
+        # a leaked generator holds the slot no longer than the old fixed TTL.
+        slot_renewal_stop = threading.Event()
+        start_thread_with_context(
+            target=slot.keep_alive,
+            name=f"prompt-slot-renewal-{session_id}",
+            daemon=True,
+            args=(slot_renewal_stop, OPENCODE_PROMPT_TIMEOUT_SECONDS),
+        )
+
         # Routing metadata merged into every forwarded subagent event and
         # the persisted assistant message.
         routing_meta["parentSessionId"] = parent_opencode_session_id
@@ -814,6 +864,9 @@ def stream_subagent_turn(
         state = BuildStreamingState(turn_index=0)
 
         # Subagent runs on the parent session's model, not the child's default.
+        # Turn-start heartbeat is written by the send-message endpoint; only
+        # the periodic refresh lives here.
+        last_heartbeat_refresh = time.monotonic()
         for sandbox_event in sandbox_manager.send_subagent_message(
             sandbox_id,
             session_id,
@@ -822,6 +875,15 @@ def stream_subagent_turn(
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
         ):
+            if slot.lost:
+                raise RuntimeError("Prompt slot lease lost mid-turn.")
+            if (
+                time.monotonic() - last_heartbeat_refresh
+                >= SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS
+            ):
+                _refresh_sandbox_heartbeat_best_effort(sandbox_id)
+                last_heartbeat_refresh = time.monotonic()
+
             # Keepalives + terminators pass through untagged.
             if isinstance(sandbox_event, SSEKeepalive):
                 yield SSE_KEEPALIVE
@@ -888,6 +950,8 @@ def stream_subagent_turn(
         logger.exception("Error in subagent message streaming")
         yield _format_packet_event(error_packet)
     finally:
+        if slot_renewal_stop is not None:
+            slot_renewal_stop.set()
         if prompt_slot_cm is not None:
             prompt_slot_cm.__exit__(None, None, None)
 

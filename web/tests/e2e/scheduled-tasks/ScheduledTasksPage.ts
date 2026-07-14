@@ -46,40 +46,34 @@ export class ScheduledTasksPage {
   // ---------------------------------------------------------------------------
 
   /**
-   * Seed the `build_user_persona` cookie so the Craft onboarding modal
-   * doesn't intercept the page. Without this, non-admin workers without a
-   * pre-existing persona cookie will hit `BuildOnboardingModal` on first
-   * navigation, blocking every other interaction. The shape matches
-   * `BuildUserPersona` in `web/src/app/craft/onboarding/constants.ts`.
-   */
-  private async seedBuildPersonaCookie(): Promise<void> {
-    const url = new URL(this.page.url());
-    const domain = url.hostname || "localhost";
-    await this.page.context().addCookies([
-      {
-        name: "build_user_persona",
-        value: encodeURIComponent(
-          JSON.stringify({ workArea: "engineering", level: "ic" })
-        ),
-        domain,
-        path: "/",
-        expires: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365,
-      },
-    ]);
-  }
-
-  /**
    * Navigate to the tasks list. When the Craft feature flag is off the
    * `/craft` layout redirects to `/app`, so callers should follow this with
    * `isCraftEnabled()` (and `test.skip` if false).
    */
   async gotoList(): Promise<void> {
-    // Land on the base URL first so we have a real origin for the cookie,
-    // then seed the persona cookie, then navigate to the tasks list.
-    await this.page.goto("/");
-    await this.seedBuildPersonaCookie();
     await this.page.goto(TASKS_LIST_PATH);
     await this.page.waitForLoadState("networkidle");
+    await this.dismissCraftIntro();
+  }
+
+  /**
+   * Dismiss the first-visit craft intro if it appeared. Fresh e2e users have
+   * no `onyx:craftOnboardingSeen:{userId}` localStorage entry, so the intro
+   * dialog auto-opens over any /craft/v1 route and its overlay would swallow
+   * every click.
+   */
+  private async dismissCraftIntro(): Promise<void> {
+    const intro = this.page
+      .getByRole("dialog")
+      .filter({ hasText: "Meet Craft" });
+    const appeared = await intro
+      .waitFor({ state: "visible", timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    if (appeared) {
+      await this.page.keyboard.press("Escape");
+      await expect(intro).toBeHidden();
+    }
   }
 
   isCraftEnabled(): boolean {

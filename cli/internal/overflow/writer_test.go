@@ -103,6 +103,21 @@ func TestWriter_MultipleChunks(t *testing.T) {
 	}
 }
 
+func TestSaveFull(t *testing.T) {
+	path, err := SaveFull("onyx-test-*.txt", "hello world")
+	if err != nil {
+		t.Fatalf("SaveFull failed: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read temp file: %v", err)
+	}
+	if string(data) != "hello world" {
+		t.Fatalf("temp file should contain full content, got %q", string(data))
+	}
+}
+
 func TestWriter_QuietMode(t *testing.T) {
 	var buf bytes.Buffer
 	w := &Writer{Limit: 0, Quiet: true, Out: &buf}

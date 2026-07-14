@@ -513,6 +513,9 @@ VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
 OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE = int(
     os.environ.get("OPENSEARCH_MIGRATION_GET_VESPA_CHUNKS_PAGE_SIZE") or 500
 )
+# Lifetime of a point-in-time used to scan an index consistently (reindex port).
+# Each search extends the lease; an idle PIT self-expires after this.
+PIT_KEEP_ALIVE: str = os.environ.get("PIT_KEEP_ALIVE") or "5m"
 # If set, will override the default number of shards and replicas for the index.
 OPENSEARCH_INDEX_NUM_SHARDS: int | None = (
     int(os.environ["OPENSEARCH_INDEX_NUM_SHARDS"])
@@ -936,6 +939,13 @@ except ValueError:
         _CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT
     )
 
+# Reindex-port runs on the docprocessing worker; cap concurrent port attempts well
+# below its concurrency so a large reindex leaves slots for live indexing.
+# Floor at 1: 0 (or negative) would gate off every new port attempt.
+MAX_CONCURRENT_PORT_ATTEMPTS = max(
+    1, _non_negative_int_env("MAX_CONCURRENT_PORT_ATTEMPTS", 2)
+)
+
 _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
 try:
     env_value = os.environ.get("CELERY_WORKER_DOCFETCHING_CONCURRENCY")
@@ -1344,6 +1354,19 @@ INDEXING_WORKER_MEMORY_LIMIT_MB = int(
 # per-allocation CPU/memory overhead — enable only while chasing a leak.
 INDEXING_WORKER_TRACEMALLOC = (
     os.environ.get("INDEXING_WORKER_TRACEMALLOC", "").lower() == "true"
+)
+
+# When set, every successfully indexed public-connector document is POSTed to
+# this endpoint. Intended for non-EE deployments; EE users should prefer the
+# Document Push hook (admin UI / /admin/hooks API) instead — it adds endpoint
+# validation, execution logs, and reachability tracking. If both are set, this
+# env config takes precedence and the hook does not fire. Not supported in
+# multi-tenant deployments. See onyx/indexing/document_push.py.
+DOCUMENT_PUSH_ENDPOINT_URL = os.environ.get("DOCUMENT_PUSH_ENDPOINT_URL") or None
+# Sent as "Authorization: Bearer <key>" on each push request.
+DOCUMENT_PUSH_API_KEY = os.environ.get("DOCUMENT_PUSH_API_KEY") or None
+DOCUMENT_PUSH_TIMEOUT_SECONDS = float(
+    os.environ.get("DOCUMENT_PUSH_TIMEOUT_SECONDS") or 30
 )
 
 MAX_FILE_SIZE_BYTES = int(
@@ -1885,6 +1908,8 @@ EXT_APP_GITHUB_CLIENT_ID = os.environ.get("EXT_APP_GITHUB_CLIENT_ID", "")
 EXT_APP_GITHUB_CLIENT_SECRET = os.environ.get("EXT_APP_GITHUB_CLIENT_SECRET", "")
 EXT_APP_HUBSPOT_CLIENT_ID = os.environ.get("EXT_APP_HUBSPOT_CLIENT_ID", "")
 EXT_APP_HUBSPOT_CLIENT_SECRET = os.environ.get("EXT_APP_HUBSPOT_CLIENT_SECRET", "")
+EXT_APP_NOTION_CLIENT_ID = os.environ.get("EXT_APP_NOTION_CLIENT_ID", "")
+EXT_APP_NOTION_CLIENT_SECRET = os.environ.get("EXT_APP_NOTION_CLIENT_SECRET", "")
 
 INSTANCE_TYPE = (
     "managed"

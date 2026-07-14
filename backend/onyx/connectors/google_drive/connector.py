@@ -12,8 +12,8 @@ from typing import Any
 from typing import cast
 from typing import Protocol
 from urllib.parse import parse_qs
+from urllib.parse import ParseResult
 from urllib.parse import urlparse
-from urllib.parse import urlunparse
 
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
@@ -29,10 +29,17 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.google_drive.doc_conversion import (
+    _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE,
+)
+from onyx.connectors.google_drive.doc_conversion import (
+    _FALLBACK_WEB_VIEW_LINK_TEMPLATES,
+)
 from onyx.connectors.google_drive.doc_conversion import build_slim_document
 from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
 from onyx.connectors.google_drive.doc_conversion import onyx_document_id_from_drive_file
 from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
+from onyx.connectors.google_drive.doc_conversion import WEB_VIEW_LINK_KEY
 from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
 from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.file_retrieval import get_all_files_for_oauth
@@ -118,6 +125,42 @@ def _extract_str_list_from_comma_str(string: str | None) -> list[str]:
 
 def _extract_ids_from_urls(urls: list[str]) -> list[str]:
     return [urlparse(url).path.strip("/").split("/")[-1] for url in urls]
+
+
+def _extract_drive_file_id(parsed: ParseResult) -> str | None:
+    """Extract the file id from a Drive/Docs URL.
+
+    Covers `?id=<id>`, `/d/<id>/...`, and the multi-account `/u/<N>/d/<id>/...` form.
+    """
+    id_query_param = parse_qs(parsed.query).get("id", [None])[0]
+    if id_query_param:
+        return id_query_param
+
+    path_parts = parsed.path.split("/")
+    for i, part in enumerate(path_parts):
+        if part == "d" and i + 1 < len(path_parts):
+            return path_parts[i + 1]
+    return None
+
+
+def _candidate_document_ids_from_file_id(file_id: str) -> list[str]:
+    """Every canonical Document.id a Drive file id could have been indexed under.
+
+    A file id is globally unique, so at most one of the native Doc/Sheet/Slide forms
+    and the uploaded-binary form is ever indexed; the caller matches whichever exists.
+    """
+    native_doc_links = [
+        template.format(file_id)
+        for template in _FALLBACK_WEB_VIEW_LINK_TEMPLATES.values()
+    ]
+    uploaded_binary_link = _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE.format(file_id)
+
+    candidates: list[str] = []
+    for link in [*native_doc_links, uploaded_binary_link]:
+        doc_id = onyx_document_id_from_drive_file({WEB_VIEW_LINK_KEY: link}).rstrip("/")
+        if doc_id not in candidates:
+            candidates.append(doc_id)
+    return candidates
 
 
 def _clean_requested_drive_ids(
@@ -343,10 +386,12 @@ class GoogleDriveConnector(
     @classmethod
     @override
     def normalize_url(cls, url: str) -> NormalizationResult:
-        """Normalize a Google Drive URL to match the canonical Document.id format.
+        """Normalize a Google Drive URL to candidate Document.id values.
 
-        Reuses the connector's existing document ID creation logic from
-        onyx_document_id_from_drive_file.
+        The pasted URL often doesn't encode the file's type, so the canonical
+        Document.id could take any of several forms; emit them all as candidates and
+        let resolution match whichever is indexed. `normalized_url` is a single best
+        guess for callers that don't consult the candidate list.
         """
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
@@ -357,36 +402,27 @@ class GoogleDriveConnector(
         ):
             return NormalizationResult(normalized_url=None, use_default=False)
 
-        # Handle ?id= query parameter case
-        query_params = parse_qs(parsed.query)
-        doc_id = query_params.get("id", [None])[0]
-        if doc_id:
-            scheme = parsed.scheme or "https"
-            netloc = "drive.google.com"
-            path = f"/file/d/{doc_id}"
-            params = ""
-            query = ""
-            fragment = ""
-            normalized = urlunparse(
-                (scheme, netloc, path, params, query, fragment)
-            ).rstrip("/")
-            return NormalizationResult(normalized_url=normalized, use_default=False)
-
-        # Extract file ID and use connector's function
-        path_parts = parsed.path.split("/")
-        file_id = None
-        for i, part in enumerate(path_parts):
-            if part == "d" and i + 1 < len(path_parts):
-                file_id = path_parts[i + 1]
-                break
-
+        file_id = _extract_drive_file_id(parsed)
         if not file_id:
             return NormalizationResult(normalized_url=None, use_default=False)
 
-        # Create minimal file object for connector function
-        file_obj = {"webViewLink": url, "id": file_id}
-        normalized = onyx_document_id_from_drive_file(file_obj).rstrip("/")
-        return NormalizationResult(normalized_url=normalized, use_default=False)
+        # Best guess: keep the pasted URL's type if it has one; a ?id= link has none.
+        if parse_qs(parsed.query).get("id"):
+            normalized = onyx_document_id_from_drive_file(
+                {
+                    WEB_VIEW_LINK_KEY: _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE.format(
+                        file_id
+                    )
+                }
+            ).rstrip("/")
+        else:
+            normalized = onyx_document_id_from_drive_file(
+                {WEB_VIEW_LINK_KEY: url, "id": file_id}
+            ).rstrip("/")
+        return NormalizationResult(
+            normalized_url=normalized,
+            candidate_document_ids=_candidate_document_ids_from_file_id(file_id),
+        )
 
     # TODO: ensure returned new_creds_dict is actually persisted when this is called?
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, str] | None:

@@ -15,6 +15,7 @@ from pyairtable.models.schema import TableSchema
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -428,6 +429,7 @@ class AirtableConnector(LoadConnector):
         fields = record["fields"]
         sections: list[TextSection] = []
         metadata: dict[str, str | list[str]] = {}
+        created_time = record["createdTime"]
 
         # Get primary field value if it exists
         primary_field_value = (
@@ -491,6 +493,7 @@ class AirtableConnector(LoadConnector):
             sections=(cast(list[TextSection | ImageSection], sections)),
             source=DocumentSource.AIRTABLE,
             semantic_identifier=semantic_id,
+            doc_created_at=time_str_to_utc(created_time),
             metadata=metadata,
             doc_metadata={
                 "hierarchy": {

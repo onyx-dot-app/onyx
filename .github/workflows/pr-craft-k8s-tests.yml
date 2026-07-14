@@ -94,7 +94,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
@@ -106,7 +106,17 @@ jobs:
               - 'backend/onyx/server/features/skill/**'
               - 'backend/onyx/skills/**'
               - 'backend/shared_configs/**'
-              - 'deployment/helm/**'
+              # Only the sandbox/craft-specific chart bits gate this lane. Generic
+              # chart changes (workers, deps, version bumps) are install-tested by
+              # the `Helm - Lint and Test Charts` lane (`ct install` into kind), so
+              # they don't need the full sandbox suite here.
+              - 'deployment/helm/charts/onyx/templates/sandbox-*'
+              - 'deployment/helm/charts/onyx/templates/sandbox-proxy/**'
+              - 'deployment/helm/charts/onyx/templates/network-policy-sandbox-*'
+              - 'deployment/helm/charts/onyx/templates/craft-*'
+              - 'deployment/helm/charts/onyx/templates/celery-worker-scheduled-tasks*'
+              - 'deployment/helm/charts/onyx/charts/code-interpreter-*'
+              - 'deployment/helm/charts/onyx/values-ci.yaml'
               - 'backend/tests/integration/tests/craft/*.py'
               - 'backend/tests/integration/tests/craft/k8s/**'
               - 'backend/tests/common/craft/**'
@@ -182,7 +192,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -244,7 +254,7 @@ jobs:
       DISABLE_VECTOR_DB: "false"
 
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6

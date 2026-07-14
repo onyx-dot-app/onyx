@@ -38,6 +38,7 @@ SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS = int(
 SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS = int(
     os.environ.get("SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS", "60")
 )
+SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS = 60
 
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
 SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
@@ -163,9 +164,17 @@ SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
 # Wall-clock budget for one user-message turn against opencode-serve.
-SANDBOX_TURN_TIMEOUT_SECONDS = float(
-    os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0")
+OPENCODE_PROMPT_TIMEOUT_SECONDS = float(
+    os.environ.get(
+        "OPENCODE_PROMPT_TIMEOUT_SECONDS",
+        # Legacy name, still honored so existing deployments keep their tuning.
+        os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0"),
+    )
 )
+
+# Prompt-slot lock lease; renewed on every sandbox event/keepalive, so a dead
+# holder strands the slot for at most this long.
+PROMPT_SLOT_LEASE_SECONDS = float(os.environ.get("PROMPT_SLOT_LEASE_SECONDS", "120.0"))
 
 # Match against the EXPOSE directive in the sandbox Dockerfile.
 OPENCODE_SERVE_PORT = int(os.environ.get("OPENCODE_SERVE_PORT", "4096"))

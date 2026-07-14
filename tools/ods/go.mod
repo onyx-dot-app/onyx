@@ -4,6 +4,7 @@ go 1.26.4
 
 require (
 	github.com/gdamore/tcell/v2 v2.13.8
+	github.com/google/osv-scalibr v0.4.6-0.20260612031204-164402d9140e
 	github.com/google/osv-scanner/v2 v2.4.0
 	github.com/jmelahman/tag v0.5.2
 	github.com/ossf/osv-schema/bindings/go v0.0.0-20260424063704-83285ce2a866
@@ -11,6 +12,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	google.golang.org/protobuf v1.36.11
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -77,7 +79,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/go-containerregistry v0.20.7 // indirect
-	github.com/google/osv-scalibr v0.4.6-0.20260612031204-164402d9140e // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20260505044615-1ff4bf46051f // indirect
 	github.com/icholy/digest v1.1.0 // indirect
@@ -162,7 +163,6 @@ require (
 	google.golang.org/grpc v1.81.1 // indirect
 	gopkg.in/ini.v1 v1.67.2 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

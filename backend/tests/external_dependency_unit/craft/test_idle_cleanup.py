@@ -1,9 +1,10 @@
 """Idle cleanup (Celery task).
 
 Exercises ``cleanup_idle_sandboxes_task`` end-to-end against real Postgres +
-Redis. The sandbox operations (``list_session_workspaces``,
+Redis; the per-sandbox reap runs through ``sleep_sandbox`` (sandbox
+lifecycle). The sandbox operations (``list_session_workspaces``,
 ``create_snapshot``, ``terminate``) are routed through the
-``StubSandboxManager`` from ``conftest.py``. The task body is
+``StubSandboxManager`` from ``conftest.py``. The sweep is
 backend-agnostic, so we only need to install the stub via
 ``get_sandbox_manager``.
 """
@@ -30,6 +31,9 @@ from onyx.db.models import Snapshot
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.session import (
+    sandbox_lifecycle as sandbox_lifecycle_module,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.stubs import StubSandboxManager
@@ -48,7 +52,7 @@ def stubbed_cleanup(
 ) -> StubSandboxManager:
     """Wire the stub so the cleanup task runs entirely against it.
 
-    The task body is backend-agnostic now: it calls
+    The sweep is backend-agnostic: it calls
     ``sandbox_manager.list_session_workspaces(sandbox_id)`` rather than a
     Kubernetes-only helper, so we just need to redirect
     ``get_sandbox_manager`` to the stub. Per-test bodies can override
@@ -64,11 +68,18 @@ def stubbed_cleanup(
 def short_idle_threshold(monkeypatch: pytest.MonkeyPatch) -> int:
     """Lower the idle threshold so tests can backdate a heartbeat cheaply.
 
+    Patched in both consuming modules: the task reads it for the background
+    snapshot cutoff; ``is_sandbox_idle`` (sandbox lifecycle) reads it for the
+    idle partition and the pre-kill re-check.
+
     Returns the threshold (seconds) so tests can reason about boundary
     conditions without hard-coding magic numbers.
     """
     threshold = 60
     monkeypatch.setattr(tasks_module, "SANDBOX_IDLE_TIMEOUT_SECONDS", threshold)
+    monkeypatch.setattr(
+        sandbox_lifecycle_module, "SANDBOX_IDLE_TIMEOUT_SECONDS", threshold
+    )
     return threshold
 
 
@@ -596,6 +607,57 @@ def test_idle_reaped_before_non_idle_background_snapshot(
         refreshed_nonidle is not None
         and refreshed_nonidle.status == SandboxStatus.RUNNING
     )
+
+
+def test_heartbeat_refresh_mid_sweep_aborts_reap(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A heartbeat refreshed mid-sweep (e.g. user resume) must abort the reap."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    session_row = BuildSession(
+        user_id=user.id,
+        name="resumed-mid-sweep-session",
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add(session_row)
+    db_session.commit()
+    db_session.refresh(session_row)
+
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
+    stubbed_cleanup.supports_opencode_history_persistence = True
+    stubbed_cleanup.create_opencode_history_snapshot_returns = True
+    stubbed_cleanup.terminate_silent = True
+
+    def _resume_then_snapshot(
+        _sandbox_id: object, _session_id: object, _tenant_id: object
+    ) -> SnapshotResult:
+        db_session.execute(
+            update(Sandbox)
+            .where(Sandbox.id == sandbox.id)
+            .values(last_heartbeat=datetime.datetime.now(datetime.timezone.utc))
+        )
+        db_session.commit()
+        return SnapshotResult(
+            storage_path=f"s3://snapshots/{sandbox.id}/{session_row.id}.tar.gz",
+            size_bytes=1234,
+        )
+
+    monkeypatch.setattr(stubbed_cleanup, "create_snapshot", _resume_then_snapshot)
+
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.RUNNING
+    assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
 
 
 def test_task_holds_redis_lock_for_duration(

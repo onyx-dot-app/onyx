@@ -7,7 +7,7 @@ import {
 } from "@/sections/model-selector/MultiModelSelector";
 import { LLMOverride } from "@/app/app/services/lib";
 import { LlmManager } from "@/lib/hooks";
-import { buildLlmOptions } from "@/lib/languageModels/options";
+import { buildLlmOptions, llmOptionKey } from "@/lib/languageModels/options";
 
 export interface UseMultiModelChatReturn {
   /** Currently selected models for multi-model comparison. */
@@ -27,11 +27,14 @@ export interface UseMultiModelChatReturn {
   /**
    * Restore multi-model selection from model version strings (e.g. from chat history).
    * Matches against available llmOptions to reconstruct full SelectedModel objects.
+   * History stores only name strings, so when two providers expose a model with the
+   * same name this resolves to the first match.
    */
   restoreFromModelNames: (modelNames: string[]) => void;
   /**
    * Switch to a single model by name (after user picks a preferred response).
-   * Matches against llmOptions to find the full SelectedModel.
+   * Matches against llmOptions to find the full SelectedModel. Name-only, so
+   * same-named models across providers resolve to the first match.
    */
   selectSingleModel: (modelName: string) => void;
 }
@@ -56,16 +59,21 @@ export default function useMultiModelChat(
     if (llmOptions.length === 0) return null;
     const { currentLlm } = llmManager;
     if (!currentLlm.modelName) return null;
-    const match = llmOptions.find(
+    // Two providers can expose a model with the same name; prefer the one
+    // whose provider (instance) name matches the current descriptor.
+    const candidates = llmOptions.filter(
       (opt) =>
         opt.provider === currentLlm.provider &&
         opt.modelName === currentLlm.modelName
     );
+    const match =
+      candidates.find((opt) => opt.name === currentLlm.name) ?? candidates[0];
     if (!match) return null;
     return {
       name: match.name,
       provider: match.provider,
       modelName: match.modelName,
+      modelConfigurationId: match.modelConfigurationId ?? null,
       displayName: match.displayName,
     };
   }, [llmOptions, llmManager.currentLlm]);
@@ -92,12 +100,7 @@ export default function useMultiModelChat(
         const base =
           prev.length <= 1 && currentLlmModel ? [currentLlmModel] : prev;
         if (base.length >= MAX_MODELS) return base;
-        if (
-          base.some(
-            (m) =>
-              m.provider === model.provider && m.modelName === model.modelName
-          )
-        ) {
+        if (base.some((m) => llmOptionKey(m) === llmOptionKey(model))) {
           return base;
         }
         return [...base, model];
@@ -140,10 +143,7 @@ export default function useMultiModelChat(
         // Don't replace with a model that's already selected elsewhere
         if (
           prev.some(
-            (m, i) =>
-              i !== index &&
-              m.provider === model.provider &&
-              m.modelName === model.modelName
+            (m, i) => i !== index && llmOptionKey(m) === llmOptionKey(model)
           )
         ) {
           return prev;
@@ -178,6 +178,7 @@ export default function useMultiModelChat(
             name: match.name,
             provider: match.provider,
             modelName: match.modelName,
+            modelConfigurationId: match.modelConfigurationId ?? null,
             displayName: match.displayName,
           });
         }
@@ -204,6 +205,7 @@ export default function useMultiModelChat(
             name: match.name,
             provider: match.provider,
             modelName: match.modelName,
+            modelConfigurationId: match.modelConfigurationId ?? null,
             displayName: match.displayName,
           },
         ]);

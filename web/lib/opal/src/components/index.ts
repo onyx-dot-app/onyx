@@ -64,6 +64,7 @@ export {
 export {
   Tag,
   TAG_COLORS,
+  TAG_REMOVE_CLASS,
   type TagProps,
   type TagColor,
 } from "@opal/components/tag/components";
@@ -131,6 +132,13 @@ export {
   default as InputTypeIn,
   type InputTypeInProps,
 } from "@opal/components/inputs/input-type-in/components";
+
+/* InputTags */
+export {
+  InputTags,
+  type InputTagsProps,
+  type TagItem,
+} from "@opal/components/inputs/input-tags/components";
 
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";

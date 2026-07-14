@@ -25,7 +25,7 @@ export default function ModelPickerButton({
   disabled = false,
 }: ModelPickerButtonProps) {
   const { llmProviders } = useLLMProviders();
-  const { openLlmSetup } = useOnboarding();
+  const { openProviderModal } = useOnboarding();
 
   const effective = useMemo(
     () => selection ?? getDefaultLlmSelection(llmProviders),
@@ -50,7 +50,7 @@ export default function ModelPickerButton({
       currentSelection={effective}
       onSelectionChange={onChange}
       llmProviders={llmProviders}
-      onOpenOnboarding={(providerKey) => openLlmSetup(providerKey)}
+      onOpenOnboarding={(providerKey) => openProviderModal(providerKey)}
       disabled={disabled}
     >
       <div className="inline-flex">

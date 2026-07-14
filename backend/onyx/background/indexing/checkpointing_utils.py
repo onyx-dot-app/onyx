@@ -14,7 +14,6 @@ from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
 from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexingStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 from onyx.utils.object_size_check import deep_getsizeof
@@ -111,12 +110,7 @@ def get_latest_valid_checkpoint(
         if (
             candidate.poll_range_start == window_start
             and candidate.poll_range_end == window_end
-            and (
-                candidate.status == IndexingStatus.FAILED
-                # if the background job was killed (and thus the attempt was canceled)
-                # we still want to use the checkpoint so that we can pick up where we left off
-                or candidate.status == IndexingStatus.CANCELED
-            )
+            and candidate.status.should_reuse_checkpoint()
             and candidate.checkpoint_pointer is not None
             # NOTE: There are a couple connectors that may make progress but not have
             # any "total_docs_indexed". E.g. they are going through

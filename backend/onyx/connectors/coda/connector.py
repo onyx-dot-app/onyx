@@ -479,6 +479,7 @@ class CodaConnector(LoadConnector, PollConnector):
     def _convert_page_to_document(self, page: CodaPage, content: str = "") -> Document:
         """Convert a page into a Document."""
         page_updated = datetime.fromisoformat(page.updated_at).astimezone(timezone.utc)
+        page_created = datetime.fromisoformat(page.created_at).astimezone(timezone.utc)
 
         text_parts = [page.name, page.browser_link]
         if content:
@@ -492,6 +493,8 @@ class CodaConnector(LoadConnector, PollConnector):
             source=DocumentSource.CODA,
             semantic_identifier=page.name or f"Page {page.id}",
             doc_updated_at=page_updated,
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=page_created,
             metadata={
                 "browser_link": page.browser_link,
                 "doc_id": page.doc_id,
@@ -504,6 +507,9 @@ class CodaConnector(LoadConnector, PollConnector):
     ) -> Document:
         """Convert a table and its rows into a single Document with multiple sections (one per row)."""
         table_updated = datetime.fromisoformat(table.updated_at).astimezone(
+            timezone.utc
+        )
+        table_created = datetime.fromisoformat(table.created_at).astimezone(
             timezone.utc
         )
 
@@ -531,6 +537,8 @@ class CodaConnector(LoadConnector, PollConnector):
             source=DocumentSource.CODA,
             semantic_identifier=table.name or f"Table {table.id}",
             doc_updated_at=table_updated,
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=table_created,
             metadata={
                 "browser_link": table.browser_link,
                 "doc_id": table.doc_id,

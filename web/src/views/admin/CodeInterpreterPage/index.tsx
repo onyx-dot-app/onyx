@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SettingsLayouts } from "@opal/layouts";
 import {
   SvgArrowExchange,
@@ -18,12 +18,35 @@ import { Card, Content, ContentAction } from "@opal/layouts";
 import { Disabled, Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import useCodeInterpreter from "@/hooks/useCodeInterpreter";
+import useCodeInterpreter, {
+  type CodeInterpreterHealthStatus,
+} from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/views/admin/CodeInterpreterPage/svc";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@opal/utils";
 
 const route = ADMIN_ROUTES.CODE_INTERPRETER;
+
+const STATUS_CONFIG: Record<
+  CodeInterpreterHealthStatus,
+  { label: string; icon: typeof SvgCheckCircle; iconColor: string }
+> = {
+  healthy: {
+    label: "Connected",
+    icon: SvgCheckCircle,
+    iconColor: "text-status-success-05!",
+  },
+  unhealthy: {
+    label: "Unhealthy",
+    icon: SvgXOctagon,
+    iconColor: "text-status-error-05!",
+  },
+  connection_lost: {
+    label: "Connection Lost",
+    icon: SvgXOctagon,
+    iconColor: "text-status-error-05!",
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -47,34 +70,42 @@ function CheckingStatus() {
 }
 
 interface ConnectionStatusProps {
-  healthy: boolean;
+  status: CodeInterpreterHealthStatus | undefined;
   isLoading: boolean;
+  onIconHover: (hovered: boolean) => void;
 }
 
-function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
-  if (isLoading) {
+function ConnectionStatus({
+  status,
+  isLoading,
+  onIconHover,
+}: ConnectionStatusProps) {
+  if (isLoading || !status) {
     return <CheckingStatus />;
   }
 
-  const label = healthy ? "Connected" : "Connection Lost";
-  const Icon = healthy ? SvgCheckCircle : SvgXOctagon;
-  const iconColor = healthy
-    ? "text-status-success-05!"
-    : "text-status-error-05!";
+  const { label, icon: Icon, iconColor } = STATUS_CONFIG[status];
+  const hasError = status !== "healthy";
 
   return (
-    <div className="p-2">
-      <Content
-        title={label}
-        icon={(props) => (
-          <Icon {...props} className={cn(props.className, iconColor)} />
-        )}
-        sizePreset="main-ui"
-        variant="body"
-        orientation="reverse"
-        color="muted"
-      />
-    </div>
+    <Section
+      flexDirection="row"
+      justifyContent="end"
+      alignItems="center"
+      gap={0.25}
+      padding={0.5}
+    >
+      <Text mainUiAction text03>
+        {label}
+      </Text>
+      <div
+        onMouseEnter={() => hasError && onIconHover(true)}
+        onMouseLeave={() => onIconHover(false)}
+        className={cn(hasError && "cursor-pointer")}
+      >
+        <Icon size={16} className={iconColor} />
+      </div>
+    </Section>
   );
 }
 
@@ -83,9 +114,27 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
 // ---------------------------------------------------------------------------
 
 export default function CodeInterpreterPage() {
-  const { isHealthy, isEnabled, isLoading, refetch } = useCodeInterpreter();
+  const { status, error, isEnabled, isLoading, refetch } = useCodeInterpreter();
+  const isHealthy = status === "healthy";
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [showErrorMenu, setShowErrorMenu] = useState(false);
+  const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleErrorHover(hovered: boolean) {
+    if (fadeTimeoutRef.current) {
+      clearTimeout(fadeTimeoutRef.current);
+      fadeTimeoutRef.current = null;
+    }
+    if (hovered) {
+      setShowErrorMenu(true);
+    } else {
+      fadeTimeoutRef.current = setTimeout(() => {
+        setShowErrorMenu(false);
+        fadeTimeoutRef.current = null;
+      }, 1000);
+    }
+  }
 
   async function handleToggle(enabled: boolean) {
     const action = enabled ? "reconnect" : "disconnect";
@@ -102,6 +151,14 @@ export default function CodeInterpreterPage() {
       setIsReconnecting(false);
     }
   }
+
+  useEffect(() => {
+    return () => {
+      if (fadeTimeoutRef.current) {
+        clearTimeout(fadeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <SettingsLayouts.Root>
@@ -130,8 +187,9 @@ export default function CodeInterpreterPage() {
                   rightChildren={
                     <Section alignItems="end" gap={0}>
                       <ConnectionStatus
-                        healthy={isHealthy}
+                        status={status}
                         isLoading={isLoading}
+                        onIconHover={handleErrorHover}
                       />
                       <div className="px-1 pb-1">
                         <Section
@@ -198,6 +256,35 @@ export default function CodeInterpreterPage() {
               }
             />
           </SelectCard>
+        )}
+        {showErrorMenu && !isHealthy && (
+          <Section
+            flexDirection="row"
+            justifyContent="end"
+            onMouseEnter={() => handleErrorHover(true)}
+            onMouseLeave={() => handleErrorHover(false)}
+          >
+            <div className="w-[15rem]">
+              <SelectCard state="filled" padding="sm" rounding="lg">
+                <Content
+                  icon={(props) => (
+                    <SvgXOctagon
+                      {...props}
+                      className={cn(props.className, "text-status-error-05!")}
+                    />
+                  )}
+                  title={
+                    status === "connection_lost"
+                      ? "Connection Lost Error"
+                      : "Code Interpreter Error"
+                  }
+                  description={error}
+                  variant="section"
+                  sizePreset="main-ui"
+                />
+              </SelectCard>
+            </div>
+          </Section>
         )}
       </SettingsLayouts.Body>
 

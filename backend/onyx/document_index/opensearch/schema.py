@@ -11,6 +11,7 @@ from pydantic import field_validator
 from pydantic import model_serializer
 from pydantic import model_validator
 from pydantic import SerializerFunctionWrapHandler
+from pydantic import ValidationInfo
 
 from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_REPLICAS
 from onyx.configs.app_configs import OPENSEARCH_INDEX_NUM_SHARDS
@@ -39,6 +40,7 @@ CONTENT_VECTOR_FIELD_NAME = "content_vector"
 SOURCE_TYPE_FIELD_NAME = "source_type"
 METADATA_LIST_FIELD_NAME = "metadata_list"
 LAST_UPDATED_FIELD_NAME = "last_updated"
+CREATED_AT_FIELD_NAME = "created_at"
 PUBLIC_FIELD_NAME = "public"
 ACCESS_CONTROL_LIST_FIELD_NAME = "access_control_list"
 HIDDEN_FIELD_NAME = "hidden"
@@ -171,6 +173,9 @@ class DocumentChunkWithoutVectors(BaseModel):
     metadata_list: list[str] | None = None
     # If it exists, time zone should always be UTC.
     last_updated: datetime | None = None
+    # Time the document was created at the source. If it exists, time zone should
+    # always be UTC.
+    created_at: datetime | None = None
 
     public: bool
     access_control_list: list[str]
@@ -238,7 +243,7 @@ class DocumentChunkWithoutVectors(BaseModel):
         serialized_exclude_none = {k: v for k, v in serialized.items() if v is not None}
         return serialized_exclude_none
 
-    @field_serializer("last_updated", mode="wrap")
+    @field_serializer("last_updated", "created_at", mode="wrap")
     def serialize_datetime_fields_to_epoch_seconds(
         self,
         value: datetime | None,
@@ -254,9 +259,11 @@ class DocumentChunkWithoutVectors(BaseModel):
         value = set_or_convert_timezone_to_utc(value)
         return int(value.timestamp())
 
-    @field_validator("last_updated", mode="before")
+    @field_validator("last_updated", "created_at", mode="before")
     @classmethod
-    def parse_epoch_seconds_to_datetime(cls, value: Any) -> datetime | None:
+    def parse_epoch_seconds_to_datetime(
+        cls, value: Any, info: ValidationInfo
+    ) -> datetime | None:
         """Parses seconds since the Unix epoch to a datetime object.
 
         If the input is None, returns None.
@@ -270,7 +277,7 @@ class DocumentChunkWithoutVectors(BaseModel):
             return value
         if not isinstance(value, int):
             raise ValueError(
-                f"Bug: Expected an int for the last_updated property from OpenSearch, got {type(value)} instead."
+                f"Bug: Expected an int for the datetime property '{info.field_name}' from OpenSearch, got {type(value)} instead."
             )
         return datetime.fromtimestamp(value, tz=timezone.utc)
 
@@ -463,6 +470,12 @@ class DocumentSchema:
                     "format": "epoch_second",
                     # For some reason date defaults to False, even though it
                     # would make sense to sort by date.
+                    "doc_values": True,
+                },
+                # Source creation time.
+                CREATED_AT_FIELD_NAME: {
+                    "type": "date",
+                    "format": "epoch_second",
                     "doc_values": True,
                 },
                 # Access control fields.

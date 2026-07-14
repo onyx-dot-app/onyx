@@ -8,6 +8,7 @@ from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import can_user_access_llm_provider
+from onyx.db.llm import fetch_default_contextual_rag_model
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
@@ -16,6 +17,7 @@ from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Persona
+from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
@@ -345,6 +347,19 @@ def get_llm_for_contextual_rag(model_configuration_id: int) -> LLM:
             model_name=mc.name,
             llm_provider=LLMProviderView.from_model(mc.llm_provider),
         )
+
+
+def get_contextual_rag_llm_for_search_settings(
+    search_settings: SearchSettings,
+) -> LLM | None:
+    """Resolve the contextual-RAG LLM for the given search settings: the explicit
+    model configuration if set, else the tenant default; None when neither exists."""
+    mc_id = search_settings.contextual_rag_model_configuration_id
+    if mc_id is None:
+        with get_session_with_current_tenant() as db_session:
+            mc = fetch_default_contextual_rag_model(db_session)
+        mc_id = mc.id if mc else None
+    return get_llm_for_contextual_rag(mc_id) if mc_id is not None else None
 
 
 def get_default_llm(

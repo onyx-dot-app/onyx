@@ -38,6 +38,7 @@ export { default as SvgGong } from "@opal/logos/gong";
 export { default as SvgGoogle } from "@opal/logos/google";
 export { default as SvgGoogleCalendar } from "@opal/logos/google-calendar";
 export { default as SvgGoogleCloud } from "@opal/logos/google-cloud";
+export { default as SvgGoogleDocs } from "@opal/logos/google-docs";
 export { default as SvgGoogleDrive } from "@opal/logos/google-drive";
 export { default as SvgGoogleSites } from "@opal/logos/google-sites";
 export { default as SvgGrok } from "@opal/logos/grok";

@@ -72,6 +72,7 @@ class SearchToolConfig(BaseModel):
     additional_context: str | None = None
     slack_context: SlackContext | None = None
     enable_slack_search: bool = True
+    auto_detect_filters: bool = True
 
 
 class FileReaderToolConfig(BaseModel):
@@ -207,6 +208,7 @@ def _construct_tools_impl(
             bypass_acl=config.bypass_acl,
             slack_context=config.slack_context,
             enable_slack_search=config.enable_slack_search,
+            auto_detect_filters=config.auto_detect_filters,
         )
 
     added_search_tool = False

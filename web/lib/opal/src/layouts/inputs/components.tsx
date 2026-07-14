@@ -72,6 +72,8 @@ interface InputLayoutProps {
 
 interface VerticalProps extends InputLayoutProps {
   subDescription?: string | RichStr;
+  /** Optional text or markdown rendered at the top-right of the label row. */
+  topRight?: string | RichStr;
 }
 
 function Vertical({
@@ -80,6 +82,7 @@ function Vertical({
   ref,
   children,
   subDescription,
+  topRight,
   title,
   tag,
   description,
@@ -88,16 +91,37 @@ function Vertical({
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
+  const titleRow = topRight ? (
+    <ContentAction
+      title={title}
+      description={description}
+      suffix={suffix}
+      tag={tag}
+      sizePreset="main-ui"
+      variant="section"
+      width="full"
+      padding="fit"
+      rightChildren={
+        <Text font="secondary-body" color="text-03" as="p">
+          {topRight}
+        </Text>
+      }
+      center
+    />
+  ) : (
+    <Content
+      title={title}
+      description={description}
+      suffix={suffix}
+      tag={tag}
+      sizePreset="main-ui"
+      variant="section"
+    />
+  );
+
   const content = (
     <Section ref={ref} gap={0.25} alignItems="start">
-      <Content
-        title={title}
-        description={description}
-        suffix={suffix}
-        tag={tag}
-        sizePreset="main-ui"
-        variant="section"
-      />
+      {titleRow}
       {children}
       {fieldName && <FormikInputError name={fieldName} />}
       {subDescription && (
@@ -132,6 +156,12 @@ interface HorizontalProps extends InputLayoutProps {
    * compact controls like toggles/switches.
    */
   responsive?: boolean;
+  /**
+   * When true, the control grows to fill the row (capped at the form input
+   * column max) instead of hugging its content. Use for full-width inputs like
+   * selects/text fields; avoid for compact controls like toggles/switches.
+   */
+  fillInput?: boolean;
 }
 
 function Horizontal({
@@ -146,6 +176,7 @@ function Horizontal({
   description,
   suffix,
   responsive,
+  fillInput,
 }: HorizontalProps) {
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
@@ -164,6 +195,7 @@ function Horizontal({
         padding="fit"
         center={center}
         responsive={responsive}
+        fillRight={fillInput}
         rightChildren={children}
       />
       {fieldName && <FormikInputError name={fieldName} />}

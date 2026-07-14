@@ -1,7 +1,11 @@
+import math
+
+from redis.exceptions import LockNotOwnedError
 from redis.lock import Lock as RedisLock
 
 from onyx.cache.interface import CacheBackend
 from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheLockLostError
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
@@ -25,6 +29,13 @@ class RedisCacheLock(CacheLock):
 
     def release(self) -> None:
         self._lock.release()
+
+    def extend(self, ttl_seconds: float) -> None:
+        try:
+            # redis-py extend takes int seconds; ceil so the lease is never shortened.
+            self._lock.extend(math.ceil(ttl_seconds), replace_ttl=True)
+        except LockNotOwnedError as e:
+            raise CacheLockLostError(str(e)) from e
 
     def owned(self) -> bool:
         return bool(self._lock.owned())

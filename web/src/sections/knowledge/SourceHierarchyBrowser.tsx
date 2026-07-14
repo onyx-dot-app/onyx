@@ -27,6 +27,7 @@ import {
   SvgXCircle,
   SvgCheck,
   SvgArrowUpDown,
+  SvgFilter,
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
@@ -140,6 +141,18 @@ function HierarchyBreadcrumb({
 // SOURCE HIERARCHY BROWSER - Browsable folder/document hierarchy for a source
 // ============================================================================
 
+function buildPathToNode(
+  targetId: number,
+  nodes: HierarchyNodeSummary[]
+): HierarchyNodeSummary[] | null {
+  const node = nodes.find((n) => n.id === targetId);
+  if (!node) return null;
+  if (node.parent_id === null) return [node];
+  const parentPath = buildPathToNode(node.parent_id, nodes);
+  if (!parentPath) return null;
+  return [...parentPath, node];
+}
+
 export interface SourceHierarchyBrowserProps {
   source: ValidSources;
   selectedDocumentIds: string[];
@@ -153,6 +166,8 @@ export interface SourceHierarchyBrowserProps {
   initialAttachedDocuments?: AgentAttachedDocument[];
   // Callback to report selection count changes for this source
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
+  // When set, automatically navigate to this node after hierarchy loads
+  initialNodeId?: number;
 }
 
 export default function SourceHierarchyBrowser({
@@ -167,6 +182,7 @@ export default function SourceHierarchyBrowser({
   onDeselectAllFolders,
   initialAttachedDocuments,
   onSelectionCountChange,
+  initialNodeId,
 }: SourceHierarchyBrowserProps) {
   // State for hierarchy nodes (loaded once per source)
   const [allNodes, setAllNodes] = useState<HierarchyNodeSummary[]>([]);
@@ -237,6 +253,25 @@ export default function SourceHierarchyBrowser({
 
     loadNodes();
   }, [source]);
+
+  // Track the last initialNodeId we navigated to, so a new value (even to a
+  // previously-visited node) re-triggers navigation instead of being skipped
+  const lastNavigatedNodeIdRef = useRef<number | null>(null);
+
+  // Navigate to initialNodeId whenever it changes to a new value and allNodes are available
+  useEffect(() => {
+    if (
+      !initialNodeId ||
+      allNodes.length === 0 ||
+      lastNavigatedNodeIdRef.current === initialNodeId
+    )
+      return;
+    const pathToNode = buildPathToNode(initialNodeId, allNodes);
+    if (pathToNode) {
+      setPath(pathToNode);
+      lastNavigatedNodeIdRef.current = initialNodeId;
+    }
+  }, [initialNodeId, allNodes]);
 
   // Load documents when current path or sort options change
   useEffect(() => {
@@ -696,11 +731,13 @@ export default function SourceHierarchyBrowser({
       >
         <GeneralLayouts.Section height="auto" width="fit">
           <InputTypeIn
-            searchIcon
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Search..."
+            placeholder="Filter..."
             variant="internal"
+            rightChildren={
+              <SvgFilter className="w-4 h-4 stroke-text-02 shrink-0" />
+            }
           />
         </GeneralLayouts.Section>
       </GeneralLayouts.Section>

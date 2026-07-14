@@ -410,7 +410,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                       onChange={(event) =>
                         setInstructionsMarkdown(event.target.value)
                       }
-                      className="min-h-[34rem] border-0"
+                      className="border-0"
                       placeholder="Write the skill instructions."
                       variant={fieldsLocked ? "disabled" : "internal"}
                     />

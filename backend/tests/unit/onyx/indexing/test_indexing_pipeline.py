@@ -344,9 +344,40 @@ def test_document_push_skipped_in_multi_tenant_mode() -> None:
     doc = _make_doc(doc_id="doc1")
     with (
         patch(_PATCH_MULTI_TENANT, True),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
         patch(_PATCH_EXECUTE_HOOK) as mock_hook,
     ):
         _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+    mock_hook.assert_not_called()
+
+
+def test_document_push_config_sink_skipped_in_multi_tenant_mode() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+    from onyx.utils.external_endpoint import ExternalEndpointConfig
+
+    config = ExternalEndpointConfig(
+        endpoint_url="https://push.example.com/docs",
+        timeout_seconds=30.0,
+    )
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, True),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=config,
+        ),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+        patch(
+            "onyx.indexing.indexing_pipeline.push_document_via_config"
+        ) as mock_config_push,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    # Multi-tenant skips both sinks — even with the env config set.
+    mock_config_push.assert_not_called()
     mock_hook.assert_not_called()
 
 
@@ -378,7 +409,7 @@ def test_document_push_skipped_for_non_public_connector() -> None:
 
 def test_document_push_fires_execute_hook_for_public_doc() -> None:
     from onyx.db.enums import HookPoint
-    from onyx.hooks.points.document_push import DocumentPushResponse
+    from onyx.indexing.document_push import DocumentPushResponse
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
 
     doc = _make_doc(doc_id="doc1")
@@ -386,6 +417,10 @@ def test_document_push_fires_execute_hook_for_public_doc() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
         patch(_PATCH_EXECUTE_HOOK) as mock_hook,
     ):
         _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
@@ -399,6 +434,59 @@ def test_document_push_fires_execute_hook_for_public_doc() -> None:
     assert payload["content"] == "Hello"
 
 
+def test_document_push_config_wins_and_skips_hook() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+    from onyx.utils.external_endpoint import ExternalEndpointConfig
+
+    config = ExternalEndpointConfig(
+        endpoint_url="https://push.example.com/docs",
+        timeout_seconds=30.0,
+    )
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=config,
+        ),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+        patch(
+            "onyx.indexing.indexing_pipeline.push_document_via_config"
+        ) as mock_config_push,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    # Either/or: the config-driven sink wins and the hook DB lookup is skipped.
+    mock_config_push.assert_called_once()
+    assert mock_config_push.call_args.args[0].document_id == "doc1"
+    mock_hook.assert_not_called()
+
+
+def test_document_push_falls_back_to_hook_when_config_unset() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
+        patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+        patch(
+            "onyx.indexing.indexing_pipeline.push_document_via_config"
+        ) as mock_config_push,
+    ):
+        _maybe_push_documents(_make_adapter(), [doc], _make_insertion_records(["doc1"]))
+
+    mock_hook.assert_called_once()
+    mock_config_push.assert_not_called()
+
+
 def test_document_push_hook_exception_propagates() -> None:
     from onyx.indexing.indexing_pipeline import _maybe_push_documents
 
@@ -407,6 +495,10 @@ def test_document_push_hook_exception_propagates() -> None:
         patch(_PATCH_MULTI_TENANT, False),
         patch(_PATCH_GET_SESSION_AW, return_value=_make_ctx()),
         patch(_PATCH_GET_CC_PAIR, return_value=_make_cc_pair(is_public=True)),
+        patch(
+            "onyx.indexing.indexing_pipeline.get_document_push_config",
+            return_value=None,
+        ),
         patch(_PATCH_EXECUTE_HOOK, side_effect=RuntimeError("hard fail")),
         pytest.raises(RuntimeError, match="hard fail"),
     ):
@@ -1054,3 +1146,31 @@ def test_get_docs_to_update_mixed_batch() -> None:
     assert docs[0].id == "changed"
     assert "changed" in hashes
     assert "unchanged" not in hashes
+
+
+def test_get_docs_to_update_secondary_build_ignores_content_hash_gate() -> None:
+    """FUTURE/secondary build (ignore_content_hash_gate=True) must NOT hash-skip.
+
+    content_hash is a single column shared by both indices but tracks only the
+    PRESENT/live index. A matching hash means PRESENT already has the doc — it
+    says nothing about the FUTURE index being built. Honoring the gate here is
+    the #11159 regression: the secondary write gets suppressed and FUTURE never
+    receives the doc (swap deadlock / stale promotion). The gate must be bypassed.
+    """
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = None
+    stored_hash = doc.content_hash()  # PRESENT already indexed this exact content
+    db_doc = _make_db_doc("doc1", content_hash=stored_hash)
+
+    # Default (PRESENT write): hash matches → skipped, as before.
+    present_docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+    assert present_docs == []
+
+    # Secondary/FUTURE write: gate bypassed → doc still indexed into FUTURE.
+    future_docs, future_hashes = get_docs_to_update(
+        [doc], db_docs=[db_doc], ignore_content_hash_gate=True
+    )
+    assert len(future_docs) == 1
+    assert future_docs[0].id == "doc1"
+    assert "doc1" in future_hashes

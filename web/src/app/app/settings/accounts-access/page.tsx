@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
-import { useAuthType } from "@/lib/hooks";
-import { AuthType } from "@/lib/constants";
+import { useAuthType } from "@/lib/auth/hooks";
+import { AuthType } from "@/lib/auth/types";
 import { AccountsAccessSettings } from "@/views/SettingsPage";
 
 export default function AccountsAccessPage() {

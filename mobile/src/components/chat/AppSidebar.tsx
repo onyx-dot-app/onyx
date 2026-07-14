@@ -1,4 +1,4 @@
-import { router, useGlobalSearchParams } from "expo-router";
+import { router, useGlobalSearchParams, useSegments } from "expo-router";
 
 import { Icon } from "@/components/ui/icon";
 import { SidebarLayouts, SidebarTab, useSidebar } from "@/components/sidebar";
@@ -7,15 +7,26 @@ import SvgPlus from "@/icons/plus";
 import { useLogout } from "@/api/auth/useLogout";
 import { useChatSessions } from "@/api/chat/sessions";
 import { AgentSidebarSection } from "@/components/chat/AgentSidebarSection";
+import { useProjects } from "@/api/chat/projects";
 import { ChatSessionList } from "@/components/chat/ChatSessionList";
+import { ProjectList } from "@/components/chat/ProjectList";
 
-// Mobile analog of web's `AppSidebar`: New chat + flat "Recents" + footer.
-// Mounted in (app)/_layout so the overlay spans every authed screen. Projects: PR 6.
+// Mounted in (app)/_layout so the overlay spans every authed screen.
 export function AppSidebar() {
   const { setFolded } = useSidebar();
   const logout = useLogout();
+
+  // `id` is the param for BOTH /chat/[id] and /projects/[id] — the active
+  // segment tells them apart.
+  // widen — expo-router's typed-routes union narrows `.includes()` arg to `never`
+  const segments: readonly string[] = useSegments();
   const params = useGlobalSearchParams<{ id?: string }>();
-  const currentSessionId = typeof params.id === "string" ? params.id : null;
+  const rawId = typeof params.id === "string" ? params.id : null;
+  const inChat = segments.includes("chat");
+  const inProject = segments.includes("projects");
+  const currentSessionId = inChat ? rawId : null;
+  const currentProjectId = inProject && rawId != null ? Number(rawId) : null;
+  const onNewChat = !inChat && !inProject;
 
   const {
     sessions,
@@ -24,6 +35,7 @@ export function AppSidebar() {
     isFetchingNextPage,
     fetchNextPage,
   } = useChatSessions();
+  const { projects, isLoading: isLoadingProjects } = useProjects();
 
   function openNewChat() {
     setFolded(true);
@@ -35,6 +47,14 @@ export function AppSidebar() {
     router.navigate({ pathname: "/chat/[id]", params: { id: sessionId } });
   }
 
+  function openProject(projectId: number) {
+    setFolded(true);
+    router.navigate({
+      pathname: "/projects/[id]",
+      params: { id: String(projectId) },
+    });
+  }
+
   return (
     <SidebarLayouts.Root foldable>
       <SidebarLayouts.Header
@@ -44,15 +64,20 @@ export function AppSidebar() {
       />
 
       <SidebarLayouts.Body scrollKey="chats">
-        <SidebarTab
-          icon={SvgPlus}
-          selected={currentSessionId === null}
-          onPress={openNewChat}
-        >
+        <SidebarTab icon={SvgPlus} selected={onNewChat} onPress={openNewChat}>
           New chat
         </SidebarTab>
 
         <AgentSidebarSection />
+
+        <SidebarLayouts.Section title="Projects">
+          <ProjectList
+            projects={projects}
+            currentProjectId={currentProjectId}
+            isLoading={isLoadingProjects}
+            onSelect={openProject}
+          />
+        </SidebarLayouts.Section>
 
         <SidebarLayouts.Section title="Recents">
           <ChatSessionList

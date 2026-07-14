@@ -961,6 +961,9 @@ class NotionConnector(LoadConnector, PollConnector):
                         doc_updated_at=datetime.fromisoformat(
                             page.last_edited_time
                         ).astimezone(timezone.utc),
+                        doc_created_at=datetime.fromisoformat(
+                            page.created_time
+                        ).astimezone(timezone.utc),
                         metadata={},
                         parent_hierarchy_raw_node_id=parent_raw_id,
                     )

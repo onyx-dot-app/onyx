@@ -59,6 +59,10 @@ class IndexingWatchdogTerminalStatus(str, Enum):
     # logically. The DB row already reflects the real outcome, so we don't touch it.
     TERMINATED_BY_ATTEMPT_FINALIZED = "terminated_by_attempt_finalized"
 
+    # worker got SIGTERM (deploy / scale-down). The watchdog stops its subprocess
+    # and marks the attempt INTERRUPTED for a fast checkpoint resume.
+    TERMINATED_BY_WORKER_SHUTDOWN = "terminated_by_worker_shutdown"
+
     # NOTE: this may actually be the same as SIGKILL, but parsed differently by python
     # consolidate once we know more
     OUT_OF_MEMORY = "out_of_memory"

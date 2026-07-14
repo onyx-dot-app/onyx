@@ -10,4 +10,9 @@ export const QUERY_KEYS = {
   agents: (serverUrl: string | null) => ["agents", serverUrl] as const,
   workspaceSettings: (serverUrl: string | null) =>
     ["workspace-settings", serverUrl] as const,
+  userProjects: (serverUrl: string | null) => ["projects", serverUrl] as const,
+  userProject: (serverUrl: string | null, projectId: number | null) =>
+    ["project", serverUrl, projectId] as const,
+  userRecentFiles: (serverUrl: string | null) =>
+    ["recent-files", serverUrl] as const,
 };

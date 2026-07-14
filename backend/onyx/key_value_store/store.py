@@ -27,8 +27,8 @@ class PgRedisKVStore(KeyValueStore):
             self._cache = get_cache_backend()
         return self._cache
 
-    def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
-        # Not encrypted in Cache backend (typically Redis), but encrypted in Postgres
+    def store(self, key: str, val: JSON_ro) -> None:
+        # Not encrypted in Cache backend (typically Redis)
         try:
             self._get_cache().set(
                 REDIS_KEY_PREFIX + key, json.dumps(val), ex=KV_REDIS_KEY_EXPIRATION
@@ -39,15 +39,14 @@ class PgRedisKVStore(KeyValueStore):
                 "Failed to set value in Cache backend for key '%s': %s", key, str(e)
             )
 
-        encrypted_val = val if encrypt else None
-        plain_val = val if not encrypt else None
         with get_session_with_current_tenant() as db_session:
             obj = db_session.query(KVStore).filter_by(key=key).first()
             if obj:
-                obj.value = plain_val
-                obj.encrypted_value = encrypted_val  # ty: ignore[invalid-assignment]
+                obj.value = val
+                # Clear any ciphertext written by the pre-flag-removal code path.
+                obj.encrypted_value = None
             else:
-                obj = KVStore(key=key, value=plain_val, encrypted_value=encrypted_val)
+                obj = KVStore(key=key, value=val)
                 db_session.query(KVStore).filter_by(key=key).delete()  # just in case
                 db_session.add(obj)
             db_session.commit()
