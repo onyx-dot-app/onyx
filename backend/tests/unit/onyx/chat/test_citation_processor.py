@@ -862,6 +862,25 @@ def test_unlabeled_fence_does_not_corrupt_closing_fence(
     assert output.count("```plaintext") == 1
 
 
+def test_fence_labeled_by_parity_when_segment_closes_then_opens(
+    mock_search_docs: CitationMapping,  # noqa: ARG001
+) -> None:
+    """When one segment closes a prior block and opens a new unlabeled block,
+    the closing fence must stay bare and only the opening fence gets labeled.
+    The fence role is decided by parity before the segment, not by position."""
+    processor = DynamicCitationProcessor()
+
+    # First token opens a labeled block and leaves it unclosed. The second token
+    # closes it and then opens an unlabeled block, all within one segment.
+    tokens: list[str | None] = ["```python\n", "```\ncode\n```\n"]
+    output, _ = process_tokens(processor, tokens)
+
+    # The closing fence of the python block must remain bare.
+    assert "```plaintext\ncode" not in output
+    # The newly opened unlabeled block must be the one that gets labeled.
+    assert "code\n```plaintext" in output
+
+
 def test_multiple_code_blocks(mock_search_docs: CitationMapping) -> None:
     """Test handling of multiple code blocks."""
     processor = DynamicCitationProcessor()

@@ -307,23 +307,29 @@ class DynamicCitationProcessor:
         self.curr_segment += token
         self.llm_out += token
 
-        # Handle code blocks without language tags
-        # If we see ``` followed by \n, add "plaintext" language specifier
+        # Add a `plaintext` language tag to unlabeled opening code fences.
+        # Each fence's role (opening vs closing) is derived from the code-block
+        # parity established *before* this segment, so closing fences and fences
+        # that already carry a language are left untouched. A naive first-fence
+        # or replace-all approach would corrupt a closing ``` or a following
+        # ```lang that shares the same segment.
         if "`" in self.curr_segment:
             if self.curr_segment.endswith("`"):
+                # Trailing fence may be incomplete; wait for the next token.
                 pass
             elif "```" in self.curr_segment:
+                prefix = self.llm_out[: len(self.llm_out) - len(self.curr_segment)]
+                inside_code_block = prefix.count("```") % 2 != 0
                 parts = self.curr_segment.split("```")
-                if len(parts) > 1 and len(parts[1]) > 0:
-                    piece_that_comes_after = parts[1][0]
-                    if piece_that_comes_after == "\n" and in_code_block(self.llm_out):
-                        # Only label the first (unlabeled) opening fence. A
-                        # blanket replace would also rewrite any other fence in
-                        # the same segment, corrupting a following ```lang fence
-                        # or turning a closing ``` into a spurious new block.
-                        self.curr_segment = (
-                            parts[0] + "```plaintext" + "```".join(parts[1:])
-                        )
+                rebuilt = parts[0]
+                for following in parts[1:]:
+                    opens_block = not inside_code_block
+                    if opens_block and following.startswith("\n"):
+                        rebuilt += "```plaintext" + following
+                    else:
+                        rebuilt += "```" + following
+                    inside_code_block = not inside_code_block
+                self.curr_segment = rebuilt
 
         # Look for citations in current segment
         citation_matches = list(self.citation_pattern.finditer(self.curr_segment))
