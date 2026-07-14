@@ -8,6 +8,7 @@ import {
   Artifact,
   ArtifactType,
   BuildMessage,
+  FileSystemEntry,
   SessionHistoryItem,
   SessionOrigin,
   SessionStatus,
@@ -566,7 +567,7 @@ export interface FilesTabState {
   expandedPaths: string[];
   scrollTop: number;
   /** Cached directory listings by path - avoids refetch on tab switch */
-  directoryCache: Record<string, unknown[]>;
+  directoryCache: Record<string, FileSystemEntry[]>;
 }
 
 /** Tab history entry - can be a pinned tab or a transient panel tab */
@@ -783,6 +784,10 @@ interface BuildSessionStore {
   updateFilesTabState: (
     sessionId: string,
     updates: Partial<FilesTabState>
+  ) => void;
+  mergeFilesTabDirectoryCache: (
+    sessionId: string,
+    listings: Record<string, FileSystemEntry[]>
   ) => void;
 
   // Subagent Actions
@@ -2126,6 +2131,31 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         filesTabState: { ...session.filesTabState, ...updates },
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  mergeFilesTabDirectoryCache: (
+    sessionId: string,
+    listings: Record<string, FileSystemEntry[]>
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        filesTabState: {
+          ...session.filesTabState,
+          directoryCache: {
+            ...session.filesTabState.directoryCache,
+            ...listings,
+          },
+        },
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);

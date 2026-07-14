@@ -45,6 +45,9 @@ export default function FilesTab({
   const updateFilesTabState = useBuildSessionStore(
     (state) => state.updateFilesTabState
   );
+  const mergeFilesTabDirectoryCache = useBuildSessionStore(
+    (state) => state.mergeFilesTabDirectoryCache
+  );
 
   // Local state for pre-provisioned mode (no persistence needed)
   const [localExpandedPaths, setLocalExpandedPaths] = useState<Set<string>>(
@@ -72,15 +75,13 @@ export default function FilesTab({
     () =>
       isPreProvisioned
         ? localDirectoryCache
-        : (new Map(Object.entries(filesTabState.directoryCache)) as Map<
-            string,
-            FileSystemEntry[]
-          >),
+        : new Map(Object.entries(filesTabState.directoryCache)),
     [isPreProvisioned, localDirectoryCache, filesTabState.directoryCache]
   );
 
   // Scroll container ref for position tracking
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const refreshGenerationRef = useRef(0);
 
   // Fetch root directory
   const {
@@ -99,33 +100,33 @@ export default function FilesTab({
   // Refresh files list when outputs/ directory changes
   const filesNeedsRefresh = useFilesNeedsRefresh();
 
-  // Snapshot of currently expanded paths — avoids putting both local and store
-  // versions in the dependency array (only one is used per mode).
-  const currentExpandedPaths = isPreProvisioned
-    ? Array.from(localExpandedPaths)
-    : filesTabState.expandedPaths;
+  const expandedPathsRef = useRef<string[]>([]);
+  useEffect(() => {
+    expandedPathsRef.current = isPreProvisioned
+      ? Array.from(localExpandedPaths)
+      : filesTabState.expandedPaths;
+  }, [isPreProvisioned, localExpandedPaths, filesTabState.expandedPaths]);
 
   useEffect(() => {
     if (filesNeedsRefresh > 0 && sessionId && mutate) {
-      // Clear directory cache to ensure all directories are refreshed
-      if (isPreProvisioned) {
-        setLocalDirectoryCache(new Map());
-      } else {
-        updateFilesTabState(sessionId, { directoryCache: {} });
-      }
-      // Refresh root directory listing
-      mutate();
+      const refreshGeneration = ++refreshGenerationRef.current;
+      const expandedPathsToRefresh = expandedPathsRef.current;
 
-      // Re-fetch all currently expanded subdirectories so they don't get
-      // stuck on "Loading..." after the cache was cleared
-      if (currentExpandedPaths.length > 0) {
-        Promise.allSettled(
-          currentExpandedPaths.map((p) => fetchDirectoryListing(sessionId, p))
+      // Keep the current tree visible while updated listings are fetched.
+      // Clearing the cache here makes every expanded directory briefly render
+      // as "Loading..." whenever an agent writes a file.
+      void mutate();
+
+      if (expandedPathsToRefresh.length > 0) {
+        void Promise.allSettled(
+          expandedPathsToRefresh.map((p) => fetchDirectoryListing(sessionId, p))
         ).then((settled) => {
+          if (refreshGeneration !== refreshGenerationRef.current) return;
+
           // Collect only the successful fetches into a path → entries map
           const fetched = new Map<string, FileSystemEntry[]>();
           settled.forEach((r, i) => {
-            const p = currentExpandedPaths[i];
+            const p = expandedPathsToRefresh[i];
             if (p && r.status === "fulfilled" && r.value) {
               fetched.set(p, r.value.entries);
             }
@@ -138,22 +139,25 @@ export default function FilesTab({
               return next;
             });
           } else {
-            const obj: Record<string, FileSystemEntry[]> = {};
+            const listings: Record<string, FileSystemEntry[]> = {};
             fetched.forEach((entries, p) => {
-              obj[p] = entries;
+              listings[p] = entries;
             });
-            updateFilesTabState(sessionId, { directoryCache: obj });
+            mergeFilesTabDirectoryCache(sessionId, listings);
           }
         });
       }
+
+      return () => {
+        refreshGenerationRef.current += 1;
+      };
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     filesNeedsRefresh,
     sessionId,
     mutate,
     isPreProvisioned,
-    updateFilesTabState,
+    mergeFilesTabDirectoryCache,
   ]);
 
   // Update cache when root listing changes
@@ -166,14 +170,10 @@ export default function FilesTab({
           return newCache;
         });
       } else {
-        const newCache = {
-          ...filesTabState.directoryCache,
-          "": rootListing.entries,
-        };
-        updateFilesTabState(sessionId, { directoryCache: newCache });
+        mergeFilesTabDirectoryCache(sessionId, { "": rootListing.entries });
       }
     }
-  }, [rootListing, sessionId, isPreProvisioned]);
+  }, [rootListing, sessionId, isPreProvisioned, mergeFilesTabDirectoryCache]);
 
   const toggleFolder = useCallback(
     async (path: string) => {
