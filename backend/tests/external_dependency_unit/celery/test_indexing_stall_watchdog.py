@@ -211,6 +211,36 @@ def test_stale_no_progress_no_workers_is_invalidated(db_session: Session) -> Non
     assert "workers crashed holding batches" in attempt.error_msg
 
 
+@pytest.mark.usefixtures("tenant_context")
+def test_liveness_ping_is_computed_once_per_pass(db_session: Session) -> None:
+    """Worker liveness is cached per pass — the (up to 4s) inspect ping must not
+    fire once per stale in-flight attempt."""
+    attempts = [
+        _make_attempt(
+            db_session,
+            total_batches=10,
+            completed_batches=6,
+            heartbeat_counter=5,
+            last_heartbeat_value=5,
+            last_batches_completed_count=6,
+            heartbeat_age_seconds=HEARTBEAT_TIMEOUT_SECONDS + 120,
+        )
+        for _ in range(3)
+    ]
+    for attempt in attempts:
+        _set_in_flight(attempt.id, 2)
+
+    ping = MagicMock(return_value=False)
+    with patch(f"{_WATCHDOG_PATH}._docprocessing_workers_alive", ping):
+        validate_active_indexing_attempts(MagicMock())
+
+    # Multiple stale in-flight attempts, but the ping is evaluated at most once.
+    assert ping.call_count == 1
+    for attempt in attempts:
+        db_session.refresh(attempt)
+        assert attempt.status == IndexingStatus.FAILED
+
+
 def test_heartbeat_failure_is_surfaced_loudly() -> None:
     """Killing the heartbeat's DB session factory must escalate to ERROR, not
     stay silently swallowed forever."""

@@ -239,6 +239,13 @@ def validate_active_indexing_attempts(
             .all()
         )
 
+        # Worker liveness does not change within a single watchdog pass, and the
+        # inspect ping blocks for up to DOCPROCESSING_LIVENESS_PING_TIMEOUT when
+        # workers are down. Compute it at most once per pass (lazily, only if an
+        # attempt actually needs it) so N stale attempts don't cost N pings while
+        # holding this DB session open.
+        workers_alive_this_pass: bool | None = None
+
         for attempt in active_attempts:
             lock_beat.reacquire()
 
@@ -356,8 +363,10 @@ def validate_active_indexing_attempts(
                     # dependency (e.g. a pegged embedder) blocks live workers the
                     # same way, and killing here discards potentially days of
                     # indexing progress. Corroborate with worker liveness before
-                    # the crash verdict.
-                    if _docprocessing_workers_alive():
+                    # the crash verdict (cached once per pass).
+                    if workers_alive_this_pass is None:
+                        workers_alive_this_pass = _docprocessing_workers_alive()
+                    if workers_alive_this_pass:
                         task_logger.error(
                             f"Attempt {fresh_attempt.id} heartbeat stale for "
                             f"{heartbeat_timeout_seconds}s (in_flight={in_flight} "
