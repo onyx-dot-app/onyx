@@ -75,7 +75,8 @@ export default function VerifyEmailPage() {
           messageType="success"
           title="Verification successful"
           description={markdown(
-            `Your email has been successfully verified. Redirecting to ${appName} in ${secondsLeft}s or [go there now](/app).`
+            `Your email has been successfully verified.`,
+            `Redirecting to ${appName} in ${secondsLeft}s or [go there now](/app).`
           )}
         />
       ) : (
