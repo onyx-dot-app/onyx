@@ -527,8 +527,8 @@ def fetch_first_accessible_llm_provider_by_type(
 ) -> LLMProviderModel | None:
     """Fetch the lowest-ID provider usable without a persona context.
 
-    Load only the fields and relationships used by the existing access policy;
-    model configurations and provider display metadata stay unloaded.
+    Load only the fields and relationships used by the existing access policy,
+    then load the API key for the selected provider.
     """
     providers = db_session.scalars(
         select(LLMProviderModel)
@@ -536,7 +536,6 @@ def fetch_first_accessible_llm_provider_by_type(
         .options(
             load_only(
                 LLMProviderModel.id,
-                LLMProviderModel.api_key,
                 LLMProviderModel.is_public,
             ),
             selectinload(LLMProviderModel.groups).load_only(UserGroup.id),
@@ -546,7 +545,7 @@ def fetch_first_accessible_llm_provider_by_type(
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
     is_admin = user.role == UserRole.ADMIN
-    return next(
+    provider = next(
         (
             provider
             for provider in providers
@@ -559,6 +558,9 @@ def fetch_first_accessible_llm_provider_by_type(
         ),
         None,
     )
+    if provider is not None:
+        db_session.refresh(provider, attribute_names=["api_key"])
+    return provider
 
 
 def fetch_existing_llm_provider(

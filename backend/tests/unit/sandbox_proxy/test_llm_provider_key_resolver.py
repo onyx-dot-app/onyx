@@ -167,7 +167,7 @@ def test_audits_credential_decryption(
         credential_type="llm_provider",
         provider="openai",
         row_id=42,
-        user_id=None,
+        user_id=str(ctx.sandbox.user_id),
     )
 
 

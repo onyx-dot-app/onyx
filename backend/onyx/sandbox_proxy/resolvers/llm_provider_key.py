@@ -69,7 +69,7 @@ class LLMProviderKeyResolver(CredentialResolver):
             credential_type="llm_provider",
             provider=provider_type,
             row_id=provider.id,
-            user_id=None,
+            user_id=str(user_id),
         )
         api_key = provider.api_key.get_value(apply_mask=False)
 
