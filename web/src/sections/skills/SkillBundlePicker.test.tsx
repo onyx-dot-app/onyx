@@ -67,6 +67,10 @@ describe("SkillBundlePicker", () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("owns preparation state without waiting for consumer work", async () => {
     const zip = new File(["zip"], "example.zip", { type: "application/zip" });
     const prepared = {
@@ -105,6 +109,7 @@ describe("SkillBundlePicker", () => {
   });
 
   it("reports preparation failures without submitting an upload", async () => {
+    const consoleError = jest.spyOn(console, "error").mockImplementation();
     const invalidFolderFile = new File(["body"], "notes.md", {
       type: "text/markdown",
     });
@@ -126,6 +131,10 @@ describe("SkillBundlePicker", () => {
       );
     });
     expect(onChange).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to prepare skill bundle",
+      expect.any(Error)
+    );
   });
 
   it("passes recursively dropped directory files with their full paths", async () => {

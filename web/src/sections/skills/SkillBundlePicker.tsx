@@ -40,6 +40,7 @@ export default function SkillBundlePicker({
         const bundle = await prepareSkillBundleUpload(files);
         onChange(bundle);
       } catch (error) {
+        console.error("Failed to prepare skill bundle", error);
         onError(
           error instanceof Error ? error.message : "Could not read the upload."
         );

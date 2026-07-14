@@ -75,7 +75,10 @@ export default function UploadSkillModal({
               setBundle(nextBundle);
               setErrorMessage(null);
             }}
-            onError={setErrorMessage}
+            onError={(message) => {
+              setBundle(null);
+              setErrorMessage(message);
+            }}
           />
           {errorMessage && (
             <div className="mt-2">

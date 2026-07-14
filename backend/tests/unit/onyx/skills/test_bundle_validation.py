@@ -125,6 +125,22 @@ def test_normalizer_rejects_duplicate_output_paths() -> None:
         validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
 
 
+@pytest.mark.parametrize(
+    "supporting_entries",
+    [
+        [("hello/scripts", b"file"), ("hello/scripts/run.sh", b"script")],
+        [("hello/scripts/run.sh", b"script"), ("hello/scripts", b"file")],
+    ],
+)
+def test_normalizer_rejects_file_descendant_path_collisions(
+    supporting_entries: list[tuple[str, bytes]],
+) -> None:
+    zip_bytes = _build_zip([("hello/SKILL.md", VALID_SKILL_MD), *supporting_entries])
+
+    with pytest.raises(OnyxError, match="conflicting path"):
+        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+
+
 def test_normalizer_ignores_operating_system_metadata() -> None:
     zip_bytes = _build_zip(
         [
@@ -162,6 +178,32 @@ def test_validator_rejects_oversized_single_file() -> None:
         validate_and_normalize_custom_bundle(
             zip_bytes, slug="hello", per_file_max_bytes=32
         )
+
+
+def test_normalizer_preserves_size_error_when_entry_close_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zip_bytes = _build_zip([("hello/SKILL.md", b"x" * 64)])
+    original_close = zipfile._ZipWriteFile.close  # ty: ignore[unresolved-attribute]
+
+    def failing_close(
+        writer: zipfile._ZipWriteFile,  # ty: ignore[unresolved-attribute]
+    ) -> None:
+        original_close(writer)
+        raise OSError("close failed")
+
+    monkeypatch.setattr(
+        zipfile._ZipWriteFile,  # ty: ignore[unresolved-attribute]
+        "close",
+        failing_close,
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        validate_and_normalize_custom_bundle(
+            zip_bytes, slug="hello", per_file_max_bytes=32
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
 
 
 def test_validator_rejects_oversized_total() -> None:

@@ -79,7 +79,10 @@ export default function CreatePersonalSkillModal({
               setBundle(nextBundle);
               setErrorMessage(null);
             }}
-            onError={setErrorMessage}
+            onError={(message) => {
+              setBundle(null);
+              setErrorMessage(message);
+            }}
           />
           {errorMessage && (
             <div className="mt-2">

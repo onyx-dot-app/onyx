@@ -7,6 +7,7 @@ import io
 import os
 import re
 import stat
+import sys
 import zipfile
 from copy import copy
 from typing import BinaryIO
@@ -414,13 +415,15 @@ def _copy_validated_bundle_file(
         ) from exc
     finally:
         if target is not None:
+            active_exception = sys.exception()
             try:
                 target.close()
             except Exception as exc:
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    f"cannot write normalized bundle entry '{output_path}': {exc}",
-                ) from exc
+                if active_exception is None:
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"cannot write normalized bundle entry '{output_path}': {exc}",
+                    ) from exc
     return size
 
 
@@ -466,6 +469,7 @@ def validate_and_normalize_custom_bundle(
         )
         total = 0
         output_paths: set[str] = set()
+        output_directory_paths: set[str] = set()
         saw_skill_md = False
 
         try:
@@ -482,7 +486,19 @@ def validate_and_normalize_custom_bundle(
                         OnyxErrorCode.INVALID_INPUT,
                         f"bundle contains duplicate path '{output_path}'",
                     )
+                path_parts = output_path.split("/")
+                parent_paths = {
+                    "/".join(path_parts[:index]) for index in range(1, len(path_parts))
+                }
+                if output_path in output_directory_paths or output_paths.intersection(
+                    parent_paths
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"bundle contains conflicting path '{output_path}'",
+                    )
                 output_paths.add(output_path)
+                output_directory_paths.update(parent_paths)
 
                 if output_path.endswith(TEMPLATE_SUFFIX):
                     raise OnyxError(
@@ -505,7 +521,15 @@ def validate_and_normalize_custom_bundle(
                     saw_skill_md = True
         finally:
             if target_zip is not None:
-                target_zip.close()
+                active_exception = sys.exception()
+                try:
+                    target_zip.close()
+                except Exception as exc:
+                    if active_exception is None:
+                        raise OnyxError(
+                            OnyxErrorCode.INVALID_INPUT,
+                            f"cannot finish normalized bundle: {exc}",
+                        ) from exc
 
     if not saw_skill_md:
         raise OnyxError(
