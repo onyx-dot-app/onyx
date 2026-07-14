@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import SearchSettings
@@ -90,6 +91,21 @@ class BaseFilters(BaseModel):
     created_at_range: TimeRange | None = None
     updated_at_range: TimeRange | None = None
     tags: list[Tag] | None = None
+
+    # Deprecated wire-compat alias for updated_at_range.start. Folded into
+    # updated_at_range on validation and cleared; internal code must never read
+    # it. Excluded from serialization so it doesn't propagate further.
+    time_cutoff: datetime | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def _fold_legacy_time_cutoff(self) -> "BaseFilters":
+        if self.time_cutoff is None:
+            return self
+        # An explicitly provided updated_at_range wins over the legacy alias.
+        if self.updated_at_range is None:
+            self.updated_at_range = TimeRange(start=self.time_cutoff)
+        self.time_cutoff = None
+        return self
 
 
 class UserFileFilters(BaseModel):

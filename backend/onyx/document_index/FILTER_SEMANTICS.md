@@ -40,6 +40,10 @@ created-vs-updated intent. The persona `search_start_date` floor is folded into
 enforces only `updated_at_range` (it has no `created_at` field, so
 `created_at_range` widens rather than narrows there).
 
+For wire compatibility, `BaseFilters` still accepts the deprecated
+`time_cutoff` request field and folds it into `updated_at_range.start` at
+validation; internal code never sees it.
+
 ### Why intent needs both fields
 
 We store only a document's creation time and its **latest** update time — no edit
