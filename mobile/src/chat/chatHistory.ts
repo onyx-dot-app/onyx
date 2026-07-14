@@ -25,7 +25,8 @@ export function processRawChatHistory(
       // loaded messages reuse message_id as nodeId (only uniqueness matters)
       nodeId: messageInfo.message_id,
       messageId: messageInfo.message_id,
-      message: messageInfo.message,
+      // errored turns carry the error text in `error`; render that in the error box (web parity)
+      message: messageInfo.error ?? messageInfo.message,
       type: messageInfo.error
         ? "error"
         : (messageInfo.message_type as MessageType),

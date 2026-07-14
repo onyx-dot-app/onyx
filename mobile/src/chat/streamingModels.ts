@@ -84,3 +84,14 @@ export interface MessageResponseIDInfo {
   user_message_id: number | null;
   reserved_assistant_message_id: number;
 }
+
+// Root-level error object (backend `StreamingError`), NOT wrapped in Packet.obj —
+// so it is discriminated by the top-level `error` string, not `obj.type`. Dropping
+// it silently is what leaves the assistant turn stuck on the "…" placeholder.
+export interface StreamingError {
+  error: string;
+  stack_trace?: string | null;
+  error_code?: string | null;
+  is_retryable?: boolean;
+  details?: Record<string, unknown> | null;
+}

@@ -14,6 +14,7 @@ import {
 import {
   isMessageIdInfo,
   isPacket,
+  isStreamError,
   SendMessageBody,
   streamChatMessage,
 } from "@/api/chat/stream";
@@ -110,6 +111,22 @@ async function runChatStream(
           messageId: event.reserved_assistant_message_id,
         });
         continue;
+      }
+      if (isStreamError(event)) {
+        // Backend errored mid-stream (root-level StreamingError). Convert the assistant turn to
+        // an error node — as web does — instead of leaving it stuck on the "…" placeholder.
+        hadError = true;
+        pending = [];
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        store.getState().patchNode(sessionId, agentNodeId, {
+          type: "error",
+          message: event.error,
+          errorCode: event.error_code ?? null,
+        });
+        break;
       }
       if (isPacket(event)) {
         if (!sawStreaming) {

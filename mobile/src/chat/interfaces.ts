@@ -35,6 +35,8 @@ export interface Message {
   message: string;
   files: FileDescriptor[];
   packets: Packet[];
+  // Set on an errored turn (type === "error"): backend StreamingError.error_code, for the box title.
+  errorCode?: string | null;
 }
 
 // One row of a loaded session snapshot (GET get-chat-session); minimal subset.
