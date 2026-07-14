@@ -74,7 +74,9 @@ export default function VerifyEmailPage() {
         <AuthLayouts.Message
           messageType="success"
           title="Verification successful"
-          description={`Your email has been successfully verified. Redirecting to ${appName} in ${secondsLeft}s or [go there now](/app).`}
+          description={markdown(
+            `Your email has been successfully verified. Redirecting to ${appName} in ${secondsLeft}s or [go there now](/app).`
+          )}
         />
       ) : (
         <AuthLayouts.Message
