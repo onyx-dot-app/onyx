@@ -1,5 +1,11 @@
 import React from "react";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { SWRConfig } from "swr";
 
 import FilesTab from "@/app/craft/components/output-panel/FilesTab";
@@ -157,5 +163,54 @@ describe("FilesTab", () => {
       expect(screen.getByText("newest.txt")).toBeInTheDocument();
       expect(screen.queryByText("stale.txt")).not.toBeInTheDocument();
     });
+  });
+
+  it("invalidates cached collapsed directories when refreshing", async () => {
+    const sessionId = "session-1";
+    const oldFile = file("old.txt", "outputs/old.txt");
+    const newFile = file("new.txt", "outputs/new.txt");
+
+    mockedFetchDirectoryListing.mockImplementation((_sessionId, path) => {
+      if (path === "") {
+        return Promise.resolve({ path: "", entries: [outputsDirectory] });
+      }
+      if (path === "outputs") {
+        return Promise.resolve({ path: "outputs", entries: [newFile] });
+      }
+      return Promise.resolve({ path: path ?? "", entries: [] });
+    });
+
+    useBuildSessionStore.getState().createSession(sessionId, {
+      filesTabState: {
+        expandedPaths: [],
+        scrollTop: 0,
+        directoryCache: { outputs: [oldFile] },
+      },
+    });
+    useBuildSessionStore.getState().setCurrentSession(sessionId);
+
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <FilesTab sessionId={sessionId} />
+      </SWRConfig>
+    );
+
+    expect(await screen.findByText("outputs")).toBeInTheDocument();
+
+    act(() => {
+      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
+    });
+
+    await waitFor(() =>
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)?.filesTabState
+          .directoryCache.outputs
+      ).toBeUndefined()
+    );
+
+    fireEvent.click(screen.getByText("outputs"));
+
+    expect(await screen.findByText("new.txt")).toBeInTheDocument();
+    expect(screen.queryByText("old.txt")).not.toBeInTheDocument();
   });
 });

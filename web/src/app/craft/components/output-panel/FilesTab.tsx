@@ -48,6 +48,9 @@ export default function FilesTab({
   const mergeFilesTabDirectoryCache = useBuildSessionStore(
     (state) => state.mergeFilesTabDirectoryCache
   );
+  const retainFilesTabDirectoryCache = useBuildSessionStore(
+    (state) => state.retainFilesTabDirectoryCache
+  );
 
   // Local state for pre-provisioned mode (no persistence needed)
   const [localExpandedPaths, setLocalExpandedPaths] = useState<Set<string>>(
@@ -111,10 +114,21 @@ export default function FilesTab({
     if (filesNeedsRefresh > 0 && sessionId && mutate) {
       const refreshGeneration = ++refreshGenerationRef.current;
       const expandedPathsToRefresh = expandedPathsRef.current;
+      const retainedPaths = new Set(["", ...expandedPathsToRefresh]);
 
       // Keep the current tree visible while updated listings are fetched.
       // Clearing the cache here makes every expanded directory briefly render
       // as "Loading..." whenever an agent writes a file.
+      if (isPreProvisioned) {
+        setLocalDirectoryCache(
+          (prev) =>
+            new Map(
+              Array.from(prev).filter(([path]) => retainedPaths.has(path))
+            )
+        );
+      } else {
+        retainFilesTabDirectoryCache(sessionId, retainedPaths);
+      }
       void mutate();
 
       if (expandedPathsToRefresh.length > 0) {
@@ -158,6 +172,7 @@ export default function FilesTab({
     mutate,
     isPreProvisioned,
     mergeFilesTabDirectoryCache,
+    retainFilesTabDirectoryCache,
   ]);
 
   // Update cache when root listing changes

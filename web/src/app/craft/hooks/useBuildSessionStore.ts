@@ -789,6 +789,10 @@ interface BuildSessionStore {
     sessionId: string,
     listings: Record<string, FileSystemEntry[]>
   ) => void;
+  retainFilesTabDirectoryCache: (
+    sessionId: string,
+    retainedPaths: ReadonlySet<string>
+  ) => void;
 
   // Subagent Actions
   /** Swap the main column to show a subagent's transcript in place of the chat. */
@@ -2155,6 +2159,33 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             ...session.filesTabState.directoryCache,
             ...listings,
           },
+        },
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  retainFilesTabDirectoryCache: (
+    sessionId: string,
+    retainedPaths: ReadonlySet<string>
+  ) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const directoryCache = Object.fromEntries(
+        Object.entries(session.filesTabState.directoryCache).filter(([path]) =>
+          retainedPaths.has(path)
+        )
+      );
+      const updatedSession: BuildSessionData = {
+        ...session,
+        filesTabState: {
+          ...session.filesTabState,
+          directoryCache,
         },
         lastAccessed: new Date(),
       };
