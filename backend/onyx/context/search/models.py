@@ -87,7 +87,6 @@ class TimeRange(BaseModel):
 class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None
     document_set: list[str] | None = None
-    # See document_index/FILTER_SEMANTICS.md ("Time filtering").
     created_at_range: TimeRange | None = None
     updated_at_range: TimeRange | None = None
     tags: list[Tag] | None = None
