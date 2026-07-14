@@ -143,8 +143,7 @@ const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
 function Submit({ label, isSubmitting, isValid, dirty, onClick }: SubmitProps) {
   return (
     <Button
-      type={onClick ? "button" : "submit"}
-      prominence={label === "logout" ? "secondary" : "primary"}
+      type="submit"
       width="full"
       onClick={onClick}
       disabled={
