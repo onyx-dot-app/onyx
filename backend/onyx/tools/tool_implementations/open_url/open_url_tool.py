@@ -1,7 +1,6 @@
 import json
 from collections import defaultdict
 from typing import Any
-from typing import Callable
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -461,9 +460,10 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
     @override
     @classmethod
     def is_available(cls, db_session: Session) -> bool:  # noqa: ARG003
-        """OpenURLTool is always available.
-        In standard deployments, it uses the vector DB for indexed retrieval and falls back to link-based lookup.
-        In lite deployments, it uses the link-based lookup only.
+        """Always available via the web content provider / built-in crawler.
+
+        Full deployments also try indexed retrieval (+ link-based fallback).
+        Lite (DISABLE_VECTOR_DB) is crawl-only.
         """
         return True
 
@@ -544,52 +544,8 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         )
 
         with get_session_with_current_tenant() as db_session:
-            # Resolve URLs to document IDs for indexed retrieval
-            # Handles both raw URLs and already-normalized document IDs
-            functions_with_args: list[tuple[Callable, tuple[Any, ...]]] = [
-                (
-                    lambda: self._fetch_web_content(
-                        urls, override_kwargs.url_snippet_map
-                    ),
-                    tuple(),
-                )
-            ]
             url_to_doc_id: dict[str, str] = {}
-            if DISABLE_VECTOR_DB:
-                functions_with_args.append((lambda: None, tuple()))
-                unresolved_urls: list[str] = []
-                filters = None
-            else:
-                url_requests, unresolved_urls = _resolve_urls_to_document_ids(
-                    urls, db_session
-                )
-
-                all_requests = _dedupe_document_requests(url_requests)
-
-                # Create mapping from URL to document_id for result merging
-                for request in url_requests:
-                    if request.original_url:
-                        url_to_doc_id[request.original_url] = request.document_id
-
-                # Build filters before parallel execution (session-safe)
-                filters = self._build_index_filters(db_session)
-
-                # Create wrapper function for parallel execution
-                # Filters are already built, so we just need to pass them
-                def _retrieve_indexed_with_filters(
-                    requests: list[IndexedDocumentRequest],
-                ) -> IndexedRetrievalResult:
-                    """Wrapper for parallel execution with pre-built filters."""
-                    return self._retrieve_indexed_documents_with_filters(
-                        requests, filters
-                    )
-
-                functions_with_args.append(
-                    (lambda: _retrieve_indexed_with_filters(all_requests), tuple())
-                )
-
-            # Track if timeout occurred for error reporting
-            timeout_occurred = [False]  # Using list for mutability in closure
+            timeout_occurred = [False]
 
             def _timeout_handler(
                 index: int,  # noqa: ARG001
@@ -599,24 +555,73 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 timeout_occurred[0] = True
                 return None
 
-            # Run indexed retrieval and crawling in parallel for all URLs
-            # This allows us to compare results and pick the best representation
-            # Note: allow_failures=True ensures we get partial results even if one
-            # task times out or fails - the other task's results will still be used
-            crawled_result, indexed_result = run_functions_tuples_in_parallel(
-                functions_with_args,
-                allow_failures=True,
-                timeout=OPEN_URL_TIMEOUT_SECONDS,
-                timeout_callback=_timeout_handler,
-            )
+            if DISABLE_VECTOR_DB:
+                # Crawl-only: no indexed retrieval / link-based fallback without a vector DB.
+                crawled_result = run_functions_tuples_in_parallel(
+                    [
+                        (
+                            self._fetch_web_content,
+                            (urls, override_kwargs.url_snippet_map),
+                        )
+                    ],
+                    allow_failures=True,
+                    timeout=OPEN_URL_TIMEOUT_SECONDS,
+                    timeout_callback=_timeout_handler,
+                )[0]
+                indexed_result = IndexedRetrievalResult(
+                    sections=[], missing_document_ids=[]
+                )
+                crawled_sections, failed_web_fetches = crawled_result or ([], [])
+            else:
+                url_requests, unresolved_urls = _resolve_urls_to_document_ids(
+                    urls, db_session
+                )
 
-            indexed_result = indexed_result or IndexedRetrievalResult(
-                sections=[], missing_document_ids=[]
-            )
-            crawled_sections, failed_web_fetches = crawled_result or ([], [])
+                all_requests = _dedupe_document_requests(url_requests)
 
-            # If timeout occurred and we have no successful results from either path,
-            # return a timeout-specific error message
+                for request in url_requests:
+                    if request.original_url:
+                        url_to_doc_id[request.original_url] = request.document_id
+
+                # Build filters before parallel execution (session-safe)
+                filters = self._build_index_filters(db_session)
+
+                def _retrieve_indexed_with_filters(
+                    requests: list[IndexedDocumentRequest],
+                ) -> IndexedRetrievalResult:
+                    return self._retrieve_indexed_documents_with_filters(
+                        requests, filters
+                    )
+
+                # Indexed + crawl in parallel; allow_failures keeps partial results.
+                indexed_result, crawled_result = run_functions_tuples_in_parallel(
+                    [
+                        (_retrieve_indexed_with_filters, (all_requests,)),
+                        (
+                            self._fetch_web_content,
+                            (urls, override_kwargs.url_snippet_map),
+                        ),
+                    ],
+                    allow_failures=True,
+                    timeout=OPEN_URL_TIMEOUT_SECONDS,
+                    timeout_callback=_timeout_handler,
+                )
+
+                indexed_result = indexed_result or IndexedRetrievalResult(
+                    sections=[], missing_document_ids=[]
+                )
+                crawled_sections, failed_web_fetches = crawled_result or ([], [])
+
+                # Last-resort: link-based lookup when doc-ID resolve + crawl both fail.
+                failed_web_fetches = self._fallback_link_lookup(
+                    unresolved_urls=unresolved_urls,
+                    failed_web_fetches=failed_web_fetches,
+                    db_session=db_session,
+                    indexed_result=indexed_result,
+                    url_to_doc_id=url_to_doc_id,
+                    filters=filters,
+                )
+
             if (
                 timeout_occurred[0]
                 and not indexed_result.sections
@@ -627,20 +632,7 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                     llm_facing_response="The call to open_url timed out",
                 )
 
-            if not DISABLE_VECTOR_DB:
-                assert filters is not None  # type checking only
-                # Last-resort: attempt link-based lookup for URLs that failed both
-                # document-ID resolution and crawling.
-                failed_web_fetches = self._fallback_link_lookup(
-                    unresolved_urls=unresolved_urls,
-                    failed_web_fetches=failed_web_fetches,
-                    db_session=db_session,
-                    indexed_result=indexed_result,
-                    url_to_doc_id=url_to_doc_id,
-                    filters=filters,
-                )
-
-            # Merge results: prefer indexed when available, fallback to crawled
+            # Prefer indexed when available, else crawled
             inference_sections = self._merge_indexed_and_crawled_results(
                 indexed_result.sections,
                 crawled_sections,
