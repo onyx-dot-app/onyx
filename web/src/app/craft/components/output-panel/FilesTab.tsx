@@ -189,11 +189,24 @@ export default function FilesTab({
         refreshQueuedRef.current = false;
         await performFilesRefresh();
       } while (refreshQueuedRef.current && isMountedRef.current);
+      if (isMountedRef.current && !isPreProvisioned && sessionId) {
+        updateFilesTabState(sessionId, {
+          lastRefreshGeneration: handledRefreshGenerationRef.current,
+        });
+      }
     } finally {
       refreshInFlightRef.current = false;
-      if (isMountedRef.current) onRefreshingChange?.(false);
+      if (isMountedRef.current) {
+        onRefreshingChange?.(false);
+      }
     }
-  }, [performFilesRefresh, onRefreshingChange]);
+  }, [
+    performFilesRefresh,
+    isPreProvisioned,
+    sessionId,
+    updateFilesTabState,
+    onRefreshingChange,
+  ]);
 
   useEffect(() => {
     if (!sessionId || filesNeedsRefresh <= 0) return;
@@ -205,18 +218,11 @@ export default function FilesTab({
     if (filesNeedsRefresh <= handledRefreshGenerationRef.current) return;
 
     handledRefreshGenerationRef.current = filesNeedsRefresh;
-    if (!isPreProvisioned) {
-      updateFilesTabState(sessionId, {
-        lastRefreshGeneration: filesNeedsRefresh,
-      });
-    }
     void runRefreshQueue();
   }, [
     filesNeedsRefresh,
     sessionId,
-    isPreProvisioned,
     filesTabState.lastRefreshGeneration,
-    updateFilesTabState,
     runRefreshQueue,
   ]);
 

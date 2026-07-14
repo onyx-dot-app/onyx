@@ -126,6 +126,66 @@ describe("FilesTab", () => {
     ).toHaveLength(1);
   });
 
+  it("retries a refresh interrupted by unmounting", async () => {
+    const sessionId = "session-1";
+    const oldFile = file("old.txt", "outputs/old.txt");
+    const staleFile = file("stale.txt", "outputs/stale.txt");
+    const newFile = file("new.txt", "outputs/new.txt");
+    const outputResolvers: Array<(listing: DirectoryListing) => void> = [];
+
+    mockedFetchDirectoryListing.mockImplementation((_sessionId, path) => {
+      if (path === "") {
+        return Promise.resolve({ path: "", entries: [outputsDirectory] });
+      }
+      if (path === "outputs") {
+        return new Promise<DirectoryListing>((resolve) => {
+          outputResolvers.push(resolve);
+        });
+      }
+      return Promise.resolve({ path: path ?? "", entries: [] });
+    });
+
+    useBuildSessionStore.getState().createSession(sessionId, {
+      filesTabState: {
+        expandedPaths: ["outputs"],
+        scrollTop: 0,
+        directoryCache: { outputs: [oldFile] },
+      },
+    });
+    useBuildSessionStore.getState().setCurrentSession(sessionId);
+
+    const { unmount } = render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <FilesTab sessionId={sessionId} />
+      </SWRConfig>
+    );
+
+    expect(await screen.findByText("old.txt")).toBeInTheDocument();
+    act(() => {
+      useBuildSessionStore.getState().triggerFilesRefresh(sessionId);
+    });
+    await waitFor(() => expect(outputResolvers).toHaveLength(1));
+
+    unmount();
+    await act(async () => {
+      outputResolvers[0]?.({ path: "outputs", entries: [staleFile] });
+      await Promise.resolve();
+    });
+
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <FilesTab sessionId={sessionId} />
+      </SWRConfig>
+    );
+    await waitFor(() => expect(outputResolvers).toHaveLength(2));
+
+    act(() => {
+      outputResolvers[1]?.({ path: "outputs", entries: [newFile] });
+    });
+    expect(await screen.findByText("new.txt")).toBeInTheDocument();
+    expect(screen.queryByText("stale.txt")).not.toBeInTheDocument();
+  });
+
   it("coalesces overlapping refreshes into one trailing refresh", async () => {
     const sessionId = "session-1";
     const oldFile = file("old.txt", "outputs/old.txt");

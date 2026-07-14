@@ -135,6 +135,9 @@ describe("useBuildStreaming thinking packets", () => {
   });
 
   it("refreshes files only when an output write completes", async () => {
+    useBuildSessionStore.getState().updateFilesTabState(sessionId, {
+      expandedPaths: ["attachments", "attachments/reports"],
+    });
     jest
       .mocked(processSSEStream)
       .mockImplementationOnce(async (_response, onPacket) => {
@@ -160,6 +163,10 @@ describe("useBuildStreaming thinking packets", () => {
     const session = useBuildSessionStore.getState().sessions.get(sessionId);
     expect(session?.filesNeedsRefresh).toBe(1);
     expect(session?.webappNeedsRefresh).toBe(0);
+    expect(session?.filesTabState.expandedPaths).toEqual([
+      "attachments",
+      "attachments/reports",
+    ]);
   });
 
   it("refreshes both files and preview for a completed output web write", async () => {
@@ -219,6 +226,25 @@ describe("useBuildStreaming thinking packets", () => {
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)?.filesNeedsRefresh
     ).toBe(1);
+  });
+
+  it("does not reconcile files after a text-only turn", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({ type: "text_chunk", text: "Done." } as never);
+        onPacket({ type: "prompt_response" } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "explain the project");
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.filesNeedsRefresh
+    ).toBe(0);
   });
 
   it("seeds clickable subagent metadata from a task start packet", async () => {

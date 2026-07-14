@@ -266,6 +266,12 @@ export function useBuildStreaming() {
       const currentItems =
         useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems ??
         [];
+      let needsTurnCompletionFileRefresh = currentItems.some(
+        (item) =>
+          item.type === "tool_call" &&
+          item.toolCall.kind === "execute" &&
+          item.toolCall.status === "completed"
+      );
       const lastCurrentItem = currentItems[currentItems.length - 1];
       if (lastCurrentItem?.type === "text") {
         accumulatedText = lastCurrentItem.content;
@@ -501,6 +507,9 @@ export function useBuildStreaming() {
           }
 
           case "tool_call_progress": {
+            if (parsed.status === "completed" && parsed.kind === "execute") {
+              needsTurnCompletionFileRefresh = true;
+            }
             if (
               parsed.status === "completed" &&
               parsed.kind === "edit" &&
@@ -651,9 +660,11 @@ export function useBuildStreaming() {
           }
 
           case "prompt_response": {
-            // Shell commands and scripts can mutate the workspace without
-            // emitting structured file paths. Reconcile once when the turn ends.
-            triggerFilesRefresh(sessionId);
+            if (needsTurnCompletionFileRefresh) {
+              // Shell commands and scripts can mutate the workspace without
+              // emitting structured file paths. Reconcile once when the turn ends.
+              triggerFilesRefresh(sessionId);
+            }
             finalizeStreaming();
             const isInterrupting = useBuildSessionStore
               .getState()

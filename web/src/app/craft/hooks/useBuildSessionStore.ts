@@ -568,7 +568,7 @@ export interface FilesTabState {
   scrollTop: number;
   /** Cached directory listings by path - avoids refetch on tab switch */
   directoryCache: Record<string, FileSystemEntry[]>;
-  /** Last refresh generation accepted by the Files tab. */
+  /** Last refresh generation completed by the Files tab. */
   lastRefreshGeneration?: number;
 }
 
@@ -1884,17 +1884,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const session = get().sessions.get(sessionId);
     if (session) {
       // Increment refresh counter to trigger files list refresh
-      // Using a counter ensures each write/edit triggers a new refresh
-      // Also collapse the attachments directory to show fresh state
-      const collapsedExpandedPaths = session.filesTabState.expandedPaths.filter(
-        (path) => path !== "attachments" && !path.startsWith("attachments/")
-      );
+      // Using a counter ensures each filesystem change triggers a new refresh
       get().updateSessionData(sessionId, {
         filesNeedsRefresh: (session.filesNeedsRefresh || 0) + 1,
-        filesTabState: {
-          ...session.filesTabState,
-          expandedPaths: collapsedExpandedPaths,
-        },
       });
     }
   },
