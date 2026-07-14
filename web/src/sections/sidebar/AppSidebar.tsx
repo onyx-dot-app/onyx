@@ -43,7 +43,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import { renderAppLogo } from "@/lib/app/utils";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -663,7 +663,7 @@ export default function AppSidebar() {
       <SidebarLayouts.Root foldable>
         <SidebarLayouts.Header
           showLogoWhenFolded={showLogoWhenFolded}
-          renderAppLogo={renderAppLogo}
+          renderAppLogo={renderSidebarLogo}
         >
           {newSessionButton}
           {searchChatsButton}
