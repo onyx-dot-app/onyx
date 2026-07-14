@@ -632,7 +632,15 @@ class SessionManager:
                 args=(slot_renewal_stop, PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS),
             )
 
+            def ensure_prompt_slot_owned() -> None:
+                if slot.lost:
+                    raise OnyxError(
+                        OnyxErrorCode.CONFLICT,
+                        "Session cleanup lost exclusive access. Try again.",
+                    )
+
             if sandbox and sandbox.status.is_active():
+                ensure_prompt_slot_owned()
                 if session.opencode_session_id:
                     try:
                         deleted_from_opencode = (
@@ -658,6 +666,8 @@ class SessionManager:
                             e,
                         )
 
+                ensure_prompt_slot_owned()
+
                 # Clean up session workspace (but don't terminate sandbox)
                 try:
                     self._sandbox_manager.cleanup_session_workspace(
@@ -676,11 +686,14 @@ class SessionManager:
                         "Failed to cleanup session workspace %s: %s", session_id, e
                     )
 
+                ensure_prompt_slot_owned()
+
             # Delete snapshot files from FileStore before removing DB records
             snapshots = get_snapshots_for_session(self._db_session, session_id)
             if snapshots:
                 snapshot_manager = SnapshotManager(get_default_file_store())
                 for snapshot in snapshots:
+                    ensure_prompt_slot_owned()
                     try:
                         snapshot_manager.delete_snapshot(snapshot.storage_path)
                     except Exception as e:
@@ -691,6 +704,7 @@ class SessionManager:
                         )
 
             # Delete session (uses flush, caller commits)
+            ensure_prompt_slot_owned()
             return delete_build_session__no_commit(
                 session_id, user_id, self._db_session
             )
