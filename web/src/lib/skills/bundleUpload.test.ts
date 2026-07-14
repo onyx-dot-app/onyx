@@ -32,6 +32,18 @@ describe("skill bundle upload preparation", () => {
     });
   });
 
+  it("passes through a standalone SKILL.md", async () => {
+    const skillMd = fileAt("./SKILL.md", "instructions");
+
+    const prepared = await prepareSkillBundleUpload([skillMd]);
+
+    expect(prepared).toEqual({
+      file: skillMd,
+      displayName: "SKILL.md",
+      source: "skill-md",
+    });
+  });
+
   it("strips one selected folder from entry paths", () => {
     const skillMd = fileAt("/example/SKILL.md", "instructions");
     const helper = fileAt("/example/scripts/helper.py", "print('hello')");
@@ -82,7 +94,7 @@ describe("skill bundle upload preparation", () => {
         fileAt("/example/SKILL.md", "instructions"),
         fileAt("/other/helper.py", "print('hello')"),
       ])
-    ).toThrow("one skill folder at a time");
+    ).toThrow("one ZIP, SKILL.md, or skill folder at a time");
   });
 
   it("ignores operating system metadata", () => {

@@ -1,4 +1,5 @@
 import io
+import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import NamedTuple
@@ -7,6 +8,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import FileStore
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import parse_skill_md_metadata
+from onyx.skills.bundle import SKILL_MD_NAME
 from onyx.skills.bundle import slug_from_filename
 from onyx.skills.bundle import validate_and_normalize_custom_bundle
 from onyx.utils.logger import setup_logger
@@ -45,19 +47,35 @@ def ingest_skill_bundle(
 ) -> IngestedBundle:
     """Validate, parse, hash, and store a custom skill bundle.
 
-    Validates and normalizes the zip structure, parses ``(name, description)``
-    from SKILL.md frontmatter, hashes the stored bytes, and saves the blob.
+    Accepts either a ZIP bundle or a standalone ``SKILL.md``. Standalone files
+    use their frontmatter ``name`` as the slug and are stored as canonical ZIPs.
 
-    Pass ``slug`` to keep an existing row's slug when replacing a bundle on
-    update; when omitted the slug is derived from ``filename`` (create path).
+    Pass ``slug`` to keep an existing row's slug when replacing a bundle. On
+    creation, ZIPs derive it from their filename and standalone files use the
+    frontmatter name.
 
     Prefer ``ingested_skill_bundle`` when the stored blob should be cleaned up
     automatically if the caller's transaction fails.
     """
-    if slug is None:
-        slug = slug_from_filename(filename)
+    is_standalone_skill_md = filename is not None and filename.lower() == "skill.md"
+    metadata: tuple[str, str] | None = None
+    if is_standalone_skill_md:
+        metadata = parse_skill_md_metadata(bundle_bytes)
+        if slug is None:
+            slug = metadata[0]
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as bundle_zip:
+            bundle_zip.writestr(SKILL_MD_NAME, bundle_bytes)
+        bundle_bytes = output.getvalue()
+    else:
+        if slug is None:
+            slug = slug_from_filename(filename)
+
     bundle_bytes = validate_and_normalize_custom_bundle(bundle_bytes, slug=slug)
-    name, description = parse_skill_md_metadata(bundle_bytes)
+    if metadata is None:
+        with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as bundle_zip:
+            metadata = parse_skill_md_metadata(bundle_zip.read(SKILL_MD_NAME))
+    name, description = metadata
     sha = compute_bundle_sha256(bundle_bytes)
 
     bundle_file_id = save_skill_bundle_bytes(

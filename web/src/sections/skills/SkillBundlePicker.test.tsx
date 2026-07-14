@@ -102,10 +102,28 @@ describe("SkillBundlePicker", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: "Choose a ZIP file" })
+        screen.getByRole("button", {
+          name: "Drag and drop or click to upload",
+        })
       ).toBeEnabled();
       expect(onPreparingChange).toHaveBeenLastCalledWith(false);
     });
+  });
+
+  it("presents a single click or drag-and-drop upload action", () => {
+    render(
+      <SkillBundlePicker
+        value={null}
+        onChange={jest.fn()}
+        onError={jest.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Drag and drop or click to upload",
+      })
+    ).toBeInTheDocument();
   });
 
   it("reports preparation failures without submitting an upload", async () => {

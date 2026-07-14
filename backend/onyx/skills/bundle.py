@@ -78,28 +78,8 @@ def read_bundle_file(bundle_file: BinaryIO) -> bytes:
     return data
 
 
-def parse_skill_md_metadata(zip_bytes: bytes) -> tuple[str, str]:
-    """Extract ``(name, description)`` from the bundle's SKILL.md frontmatter.
-
-    The bundle is the source of truth for skill metadata.
-    ``validate_and_normalize_custom_bundle`` has already confirmed structural
-    shape; here we re-open the zip just for the SKILL.md payload because parsing
-    frontmatter requires the contents, not the archive layout.
-    """
-    try:
-        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
-    except zipfile.BadZipFile:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
-
-    with zf:
-        try:
-            raw = zf.read(SKILL_MD_NAME)
-        except KeyError:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "SKILL.md missing at bundle root",
-            )
-
+def parse_skill_md_metadata(raw: bytes) -> tuple[str, str]:
+    """Extract and validate ``(name, description)`` from SKILL.md bytes."""
     try:
         content = raw.decode("utf-8")
     except UnicodeDecodeError as exc:

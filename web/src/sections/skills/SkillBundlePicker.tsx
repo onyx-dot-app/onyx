@@ -55,7 +55,7 @@ export default function SkillBundlePicker({
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     disabled: disabled || preparing,
     // Folder entries can contain any file type. The input-level accept below
-    // limits only the system file picker to ZIP files.
+    // limits only the system file picker to supported single-file uploads.
     multiple: true,
     noClick: true,
     noKeyboard: true,
@@ -78,7 +78,8 @@ export default function SkillBundlePicker({
     >
       <input
         {...getInputProps({
-          accept: ".zip,application/zip,application/x-zip-compressed",
+          accept:
+            ".zip,.md,application/zip,application/x-zip-compressed,text/markdown",
         })}
       />
       <div
@@ -99,8 +100,8 @@ export default function SkillBundlePicker({
             : busyLabel
               ? busyLabel
               : value
-                ? "Choose a different ZIP file"
-                : "Choose a ZIP file"}
+                ? "Choose a different file"
+                : "Drag and drop or click to upload"}
         </Button>
         {(value || compact) && (
           <Text font="main-ui-body" color="text-03">
@@ -110,11 +111,6 @@ export default function SkillBundlePicker({
           </Text>
         )}
       </div>
-      <Text as="p" font="secondary-body" color="text-03">
-        {isDragActive
-          ? "Drop it here"
-          : "Or drag and drop a ZIP file or skill folder here."}
-      </Text>
     </div>
   );
 }

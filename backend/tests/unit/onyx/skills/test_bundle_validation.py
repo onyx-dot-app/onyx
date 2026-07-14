@@ -325,9 +325,9 @@ def test_rewrite_custom_bundle_skill_md_preserves_supporting_files() -> None:
         instructions_markdown="# New instructions\n\nDo it.",
     )
 
-    assert parse_skill_md_metadata(rewritten) == ("New", "New desc")
     assert read_custom_bundle_instructions(rewritten) == "# New instructions\n\nDo it."
     with zipfile.ZipFile(io.BytesIO(rewritten)) as zf:
+        assert parse_skill_md_metadata(zf.read("SKILL.md")) == ("New", "New desc")
         assert zf.read("scripts/run.py") == b"print('hi')\n"
         assert zf.read("docs/notes.md") == b"# Notes\n"
 
@@ -445,53 +445,38 @@ def test_slug_from_filename_rejects_invalid(bad: str | None) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _bundle_with_skill_md(body: bytes) -> bytes:
-    return _build_zip([("SKILL.md", body)])
-
-
 def test_parse_skill_md_metadata_happy_path() -> None:
     body = b"---\nname: My Skill\ndescription: Helpful description\n---\n\nbody\n"
-    name, description = parse_skill_md_metadata(_bundle_with_skill_md(body))
+    name, description = parse_skill_md_metadata(body)
     assert name == "My Skill"
     assert description == "Helpful description"
 
 
 def test_parse_skill_md_metadata_strips_whitespace() -> None:
     body = b"---\nname: '  spaced  '\ndescription: ' desc '\n---\n\nbody\n"
-    name, description = parse_skill_md_metadata(_bundle_with_skill_md(body))
+    name, description = parse_skill_md_metadata(body)
     assert name == "spaced"
     assert description == "desc"
 
 
 def test_parse_skill_md_metadata_rejects_missing_frontmatter() -> None:
     with pytest.raises(OnyxError, match="frontmatter"):
-        parse_skill_md_metadata(_bundle_with_skill_md(b"no frontmatter here\n"))
+        parse_skill_md_metadata(b"no frontmatter here\n")
 
 
 def test_parse_skill_md_metadata_rejects_missing_name() -> None:
     body = b"---\ndescription: only a description\n---\n\nbody\n"
     with pytest.raises(OnyxError, match="name"):
-        parse_skill_md_metadata(_bundle_with_skill_md(body))
+        parse_skill_md_metadata(body)
 
 
 def test_parse_skill_md_metadata_rejects_missing_description() -> None:
     body = b"---\nname: only a name\n---\n\nbody\n"
     with pytest.raises(OnyxError, match="description"):
-        parse_skill_md_metadata(_bundle_with_skill_md(body))
+        parse_skill_md_metadata(body)
 
 
 def test_parse_skill_md_metadata_rejects_empty_name() -> None:
     body = b"---\nname: ''\ndescription: desc\n---\n\nbody\n"
     with pytest.raises(OnyxError, match="name"):
-        parse_skill_md_metadata(_bundle_with_skill_md(body))
-
-
-def test_parse_skill_md_metadata_rejects_missing_skill_md() -> None:
-    zip_bytes = _build_zip([("other.txt", b"hi")])
-    with pytest.raises(OnyxError, match="SKILL.md missing"):
-        parse_skill_md_metadata(zip_bytes)
-
-
-def test_parse_skill_md_metadata_rejects_bad_zip() -> None:
-    with pytest.raises(OnyxError, match="not a valid zip"):
-        parse_skill_md_metadata(b"not a zip")
+        parse_skill_md_metadata(body)

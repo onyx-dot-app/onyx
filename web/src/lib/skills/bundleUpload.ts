@@ -6,7 +6,7 @@ const IGNORED_FILE_NAMES = new Set([".DS_Store", "Thumbs.db"]);
 export interface PreparedSkillBundle {
   file: File;
   displayName: string;
-  source: "zip" | "folder";
+  source: "zip" | "skill-md" | "folder";
 }
 
 export interface SkillDirectoryEntry {
@@ -41,6 +41,10 @@ function isZipFile(file: File): boolean {
   return file.name.toLowerCase().endsWith(".zip");
 }
 
+function isSkillMd(file: File): boolean {
+  return file.name.toLowerCase() === "skill.md";
+}
+
 export function getSkillDirectoryEntries(files: readonly FileWithPath[]): {
   directoryName: string;
   entries: SkillDirectoryEntry[];
@@ -56,7 +60,7 @@ export function getSkillDirectoryEntries(files: readonly FileWithPath[]): {
   const directoryName = filesWithParts[0]!.parts[0]!;
   const entries = filesWithParts.map(({ file, parts }) => {
     if (parts.length < 2 || parts[0] !== directoryName) {
-      throw new Error("Upload one ZIP or one skill folder at a time.");
+      throw new Error("Upload one ZIP, SKILL.md, or skill folder at a time.");
     }
     return { file, path: parts.slice(1).join("/") };
   });
@@ -111,6 +115,13 @@ export async function prepareSkillBundleUpload(
         file: file!,
         displayName: file!.name,
         source: "zip",
+      };
+    }
+    if (parts.length === 1 && isSkillMd(file!)) {
+      return {
+        file: file!,
+        displayName: file!.name,
+        source: "skill-md",
       };
     }
   }

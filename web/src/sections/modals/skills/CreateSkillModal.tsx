@@ -3,25 +3,24 @@
 import { useState } from "react";
 import { Button, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
-import Modal from "@/refresh-components/Modal";
+import { toast } from "@/hooks/useToast";
 import { createCustomSkill } from "@/lib/skills/api";
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
-import { toast } from "@/hooks/useToast";
 import type { CustomSkill } from "@/lib/skills/types";
+import Modal from "@/refresh-components/Modal";
 import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
 
-interface UploadSkillModalProps {
+interface CreateSkillModalProps {
   open: boolean;
   onClose: () => void;
-  /** Invoked with the created skill after a successful upload. */
-  onUploaded: (skill: CustomSkill) => void;
+  onCreated: (skill: CustomSkill) => void;
 }
 
-export default function UploadSkillModal({
+export default function CreateSkillModal({
   open,
   onClose,
-  onUploaded,
-}: UploadSkillModalProps) {
+  onCreated,
+}: CreateSkillModalProps) {
   const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -41,29 +40,30 @@ export default function UploadSkillModal({
   async function handleSubmit() {
     if (!bundle) return;
     setSubmitting(true);
+    setErrorMessage(null);
     try {
       const created = await createCustomSkill(bundle.file);
-      toast.success(`Uploaded "${created.name}"`);
+      toast.success(`Created "${created.name}"`);
       reset();
-      onUploaded(created);
+      onCreated(created);
       onClose();
-    } catch (err) {
-      console.error("Failed to upload skill bundle", err);
-      setErrorMessage(err instanceof Error ? err.message : "Upload failed");
+    } catch (error) {
+      console.error("Failed to create skill", error);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to create skill"
+      );
     } finally {
       setSubmitting(false);
     }
   }
-
-  const submitDisabled = submitting || !bundle;
 
   return (
     <Modal open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgUploadCloud}
-          title="Upload skill"
-          description="Add a skill from a ZIP file or folder. SKILL.md provides its name and description."
+          title="Create skill"
+          description="Upload a SKILL.md file, ZIP file, or skill folder. New skills are private until you choose to share them."
           onClose={handleClose}
         />
         <Modal.Body>
@@ -80,6 +80,23 @@ export default function UploadSkillModal({
               setErrorMessage(message);
             }}
           />
+          <div className="mt-3">
+            <Text as="p" font="main-ui-body" color="text-02">
+              File requirements
+            </Text>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              <Text as="li" font="secondary-body" color="text-03">
+                SKILL.md must include valid frontmatter with a name and
+                description.
+              </Text>
+              <Text as="li" font="secondary-body" color="text-03">
+                ZIP files must contain a SKILL.md file.
+              </Text>
+              <Text as="li" font="secondary-body" color="text-03">
+                Upload one skill at a time.
+              </Text>
+            </ul>
+          </div>
           {errorMessage && (
             <div className="mt-2">
               <Text as="p" font="secondary-body" color="status-error-05">
@@ -97,11 +114,11 @@ export default function UploadSkillModal({
             Cancel
           </Button>
           <Button
-            disabled={preparing || submitDisabled}
+            disabled={preparing || submitting || !bundle}
             onClick={handleSubmit}
             icon={SvgUploadCloud}
           >
-            {submitting ? "Uploading..." : "Upload"}
+            {submitting ? "Creating…" : "Create"}
           </Button>
         </Modal.Footer>
       </Modal.Content>
