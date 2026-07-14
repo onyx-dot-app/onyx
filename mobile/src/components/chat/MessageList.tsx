@@ -13,12 +13,15 @@ import {
 import { FlashList, FlashListRef } from "@shopify/flash-list";
 
 import { Message } from "@/chat/interfaces";
+import { MinimalAgent } from "@/chat/agents";
 import { MessageRow } from "@/components/chat/MessageRow";
 import { Icon } from "@/components/ui/icon";
 import SvgChevronDown from "@/icons/chevron-down";
 
 interface MessageListProps {
   messages: Message[];
+  // session agent, for the assistant-message avatar
+  agent: MinimalAgent | null;
 }
 
 // Newest turn this far below the viewport → treat as "scrolled up" and reveal the button (web: 32px).
@@ -32,18 +35,19 @@ const FAB_SHADOW = {
   elevation: 4,
 } as const;
 
-function renderItem({ item }: { item: Message }) {
-  return <MessageRow node={item} />;
-}
-
 function keyExtractor(item: Message): string {
   return String(item.nodeId);
 }
 
-export function MessageList({ messages }: MessageListProps) {
+export function MessageList({ messages, agent }: MessageListProps) {
   const listRef = useRef<FlashListRef<Message>>(null);
   const didInitialScroll = useRef(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
+
+  const renderItem = useCallback(
+    ({ item }: { item: Message }) => <MessageRow node={item} agent={agent} />,
+    [agent],
+  );
 
   // Opening an existing chat lands on the newest turn (web's session-load scroll-to-bottom). A
   // short/new chat is already fully visible, so this is a no-op that leaves the first turn at top.

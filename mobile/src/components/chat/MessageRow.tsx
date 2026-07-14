@@ -4,8 +4,10 @@ import { memo } from "react";
 import { View } from "react-native";
 
 import { Message } from "@/chat/interfaces";
+import { MinimalAgent } from "@/chat/agents";
 import { getErrorTitle } from "@/chat/errorHelpers";
 import { fileDescriptorToDisplayFile } from "@/chat/fileDescriptors";
+import { AgentTimeline } from "@/components/chat/AgentTimeline";
 import { FileCard } from "@/components/chat/FileCard";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
@@ -26,7 +28,9 @@ function UserMessage({ node }: { node: Message }) {
       {node.message.length > 0 ? (
         // Web parity (HumanMessage): tint bubble, px-3/py-2, asymmetric corners (square bottom-right).
         <View className="max-w-[85%] rounded-t-16 rounded-bl-16 bg-background-tint-02 px-12 py-8">
-          <Text font="main-content-body" color="text-05">
+          {/* main-ui-body (14px): deliberate reduction from web's main-content-body (16px) — 16px
+              reads oversized on a phone. Assistant markdown (StreamingMarkdown) matches. */}
+          <Text font="main-ui-body" color="text-05">
             {node.message}
           </Text>
         </View>
@@ -59,28 +63,43 @@ function ErrorMessage({ node }: { node: Message }) {
   );
 }
 
-function AssistantMessage({ node }: { node: Message }) {
+function AssistantMessage({
+  node,
+  agent,
+}: {
+  node: Message;
+  agent: MinimalAgent | null;
+}) {
   const { renderer, packets, isComplete } = usePacketDisplay(node);
   const Renderer = renderer?.Component;
+  const hasContent = Renderer != null && packets.length > 0;
 
+  // Web AgentMessage: vertical stack of the timeline (avatar + status) then the answer. The timeline
+  // owns the "Thinking…" loader, so the bare "…" placeholder is gone.
   return (
-    <View className="py-6">
-      {Renderer && packets.length > 0 ? (
-        <Renderer packets={packets} isComplete={isComplete} />
-      ) : (
-        // no content yet — thinking placeholder
-        <Text font="main-content-muted" color="text-03">
-          …
-        </Text>
-      )}
+    <View className="gap-12 py-6">
+      <AgentTimeline agent={agent} isLoading={!hasContent && !isComplete} />
+      {hasContent ? (
+        // web AgentMessage answer wrapper is px-3 (12px) — inset so the text lines up under the
+        // avatar rail instead of sticking out to its left.
+        <View className="px-12">
+          <Renderer packets={packets} isComplete={isComplete} />
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function MessageRowComponent({ node }: { node: Message }) {
+function MessageRowComponent({
+  node,
+  agent,
+}: {
+  node: Message;
+  agent: MinimalAgent | null;
+}) {
   if (node.type === "user") return <UserMessage node={node} />;
   if (node.type === "error") return <ErrorMessage node={node} />;
-  return <AssistantMessage node={node} />;
+  return <AssistantMessage node={node} agent={agent} />;
 }
 
 export const MessageRow = memo(
@@ -93,5 +112,7 @@ export const MessageRow = memo(
     prev.node.errorCode === next.node.errorCode &&
     prev.node.packets.length === next.node.packets.length &&
     // user rows render attachment chips from node.files; re-render if that array is replaced
-    prev.node.files === next.node.files,
+    prev.node.files === next.node.files &&
+    // assistant rows show the agent avatar; re-render if the session's agent resolves/changes
+    prev.agent === next.agent,
 );

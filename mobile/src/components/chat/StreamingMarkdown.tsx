@@ -12,11 +12,13 @@ interface StreamingMarkdownProps {
   isStreaming: boolean;
 }
 
-const BODY = textPresets["main-content-body"];
+// main-ui-body (14px): deliberate reduction from web's main-content-body (16px) — 16px reads
+// oversized on a phone. The user bubble (MessageRow) matches. Headings/code keep fixed px sizes.
+const BODY = textPresets["main-ui-body"];
 const MONO = textPresets["main-content-mono"];
 
 // Markdown element styles as concrete values (enriched-markdown takes literals, not NativeWind
-// classes): Onyx tokens on a 16px body base; heading/code sizes are fixed pixels.
+// classes): Onyx tokens on a 14px body base; heading/code sizes are fixed pixels.
 function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
   const vars = scheme === "dark" ? varsDark : varsLight;
   const color = (token: string): string => vars[token] ?? "#000000";

@@ -24,7 +24,9 @@ function accumulateContent(packets: Packet[]): string {
       packet.obj.type === PacketType.MESSAGE_START ||
       packet.obj.type === PacketType.MESSAGE_DELTA
     ) {
-      content += (packet.obj as MessageStart | MessageDelta).content;
+      // `?? ""`: a message_start packet can arrive with no `content`; without the guard the
+      // template appends the literal string "undefined" before the first delta.
+      content += (packet.obj as MessageStart | MessageDelta).content ?? "";
     }
   }
   return content;
