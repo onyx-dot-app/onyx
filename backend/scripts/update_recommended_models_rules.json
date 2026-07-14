@@ -14,7 +14,6 @@
           "vendor_prefix": "openai/",
           "include_regex": "^openai/gpt-\\d+(\\.\\d+)?-sol$",
           "exclude_regex": "-pro",
-          "limit": 1,
           "is_default_source": true
         },
         {
@@ -22,7 +21,6 @@
           "vendor_prefix": "openai/",
           "include_regex": "^openai/gpt-\\d+(\\.\\d+)?-terra$",
           "exclude_regex": "-pro",
-          "limit": 1,
           "is_default_source": false
         },
         {
@@ -30,7 +28,6 @@
           "vendor_prefix": "openai/",
           "include_regex": "^openai/gpt-\\d+(\\.\\d+)?-luna$",
           "exclude_regex": "-pro",
-          "limit": 1,
           "is_default_source": false
         },
         {
@@ -38,7 +35,6 @@
           "vendor_prefix": "openai/",
           "include_regex": "^openai/gpt-\\d+(\\.\\d+)?$",
           "exclude_regex": "-(mini|nano|chat|codex|pro|audio|realtime|image|luna|terra|sol)",
-          "limit": 3,
           "is_default_source": false
         }
       ]
@@ -55,7 +51,6 @@
           "vendor_prefix": "anthropic/",
           "include_regex": "^anthropic/claude-opus-\\d+(\\.\\d+)?$",
           "exclude_regex": "-(fast|thinking)",
-          "limit": 3,
           "is_default_source": true
         },
         {
@@ -63,7 +58,6 @@
           "vendor_prefix": "anthropic/",
           "include_regex": "^anthropic/claude-fable-\\d+(\\.\\d+)?$",
           "exclude_regex": "-(fast|thinking)",
-          "limit": 1,
           "is_default_source": false
         },
         {
@@ -71,7 +65,6 @@
           "vendor_prefix": "anthropic/",
           "include_regex": "^anthropic/claude-sonnet-\\d+(\\.\\d+)?$",
           "exclude_regex": "-(fast|thinking)",
-          "limit": 1,
           "is_default_source": false
         },
         {
@@ -79,7 +72,6 @@
           "vendor_prefix": "anthropic/",
           "include_regex": "^anthropic/claude-haiku-\\d+(\\.\\d+)?$",
           "exclude_regex": "-(fast|thinking)",
-          "limit": 1,
           "is_default_source": false
         }
       ]
@@ -99,7 +91,6 @@
           "vendor_prefix": "google/",
           "include_regex": "^google/gemini-\\d+(\\.\\d+)?-pro(-preview)?$",
           "exclude_regex": "-(lite|image|audio|tts|customtools)",
-          "limit": 1,
           "is_default_source": true
         },
         {
@@ -107,7 +98,6 @@
           "vendor_prefix": "google/",
           "include_regex": "^google/gemini-\\d+(\\.\\d+)?-flash(-preview)?$",
           "exclude_regex": "-(lite|image|audio|tts|customtools)",
-          "limit": 1,
           "is_default_source": false
         }
       ]
@@ -124,7 +114,6 @@
           "vendor_prefix": "z-ai/",
           "include_regex": "^z-ai/glm-\\d+(\\.\\d+)?$",
           "exclude_regex": "-(turbo|flash|air)",
-          "limit": 1,
           "is_default_source": true
         },
         {
@@ -132,7 +121,6 @@
           "vendor_prefix": "deepseek/",
           "include_regex": "^deepseek/deepseek-v\\d+(\\.\\d+)?(-pro)?$",
           "exclude_regex": "-(exp|flash)",
-          "limit": 1,
           "is_default_source": false
         },
         {
@@ -140,7 +128,6 @@
           "vendor_prefix": "qwen/",
           "include_regex": "^qwen/qwen\\d+(\\.\\d+)?-(plus|max)$",
           "exclude_regex": "-(preview|thinking)",
-          "limit": 1,
           "is_default_source": false
         },
         {
@@ -148,7 +135,6 @@
           "vendor_prefix": "moonshotai/",
           "include_regex": "^moonshotai/kimi-k\\d+(\\.\\d+)?$",
           "exclude_regex": "-(code|thinking)",
-          "limit": 1,
           "is_default_source": false
         }
       ]

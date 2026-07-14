@@ -124,14 +124,13 @@ class CatalogModel:
 
 @dataclass
 class FamilyRule:
-    """Selects the newest N catalog models of one model family."""
+    """Selects the newest catalog model of one model family."""
 
     label: str
     vendor_prefix: str
     include_regex: str
     exclude_regex: str | None
-    limit: int
-    # The rule whose newest pick becomes the section's default_model.
+    # The rule whose pick becomes the section's default_model.
     is_default_source: bool
 
 
@@ -176,7 +175,6 @@ def _parse_section_rules(section_name: str, payload: dict[str, Any]) -> SectionR
                 vendor_prefix=rule["vendor_prefix"],
                 include_regex=rule["include_regex"],
                 exclude_regex=rule.get("exclude_regex"),
-                limit=rule.get("limit", 1),
                 is_default_source=rule.get("is_default_source", False),
             )
             for rule in payload["rules"]
@@ -269,7 +267,7 @@ def select_for_rule(
     catalog: list[CatalogModel],
     rules: CurationRules,
     now: date,
-) -> list[CatalogModel]:
+) -> CatalogModel | None:
     candidates = [
         model
         for model in catalog
@@ -278,9 +276,10 @@ def select_for_rule(
         and not (rule.exclude_regex and re.search(rule.exclude_regex, model.id))
         and passes_global_filters(model, rules, now)
     ]
-    # Never trust API response order: newest first, id as deterministic tie-break.
-    candidates.sort(key=lambda model: (-model.created, model.id))
-    return candidates[: rule.limit]
+    if not candidates:
+        return None
+    # Never trust API response order: newest wins, id as deterministic tie-break.
+    return min(candidates, key=lambda model: (-model.created, model.id))
 
 
 def derive_native_name(model: CatalogModel, section: SectionRules) -> str:
@@ -347,14 +346,15 @@ def build_section(
     default_name = section.pinned_default
     picks: list[CatalogModel] = []
     for rule in section.rules:
-        matches = select_for_rule(rule, catalog, rules, now)
-        if not matches:
+        pick = select_for_rule(rule, catalog, rules, now)
+        if pick is None:
             warnings.append(
                 f"{section_name}: rule '{rule.label}' matched no catalog models"
             )
-        picks.extend(matches)
-        if rule.is_default_source and default_name is None and matches:
-            default_name = derive_native_name(matches[0], section)
+            continue
+        picks.append(pick)
+        if rule.is_default_source and default_name is None:
+            default_name = derive_native_name(pick, section)
 
     if default_name is None:
         # The default-source rule came up empty and there's no pin: keep the
