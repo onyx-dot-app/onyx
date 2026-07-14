@@ -18,6 +18,7 @@ function ResumeButton({ row }: { row: ReindexErrorRow }) {
     try {
       await resumePausedPort(row);
     } catch (e) {
+      console.error("Failed to resume paused port unit:", e);
       setErrorMsg(e instanceof Error ? e.message : "Failed to resume.");
       setBusy(false);
       return;

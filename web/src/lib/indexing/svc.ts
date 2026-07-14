@@ -163,10 +163,13 @@ export async function resumePausedPort(
     return;
   }
   if (!response.ok) {
-    const detail = await response
-      .json()
-      .then((body) => body?.detail as string | undefined)
-      .catch(() => undefined);
+    let detail: string | undefined;
+    try {
+      detail = ((await response.json()) as { detail?: string }).detail;
+    } catch (e) {
+      // non-JSON error body (e.g. a 502 HTML page): log so the failure is traceable
+      console.error(`resumePausedPort failed (${response.status}):`, e);
+    }
     throw new Error(detail ?? "Failed to resume the paused unit.");
   }
 }
