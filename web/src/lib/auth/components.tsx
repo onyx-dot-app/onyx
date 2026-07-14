@@ -374,17 +374,15 @@ export function EmailPasswordForm({
         return;
       }
 
-      // On verification-required deployments the server blocks login until the
-      // email is confirmed, so we must NOT call basicLogin first — it would
-      // fail and leave the user stranded even though the account was created.
       if (shouldVerify) {
+        const loginCaptchaToken = await getCaptchaToken("login");
+        await basicLogin(email, values.password, loginCaptchaToken);
         try {
           await requestEmailVerification(email);
         } catch (e) {
-          // Best-effort: the account already exists, so redirect regardless.
           console.warn("requestEmailVerification failed:", e);
         }
-        window.location.href = `/auth/send-email-verification?email=${encodeURIComponent(email)}`;
+        window.location.href = "/auth/send-email-verification";
         return;
       }
     }

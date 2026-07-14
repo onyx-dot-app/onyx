@@ -26,42 +26,35 @@ export default function SendEmailVerificationPage() {
     return () => channel.close();
   }, [router]);
 
-  // Poll only when a session exists — pointless without one.
+  // Poll as a fallback in case the BroadcastChannel message is missed
+  // (e.g. the verification happened in a different browser or device).
   useEffect(() => {
-    if (!user) return;
     const interval = setInterval(() => mutateUser(), 3000);
     return () => clearInterval(interval);
-  }, [user, mutateUser]);
-
-  const email = searchParams.get("email");
+  }, [mutateUser]);
 
   // Resend flow: fire-and-forget, then strip the ?resend param.
   useEffect(() => {
-    if (!searchParams.get("resend") || !email) return;
-    router.replace(
-      `/auth/send-email-verification?email=${encodeURIComponent(email)}` as Route
-    );
-    requestEmailVerification(email)
+    if (!searchParams.get("resend") || !user) return;
+    router.replace("/auth/send-email-verification" as Route);
+    requestEmailVerification(user.email)
       .then(() => toast.success("Verification email resent!"))
       .catch((e: Error) =>
         toast.error(
           `Failed to resend verification email — ${e.message || "unknown error"}`
         )
       );
-  }, [searchParams, email, router]);
+  }, [searchParams, user, router]);
 
   async function handleLogout() {
     await logout();
     router.replace("/auth/login" as Route);
   }
 
-  // Wait for auth state before potentially skipping verified users to /app.
   if (isLoading) return <PageLoader />;
-  if (!email) redirect("/auth/login");
-  if (user?.is_verified || !authTypeMetadata?.requiresVerification)
+  if (!user) redirect("/auth/login");
+  if (user.is_verified || !authTypeMetadata?.requiresVerification)
     redirect("/app");
-
-  const resendUrl = `/auth/send-email-verification?resend=true&email=${encodeURIComponent(email)}`;
 
   return (
     <AuthLayouts.Card
@@ -70,17 +63,13 @@ export default function SendEmailVerificationPage() {
       icon={Logo}
     >
       <AuthLayouts.Message
-        title={`Email sent to ${email}`}
+        title={`Email sent to ${user.email}`}
         description={markdown(
-          `Didn't receive an email? [Resend](${resendUrl})`
+          "Didn't receive an email? [Resend](/auth/send-email-verification?resend=true)"
         )}
       />
-      {user && (
-        <>
-          <AuthLayouts.OrSeparator />
-          <AuthLayouts.Submit label="logout" onClick={handleLogout} />
-        </>
-      )}
+      <AuthLayouts.OrSeparator />
+      <AuthLayouts.Submit label="logout" onClick={handleLogout} />
     </AuthLayouts.Card>
   );
 }
