@@ -18,6 +18,7 @@ import { AUTH_SUCCESS_REDIRECT_DELAY_MS } from "@/lib/auth/constants";
 import { PasswordCondition, PasswordConditions } from "@/lib/auth/components";
 import { backToLoginOrSignupCopy } from "@/lib/auth/copies";
 import { Logo } from "@/lib/app/components";
+import { useCurrentUser } from "@/lib/users/hooks";
 
 const initialValues = { password: "", confirmPassword: "" };
 
@@ -31,6 +32,7 @@ const validationSchema = Yup.object().shape({
 export default function ResetPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useCurrentUser();
   const token = searchParams?.get("token");
   const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
   const email = searchParams?.get("email");
@@ -66,6 +68,7 @@ export default function ResetPasswordPage() {
     };
   }, [resetSuccess, router]);
 
+  if (user) redirect("/app");
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED || !token || !email)
     redirect("/auth/login");
 

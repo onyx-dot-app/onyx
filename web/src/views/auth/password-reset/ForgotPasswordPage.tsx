@@ -10,12 +10,15 @@ import { toast } from "@/hooks/useToast";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import type { Route } from "next";
 import { Logo } from "@/lib/app/components";
+import { redirect } from "next/navigation";
+import { useCurrentUser } from "@/lib/users/hooks";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams?.get("email");
   const isResend = searchParams?.get("reset") === "true";
+  const { user } = useCurrentUser();
 
   const firedRef = useRef(false);
 
@@ -50,6 +53,7 @@ export default function ForgotPasswordPage() {
       .catch((e) => console.error("Failed to resend password reset email:", e));
   }, [isResend, email, router]);
 
+  if (user) redirect("/app");
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED || !email) return null;
 
   return (
