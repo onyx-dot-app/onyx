@@ -351,7 +351,8 @@ function InputSelectItem({
   const { currentValue, setSelectedItemDisplay } = useInputSelectContext();
   const isSelected = value === currentValue;
 
-  // Refs so the trigger reads current children/icon without re-registration.
+  // Refs keep the trigger reading the latest children/icon between
+  // registrations.
   const childrenRef = React.useRef<string | RichStr>(children);
   const iconRef = React.useRef(icon);
   childrenRef.current = children;
@@ -360,12 +361,16 @@ function InputSelectItem({
   // Layout effect so the trigger never paints the placeholder on first
   // render when a value is already selected. Radix mounts closed Content
   // into a detached fragment, so this runs even while the menu is closed.
+  // Keyed on the rendered content (plain-text key, since RichStr identity
+  // churns per render) so the trigger mirror re-renders when the selected
+  // option's label or icon changes without a value change.
+  const childrenKey = toPlainString(children);
   React.useLayoutEffect(() => {
     if (!isSelected) return;
     setSelectedItemDisplay({ childrenRef, iconRef });
 
     return () => setSelectedItemDisplay(null);
-  }, [isSelected]);
+  }, [isSelected, childrenKey, icon]);
 
   return (
     <SelectPrimitive.Item
