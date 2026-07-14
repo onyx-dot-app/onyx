@@ -1,5 +1,5 @@
 import React, { memo, useState } from "react";
-import Calendar from "@/refresh-components/Calendar";
+import { Calendar } from "@opal/components";
 import { Popover } from "@opal/components";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
