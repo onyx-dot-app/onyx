@@ -28,6 +28,7 @@ import { useTheme } from "next-themes";
 
 interface UserContextType {
   user: User | null;
+  isLoading: boolean;
   isAdmin: boolean;
   isCurator: boolean;
   refreshUser: () => Promise<void>;
@@ -61,7 +62,7 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const { user: fetchedUser, mutateUser } = useCurrentUser();
+  const { user: fetchedUser, mutateUser, isLoading } = useCurrentUser();
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
   const updatedSettingsData = useSettings();
@@ -544,6 +545,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     <UserContext.Provider
       value={{
         user: upToDateUser,
+        isLoading,
         refreshUser,
         authTypeMetadata,
         updateUserAutoScroll,

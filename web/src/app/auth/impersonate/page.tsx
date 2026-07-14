@@ -1,7 +1,7 @@
 "use client";
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-
+import PageLoader from "@/refresh-components/PageLoader";
 import { useUser } from "@/providers/UserProvider";
 import { redirect, useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -19,7 +19,12 @@ const ImpersonateSchema = Yup.object().shape({
 
 export default function ImpersonatePage() {
   const router = useRouter();
-  const { user, isCloudSuperuser } = useUser();
+  const { user, isLoading, isCloudSuperuser } = useUser();
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
   if (!user) {
     redirect("/auth/login");
   }
