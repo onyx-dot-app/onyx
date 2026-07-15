@@ -5808,7 +5808,6 @@ class SlackSessionLink(Base):
         PGUUID(as_uuid=True),
         ForeignKey("build_session.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True,
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -5822,6 +5821,9 @@ class SlackSessionLink(Base):
             "channel_id",
             "thread_ts",
             name="uq_slack_session_link_thread",
+        ),
+        UniqueConstraint(
+            "build_session_id", name="uq_slack_session_link_build_session_id"
         ),
     )
 
