@@ -365,6 +365,7 @@ def fetch_skill(
     policy: SkillAccessPolicy,
     db_session: Session,
     user: User,
+    lock_for_update: bool = False,
 ) -> Skill | None:
     stmt = _skill_select_for_access_policy(
         policy=policy,
@@ -372,6 +373,8 @@ def fetch_skill(
         user=user,
         order_by_name=False,
     ).where(Skill.id == skill_id)
+    if lock_for_update:
+        stmt = stmt.with_for_update(of=Skill)
     return db_session.scalars(stmt).one_or_none()
 
 

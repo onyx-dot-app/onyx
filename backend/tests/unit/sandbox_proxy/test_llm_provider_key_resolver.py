@@ -21,14 +21,15 @@ from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.resolvers import llm_provider_key
 from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
 from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
+from onyx.utils.sensitive import make_mock_sensitive_value
 from tests.unit.sandbox_proxy.conftest import make_flow
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox
 
 
 class _FakeProvider:
-    def __init__(self, provider: str, api_key: str | None) -> None:
-        self.provider = provider
-        self.api_key = api_key
+    def __init__(self, api_key: str | None) -> None:
+        self.id = 1
+        self.api_key = make_mock_sensitive_value(api_key)
 
 
 def _noop_db_factory() -> Any:
@@ -44,6 +45,7 @@ def _patch_session(monkeypatch: pytest.MonkeyPatch) -> None:
     """The resolver opens its own tenant session via `get_session_with_tenant`;
     yield a dummy so the patched DB-access functions receive it."""
     monkeypatch.setattr(llm_provider_key, "get_session_with_tenant", _noop_db_factory())
+    monkeypatch.setattr(llm_provider_key, "emit_credential_access", MagicMock())
 
 
 def _ctx() -> InjectionContext:
@@ -58,13 +60,13 @@ def resolver() -> LLMProviderKeyResolver:
 
 
 def _patch_providers(
-    monkeypatch: pytest.MonkeyPatch, providers: list[_FakeProvider]
+    monkeypatch: pytest.MonkeyPatch, providers: dict[str, _FakeProvider]
 ) -> None:
     monkeypatch.setattr(llm_provider_key, "fetch_user_by_id", lambda *_: object())
     monkeypatch.setattr(
         llm_provider_key,
-        "fetch_all_supported_build_llm_providers",
-        lambda *_: providers,
+        "fetch_first_accessible_llm_provider_by_type",
+        lambda provider_type, _user, _db: providers.get(provider_type),
     )
 
 
@@ -81,7 +83,10 @@ def test_openai_and_openrouter_render_bearer(
 ) -> None:
     _patch_providers(
         monkeypatch,
-        [_FakeProvider("openai", "sk-oai"), _FakeProvider("openrouter", "sk-or")],
+        {
+            "openai": _FakeProvider("sk-oai"),
+            "openrouter": _FakeProvider("sk-or"),
+        },
     )
     assert resolver.resolve(make_flow(host="api.openai.com").request, _ctx()) == {
         "Authorization": "Bearer sk-oai"
@@ -94,27 +99,76 @@ def test_openai_and_openrouter_render_bearer(
 def test_anthropic_renders_x_api_key_only(
     resolver: LLMProviderKeyResolver, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _patch_providers(monkeypatch, [_FakeProvider("anthropic", "sk-ant")])
+    _patch_providers(monkeypatch, {"anthropic": _FakeProvider("sk-ant")})
     # x-api-key only — anthropic-version and other SDK headers must survive.
     assert resolver.resolve(make_flow(host="api.anthropic.com").request, _ctx()) == {
         "x-api-key": "sk-ant"
     }
 
 
-def test_selects_first_provider_of_claimed_type(
+def test_queries_only_claimed_provider_type(
     resolver: LLMProviderKeyResolver, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _patch_providers(
-        monkeypatch,
-        [
-            _FakeProvider("openai", "sk-first"),
-            _FakeProvider("openai", "sk-second"),
-            _FakeProvider("anthropic", "sk-ant"),
-        ],
+    requested_provider_types: list[str] = []
+    monkeypatch.setattr(llm_provider_key, "fetch_user_by_id", lambda *_: object())
+
+    def fetch_provider(provider_type: str, _user: object, _db: object) -> _FakeProvider:
+        requested_provider_types.append(provider_type)
+        return _FakeProvider("sk-openai")
+
+    monkeypatch.setattr(
+        llm_provider_key,
+        "fetch_first_accessible_llm_provider_by_type",
+        fetch_provider,
     )
     assert resolver.resolve(make_flow(host="api.openai.com").request, _ctx()) == {
-        "Authorization": "Bearer sk-first"
+        "Authorization": "Bearer sk-openai"
     }
+    assert requested_provider_types == ["openai"]
+
+
+def test_unwraps_api_key_with_masking_disabled(
+    resolver: LLMProviderKeyResolver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    api_key = make_mock_sensitive_value("sk-openai")
+    provider = MagicMock(api_key=api_key)
+    monkeypatch.setattr(llm_provider_key, "fetch_user_by_id", lambda *_: object())
+    monkeypatch.setattr(
+        llm_provider_key,
+        "fetch_first_accessible_llm_provider_by_type",
+        lambda *_: provider,
+    )
+    assert resolver.resolve(make_flow(host="api.openai.com").request, _ctx()) == {
+        "Authorization": "Bearer sk-openai"
+    }
+    api_key.get_value.assert_called_once_with(apply_mask=False)
+
+
+def test_audits_credential_decryption(
+    resolver: LLMProviderKeyResolver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    provider = MagicMock(
+        id=42,
+        api_key=make_mock_sensitive_value("sk-openai"),
+    )
+    monkeypatch.setattr(llm_provider_key, "fetch_user_by_id", lambda *_: object())
+    monkeypatch.setattr(
+        llm_provider_key,
+        "fetch_first_accessible_llm_provider_by_type",
+        lambda *_: provider,
+    )
+    audit = MagicMock()
+    monkeypatch.setattr(llm_provider_key, "emit_credential_access", audit)
+
+    ctx = _ctx()
+    resolver.resolve(make_flow(host="api.openai.com").request, ctx)
+
+    audit.assert_called_once_with(
+        credential_type="llm_provider",
+        provider="openai",
+        row_id=42,
+        user_id=str(ctx.sandbox.user_id),
+    )
 
 
 def test_resolve_raises_when_user_missing(
@@ -128,7 +182,7 @@ def test_resolve_raises_when_user_missing(
 def test_resolve_raises_when_no_provider_of_type(
     resolver: LLMProviderKeyResolver, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _patch_providers(monkeypatch, [_FakeProvider("anthropic", "sk-ant")])
+    _patch_providers(monkeypatch, {})
     with pytest.raises(CredentialUnavailableError):
         resolver.resolve(make_flow(host="api.openai.com").request, _ctx())
 
@@ -136,7 +190,7 @@ def test_resolve_raises_when_no_provider_of_type(
 def test_resolve_raises_when_provider_has_no_key(
     resolver: LLMProviderKeyResolver, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _patch_providers(monkeypatch, [_FakeProvider("openai", None)])
+    _patch_providers(monkeypatch, {"openai": _FakeProvider(None)})
     with pytest.raises(CredentialUnavailableError):
         resolver.resolve(make_flow(host="api.openai.com").request, _ctx())
 

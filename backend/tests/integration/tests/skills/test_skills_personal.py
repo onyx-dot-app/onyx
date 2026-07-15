@@ -8,6 +8,8 @@ promotion to org-wide, and admin disable as a reversible mute.
 
 from __future__ import annotations
 
+import io
+import zipfile
 from uuid import uuid4
 
 import httpx
@@ -60,6 +62,99 @@ def test_create_personal_skill_visibility(
     admin_match = [skill for skill in admin_customs if skill.slug == slug]
     assert len(admin_match) == 1
     assert admin_match[0].is_personal is True
+
+
+def test_create_personal_skill_from_editor(basic_user: DATestUser) -> None:
+    suffix = uuid4().hex[:6]
+    name = f"Editor Skill {suffix}"
+
+    skill = SkillManager.create_from_editor(
+        basic_user,
+        name=name,
+        description="Created without an uploaded bundle",
+        instructions_markdown="# Workflow\n\nFollow these steps.",
+        upload_bytes=b"supporting context",
+        upload_filename="context.txt",
+    )
+
+    editable = SkillManager.get_editable(skill.id, basic_user)
+    assert skill.slug == f"editor-skill-{suffix}"
+    assert skill.is_personal is True
+    assert editable.instructions_markdown == "# Workflow\n\nFollow these steps."
+    assert [file.path for file in editable.files] == ["context.txt"]
+
+
+def test_upload_supporting_files_merges_and_bundle_upload_replaces(
+    basic_user: DATestUser,
+) -> None:
+    original_name = f"Original {uuid4().hex[:6]}"
+    skill = SkillManager.create_from_editor(
+        basic_user,
+        name=original_name,
+        description="Original description",
+        instructions_markdown="Original instructions.",
+    )
+
+    supporting = io.BytesIO()
+    with zipfile.ZipFile(supporting, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("scripts/run.py", "print('hello')\n")
+        zf.writestr("references/context.md", "Context")
+    merged = SkillManager.upload_files(
+        skill,
+        supporting.getvalue(),
+        "supporting.zip",
+        basic_user,
+    )
+    assert [file.path for file in merged.files] == [
+        "references/context.md",
+        "scripts/run.py",
+    ]
+    assert merged.name == original_name
+
+    after_removal = SkillManager.remove_file(skill, "scripts/run.py", basic_user)
+    assert [file.path for file in after_removal.files] == ["references/context.md"]
+    assert after_removal.instructions_markdown == "Original instructions."
+
+    replacement = io.BytesIO()
+    with zipfile.ZipFile(replacement, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "replacement/SKILL.md",
+            "---\nname: Replacement\ndescription: Replaced bundle\n---\n\n"
+            "Replacement instructions.",
+        )
+        zf.writestr("replacement/new.txt", "new")
+    replaced = SkillManager.upload_files(
+        skill,
+        replacement.getvalue(),
+        "replacement.zip",
+        basic_user,
+    )
+    assert replaced.name == "Replacement"
+    assert replaced.description == "Replaced bundle"
+    assert replaced.instructions_markdown == "Replacement instructions."
+    assert [file.path for file in replaced.files] == ["new.txt"]
+
+
+def test_create_personal_skill_accepts_wrapped_directory(
+    basic_user: DATestUser,
+) -> None:
+    slug = f"personal-wrapped-{uuid4().hex[:6]}"
+    bundle = io.BytesIO()
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            f"{slug}/SKILL.md",
+            "---\nname: Wrapped Skill\ndescription: Wrapped directory\n---\n\n"
+            "Use the supporting script.",
+        )
+
+    skill = SkillManager.create_personal(
+        basic_user,
+        slug=slug,
+        bundle_bytes=bundle.getvalue(),
+    )
+
+    assert skill.name == "Wrapped Skill"
+    assert skill.description == "Wrapped directory"
 
 
 def test_owner_can_fetch_own_personal_skill(basic_user: DATestUser) -> None:

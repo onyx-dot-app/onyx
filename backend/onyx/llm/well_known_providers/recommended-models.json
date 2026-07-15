@@ -1,6 +1,6 @@
 {
-  "version": "1.7",
-  "updated_at": "2026-07-10T00:00:00Z",
+  "version": "1.8",
+  "updated_at": "2026-07-14T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-5.6-sol",
@@ -16,12 +16,6 @@
         },
         {
           "name": "gpt-5.5"
-        },
-        {
-          "name": "gpt-5.4"
-        },
-        {
-          "name": "gpt-5.2"
         }
       ]
     },
@@ -31,14 +25,6 @@
         {
           "name": "claude-opus-4-8",
           "display_name": "Claude Opus 4.8"
-        },
-        {
-          "name": "claude-opus-4-7",
-          "display_name": "Claude Opus 4.7"
-        },
-        {
-          "name": "claude-opus-4-6",
-          "display_name": "Claude Opus 4.6"
         },
         {
           "name": "claude-fable-5",

@@ -5,6 +5,7 @@ from sqlalchemy import delete
 from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import aliased
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -14,6 +15,11 @@ from onyx.db.models import Tag
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Orphan-tag deletes must stay bounded: a single unbounded DELETE over millions
+# of orphans generates one massive transaction (locks + WAL burst) that can
+# saturate the primary DB.
+ORPHAN_TAG_DELETION_BATCH_SIZE = 5000
 
 
 def check_tag_validity(tag_key: str, tag_value: str) -> bool:
@@ -239,15 +245,65 @@ def delete_document_tags_for_documents__no_commit(
     db_session.execute(stmt)
 
 
-def delete_orphan_tags__no_commit(db_session: Session) -> None:
-    orphan_tags_query = select(Tag.id).where(
-        ~db_session.query(Document__Tag.tag_id)
-        .filter(Document__Tag.tag_id == Tag.id)
-        .exists()
+def _delete_orphan_tags_batch(db_session: Session, batch_size: int) -> int:
+    """Deletes at most batch_size orphan tags in a single server-side statement.
+
+    The candidate ids are selected via a LIMITed subquery so no ids are ever
+    materialized into Python. Returns the number of tags deleted.
+    """
+    # Alias Tag so the subquery doesn't auto-correlate against the DELETE target.
+    candidate_tag = aliased(Tag)
+    orphan_tag_ids = (
+        select(candidate_tag.id)
+        .where(
+            ~select(Document__Tag.tag_id)
+            .where(Document__Tag.tag_id == candidate_tag.id)
+            .exists()
+        )
+        .limit(batch_size)
+        .scalar_subquery()
     )
+    delete_stmt = (
+        delete(Tag)
+        .where(Tag.id.in_(orphan_tag_ids))
+        .execution_options(synchronize_session=False)
+    )
+    result = db_session.execute(delete_stmt)
+    return result.rowcount  # ty: ignore[unresolved-attribute]
 
-    orphan_tags = db_session.execute(orphan_tags_query).scalars().all()
 
-    if orphan_tags:
-        delete_orphan_tags_stmt = delete(Tag).where(Tag.id.in_(orphan_tags))
-        db_session.execute(delete_orphan_tags_stmt)
+def delete_orphan_tags__no_commit(
+    db_session: Session,
+    batch_size: int = ORPHAN_TAG_DELETION_BATCH_SIZE,
+) -> int:
+    """Best-effort cleanup of at most one batch of orphan tags inside the
+    caller's transaction. Intentionally bounded so callers holding long
+    transactions (e.g. connector deletion) don't balloon them; use
+    delete_orphan_tags_batched for a full drain."""
+    return _delete_orphan_tags_batch(db_session, batch_size)
+
+
+def delete_orphan_tags_batched(
+    db_session: Session,
+    batch_size: int = ORPHAN_TAG_DELETION_BATCH_SIZE,
+) -> int:
+    """Deletes all orphan tags in bounded batches, committing after each batch.
+
+    Only call with no uncommitted work pending on db_session, since each batch
+    commits. Returns the total number of tags deleted."""
+    total_deleted = 0
+    batch_count = 0
+    while True:
+        num_deleted = _delete_orphan_tags_batch(db_session, batch_size)
+        if num_deleted == 0:
+            # nothing to persist, but the probe opened a transaction — end it
+            # rather than leaving the session idle-in-transaction
+            db_session.rollback()
+            break
+        db_session.commit()
+        total_deleted += num_deleted
+        batch_count += 1
+
+    if total_deleted:
+        logger.info("Deleted %d orphan tags in %d batches", total_deleted, batch_count)
+    return total_deleted

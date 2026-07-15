@@ -1,6 +1,6 @@
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.utils import get_model_map
-from onyx.llm.utils import is_true_openai_model
+from onyx.llm.model_capabilities import get_model_map
+from onyx.llm.model_capabilities import is_true_openai_model
 
 
 class TestIsTrueOpenAIModel:

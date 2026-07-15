@@ -1,6 +1,4 @@
-// streamdown wraps enriched-markdown (worklet parsing), which needs concrete style values, not NativeWind
-// classes — so resolve Onyx tokens from the shared vars/presets here. Swapping the markdown lib touches
-// only this file.
+// enriched-markdown needs concrete style values, not NativeWind classes — resolve Onyx tokens here.
 import { useMemo } from "react";
 import { useColorScheme } from "react-native";
 import { StreamdownText } from "react-native-streamdown";
@@ -12,15 +10,14 @@ interface StreamingMarkdownProps {
   isStreaming: boolean;
 }
 
-const BODY = textPresets["main-content-body"];
+// 14px body: deliberate reduction from web's 16px, which reads oversized on a phone.
+const BODY = textPresets["main-ui-body"];
 const MONO = textPresets["main-content-mono"];
 
-// Markdown element styles as concrete values (enriched-markdown takes literals, not NativeWind
-// classes): Onyx tokens on a 16px body base; heading/code sizes are fixed pixels.
 function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
   const vars = scheme === "dark" ? varsDark : varsLight;
   const color = (token: string): string => vars[token] ?? "#000000";
-  // Fenced code has no Onyx token; use the Atom One base color (one flat color — no per-token highlighting).
+  // Fenced code has no Onyx token; use Atom One's flat base color (no per-token highlighting).
   const codeBaseColor = scheme === "dark" ? "#e2e6eb" : "#383a42";
   return {
     paragraph: {
@@ -28,7 +25,7 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
       fontFamily: BODY.fontFamily,
       fontSize: BODY.fontSize,
       lineHeight: BODY.lineHeight,
-      // marginTop 0: RN doesn't collapse margins, so 0 top + 8 bottom gives an even 8px rhythm.
+      // RN doesn't collapse margins: 0 top + 8 bottom gives an even 8px rhythm.
       marginTop: 0,
       marginBottom: 8,
     },
@@ -60,7 +57,7 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
       marginBottom: 10,
     },
     strong: { color: color("--text-05"), fontWeight: "bold" },
-    // No color: italics inherit their block color (paragraph/list text-05, blockquote text-04).
+    // No color: italics inherit block color (paragraph/list text-05, blockquote text-04).
     em: { fontStyle: "italic" },
     link: { color: color("--action-link-05"), underline: true },
     list: {
