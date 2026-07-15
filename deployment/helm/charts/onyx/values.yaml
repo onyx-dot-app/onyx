@@ -1482,7 +1482,7 @@ configMap:
   OIDC_PKCE_ENABLED: ""
   # Opt-in: capture IdP directory claims at OAuth/OIDC login and use them to
   # enrich chat prompts and resolve {{user.<key>}} agent placeholders. Sends
-  # directory data to the configured LLM, so off by default. Single-tenant only.
+  # directory data to the configured LLM, so off by default.
   IDP_PROFILE_ENRICHMENT_ENABLED: ""
   # Optional JSON overriding the directory claim aliases per profile field, e.g.
   # '{"department": ["dept", "division"], "country": ["c"]}'.

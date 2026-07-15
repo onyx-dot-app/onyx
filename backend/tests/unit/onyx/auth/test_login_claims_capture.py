@@ -433,3 +433,57 @@ async def test_capture_saml_noop_when_enrichment_disabled(
             "user@example.com", {"department": ["Legal"]}, "okta-saml"
         )
     redis.set.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_multi_tenant_capture_keys_by_mapped_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On multi-tenant the capture callbacks run unauthenticated, so the key
+    tenant must come from the email mapping, not the request contextvar."""
+    monkeypatch.setattr(claims_capture, "MULTI_TENANT", True)
+    redis = AsyncMock()
+
+    with (
+        patch(
+            "onyx.auth.login_claims_capture.get_async_redis_connection",
+            return_value=redis,
+        ),
+        patch(
+            "onyx.auth.login_claims_capture.fetch_ee_implementation_or_noop",
+            return_value=lambda _email: "tenant_abc123",
+        ),
+    ):
+        await capture_oauth_login_claims(
+            _FakeOAuthClient(), "user@example.com", _make_token({"sub": "abc"})
+        )
+
+    key = redis.set.await_args.args[0]
+    assert "tenant_abc123" in key
+
+
+@pytest.mark.asyncio
+async def test_multi_tenant_capture_skips_unmapped_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(claims_capture, "MULTI_TENANT", True)
+    redis = AsyncMock()
+
+    def _raise_user_not_exists(_email: str) -> str:
+        raise claims_capture.fastapi_users_exceptions.UserNotExists()
+
+    with (
+        patch(
+            "onyx.auth.login_claims_capture.get_async_redis_connection",
+            return_value=redis,
+        ),
+        patch(
+            "onyx.auth.login_claims_capture.fetch_ee_implementation_or_noop",
+            return_value=_raise_user_not_exists,
+        ),
+    ):
+        await capture_oauth_login_claims(
+            _FakeOAuthClient(), "new-user@example.com", _make_token({"sub": "abc"})
+        )
+
+    redis.set.assert_not_awaited()
