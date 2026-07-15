@@ -37,8 +37,10 @@ export function MessageList({ messages, agent }: MessageListProps) {
   const autoScrollEnabled = useSettings((state) => state.autoScrollEnabled);
   const {
     onLoad,
+    onLayout,
     onScroll,
     onScrollBeginDrag,
+    onContentSizeChange,
     scrollToBottom,
     showScrollButton,
     maintainVisibleContentPosition,
@@ -53,7 +55,7 @@ export function MessageList({ messages, agent }: MessageListProps) {
   );
 
   return (
-    <View className="flex-1">
+    <View className="flex-1" onLayout={onLayout}>
       <FlashList
         ref={listRef}
         data={messages}
@@ -62,6 +64,7 @@ export function MessageList({ messages, agent }: MessageListProps) {
         onLoad={onLoad}
         onScroll={onScroll}
         onScrollBeginDrag={onScrollBeginDrag}
+        onContentSizeChange={onContentSizeChange}
         scrollEventThrottle={16}
         maintainVisibleContentPosition={maintainVisibleContentPosition}
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8 }}

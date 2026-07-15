@@ -14,7 +14,11 @@
 // always lands at the bottom, so any scroll event reporting a position beyond the band is the user
 // pulling away, and content growth fires no scroll event so it can't move the pin.
 import { RefObject, useCallback, useEffect, useRef, useState } from "react";
-import { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import {
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+} from "react-native";
 
 import { isWithinBottomBand } from "@/chat/autoScroll";
 
@@ -40,8 +44,10 @@ export interface UseChatAutoScrollParams {
 
 export interface ChatAutoScroll {
   onLoad: () => void;
+  onLayout: (event: LayoutChangeEvent) => void;
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   onScrollBeginDrag: () => void;
+  onContentSizeChange: (width: number, height: number) => void;
   scrollToBottom: () => void;
   showScrollButton: boolean;
   maintainVisibleContentPosition: typeof ANCHOR_ONLY_MVCP;
@@ -55,7 +61,10 @@ export function useChatAutoScroll(
   // pinnedRef = "follow the bottom". A ref (not state): nothing rendered depends on it, so flipping
   // it must not re-render; it's read fresh in onScroll and at the follow rAF's fire time.
   const pinnedRef = useRef(true);
-  const hasOverflowedRef = useRef(false);
+  // Last known viewport and scroll offset, so onContentSizeChange can compute the button from the
+  // real content height without waiting for a scroll event (content growth fires none).
+  const viewportRef = useRef(0);
+  const lastOffsetRef = useRef(0);
   // True while our own animated jump is running, so its scroll events don't flicker the button or
   // unpin the list before it reaches the bottom. Cleared when it reaches the bottom, when the user
   // grabs the list (onScrollBeginDrag), or by a fallback timer.
@@ -91,13 +100,36 @@ export function useChatAutoScroll(
         return;
       }
 
-      if (metrics.contentHeight > metrics.viewportHeight) {
-        hasOverflowedRef.current = true;
-      }
+      viewportRef.current = metrics.viewportHeight;
+      lastOffsetRef.current = metrics.offsetY;
       pinnedRef.current = atBottom;
       setShowScrollButton(!atBottom);
     },
     [],
+  );
+
+  // The list's viewport height, captured before content measures so onContentSizeChange has it.
+  const onLayout = useCallback((event: LayoutChangeEvent) => {
+    viewportRef.current = event.nativeEvent.layout.height;
+  }, []);
+
+  // FlashList v2 forwards this to its underlying ScrollView (FlashListProps extends ScrollViewProps),
+  // so it fires post-measurement whenever content height changes — including growth below the
+  // viewport, which fires no scroll event. Used to keep the jump button correct while NOT following
+  // (following manages its own scroll + button via the effect and onScroll). Fixes: with auto-scroll
+  // off, a chat growing from fitting to overflowing now reveals the button without a manual scroll.
+  const onContentSizeChange = useCallback(
+    (_width: number, height: number) => {
+      if (!didInitialScroll.current || viewportRef.current <= 0) return;
+      if (enabled && pinnedRef.current) return;
+      const atBottom = isWithinBottomBand({
+        offsetY: lastOffsetRef.current,
+        contentHeight: height,
+        viewportHeight: viewportRef.current,
+      });
+      setShowScrollButton(!atBottom);
+    },
+    [enabled],
   );
 
   // The user grabbed the list: a programmatic jump never fires this, so it cleanly ends the jump
@@ -119,33 +151,29 @@ export function useChatAutoScroll(
     }, AUTO_SCROLL_SETTLE_MS);
   }, [listRef]);
 
-  // Follow on content growth. The rAF defers one frame so FlashList has measured the appended content
-  // before we scroll to its end (FlashList v2 has no onContentSizeChange), and coalesces rapid flushes
-  // via the cleanup cancel. The pin is re-checked when the frame FIRES: an onScroll unpin in the gap
-  // can't re-run this effect (pinnedRef is a ref), so the schedule-time check is already stale.
+  // Follow on content growth. The rAF defers one frame so the appended content is laid out before we
+  // scroll to its end, and coalesces rapid flushes via the cleanup cancel. The pin is re-checked when
+  // the frame FIRES: an onScroll unpin in the gap can't re-run this effect (pinnedRef is a ref), so
+  // the schedule-time check is already stale. (The button while not following is handled separately
+  // by onContentSizeChange.)
   useEffect(() => {
     const contentChanged = prevSignatureRef.current !== contentSignature;
     prevSignatureRef.current = contentSignature;
     if (!contentChanged) return;
+    if (!(enabled && pinnedRef.current)) return;
 
-    if (enabled && pinnedRef.current) {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      if (!pinnedRef.current) return; // user scrolled up between schedule and fire → don't yank
+      listRef.current?.scrollToEnd({ animated: false });
+    });
+    return () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
-        if (!pinnedRef.current) return; // user scrolled up between schedule and fire → don't yank
-        listRef.current?.scrollToEnd({ animated: false });
-      });
-      return () => {
-        if (rafRef.current != null) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = null;
-        }
-      };
-    }
-
-    // Not following: content grew below the viewport, which fires no scroll event, so onScroll can't
-    // reveal the jump button. Do it here — guarded on known overflow so a short chat never flashes it.
-    if (hasOverflowedRef.current) setShowScrollButton(true);
+      }
+    };
   }, [contentSignature, enabled, listRef]);
 
   useEffect(
@@ -158,8 +186,10 @@ export function useChatAutoScroll(
 
   return {
     onLoad,
+    onLayout,
     onScroll,
     onScrollBeginDrag,
+    onContentSizeChange,
     scrollToBottom,
     showScrollButton,
     maintainVisibleContentPosition: ANCHOR_ONLY_MVCP,

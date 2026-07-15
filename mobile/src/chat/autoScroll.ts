@@ -29,9 +29,9 @@ export function isWithinBottomBand(
 // or a streaming flush (the last assistant node's packets append). Drives the auto-follow — comparing
 // it, rather than reacting to every render, means the follow fires only on real content growth.
 //
-// Known gap: it is height-blind. Growth from late async layout (e.g. an image finishing load after
-// the final packet) doesn't change it, so that growth isn't followed. FlashList v2 exposes no
-// content-size callback to key off instead.
+// It is height-blind: growth from late async layout (e.g. an image finishing load after the final
+// packet) doesn't change it, so the follow won't chase that growth — but the jump button still
+// surfaces it, via onContentSizeChange in useChatAutoScroll.
 export function contentSignature(messages: Message[]): string {
   const last = messages.length ? messages[messages.length - 1] : undefined;
   return `${messages.length}:${last?.nodeId ?? ""}:${last?.packets.length ?? 0}:${last?.message.length ?? 0}`;

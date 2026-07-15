@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { act, renderHook } from "@testing-library/react-native";
 import type { RefObject } from "react";
-import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import type {
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+} from "react-native";
 
 import {
   useChatAutoScroll,
@@ -50,6 +54,12 @@ function scrollEvent(
       layoutMeasurement: { height: viewportHeight },
     },
   } as unknown as NativeSyntheticEvent<NativeScrollEvent>;
+}
+
+function layoutEvent(height: number): LayoutChangeEvent {
+  return {
+    nativeEvent: { layout: { height } },
+  } as unknown as LayoutChangeEvent;
 }
 
 function setup(
@@ -149,24 +159,37 @@ describe("useChatAutoScroll", () => {
     expect(scrollToEnd).toHaveBeenCalledTimes(1);
   });
 
-  it("reveals the jump button when content grows below an un-followed viewport", () => {
-    const { result, rerender } = setup({
-      enabled: false,
-      contentSignature: "0",
-    });
-    act(() => result.current.onScroll(scrollEvent(400))); // marks overflow, at bottom
+  // The reported gap: with auto-scroll off, content growing past the viewport must reveal the button
+  // even though the user never scrolled (content growth fires no onScroll). onContentSizeChange does.
+  it("reveals the jump button when content grows to overflow while not following", () => {
+    const { result } = setup({ enabled: false, contentSignature: "0" });
+    act(() => result.current.onLoad()); // marks the initial scroll done
+    act(() => result.current.onLayout(layoutEvent(600))); // viewport known
+    act(() => result.current.onContentSizeChange(0, 500)); // still fits → hidden
     expect(result.current.showScrollButton).toBe(false);
-    act(() => rerender({ enabled: false, contentSignature: "1" }));
+    act(() => result.current.onContentSizeChange(0, 1000)); // overflows at offset 0 → shown
     expect(result.current.showScrollButton).toBe(true);
   });
 
-  it("does not flash the button on a content change in a short (non-overflowing) chat", () => {
-    const { result, rerender } = setup({
-      enabled: false,
-      contentSignature: "0",
-    });
-    act(() => result.current.onScroll(scrollEvent(0, 300, 600))); // fits → never overflowed
-    act(() => rerender({ enabled: false, contentSignature: "1" }));
+  it("does not flash the button on content growth that still fits the viewport", () => {
+    const { result } = setup({ enabled: false, contentSignature: "0" });
+    act(() => result.current.onLoad());
+    act(() => result.current.onLayout(layoutEvent(600)));
+    act(() => result.current.onContentSizeChange(0, 400)); // fits
+    expect(result.current.showScrollButton).toBe(false);
+  });
+
+  it("leaves the button to the follow loop while pinned+enabled (content-size change is a no-op)", () => {
+    const { result } = setup({ enabled: true, contentSignature: "0" });
+    act(() => result.current.onLoad());
+    act(() => result.current.onLayout(layoutEvent(600)));
+    act(() => result.current.onContentSizeChange(0, 1000)); // following → button untouched
+    expect(result.current.showScrollButton).toBe(false);
+  });
+
+  it("ignores content-size changes before the initial scroll or before layout", () => {
+    const { result } = setup({ enabled: false, contentSignature: "0" });
+    act(() => result.current.onContentSizeChange(0, 1000)); // no onLoad / onLayout yet
     expect(result.current.showScrollButton).toBe(false);
   });
 
