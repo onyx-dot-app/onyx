@@ -23,9 +23,9 @@ from onyx.deep_research.dr_mock_tools import THINK_TOOL_RESPONSE_TOKEN_COUNT
 from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolChoiceOptions
-from onyx.llm.utils import model_is_reasoning_model
 from onyx.prompts.coding_agent.coding_agent import CODING_AGENT_FINAL_ANSWER_PROMPT
 from onyx.prompts.coding_agent.coding_agent import CODING_AGENT_PROMPT
 from onyx.prompts.coding_agent.coding_agent import CODING_AGENT_PROMPT_REASONING

@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.10
+version: 0.6.13
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,13 +16,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: fixed
-      description: Support clusters running their own cluster-managed CloudNativePG operator.
-        New postgresqlOperator.enabled toggle (mirrors redisOperator.enabled) skips the bundled
-        CNPG operator and its CRDs while keeping the Cluster CR for the external operator to
-        reconcile; the CRDs move byte-for-byte into a condition-gated CRDs-only subchart
-        (onyx-cnpg-crds) with postgresql.installCRDs as an independent override. Default
-        behavior is unchanged; CRDs also no longer install when postgresql.enabled is false.
+    - kind: changed
+      description: Increase the default sandbox proxy memory request from 256Mi to 512Mi and its
+        memory limit from 1Gi to 2Gi, providing more headroom for transient proxy workloads and
+        reducing the risk of out-of-memory termination.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

@@ -282,39 +282,43 @@ export function EmailPasswordForm({
   const { getCaptchaToken } = useCaptcha();
 
   const validationSchema = useMemo(() => {
-    const minLength = authTypeMetadata?.passwordMinLength ?? 0;
-    const maxLength = authTypeMetadata?.passwordMaxLength ?? Infinity;
+    let passwordSchema = Yup.string();
 
-    let passwordSchema = Yup.string().test(
-      "length",
-      `Password must be between ${minLength}–${maxLength} characters`,
-      (v) => passwordMeetsLengthRequirements(v ?? "", minLength, maxLength)
-    );
+    if (isSignup) {
+      const minLength = authTypeMetadata?.passwordMinLength ?? 0;
+      const maxLength = authTypeMetadata?.passwordMaxLength ?? Infinity;
 
-    if (authTypeMetadata?.passwordRequireUppercase)
       passwordSchema = passwordSchema.test(
-        "uppercase",
-        "Password must contain at least one uppercase letter",
-        (v) => passwordHasUppercase(v ?? "")
+        "length",
+        `Password must be between ${minLength}–${maxLength} characters`,
+        (v) => passwordMeetsLengthRequirements(v ?? "", minLength, maxLength)
       );
-    if (authTypeMetadata?.passwordRequireLowercase)
-      passwordSchema = passwordSchema.test(
-        "lowercase",
-        "Password must contain at least one lowercase letter",
-        (v) => passwordHasLowercase(v ?? "")
-      );
-    if (authTypeMetadata?.passwordRequireDigit)
-      passwordSchema = passwordSchema.test(
-        "digit",
-        "Password must contain at least one number",
-        (v) => passwordHasDigit(v ?? "")
-      );
-    if (authTypeMetadata?.passwordRequireSpecialChar)
-      passwordSchema = passwordSchema.test(
-        "special-char",
-        "Password must contain at least one special character",
-        (v) => passwordHasSpecialChar(v ?? "")
-      );
+
+      if (authTypeMetadata?.passwordRequireUppercase)
+        passwordSchema = passwordSchema.test(
+          "uppercase",
+          "Password must contain at least one uppercase letter",
+          (v) => passwordHasUppercase(v ?? "")
+        );
+      if (authTypeMetadata?.passwordRequireLowercase)
+        passwordSchema = passwordSchema.test(
+          "lowercase",
+          "Password must contain at least one lowercase letter",
+          (v) => passwordHasLowercase(v ?? "")
+        );
+      if (authTypeMetadata?.passwordRequireDigit)
+        passwordSchema = passwordSchema.test(
+          "digit",
+          "Password must contain at least one number",
+          (v) => passwordHasDigit(v ?? "")
+        );
+      if (authTypeMetadata?.passwordRequireSpecialChar)
+        passwordSchema = passwordSchema.test(
+          "special-char",
+          "Password must contain at least one special character",
+          (v) => passwordHasSpecialChar(v ?? "")
+        );
+    }
 
     return Yup.object().shape({
       email: Yup.string()
@@ -323,7 +327,7 @@ export function EmailPasswordForm({
         .transform((value: string) => value.toLowerCase()),
       password: passwordSchema.required(),
     });
-  }, [authTypeMetadata]);
+  }, [isSignup, authTypeMetadata]);
 
   const initialValues: FormValues = {
     email: defaultEmail?.toLowerCase() ?? "",

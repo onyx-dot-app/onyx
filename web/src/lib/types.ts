@@ -173,6 +173,7 @@ export type ValidStatuses =
   | "success"
   | "completed_with_errors"
   | "canceled"
+  | "interrupted"
   | "failed"
   | "in_progress"
   | "not_started";
@@ -599,6 +600,7 @@ export enum ValidSources {
   Bitbucket = "bitbucket",
   TestRail = "testrail",
   Braintrust = "braintrust",
+  Lumapps = "lumapps",
 
   // Craft-specific sources
   CraftFile = "craft_file",

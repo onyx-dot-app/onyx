@@ -242,10 +242,15 @@ def build_vespa_filters(
     elif len(knowledge_scope_parts) == 1:
         filter_parts.append(knowledge_scope_parts[0])
 
-    # Time filter
+    # Vespa only indexes doc_updated_at: created_at_range is dropped (widens
+    # rather than narrows).
+    updated_at_range = filters.updated_at_range
     _append(
         filter_parts,
-        _build_time_filter(filters.time_cutoff, filters.time_cutoff_upper),
+        _build_time_filter(
+            updated_at_range.start if updated_at_range else None,
+            updated_at_range.end if updated_at_range else None,
+        ),
     )
 
     # # Knowledge Graph Filters

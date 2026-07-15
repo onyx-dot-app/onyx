@@ -151,8 +151,8 @@ export default function CraftPage() {
 
   const header = (
     <SettingsLayouts.Header
-      icon={ADMIN_ROUTES.CRAFT.icon}
-      title={ADMIN_ROUTES.CRAFT.title}
+      icon={ADMIN_ROUTES.CRAFT_ACCESS.icon}
+      title={ADMIN_ROUTES.CRAFT_ACCESS.title}
       description="Control who can use Craft, Onyx's agentic app builder."
       divider
     />
@@ -269,7 +269,7 @@ export default function CraftPage() {
 
       {pendingDefault !== null && (
         <ConfirmationModalLayout
-          icon={ADMIN_ROUTES.CRAFT.icon}
+          icon={ADMIN_ROUTES.CRAFT_ACCESS.icon}
           title={
             pendingDefault
               ? "Enable Craft for all users?"

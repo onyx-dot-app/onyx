@@ -2,7 +2,7 @@
 
 Verifies that:
 - SearchTool.is_available() returns False when vector DB is disabled
-- OpenURLTool.is_available() returns False when vector DB is disabled
+- OpenURLTool.is_available() returns True when vector DB is disabled (crawl-only)
 - The force-add SearchTool block is suppressed when DISABLE_VECTOR_DB
 - FileReaderTool.is_available() returns True when vector DB is disabled
 """
@@ -14,6 +14,7 @@ from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileRea
 
 APP_CONFIGS_MODULE = "onyx.configs.app_configs"
 FILE_READER_MODULE = "onyx.tools.tool_implementations.file_reader.file_reader_tool"
+OPEN_URL_MODULE = "onyx.tools.tool_implementations.open_url.open_url_tool"
 
 
 # ------------------------------------------------------------------
@@ -55,13 +56,13 @@ class TestSearchToolAvailability:
 
 
 class TestOpenURLToolAvailability:
-    @patch(f"{APP_CONFIGS_MODULE}.DISABLE_VECTOR_DB", True)
-    def test_unavailable_when_vector_db_disabled(self) -> None:
+    @patch(f"{OPEN_URL_MODULE}.DISABLE_VECTOR_DB", True)
+    def test_available_when_vector_db_disabled(self) -> None:
         from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 
-        assert OpenURLTool.is_available(MagicMock()) is False
+        assert OpenURLTool.is_available(MagicMock()) is True
 
-    @patch(f"{APP_CONFIGS_MODULE}.DISABLE_VECTOR_DB", False)
+    @patch(f"{OPEN_URL_MODULE}.DISABLE_VECTOR_DB", False)
     def test_available_when_vector_db_enabled(self) -> None:
         from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 

@@ -99,7 +99,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
     const tags = overrides.tags !== undefined ? overrides.tags : selectedTags;
     const cutoff = time ? getTimeFilterDate(time) : null;
     return {
-      time_cutoff: cutoff?.toISOString() ?? null,
+      updated_at_range: cutoff
+        ? { start: cutoff.toISOString(), end: null }
+        : null,
       tags:
         tags.length > 0
           ? tags.map((t) => ({ tag_key: t.tag_key, tag_value: t.tag_value }))

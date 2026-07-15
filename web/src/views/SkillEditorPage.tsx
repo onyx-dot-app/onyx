@@ -4,9 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type ChangeEvent,
   type FormEvent,
 } from "react";
 import useSWR, { useSWRConfig } from "swr";
@@ -24,12 +22,11 @@ import {
   Tooltip,
 } from "@opal/components";
 import {
-  SvgArrowLeft,
+  SvgAlertTriangle,
   SvgBlocks,
   SvgShare,
   SvgSimpleLoader,
   SvgTrash,
-  SvgUploadCloud,
 } from "@opal/icons";
 import {
   Content,
@@ -42,20 +39,27 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  createCustomSkillFromEditor,
   deleteUserSkill,
+  inspectSkillBundle,
   patchUserSkill,
-  replaceUserSkillBundle,
+  removeUserSkillFile,
+  uploadUserSkillFiles,
 } from "@/lib/skills/api";
 import type { CustomSkill, SkillEditableDetail } from "@/lib/skills/types";
+import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
 import { toast } from "@/hooks/useToast";
 import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import SkillFileTree from "@/sections/skills/SkillFileTree";
+import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
+import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 
 interface SkillEditorPageProps {
-  skillId: string;
+  skillId?: string;
 }
 
 function getSharingStatus(skill: SkillEditableDetail): {
@@ -93,16 +97,16 @@ function getSharingStatus(skill: SkillEditableDetail): {
 }
 
 export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
+  const isCreating = skillId === undefined;
   const router = useRouter();
   const { mutate } = useSWRConfig();
-  const replaceFileRef = useRef<HTMLInputElement>(null);
   const {
     data: skill,
     error,
     isLoading,
     mutate: refreshSkill,
   } = useSWR<SkillEditableDetail>(
-    SWR_KEYS.editableSkill(skillId),
+    skillId ? SWR_KEYS.editableSkill(skillId) : null,
     errorHandlingFetcher
   );
 
@@ -115,7 +119,13 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const [shareOpen, setShareOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isReplacingFiles, setIsReplacingFiles] = useState(false);
+  const [isPreparingFiles, setIsPreparingFiles] = useState(false);
+  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+  const [pendingFilesUpload, setPendingFilesUpload] =
+    useState<PreparedSkillFilesUpload | null>(null);
+  const [filesUploadToConfirm, setFilesUploadToConfirm] =
+    useState<PreparedSkillFilesUpload | null>(null);
+  const [removingFilePath, setRemovingFilePath] = useState<string | null>(null);
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -132,26 +142,42 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   }, [hydratedSkillId, skill, syncEditableFields]);
 
   const isDirty = useMemo(() => {
+    if (isCreating) {
+      return Boolean(
+        name || description || instructionsMarkdown || pendingFilesUpload
+      );
+    }
     if (!skill) return false;
     return (
       name !== skill.name ||
       description !== skill.description ||
       instructionsMarkdown !== skill.instructions_markdown
     );
-  }, [description, instructionsMarkdown, name, skill]);
+  }, [
+    description,
+    instructionsMarkdown,
+    isCreating,
+    name,
+    pendingFilesUpload,
+    skill,
+  ]);
 
   const canManageSkill =
-    skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
+    isCreating ||
+    skill?.user_permission === "OWNER" ||
+    skill?.user_permission === "EDITOR";
 
   // A bundle upload rewrites name/description/instructions from SKILL.md, so
   // lock the detail fields while one is in flight: edits made mid-upload
   // would be clobbered by the post-upload sync (or race it via Save).
-  const fieldsLocked = !canManageSkill || isReplacingFiles;
+  const fieldsLocked =
+    !canManageSkill || isPreparingFiles || isUploadingFiles || isSaving;
 
   const canSave =
-    !!skill &&
+    (isCreating || !!skill) &&
     canManageSkill &&
-    !isReplacingFiles &&
+    !isPreparingFiles &&
+    !isUploadingFiles &&
     isDirty &&
     !!name.trim() &&
     !!description.trim() &&
@@ -175,26 +201,37 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
   async function handleSave(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    if (!skill || !canSave) return;
+    if (!canSave) return;
     setIsSaving(true);
     try {
+      if (isCreating) {
+        const created = await createCustomSkillFromEditor(
+          {
+            name,
+            description,
+            instructions_markdown: instructionsMarkdown,
+          },
+          pendingFilesUpload?.file
+        );
+        await refreshSkillList();
+        toast.success(`Created "${created.name}"`);
+        router.replace(`/craft/v1/skills/edit/${created.id}` as Route);
+        return;
+      }
+
+      if (!skill) return;
       const updated = await patchUserSkill(skill.id, {
         name,
         description,
         instructions_markdown: instructionsMarkdown,
       });
-      const refreshed = await refreshSkill();
-      if (refreshed) {
-        syncEditableFields(refreshed);
-      } else {
-        const nextSkill: SkillEditableDetail = {
-          ...skill,
-          ...updated,
-          instructions_markdown: instructionsMarkdown.trim(),
-        };
-        await refreshSkill(nextSkill, { revalidate: false });
-        syncEditableFields(nextSkill);
-      }
+      const nextSkill: SkillEditableDetail = {
+        ...skill,
+        ...updated,
+        instructions_markdown: instructionsMarkdown.trim(),
+      };
+      await refreshSkill(nextSkill, { revalidate: false });
+      syncEditableFields(nextSkill);
       await refreshSkillList();
       toast.success(`Saved "${updated.name}"`);
     } catch (err) {
@@ -210,31 +247,87 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     await refreshSkillList();
   }
 
-  function handleReplaceFilesClick() {
-    replaceFileRef.current?.click();
-  }
-
-  async function handleReplaceFiles(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!skill || !file || !canManageSkill || isDirty) return;
-
-    setIsReplacingFiles(true);
-    try {
-      const updated = await replaceUserSkillBundle(skill.id, file);
-      await refreshSkillList();
-      const refreshed = await refreshSkill();
-      if (refreshed) {
-        syncEditableFields(refreshed);
+  async function applyFilesUpload(upload: PreparedSkillFilesUpload) {
+    if (isCreating) {
+      if (!upload.containsSkillMd) {
+        setPendingFilesUpload(upload);
+        return;
       }
-      toast.success(`Replaced files for "${updated.name}"`);
+
+      setIsUploadingFiles(true);
+      try {
+        const bundle = await inspectSkillBundle(upload.file);
+        setName(bundle.name);
+        setDescription(bundle.description);
+        setInstructionsMarkdown(bundle.instructions_markdown);
+        setPendingFilesUpload({
+          ...upload,
+          entries: bundle.files,
+        });
+      } catch (err) {
+        console.error("Failed to inspect skill bundle", err);
+        toast.error(
+          err instanceof Error ? err.message : "Failed to inspect skill bundle"
+        );
+      } finally {
+        setIsUploadingFiles(false);
+      }
+      return;
+    }
+    if (!skill || !canManageSkill || isDirty) return;
+
+    setIsUploadingFiles(true);
+    try {
+      const updated = await uploadUserSkillFiles(skill.id, upload.file);
+      await refreshSkill(updated, { revalidate: false });
+      syncEditableFields(updated);
+      await refreshSkillList();
+      toast.success(`Updated files for "${updated.name}"`);
     } catch (err) {
-      console.error("Failed to replace skill files", err);
+      console.error("Failed to update skill files", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to replace skill files"
+        err instanceof Error ? err.message : "Failed to update skill files"
       );
     } finally {
-      setIsReplacingFiles(false);
+      setIsUploadingFiles(false);
+    }
+  }
+
+  function handleFilesSelected(upload: PreparedSkillFilesUpload) {
+    if (upload.containsSkillMd) {
+      if (isCreating && !isDirty) {
+        void applyFilesUpload(upload);
+        return;
+      }
+      setFilesUploadToConfirm(upload);
+      return;
+    }
+    void applyFilesUpload(upload);
+  }
+
+  function handleImportSelected(upload: PreparedSkillFilesUpload) {
+    if (!upload.containsSkillMd) {
+      toast.error("Import a SKILL.md, ZIP, or folder containing SKILL.md.");
+      return;
+    }
+    handleFilesSelected(upload);
+  }
+
+  async function handleRemoveFile(path: string) {
+    if (!skill || !canManageSkill || removingFilePath !== null) return;
+    setRemovingFilePath(path);
+    try {
+      const updated = await removeUserSkillFile(skill.id, path);
+      await refreshSkill(updated, { revalidate: false });
+      await refreshSkillList();
+      toast.success(`Removed "${path}"`);
+    } catch (err) {
+      console.error("Failed to remove skill file", err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to remove skill file"
+      );
+    } finally {
+      setRemovingFilePath(null);
     }
   }
 
@@ -278,13 +371,15 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   }
 
   const saveTooltip = isSaving
-    ? "Saving changes..."
-    : !skill
+    ? isCreating
+      ? "Creating skill..."
+      : "Saving changes..."
+    : !isCreating && !skill
       ? undefined
       : !canManageSkill
         ? "You don't have permission to edit this skill's details."
         : !name.trim()
-          ? "Add a title before saving."
+          ? "Add a name before saving."
           : !description.trim()
             ? "Add a description before saving."
             : !instructionsMarkdown.trim()
@@ -294,15 +389,23 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                 : undefined;
 
   const sharingStatus = skill ? getSharingStatus(skill) : null;
-  const replaceFilesDisabled =
-    !canManageSkill || isReplacingFiles || isSaving || isDirty;
-  const replaceFilesTooltip = isDirty
-    ? "Save detail changes before replacing skill files."
-    : isReplacingFiles
-      ? "Replacing skill files..."
-      : !canManageSkill
-        ? "You don't have permission to replace this skill's files."
-        : undefined;
+  const filesUploadDisabled =
+    !canManageSkill ||
+    isPreparingFiles ||
+    isUploadingFiles ||
+    isSaving ||
+    (!isCreating && isDirty);
+  const filesUploadTooltip =
+    !isCreating && isDirty
+      ? "Save detail changes before updating skill files."
+      : isUploadingFiles
+        ? "Updating skill files..."
+        : !canManageSkill
+          ? "You don't have permission to update this skill's files."
+          : undefined;
+  const displayedFiles = isCreating
+    ? (pendingFilesUpload?.entries ?? [])
+    : (skill?.files ?? []);
 
   return (
     <form
@@ -313,21 +416,30 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgBlocks}
-          title="Edit skill"
-          description={skill?.slug}
+          title={isCreating ? "Create skill" : "Edit skill"}
+          description={
+            isCreating
+              ? "Build a personal skill"
+              : "Update skill details and files"
+          }
           rightChildren={
             <div className="flex items-center gap-2">
               <Button
                 prominence="secondary"
                 type="button"
-                icon={SvgArrowLeft}
                 onClick={navigateBack}
               >
                 Cancel
               </Button>
               <Tooltip tooltip={saveTooltip} side="bottom">
                 <Button disabled={!canSave} type="submit">
-                  {isSaving ? "Saving..." : "Save"}
+                  {isSaving
+                    ? isCreating
+                      ? "Creating..."
+                      : "Saving..."
+                    : isCreating
+                      ? "Create"
+                      : "Save"}
                 </Button>
               </Tooltip>
             </div>
@@ -337,13 +449,13 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
         />
 
         <SettingsLayouts.Body>
-          {isLoading && (
+          {!isCreating && isLoading && (
             <div className="flex min-h-40 items-center justify-center">
               <SvgSimpleLoader />
             </div>
           )}
 
-          {error && !isLoading && (
+          {!isCreating && error && !isLoading && (
             <MessageCard
               variant="error"
               title="Skill unavailable"
@@ -351,9 +463,46 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
             />
           )}
 
-          {skill && !isLoading && !error && (
+          {(isCreating || skill) && !isLoading && !error && (
             <>
+              {isCreating && (
+                <>
+                  <Section gap={0.5} alignItems="stretch" height="auto">
+                    <Card border="solid" rounding="lg" padding="sm">
+                      <Section gap={0.5} alignItems="stretch" height="auto">
+                        <Content
+                          title="Have an existing skill?"
+                          description="Import a SKILL.md, ZIP, or skill folder to prefill the form and include its files."
+                          sizePreset="main-content"
+                          variant="section"
+                        />
+                        <SkillFilesPicker
+                          disabled={filesUploadDisabled}
+                          busyLabel={
+                            isUploadingFiles ? "Importing..." : undefined
+                          }
+                          buttonLabel="Import skill"
+                          inputLabel="Import existing skill"
+                          prompt="Choose a SKILL.md or ZIP, or drop a skill folder here."
+                          onChange={handleImportSelected}
+                          onError={(message) => toast.error(message)}
+                          onPreparingChange={setIsPreparingFiles}
+                        />
+                      </Section>
+                    </Card>
+                  </Section>
+
+                  <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                </>
+              )}
+
               <Section alignItems="stretch">
+                <Content
+                  title="Details"
+                  description="Define when and how Craft should use this skill."
+                  sizePreset="main-content"
+                  variant="section"
+                />
                 <InputVertical withLabel="name" title="Name">
                   <InputTypeIn
                     id="name"
@@ -373,7 +522,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                   <InputTextArea
                     id="description"
                     name="description"
-                    rows={4}
+                    rows={2}
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
                     placeholder="What does this skill help with?"
@@ -405,7 +554,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                     <InputTextArea
                       id="instructions_markdown"
                       name="instructions_markdown"
-                      rows={22}
+                      rows={10}
                       value={instructionsMarkdown}
                       onChange={(event) =>
                         setInstructionsMarkdown(event.target.value)
@@ -428,105 +577,135 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
               <Section gap={0.5} alignItems="stretch" height="auto">
                 <Content
-                  title="Management"
-                  description="Control who can use this skill and whether Craft can currently select it."
+                  title="Supporting files"
+                  description="Add references, scripts, assets, or other files used by this skill. ZIP files are unpacked automatically."
                   sizePreset="main-content"
                   variant="section"
                 />
                 <Card border="solid" rounding="lg">
-                  <Section>
-                    {sharingStatus && (
-                      <InputHorizontal
-                        title="Sharing"
-                        description={sharingStatus.description}
-                        center
-                      >
-                        <div className="flex items-center gap-2">
-                          <Tag
-                            title={sharingStatus.title}
-                            color={sharingStatus.color}
+                  <SkillFileTree
+                    files={displayedFiles}
+                    onRemove={
+                      skill && canManageSkill ? handleRemoveFile : undefined
+                    }
+                    removingPath={removingFilePath}
+                    removeDisabled={filesUploadDisabled}
+                    emptyMessage={
+                      pendingFilesUpload?.entries === null
+                        ? "Files from this upload will appear after you create the skill."
+                        : undefined
+                    }
+                  />
+                  {canManageSkill && (
+                    <div className="border-t border-border-01 p-2">
+                      <Tooltip tooltip={filesUploadTooltip} side="bottom">
+                        <div>
+                          <SkillFilesPicker
+                            value={pendingFilesUpload}
+                            disabled={filesUploadDisabled}
+                            inputLabel="Add supporting files"
+                            busyLabel={
+                              isUploadingFiles ? "Uploading..." : undefined
+                            }
+                            onChange={handleFilesSelected}
+                            onError={(message) => toast.error(message)}
+                            onPreparingChange={setIsPreparingFiles}
                           />
-                          {canManageSkill && (
-                            <Button
-                              type="button"
-                              prominence="secondary"
-                              icon={SvgShare}
-                              onClick={() => setShareOpen(true)}
-                            >
-                              Edit sharing
-                            </Button>
-                          )}
                         </div>
-                      </InputHorizontal>
-                    )}
-
-                    {canManageSkill && (
-                      <InputHorizontal
-                        title="Skill files"
-                        description="Replace the ZIP bundle for this skill. The slug stays the same; name, description, and instructions are read from the new SKILL.md."
-                        center
-                      >
-                        <Tooltip tooltip={replaceFilesTooltip} side="bottom">
-                          <Button
-                            type="button"
-                            prominence="secondary"
-                            icon={SvgUploadCloud}
-                            disabled={replaceFilesDisabled}
-                            onClick={handleReplaceFilesClick}
-                          >
-                            {isReplacingFiles
-                              ? "Replacing..."
-                              : "Replace files"}
-                          </Button>
-                        </Tooltip>
-                      </InputHorizontal>
-                    )}
-
-                    {canManageSkill && (
-                      <InputHorizontal
-                        title={skill.enabled ? "Enabled" : "Disabled"}
-                        description={
-                          skill.enabled
-                            ? "Craft can use this skill when it is relevant."
-                            : "Craft will not use this skill until it is re-enabled."
-                        }
-                        center
-                      >
-                        <Switch
-                          checked={skill.enabled}
-                          disabled={isTogglingEnabled}
-                          onCheckedChange={handleToggleEnabled}
-                        />
-                      </InputHorizontal>
-                    )}
-                  </Section>
+                      </Tooltip>
+                    </div>
+                  )}
                 </Card>
               </Section>
 
-              {canManageSkill && (
+              {skill && (
                 <>
                   <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
-                  <Card border="solid" rounding="lg">
-                    <Section>
-                      <InputHorizontal
-                        title="Delete this skill"
-                        description="Anyone using this skill will lose access. Deletion cannot be undone."
-                        center
-                      >
-                        <Button
-                          type="button"
-                          variant="danger"
-                          prominence="secondary"
-                          icon={SvgTrash}
-                          disabled={isDeleting}
-                          onClick={() => setDeleteOpen(true)}
-                        >
-                          Delete skill
-                        </Button>
-                      </InputHorizontal>
-                    </Section>
-                  </Card>
+                  <Section gap={0.5} alignItems="stretch" height="auto">
+                    <Content
+                      title="Management"
+                      description="Control who can use this skill and whether Craft can currently select it."
+                      sizePreset="main-content"
+                      variant="section"
+                    />
+                    <Card border="solid" rounding="lg">
+                      <Section>
+                        {sharingStatus && (
+                          <InputHorizontal
+                            title="Sharing"
+                            description={sharingStatus.description}
+                            center
+                          >
+                            <div className="flex items-center gap-2">
+                              <Tag
+                                title={sharingStatus.title}
+                                color={sharingStatus.color}
+                              />
+                              {canManageSkill && (
+                                <Button
+                                  type="button"
+                                  prominence="secondary"
+                                  icon={SvgShare}
+                                  onClick={() => setShareOpen(true)}
+                                >
+                                  Edit sharing
+                                </Button>
+                              )}
+                            </div>
+                          </InputHorizontal>
+                        )}
+
+                        {canManageSkill && (
+                          <InputHorizontal
+                            title={skill.enabled ? "Enabled" : "Disabled"}
+                            description={
+                              skill.enabled
+                                ? "Craft can use this skill when it is relevant."
+                                : "Craft will not use this skill until it is re-enabled."
+                            }
+                            center
+                          >
+                            <Switch
+                              checked={skill.enabled}
+                              disabled={isTogglingEnabled}
+                              onCheckedChange={handleToggleEnabled}
+                            />
+                          </InputHorizontal>
+                        )}
+                      </Section>
+                    </Card>
+                  </Section>
+
+                  {canManageSkill && (
+                    <>
+                      <Divider
+                        paddingParallel="fit"
+                        paddingPerpendicular="fit"
+                      />
+
+                      <Card border="solid" rounding="lg">
+                        <Section>
+                          <InputHorizontal
+                            title="Delete this skill"
+                            description="Anyone using this skill will lose access. Deletion cannot be undone."
+                            center
+                          >
+                            <Button
+                              type="button"
+                              variant="danger"
+                              prominence="secondary"
+                              icon={SvgTrash}
+                              disabled={isDeleting}
+                              onClick={() => setDeleteOpen(true)}
+                            >
+                              Delete skill
+                            </Button>
+                          </InputHorizontal>
+                        </Section>
+                      </Card>
+                    </>
+                  )}
                 </>
               )}
             </>
@@ -534,20 +713,35 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
 
-      <input
-        ref={replaceFileRef}
-        type="file"
-        accept=".zip,application/zip,application/x-zip-compressed"
-        className="hidden"
-        onChange={handleReplaceFiles}
-      />
-
       <ShareSkillModal
         skill={shareOpen ? (skill ?? null) : null}
         open={shareOpen}
         onClose={() => setShareOpen(false)}
         onSaved={handleSharingSaved}
       />
+
+      {filesUploadToConfirm && (
+        <ConfirmationModalLayout
+          icon={SvgAlertTriangle}
+          title={isCreating ? "Import this skill?" : "Replace skill content?"}
+          onClose={() => setFilesUploadToConfirm(null)}
+          submit={
+            <Button
+              type="button"
+              onClick={() => {
+                const upload = filesUploadToConfirm;
+                setFilesUploadToConfirm(null);
+                void applyFilesUpload(upload);
+              }}
+            >
+              {isCreating ? "Import skill" : "Replace content"}
+            </Button>
+          }
+        >
+          This upload includes SKILL.md. Continuing will replace the current
+          name, description, instructions, and files with the uploaded bundle.
+        </ConfirmationModalLayout>
+      )}
 
       {skill && deleteOpen && (
         <ConfirmEntityModal

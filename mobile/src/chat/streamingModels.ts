@@ -1,5 +1,4 @@
-// Minimal core streaming-packet contracts (NDJSON wire shapes). Rich packet
-// types are added in their own phases.
+// Core streaming-packet contracts (NDJSON wire shapes).
 
 interface BaseObj {
   type: string;
@@ -75,12 +74,20 @@ export interface Packet {
   obj: ObjTypes;
 }
 
-// Root object (not wrapped in Packet.obj). The wire does NOT carry `type` here
-// (the backend emits only the two id fields), so consumers must discriminate it
-// by field presence (e.g. "user_message_id" in obj), never by `obj.type`. The
-// optional `type` is kept only as a readable tag.
+// Root object (not wrapped in Packet.obj); wire omits `type`, so discriminate by
+// field presence (`"user_message_id" in obj`), never `obj.type`.
 export interface MessageResponseIDInfo {
   type?: "message_id_info";
   user_message_id: number | null;
   reserved_assistant_message_id: number;
+}
+
+// Root-level error (backend `StreamingError`), not wrapped in Packet.obj — discriminate
+// by top-level `error`, not `obj.type`. Dropping it silently leaves the turn stuck on "…".
+export interface StreamingError {
+  error: string;
+  stack_trace?: string | null;
+  error_code?: string | null;
+  is_retryable?: boolean;
+  details?: Record<string, unknown> | null;
 }
