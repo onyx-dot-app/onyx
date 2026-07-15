@@ -7,7 +7,6 @@ import { getExtensionContext } from "@/lib/extension/utils";
 import Modal from "@/refresh-components/Modal";
 import { Button, Text } from "@opal/components";
 import { SvgLogOut, SvgCheckCircle, SvgXCircle } from "@opal/icons";
-import { AuthType } from "@/lib/auth/types";
 import { SvgGoogle } from "@opal/logos";
 import type { IconProps } from "@opal/types";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
@@ -88,10 +87,10 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
 // ---------------------------------------------------------------------------
 // SignInButton
 //
-// Renders the SSO / OAuth sign-in button on the login page.
+// Renders the Google sign-in button on the login page.
 //
 // When reCAPTCHA is enabled for this deployment (NEXT_PUBLIC_RECAPTCHA_SITE_KEY
-// set at build time), the Google/OIDC/SAML OAuth click is intercepted to
+// set at build time), the Google OAuth click is intercepted to
 // (1) fetch a reCAPTCHA v3 token for the "oauth" action, (2) POST it to
 // /api/auth/captcha/oauth-verify which sets a signed HttpOnly cookie on the
 // response, and (3) then navigate to the authorize URL. The cookie is sent
@@ -115,27 +114,23 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
 
 interface SignInButtonProps {
   authorizeUrl: string;
-  authType: AuthType;
+  multiTenant: boolean;
 }
 
-export function SignInButton({ authorizeUrl, authType }: SignInButtonProps) {
+export function SignInButton({ authorizeUrl, multiTenant }: SignInButtonProps) {
   const { getCaptchaToken, isCaptchaEnabled } = useCaptcha();
   const [isVerifying, setIsVerifying] = useState(false);
 
   let button: string | undefined;
   let icon: React.FunctionComponent<IconProps> | undefined;
 
-  if (authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD) {
+  if (multiTenant) {
     button = "Continue with Google";
     icon = SvgGoogle;
-  } else if (authType === AuthType.OIDC) {
-    button = "Continue with OIDC SSO";
-  } else if (authType === AuthType.SAML) {
-    button = "Continue with SAML SSO";
   }
 
   if (!button) {
-    throw new Error(`Unhandled authType: ${authType}`);
+    throw new Error(`Unhandled multiTenant value: ${multiTenant}`);
   }
 
   async function handleClick(e: React.MouseEvent) {
@@ -163,12 +158,8 @@ export function SignInButton({ authorizeUrl, authType }: SignInButtonProps) {
   }
 
   // Only the Google OAuth callback is gated by CaptchaCookieMiddleware on the
-  // backend. OIDC/SAML callbacks have no cookie requirement, so running the
-  // reCAPTCHA interception for them is wasted friction — and worse, a failed
-  // captcha would block the sign-in entirely.
-  const intercepted =
-    isCaptchaEnabled &&
-    (authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD);
+  // backend, so the reCAPTCHA interception applies only to the Google sign-in.
+  const intercepted = isCaptchaEnabled && multiTenant;
 
   return (
     <Button

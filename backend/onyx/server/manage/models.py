@@ -11,7 +11,6 @@ from pydantic import field_validator
 from pydantic import model_validator
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import SSOProviderType
@@ -60,8 +59,9 @@ class SSOProviderOption(BaseModel):
     authorize_url: str
 
 
-class AuthTypeResponse(BaseModel):
-    auth_type: AuthType
+class AuthConfigResponse(BaseModel):
+    # Cloud (multi-tenant) signup provisions a tenant and offers Google login.
+    multi_tenant: bool
     # specifies whether the current auth setup requires
     # users to have verified emails
     requires_verification: bool
@@ -76,7 +76,8 @@ class AuthTypeResponse(BaseModel):
     has_users: bool = True
     oauth_enabled: bool = False
     # Enabled DB-backed SSO providers, one login button each. Empty on cloud and
-    # on instances with no provider rows, so the page falls back to auth_type.
+    # on instances with no provider rows, so the page falls back to the built-in
+    # password (and Google when oauth_enabled) login.
     sso_providers: list[SSOProviderOption] = []
 
 

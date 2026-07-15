@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@opal/layouts";
-import { AuthType } from "@/lib/auth/types";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
@@ -634,7 +633,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <Modal.Content width="sm" height="sm">
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
-              {authTypeMetadata?.authType === AuthType.BASIC ? (
+              {authTypeMetadata?.multiTenant === false ? (
                 <LoginPage
                   authUrl={null}
                   authTypeMetadata={authTypeMetadata ?? null}
