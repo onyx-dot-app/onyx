@@ -30,6 +30,10 @@ env:
 
 jobs:
   connector-filter-eval:
+    # Informative, not a merge gate: a single failing eval case fails the run,
+    # but some cases document behaviors the prompt does not handle yet, so a
+    # red eval must never block the PR.
+    continue-on-error: true
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64

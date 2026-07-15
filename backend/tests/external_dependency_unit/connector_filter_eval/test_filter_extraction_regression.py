@@ -7,19 +7,16 @@ drops below the threshold. This is the CI gate for changes to
 `.github/workflows/pr-connector-filter-eval.yml`, which runs this file only
 when the prompt (or the flow around it) changes.
 
-LLM output varies between runs, so the gate is a scored dataset rather than
-per-case hard asserts: each case gets a retry, and the suite passes on an
-aggregate threshold. A systematic prompt regression flips its cases on every
-attempt and sinks the score; a one-off wobble does not.
+A single failing case fails the test — the report lists every failure with
+expected vs got. LLM output varies between runs, so each case gets a retry
+(CONNECTOR_FILTER_EVAL_ATTEMPTS, default 2) and passes if any attempt returns
+the expected scope. The CI job is intentionally NON-blocking
+(continue-on-error in the workflow): a red run is a signal to read, not a
+merge gate — some cases document behaviors the prompt does not handle yet.
 
 Scoring normalizes a scope that covers every connected source to "unscoped" —
 filtering to all sources retrieves exactly what no filter does, so the two
 answers are behaviorally identical.
-
-Knobs (env vars):
-- CONNECTOR_FILTER_EVAL_THRESHOLD: minimum pass rate in [0, 1] (default 0.85).
-- CONNECTOR_FILTER_EVAL_ATTEMPTS: attempts per case; a case passes if any
-  attempt returns the expected scope (default 2).
 """
 
 from __future__ import annotations
@@ -42,7 +39,6 @@ from tests.external_dependency_unit.connector_filter_eval.scope_eval_cases impor
     ScopeEvalCase,
 )
 
-_PASS_RATE_THRESHOLD = float(os.environ.get("CONNECTOR_FILTER_EVAL_THRESHOLD", "0.85"))
 _ATTEMPTS_PER_CASE = int(os.environ.get("CONNECTOR_FILTER_EVAL_ATTEMPTS", "2"))
 _MAX_WORKERS = 4
 
@@ -104,10 +100,7 @@ def _report(outcomes: list[_CaseOutcome]) -> str:
             f"expected={_scope_str(outcome.case.expected)} got={got}"
         )
     passed = sum(o.passed for o in outcomes)
-    lines.append(
-        f"pass rate: {passed}/{len(outcomes)} "
-        f"({passed / len(outcomes):.1%}), threshold {_PASS_RATE_THRESHOLD:.0%}"
-    )
+    lines.append(f"passed: {passed}/{len(outcomes)} ({passed / len(outcomes):.1%})")
     lines.append(
         "per category: "
         + ", ".join(
@@ -128,9 +121,7 @@ def test_filter_extraction_no_regression(eval_llm: LLM) -> None:
     print("\n" + report)
 
     failed = [o for o in outcomes if not o.passed]
-    pass_rate = (len(outcomes) - len(failed)) / len(outcomes)
-    assert pass_rate >= _PASS_RATE_THRESHOLD, (
-        f"filter extraction regressed: pass rate {pass_rate:.1%} is below the "
-        f"{_PASS_RATE_THRESHOLD:.0%} threshold "
-        f"({len(failed)}/{len(outcomes)} cases failed)\n{report}"
+    assert not failed, (
+        f"{len(failed)}/{len(outcomes)} filter-extraction cases failed: "
+        f"{', '.join(o.case.name for o in failed)}\n{report}"
     )

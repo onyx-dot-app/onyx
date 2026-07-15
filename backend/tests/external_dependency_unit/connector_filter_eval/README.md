@@ -5,10 +5,14 @@ Scored regression eval for the source-scope filter extraction
 `SOURCE_SCOPE_DECISION_PROMPT` in `onyx/prompts/filter_extration.py`).
 
 `test_filter_extraction_regression.py` runs every eval question in
-`scope_eval_cases.py` directly through `decide_search_scope` (real LLM, no agent
-loop) and fails when the pass rate drops below a threshold (default 85%; each
-case gets one retry to absorb LLM wobble, and a scope covering every connected
-source grades the same as unscoped).
+`scope_eval_cases.py` directly through `decide_search_scope` (real LLM, no
+agent loop). A single failing case fails the test, and the report lists every
+failure with expected vs got. Each case gets one retry to absorb LLM wobble,
+and a scope covering every connected source grades the same as unscoped.
+
+The CI job is **non-blocking** (`continue-on-error`): a red eval is a signal
+to read, not a merge gate — some cases document behaviors the prompt does not
+handle yet.
 
 The dataset covers the behaviors the prompt is responsible for:
 
@@ -53,12 +57,10 @@ run with `-s` to see it on success too.
 - Add cases to `scope_eval_cases.py` (name, category, user turns, connected
   sources, cycle state, expected scope). Expectations are graded on the
   resolved scope set only, never answer phrasing.
-- Knobs: `CONNECTOR_FILTER_EVAL_THRESHOLD` (pass rate in [0,1], default 0.85)
-  and `CONNECTOR_FILTER_EVAL_ATTEMPTS` (attempts per case, default 2).
-- The threshold is deliberately below 100%: a couple of known-hard backoff
-  cases (advance-vs-re-search judgment) fail with cheap models. A real prompt
-  regression flips a whole category and sinks the score well below the bar.
-- The `false-positive` trap cases (a connected source named as the TOPIC of
-  the question, not as where to look) currently FAIL — the suite is red until
-  the WHERE-vs-TOPIC prompt tuning lands and lifts the score back over the
-  threshold.
+- `CONNECTOR_FILTER_EVAL_ATTEMPTS` sets attempts per case (default 2; a case
+  passes if any attempt matches).
+- Known-failing today (why the run is red, and non-blocking): the
+  `false-positive` traps (a connected source named as the TOPIC of the
+  question, not as where to look) until the WHERE-vs-TOPIC prompt tuning
+  lands, and two hard backoff cases (advance-vs-re-search judgment) with
+  cheap models.
