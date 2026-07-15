@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.oauth_claims_capture import (
+from onyx.auth.login_claims_capture import (
     get_idp_profile_fields,
     get_idp_profile_placeholder_values,
 )

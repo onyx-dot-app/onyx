@@ -4,7 +4,7 @@ from typing import cast
 
 from langchain_core.messages import BaseMessage
 
-from onyx.auth.oauth_claims_capture import IDP_PLACEHOLDER_KEYS
+from onyx.auth.login_claims_capture import IDP_PLACEHOLDER_KEYS
 from onyx.configs.constants import DocumentSource
 from onyx.prompts.chat_prompts import (
     ADDITIONAL_INFO,

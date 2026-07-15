@@ -70,12 +70,12 @@ from onyx.auth.email_utils import (
 )
 from onyx.auth.invited_users import get_invited_users, remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
+from onyx.auth.login_claims_capture import capture_oauth_login_claims
 from onyx.auth.mobile_sso.sso_completion import (
     apply_mobile_state,
     complete_mobile_sso,
     is_mobile_sso,
 )
-from onyx.auth.oauth_claims_capture import capture_oauth_login_claims
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend, UserCreate, UserRole
 from onyx.auth.session_tokens import (
