@@ -1706,6 +1706,20 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       },
     ],
   },
+  canvas: {
+    description: "Configure Canvas connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Canvas base URL:",
+        label: "Canvas Base URL",
+        name: "canvas_base_url",
+        optional: false,
+        description: "e.g. https://school.instructure.com",
+      },
+    ],
+    advanced_values: [],
+  },
   egnyte: {
     description: "Configure Egnyte connector",
     values: [
@@ -2059,6 +2073,10 @@ export interface DiscourseConfig {
 
 export interface AxeroConfig {
   spaces?: string[];
+}
+
+export interface CanvasConfig {
+  canvas_base_url: string;
 }
 
 export interface DrupalWikiConfig {
