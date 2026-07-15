@@ -259,6 +259,10 @@ export interface BraintrustCredentialJson {
   braintrust_api_key: string;
 }
 
+export interface CanvasCredentialJson {
+  canvas_access_token: string;
+}
+
 export interface MediaWikiCredentialJson {}
 export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
 
@@ -465,6 +469,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
   braintrust: {
     braintrust_api_key: "",
   } as BraintrustCredentialJson,
+  canvas: {
+    canvas_access_token: "",
+  } as CanvasCredentialJson,
   egnyte: {
     domain: "",
     access_token: "",
@@ -669,6 +676,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Braintrust
   braintrust_api_key: "Braintrust API Key",
+
+  // Canvas
+  canvas_access_token: "Canvas Access Token",
 
   // GitBook
   gitbook_space_id: "GitBook Space ID",

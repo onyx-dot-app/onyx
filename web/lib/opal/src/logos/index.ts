@@ -9,6 +9,7 @@ export { default as SvgBitbucket } from "@opal/logos/bitbucket";
 export { default as SvgBookstack } from "@opal/logos/bookstack";
 export { default as SvgBraintrust } from "@opal/logos/braintrust";
 export { default as SvgBrave } from "@opal/logos/brave";
+export { default as SvgCanvas } from "@opal/logos/canvas";
 export { default as SvgClaude } from "@opal/logos/claude";
 export { default as SvgClickup } from "@opal/logos/clickup";
 export { default as SvgCloudflare } from "@opal/logos/cloudflare";
