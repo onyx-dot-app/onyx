@@ -10,6 +10,7 @@ from dateutil.relativedelta import relativedelta
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import datetime_to_utc
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import ReasoningEffort
@@ -73,10 +74,9 @@ def _parse_absolute_date(token: str) -> datetime | None:
     """Parse a date string (the prompt asks for YYYY-MM-DD); naive values are
     treated as UTC."""
     try:
-        dt = parse(token)
+        return datetime_to_utc(parse(token))
     except (ValueError, OverflowError):
         return None
-    return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def _parse_bound(token: str, now: datetime) -> datetime | None:
