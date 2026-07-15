@@ -3,8 +3,14 @@
 import "@opal/components/inputs/shared.css";
 import React from "react";
 import type { InputVariants } from "@opal/types";
-import { Button, Text } from "@opal/components";
+import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
+import {
+  SEGMENT_INPUT_PROPS,
+  SegmentSeparator,
+  makeSegmentChangeHandler,
+  makeSegmentKeyDownHandler,
+} from "@opal/components/inputs/segmented";
 
 // ---------------------------------------------------------------------------
 // Types and segment helpers
@@ -179,32 +185,8 @@ function InputTime({
     }
   }
 
-  function handleSegmentChange(
-    part: keyof TimeSegments,
-    nextRef: React.RefObject<HTMLInputElement | null> | null
-  ) {
-    return (e: React.ChangeEvent<HTMLInputElement>) => {
-      const digits = e.target.value.replace(/\D/g, "").slice(0, 2);
-      setSegments((prev) => ({ ...prev, [part]: digits }));
-      if (digits.length === 2) nextRef?.current?.focus();
-    };
-  }
-
-  function handleSegmentKeyDown(
-    part: keyof TimeSegments,
-    prevRef: React.RefObject<HTMLInputElement | null> | null
-  ) {
-    return (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") {
-        commit(segments);
-        return;
-      }
-      if (e.key === "Backspace" && segments[part] === "") {
-        prevRef?.current?.focus();
-        e.preventDefault();
-      }
-    };
-  }
+  const handleSegmentChange = makeSegmentChangeHandler(setSegments);
+  const handleSegmentKeyDown = makeSegmentKeyDownHandler(segments, commit);
 
   // Commit when focus leaves the whole field, not on intra-field tabbing.
   function handleRootBlur(e: React.FocusEvent<HTMLDivElement>) {
@@ -212,19 +194,7 @@ function InputTime({
     commit(segments);
   }
 
-  const segmentProps = {
-    className: "opal-input-segment",
-    type: "text" as const,
-    inputMode: "numeric" as const,
-    autoComplete: "off",
-    disabled,
-  };
-
-  const separator = (
-    <Text font="main-ui-mono" color="text-02" aria-hidden>
-      :
-    </Text>
-  );
+  const separator = <SegmentSeparator>:</SegmentSeparator>;
 
   return (
     <div className="opal-input-segmented-root">
@@ -241,7 +211,8 @@ function InputTime({
               {i > 0 && separator}
               {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
               <input
-                {...segmentProps}
+                {...SEGMENT_INPUT_PROPS}
+                disabled={disabled}
                 ref={segmentRefs[part]}
                 id={part === "hours" ? id : undefined}
                 aria-label={SEGMENT_META[part].label}
@@ -250,6 +221,7 @@ function InputTime({
                 value={segments[part]}
                 onChange={handleSegmentChange(
                   part,
+                  2,
                   i < segmentParts.length - 1
                     ? segmentRefs[segmentParts[i + 1]!]
                     : null
