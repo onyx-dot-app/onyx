@@ -1,4 +1,12 @@
+from unittest.mock import patch
+
+from onyx.prompts.chat_prompts import ALT_DATETIME_REPLACEMENT_PAT
+from onyx.prompts.chat_prompts import CITATION_GUIDANCE_REPLACEMENT_PAT
+from onyx.prompts.chat_prompts import DATETIME_REPLACEMENT_PAT
+from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
 from onyx.prompts.constants import REMINDER_TAG_DESCRIPTION
+from onyx.prompts.prompt_utils import apply_prompt_placeholders
+from onyx.prompts.prompt_utils import replace_current_datetime_tag
 from onyx.prompts.prompt_utils import replace_reminder_tag
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 
@@ -103,3 +111,61 @@ def test_frontend_placeholder_catalog_matches_backend_allowlist() -> None:
         pytest.skip("web/ not present in this checkout")
     frontend_keys = set(re.findall(r'key: "([a-z_]+)"', ts_path.read_text()))
     assert frontend_keys == set(USER_PLACEHOLDER_KEYS)
+
+
+@patch(
+    "onyx.prompts.prompt_utils.get_current_llm_day_time",
+    return_value="Wednesday July 15, 2026",
+)
+def test_replace_current_datetime_tag(mock_get_time: object) -> None:
+    prompt = f"The current date is {DATETIME_REPLACEMENT_PAT}."
+    result = replace_current_datetime_tag(prompt)
+    assert result == "The current date is Wednesday July 15, 2026."
+    mock_get_time.assert_called_once()
+
+
+@patch(
+    "onyx.prompts.prompt_utils.get_current_llm_day_time",
+    return_value="Wednesday July 15, 2026",
+)
+def test_replace_current_datetime_tag_alt_pattern(mock_get_time: object) -> None:
+    prompt = f"The current date is {ALT_DATETIME_REPLACEMENT_PAT}."
+    result = replace_current_datetime_tag(prompt)
+    assert result == "The current date is Wednesday July 15, 2026."
+    mock_get_time.assert_called_once()
+
+
+@patch(
+    "onyx.prompts.prompt_utils.get_current_llm_day_time",
+    return_value="Wednesday July 15, 2026",
+)
+def test_apply_prompt_placeholders_appends_datetime_when_aware(
+    mock_get_time: object,
+) -> None:
+    prompt = "Custom agent instructions."
+    result, should_append_citation = apply_prompt_placeholders(
+        prompt,
+        datetime_aware=True,
+        append_datetime_if_aware=True,
+    )
+    assert "Wednesday July 15, 2026" in result
+    assert should_append_citation is False
+    mock_get_time.assert_called()
+
+
+@patch(
+    "onyx.prompts.prompt_utils.get_current_llm_day_time",
+    return_value="Wednesday July 15, 2026",
+)
+def test_apply_prompt_placeholders_replaces_citation_guidance(
+    _mock_get_time: object,
+) -> None:
+    prompt = f"Answer with citations. {CITATION_GUIDANCE_REPLACEMENT_PAT}"
+    result, should_append_citation = apply_prompt_placeholders(
+        prompt,
+        should_cite_documents=True,
+        append_citation_if_missing=False,
+    )
+    assert REQUIRE_CITATION_GUIDANCE in result
+    assert CITATION_GUIDANCE_REPLACEMENT_PAT not in result
+    assert should_append_citation is False
