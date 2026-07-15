@@ -37,7 +37,7 @@ context.
 
 Scope to a source ONLY when it is named as WHERE to look ("in X", "from X", "search X", \
 "check X", "my X") — in this cycle's queries, or in an earlier turn that this cycle \
-continues. A source that is merely the query's TOPIC — its subject or object — is not a \
+continues. A source that is the query's TOPIC — its subject or object — is not a \
 directive: do NOT scope to it, and NEVER infer a source from the topic (e.g. an HR or \
 billing query is not a source). If no source is named as a WHERE to look, return [].
 
