@@ -16,6 +16,7 @@ from onyx.skills.bundle import parse_skill_md_metadata
 from onyx.skills.bundle import read_custom_bundle_instructions
 from onyx.skills.bundle import rewrite_custom_bundle_skill_md
 from onyx.skills.bundle import slug_from_filename
+from onyx.skills.bundle import slug_from_skill_name
 from onyx.skills.bundle import strip_skill_md_frontmatter
 from onyx.skills.bundle import validate_and_normalize_custom_bundle
 
@@ -38,6 +39,25 @@ def _build_zip(
             info.external_attr = (stat.S_IFLNK | 0o755) << 16
             zf.writestr(info, target)
     return buf.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Customer Research", "customer-research"),
+        ("  Résumé helper  ", "resume-helper"),
+        ("123 Reports", "skill-123-reports"),
+        ("Research / Analysis", "research-analysis"),
+        ("研究", "yan-jiu"),
+    ],
+)
+def test_slug_from_skill_name_normalizes_display_name(name: str, expected: str) -> None:
+    assert slug_from_skill_name(name) == expected
+
+
+def test_slug_from_skill_name_rejects_name_without_alphanumerics() -> None:
+    with pytest.raises(OnyxError, match="at least one letter or number"):
+        slug_from_skill_name("💡")
 
 
 VALID_SKILL_MD = b"# Hello\n\nBody content.\n"

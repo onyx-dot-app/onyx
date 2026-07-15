@@ -3,10 +3,22 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { Button, InputTypeIn, MessageCard, Text } from "@opal/components";
+import {
+  Button,
+  InputTypeIn,
+  MessageCard,
+  Popover,
+  Text,
+} from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { SvgBlocks, SvgPlus, SvgSimpleLoader } from "@opal/icons";
+import {
+  SvgBlocks,
+  SvgEdit,
+  SvgPlus,
+  SvgSimpleLoader,
+  SvgUploadCloud,
+} from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
@@ -18,6 +30,7 @@ import SkillCard, {
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
+import LineItem from "@/refresh-components/buttons/LineItem";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -28,6 +41,7 @@ export default function SkillsPage() {
   const { data, error, isLoading, refresh } = useUserSkills();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<SkillCardItem | null>(
     null
   );
@@ -108,11 +122,37 @@ export default function SkillsPage() {
         title="Skills"
         description="Capability bundles your Craft agent can reach for. This page shows built-in skills, skills shared with you, and your own personal skills."
         rightChildren={
-          <div className="flex items-center gap-2">
-            <Button icon={SvgPlus} onClick={() => setCreateOpen(true)}>
-              Create skill
-            </Button>
-          </div>
+          <Popover open={createMenuOpen} onOpenChange={setCreateMenuOpen}>
+            <Popover.Trigger asChild>
+              <Button icon={SvgPlus}>Create skill</Button>
+            </Popover.Trigger>
+            <Popover.Content align="end" sideOffset={4} width="xl">
+              <Popover.Menu>
+                <LineItem
+                  icon={SvgEdit}
+                  description="Write the instructions and add supporting files in Onyx."
+                  wrapDescription
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    router.push("/craft/v1/skills/new" as Route);
+                  }}
+                >
+                  Start from scratch
+                </LineItem>
+                <LineItem
+                  icon={SvgUploadCloud}
+                  description="Import a SKILL.md file, ZIP file, or skill folder."
+                  wrapDescription
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    setCreateOpen(true);
+                  }}
+                >
+                  Upload a skill
+                </LineItem>
+              </Popover.Menu>
+            </Popover.Content>
+          </Popover>
         }
       >
         <InputTypeIn

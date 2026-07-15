@@ -1,13 +1,16 @@
 import {
   BlobReader,
+  BlobWriter,
+  TextReader,
   TextWriter,
   ZipReader,
+  ZipWriter,
   type FileEntry,
 } from "@zip.js/zip.js";
 import type { FileWithPath } from "react-dropzone";
 import {
-  getSkillDirectoryEntries,
   prepareSkillBundleUpload,
+  prepareSkillFilesUpload,
 } from "./bundleUpload";
 
 function fileAt(path: string, content: string): FileWithPath {
@@ -17,6 +20,17 @@ function fileAt(path: string, content: string): FileWithPath {
   }) as FileWithPath;
   Object.defineProperty(file, "path", { value: path });
   return file;
+}
+
+async function zipFile(entries: Record<string, string>): Promise<FileWithPath> {
+  const writer = new ZipWriter(new BlobWriter("application/zip"));
+  for (const [path, content] of Object.entries(entries)) {
+    await writer.add(path, new TextReader(content));
+  }
+  const blob = await writer.close();
+  return new File([blob], "files.zip", {
+    type: "application/zip",
+  }) as FileWithPath;
 }
 
 describe("skill bundle upload preparation", () => {
@@ -44,19 +58,6 @@ describe("skill bundle upload preparation", () => {
     });
   });
 
-  it("strips one selected folder from entry paths", () => {
-    const skillMd = fileAt("/example/SKILL.md", "instructions");
-    const helper = fileAt("/example/scripts/helper.py", "print('hello')");
-
-    const result = getSkillDirectoryEntries([helper, skillMd]);
-
-    expect(result.directoryName).toBe("example");
-    expect(result.entries.map((entry) => entry.path)).toEqual([
-      "scripts/helper.py",
-      "SKILL.md",
-    ]);
-  });
-
   it("packages a dropped folder as a canonical ZIP", async () => {
     const prepared = await prepareSkillBundleUpload([
       fileAt("/example/SKILL.md", "instructions"),
@@ -80,30 +81,87 @@ describe("skill bundle upload preparation", () => {
     await reader.close();
   });
 
-  it("rejects a folder without top-level SKILL.md", () => {
-    expect(() =>
-      getSkillDirectoryEntries([
+  it("rejects a folder without top-level SKILL.md", async () => {
+    await expect(
+      prepareSkillBundleUpload([
         fileAt("/example/nested/SKILL.md", "instructions"),
       ])
-    ).toThrow("must contain SKILL.md at its top level");
+    ).rejects.toThrow("must contain SKILL.md at its top level");
   });
 
-  it("rejects files from multiple roots", () => {
-    expect(() =>
-      getSkillDirectoryEntries([
+  it("rejects files from multiple roots", async () => {
+    await expect(
+      prepareSkillBundleUpload([
         fileAt("/example/SKILL.md", "instructions"),
         fileAt("/other/helper.py", "print('hello')"),
       ])
-    ).toThrow("one ZIP, SKILL.md, or skill folder at a time");
+    ).rejects.toThrow("one ZIP, SKILL.md, or skill folder at a time");
   });
 
-  it("ignores operating system metadata", () => {
-    const result = getSkillDirectoryEntries([
+  it("ignores operating system metadata", async () => {
+    const prepared = await prepareSkillBundleUpload([
       fileAt("/example/SKILL.md", "instructions"),
       fileAt("/example/.DS_Store", "metadata"),
       fileAt("/__MACOSX/example/._SKILL.md", "resource fork"),
     ]);
 
-    expect(result.entries.map((entry) => entry.path)).toEqual(["SKILL.md"]);
+    const reader = new ZipReader(new BlobReader(prepared.file));
+    const entries = await reader.getEntries();
+    expect(entries.map((entry) => entry.filename)).toEqual(["SKILL.md"]);
+    await reader.close();
+  });
+});
+
+describe("skill file upload preparation", () => {
+  it("passes through a single file", async () => {
+    const file = fileAt("./notes.md", "notes");
+
+    await expect(prepareSkillFilesUpload([file])).resolves.toEqual({
+      file,
+      displayName: "notes.md",
+      entries: [{ path: "notes.md", size: 5 }],
+      containsSkillMd: false,
+    });
+  });
+
+  it("detects SKILL.md inside a ZIP before upload", async () => {
+    const file = await zipFile({
+      "bundle/SKILL.md": "instructions",
+      "bundle/reference.md": "reference",
+    });
+
+    const prepared = await prepareSkillFilesUpload([file]);
+
+    expect(prepared).toMatchObject({
+      file,
+      displayName: "files.zip",
+      entries: null,
+      containsSkillMd: true,
+    });
+  });
+
+  it("preserves a dropped folder in the generated ZIP", async () => {
+    const prepared = await prepareSkillFilesUpload([
+      fileAt("/scripts/run.py", "print('hello')"),
+      fileAt("/scripts/lib/util.py", "pass"),
+    ]);
+
+    const reader = new ZipReader(new BlobReader(prepared.file));
+    const entries = await reader.getEntries();
+    expect(entries.map((entry) => entry.filename)).toEqual([
+      "scripts/run.py",
+      "scripts/lib/util.py",
+    ]);
+    expect(prepared.containsSkillMd).toBe(false);
+    await reader.close();
+  });
+
+  it("rejects a ZIP mixed with other selected files", async () => {
+    await expect(
+      prepareSkillFilesUpload([
+        fileAt("./files.zip", "zip"),
+        fileAt("./notes.md", "notes"),
+      ])
+    ).rejects.toThrow("Upload ZIP files separately");
   });
 });
