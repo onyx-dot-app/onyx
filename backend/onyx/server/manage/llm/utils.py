@@ -229,6 +229,11 @@ def is_reasoning_model(model_id: str, display_name: str) -> bool:
 
     Used for OpenRouter and other dynamic providers where we need to infer
     reasoning capability from model identifiers.
+
+    TODO: unify with model_is_reasoning_model (onyx/llm/model_capabilities.py)
+    behind a single infer_reasoning_support() helper so the dynamic-provider
+    fetch endpoints and ModelConfigurationView.from_model don't each have to
+    compose the cost-map lookup and this heuristic manually.
     """
     combined = f"{model_id} {display_name}".lower()
     return any(pattern in combined for pattern in REASONING_MODEL_PATTERNS)
