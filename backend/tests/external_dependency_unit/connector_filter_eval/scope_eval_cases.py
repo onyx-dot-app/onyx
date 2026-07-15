@@ -24,8 +24,11 @@ from onyx.secondary_llm_flows.source_filter import SearchCycle
 ASANA = DocumentSource.ASANA
 CONFLUENCE = DocumentSource.CONFLUENCE
 GITHUB = DocumentSource.GITHUB
+GMAIL = DocumentSource.GMAIL
 GOOGLE_DRIVE = DocumentSource.GOOGLE_DRIVE
+HIGHSPOT = DocumentSource.HIGHSPOT
 JIRA = DocumentSource.JIRA
+SALESFORCE = DocumentSource.SALESFORCE
 SLACK = DocumentSource.SLACK
 ZENDESK = DocumentSource.ZENDESK
 
@@ -97,6 +100,46 @@ SCOPE_EVAL_CASES: list[ScopeEvalCase] = [
         user_turns=["Summarize what we know about the Q3 roadmap."],
         connected_sources=[CONFLUENCE, SLACK, JIRA, GITHUB, GOOGLE_DRIVE, ZENDESK],
         current_queries=["Q3 roadmap plans"],
+        expected=None,
+    ),
+    # --- FALSE-POSITIVE TRAPS: a CONNECTED source is named, but as the topic
+    # --- of the question, not as where to look — must stay unfiltered.
+    # --- (currently failing: the prompt scopes to topic-named sources; the
+    # --- WHERE-vs-TOPIC tuning that fixes these is landing separately) -------
+    ScopeEvalCase(
+        # Real reported failure: scoped to gmail/highspot when the connectors
+        # are the SUBJECT of the question ("which customers use them").
+        name="connector-as-topic-not-directive",
+        category="false-positive",
+        user_turns=[
+            "Which customers use the highspot connector and/or gmail connector?"
+        ],
+        connected_sources=[GMAIL, HIGHSPOT, SALESFORCE, SLACK, CONFLUENCE],
+        current_queries=["customers using highspot connector gmail connector"],
+        expected=None,
+    ),
+    ScopeEvalCase(
+        name="integration-setup-question",
+        category="false-positive",
+        user_turns=["How do I set up the Jira integration for our workspace?"],
+        connected_sources=[JIRA, CONFLUENCE, SLACK],
+        current_queries=["Jira integration workspace setup"],
+        expected=None,
+    ),
+    ScopeEvalCase(
+        name="policy-about-source-tool",
+        category="false-positive",
+        user_turns=["What's our policy on sending customer emails from Gmail?"],
+        connected_sources=[GMAIL, CONFLUENCE, SLACK],
+        current_queries=["customer email sending policy Gmail"],
+        expected=None,
+    ),
+    ScopeEvalCase(
+        name="tool-ownership-question",
+        category="false-positive",
+        user_turns=["Who maintains our Slack bot and where does its code live?"],
+        connected_sources=[SLACK, GITHUB, CONFLUENCE],
+        current_queries=["Slack bot maintainer code repository"],
         expected=None,
     ),
     # --- COMBINED: named set held, every cycle -------------------------------

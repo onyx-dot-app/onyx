@@ -58,3 +58,7 @@ run with `-s` to see it on success too.
 - The threshold is deliberately below 100%: a couple of known-hard backoff
   cases (advance-vs-re-search judgment) fail with cheap models. A real prompt
   regression flips a whole category and sinks the score well below the bar.
+- The `false-positive` trap cases (a connected source named as the TOPIC of
+  the question, not as where to look) currently FAIL — the suite is red until
+  the WHERE-vs-TOPIC prompt tuning lands and lifts the score back over the
+  threshold.
