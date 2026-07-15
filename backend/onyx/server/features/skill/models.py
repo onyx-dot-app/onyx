@@ -185,6 +185,28 @@ class SkillBundleInspectResponse(BaseModel):
     files: list[SkillBundleFile]
 
 
+class GitHubSkillPreview(BaseModel):
+    path: str
+    name: str
+    description: str
+    unavailable_reason: str | None
+
+
+class GitHubSkillsPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    repository: str
+
+
+class GitHubSkillsPreviewResponse(BaseModel):
+    repository: str
+    skills: list[GitHubSkillPreview]
+
+
+class GitHubSkillsImportRequest(GitHubSkillsPreviewRequest):
+    paths: list[str] = Field(min_length=1)
+
+
 class SkillCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -89,3 +89,15 @@ export interface SkillBundleContents {
   instructions_markdown: string;
   files: SkillBundleFile[];
 }
+
+export interface GitHubSkillPreview {
+  path: string;
+  name: string;
+  description: string;
+  unavailable_reason: string | null;
+}
+
+export interface GitHubSkillsPreview {
+  repository: string;
+  skills: GitHubSkillPreview[];
+}
