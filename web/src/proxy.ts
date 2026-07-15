@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
+  SERVER_SIDE_ONLY__AUTH_TYPE,
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
 } from "./lib/constants";
 import { AuthType } from "@/lib/auth/types";
@@ -52,7 +53,7 @@ const sentryConnectSrc = (() => {
 // NEXT_PUBLIC_* and NODE_ENV are inlined at build, so this stays build-time —
 // only the frame-ancestors flag above is runtime.
 const upgradeInsecureRequests =
-  process.env.NEXT_PUBLIC_AUTH_TYPE === "cloud" &&
+  process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" &&
   process.env.NODE_ENV !== "development";
 
 const CSP_HEADER = [

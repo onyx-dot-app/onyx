@@ -36,8 +36,8 @@ import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
 import { toast } from "@/hooks/useToast";
 import { SvgArrowExchange } from "@opal/icons";
+import { useAuthType } from "@/lib/auth/hooks";
 import { AuthType } from "@/lib/auth/types";
-import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServer | null;
@@ -151,9 +151,10 @@ export default function MCPAuthenticationModal({
   // Open the Advanced (known-provider) section by default when configured.
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
+  // Check if OAuth is enabled for the Onyx instance
+  const authType = useAuthType();
   const isOAuthEnabled =
-    NEXT_PUBLIC_AUTH_TYPE === AuthType.OIDC ||
-    NEXT_PUBLIC_AUTH_TYPE === AuthType.GOOGLE_OAUTH;
+    authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
 
   const redirectUri = useMemo(() => {
     if (typeof window === "undefined") {

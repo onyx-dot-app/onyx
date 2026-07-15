@@ -8,8 +8,8 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { AuthType } from "@/lib/auth/types";
-import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import InviteOnlyCard from "./InviteOnlyCard";
 
 // ---------------------------------------------------------------------------
@@ -109,10 +109,11 @@ export default function UsersSummary({
   onFilterInvites,
   onFilterRequests,
 }: UsersSummaryProps) {
+  const { authTypeMetadata } = useAuthTypeMetadata();
   const showInviteOnly =
     !showScim &&
-    (NEXT_PUBLIC_AUTH_TYPE === AuthType.BASIC ||
-      NEXT_PUBLIC_AUTH_TYPE === AuthType.GOOGLE_OAUTH);
+    (authTypeMetadata?.authType === AuthType.BASIC ||
+      authTypeMetadata?.authType === AuthType.GOOGLE_OAUTH);
   const showRequests = requests !== null && requests > 0;
 
   const statsCard = (

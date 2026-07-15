@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuthTypeMetadata, useAuthRedirect } from "@/lib/auth/hooks";
 import { AuthType } from "@/lib/auth/types";
-import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
@@ -49,8 +48,8 @@ export default function JoinPage() {
     }
   }, [searchParams]);
 
-  const isCloud = NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD;
-  const authUrl = getAuthUrl(NEXT_PUBLIC_AUTH_TYPE);
+  const isCloud = authTypeMetadata.authType === AuthType.CLOUD;
+  const authUrl = getAuthUrl(authTypeMetadata.authType);
 
   return (
     <AuthLayouts.Card

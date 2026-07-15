@@ -4,13 +4,6 @@ const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  env: {
-    // Allow AUTH_TYPE (backend env var) to serve as a fallback for
-    // NEXT_PUBLIC_AUTH_TYPE in dev. Resolved once at startup so both SSR
-    // and client bundles see the same value — no hydration mismatch.
-    NEXT_PUBLIC_AUTH_TYPE:
-      process.env.NEXT_PUBLIC_AUTH_TYPE ?? process.env.AUTH_TYPE ?? "basic",
-  },
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
   output: "standalone",

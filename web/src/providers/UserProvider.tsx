@@ -120,7 +120,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const onRefreshFail = useCallback(async () => {
     await mutateUser();
   }, [mutateUser]);
-  useTokenRefresh(upToDateUser, authTypeMetadataLoading, onRefreshFail);
+  useTokenRefresh(
+    upToDateUser,
+    authTypeMetadata,
+    authTypeMetadataLoading,
+    onRefreshFail
+  );
 
   // Sync user's theme preference from DB to next-themes on load
   const { setTheme, theme } = useTheme();

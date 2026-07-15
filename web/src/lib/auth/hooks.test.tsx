@@ -1,7 +1,23 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { setDocumentVisibility } from "@tests/setup/test-utils";
 import { useTokenRefresh } from "@/lib/auth/hooks";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 import { User } from "@/lib/types";
+
+const baseAuthMetadata = (authType: AuthType): AuthTypeMetadata => ({
+  authType,
+  autoRedirect: false,
+  requiresVerification: false,
+  anonymousUserEnabled: null,
+  passwordMinLength: 0,
+  passwordMaxLength: Infinity,
+  passwordRequireUppercase: false,
+  passwordRequireLowercase: false,
+  passwordRequireDigit: false,
+  passwordRequireSpecialChar: false,
+  hasUsers: true,
+  oauthEnabled: false,
+});
 
 const fakeUser = { id: "user-1" } as User;
 
@@ -14,13 +30,53 @@ describe("useTokenRefresh", () => {
   });
 
   test("does not call /api/auth/refresh while auth type metadata is loading", () => {
-    renderHook(() => useTokenRefresh(fakeUser, true, jest.fn()));
+    renderHook(() =>
+      useTokenRefresh(
+        fakeUser,
+        baseAuthMetadata(AuthType.BASIC),
+        true,
+        jest.fn()
+      )
+    );
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test("calls /api/auth/refresh once when user is present", async () => {
-    renderHook(() => useTokenRefresh(fakeUser, false, jest.fn()));
+  test("does not call /api/auth/refresh for SAML deployments", () => {
+    renderHook(() =>
+      useTokenRefresh(
+        fakeUser,
+        baseAuthMetadata(AuthType.SAML),
+        false,
+        jest.fn()
+      )
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("does not call /api/auth/refresh for OIDC deployments", () => {
+    renderHook(() =>
+      useTokenRefresh(
+        fakeUser,
+        baseAuthMetadata(AuthType.OIDC),
+        false,
+        jest.fn()
+      )
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("calls /api/auth/refresh once when auth type is BASIC and user is present", async () => {
+    renderHook(() =>
+      useTokenRefresh(
+        fakeUser,
+        baseAuthMetadata(AuthType.BASIC),
+        false,
+        jest.fn()
+      )
+    );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/refresh", {
@@ -34,7 +90,13 @@ describe("useTokenRefresh", () => {
     const onRefreshFail = jest.fn().mockResolvedValue(undefined);
 
     const { rerender } = renderHook(
-      ({ user }: { user: User }) => useTokenRefresh(user, false, onRefreshFail),
+      ({ user }: { user: User }) =>
+        useTokenRefresh(
+          user,
+          baseAuthMetadata(AuthType.BASIC),
+          false,
+          onRefreshFail
+        ),
       { initialProps: { user: { ...fakeUser } } }
     );
 
@@ -53,7 +115,14 @@ describe("useTokenRefresh", () => {
     jest.useFakeTimers();
     try {
       setDocumentVisibility(false);
-      renderHook(() => useTokenRefresh(fakeUser, false, jest.fn()));
+      renderHook(() =>
+        useTokenRefresh(
+          fakeUser,
+          baseAuthMetadata(AuthType.BASIC),
+          false,
+          jest.fn()
+        )
+      );
 
       await act(async () => {
         jest.advanceTimersByTime(31 * 60 * 1000);

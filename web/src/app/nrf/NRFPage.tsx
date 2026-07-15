@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@/hooks/useToast";
 import { AuthType } from "@/lib/auth/types";
-import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
@@ -65,7 +64,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   const searchParams = useSearchParams();
   const filterManager = useFilters();
-  const { user } = useUser();
+  const { user, authTypeMetadata } = useUser();
 
   // Chat sessions
   const { refreshChatSessions } = useChatSessions();
@@ -635,7 +634,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <Modal.Content width="sm" height="sm">
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
-              {NEXT_PUBLIC_AUTH_TYPE === AuthType.BASIC ? (
+              {authTypeMetadata?.authType === AuthType.BASIC ? (
                 <EmailPasswordForm label="submit" nextUrl="/nrf" />
               ) : (
                 <div className="flex flex-col items-center">

@@ -13,6 +13,11 @@ export const DOCS_ADMINS_PATH = `${DOCS_BASE_URL}/admins`;
 export const MCP_INTERNAL_URL =
   process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090";
 
+// NOTE: this should ONLY be used on the server-side (including middleware).
+// The AUTH_TYPE environment variable is set in the backend and shared with Next.js
+export const SERVER_SIDE_ONLY__AUTH_TYPE = (process.env.AUTH_TYPE ||
+  AuthType.BASIC) as AuthType;
+
 export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
   process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===
   "true";
@@ -61,18 +66,14 @@ export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
 export const GTM_ENABLED =
   process.env.NEXT_PUBLIC_GTM_ENABLED?.toLowerCase() === "true";
 
-export const NEXT_PUBLIC_AUTH_TYPE: AuthType =
-  (process.env.NEXT_PUBLIC_AUTH_TYPE?.toLowerCase() as AuthType) ??
-  AuthType.BASIC;
-
 export const NEXT_PUBLIC_CLOUD_ENABLED =
-  NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD;
+  process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
 
 export const REGISTRATION_URL =
   process.env.INTERNAL_URL || "http://127.0.0.1:3001";
 
 export const SERVER_SIDE_ONLY__CLOUD_ENABLED =
-  NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD;
+  process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
 
 export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
   process.env.NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED?.toLowerCase() === "true" &&

@@ -3,22 +3,30 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
+import { useAuthType } from "@/lib/auth/hooks";
+import { AuthType } from "@/lib/auth/types";
 import { AccountsAccessSettings } from "@/views/SettingsPage";
 
 export default function AccountsAccessPage() {
   const router = useRouter();
   const { user } = useUser();
+  const authType = useAuthType();
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const hasAccess = showPasswordSection || /* tokens always available */ true;
+  const showTokensSection = authType !== null;
+  const hasAccess = showPasswordSection || showTokensSection;
+
+  // Only redirect after authType has loaded to avoid redirecting during loading state
+  const isAuthTypeLoaded = authType !== null;
 
   useEffect(() => {
-    if (!hasAccess) {
+    if (isAuthTypeLoaded && !hasAccess) {
       router.replace("/app/settings/general");
     }
-  }, [hasAccess, router]);
+  }, [isAuthTypeLoaded, hasAccess, router]);
 
-  if (!hasAccess) {
+  // Don't render content until authType is loaded and access is determined
+  if (!isAuthTypeLoaded || !hasAccess) {
     return null;
   }
 

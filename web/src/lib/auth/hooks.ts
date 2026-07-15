@@ -7,7 +7,7 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
 import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
-import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
@@ -22,6 +22,7 @@ const MIN_REFRESH_GAP_MS = REFRESH_INTERVAL - 60000;
 const VISIBILITY_REFRESH_GAP_MS = 60000;
 
 const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {
+  authType: NEXT_PUBLIC_CLOUD_ENABLED ? AuthType.CLOUD : AuthType.BASIC,
   autoRedirect: false,
   requiresVerification: false,
   anonymousUserEnabled: null,
@@ -152,8 +153,26 @@ export function useSessionWatcher(): boolean {
   );
 }
 
+export function useAuthType(): AuthType | null {
+  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
+  // camelCase-mapped shape — a raw fetcher here would poison the cache for
+  // every other consumer of the key.
+  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
+
+  if (NEXT_PUBLIC_CLOUD_ENABLED) {
+    return AuthType.CLOUD;
+  }
+
+  if (error || isLoading) {
+    return null;
+  }
+
+  return authTypeMetadata?.authType ?? null;
+}
+
 export function useTokenRefresh(
   user: User | null,
+  authTypeMetadata: AuthTypeMetadata | undefined,
   authTypeMetadataLoading: boolean,
   onRefreshFail: () => Promise<void>
 ) {
@@ -170,8 +189,8 @@ export function useTokenRefresh(
       !user ||
       user.id === NO_AUTH_USER_ID ||
       user.is_anonymous_user ||
-      NEXT_PUBLIC_AUTH_TYPE === AuthType.OIDC ||
-      NEXT_PUBLIC_AUTH_TYPE === AuthType.SAML
+      authTypeMetadata?.authType === AuthType.OIDC ||
+      authTypeMetadata?.authType === AuthType.SAML
     ) {
       return;
     }
@@ -227,5 +246,5 @@ export function useTokenRefresh(
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [user, authTypeMetadataLoading, onRefreshFail]);
+  }, [user, authTypeMetadata, authTypeMetadataLoading, onRefreshFail]);
 }

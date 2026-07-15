@@ -8,7 +8,6 @@ import { AuthLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
 import { AuthType } from "@/lib/auth/types";
-import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import { getAuthUrl } from "@/lib/auth/utils";
 import { markdown } from "@opal/utils";
 import { Logo } from "@/lib/app/components";
@@ -33,13 +32,13 @@ export default function SignupPage() {
     }
   }, [searchParams]);
 
-  const authUrl = getAuthUrl(NEXT_PUBLIC_AUTH_TYPE, nextUrl);
-  const isCloud = NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD;
-  const isBasic = NEXT_PUBLIC_AUTH_TYPE === AuthType.BASIC;
+  const authUrl = getAuthUrl(authTypeMetadata.authType, nextUrl);
+  const isCloud = authTypeMetadata.authType === AuthType.CLOUD;
+  const isBasic = authTypeMetadata.authType === AuthType.BASIC;
   const isSso =
-    NEXT_PUBLIC_AUTH_TYPE === AuthType.GOOGLE_OAUTH ||
-    NEXT_PUBLIC_AUTH_TYPE === AuthType.OIDC ||
-    NEXT_PUBLIC_AUTH_TYPE === AuthType.SAML;
+    authTypeMetadata.authType === AuthType.GOOGLE_OAUTH ||
+    authTypeMetadata.authType === AuthType.OIDC ||
+    authTypeMetadata.authType === AuthType.SAML;
 
   const loginUrl = nextUrl
     ? `/auth/login?next=${encodeURIComponent(nextUrl)}`
@@ -56,14 +55,17 @@ export default function SignupPage() {
       icon={Logo}
     >
       {authUrl && !isCloud && !isBasic && (
-        <SignInButton authorizeUrl={authUrl} authType={NEXT_PUBLIC_AUTH_TYPE} />
+        <SignInButton
+          authorizeUrl={authUrl}
+          authType={authTypeMetadata.authType}
+        />
       )}
 
       {isCloud && authUrl && (
         <>
           <SignInButton
             authorizeUrl={authUrl}
-            authType={NEXT_PUBLIC_AUTH_TYPE}
+            authType={authTypeMetadata.authType}
           />
           <AuthLayouts.OrSeparator />
         </>
