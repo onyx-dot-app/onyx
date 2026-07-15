@@ -309,8 +309,8 @@ class SessionManager:
             llm_provider_type: Provider type from user's cookie (e.g., "anthropic", "openai")
             llm_model_name: Model name from user's cookie (e.g., "claude-opus-4-5")
             origin: Provenance of the session. INTERACTIVE (default) sessions
-                appear in the Craft sidebar; SCHEDULED sessions (created by
-                the scheduled-tasks executor) are excluded.
+                appear in the Craft sidebar; SCHEDULED (scheduled-tasks
+                executor) and SLACK (Slack bot) sessions are excluded.
 
         Returns:
             The created BuildSession model
@@ -331,11 +331,11 @@ class SessionManager:
 
         # Allocate port for this session (per-session port allocation).
         # Both LOCAL and KUBERNETES backends use the same port allocation
-        # strategy. Skipped for SCHEDULED sessions: scheduled-task fires
-        # are headless, never attach a preview, and pile up so fast they'd
-        # exhaust the [3010, 3100) range on a busy tenant.
+        # strategy. Skipped for non-interactive origins (SCHEDULED, SLACK):
+        # those sessions are headless, never attach a preview, and pile up
+        # fast enough to exhaust the [3010, 3100) range on a busy tenant.
         nextjs_port: int | None
-        if origin == SessionOrigin.SCHEDULED or headless:
+        if origin != SessionOrigin.INTERACTIVE or headless:
             nextjs_port = None
         else:
             nextjs_port = allocate_nextjs_port(self._db_session)

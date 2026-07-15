@@ -25,6 +25,14 @@ export const ExternalLink: Story = {
   ),
 };
 
+export const InternalLink: Story = {
+  render: () => (
+    <LinkButton href="/admin/settings" external={false}>
+      Settings
+    </LinkButton>
+  ),
+};
+
 export const LongLabel: Story = {
   render: () => (
     <LinkButton href="https://docs.onyx.app" target="_blank">
@@ -37,7 +45,9 @@ export const LongLabel: Story = {
 
 export const AsButton: Story = {
   render: () => (
-    <LinkButton onClick={() => alert("clicked")}>Click me</LinkButton>
+    <LinkButton onClick={() => alert("clicked")} external={false}>
+      Click me
+    </LinkButton>
   ),
 };
 
@@ -53,7 +63,11 @@ export const DisabledLink: Story = {
 
 export const DisabledButton: Story = {
   render: () => (
-    <LinkButton onClick={() => alert("should not fire")} disabled>
+    <LinkButton
+      onClick={() => alert("should not fire")}
+      disabled
+      external={false}
+    >
       Disabled button
     </LinkButton>
   ),

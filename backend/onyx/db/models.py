@@ -5751,8 +5751,8 @@ class BuildSession(Base):
         default=SharingScope.PRIVATE,
         server_default="private",
     )
-    # Distinguishes user-initiated sessions from sessions created by the
-    # scheduled-tasks executor (or any future non-interactive caller). The
+    # Distinguishes user-initiated sessions from sessions created by
+    # non-interactive callers (scheduled-tasks executor, Slack bot). The
     # Craft sidebar filters on origin == INTERACTIVE.
     origin: Mapped[SessionOrigin] = mapped_column(
         Enum(SessionOrigin, native_enum=False, name="sessionorigin"),

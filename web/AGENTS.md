@@ -32,12 +32,12 @@ import { Content, ContentAction, IllustrationContent } from "@opal/layouts";
 A two-axis layout component that automatically routes to the correct internal layout
 (`ContentXl`, `ContentLg`, `ContentMd`, `ContentSm`) based on `sizePreset` and `variant`:
 
-| sizePreset | variant | Routes to | Layout |
-|---|---|---|---|
-| `headline` / `section` | `heading` | `ContentXl` | Icon on top (flex-col) |
-| `headline` / `section` | `section` | `ContentLg` | Icon inline (flex-row) |
-| `main-content` / `main-ui` / `secondary` | `section` / `heading` | `ContentMd` | Compact inline |
-| `main-content` / `main-ui` / `secondary` | `body` | `ContentSm` | Body text layout |
+| sizePreset                               | variant               | Routes to   | Layout                 |
+| ---------------------------------------- | --------------------- | ----------- | ---------------------- |
+| `headline` / `section`                   | `heading`             | `ContentXl` | Icon on top (flex-col) |
+| `headline` / `section`                   | `section`             | `ContentLg` | Icon inline (flex-row) |
+| `main-content` / `main-ui` / `secondary` | `section` / `heading` | `ContentMd` | Compact inline         |
+| `main-content` / `main-ui` / `secondary` | `body`                | `ContentSm` | Body text layout       |
 
 ```typescript
 <Content
@@ -54,6 +54,7 @@ A two-axis layout component that automatically routes to the correct internal la
 **Use this when a Content block needs right-side actions** (buttons, badges, icons, etc.).
 
 Wraps `Content` and adds a `rightChildren` slot. Accepts all `Content` props plus:
+
 - `rightChildren`: `ReactNode` — actions rendered on the right
 - `padding`: `SizeVariant` — controls outer padding
 
@@ -86,6 +87,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
 ```
 
 Props:
+
 - `illustration`: `IconFunctionComponent` — optional, from `@opal/illustrations`
 - `title`: `string` — required
 - `description`: `string` — optional
@@ -119,6 +121,7 @@ function MySettingsPage() {
 ```
 
 Sub-components:
+
 - **`SettingsLayouts.Root`** — Wrapper with centered, scrollable container. Width options:
   `"sm"` (672px), `"sm-md"` (752px), `"md"` (872px, default), `"lg"` (992px), `"full"` (100%).
 - **`SettingsLayouts.Header`** — Sticky header with icon, title, description, optional
@@ -141,6 +144,7 @@ import FileCard from "@/sections/cards/FileCard";
 ```
 
 Guidelines:
+
 - One card per entity type — keep card-specific logic within the card component.
 - Cards should be reusable across different pages and contexts.
 - Use shared components from `@opal/components`, `@opal/layouts`, and `@/refresh-components`
@@ -166,6 +170,7 @@ import { Button } from "@opal/components/buttons/button/components";
 ```
 
 Key props:
+
 - `variant`: `"default"` | `"action"` | `"danger"` | `"none"`
 - `prominence`: `"primary"` | `"secondary"` | `"tertiary"` | `"internal"`
 - `size`: `"lg"` | `"md"` | `"sm"` | `"xs"` | `"2xs"` | `"fit"`
@@ -349,6 +354,7 @@ import Text from "@/refresh-components/texts/Text";
 ```
 
 Key props:
+
 - `font`: `TextFont` — font preset (e.g., `"main-ui-body"`, `"heading-h2"`, `"secondary-action"`)
 - `color`: `TextColor` — text color (e.g., `"text-03"`, `"text-inverted-05"`)
 - `as`: `"p" | "span" | "li" | "h1" | "h2" | "h3"` — HTML tag (default: `"span"`)
@@ -578,7 +584,7 @@ divs that exist solely for spacing.
 **Reason:** `cn`s are easier to read. They also allow for more complex types (i.e., string-arrays) to get formatted properly (it flattens each element in that string array down). As a result, it can allow things such as conditionals (i.e., `myCondition && "some-tailwind-class"`, which evaluates to `false` when `myCondition` is `false`) to get filtered out.
 
 ```typescript
-import { cn } from '@/lib/utils'
+import { cn } from "@opal/utils";
 
 // ✅ Good
 <div className={cn(
@@ -601,6 +607,7 @@ import { cn } from '@/lib/utils'
 Only fall back to `web/src/hooks/` for genuinely general-purpose hooks with no feature home.**
 
 Priority order:
+
 1. **Feature hook** (`web/src/lib/<feature>/hooks.ts`) — if the hook is specific to a domain
    (users, billing, connectors, etc.), it lives alongside the rest of that feature's code.
 2. **Opal** (`web/lib/opal/src/`) — if the hook is a reusable UI primitive with no

@@ -75,6 +75,14 @@ export {
   type DividerProps,
 } from "@opal/components/divider/components";
 
+/* IconContainer */
+export {
+  IconContainer,
+  type IconContainerProps,
+  type IconContainerSize,
+  type IconContainerType,
+} from "@opal/components/icon-container/components";
+
 /* Card */
 export { Card, type CardProps } from "@opal/components/cards/card/components";
 
@@ -102,6 +110,12 @@ export {
   type PaginationProps,
   type PaginationSize,
 } from "@opal/components/pagination/components";
+
+/* Calendar */
+export {
+  Calendar,
+  type CalendarProps,
+} from "@opal/components/calendar/components";
 
 /* Checkbox */
 export {

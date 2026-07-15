@@ -317,13 +317,16 @@ class SessionOrigin(str, PyEnum):
     """How a BuildSession was created.
 
     INTERACTIVE: session started by a user in the Craft UI.
-    SCHEDULED:   session started by the scheduled-tasks executor (or any
-                 future non-interactive caller). Sessions with this origin
-                 are excluded from the Craft sidebar list.
+    SCHEDULED:   session started by the scheduled-tasks executor. Sessions
+                 with this origin are excluded from the Craft sidebar list.
+    SLACK:       session started by a Slack thread mention. Surfaces in
+                 Slack (and a future admin list), not the user sidebar.
+                 Excluded from the Craft sidebar list.
     """
 
     INTERACTIVE = "INTERACTIVE"
     SCHEDULED = "SCHEDULED"
+    SLACK = "SLACK"
 
 
 class SharingScope(str, PyEnum):

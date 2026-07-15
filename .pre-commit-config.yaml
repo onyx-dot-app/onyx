@@ -60,7 +60,8 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
         name: Check lazy imports
-        args: ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
+        args:
+          ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -88,13 +89,13 @@ repos:
         # of uv's project handling, so config still applies. Keep the pinned
         # version in sync with `ruff` in the dev dependency group in
         # pyproject.toml.
-        args: ["--no-project", "--with=ruff==0.12.0", "ruff", "check", "--fix"]
+        args: ["--no-project", "--with=ruff==0.15.21", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
         alias: ruff-format
         name: ruff format
-        args: ["--no-project", "--with=ruff==0.12.0", "ruff", "format"]
+        args: ["--no-project", "--with=ruff==0.15.21", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
@@ -106,8 +107,7 @@ repos:
         # uses `uv sync --only-group zizmor`). `--offline` keeps it fast and
         # token-free locally; CI runs the online audits. Keep the pinned version
         # in sync with the `zizmor` dependency group in pyproject.toml.
-        args:
-          ["--no-project", "--with=zizmor==1.25.2", "zizmor", "--offline"]
+        args: ["--no-project", "--with=zizmor==1.25.2", "zizmor", "--offline"]
         pass_filenames: true
         files: ^\.github/(workflows/.+\.ya?ml|actions/.+/action\.ya?ml)$
 
