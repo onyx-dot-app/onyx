@@ -1,5 +1,8 @@
+import os
 import subprocess
 import threading
+
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def monitor_process(process_name: str, process: subprocess.Popen) -> None:
@@ -146,10 +149,28 @@ def run_jobs() -> None:
         ("BEAT", cmd_beat),
     ]
 
+    # onyx isn't installed into the venv, and celery keeps the cwd on
+    # sys.path only transiently while importing the app. Spawn-context
+    # children (SimpleJobClient) inherit the worker's sys.path, so pin the
+    # backend dir via PYTHONPATH, mirroring the Dockerfile's PYTHONPATH=/app.
+    _inherited_pythonpath = os.environ.get("PYTHONPATH")
+    worker_env = {
+        **os.environ,
+        "PYTHONPATH": (
+            f"{BACKEND_DIR}{os.pathsep}{_inherited_pythonpath}"
+            if _inherited_pythonpath
+            else BACKEND_DIR
+        ),
+    }
+
     processes = []
     for name, cmd in all_workers:
         process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            cmd,
+            env=worker_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
         processes.append((name, process))
 

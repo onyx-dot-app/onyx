@@ -14,6 +14,8 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB = 200
 DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB = 10000
 
+CRAFT_INSTRUCTIONS_MAX_LENGTH = 4000
+
 
 class PageType(str, Enum):
     CHAT = "chat"
@@ -48,6 +50,7 @@ class Settings(BaseModel):
     deep_research_enabled: bool | None = None
     multi_model_chat_enabled: bool | None = True
     search_ui_enabled: bool | None = True
+    auto_detect_search_filters: bool | None = True
 
     # Whether EE features are unlocked for use.
     # Depends on license status: True when the user has a valid license
@@ -89,6 +92,12 @@ class Settings(BaseModel):
     # Workspace default for Craft access; per-user User.craft_enabled
     # overrides win. The deployment-level Craft gate still applies on top.
     craft_default_enabled: bool = True
+
+    # Workspace-wide instructions injected into every Craft agent's AGENTS.md
+    # as an "Organization instructions" section.
+    craft_instructions: str | None = Field(
+        default=None, max_length=CRAFT_INSTRUCTIONS_MAX_LENGTH
+    )
 
     # Seat usage - populated by license enforcement when seat limit is exceeded
     seat_count: int | None = None

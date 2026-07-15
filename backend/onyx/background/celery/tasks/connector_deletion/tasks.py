@@ -513,7 +513,8 @@ def monitor_connector_deletion_taskset(
                 db_session=db_session,
             )
 
-            # delete orphan tags
+            # best-effort bounded orphan tag cleanup; a full drain would balloon
+            # this transaction, remaining orphans are swept by the pruning monitor
             delete_orphan_tags__no_commit(db_session)
 
             # Store IDs before potentially expiring cc_pair

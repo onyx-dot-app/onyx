@@ -88,11 +88,17 @@ async def get_auth_type(response: Response) -> AuthTypeResponse:
         "public, max-age=60" if has_users else "no-store"
     )
 
+    security = get_security_settings()
     return AuthTypeResponse(
         auth_type=AUTH_TYPE,
         requires_verification=user_needs_to_be_verified(),
         anonymous_user_enabled=anonymous_user_enabled(),
-        password_min_length=get_security_settings().password_min_length,
+        password_min_length=security.password_min_length,
+        password_max_length=security.password_max_length,
+        password_require_uppercase=security.password_require_uppercase,
+        password_require_lowercase=security.password_require_lowercase,
+        password_require_digit=security.password_require_digit,
+        password_require_special_char=security.password_require_special_char,
         has_users=has_users,
         oauth_enabled=OAUTH_ENABLED,
         sso_providers=await run_in_threadpool(_fetch_sso_provider_options),

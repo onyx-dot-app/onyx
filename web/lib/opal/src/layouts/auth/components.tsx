@@ -14,6 +14,8 @@ import { Content } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgSimpleLoader } from "@opal/icons";
 
+const ICON_SIZE_PX = 44;
+
 // ---------------------------------------------------------------------------
 // Root — screen-centering wrapper for auth pages
 // ---------------------------------------------------------------------------
@@ -51,7 +53,7 @@ function Card({
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <div className="p-0.5">
-              <Icon size={48} />
+              <Icon size={ICON_SIZE_PX} />
             </div>
             <Content
               sizePreset="headline"
@@ -113,13 +115,20 @@ function Fields({ children }: FieldsProps) {
 // Submit — full-width submit button
 // ---------------------------------------------------------------------------
 
-type SubmitLabel = "submit" | "create" | "join" | "reset" | "impersonate";
+type SubmitLabel =
+  | "submit"
+  | "create"
+  | "join"
+  | "reset"
+  | "impersonate"
+  | "logout";
 
 interface SubmitProps {
   label: SubmitLabel;
   isSubmitting?: boolean;
   isValid?: boolean;
   dirty?: boolean;
+  onClick?: () => void;
 }
 
 const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
@@ -128,13 +137,15 @@ const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
   join: "Join",
   reset: "Reset Password",
   impersonate: "Impersonate",
+  logout: "Sign Out",
 };
 
-function Submit({ label, isSubmitting, isValid, dirty }: SubmitProps) {
+function Submit({ label, isSubmitting, isValid, dirty, onClick }: SubmitProps) {
   return (
     <Button
       type="submit"
       width="full"
+      onClick={onClick}
       disabled={
         Boolean(isSubmitting) ||
         (isValid !== undefined && !isValid) ||

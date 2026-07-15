@@ -27,8 +27,12 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheLock
 from onyx.cache.interface import CacheLockLostError
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.server.features.build.configs import (
+    OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
+from onyx.server.features.build.configs import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
 from onyx.server.features.build.configs import PROMPT_SLOT_LEASE_SECONDS
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
@@ -114,8 +118,8 @@ class PromptSlot:
     def keep_alive(self, stop: threading.Event, max_seconds: float) -> None:
         """For holders whose progress is client-paced or opaque — SSE
         backpressure must not expire a live turn's lease. The cap bounds a
-        leaked holder to roughly the old fixed-TTL ceiling; hitting it marks
-        the slot ``lost`` so the holder aborts instead of driving unrenewed."""
+        leaked holder; hitting it marks the slot ``lost`` so the holder aborts
+        instead of driving opencode without mutual exclusion."""
         deadline = time.monotonic() + max_seconds
         while not stop.wait(PROMPT_SLOT_LEASE_SECONDS / 4):
             if self.lost:
@@ -468,9 +472,9 @@ class _ServeMixin:
             password=info.password,
             event_bus=bus,
             # Self-heal a 401 on any unary call (peer pod rotated the password).
-            reload_password=lambda: self._reload_serve_connection_info(
-                sandbox_id
-            ).password,
+            reload_password=lambda: (
+                self._reload_serve_connection_info(sandbox_id).password
+            ),
         )
 
     def answer_connect_app_permission(
@@ -541,6 +545,7 @@ class _ServeMixin:
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
         should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream sandbox events via the in-sandbox ``opencode serve``. Preflight
         ``opencode_session_id`` via :meth:`ensure_opencode_session` to avoid
@@ -589,6 +594,8 @@ class _ServeMixin:
                     directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
+                    timeout=OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+                    absolute_timeout=turn_timeout_seconds,
                     should_interrupt=should_interrupt,
                 ):
                     events_count += 1
@@ -741,6 +748,7 @@ class _ServeMixin:
                     directory=session_path,
                     model_provider=agent_provider,
                     model_id=agent_model,
+                    absolute_timeout=PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
                 ):
                     events_count += 1
                     yield event
@@ -833,9 +841,8 @@ class _ServeMixin:
                     fetch_message=fetch_message,
                     parent_resolver=bus.parent_of,
                     children_resolver=bus.list_children,
-                    fetch_message_by_session=lambda session_id,
-                    message_id: client.get_message(
-                        session_id, message_id, directory=directory
+                    fetch_message_by_session=lambda session_id, message_id: (
+                        client.get_message(session_id, message_id, directory=directory)
                     ),
                 ):
                     if pending_text_event is not None:

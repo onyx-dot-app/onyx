@@ -1,12 +1,11 @@
 "use client";
 
-import { AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 import LoginText from "@/app/auth/login/LoginText";
-import SignInButton from "@/app/auth/login/SignInButton";
 import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
-import EmailPasswordForm from "./EmailPasswordForm";
-import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
-import { useSendAuthRequiredMessage } from "@/lib/extension/utils";
+import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
+import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
+import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import Text from "@/refresh-components/texts/Text";
 import { Button, MessageCard } from "@opal/components";
 
@@ -75,7 +74,11 @@ export default function LoginPage({
               </div>
             </>
           )}
-          <EmailPasswordForm shouldVerify={true} nextUrl={effectiveNextUrl} />
+          <EmailPasswordForm
+            label="submit"
+            shouldVerify={true}
+            nextUrl={effectiveNextUrl}
+          />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
             <Button href="/auth/forgot-password">Reset Password</Button>
           )}
@@ -105,7 +108,7 @@ export default function LoginPage({
               </div>
             </>
           )}
-          <EmailPasswordForm nextUrl={effectiveNextUrl} />
+          <EmailPasswordForm label="submit" nextUrl={effectiveNextUrl} />
         </div>
       )}
 

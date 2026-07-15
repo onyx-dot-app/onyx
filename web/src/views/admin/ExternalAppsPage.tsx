@@ -8,6 +8,7 @@ import { Button, Divider, Text } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { SvgArrowLeft, SvgPlug, SvgPlus, SvgTrash } from "@opal/icons";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   availableBuiltInDescriptors,
   BuiltInExternalAppDescriptor,
@@ -27,32 +28,22 @@ interface ModalState {
   existingApp: ExternalAppAdminResponse | null;
 }
 
-interface ExternalAppsPageProps {
-  onBack?: () => void;
-}
-
 // Admin External Apps management; members connect their own accounts on the Apps page.
-export default function ExternalAppsPage({
-  onBack,
-}: ExternalAppsPageProps = {}) {
+export default function ExternalAppsPage() {
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
-        icon={SvgPlug}
-        title="External Apps"
+        icon={ADMIN_ROUTES.CRAFT_APPS.icon}
+        title={ADMIN_ROUTES.CRAFT_APPS.title}
         description="Connect third-party integrations so users in your org can authorize them with their personal accounts in Onyx Craft."
         rightChildren={
-          onBack ? (
-            <div className="flex items-center gap-2">
-              <Button
-                prominence="secondary"
-                icon={SvgArrowLeft}
-                onClick={onBack}
-              >
-                Back
-              </Button>
-            </div>
-          ) : undefined
+          <Button
+            href="/craft/v1/apps"
+            prominence="secondary"
+            icon={SvgArrowLeft}
+          >
+            Back to Craft
+          </Button>
         }
       />
       <SettingsLayouts.Body>

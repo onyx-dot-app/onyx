@@ -33,7 +33,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
-from onyx.server.features.build.configs import OPENCODE_PROMPT_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
 from onyx.server.features.build.configs import (
     SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS,
 )
@@ -486,6 +486,7 @@ def yield_sandbox_events(
     agent_model: str | None,
     should_interrupt: Callable[[], bool] | None = None,
     should_abort_on_teardown: Callable[[], bool] | None = None,
+    turn_timeout_seconds: float | None = None,
 ) -> Generator[Any, None, None]:
     """Drive the agent to completion, yielding raw sandbox events.
 
@@ -520,6 +521,7 @@ def yield_sandbox_events(
         on_opencode_session_resolved=_persist_resolved_id,
         should_interrupt=should_interrupt,
         should_abort_on_teardown=should_abort_on_teardown,
+        turn_timeout_seconds=turn_timeout_seconds,
     )
     try:
         for sandbox_event in event_stream:
@@ -852,7 +854,7 @@ def stream_subagent_turn(
             target=slot.keep_alive,
             name=f"prompt-slot-renewal-{session_id}",
             daemon=True,
-            args=(slot_renewal_stop, OPENCODE_PROMPT_TIMEOUT_SECONDS),
+            args=(slot_renewal_stop, PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS),
         )
 
         # Routing metadata merged into every forwarded subagent event and

@@ -1,13 +1,15 @@
 import copy
 import os
 import re
-import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 from typing import Union
+
+from readerwriterlock import rwlock
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
@@ -23,6 +25,8 @@ from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ReasoningEffort
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.model_capabilities import is_true_openai_model
+from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.model_response import Usage
@@ -31,8 +35,6 @@ from onyx.llm.models import ANTHROPIC_REASONING_EFFORT_BUDGET
 from onyx.llm.models import OPENAI_REASONING_EFFORT
 from onyx.llm.request_context import get_llm_mock_response
 from onyx.llm.utils import build_litellm_passthrough_kwargs
-from onyx.llm.utils import is_true_openai_model
-from onyx.llm.utils import model_is_reasoning_model
 from onyx.llm.well_known_providers.constants import AWS_ACCESS_KEY_ID_KWARG
 from onyx.llm.well_known_providers.constants import (
     AWS_ACCESS_KEY_ID_KWARG_ENV_VAR_FORMAT,
@@ -59,11 +61,14 @@ from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
 from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
-from onyx.utils.timing import log_generator_function_time
 
 logger = setup_logger()
 
-_env_lock = threading.Lock()
+# Write-preferring reader-writer lock guarding os.environ during litellm calls.
+# Calls that inject custom_config env vars hold the write lock; all other calls
+# hold a read lock so they never observe injected secrets but still run
+# concurrently with each other.
+_env_rwlock = rwlock.RWLockWrite()
 
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper
@@ -526,6 +531,7 @@ class LitellmLLM(LLM):
         # Flags that modify the final arguments
         #########################
         is_claude_model = "claude" in self.config.model_name.lower()
+        is_qwen_model = "qwen" in self.config.model_name.lower()
         is_reasoning = model_is_reasoning_model(
             self.config.model_name, self.config.model_provider
         )
@@ -571,9 +577,15 @@ class LitellmLLM(LLM):
             model = f"{model_provider}/{self.config.deployment_name or self.config.model_name}"
 
         # Tool choice
-        if is_claude_model and tool_choice == ToolChoiceOptions.REQUIRED:
-            # Claude models will not use reasoning if tool_choice is required
-            # let it choose tools automatically so reasoning can still be used
+        # Downgrade tool_choice=required to AUTO for models that mishandle it:
+        # Claude skips reasoning when it's set, and Qwen thinking models reject
+        # it with a 400. The chat loop's fallback tool-call extraction still
+        # enforces the forced tool. Matched by model name rather than
+        # `is_reasoning` because the litellm/local registry lags behind new
+        # Qwen releases (e.g. qwen3.7-plus).
+        if (is_claude_model or is_qwen_model) and (
+            tool_choice == ToolChoiceOptions.REQUIRED
+        ):
             tool_choice = ToolChoiceOptions.AUTO
 
         # If no tools are provided, tool_choice should be None
@@ -1018,25 +1030,32 @@ class LitellmLLM(LLM):
 
 
 @contextmanager
-@log_generator_function_time()
 def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
     """
-    Temporarily sets the environment variables to the given values.
-    _env_lock is held while the environment variables are set, so no concurrent
-    LLM call can observe them. Then cleans up the environment and releases the
-    lock.
+    Temporarily sets the environment variables to the given values while holding
+    the exclusive write side of _env_rwlock, so no concurrent LLM call can
+    observe them. Then cleans up the environment and releases the lock.
+
+    Calls without env_variables hold the shared read side instead: they run
+    concurrently with each other and only block while a writer has env vars
+    injected.
     """
-    if env_variables:
-        masked_env = {
-            key: mask_env_value_for_logging(key, value)
-            for key, value in env_variables.items()
-        }
-        logger.info(
-            "temporary_env_and_lock setting custom_config env var(s): %s",
-            masked_env,
-        )
-    with _env_lock:
-        logger.debug("Acquired lock in temporary_env_and_lock")
+    if not env_variables:
+        with _env_rwlock.gen_rlock():
+            yield
+        return
+
+    masked_env = {
+        key: mask_env_value_for_logging(key, value)
+        for key, value in env_variables.items()
+    }
+    logger.info(
+        "temporary_env_and_lock setting custom_config env var(s): %s",
+        masked_env,
+    )
+    start_time = time.monotonic()
+    with _env_rwlock.gen_wlock():
+        logger.debug("Acquired env write lock in temporary_env_and_lock")
         # Store original values (None if key didn't exist)
         original_values: dict[str, str | None] = {
             key: os.environ.get(key) for key in env_variables
@@ -1051,4 +1070,7 @@ def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
                 else:
                     os.environ[key] = original_value  # Restore original value
 
-    logger.debug("Released lock in temporary_env_and_lock")
+    logger.info(
+        "temporary_env_and_lock write section took %.3f seconds",
+        time.monotonic() - start_time,
+    )

@@ -17,9 +17,8 @@ import {
 } from "@/lib/types";
 import { usePostHog } from "posthog-js/react";
 import { useSettings } from "@/lib/settings/hooks";
-import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { useCurrentUser } from "@/lib/users/hooks";
-import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { useAuthTypeMetadata, useTokenRefresh } from "@/lib/auth/hooks";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import {
   updateUserPersonalization as persistPersonalization,
@@ -33,7 +32,7 @@ interface UserContextType {
   isCurator: boolean;
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
-  authTypeMetadata: AuthTypeMetadata;
+  authTypeMetadata: AuthTypeMetadata | undefined;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
   updateUserPasteAsTile: (enabled: boolean) => Promise<void>;

@@ -75,4 +75,17 @@ export interface SkillPreview {
 
 export type SkillEditableDetail = CustomSkill & {
   instructions_markdown: string;
+  files: SkillBundleFile[];
 };
+
+export interface SkillBundleFile {
+  path: string;
+  size: number;
+}
+
+export interface SkillBundleContents {
+  name: string;
+  description: string;
+  instructions_markdown: string;
+  files: SkillBundleFile[];
+}

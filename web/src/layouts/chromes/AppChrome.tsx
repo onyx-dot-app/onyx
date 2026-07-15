@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -67,7 +66,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import { useCustomFooterContent } from "@/lib/app/hooks";
+import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 
 // ---------------------------------------------------------------------------
@@ -558,16 +557,7 @@ export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
 
   const appFocus = useAppFocus();
-  const { appName } = useSettings();
-  const { currentChatSession } = useChatSessions();
-
-  useLayoutEffect(() => {
-    const appendChatNameToDocumentTitle =
-      (appFocus.isChat() || appFocus.isSharedChat()) && currentChatSession;
-    document.title = appendChatNameToDocumentTitle
-      ? `${currentChatSession.name} — ${appName}`
-      : appName;
-  }, [currentChatSession?.name, appName, appFocus]);
+  useAppDocumentTitle();
 
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();

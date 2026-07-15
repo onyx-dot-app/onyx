@@ -65,6 +65,8 @@ from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
 
+admin_router = APIRouter()
+
 # Adapters for the structured custom-app form fields, which arrive as JSON
 # strings (multipart can't carry native lists/objects).
 _STR_LIST_ADAPTER = TypeAdapter(list[str])
@@ -142,7 +144,7 @@ def _to_user_response(
 # =============================================================================
 
 
-@router.post("/admin/apps/built-in")
+@admin_router.post("/apps/built-in")
 def create_built_in_external_app(
     request: CreateBuiltInExternalAppRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -191,7 +193,7 @@ def create_built_in_external_app(
     return _to_admin_response(app)
 
 
-@router.patch("/admin/apps/{external_app_id}")
+@admin_router.patch("/apps/{external_app_id}")
 def update_external_app_admin(
     external_app_id: int,
     request: UpdateExternalAppRequest,
@@ -244,7 +246,7 @@ def update_external_app_admin(
     return _to_admin_response(app)
 
 
-@router.post("/admin/apps/custom")
+@admin_router.post("/apps/custom")
 def create_custom_external_app(
     name: str = Form(...),
     description: str = Form(""),
@@ -322,7 +324,7 @@ def create_custom_external_app(
     return _to_admin_response(app)
 
 
-@router.put("/admin/apps/{external_app_id}/bundle")
+@admin_router.put("/apps/{external_app_id}/bundle")
 def replace_custom_app_bundle(
     external_app_id: int,
     bundle: UploadFile = File(...),
@@ -365,7 +367,7 @@ def replace_custom_app_bundle(
     return _to_admin_response(app)
 
 
-@router.get("/admin/apps")
+@admin_router.get("/apps")
 def list_external_apps_admin(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -375,7 +377,7 @@ def list_external_apps_admin(
     return [_to_admin_response(app) for app in apps]
 
 
-@router.get("/admin/apps/built-in/options")
+@admin_router.get("/apps/built-in/options")
 def list_built_in_external_apps(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[BuiltInExternalAppDescriptor]:
@@ -383,7 +385,7 @@ def list_built_in_external_apps(
     return fetch_available_built_in_apps()
 
 
-@router.delete("/admin/apps/{external_app_id}")
+@admin_router.delete("/apps/{external_app_id}")
 def delete_external_app_admin(
     external_app_id: int,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),

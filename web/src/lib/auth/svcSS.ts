@@ -1,9 +1,16 @@
+import "server-only";
+
 import { buildUrl, UrlBuilder } from "@/lib/utilsSS";
-import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { getDomain } from "@/lib/redirectSS";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  AuthType,
+  AuthTypeMetadata,
+  type SSOProviderType,
+} from "@/lib/auth/types";
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
-import { AuthTypeMetadata } from "@/lib/auth/types";
-import type { SSOProviderType } from "@/lib/auth/types";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
   const res = await fetch(buildUrl("/auth/type"));
@@ -16,6 +23,11 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
     requires_verification: boolean;
     anonymous_user_enabled: boolean | null;
     password_min_length: number;
+    password_max_length: number;
+    password_require_uppercase: boolean;
+    password_require_lowercase: boolean;
+    password_require_digit: boolean;
+    password_require_special_char: boolean;
     has_users: boolean;
     oauth_enabled: boolean;
     sso_providers?: {
@@ -38,6 +50,11 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
     requiresVerification: data.requires_verification,
     anonymousUserEnabled: data.anonymous_user_enabled,
     passwordMinLength: data.password_min_length,
+    passwordMaxLength: data.password_max_length,
+    passwordRequireUppercase: data.password_require_uppercase,
+    passwordRequireLowercase: data.password_require_lowercase,
+    passwordRequireDigit: data.password_require_digit,
+    passwordRequireSpecialChar: data.password_require_special_char,
     hasUsers: data.has_users,
     oauthEnabled: data.oauth_enabled,
     ssoProviders: (data.sso_providers ?? []).map((provider) => ({
@@ -109,6 +126,24 @@ export async function logoutSS(
     default:
       return logoutStandardSS(headers);
   }
+}
+
+export async function authErrorRedirect(
+  request: NextRequest,
+  response: Response,
+  redirectStatus?: number
+): Promise<NextResponse> {
+  const errorUrl = new URL("/auth/error", getDomain(request));
+  try {
+    const body = await response.json();
+    const detail = body?.detail;
+    if (typeof detail === "string" && detail) {
+      errorUrl.searchParams.set("error", detail);
+    }
+  } catch {
+    // response may not be JSON
+  }
+  return NextResponse.redirect(errorUrl, redirectStatus);
 }
 
 // ---------------------------------------------------------------------------

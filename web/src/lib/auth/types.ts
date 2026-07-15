@@ -1,4 +1,10 @@
-import { AuthType } from "@/lib/constants";
+export enum AuthType {
+  BASIC = "basic",
+  GOOGLE_OAUTH = "google_oauth",
+  OIDC = "oidc",
+  SAML = "saml",
+  CLOUD = "cloud",
+}
 
 export type SSOProviderType = "GOOGLE_OAUTH" | "OIDC" | "SAML";
 
@@ -15,6 +21,11 @@ export interface AuthTypeMetadata {
   requiresVerification: boolean;
   anonymousUserEnabled: boolean | null;
   passwordMinLength: number;
+  passwordMaxLength: number;
+  passwordRequireUppercase: boolean;
+  passwordRequireLowercase: boolean;
+  passwordRequireDigit: boolean;
+  passwordRequireSpecialChar: boolean;
   hasUsers: boolean;
   oauthEnabled: boolean;
   // DB-backed SSO providers, one login button each. Absent on the client-hook

@@ -4,7 +4,7 @@ import { ReactNode } from "react";
 import type { IconProps } from "@opal/types";
 import { SidebarLayouts } from "@opal/layouts";
 import { SidebarTab } from "@opal/components";
-import { renderAppLogo } from "@/lib/app/utils";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 
 export interface StepSidebarProps {
@@ -25,16 +25,16 @@ export default function StepSidebar({
   return (
     <SidebarLayouts.Root>
       <SidebarLayouts.Header
-        renderAppLogo={renderAppLogo}
+        renderAppLogo={renderSidebarLogo}
         showLogoWhenFolded={showLogoWhenFolded}
-      />
-      <SidebarLayouts.Body scrollKey="step-sidebar">
+      >
         <SidebarTab icon={buttonIcon} href={buttonHref}>
           {buttonName}
         </SidebarTab>
+      </SidebarLayouts.Header>
+      <SidebarLayouts.Body scrollKey="step-sidebar">
+        {children}
       </SidebarLayouts.Body>
-
-      <div className="h-full w-full px-4">{children}</div>
     </SidebarLayouts.Root>
   );
 }

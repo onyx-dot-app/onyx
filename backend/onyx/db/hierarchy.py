@@ -94,6 +94,14 @@ def ensure_source_node_exists(
     # Try to get existing SOURCE node first
     existing_node = get_source_hierarchy_node(db_session, source)
     if existing_node:
+        if (
+            not existing_node.is_public
+        ):  # fix for earlier bug where SOURCE nodes were not public
+            existing_node.is_public = True
+            if commit:
+                db_session.commit()
+            else:
+                db_session.flush()
         return existing_node
 
     # Create the SOURCE node
@@ -107,6 +115,7 @@ def ensure_source_node_exists(
         node_type=HierarchyNodeType.SOURCE,
         document_id=None,
         parent_id=None,  # SOURCE nodes have no parent
+        is_public=True,
     )
 
     db_session.add(source_node)
