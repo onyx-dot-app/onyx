@@ -9,7 +9,7 @@ restart.
 
 from typing import Any
 
-from onyx.llm.anthropic_versions import anthropic_supports_adaptive_thinking
+from onyx.llm.model_capabilities import anthropic_supports_adaptive_thinking
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 
 

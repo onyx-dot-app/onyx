@@ -8,10 +8,10 @@ thinking supported, 4.6+).
 
 import pytest
 
-from onyx.llm.anthropic_versions import anthropic_omits_sampling_params
-from onyx.llm.anthropic_versions import anthropic_requires_adaptive_thinking
-from onyx.llm.anthropic_versions import anthropic_supports_adaptive_thinking
-from onyx.llm.anthropic_versions import parse_anthropic_model_version
+from onyx.llm.model_capabilities import anthropic_omits_sampling_params
+from onyx.llm.model_capabilities import anthropic_requires_adaptive_thinking
+from onyx.llm.model_capabilities import anthropic_supports_adaptive_thinking
+from onyx.llm.model_capabilities import parse_anthropic_model_version
 
 
 @pytest.mark.parametrize(

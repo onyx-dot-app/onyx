@@ -16,8 +16,6 @@ from onyx.configs.chat_configs import LLM_FIRST_CHUNK_MAX_RETRIES
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
-from onyx.llm.anthropic_versions import anthropic_omits_sampling_params
-from onyx.llm.anthropic_versions import anthropic_requires_adaptive_thinking
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.cost import calculate_llm_cost_cents
 from onyx.llm.interfaces import LanguageModelInput
@@ -26,6 +24,8 @@ from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.interfaces import ReasoningEffort
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.model_capabilities import anthropic_omits_sampling_params
+from onyx.llm.model_capabilities import anthropic_requires_adaptive_thinking
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.model_response import ModelResponse
