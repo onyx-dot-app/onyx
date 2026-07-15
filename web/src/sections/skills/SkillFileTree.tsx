@@ -132,7 +132,9 @@ export default function SkillFileTree({
     for (const file of files) {
       const parts = file.path.split("/");
       let parent = root;
-      for (const [index, part] of parts.entries()) {
+      for (let index = 0; index < parts.length; index += 1) {
+        const part = parts[index];
+        if (part === undefined) continue;
         const path = parts.slice(0, index + 1).join("/");
         let node = parent.children.find((child) => child.name === part);
         if (!node) {
