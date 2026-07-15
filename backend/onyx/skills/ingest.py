@@ -6,6 +6,7 @@ from typing import NamedTuple
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import FileStore
+from onyx.skills.bundle import build_single_file_bundle
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import parse_skill_md_metadata
 from onyx.skills.bundle import SKILL_MD_NAME
@@ -63,10 +64,7 @@ def ingest_skill_bundle(
         metadata = parse_skill_md_metadata(bundle_bytes)
         if slug is None:
             slug = metadata[0]
-        output = io.BytesIO()
-        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as bundle_zip:
-            bundle_zip.writestr(SKILL_MD_NAME, bundle_bytes)
-        bundle_bytes = output.getvalue()
+        bundle_bytes = build_single_file_bundle(SKILL_MD_NAME, bundle_bytes)
     else:
         if slug is None:
             slug = slug_from_filename(filename)

@@ -16,6 +16,8 @@ from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
+from onyx.skills.built_in import SKILL_SLUG_PATTERN
+from onyx.skills.models import SkillBundleFile
 
 
 class SkillUserShare(BaseModel):
@@ -174,6 +176,25 @@ class SkillPreviewResponse(BaseModel):
 
 class SkillEditableDetailResponse(SkillResponse):
     instructions_markdown: str
+    files: list[SkillBundleFile]
+
+
+class SkillCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str = Field(pattern=SKILL_SLUG_PATTERN)
+    name: str
+    description: str
+    instructions_markdown: str
+
+    @model_validator(mode="after")
+    def _strip_values(self) -> "SkillCreateRequest":
+        for field in ("name", "description", "instructions_markdown"):
+            stripped = getattr(self, field).strip()
+            if not stripped:
+                raise ValueError(f"{field} cannot be empty")
+            setattr(self, field, stripped)
+        return self
 
 
 class SkillPatchRequest(BaseModel):

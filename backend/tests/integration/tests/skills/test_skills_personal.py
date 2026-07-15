@@ -64,6 +64,78 @@ def test_create_personal_skill_visibility(
     assert admin_match[0].is_personal is True
 
 
+def test_create_personal_skill_from_editor(basic_user: DATestUser) -> None:
+    slug = f"personal-editor-{uuid4().hex[:6]}"
+
+    skill = SkillManager.create_from_editor(
+        basic_user,
+        slug=slug,
+        name="Editor Skill",
+        description="Created without an uploaded bundle",
+        instructions_markdown="# Workflow\n\nFollow these steps.",
+        upload_bytes=b"supporting context",
+        upload_filename="context.txt",
+    )
+
+    editable = SkillManager.get_editable(skill.id, basic_user)
+    assert skill.slug == slug
+    assert skill.is_personal is True
+    assert editable.instructions_markdown == "# Workflow\n\nFollow these steps."
+    assert [file.path for file in editable.files] == ["context.txt"]
+
+
+def test_upload_supporting_files_merges_and_bundle_upload_replaces(
+    basic_user: DATestUser,
+) -> None:
+    slug = f"personal-files-{uuid4().hex[:6]}"
+    skill = SkillManager.create_from_editor(
+        basic_user,
+        slug=slug,
+        name="Original",
+        description="Original description",
+        instructions_markdown="Original instructions.",
+    )
+
+    supporting = io.BytesIO()
+    with zipfile.ZipFile(supporting, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("scripts/run.py", "print('hello')\n")
+        zf.writestr("references/context.md", "Context")
+    merged = SkillManager.upload_files(
+        skill,
+        supporting.getvalue(),
+        "supporting.zip",
+        basic_user,
+    )
+    assert [file.path for file in merged.files] == [
+        "references/context.md",
+        "scripts/run.py",
+    ]
+    assert merged.name == "Original"
+
+    after_removal = SkillManager.remove_file(skill, "scripts/run.py", basic_user)
+    assert [file.path for file in after_removal.files] == ["references/context.md"]
+    assert after_removal.instructions_markdown == "Original instructions."
+
+    replacement = io.BytesIO()
+    with zipfile.ZipFile(replacement, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "replacement/SKILL.md",
+            "---\nname: Replacement\ndescription: Replaced bundle\n---\n\n"
+            "Replacement instructions.",
+        )
+        zf.writestr("replacement/new.txt", "new")
+    replaced = SkillManager.upload_files(
+        skill,
+        replacement.getvalue(),
+        "replacement.zip",
+        basic_user,
+    )
+    assert replaced.name == "Replacement"
+    assert replaced.description == "Replaced bundle"
+    assert replaced.instructions_markdown == "Replacement instructions."
+    assert [file.path for file in replaced.files] == ["new.txt"]
+
+
 def test_create_personal_skill_accepts_wrapped_directory(
     basic_user: DATestUser,
 ) -> None:

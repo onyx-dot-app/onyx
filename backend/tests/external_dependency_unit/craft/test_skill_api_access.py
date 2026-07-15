@@ -20,7 +20,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import create_custom_skill
 from onyx.server.features.skill.api import fetch_skill_for_current_user
 from onyx.server.features.skill.api import patch_current_user_skill
+from onyx.server.features.skill.api import remove_current_user_skill_file
 from onyx.server.features.skill.api import replace_current_user_skill_bundle
+from onyx.server.features.skill.api import upload_current_user_skill_files
 from onyx.server.features.skill.models import SkillPatchRequest
 from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
 from tests.external_dependency_unit.craft.db_helpers import make_group
@@ -169,3 +171,77 @@ def test_replace_bundle_authorizes_before_reading_bundle(
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
     read_bundle_file.assert_not_called()
+
+
+def test_upload_files_authorizes_before_reading_upload(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = make_user(db_session, role=UserRole.BASIC)
+    shared_user = make_user(db_session, role=UserRole.BASIC)
+    private_skill = make_skill(
+        db_session,
+        is_public=False,
+        enabled=True,
+        author_user_id=owner.id,
+    )
+    share_skill_with_user(
+        db_session,
+        private_skill,
+        shared_user,
+        SkillSharePermission.VIEWER,
+    )
+    read_bundle_file = MagicMock()
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.read_bundle_file",
+        read_bundle_file,
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        upload_current_user_skill_files(
+            private_skill.id,
+            upload=_upload("notes.md"),
+            user=shared_user,
+            db_session=db_session,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
+    read_bundle_file.assert_not_called()
+
+
+def test_remove_file_authorizes_before_reading_bundle(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = make_user(db_session, role=UserRole.BASIC)
+    shared_user = make_user(db_session, role=UserRole.BASIC)
+    private_skill = make_skill(
+        db_session,
+        is_public=False,
+        enabled=True,
+        author_user_id=owner.id,
+    )
+    share_skill_with_user(
+        db_session,
+        private_skill,
+        shared_user,
+        SkillSharePermission.VIEWER,
+    )
+    read_bundle = MagicMock()
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        read_bundle,
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        remove_current_user_skill_file(
+            private_skill.id,
+            path="references/context.md",
+            user=shared_user,
+            db_session=db_session,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
+    read_bundle.assert_not_called()

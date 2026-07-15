@@ -6,7 +6,11 @@
  * them to `toast.error` directly.
  */
 
-import type { CustomSkill, SkillSharePermission } from "@/lib/skills/types";
+import type {
+  CustomSkill,
+  SkillEditableDetail,
+  SkillSharePermission,
+} from "@/lib/skills/types";
 
 async function readErrorDetail(res: Response): Promise<string> {
   try {
@@ -45,6 +49,31 @@ export async function createCustomSkill(bundle: File): Promise<CustomSkill> {
   return handle<CustomSkill>(res);
 }
 
+export interface CreateCustomSkillInput {
+  slug: string;
+  name: string;
+  description: string;
+  instructions_markdown: string;
+}
+
+export async function createCustomSkillFromEditor(
+  input: CreateCustomSkillInput,
+  upload?: File
+): Promise<SkillEditableDetail> {
+  const form = new FormData();
+  form.append("slug", input.slug);
+  form.append("name", input.name);
+  form.append("description", input.description);
+  form.append("instructions_markdown", input.instructions_markdown);
+  if (upload) form.append("upload", upload);
+
+  const res = await fetch("/api/skills/custom/editor", {
+    method: "POST",
+    body: form,
+  });
+  return handle<SkillEditableDetail>(res);
+}
+
 export interface PatchCustomSkillInput {
   name?: string;
   description?: string;
@@ -65,17 +94,29 @@ export interface SkillShareUpdatePayload {
   public_permission?: SkillSharePermission | null;
 }
 
-export async function replaceUserSkillBundle(
+export async function uploadUserSkillFiles(
   skillId: string,
-  bundle: File
-): Promise<CustomSkill> {
+  upload: File
+): Promise<SkillEditableDetail> {
   const form = new FormData();
-  form.append("bundle", bundle);
-  const res = await fetch(`/api/skills/custom/${skillId}/bundle`, {
-    method: "PUT",
+  form.append("upload", upload);
+  const res = await fetch(`/api/skills/custom/${skillId}/files`, {
+    method: "POST",
     body: form,
   });
-  return handle<CustomSkill>(res);
+  return handle<SkillEditableDetail>(res);
+}
+
+export async function removeUserSkillFile(
+  skillId: string,
+  path: string
+): Promise<SkillEditableDetail> {
+  const params = new URLSearchParams({ path });
+  const res = await fetch(
+    `/api/skills/custom/${skillId}/files?${params.toString()}`,
+    { method: "DELETE" }
+  );
+  return handle<SkillEditableDetail>(res);
 }
 
 export async function patchUserSkill(

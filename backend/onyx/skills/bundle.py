@@ -9,6 +9,7 @@ import re
 import stat
 import sys
 import zipfile
+from contextlib import ExitStack
 from copy import copy
 from typing import BinaryIO
 from typing import Final
@@ -20,6 +21,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import SLUG_REGEX
+from onyx.skills.models import CustomSkillBundleContents
+from onyx.skills.models import SkillBundleFile
 
 DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
     os.environ.get("SKILL_BUNDLE_PER_FILE_MAX_BYTES") or 25 * 1024 * 1024
@@ -130,7 +133,7 @@ def strip_skill_md_frontmatter(content: str) -> str:
     return content[match.end() :].strip()
 
 
-def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
+def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
     try:
         zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile as exc:
@@ -147,6 +150,14 @@ def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
                 OnyxErrorCode.INTERNAL_ERROR,
                 "Stored skill bundle is missing SKILL.md.",
             ) from exc
+        files: list[SkillBundleFile] = []
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            normalized = _validated_bundle_path(info)
+            if normalized == SKILL_MD_NAME or _is_ignored_bundle_path(normalized):
+                continue
+            files.append(SkillBundleFile(path=normalized, size=info.file_size))
 
     try:
         skill_md = raw_skill_md.decode("utf-8")
@@ -156,7 +167,14 @@ def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
             "Stored skill bundle SKILL.md must be UTF-8 encoded.",
         ) from exc
 
-    return strip_skill_md_frontmatter(skill_md)
+    return CustomSkillBundleContents(
+        instructions_markdown=strip_skill_md_frontmatter(skill_md),
+        files=sorted(files, key=lambda entry: entry.path),
+    )
+
+
+def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
+    return inspect_custom_bundle(zip_bytes).instructions_markdown
 
 
 def build_skill_md(
@@ -187,6 +205,16 @@ def build_skill_md(
         allow_unicode=True,
     ).strip()
     return f"---\n{frontmatter}\n---\n\n{instructions_markdown}\n"
+
+
+def build_single_file_bundle(filename: str, content: bytes) -> bytes:
+    info = zipfile.ZipInfo(filename=filename)
+    _validated_bundle_path(info)
+    info.compress_type = zipfile.ZIP_DEFLATED
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(info, content)
+    return output.getvalue()
 
 
 def rewrite_custom_bundle_skill_md(
@@ -538,6 +566,143 @@ def validate_and_normalize_custom_bundle(
             "top-level directory",
         )
     return output.getvalue() if needs_rewrite else zip_bytes
+
+
+def update_custom_bundle_files(
+    existing_zip_bytes: bytes,
+    upload_bytes: bytes | None = None,
+    *,
+    filename: str | None = None,
+    remove_path: str | None = None,
+    slug: str,
+    per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
+    total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
+) -> bytes:
+    """Apply an upload or file removal to a custom skill bundle.
+
+    A ZIP or standalone file containing ``SKILL.md`` is a full bundle
+    replacement. Other uploads are merged into the existing bundle, replacing
+    files at matching paths while preserving ``SKILL.md`` and unrelated files.
+    """
+    is_upload = upload_bytes is not None
+    if is_upload == (remove_path is not None):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "provide exactly one file upload or path to remove",
+        )
+    if is_upload and not filename:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "upload is missing a filename")
+
+    output = io.BytesIO()
+    with ExitStack() as archives:
+        upload_zip: zipfile.ZipFile | None = None
+        upload_infos: list[tuple[zipfile.ZipInfo, str]] = []
+        changed_paths: set[str]
+        if upload_bytes is not None:
+            assert filename is not None
+            upload_archive_bytes = (
+                upload_bytes
+                if filename.lower().endswith(".zip")
+                else build_single_file_bundle(filename, upload_bytes)
+            )
+            try:
+                upload_zip = archives.enter_context(
+                    zipfile.ZipFile(io.BytesIO(upload_archive_bytes))
+                )
+            except zipfile.BadZipFile as exc:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT, "upload is not a valid zip"
+                ) from exc
+
+            upload_infos = [
+                (info, _validated_bundle_path(info)) for info in upload_zip.infolist()
+            ]
+            upload_file_paths = [
+                path
+                for info, path in upload_infos
+                if not info.is_dir() and not _is_ignored_bundle_path(path)
+            ]
+            if any(
+                path.split("/")[-1].lower() == SKILL_MD_NAME.lower()
+                for path in upload_file_paths
+            ):
+                return validate_and_normalize_custom_bundle(
+                    upload_archive_bytes,
+                    slug=slug,
+                    per_file_max_bytes=per_file_max_bytes,
+                    total_max_bytes=total_max_bytes,
+                )
+            if not upload_file_paths:
+                raise OnyxError(OnyxErrorCode.INVALID_INPUT, "upload contains no files")
+            if len(upload_file_paths) != len(set(upload_file_paths)):
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT, "upload contains duplicate paths"
+                )
+            if any(path.endswith(TEMPLATE_SUFFIX) for path in upload_file_paths):
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "custom skills cannot ship templates",
+                )
+            changed_paths = set(upload_file_paths)
+        else:
+            assert remove_path is not None
+            normalized_remove_path = _validated_bundle_path(
+                zipfile.ZipInfo(remove_path)
+            )
+            if normalized_remove_path == SKILL_MD_NAME:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT, "SKILL.md cannot be removed"
+                )
+            changed_paths = {normalized_remove_path}
+
+        try:
+            existing_zip = archives.enter_context(
+                zipfile.ZipFile(io.BytesIO(existing_zip_bytes))
+            )
+        except zipfile.BadZipFile as exc:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "Stored skill bundle is not a valid zip.",
+            ) from exc
+
+        existing_infos = [
+            (info, _validated_bundle_path(info)) for info in existing_zip.infolist()
+        ]
+        if remove_path is not None and not any(
+            not info.is_dir() and path in changed_paths for info, path in existing_infos
+        ):
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill file not found")
+
+        total = 0
+        with zipfile.ZipFile(
+            output, mode="w", compression=zipfile.ZIP_DEFLATED
+        ) as target_zip:
+            sources = [(existing_zip, existing_infos)]
+            if upload_zip is not None:
+                sources.append((upload_zip, upload_infos))
+            for source_zip, source_infos in sources:
+                for info, path in source_infos:
+                    if source_zip is existing_zip and path in changed_paths:
+                        continue
+                    if info.is_dir() or _is_ignored_bundle_path(path):
+                        continue
+                    total += _copy_validated_bundle_file(
+                        source_zip=source_zip,
+                        source_info=info,
+                        source_path=path,
+                        output_path=path,
+                        target_zip=target_zip,
+                        per_file_max_bytes=per_file_max_bytes,
+                        total_bytes_before_file=total,
+                        total_max_bytes=total_max_bytes,
+                    )
+
+    return validate_and_normalize_custom_bundle(
+        output.getvalue(),
+        slug=slug,
+        per_file_max_bytes=per_file_max_bytes,
+        total_max_bytes=total_max_bytes,
+    )
 
 
 def compute_bundle_sha256(zip_bytes: bytes) -> str:
