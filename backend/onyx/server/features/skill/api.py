@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import AccountType
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import Permission
@@ -80,14 +81,28 @@ from shared_configs.contextvars import get_current_tenant_id
 user_router = APIRouter(prefix="/skills")
 
 
-def _github_authorization_header(user: User, db_session: Session) -> str | None:
-    github_app = get_built_in_external_app(db_session, ExternalAppType.GITHUB)
-    if github_app is None:
-        return None
-    ensure_fresh_credentials(get_current_tenant_id(), github_app.id, user.id)
-    return resolve_injection_headers(db_session, github_app.id, user.id).get(
-        "Authorization"
-    )
+def _github_authorization_header(user: User) -> str | None:
+    tenant_id = get_current_tenant_id()
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        github_app = get_built_in_external_app(db_session, ExternalAppType.GITHUB)
+        if (
+            github_app is None
+            or fetch_skill(
+                github_app.skill_id,
+                policy=SkillAccessPolicy.USE,
+                user=user,
+                db_session=db_session,
+            )
+            is None
+        ):
+            return None
+        github_app_id = github_app.id
+
+    ensure_fresh_credentials(tenant_id, github_app_id, user.id)
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        return resolve_injection_headers(db_session, github_app_id, user.id).get(
+            "Authorization"
+        )
 
 
 def _ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
@@ -311,14 +326,20 @@ def create_custom_skill_from_editor(
 def preview_github_skills(
     request: GitHubSkillsPreviewRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
 ) -> GitHubSkillsPreviewResponse:
     repository, skills = fetch_github_skill_bundles(
         request.repository,
-        _github_authorization_header(user, db_session),
+        _github_authorization_header(user),
     )
+    if repository.ref is None:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "GitHub did not return a repository revision.",
+        )
     return GitHubSkillsPreviewResponse(
         repository=f"{repository.owner}/{repository.repo}",
+        revision=repository.ref,
+        subpath=repository.subpath,
         skills=[
             GitHubSkillPreview(
                 path=skill.path,
@@ -339,7 +360,9 @@ def import_github_skills(
 ) -> list[SkillResponse]:
     _, available_skills = fetch_github_skill_bundles(
         request.repository,
-        _github_authorization_header(user, db_session),
+        _github_authorization_header(user),
+        revision=request.revision,
+        subpath=request.subpath,
     )
     skills_by_path = {skill.path: skill for skill in available_skills}
     selected_paths = list(dict.fromkeys(request.paths))

@@ -32,4 +32,25 @@ describe("skills API errors", () => {
       },
     });
   });
+
+  it("logs malformed error responses before using the fallback", async () => {
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response("not json", { status: 502 }));
+
+    await expect(previewGitHubSkills("owner/repository")).rejects.toMatchObject<
+      Partial<FetchError>
+    >({
+      message: "Request failed (502)",
+      status: 502,
+      info: undefined,
+    });
+    expect(consoleError).toHaveBeenCalledWith(
+      "Failed to parse skills API error response:",
+      expect.anything()
+    );
+  });
 });

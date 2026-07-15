@@ -17,6 +17,8 @@ const githubApp: ExternalAppUserResponse = {
 
 const preview = {
   repository: "onyx-dot-app/skills",
+  revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  subpath: null,
   skills: [
     {
       path: "skills/deep-research",
@@ -99,6 +101,8 @@ export const ReservedNameAmongSkills: Story = {
     repository: "https://github.com/anthropics/skills",
     preview: {
       repository: "anthropics/skills",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      subpath: null,
       skills: [
         {
           path: "skills/pptx",
@@ -124,6 +128,8 @@ export const NoImportableSkills: Story = {
     repository: "https://github.com/example/presentation-skill",
     preview: {
       repository: "example/presentation-skill",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      subpath: null,
       skills: [
         {
           path: ".",

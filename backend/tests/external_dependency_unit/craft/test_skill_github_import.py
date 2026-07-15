@@ -21,6 +21,8 @@ from onyx.skills.models import GitHubRepository
 from onyx.skills.models import GitHubSkillBundle
 from tests.external_dependency_unit.craft.db_helpers import make_skill
 
+_REVISION = "a" * 40
+
 
 def _bundle(name: str, supporting_path: str) -> bytes:
     output = io.BytesIO()
@@ -64,8 +66,8 @@ def test_import_github_skills_creates_personal_skills_with_supporting_files(
     ]
     monkeypatch.setattr(
         "onyx.server.features.skill.api.fetch_github_skill_bundles",
-        lambda _source, _authorization: (
-            GitHubRepository(owner="owner", repo="repo"),
+        lambda _source, _authorization, **_kwargs: (
+            GitHubRepository(owner="owner", repo="repo", ref=_REVISION),
             discovered,
         ),
     )
@@ -81,6 +83,7 @@ def test_import_github_skills_creates_personal_skills_with_supporting_files(
     response = import_github_skills(
         GitHubSkillsImportRequest(
             repository="owner/repo",
+            revision=_REVISION,
             paths=["skills/alpha", "skills/beta"],
         ),
         user=test_user,
@@ -108,8 +111,8 @@ def test_import_github_skills_creates_personal_skills_with_supporting_files(
             stored_files.append(
                 {file.path for file in inspect_custom_bundle(stored_bundle).files}
             )
-        assert {"SKILL.md", "references/alpha.md"} in stored_files
-        assert {"SKILL.md", "scripts/beta.py"} in stored_files
+        assert {"references/alpha.md"} in stored_files
+        assert {"scripts/beta.py"} in stored_files
     finally:
         for row in rows:
             if row.bundle_file_id is not None:
@@ -147,8 +150,8 @@ def test_import_github_skills_rolls_back_the_batch_on_a_slug_collision(
     ]
     monkeypatch.setattr(
         "onyx.server.features.skill.api.fetch_github_skill_bundles",
-        lambda _source, _authorization: (
-            GitHubRepository(owner="owner", repo="repo"),
+        lambda _source, _authorization, **_kwargs: (
+            GitHubRepository(owner="owner", repo="repo", ref=_REVISION),
             discovered,
         ),
     )
@@ -161,6 +164,7 @@ def test_import_github_skills_rolls_back_the_batch_on_a_slug_collision(
         import_github_skills(
             GitHubSkillsImportRequest(
                 repository="owner/repo",
+                revision=_REVISION,
                 paths=["skills/new", "skills/existing"],
             ),
             user=test_user,
@@ -168,7 +172,7 @@ def test_import_github_skills_rolls_back_the_batch_on_a_slug_collision(
         )
 
     assert collision_name in exc_info.value.detail
-    assert "Choose a different name in SKILL.md" in exc_info.value.detail
+    assert "Rename it in SKILL.md, then try again." in exc_info.value.detail
     db_session.rollback()
     assert (
         db_session.scalar(
@@ -187,8 +191,8 @@ def test_import_github_skills_rejects_an_unavailable_selected_path(
     unavailable_reason = "Can't import: 'pptx' is a reserved skill name in Onyx."
     monkeypatch.setattr(
         "onyx.server.features.skill.api.fetch_github_skill_bundles",
-        lambda _source, _authorization: (
-            GitHubRepository(owner="anthropics", repo="skills"),
+        lambda _source, _authorization, **_kwargs: (
+            GitHubRepository(owner="anthropics", repo="skills", ref=_REVISION),
             [
                 GitHubSkillBundle(
                     path="skills/pptx",
@@ -210,6 +214,7 @@ def test_import_github_skills_rejects_an_unavailable_selected_path(
         import_github_skills(
             GitHubSkillsImportRequest(
                 repository="anthropics/skills",
+                revision=_REVISION,
                 paths=["skills/pptx"],
             ),
             user=test_user,

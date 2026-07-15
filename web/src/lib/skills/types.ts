@@ -99,5 +99,7 @@ export interface GitHubSkillPreview {
 
 export interface GitHubSkillsPreview {
   repository: string;
+  revision: string;
+  subpath: string | null;
   skills: GitHubSkillPreview[];
 }

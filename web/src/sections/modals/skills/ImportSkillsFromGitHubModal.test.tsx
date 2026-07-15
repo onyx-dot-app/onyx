@@ -11,7 +11,8 @@ jest.mock("@/lib/skills/api", () => ({
   importGitHubSkills: jest.fn(),
   previewGitHubSkills: jest.fn(),
 }));
-jest.mock("@/hooks/useToast", () => ({
+jest.mock("@opal/layouts", () => ({
+  ...jest.requireActual("@opal/layouts"),
   toast: { success: jest.fn() },
 }));
 jest.mock("@/hooks/useUserExternalApps", () => ({
@@ -55,6 +56,8 @@ describe("ImportSkillsFromGitHubModal", () => {
     const user = userEvent.setup();
     mockedPreviewGitHubSkills.mockResolvedValue({
       repository: "owner/repo",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      subpath: null,
       skills: [
         {
           path: "skills/alpha",
@@ -111,7 +114,9 @@ describe("ImportSkillsFromGitHubModal", () => {
 
     await waitFor(() => {
       expect(mockedImportGitHubSkills).toHaveBeenCalledWith(
-        "https://github.com/owner/repo",
+        "owner/repo",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        null,
         ["skills/alpha"]
       );
     });
@@ -254,6 +259,8 @@ describe("ImportSkillsFromGitHubModal", () => {
     const user = userEvent.setup();
     mockedPreviewGitHubSkills.mockResolvedValueOnce({
       repository: "owner/repository",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      subpath: null,
       skills: [
         {
           path: "skills/research",

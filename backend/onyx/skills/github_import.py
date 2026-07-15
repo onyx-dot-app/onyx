@@ -37,6 +37,9 @@ _FETCH_TIMEOUT_SECONDS: Final[int] = 30
 def fetch_github_skill_bundles(
     source: str,
     authorization_header: str | None = None,
+    *,
+    revision: str | None = None,
+    subpath: str | None = None,
 ) -> tuple[GitHubRepository, list[GitHubSkillBundle]]:
     """Fetch a repository and return every directory containing SKILL.md."""
     value = source.strip().rstrip("/")
@@ -90,9 +93,18 @@ def fetch_github_skill_bundles(
             repository = GitHubRepository(
                 owner=owner,
                 repo=repo,
-                ref=parts[3],
-                subpath="/".join(parts[4:]) or None,
+                ref="/".join(parts[3:]),
             )
+
+    if revision is not None and not re.fullmatch(r"[0-9a-fA-F]{40}", revision):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid repository revision.")
+    if revision is not None:
+        repository = GitHubRepository(
+            owner=repository.owner,
+            repo=repository.repo,
+            ref=revision.lower(),
+            subpath=subpath,
+        )
 
     search_prefix = repository.subpath.rstrip("/") if repository.subpath else ""
     if search_prefix and (
@@ -101,20 +113,31 @@ def fetch_github_skill_bundles(
     ):
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid repository folder.")
 
-    ref = quote(repository.ref or "HEAD", safe="/")
     owner = quote(repository.owner, safe="")
     repo = quote(repository.repo, safe="")
-    if authorization_header is not None:
-        api_url = f"https://api.github.com/repos/{owner}/{repo}/tarball/{ref}"
+
+    def get(
+        url: str,
+        *,
+        authorization: str | None = None,
+        stream: bool = False,
+        follow_redirects: bool = True,
+    ) -> requests.Response:
+        headers = (
+            {
+                "Accept": "application/vnd.github+json",
+                "Authorization": authorization,
+            }
+            if authorization is not None
+            else None
+        )
         try:
-            redirect_response = ssrf_safe_get(
-                api_url,
-                headers={
-                    "Accept": "application/vnd.github+json",
-                    "Authorization": authorization_header,
-                },
+            return ssrf_safe_get(
+                url,
+                headers=headers,
                 timeout=_FETCH_TIMEOUT_SECONDS,
-                follow_redirects=False,
+                stream=stream,
+                follow_redirects=follow_redirects,
             )
         except SSRFException as exc:
             raise OnyxError(
@@ -131,6 +154,105 @@ def fetch_github_skill_bundles(
                 OnyxErrorCode.BAD_GATEWAY,
                 "Could not reach GitHub. Check your connection and try again.",
             ) from exc
+
+    if revision is None:
+        ref_parts = repository.ref.split("/") if repository.ref else ["HEAD"]
+        candidates = [
+            ("/".join(ref_parts[:index]), "/".join(ref_parts[index:]) or None)
+            for index in range(len(ref_parts), 0, -1)
+        ]
+        resolved_revision: str | None = None
+        resolved_subpath: str | None = None
+        last_response: requests.Response | None = None
+        for candidate_ref, candidate_subpath in candidates:
+            commit_url = (
+                f"https://api.github.com/repos/{owner}/{repo}/commits/"
+                f"{quote(candidate_ref, safe='')}"
+            )
+            response = get(commit_url)
+            if response.status_code in {401, 403, 404, 429} and authorization_header:
+                response.close()
+                response = get(commit_url, authorization=authorization_header)
+            if response.status_code == 200:
+                with response:
+                    try:
+                        sha = response.json().get("sha")
+                    except (
+                        requests.JSONDecodeError,
+                        ValueError,
+                        AttributeError,
+                    ) as exc:
+                        raise OnyxError(
+                            OnyxErrorCode.BAD_GATEWAY,
+                            "GitHub returned an unreadable repository revision. Try again.",
+                        ) from exc
+                if not isinstance(sha, str) or not re.fullmatch(
+                    r"[0-9a-fA-F]{40}", sha
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_GATEWAY,
+                        "GitHub returned an invalid repository revision. Try again.",
+                    )
+                resolved_revision = sha.lower()
+                resolved_subpath = candidate_subpath
+                break
+            if last_response is not None:
+                last_response.close()
+            last_response = response
+
+        if resolved_revision is None:
+            if last_response is None:
+                raise OnyxError(OnyxErrorCode.NOT_FOUND, "Repository not found.")
+            with last_response:
+                if last_response.status_code == 401:
+                    raise OnyxError(
+                        OnyxErrorCode.UNAUTHENTICATED,
+                        "Your GitHub connection has expired. Reconnect GitHub, then try again.",
+                    )
+                if last_response.status_code in {403, 429} and (
+                    last_response.status_code == 429
+                    or last_response.headers.get("X-RateLimit-Remaining") == "0"
+                    or "Retry-After" in last_response.headers
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.RATE_LIMITED,
+                        "GitHub's API rate limit has been reached. Try again in a few minutes.",
+                    )
+                if last_response.status_code == 403 and authorization_header:
+                    raise OnyxError(
+                        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                        "GitHub denied access to this repository. Make sure your connected account has access and, if required, has authorized organization SSO.",
+                    )
+                if last_response.status_code in {403, 404}:
+                    raise OnyxError(
+                        OnyxErrorCode.NOT_FOUND,
+                        "Repository or branch not found. Check the URL. If the repository is private, connect GitHub and try again.",
+                    )
+                raise OnyxError(
+                    OnyxErrorCode.BAD_GATEWAY,
+                    "Couldn't load the repository from GitHub. Try again in a few minutes.",
+                )
+        repository = GitHubRepository(
+            owner=repository.owner,
+            repo=repository.repo,
+            ref=resolved_revision,
+            subpath=resolved_subpath,
+        )
+        search_prefix = resolved_subpath or ""
+
+    if repository.ref is None:
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Repository revision is missing.")
+    ref = quote(repository.ref, safe="")
+    archive_url = f"https://codeload.github.com/{owner}/{repo}/tar.gz/{ref}"
+    response = get(archive_url, stream=True)
+    if response.status_code != 200 and authorization_header is not None:
+        response.close()
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/tarball/{ref}"
+        redirect_response = get(
+            api_url,
+            authorization=authorization_header,
+            follow_redirects=False,
+        )
         with redirect_response:
             if redirect_response.status_code == 401:
                 raise OnyxError(
@@ -167,29 +289,7 @@ def fetch_github_skill_bundles(
                     OnyxErrorCode.BAD_GATEWAY,
                     "GitHub didn't provide a repository download. Try again.",
                 )
-    else:
-        archive_url = f"https://codeload.github.com/{owner}/{repo}/tar.gz/{ref}"
-    try:
-        response = ssrf_safe_get(
-            archive_url,
-            timeout=_FETCH_TIMEOUT_SECONDS,
-            stream=True,
-        )
-    except SSRFException as exc:
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            "GitHub returned an unsupported repository download URL. Try again.",
-        ) from exc
-    except requests.Timeout as exc:
-        raise OnyxError(
-            OnyxErrorCode.GATEWAY_TIMEOUT,
-            "GitHub took too long to respond. Try again.",
-        ) from exc
-    except requests.RequestException as exc:
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            "Could not reach GitHub. Check your connection and try again.",
-        ) from exc
+        response = get(archive_url, stream=True)
 
     with response:
         if response.status_code == 404:
@@ -212,6 +312,11 @@ def fetch_github_skill_bundles(
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "GitHub denied access to this repository. Make sure your connected account has access and, if required, has authorized organization SSO.",
+            )
+        if response.status_code == 403:
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                "Repository not found. Check the URL. If the repository is private, connect GitHub and try again.",
             )
         if response.status_code != 200:
             raise OnyxError(
@@ -333,6 +438,28 @@ def fetch_github_skill_bundles(
             "No SKILL.md files were found in this repository. Add a SKILL.md file, then try again.",
         )
 
+    skill_directories = {
+        ""
+        if str(PurePosixPath(path).parent) == "."
+        else str(PurePosixPath(path).parent)
+        for path in skill_md_paths
+    }
+    files_by_skill: dict[str, dict[str, bytes]] = {
+        directory: {} for directory in skill_directories
+    }
+    for path, content in files.items():
+        parent = str(PurePosixPath(path).parent)
+        parent = "" if parent == "." else parent
+        while True:
+            if parent in skill_directories:
+                prefix = f"{parent}/" if parent else ""
+                files_by_skill[parent][path.removeprefix(prefix)] = content
+                break
+            if not parent:
+                break
+            next_parent = str(PurePosixPath(parent).parent)
+            parent = "" if next_parent == "." else next_parent
+
     skills: list[GitHubSkillBundle] = []
     for skill_md_path in skill_md_paths:
         skill_directory = str(PurePosixPath(skill_md_path).parent)
@@ -366,11 +493,7 @@ def fetch_github_skill_bundles(
         with zipfile.ZipFile(
             output, mode="w", compression=zipfile.ZIP_DEFLATED
         ) as bundle:
-            prefix = f"{skill_directory}/" if skill_directory else ""
-            for path, content in files.items():
-                if prefix and not path.startswith(prefix):
-                    continue
-                relative_path = path.removeprefix(prefix)
+            for relative_path, content in files_by_skill[skill_directory].items():
                 if not relative_path or relative_path.endswith(TEMPLATE_SUFFIX):
                     continue
                 if "__pycache__" in PurePosixPath(relative_path).parts:

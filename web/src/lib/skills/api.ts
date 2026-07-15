@@ -20,7 +20,8 @@ async function handle<T>(res: Response): Promise<T> {
     let body: unknown;
     try {
       body = await res.json();
-    } catch {
+    } catch (error) {
+      console.error("Failed to parse skills API error response:", error);
       body = undefined;
     }
     const detail =
@@ -73,12 +74,14 @@ export async function previewGitHubSkills(
 
 export async function importGitHubSkills(
   repository: string,
+  revision: string,
+  subpath: string | null,
   paths: string[]
 ): Promise<CustomSkill[]> {
   const res = await fetch("/api/skills/github/import", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ repository, paths }),
+    body: JSON.stringify({ repository, revision, subpath, paths }),
   });
   return handle<CustomSkill[]>(res);
 }

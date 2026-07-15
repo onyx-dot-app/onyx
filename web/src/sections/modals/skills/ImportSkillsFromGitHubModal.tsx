@@ -9,9 +9,8 @@ import {
   MessageCard,
   Text,
 } from "@opal/components";
-import { Content, InputVertical } from "@opal/layouts";
+import { Content, InputVertical, toast } from "@opal/layouts";
 import { SvgGithub } from "@opal/logos";
-import { toast } from "@/hooks/useToast";
 import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
 import type { CustomSkill, GitHubSkillsPreview } from "@/lib/skills/types";
 import Modal from "@/refresh-components/Modal";
@@ -83,7 +82,12 @@ export default function ImportSkillsFromGitHubModal({
         return;
       }
 
-      const created = await importGitHubSkills(repository, selectedPaths);
+      const created = await importGitHubSkills(
+        preview.repository,
+        preview.revision,
+        preview.subpath,
+        selectedPaths
+      );
       toast.success(
         created.length === 1
           ? `Imported "${created[0]!.name}"`

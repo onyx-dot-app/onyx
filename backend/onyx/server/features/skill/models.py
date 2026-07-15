@@ -200,10 +200,14 @@ class GitHubSkillsPreviewRequest(BaseModel):
 
 class GitHubSkillsPreviewResponse(BaseModel):
     repository: str
+    revision: str
+    subpath: str | None
     skills: list[GitHubSkillPreview]
 
 
 class GitHubSkillsImportRequest(GitHubSkillsPreviewRequest):
+    revision: str = Field(pattern=r"^[0-9a-fA-F]{40}$")
+    subpath: str | None = None
     paths: list[str] = Field(min_length=1)
 
 

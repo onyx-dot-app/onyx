@@ -5,12 +5,15 @@ import tarfile
 import zipfile
 from collections.abc import Iterator
 from typing import Any
+from urllib.parse import unquote
 
 import pytest
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.github_import import fetch_github_skill_bundles
+
+_REVISION = "a" * 40
 
 
 class _ArchiveResponse:
@@ -19,10 +22,12 @@ class _ArchiveResponse:
         archive: bytes,
         status_code: int = 200,
         headers: dict[str, str] | None = None,
+        json_data: dict[str, Any] | None = None,
     ) -> None:
         self.archive = archive
         self.status_code = status_code
         self.headers = headers or {}
+        self.json_data = json_data
 
     def __enter__(self) -> "_ArchiveResponse":
         return self
@@ -33,6 +38,14 @@ class _ArchiveResponse:
     def iter_content(self, chunk_size: int) -> Iterator[bytes]:
         for offset in range(0, len(self.archive), chunk_size):
             yield self.archive[offset : offset + chunk_size]
+
+    def json(self) -> dict[str, Any]:
+        if self.json_data is None:
+            raise ValueError("No JSON response")
+        return self.json_data
+
+    def close(self) -> None:
+        return None
 
 
 def _skill_md(name: str, description: str) -> bytes:
@@ -52,28 +65,34 @@ def _repository_archive(files: dict[str, bytes]) -> bytes:
 
 
 def _mock_archive(monkeypatch: pytest.MonkeyPatch, archive: bytes) -> None:
+    def get(url: str, **_kwargs: Any) -> _ArchiveResponse:
+        if "/commits/" in url:
+            ref = unquote(url.rsplit("/", maxsplit=1)[1])
+            if ref not in {"HEAD", "main"}:
+                return _ArchiveResponse(b"", status_code=404)
+            return _ArchiveResponse(b"", json_data={"sha": _REVISION})
+        return _ArchiveResponse(archive)
+
     monkeypatch.setattr(
         "onyx.skills.github_import.ssrf_safe_get",
-        lambda *_args, **_kwargs: _ArchiveResponse(archive),
+        get,
     )
 
 
 @pytest.mark.parametrize(
-    "source,owner,repo,ref,subpath",
+    "source,owner,repo,subpath",
     [
-        ("onyx-dot-app/onyx", "onyx-dot-app", "onyx", None, None),
+        ("onyx-dot-app/onyx", "onyx-dot-app", "onyx", None),
         (
             "https://github.com/onyx-dot-app/onyx.git",
             "onyx-dot-app",
             "onyx",
-            None,
             None,
         ),
         (
             "https://github.com/onyx-dot-app/onyx/tree/main/skills/example",
             "onyx-dot-app",
             "onyx",
-            "main",
             "skills/example",
         ),
     ],
@@ -83,7 +102,6 @@ def test_parse_github_repository(
     source: str,
     owner: str,
     repo: str,
-    ref: str | None,
     subpath: str | None,
 ) -> None:
     _mock_archive(
@@ -96,9 +114,70 @@ def test_parse_github_repository(
     assert (parsed.owner, parsed.repo, parsed.ref, parsed.subpath) == (
         owner,
         repo,
-        ref,
+        _REVISION,
         subpath,
     )
+
+
+def test_tree_url_resolves_the_longest_matching_slash_ref(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = _repository_archive(
+        {"skills/example/SKILL.md": _skill_md("Example", "Example skill")}
+    )
+    refs_seen: list[str] = []
+
+    def get(url: str, **_kwargs: Any) -> _ArchiveResponse:
+        if "/commits/" not in url:
+            return _ArchiveResponse(archive)
+        refs_seen.append(unquote(url.rsplit("/", maxsplit=1)[1]))
+        if refs_seen[-1] == "feature/foo":
+            return _ArchiveResponse(b"", json_data={"sha": _REVISION})
+        return _ArchiveResponse(b"", status_code=404)
+
+    monkeypatch.setattr("onyx.skills.github_import.ssrf_safe_get", get)
+
+    repository, skills = fetch_github_skill_bundles(
+        "https://github.com/owner/repo/tree/feature/foo/skills/example"
+    )
+
+    assert repository.ref == _REVISION
+    assert repository.subpath == "skills/example"
+    assert refs_seen == [
+        "feature/foo/skills/example",
+        "feature/foo/skills",
+        "feature/foo",
+    ]
+    assert [skill.name for skill in skills] == ["Example"]
+
+
+def test_pinned_import_uses_previewed_revision_and_subpath(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = _repository_archive(
+        {
+            "skills/alpha/SKILL.md": _skill_md("Alpha", "First"),
+            "skills/beta/SKILL.md": _skill_md("Beta", "Second"),
+        }
+    )
+    urls_seen: list[str] = []
+
+    def get(url: str, **_kwargs: Any) -> _ArchiveResponse:
+        urls_seen.append(url)
+        return _ArchiveResponse(archive)
+
+    monkeypatch.setattr("onyx.skills.github_import.ssrf_safe_get", get)
+
+    repository, skills = fetch_github_skill_bundles(
+        "owner/repo",
+        revision=_REVISION,
+        subpath="skills/beta",
+    )
+
+    assert urls_seen == [f"https://codeload.github.com/owner/repo/tar.gz/{_REVISION}"]
+    assert repository.ref == _REVISION
+    assert repository.subpath == "skills/beta"
+    assert [skill.name for skill in skills] == ["Beta"]
 
 
 def test_discovers_multiple_skills_and_builds_independent_bundles(
@@ -141,6 +220,31 @@ def test_discovers_multiple_skills_and_builds_independent_bundles(
     with zipfile.ZipFile(io.BytesIO(review.bundle_bytes)) as bundle:
         assert set(bundle.namelist()) == {"SKILL.md", "scripts/check.py"}
         assert "README.md" not in bundle.namelist()
+
+
+def test_nested_skills_are_packaged_as_independent_bundles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mock_archive(
+        monkeypatch,
+        _repository_archive(
+            {
+                "skill/SKILL.md": _skill_md("Parent", "Parent skill"),
+                "skill/parent.txt": b"parent",
+                "skill/child/SKILL.md": _skill_md("Child", "Child skill"),
+                "skill/child/child.txt": b"child",
+            }
+        ),
+    )
+
+    _, skills = fetch_github_skill_bundles("owner/repo")
+    by_name = {skill.name: skill for skill in skills}
+    assert by_name["Parent"].bundle_bytes is not None
+    assert by_name["Child"].bundle_bytes is not None
+    with zipfile.ZipFile(io.BytesIO(by_name["Parent"].bundle_bytes)) as bundle:
+        assert set(bundle.namelist()) == {"SKILL.md", "parent.txt"}
+    with zipfile.ZipFile(io.BytesIO(by_name["Child"].bundle_bytes)) as bundle:
+        assert set(bundle.namelist()) == {"SKILL.md", "child.txt"}
 
 
 def test_reserved_skill_name_does_not_block_other_repository_skills(
@@ -249,6 +353,12 @@ def test_private_repo_token_is_not_forwarded_to_archive_host(
 
     def get(url: str, **kwargs: Any) -> _ArchiveResponse:
         requests_seen.append((url, kwargs))
+        if "/commits/" in url:
+            if kwargs.get("headers") is None:
+                return _ArchiveResponse(b"", status_code=404)
+            return _ArchiveResponse(b"", json_data={"sha": _REVISION})
+        if url.startswith("https://codeload.github.com/owner/repo/"):
+            return _ArchiveResponse(b"", status_code=404)
         if url.startswith("https://api.github.com/"):
             return _ArchiveResponse(
                 b"",
@@ -264,9 +374,40 @@ def test_private_repo_token_is_not_forwarded_to_archive_host(
     )
 
     assert [skill.name for skill in skills] == ["Private"]
-    assert requests_seen[0][1]["headers"]["Authorization"] == "Bearer private-token"
-    assert requests_seen[0][1]["follow_redirects"] is False
-    assert "headers" not in requests_seen[1][1]
+    authenticated = [
+        request for request in requests_seen if request[1].get("headers") is not None
+    ]
+    assert all(
+        request[1]["headers"]["Authorization"] == "Bearer private-token"
+        for request in authenticated
+    )
+    signed_download = requests_seen[-1]
+    assert signed_download[0] == "https://codeload.github.com/signed/archive"
+    assert signed_download[1]["headers"] is None
+
+
+def test_connected_user_downloads_public_repository_anonymously(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = _repository_archive(
+        {"skill/SKILL.md": _skill_md("Public", "Public skill")}
+    )
+    requests_seen: list[dict[str, Any]] = []
+
+    def get(url: str, **kwargs: Any) -> _ArchiveResponse:
+        requests_seen.append(kwargs)
+        if "/commits/" in url:
+            return _ArchiveResponse(b"", json_data={"sha": _REVISION})
+        return _ArchiveResponse(archive)
+
+    monkeypatch.setattr("onyx.skills.github_import.ssrf_safe_get", get)
+
+    _, skills = fetch_github_skill_bundles(
+        "owner/repo", authorization_header="Bearer stale-token"
+    )
+
+    assert [skill.name for skill in skills] == ["Public"]
+    assert all(request["headers"] is None for request in requests_seen)
 
 
 @pytest.mark.parametrize(
@@ -299,12 +440,12 @@ def test_private_repo_reports_actionable_github_failures(
     error_code: OnyxErrorCode,
     message: str,
 ) -> None:
-    monkeypatch.setattr(
-        "onyx.skills.github_import.ssrf_safe_get",
-        lambda *_args, **_kwargs: _ArchiveResponse(
-            b"", status_code=status_code, headers=headers
-        ),
-    )
+    def get(_url: str, **kwargs: Any) -> _ArchiveResponse:
+        if kwargs.get("headers") is None:
+            return _ArchiveResponse(b"", status_code=404)
+        return _ArchiveResponse(b"", status_code=status_code, headers=headers)
+
+    monkeypatch.setattr("onyx.skills.github_import.ssrf_safe_get", get)
 
     with pytest.raises(OnyxError, match=message) as exc_info:
         fetch_github_skill_bundles(
@@ -312,3 +453,17 @@ def test_private_repo_reports_actionable_github_failures(
         )
 
     assert exc_info.value.error_code == error_code
+
+
+def test_unauthenticated_forbidden_repository_suggests_connecting_github(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "onyx.skills.github_import.ssrf_safe_get",
+        lambda *_args, **_kwargs: _ArchiveResponse(b"", status_code=403),
+    )
+
+    with pytest.raises(OnyxError, match="private, connect GitHub") as exc_info:
+        fetch_github_skill_bundles("owner/private-repo")
+
+    assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
