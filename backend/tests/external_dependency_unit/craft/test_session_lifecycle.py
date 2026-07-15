@@ -1081,7 +1081,7 @@ class TestSidebarOriginFilter:
         db_session: Session,
         test_user: User,
     ) -> None:
-        """``get_user_build_sessions`` filters out ``origin=SCHEDULED`` rows.
+        """``get_user_build_sessions`` filters out non-INTERACTIVE rows.
 
         Relocated from ``backend/tests/integration/tests/craft/
         test_scheduled_tasks_api.py`` — the original test inserted
@@ -1095,12 +1095,12 @@ class TestSidebarOriginFilter:
         The covering composite index
         ``ix_build_session_user_origin_created`` is built for this exact
         ``(user_id, origin, created_at DESC)`` shape — a regression here
-        would silently leak scheduled-task fire sessions into the Craft
-        sidebar.
+        would silently leak scheduled-task fire or Slack sessions into the
+        Craft sidebar.
         """
-        # Both sessions need a BuildMessage row because
+        # Every session needs a BuildMessage row because
         # ``get_user_build_sessions`` requires ``EXISTS messages`` —
-        # without one, BOTH origin types would be filtered and we'd have
+        # without one, ALL origin types would be filtered and we'd have
         # nothing to compare against.
         interactive = BuildSession(
             id=uuid4(),
@@ -1116,7 +1116,14 @@ class TestSidebarOriginFilter:
             status=BuildSessionStatus.ACTIVE,
             origin=SessionOrigin.SCHEDULED,
         )
-        db_session.add_all([interactive, scheduled])
+        slack = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="slack-thread",
+            status=BuildSessionStatus.ACTIVE,
+            origin=SessionOrigin.SLACK,
+        )
+        db_session.add_all([interactive, scheduled, slack])
         db_session.flush()
         db_session.add_all(
             [
@@ -1138,6 +1145,15 @@ class TestSidebarOriginFilter:
                         "content": {"text": "fire"},
                     },
                 ),
+                BuildMessage(
+                    session_id=slack.id,
+                    turn_index=0,
+                    type=MessageType.USER,
+                    message_metadata={
+                        "type": "user_message",
+                        "content": {"text": "@bot hi"},
+                    },
+                ),
             ]
         )
         db_session.commit()
@@ -1145,7 +1161,8 @@ class TestSidebarOriginFilter:
         listed = get_user_build_sessions(test_user.id, db_session)
         listed_ids = {s.id for s in listed}
 
-        # Observable outcome: the SCHEDULED row is invisible to the
+        # Observable outcome: SCHEDULED and SLACK rows are invisible to the
         # sidebar query while the INTERACTIVE row is visible.
         assert interactive.id in listed_ids
         assert scheduled.id not in listed_ids
+        assert slack.id not in listed_ids

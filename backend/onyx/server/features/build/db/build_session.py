@@ -125,8 +125,8 @@ def get_user_build_sessions(
     """Get a user's interactive build sessions that have at least one message.
 
     Sessions created by non-interactive callers (e.g. the scheduled-tasks
-    executor) are intentionally excluded from this listing so they don't
-    leak into the Craft sidebar. The covering composite index
+    executor or the Slack bot) are intentionally excluded from this listing
+    so they don't leak into the Craft sidebar. The covering composite index
     ``ix_build_session_user_origin_created`` is built for this exact query
     shape: ``(user_id, origin, created_at DESC)``.
     """
