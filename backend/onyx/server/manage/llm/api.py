@@ -1209,8 +1209,6 @@ def get_bedrock_available_models(
                                 if profile_name
                                 else generate_bedrock_display_name(profile_id)
                             ),
-                            # Vision support from the LiteLLM cost map, not a
-                            # hardcoded list
                             "supports_image_input": (
                                 litellm_thinks_model_supports_image_input(
                                     profile_id, LlmProviderNames.BEDROCK
