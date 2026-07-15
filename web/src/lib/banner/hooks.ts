@@ -4,9 +4,11 @@
 // the other banner-worthy notification types (license expiry, trial ending)
 // into a single pageable card, most urgent first.
 //
-// Each banner type is fetched with its own type-filtered notifications request
-// so an older banner-worthy notification can never be paged out behind newer,
-// unrelated items in the mixed feed.
+// Per-user types (admin announcement, license expiry) each get their own
+// type-filtered notifications request so none is paged out behind newer,
+// unrelated items. TRIAL_ENDS_TWO_DAYS is a global (user=None) product-gating
+// alert, so it rides in on the settings payload rather than the per-user feed,
+// which only returns the caller's own rows.
 //
 // TODO(nikg): deliver `show_as_popup` to a first-visit popup renderer. The
 // notification feed's `additional_data` is `{}` for SYSTEM_ANNOUNCEMENT
@@ -16,10 +18,12 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
+import Cookies from "js-cookie";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { isAuthPath } from "@/lib/auth/paths";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   dismissNotification,
   invalidateNotificationCaches,
@@ -74,6 +78,21 @@ export const LICENSE_EXPIRY_ERROR_THRESHOLD = LICENSE_STAGE_SEVERITY.t_1d;
 
 function isBannerWorthy(notification: Notification): boolean {
   return notification.notif_type in BANNER_TYPE_PRIORITY;
+}
+
+// TRIAL_ENDS_TWO_DAYS is a global product-gating notification. It can only be
+// dismissed per-user through a browser cookie: a basic user can't dismiss a
+// global row server-side, and an admin dismiss would hide it tenant-wide. This
+// mirrors the retired AnnouncementBanner.
+const DISMISSED_NOTIFICATION_COOKIE_PREFIX = "dismissed_notification_";
+const COOKIE_DISMISS_EXPIRY_DAYS = 1;
+
+function isGlobalBannerType(notifType: NotificationType): boolean {
+  return notifType === NotificationType.TRIAL_ENDS_TWO_DAYS;
+}
+
+function isCookieDismissed(id: number): boolean {
+  return Boolean(Cookies.get(`${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${id}`));
 }
 
 // Collapses multiple undismissed notifications of the same banner type into the
@@ -141,16 +160,9 @@ export function useBannerQueue(): UseBannerQueueResult {
     errorHandlingFetcher,
     BANNER_SWR_OPTIONS
   );
-  const trial = useSWR<NotificationsResponse>(
-    disabled
-      ? null
-      : SWR_KEYS.notificationsByType(
-          NotificationType.TRIAL_ENDS_TWO_DAYS,
-          BANNER_NOTIFICATIONS_PAGE_SIZE
-        ),
-    errorHandlingFetcher,
-    BANNER_SWR_OPTIONS
-  );
+  // The global trial-ending alert arrives via the settings payload (see the
+  // file header), not the per-user notifications feed.
+  const settings = useSettings();
 
   const [index, setIndex] = useState(0);
   // IDs hidden optimistically while a server dismissal is in flight.
@@ -162,15 +174,19 @@ export function useBannerQueue(): UseBannerQueueResult {
     () => [
       ...(announcement.data?.notifications ?? []),
       ...(license.data?.notifications ?? []),
-      ...(trial.data?.notifications ?? []),
+      ...settings.notifications.filter(
+        (n) => n.notif_type === NotificationType.TRIAL_ENDS_TWO_DAYS
+      ),
     ],
-    [announcement.data, license.data, trial.data]
+    [announcement.data, license.data, settings.notifications]
   );
 
   // Dismissals must update every notification surface (this queue, the bell
-  // popover, the badge), so refresh goes through the shared invalidation.
+  // popover, the badge, and the settings-sourced trial alert), so refresh goes
+  // through the shared invalidation plus the settings cache.
   const refresh = useCallback(async () => {
     await invalidateNotificationCaches();
+    await mutate(SWR_KEYS.settings);
   }, []);
 
   const queue = useMemo(() => {
@@ -179,7 +195,8 @@ export function useBannerQueue(): UseBannerQueueResult {
       if (
         !isBannerWorthy(notification) ||
         notification.dismissed ||
-        pendingDismissals.has(notification.id)
+        pendingDismissals.has(notification.id) ||
+        isCookieDismissed(notification.id)
       ) {
         continue;
       }
@@ -220,18 +237,29 @@ export function useBannerQueue(): UseBannerQueueResult {
   const dismissCurrent = useCallback(async () => {
     if (!current) return;
     const id = current.id;
+    const global = isGlobalBannerType(current.notif_type);
     setPendingDismissals((prev) => new Set(prev).add(id));
-    try {
-      await dismissNotification(id);
-      await refresh();
-    } catch (error) {
-      console.error("Failed to dismiss banner notification:", error);
-      setPendingDismissals((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
+    // A global product-gating alert can't be dismissed per-user server-side, so
+    // record the dismissal in a cookie and treat the server call as best-effort.
+    if (global) {
+      Cookies.set(`${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${id}`, "true", {
+        expires: COOKIE_DISMISS_EXPIRY_DAYS,
       });
     }
+    try {
+      await dismissNotification(id);
+    } catch (error) {
+      if (!global) {
+        console.error("Failed to dismiss banner notification:", error);
+        setPendingDismissals((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        return;
+      }
+    }
+    await refresh();
   }, [current, refresh]);
 
   return {
