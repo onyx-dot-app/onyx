@@ -23,7 +23,6 @@ from onyx.chat.emitter import NullEmitter
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import PersonaSearchInfo
-from onyx.context.search.models import TimeRange
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import can_user_access_llm_provider
@@ -124,16 +123,12 @@ def search(
         llm_provider_api_key=llm.config.api_key,
     )
 
-    # 3. Build filters. The public time_cutoff maps onto the internal
-    # updated_at_range lower bound; TimeRange coerces naive bounds to UTC.
+    # 3. Build filters.
     base_filters = BaseFilters(
         source_type=request.sources,
         document_set=request.document_sets,
-        updated_at_range=(
-            TimeRange(start=request.time_cutoff)
-            if request.time_cutoff is not None
-            else None
-        ),
+        created_at_range=request.created_at_range,
+        updated_at_range=request.updated_at_range,
         tags=request.tags,
     )
 
