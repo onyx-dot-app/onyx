@@ -1116,14 +1116,14 @@ class TestSidebarOriginFilter:
             status=BuildSessionStatus.ACTIVE,
             origin=SessionOrigin.SCHEDULED,
         )
-        slack = BuildSession(
+        slack_session = BuildSession(
             id=uuid4(),
             user_id=test_user.id,
             name="slack-thread",
             status=BuildSessionStatus.ACTIVE,
             origin=SessionOrigin.SLACK,
         )
-        db_session.add_all([interactive, scheduled, slack])
+        db_session.add_all([interactive, scheduled, slack_session])
         db_session.flush()
         db_session.add_all(
             [
@@ -1146,7 +1146,7 @@ class TestSidebarOriginFilter:
                     },
                 ),
                 BuildMessage(
-                    session_id=slack.id,
+                    session_id=slack_session.id,
                     turn_index=0,
                     type=MessageType.USER,
                     message_metadata={
@@ -1165,4 +1165,4 @@ class TestSidebarOriginFilter:
         # sidebar query while the INTERACTIVE row is visible.
         assert interactive.id in listed_ids
         assert scheduled.id not in listed_ids
-        assert slack.id not in listed_ids
+        assert slack_session.id not in listed_ids
