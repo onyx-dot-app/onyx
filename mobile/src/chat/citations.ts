@@ -55,7 +55,9 @@ export function selectSources(state: ProcessedMessageState): SelectedSources {
     3,
   );
   const count = cited.length + more.length + files.length;
-  const hasSources = state.citations.length > 0 || state.documentMap.size > 0;
+  // From count, not raw citations/docs: citations whose documents never arrived must not render an
+  // empty "Sources · 0".
+  const hasSources = count > 0;
 
   return { cited, more, files, iconDocs, count, hasSources };
 }

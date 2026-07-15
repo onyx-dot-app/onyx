@@ -13,7 +13,8 @@ processing, no sources UI). This change ports web's citation **behavior** to mob
 2. Make inline `[N]` markers (and ordinary answer links) **tappable**, opening the source in the
    in-app browser.
 3. Render a **"Sources" button** under completed answers that opens a **bottom sheet** listing the
-   cited/found source documents, each tappable to open.
+   cited/found source documents. Tapping a linked doc opens it in the in-app browser; a file /
+   link-less doc has no mobile preview yet, so it shows a heads-up toast (files) or no-ops.
 4. Establish the minimal, reusable packet-processing + source-UI **foundation** that PR 9b (agent
    timeline) extends — without building grouping now.
 

@@ -1,5 +1,5 @@
 // Memoized on packet count, not array identity: a row re-renders only when its own packets grow.
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { View } from "react-native";
 
 import { selectSources } from "@/chat/citations";
@@ -78,7 +78,11 @@ function AssistantMessage({
   const hasContent = Renderer != null && packets.length > 0;
 
   // Sources appear only once the answer completes (web parity; avoids mid-stream layout shift).
-  const sources = processed.isComplete ? selectSources(processed) : null;
+  // Memoized on `processed` so toggling the sheet open/closed doesn't re-run the selector.
+  const sources = useMemo(
+    () => (processed.isComplete ? selectSources(processed) : null),
+    [processed],
+  );
 
   // Web AgentMessage: timeline (avatar + status) above the answer; the timeline owns the loader.
   return (
@@ -93,7 +97,7 @@ function AssistantMessage({
           <Renderer packets={packets} processed={processed} />
         </View>
       ) : null}
-      {sources?.hasSources ? (
+      {sources && sources.hasSources ? (
         <View className="px-12">
           <CitedSourcesBar
             iconDocs={sources.iconDocs}
@@ -103,7 +107,7 @@ function AssistantMessage({
           <CitedSourcesSheet
             visible={sourcesOpen}
             onClose={() => setSourcesOpen(false)}
-            processed={processed}
+            sources={sources}
           />
         </View>
       ) : null}

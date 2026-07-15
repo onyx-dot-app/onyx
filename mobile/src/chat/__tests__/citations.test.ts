@@ -80,4 +80,12 @@ describe("selectSources", () => {
     expect(selected.hasSources).toBe(false);
     expect(selected.count).toBe(0);
   });
+
+  it("hides sources when citations have no matching documents", () => {
+    let state = createInitialState(1);
+    state = processPackets(state, [makeCitationPacket(1, "missing-doc")]);
+    const selected = selectSources(state);
+    expect(selected.count).toBe(0);
+    expect(selected.hasSources).toBe(false);
+  });
 });

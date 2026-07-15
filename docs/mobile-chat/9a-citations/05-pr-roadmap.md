@@ -72,10 +72,12 @@ Build the pure/foundation layers before the UI that consumes them. 9b (agent tim
 - **Est. size:** ~1050-1250 LOC (production + tests).
 - **Depends on:** —
 - **Feature-flag state:** N/A — additive; `main` stays releasable.
-- **Tests on merge:** unit (jest) + RN Testing Library. Provably working: citation/document state
-  builds incrementally from a mocked packet stream; tapping an inline marker/link opens its URL; the
-  Sources button appears on a completed cited answer; the sheet lists the correct sections; a row tap
-  opens the doc. Gate: `bun run typecheck`, `bun run lint`, `bunx jest`.
+- **Tests on merge:** unit (jest) + RN Testing Library. Directly covered: citation/document state
+  building from a mocked packet stream (`messageProcessor`), the `selectSources` split, `documentTarget`
+  routing, a `SourceRow` tap → `openSource`, and the sheet's section rendering. **Not** exercised by
+  the unit suite (pending on-device verification): the native `onLinkPress` event shape and the
+  inline-marker → `openUrl` plumbing through `StreamdownText`, and the `MessageRow` completed-answer
+  footer gating. Gate: `bun run typecheck`, `bun run lint`, `bunx jest`.
 - **Drift checkpoint:** Before/at implementation, **device-verify the `react-native-enriched-markdown`
   `onLinkPress` `event` shape** (expected `{ url }`) — the one platform unknown the inline path rests
   on (unit tests mock it; a dev build confirms it). Also confirm whether `[[n]]()` file markers render

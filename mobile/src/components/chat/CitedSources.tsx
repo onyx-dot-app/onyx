@@ -3,9 +3,8 @@
 import { Modal, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { selectSources } from "@/chat/citations";
+import { SelectedSources } from "@/chat/citations";
 import { SearchDoc } from "@/chat/contracts/documents";
-import { ProcessedMessageState } from "@/chat/messageProcessor";
 import { openSource } from "@/chat/openSource";
 import { SourceIcon } from "@/components/chat/SourceIcon";
 import { SourceRow } from "@/components/chat/SourceRow";
@@ -54,16 +53,16 @@ export function CitedSourcesBar({
 interface CitedSourcesSheetProps {
   visible: boolean;
   onClose: () => void;
-  processed: ProcessedMessageState;
+  sources: SelectedSources;
 }
 
 export function CitedSourcesSheet({
   visible,
   onClose,
-  processed,
+  sources,
 }: CitedSourcesSheetProps) {
   const insets = useSafeAreaInsets();
-  const { cited, more, files } = selectSources(processed);
+  const { cited, more, files } = sources;
 
   const sections = [
     { title: "Cited Sources", docs: cited },

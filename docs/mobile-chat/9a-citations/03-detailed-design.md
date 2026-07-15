@@ -30,9 +30,14 @@ function processPackets(state: ProcessedMessageState, rawPackets: Packet[]): Pro
 ```
 
 - `processPackets`: if `nextPacketIndex > rawPackets.length` → `createInitialState(nodeId)`
-  (array replaced by regenerate/history-load); else loop `[nextPacketIndex, len)` and dispatch each,
-  then set `nextPacketIndex = len`. Mutates `citationMap`/`documentMap`/`citations` in place (web
-  pattern); returns the same object.
+  (array replaced by a *shorter* one); else loop `[nextPacketIndex, len)` and dispatch each, then set
+  `nextPacketIndex = len`. Mutates `citationMap`/`documentMap`/`citations` in place (web pattern);
+  returns the same object.
+  - **Reset caveat:** this shrink check only catches a *shorter* replacement. A same-length or
+    longer regenerate/history-load would reuse stale state under an incremental host. 9a sidesteps
+    this entirely — `usePacketDisplay` passes a *fresh* `createInitialState` every render (useMemo),
+    so nothing is reused. A future incremental host (9b) must reset on packet-array *identity*
+    change, not just length.
 - Per-packet dispatch (by `obj.type`):
   - `CITATION_INFO` → `citationMap[n] = document_id`; if `!seenCitationDocIds.has(document_id)` →
     add + push `{ citation_num, document_id }`.
@@ -82,11 +87,13 @@ type SourceTarget =
 
 function documentTarget(doc: SearchDoc): SourceTarget;   // link → browser; file_id & !link → file; else none
 function openUrl(url: string): void;                     // WebBrowser.openBrowserAsync (in-app)
-function openSource(doc: SearchDoc, opts?: { onUnavailable?: () => void }): void;
+function openSource(doc: SearchDoc): void;
 ```
 
-- `openSource`: `documentTarget(doc)` → `browser` = `openUrl`; `file` = `onUnavailable?.()`
-  (toast "Preview not available on mobile yet") — no mobile doc viewer in 9a; `none` = no-op.
+- `openSource`: `documentTarget(doc)` → `browser` = `openUrl`; `file` = a heads-up toast via the
+  global `toast` helper ("Preview isn't available on mobile yet") — no mobile doc viewer in 9a;
+  `none` = no-op. (No caller callback — the toast is fired internally, so `SourceRow` just calls
+  `openSource(doc)`.)
 
 ### `PacketDisplay` (modified · FOUNDATION) — `mobile/src/hooks/usePacketDisplay.ts`
 ```ts
@@ -197,7 +204,7 @@ mobile/src/
     `FilePickerSheet` chrome (scrim `Pressable`, inner `rounded-t-24 … px-16 pt-16`, safe-area
     bottom, header "Sources" + close `SvgX`, `ScrollView max-h`). Body = `selectSources(processed)`
     → up to three labeled sections (`Cited Sources` / `More` / `User Files`) each a `Separator` +
-    `Text` header + `SourceRow`s; a row's `onPress` = `openSource(doc, { onUnavailable: toast })`.
+    `Text` header + `SourceRow`s; a row's `onPress` = `openSource(doc)`.
 - **`usePacketDisplay.ts`** — replace the `useMemo` body: `const stateRef =
   useRef(createInitialState(node.nodeId))`; if `stateRef.current.nodeId !== node.nodeId` or shrink →
   reseed; `stateRef.current = processPackets(stateRef.current, node.packets)`; `renderer =

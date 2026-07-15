@@ -31,15 +31,18 @@ packets — the work is to *process* and *render* them:
 
 1. **Type the new packets.** Add the three packet shapes + a `SearchDoc` contract so the stream is
    strongly typed (purely additive to `streamingModels.ts`).
-2. **Process them into state.** A new pure, incremental processor (`messageProcessor.ts`, a small
-   mobile port of web's `packetProcessor`) folds the packets into a `ProcessedMessageState`:
-   a `citationMap` (`{[N]: document_id}`), a deduped ordered `citations[]`, a
-   `documentMap` (`document_id → SearchDoc`), and completion (`isComplete`/`stopReason`). It
-   processes only *new* packets each render (a cursor) and resets if the packet array is replaced
-   (regenerate / history load) — exactly web's pattern.
-3. **Host the processor.** `usePacketDisplay` becomes the mobile analog of web's `usePacketProcessor`:
-   it keeps the processor state in a ref, advances it as packets arrive, and returns
-   `{ renderer, packets, processed }`. This `processed` value is the **channel** that both this
+2. **Process them into state.** A new pure processor (`messageProcessor.ts`, a small mobile port of
+   web's `packetProcessor`) folds the packets into a `ProcessedMessageState`: a `citationMap`
+   (`{[N]: document_id}`), a deduped ordered `citations[]`, a `documentMap`
+   (`document_id → SearchDoc`), and completion (`isComplete`/`stopReason`). The processor is
+   incremental-capable (a cursor + reset when the packet array shrinks), but 9a drives it with a
+   full pass per flush (see step 3), so the cursor isn't relied upon yet — 9b can host it
+   incrementally.
+3. **Host the processor.** `usePacketDisplay` is the mobile analog of web's `usePacketProcessor`:
+   it recomputes `processed` with a `useMemo` (from a fresh `createInitialState`, a full pass over
+   `node.packets`) whenever the packet array changes — cheap at chat scale, and lint-clean (the
+   `react-hooks/refs` rule forbids the ref-during-render pattern web uses). It returns
+   `{ renderer, packets, processed }`; this `processed` value is the **channel** that both this
    phase's Sources UI and 9b's timeline renderers read.
 4. **Render inline markers.** The answer keeps flowing through the existing
    `MessageTextRenderer → useTypewriter → StreamingMarkdown` path. `StreamingMarkdown` gains an

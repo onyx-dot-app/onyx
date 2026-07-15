@@ -15,7 +15,7 @@ roadmap). Ports web's chat citations + cited-sources experience to the React Nat
    contents, integration points, implementation notes.
 4. [04-implementation-plan.md](04-implementation-plan.md) — CLAUDE.md-format plan + the appended
    plan-challenge results.
-5. [05-pr-roadmap.md](05-pr-roadmap.md) — the two-PR delivery slices.
+5. [05-pr-roadmap.md](05-pr-roadmap.md) — the single-PR delivery plan.
 
 ## One-line summary
 

@@ -6,6 +6,7 @@ import {
   makeSearchDoc,
   makeSearchDocsPacket,
 } from "@/chat/__tests__/fixtures";
+import { selectSources } from "@/chat/citations";
 import { createInitialState, processPackets } from "@/chat/messageProcessor";
 import {
   CitedSourcesBar,
@@ -27,7 +28,13 @@ describe("CitedSourcesSheet", () => {
       makeCitationPacket(1, "d1"),
     ]);
 
-    render(<CitedSourcesSheet visible processed={state} onClose={jest.fn()} />);
+    render(
+      <CitedSourcesSheet
+        visible
+        sources={selectSources(state)}
+        onClose={jest.fn()}
+      />,
+    );
     expect(screen.getByText("Cited Sources")).toBeTruthy();
     expect(screen.getByText("Cited Doc")).toBeTruthy();
     expect(screen.getByText("More")).toBeTruthy();
