@@ -11,8 +11,6 @@ from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS
 from onyx.auth.scoped_permissions import assert_global
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.auth.scoped_permissions import get_scoped_groups
-from onyx.auth.scoped_permissions import scoped_group_ids_subquery
-from onyx.auth.scoped_permissions import within_managed_scope_clause
 from onyx.db.enums import AccessType
 from onyx.db.enums import Permission
 from onyx.db.models import ConnectorCredentialPair
@@ -22,6 +20,8 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
+from onyx.db.scoped_permissions import scoped_group_ids_subquery
+from onyx.db.scoped_permissions import within_managed_scope_clause
 from onyx.error_handling.exceptions import OnyxError
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair

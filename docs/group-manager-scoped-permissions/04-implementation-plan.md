@@ -3,7 +3,7 @@
 # §8 Scoped Permissions (Group Manager) — Implementation Plan
 
 > **Primitives per [03 §2](03-detailed-design.md) (single-classifier model).** `has_permission` returns
-> `PermissionAuthority` (one classifier; `has_permission` removed) and lives in `permissions.py` with
+> `PermissionAuthority` (one classifier; the separate `has_permission_or_scope` removed) and lives in `permissions.py` with
 > the bundle; `has_global_permission` is the GLOBAL-only bool helper. GATE 1 = `require_permission(...,
 > allow_scope=True)` (threshold); GATE 2 = `assert_within_scope` / `assert_global`. Names below updated to match.
 

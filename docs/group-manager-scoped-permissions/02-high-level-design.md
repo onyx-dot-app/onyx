@@ -3,7 +3,7 @@
 # §8 Scoped Permissions (Group Manager) — High-Level Design
 
 > **Primitives superseded by [03 §2](03-detailed-design.md) (single-classifier model).** `has_permission`
-> now returns `PermissionAuthority` (GLOBAL/SCOPED/NONE) — it is the one classifier; `has_permission`
+> now returns `PermissionAuthority` (GLOBAL/SCOPED/NONE) — it is the one classifier; the separate `has_permission_or_scope`
 > is gone. GATE 1 is `require_permission(..., allow_scope=True)` (a threshold on `has_permission`); GATE 2 is
 > `assert_within_scope` / `assert_global`. Names below are updated to match; see 03 §2 for signatures.
 
