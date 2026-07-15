@@ -9,7 +9,7 @@ import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import {

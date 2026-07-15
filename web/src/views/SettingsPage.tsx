@@ -8,6 +8,7 @@ import {
   ContentAction,
   InputHorizontal,
   InputVertical,
+  toast,
 } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
@@ -32,7 +33,6 @@ import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
-import { toast } from "@/hooks/useToast";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";

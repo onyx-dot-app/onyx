@@ -7,7 +7,7 @@ import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { disconnectTracingProvider } from "@/lib/tracing/svc";
 import type { TracingDisconnectTarget } from "@/lib/tracing/types";
 

@@ -15,7 +15,7 @@ import {
   updateConnectorFiles,
   type ConnectorFileInfo,
 } from "@/lib/fileConnector";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import SvgSimpleLoader from "@opal/icons/simple-loader";

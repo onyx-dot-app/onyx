@@ -12,7 +12,7 @@ import {
   MCPServer,
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";
 import AddMCPServerModal from "@/sections/actions/modals/AddMCPServerModal";

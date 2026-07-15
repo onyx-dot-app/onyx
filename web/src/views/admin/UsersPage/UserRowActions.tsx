@@ -17,7 +17,7 @@ import { Popover } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { approveRequest } from "./svc";
 import EditUserModal from "./EditUserModal";
 import {

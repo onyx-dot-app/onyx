@@ -1,7 +1,7 @@
 import { SvgGlobe, SvgUserKey } from "@opal/icons";
 import { SvgGoogle } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { SSOProviderType } from "@/lib/sso/interfaces";
 
 interface SSOProviderDetail {

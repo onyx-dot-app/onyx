@@ -8,7 +8,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import useOnMount from "@/hooks/useOnMount";
 import { cn } from "@opal/utils";
 import { Button, Card, InputTypeIn, Text } from "@opal/components";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { SvgCheckCircle, SvgPlug, SvgSettings } from "@opal/icons";
 import {
   ExternalAppUserResponse,
@@ -19,7 +19,6 @@ import {
   startExternalAppOAuth,
 } from "@/app/craft/services/externalAppsService";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
-import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 
 // The user's own app connections. Org-wide configuration lives in the admin

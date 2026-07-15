@@ -7,7 +7,7 @@ import { CopyButton } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { downloadFile } from "@/lib/download";
 
 import type { ScimModalView } from "./interfaces";

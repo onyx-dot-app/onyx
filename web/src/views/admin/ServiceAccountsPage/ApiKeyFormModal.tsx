@@ -1,7 +1,6 @@
 "use client";
 
 import { Form, Formik } from "formik";
-import { toast } from "@/hooks/useToast";
 import {
   createApiKey,
   updateApiKey,
@@ -12,7 +11,7 @@ import { Button } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { InputVertical } from "@opal/layouts";
+import { InputVertical, toast } from "@opal/layouts";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { SvgKey, SvgLock, SvgUser, SvgUserManage } from "@opal/icons";
 

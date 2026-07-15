@@ -33,6 +33,7 @@ import {
   InputHorizontal,
   InputVertical,
   SettingsLayouts,
+  toast,
 } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
@@ -48,7 +49,6 @@ import {
 } from "@/lib/skills/api";
 import type { CustomSkill, SkillEditableDetail } from "@/lib/skills/types";
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
-import { toast } from "@/hooks/useToast";
 import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
