@@ -35,13 +35,11 @@ context.
 
 ## Guidance
 
-Scope to a source ONLY when the phrasing directs WHERE to look — the source is named as a \
-place to search: "in X", "from X", "within X", "search X", "check X", "my X". This can be in \
-this cycle's queries, or in an earlier turn that this cycle continues.
-
-If a source word appears merely as what the query is ABOUT — its subject or object — it is a \
-TOPIC, not a directive: do NOT scope to it. NEVER infer a source from the query's topic \
-either (e.g. an HR or billing query is not a source). If no source is named as a WHERE-to-look, return [].
+Scope to a source ONLY when it is named as WHERE to look ("in X", "from X", "search X", \
+"check X", "my X") — in this cycle's queries, or in an earlier turn that this cycle \
+continues. A source that is merely the query's TOPIC — its subject or object — is not a \
+directive: do NOT scope to it, and NEVER infer a source from the topic (e.g. an HR or \
+billing query is not a source). If no source is named as a WHERE to look, return [].
 
 A source named in an earlier turn still applies to a same-topic follow-up that names no new \
 source — keep scoping to it.
@@ -81,8 +79,8 @@ none of the named sources are listed.
 
 ## Guidance reminder
 
-Scope ONLY to a source named as WHERE to look ("in X", "search X"). A source that is merely \
-the query's TOPIC is not a directive — do not scope to it.
+Scope ONLY to a source named as WHERE to look ("in X", "search X") — a mere TOPIC mention \
+is not a directive.
 
 COMBINED ("A and B"): scope to all named sources, every cycle.
 BACKOFF ("A first, then B"): by DEFAULT ADVANCE to the first named source not in previous \
