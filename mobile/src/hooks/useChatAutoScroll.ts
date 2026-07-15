@@ -63,9 +63,10 @@ export function useChatAutoScroll(
   // pinnedRef = "follow the bottom". A ref (not state): nothing rendered depends on it, so flipping
   // it must not re-render; it's read fresh in onScroll and at the follow rAF's fire time.
   const pinnedRef = useRef(true);
-  // Last known viewport and scroll offset, so onContentSizeChange can compute the button from the
-  // real content height without waiting for a scroll event (content growth fires none).
+  // Last measured viewport, content height, and scroll offset. Kept so the jump button can be
+  // recomputed from real geometry on a content-size OR viewport change (neither fires a scroll event).
   const viewportRef = useRef(0);
+  const contentHeightRef = useRef(0);
   const lastOffsetRef = useRef(0);
   // True while our own animated jump is running, so its scroll events don't flicker the button or
   // unpin the list before it reaches the bottom. Cleared when it reaches the bottom, when the user
@@ -111,28 +112,46 @@ export function useChatAutoScroll(
     [],
   );
 
-  // The list's viewport height, captured before content measures so onContentSizeChange has it.
-  const onLayout = useCallback((event: LayoutChangeEvent) => {
-    viewportRef.current = event.nativeEvent.layout.height;
-  }, []);
+  // Recompute the jump button from the latest geometry, for changes that fire no scroll event. Only
+  // while NOT following — when following, the effect scrolls to the bottom and onScroll owns the
+  // button. Skipped until the initial scroll and until both dimensions are known.
+  const refreshIdleButton = useCallback(() => {
+    if (
+      !didInitialScroll.current ||
+      viewportRef.current <= 0 ||
+      contentHeightRef.current <= 0
+    ) {
+      return;
+    }
+    if (enabled && pinnedRef.current) return;
+    const atBottom = isWithinBottomBand({
+      offsetY: lastOffsetRef.current,
+      contentHeight: contentHeightRef.current,
+      viewportHeight: viewportRef.current,
+    });
+    setShowScrollButton(!atBottom);
+  }, [enabled]);
+
+  // A viewport resize (rotation, split-screen, keyboard) changes the bottom distance without a scroll
+  // or content-size event, so refresh the button too — not just capture the height.
+  const onLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      viewportRef.current = event.nativeEvent.layout.height;
+      refreshIdleButton();
+    },
+    [refreshIdleButton],
+  );
 
   // FlashList v2 forwards this to its underlying ScrollView (FlashListProps extends ScrollViewProps),
   // so it fires post-measurement whenever content height changes — including growth below the
-  // viewport, which fires no scroll event. Used to keep the jump button correct while NOT following
-  // (following manages its own scroll + button via the effect and onScroll). Fixes: with auto-scroll
-  // off, a chat growing from fitting to overflowing now reveals the button without a manual scroll.
+  // viewport, which fires no scroll event. Fixes: with auto-scroll off, a chat growing from fitting to
+  // overflowing reveals the button without a manual scroll.
   const onContentSizeChange = useCallback(
     (_width: number, height: number) => {
-      if (!didInitialScroll.current || viewportRef.current <= 0) return;
-      if (enabled && pinnedRef.current) return;
-      const atBottom = isWithinBottomBand({
-        offsetY: lastOffsetRef.current,
-        contentHeight: height,
-        viewportHeight: viewportRef.current,
-      });
-      setShowScrollButton(!atBottom);
+      contentHeightRef.current = height;
+      refreshIdleButton();
     },
-    [enabled],
+    [refreshIdleButton],
   );
 
   // The user grabbed the list: a programmatic jump never fires this, so it cleanly ends the jump

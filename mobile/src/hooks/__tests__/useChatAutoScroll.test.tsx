@@ -193,6 +193,20 @@ describe("useChatAutoScroll", () => {
     expect(result.current.showScrollButton).toBe(false);
   });
 
+  // A viewport resize (keyboard, rotation, split-screen) changes the bottom distance but fires no
+  // scroll/content-size event, so onLayout must recompute the button, not just capture the height.
+  it("refreshes the jump button on a viewport resize while not following", () => {
+    const { result } = setup({ enabled: false, contentSignature: "0" });
+    act(() => result.current.onLoad());
+    act(() => result.current.onLayout(layoutEvent(600)));
+    act(() => result.current.onContentSizeChange(0, 640)); // 40px over → within band → hidden
+    expect(result.current.showScrollButton).toBe(false);
+    act(() => result.current.onLayout(layoutEvent(400))); // shrinks (keyboard) → 240px below → shown
+    expect(result.current.showScrollButton).toBe(true);
+    act(() => result.current.onLayout(layoutEvent(600))); // restored → back within band → hidden
+    expect(result.current.showScrollButton).toBe(false);
+  });
+
   it("scrollToBottom re-pins, jumps animated, and keeps the button hidden through the settle", () => {
     const { result, rerender, scrollToEnd } = setup();
     act(() => result.current.onScroll(scrollEvent(200))); // unpin, button shows
