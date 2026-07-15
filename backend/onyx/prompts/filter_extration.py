@@ -83,6 +83,7 @@ none of the named sources are listed.
 
 Scope ONLY to a source named as WHERE to look ("in X", "search X"). A source that is merely \
 the query's TOPIC is not a directive — do not scope to it.
+
 COMBINED ("A and B"): scope to all named sources, every cycle.
 BACKOFF ("A first, then B"): by DEFAULT ADVANCE to the first named source not in previous \
 cycles' searched_sources (a reworded retry keeps advancing). If this cycle's queries are \
