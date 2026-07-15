@@ -41,7 +41,6 @@ from ee.onyx.server.user_group.api import router as user_group_router
 from ee.onyx.utils.encryption import test_encryption
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
-from onyx.auth.users import fastapi_users
 from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
 from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
@@ -124,13 +123,6 @@ def get_application() -> FastAPI:
                 redirect_url=f"{WEB_DOMAIN}/auth/oauth/callback",
             ),
             prefix="/auth/oauth",
-        )
-
-        # Need basic auth router for `logout` endpoint
-        include_auth_router_with_prefix(
-            application,
-            fastapi_users.get_logout_router(auth_backend),
-            prefix="/auth",
         )
 
     # RBAC / group access control

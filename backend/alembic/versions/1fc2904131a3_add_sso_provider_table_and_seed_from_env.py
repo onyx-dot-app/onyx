@@ -9,6 +9,7 @@ Create Date: 2026-07-06 21:34:08.516250
 from __future__ import annotations
 
 import json
+import os
 
 from alembic import op
 import sqlalchemy as sa
@@ -58,14 +59,15 @@ def _sso_provider_table(metadata: sa.MetaData) -> sa.Table:
 
 def _seed_from_env(table: sa.Table) -> None:
     """One-time import of legacy single-provider config. The DB is the source
-    of truth afterwards; env vars are never read at request time.
+    of truth afterwards. Env vars are never read at request time.
 
-    Reads the already-resolved app_config constants (not raw os.environ) so
-    the legacy GOOGLE_OAUTH_* fallbacks and the VALID_EMAIL_DOMAINS parsing
-    stay in one place. Skipped in multi-tenant (cloud auth does not use
-    per-instance provider rows) and when the table already has any row.
+    Reads the already-resolved app_config constants for credentials and
+    domains so the legacy GOOGLE_OAUTH_* fallbacks and the VALID_EMAIL_DOMAINS
+    parsing stay in one place, but AUTH_TYPE comes from raw os.environ because
+    app_configs coerces legacy SSO values to BASIC. Skipped in multi-tenant
+    (cloud auth does not use per-instance provider rows) and when the table
+    already has any row.
     """
-    from onyx.configs.app_configs import AUTH_TYPE
     from onyx.configs.app_configs import OAUTH_CLIENT_ID
     from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
     from onyx.configs.app_configs import OPENID_CONFIG_URL
@@ -76,13 +78,15 @@ def _seed_from_env(table: sa.Table) -> None:
     if MULTI_TENANT:
         return
 
+    raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
+
     # provider_type is the enum member NAME (Enum(native_enum=False) storage);
     # the login `name` matches the oauth_name existing linked accounts carry so
     # linkage survives the routing cutover.
-    if AUTH_TYPE == AuthType.GOOGLE_OAUTH:
+    if raw_auth_type == AuthType.GOOGLE_OAUTH.value:
         provider_type, name = "GOOGLE_OAUTH", "google"
         display_name, config_url = "Continue with Google", None
-    elif AUTH_TYPE == AuthType.OIDC:
+    elif raw_auth_type == AuthType.OIDC.value:
         if not OPENID_CONFIG_URL:
             return
         provider_type, name = "OIDC", "openid"
