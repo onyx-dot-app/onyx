@@ -75,6 +75,7 @@ def test_default_policies(action: SlackAction, expected_policy: EndpointPolicy) 
 def test_files_write_scope_and_upstream_pattern() -> None:
     spec = SlackProvider.spec
     assert "files:write:user" in spec.oauth.scope.split(",")
+    assert "files:write" not in spec.oauth.scope.split(",")
     assert (
         "https://files\\.slack\\.com/upload/v1/.*"
         in spec.descriptor.upstream_url_patterns
