@@ -684,6 +684,8 @@ def fetch_document_id_by_link_substring(
         .where(
             DbDocument.link.ilike(f"%{escape_like_pattern(substring)}%", escape="\\")
         )
+        # Deterministic pick if multiple documents contain the identifier
+        .order_by(DbDocument.id)
         .limit(1)
     )
     return db_session.execute(stmt).scalars().first()
