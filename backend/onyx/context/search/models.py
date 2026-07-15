@@ -88,11 +88,9 @@ class TimeRange(BaseModel):
         unbounded."""
         if other is None:
             return self
-        starts = [s for s in (self.start, other.start) if s is not None]
-        ends = [e for e in (self.end, other.end) if e is not None]
         return TimeRange(
-            start=max(starts) if starts else None,
-            end=min(ends) if ends else None,
+            start=max(filter(None, (self.start, other.start)), default=None),
+            end=min(filter(None, (self.end, other.end)), default=None),
         )
 
 
