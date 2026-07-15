@@ -53,3 +53,37 @@ def test_verify_email_is_invited_skipped_when_invite_only_disabled(
     )
 
     verify_email_is_invited("newuser@example.com")
+
+
+def test_sso_managed_bypasses_whitelist_under_basic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A provider-row login on a BASIC deployment is IdP-managed, so the
+    workspace invite list must not block its JIT-provisioned users."""
+    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.BASIC, raising=False)
+    monkeypatch.setattr(users, "workspace_invite_only_enabled", lambda: True)
+    monkeypatch.setattr(
+        users,
+        "get_invited_users",
+        lambda: ["allowed@example.com"],
+        raising=False,
+    )
+
+    verify_email_is_invited("newuser@example.com", sso_managed=True)
+
+
+def test_sso_managed_default_false_keeps_enforcement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Callers that do not declare SSO provenance keep the invite check."""
+    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.BASIC, raising=False)
+    monkeypatch.setattr(users, "workspace_invite_only_enabled", lambda: True)
+    monkeypatch.setattr(
+        users,
+        "get_invited_users",
+        lambda: ["allowed@example.com"],
+        raising=False,
+    )
+
+    with pytest.raises(OnyxError):
+        verify_email_is_invited("newuser@example.com", sso_managed=False)

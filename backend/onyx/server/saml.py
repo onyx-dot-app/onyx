@@ -113,7 +113,8 @@ async def upsert_saml_user(email: str) -> User:
                         password=secure_random_password,  # Pass raw password, not hash
                         role=role,
                         is_verified=True,  # SAML users are pre-verified by their IdP
-                    )
+                    ),
+                    sso_managed=True,
                 )
 
                 return user
