@@ -105,7 +105,6 @@ from onyx.server.manage.llm.provider_cache import get_cached_provider_listing
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.manage.llm.utils import generate_bedrock_display_name
 from onyx.server.manage.llm.utils import generate_ollama_display_name
-from onyx.server.manage.llm.utils import infer_vision_support
 from onyx.server.manage.llm.utils import is_embedding_model
 from onyx.server.manage.llm.utils import is_reasoning_model
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
@@ -1210,8 +1209,13 @@ def get_bedrock_available_models(
                                 if profile_name
                                 else generate_bedrock_display_name(profile_id)
                             ),
-                            # Infer vision support from known vision models
-                            "supports_image_input": infer_vision_support(profile_id),
+                            # Vision support from the LiteLLM cost map, not a
+                            # hardcoded list
+                            "supports_image_input": (
+                                litellm_thinks_model_supports_image_input(
+                                    profile_id, LlmProviderNames.BEDROCK
+                                )
+                            ),
                         }
         except Exception as e:
             logger.warning("Couldn't fetch inference profiles for Bedrock: %s", e)
@@ -2061,7 +2065,10 @@ def get_openai_compatible_server_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=infer_vision_support(model_id),
+                    # Vision support from the LiteLLM cost map, not a hardcoded list
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.OPENAI_COMPATIBLE
+                    ),
                     supports_reasoning=is_reasoning_model(model_id, model_name),
                 )
             )
