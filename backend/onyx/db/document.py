@@ -38,6 +38,7 @@ from onyx.db.entities import delete_from_kg_entities_extraction_staging__no_comm
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
+from onyx.db.hierarchy import escape_like_pattern
 from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.models import Connector
@@ -657,6 +658,35 @@ def fetch_document_ids_by_links(
     stmt = select(DbDocument.link, DbDocument.id).where(DbDocument.link.in_(links))
     rows = db_session.execute(stmt).all()
     return {link: doc_id for link, doc_id in rows if link}
+
+
+# Reject substrings too short to be identifying, so a bad caller can't match
+# broad swaths of the table.
+_MIN_LINK_SUBSTRING_LENGTH = 8
+
+
+def fetch_document_id_by_link_substring(
+    db_session: Session,
+    substring: str,
+) -> str | None:
+    """Find the id of a document whose link contains the given substring
+    (case-insensitive).
+
+    Used for connectors whose Document.ids aren't derivable from a pasted URL
+    (e.g. SharePoint's Graph drive-item ids) but whose stored link contains an
+    identifier the URL carries (e.g. the file's sourcedoc GUID).
+    """
+    if len(substring) < _MIN_LINK_SUBSTRING_LENGTH:
+        return None
+
+    stmt = (
+        select(DbDocument.id)
+        .where(
+            DbDocument.link.ilike(f"%{escape_like_pattern(substring)}%", escape="\\")
+        )
+        .limit(1)
+    )
+    return db_session.execute(stmt).scalars().first()
 
 
 def get_document_connector_count(

@@ -52,6 +52,15 @@ def test_google_drive_candidates_cover_all_type_forms() -> None:
     }
 
 
+def test_sharepoint_site_page_keeps_default_normalization() -> None:
+    """SitePages URLs carry no file GUID; the stored link is the plain page URL,
+    so the default normalizer applies."""
+    url = "https://acme.sharepoint.com/sites/eng/SitePages/Team-Updates.aspx?web=1"
+    assert normalize_url_candidates(url) == [
+        "https://acme.sharepoint.com/sites/eng/SitePages/Team-Updates.aspx"
+    ]
+
+
 def test_non_drive_candidates_fall_back_to_single_value() -> None:
     """Non-connector URLs return just the default-normalized value."""
     assert normalize_url_candidates("https://example.com/some/page?a=1#x") == [

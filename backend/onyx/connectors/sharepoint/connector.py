@@ -53,6 +53,7 @@ from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import IndexingHeartbeatInterface
+from onyx.connectors.interfaces import NormalizationResult
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
@@ -72,6 +73,11 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
+from onyx.connectors.sharepoint.url_utils import extract_sharepoint_document_guid
+from onyx.connectors.sharepoint.url_utils import sharepoint_page_url_variants
+from onyx.db.document import fetch_document_id_by_link_substring
+from onyx.db.document import fetch_document_ids_by_links
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -1273,6 +1279,47 @@ class SharepointConnector(
                 raise ConnectorValidationError(
                     f"Invalid site URL '{site_url}': {e}"
                 ) from e
+
+    @classmethod
+    @override
+    def normalize_url(cls, url: str) -> NormalizationResult:
+        """Resolve a pasted SharePoint URL to the indexed Document.id.
+
+        Unlike connectors whose ids are computable from the URL (Google Drive,
+        Notion, Slack), Document.ids here are Graph ids that appear in no URL
+        form: drive items use "01" + base32 of a drive-scoped hash plus the
+        file's unique-ID GUID; site pages use a bare page GUID. The stored
+        Document.link does identify the document — for files it contains the
+        unique-ID GUID (`sourcedoc=%7B<GUID>%7D`) that Doc.aspx URLs and
+        `/:w:/s/...` sharing links carry, and for site pages it is the plain
+        page URL — so look the id up by link. Hence the DB read, which the
+        open_url flow (the only caller) always runs with an engine and tenant
+        context available.
+        """
+        split = urlsplit(url)
+
+        if "sharepoint" not in split.netloc.lower():
+            return NormalizationResult(normalized_url=None, use_default=False)
+
+        guid = extract_sharepoint_document_guid(split.query, split.path)
+        with get_session_with_current_tenant() as db_session:
+            if guid:
+                doc_id = fetch_document_id_by_link_substring(db_session, guid)
+            else:
+                link_to_doc_id = fetch_document_ids_by_links(
+                    db_session, sharepoint_page_url_variants(url)
+                )
+                doc_id = next(iter(link_to_doc_id.values()), None)
+
+        if doc_id:
+            return NormalizationResult(
+                normalized_url=None,
+                use_default=False,
+                candidate_document_ids=[doc_id],
+            )
+        # Miss: a GUID-bearing URL has nothing else to try; for other shapes keep
+        # default normalization so the generic link fallback still applies.
+        return NormalizationResult(normalized_url=None, use_default=guid is None)
 
     def probe_role_assignments_permission(self) -> None:
         """Verify the Azure AD app can read SharePoint RoleAssignments.

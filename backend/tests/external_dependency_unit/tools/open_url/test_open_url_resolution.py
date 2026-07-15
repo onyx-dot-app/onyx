@@ -7,7 +7,9 @@ form must still be found when the user pastes the type-ambiguous
 `drive.google.com/file/d/<id>` form.
 """
 
+import base64
 from collections.abc import Generator
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
@@ -36,11 +38,14 @@ def doc_cleanup(
             db_session.commit()
 
 
-def _seed_doc(db_session: Session, tracker: list[str], doc_id: str) -> None:
+def _seed_doc(
+    db_session: Session, tracker: list[str], doc_id: str, link: str | None = None
+) -> None:
     doc = DBDocument(
         id=doc_id,
         semantic_id=f"semantic-{doc_id}",
         kg_stage=KGStage.NOT_STARTED,
+        link=link,
     )
     db_session.add(doc)
     db_session.commit()
@@ -76,3 +81,126 @@ def test_unindexed_file_id_is_unresolved(
 
     assert matches == []
     assert unresolved == [pasted]
+
+
+def _seed_sharepoint_doc(
+    db_session: Session, doc_cleanup: list[str]
+) -> tuple[str, str, str]:
+    """Seed a SharePoint-shaped doc: Graph drive-item id + Doc.aspx link.
+
+    Returns (doc_id, guid, stored_link).
+    """
+    guid = str(uuid4()).upper()
+    doc_id = f"01SFDIZ6{uuid4().hex.upper()[:24]}"
+    stored_link = (
+        "https://acme.sharepoint.com/sites/eng/_layouts/15/Doc.aspx"
+        f"?sourcedoc=%7B{guid}%7D&file=Foo.docx&action=default&mobileredirect=true"
+    )
+    _seed_doc(db_session, doc_cleanup, doc_id, link=stored_link)
+    return doc_id, guid, stored_link
+
+
+def test_sharepoint_doc_aspx_url_resolves_via_sourcedoc_guid(
+    db_session: Session,
+    doc_cleanup: list[str],
+) -> None:
+    """The exact stored Doc.aspx URL resolves to the Graph drive-item Document.id."""
+    doc_id, _, stored_link = _seed_sharepoint_doc(db_session, doc_cleanup)
+
+    matches, unresolved = _resolve_urls_to_document_ids([stored_link], db_session)
+
+    assert unresolved == []
+    assert len(matches) == 1
+    assert matches[0].document_id == doc_id
+    assert matches[0].original_url == stored_link
+
+
+def test_sharepoint_url_with_decoded_braces_resolves(
+    db_session: Session,
+    doc_cleanup: list[str],
+) -> None:
+    """A re-emitted URL with raw {...} braces still resolves to the stored doc."""
+    doc_id, guid, _ = _seed_sharepoint_doc(db_session, doc_cleanup)
+
+    pasted = (
+        "https://acme.sharepoint.com/sites/eng/_layouts/15/Doc.aspx"
+        f"?sourcedoc={{{guid.lower()}}}&file=Foo.docx&action=default&mobileredirect=true"
+    )
+    matches, unresolved = _resolve_urls_to_document_ids([pasted], db_session)
+
+    assert unresolved == []
+    assert len(matches) == 1
+    assert matches[0].document_id == doc_id
+    assert matches[0].original_url == pasted
+
+
+def test_sharepoint_url_with_reordered_extra_params_resolves(
+    db_session: Session,
+    doc_cleanup: list[str],
+) -> None:
+    """Different query-param order and extra params don't break resolution."""
+    doc_id, guid, _ = _seed_sharepoint_doc(db_session, doc_cleanup)
+
+    pasted = (
+        "https://acme.sharepoint.com/sites/eng/_layouts/15/Doc.aspx"
+        f"?file=Foo.docx&wdOrigin=TEAMS&sourcedoc=%7B{guid}%7D"
+    )
+    matches, unresolved = _resolve_urls_to_document_ids([pasted], db_session)
+
+    assert unresolved == []
+    assert len(matches) == 1
+    assert matches[0].document_id == doc_id
+    assert matches[0].original_url == pasted
+
+
+def test_sharepoint_sharing_link_resolves_via_embedded_guid(
+    db_session: Session,
+    doc_cleanup: list[str],
+) -> None:
+    """A /:w:/s/... sharing link resolves via the GUID embedded in its token."""
+    doc_id, guid, _ = _seed_sharepoint_doc(db_session, doc_cleanup)
+
+    raw = b"!\x00" + UUID(guid).bytes_le + b"\x01" + bytes(16)
+    token = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+    pasted = f"https://acme.sharepoint.com/:w:/s/eng/{token}?e=u4Gcoi"
+
+    matches, unresolved = _resolve_urls_to_document_ids([pasted], db_session)
+
+    assert unresolved == []
+    assert len(matches) == 1
+    assert matches[0].document_id == doc_id
+    assert matches[0].original_url == pasted
+
+
+def test_sharepoint_site_page_resolves_via_stored_link(
+    db_session: Session,
+    doc_cleanup: list[str],
+) -> None:
+    """A SitePages URL resolves to its GUID Document.id via exact-link lookup,
+    including with volatile query params attached."""
+    doc_id = str(uuid4())
+    stored_link = "https://acme.sharepoint.com/sites/eng/SitePages/Team-Updates.aspx"
+    _seed_doc(db_session, doc_cleanup, doc_id, link=stored_link)
+
+    for pasted in (stored_link, f"{stored_link}?web=1"):
+        matches, unresolved = _resolve_urls_to_document_ids([pasted], db_session)
+
+        assert unresolved == []
+        assert len(matches) == 1
+        assert matches[0].document_id == doc_id
+        assert matches[0].original_url == pasted
+
+
+def test_sharepoint_url_with_unknown_guid_is_unresolved(
+    db_session: Session,
+    doc_cleanup: list[str],  # noqa: ARG001
+) -> None:
+    """A sourcedoc GUID not in the index resolves to nothing (falls back to crawl)."""
+    pasted = (
+        "https://acme.sharepoint.com/sites/eng/_layouts/15/Doc.aspx"
+        f"?sourcedoc=%7B{str(uuid4()).upper()}%7D&file=Foo.docx"
+    )
+    matches, unresolved = _resolve_urls_to_document_ids([pasted], db_session)
+
+    assert matches == []
+    assert pasted in unresolved
