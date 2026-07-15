@@ -83,6 +83,18 @@ class TimeRange(BaseModel):
     def has_bounds(self) -> bool:
         return self.start is not None or self.end is not None
 
+    def intersect(self, other: "TimeRange | None") -> "TimeRange":
+        """The overlap of the two windows (later start, earlier end); None is
+        unbounded."""
+        if other is None:
+            return self
+        starts = [s for s in (self.start, other.start) if s is not None]
+        ends = [e for e in (self.end, other.end) if e is not None]
+        return TimeRange(
+            start=max(starts) if starts else None,
+            end=min(ends) if ends else None,
+        )
+
 
 class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None

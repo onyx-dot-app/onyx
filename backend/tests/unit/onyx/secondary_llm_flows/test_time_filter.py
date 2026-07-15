@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from datetime import datetime
+from datetime import timezone
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.configs.constants import MessageType
+from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import TimeRange
 from onyx.llm.models import UserMessage
 from onyx.secondary_llm_flows.time_filter import _parse_time_decision
 from onyx.secondary_llm_flows.time_filter import decide_time_filter
@@ -113,6 +117,51 @@ def test_empty_content_is_no_filter() -> None:
 
 def test_unparseable_dates_are_no_filter() -> None:
     assert _parse_time_decision("updated (banana, None)") is None
+
+
+def test_partial_dates_fail_open() -> None:
+    """A bare year or month name must not inherit today's month/day."""
+    assert _parse_time_decision("updated (2022, None)") is None
+    assert _parse_time_decision("updated (March, None)") is None
+
+
+# ---- TimeFilter.apply_to (intersection with explicit filters) ----
+
+
+def test_apply_to_sets_range_on_empty_filters() -> None:
+    tf = _parse_time_decision("created (2025-01-01, 2025-01-31)")
+    assert tf is not None
+    filters = tf.apply_to(BaseFilters())
+    assert filters.created_at_range is not None
+    assert filters.updated_at_range is None
+
+
+def test_apply_to_never_widens_an_explicit_range() -> None:
+    explicit = BaseFilters(
+        updated_at_range=TimeRange(
+            start=datetime(2025, 6, 1, tzinfo=timezone.utc),
+            end=datetime(2025, 6, 30, tzinfo=timezone.utc),
+        )
+    )
+    tf = _parse_time_decision("updated (2025-01-01, None)")
+    assert tf is not None
+    filters = tf.apply_to(explicit)
+    # The wider inferred window keeps the tighter explicit bounds.
+    assert filters.updated_at_range is not None
+    assert filters.updated_at_range.start == datetime(2025, 6, 1, tzinfo=timezone.utc)
+    assert filters.updated_at_range.end == datetime(2025, 6, 30, tzinfo=timezone.utc)
+
+
+def test_apply_to_narrows_an_explicit_range() -> None:
+    explicit = BaseFilters(
+        updated_at_range=TimeRange(start=datetime(2025, 1, 1, tzinfo=timezone.utc))
+    )
+    tf = _parse_time_decision("updated (2025-03-01, 2025-03-31)")
+    assert tf is not None
+    filters = tf.apply_to(explicit)
+    assert filters.updated_at_range is not None
+    assert filters.updated_at_range.start == datetime(2025, 3, 1, tzinfo=timezone.utc)
+    assert filters.updated_at_range.end is not None
 
 
 # ---- decide_time_filter (prompt construction + LLM stub) ----

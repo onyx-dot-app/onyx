@@ -5,12 +5,10 @@ from datetime import timedelta
 from datetime import timezone
 from enum import StrEnum
 
-from dateutil.parser import parse
 from dateutil.relativedelta import relativedelta
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import datetime_to_utc
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import TimeRange
 from onyx.llm.interfaces import LLM
@@ -44,13 +42,15 @@ class TimeFilter(BaseModel):
     end: datetime | None = None
 
     def apply_to(self, filters: BaseFilters) -> BaseFilters:
-        """Return a copy of `filters` with this window on the matching range field."""
+        """Return a copy of `filters` with this window intersected onto the
+        matching range field, so the inferred window can narrow but never widen
+        a caller-selected restriction."""
         filters = filters.model_copy()
         window = TimeRange(start=self.start, end=self.end)
         if self.field is DocumentTimeField.CREATED_AT:
-            filters.created_at_range = window
+            filters.created_at_range = window.intersect(filters.created_at_range)
         else:
-            filters.updated_at_range = window
+            filters.updated_at_range = window.intersect(filters.updated_at_range)
         return filters
 
 
@@ -83,11 +83,11 @@ def _resolve_relative_bound(token: str, now: datetime) -> datetime | None:
 
 
 def _parse_absolute_date(token: str) -> datetime | None:
-    """Parse a date string (the prompt asks for YYYY-MM-DD); naive values are
-    treated as UTC."""
+    """Parse the prompt's promised YYYY-MM-DD format; anything else fails open
+    so a partial date can't silently inherit today's month/day."""
     try:
-        return datetime_to_utc(parse(token))
-    except (ValueError, OverflowError):
+        return datetime.strptime(token, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
         return None
 
 
