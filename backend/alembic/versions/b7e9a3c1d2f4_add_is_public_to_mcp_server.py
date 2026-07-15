@@ -1,7 +1,7 @@
 """Add is_public to mcp_server
 
 Revision ID: b7e9a3c1d2f4
-Revises: c7d1f0a4b8e2
+Revises: bd38e2a494ff
 Create Date: 2026-06-18 09:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "b7e9a3c1d2f4"
-down_revision = "c7d1f0a4b8e2"
+down_revision = "bd38e2a494ff"
 branch_labels = None
 depends_on = None
 
