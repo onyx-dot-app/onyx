@@ -104,6 +104,19 @@ def delete_notifications_by_additional_data(
     ).delete(synchronize_session=False)
 
 
+def delete_notifications_by_type(
+    notif_type: NotificationType,
+    db_session: Session,
+) -> None:
+    """Hard-delete every notification of this type for all users, so an
+    admin-authored source that changed out-of-band re-materializes fresh on
+    the next read."""
+    db_session.query(Notification).filter(Notification.notif_type == notif_type).delete(
+        synchronize_session=False
+    )
+    db_session.commit()
+
+
 def get_notification_by_id(
     notification_id: int, user: User, db_session: Session
 ) -> Notification:
