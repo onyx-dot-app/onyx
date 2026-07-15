@@ -69,6 +69,7 @@ def _run(
         patch(f"{MODULE}.semantic_query_rephrase", return_value="rephrased query"),
         patch(f"{MODULE}.keyword_query_expansion", return_value=[]),
         patch(f"{MODULE}.decide_search_scope", decide),
+        patch(f"{MODULE}.decide_time_filter", MagicMock(return_value=None)),
         patch(f"{MODULE}.weighted_reciprocal_rank_fusion", return_value=[]),
         patch(f"{MODULE}.merge_individual_chunks", return_value=[]),
         patch(f"{MODULE}.search_pipeline", mock_search_pipeline),
