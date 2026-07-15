@@ -10,6 +10,7 @@ from onyx.external_apps.models import OrgCredentialFieldDescriptor
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.base import ExternalAppProvider
 from onyx.external_apps.providers.base import OnyxManagedExtApp
+from onyx.external_apps.providers.confluence import ConfluenceProvider
 from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
@@ -28,6 +29,7 @@ _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     GitHubProvider,
     HubspotProvider,
     NotionProvider,
+    ConfluenceProvider,
 ]
 
 

@@ -197,6 +197,9 @@ _REGISTRY: Final = BuiltInSkillRegistry(
             skill_id="hubspot", app_type=ExternalAppType.HUBSPOT
         ),
         ExternalAppBuiltInProvider(skill_id="notion", app_type=ExternalAppType.NOTION),
+        ExternalAppBuiltInProvider(
+            skill_id="confluence", app_type=ExternalAppType.CONFLUENCE
+        ),
     )
 )
 
