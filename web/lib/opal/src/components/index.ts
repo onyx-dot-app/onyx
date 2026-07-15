@@ -75,6 +75,14 @@ export {
   type DividerProps,
 } from "@opal/components/divider/components";
 
+/* IconContainer */
+export {
+  IconContainer,
+  type IconContainerProps,
+  type IconContainerSize,
+  type IconContainerType,
+} from "@opal/components/icon-container/components";
+
 /* Card */
 export { Card, type CardProps } from "@opal/components/cards/card/components";
 
