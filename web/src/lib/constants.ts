@@ -62,7 +62,8 @@ export const GTM_ENABLED =
   process.env.NEXT_PUBLIC_GTM_ENABLED?.toLowerCase() === "true";
 
 export const NEXT_PUBLIC_AUTH_TYPE: AuthType =
-  (process.env.NEXT_PUBLIC_AUTH_TYPE as AuthType) ?? AuthType.BASIC;
+  (process.env.NEXT_PUBLIC_AUTH_TYPE?.toLowerCase() as AuthType) ??
+  AuthType.BASIC;
 
 export const NEXT_PUBLIC_CLOUD_ENABLED =
   NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD;

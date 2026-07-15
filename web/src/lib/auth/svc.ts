@@ -23,6 +23,10 @@ export async function fetchAuthTypeMetadata(
     throw new Error("Failed to fetch auth type metadata");
   }
   const data: AuthTypeAPIResponse = await res.json();
+  // Self-hosted OIDC/SAML/Google OAuth deployments still work here: next.config.js
+  // derives NEXT_PUBLIC_AUTH_TYPE from AUTH_TYPE at Next.js startup, so deployments
+  // that only set AUTH_TYPE at runtime (e.g. docker-compose) pick up the correct
+  // value without needing a separate NEXT_PUBLIC_AUTH_TYPE build arg.
   return {
     autoRedirect:
       NEXT_PUBLIC_AUTH_TYPE === AuthType.OIDC ||

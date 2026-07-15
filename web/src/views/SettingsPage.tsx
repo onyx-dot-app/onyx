@@ -1336,31 +1336,23 @@ function AccountsAccessSettings() {
   const canCreateTokens = useCloudSubscription();
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = true;
-
   // Fetch PATs with SWR
   const {
     data: pats = [],
     mutate,
     error,
     isLoading,
-  } = useSWR<PAT[]>(
-    showTokensSection ? SWR_KEYS.userPats : null,
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: true,
-      dedupingInterval: 2000,
-      fallbackData: [],
-    }
-  );
+  } = useSWR<PAT[]>(SWR_KEYS.userPats, errorHandlingFetcher, {
+    revalidateOnFocus: true,
+    dedupingInterval: 2000,
+    fallbackData: [],
+  });
 
   const { data: scopeOptions = [], error: scopeOptionsError } = useSWR<
     PatScopeOption[]
-  >(
-    showTokensSection && canCreateTokens ? SWR_KEYS.userPatScopes : null,
-    errorHandlingFetcher,
-    { fallbackData: [] }
-  );
+  >(canCreateTokens ? SWR_KEYS.userPatScopes : null, errorHandlingFetcher, {
+    fallbackData: [],
+  });
 
   const scopeLabels = useMemo(
     () =>
@@ -1683,131 +1675,129 @@ function AccountsAccessSettings() {
           </Card>
         </Section>
 
-        {showTokensSection && (
-          <Section gap={0.75}>
-            <Content
-              title="Access Tokens"
-              sizePreset="main-content"
-              variant="section"
-              width="full"
-            />
-            {canCreateTokens ? (
-              <Card padding={0.25}>
-                <Section gap={0}>
-                  <Section flexDirection="row" padding={0.25} gap={0.5}>
-                    {pats.length === 0 ? (
-                      <Section
-                        padding={0.5}
-                        alignItems="start"
-                        data-testid="access-token-list-status"
-                      >
-                        <Text font="secondary-body" color="text-03">
-                          {isLoading
-                            ? "Loading tokens..."
-                            : "No access tokens created."}
-                        </Text>
-                      </Section>
-                    ) : (
-                      <InputTypeIn
-                        placeholder="Search..."
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        searchIcon
-                        variant="internal"
-                      />
-                    )}
-                    <div className="shrink-0">
-                      <Button
-                        rightIcon={SvgPlusCircle}
-                        prominence="internal"
-                        interaction={showCreateModal ? "active" : "rest"}
-                        onClick={() => setShowCreateModal(true)}
-                      >
-                        New Access Token
-                      </Button>
-                    </div>
-                  </Section>
+        <Section gap={0.75}>
+          <Content
+            title="Access Tokens"
+            sizePreset="main-content"
+            variant="section"
+            width="full"
+          />
+          {canCreateTokens ? (
+            <Card padding={0.25}>
+              <Section gap={0}>
+                <Section flexDirection="row" padding={0.25} gap={0.5}>
+                  {pats.length === 0 ? (
+                    <Section
+                      padding={0.5}
+                      alignItems="start"
+                      data-testid="access-token-list-status"
+                    >
+                      <Text font="secondary-body" color="text-03">
+                        {isLoading
+                          ? "Loading tokens..."
+                          : "No access tokens created."}
+                      </Text>
+                    </Section>
+                  ) : (
+                    <InputTypeIn
+                      placeholder="Search..."
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      searchIcon
+                      variant="internal"
+                    />
+                  )}
+                  <div className="shrink-0">
+                    <Button
+                      rightIcon={SvgPlusCircle}
+                      prominence="internal"
+                      interaction={showCreateModal ? "active" : "rest"}
+                      onClick={() => setShowCreateModal(true)}
+                    >
+                      New Access Token
+                    </Button>
+                  </div>
+                </Section>
 
-                  <Section gap={0.25}>
-                    {filteredPats.map((pat) => {
-                      const now = new Date();
-                      const createdDate = new Date(pat.created_at);
-                      const daysSinceCreation = Math.floor(
-                        (now.getTime() - createdDate.getTime()) /
+                <Section gap={0.25}>
+                  {filteredPats.map((pat) => {
+                    const now = new Date();
+                    const createdDate = new Date(pat.created_at);
+                    const daysSinceCreation = Math.floor(
+                      (now.getTime() - createdDate.getTime()) /
+                        (1000 * 60 * 60 * 24)
+                    );
+
+                    let expiryText = "Never expires";
+                    if (pat.expires_at) {
+                      const expiresDate = new Date(pat.expires_at);
+                      const daysUntilExpiry = Math.ceil(
+                        (expiresDate.getTime() - now.getTime()) /
                           (1000 * 60 * 60 * 24)
                       );
+                      expiryText = `Expires in ${daysUntilExpiry} day${
+                        daysUntilExpiry === 1 ? "" : "s"
+                      }`;
+                    }
 
-                      let expiryText = "Never expires";
-                      if (pat.expires_at) {
-                        const expiresDate = new Date(pat.expires_at);
-                        const daysUntilExpiry = Math.ceil(
-                          (expiresDate.getTime() - now.getTime()) /
-                            (1000 * 60 * 60 * 24)
-                        );
-                        expiryText = `Expires in ${daysUntilExpiry} day${
-                          daysUntilExpiry === 1 ? "" : "s"
-                        }`;
-                      }
+                    const scopeText =
+                      pat.scopes === null
+                        ? "Full access"
+                        : pat.scopes
+                            .map((scope) => scopeLabels.get(scope) ?? scope)
+                            .join(", ");
 
-                      const scopeText =
-                        pat.scopes === null
-                          ? "Full access"
-                          : pat.scopes
-                              .map((scope) => scopeLabels.get(scope) ?? scope)
-                              .join(", ");
+                    const createdText =
+                      daysSinceCreation === 0
+                        ? "Created today"
+                        : `Created ${daysSinceCreation} day${
+                            daysSinceCreation === 1 ? "" : "s"
+                          } ago`;
 
-                      const createdText =
-                        daysSinceCreation === 0
-                          ? "Created today"
-                          : `Created ${daysSinceCreation} day${
-                              daysSinceCreation === 1 ? "" : "s"
-                            } ago`;
+                    const middleText = `${createdText} - ${expiryText} - ${scopeText}`;
 
-                      const middleText = `${createdText} - ${expiryText} - ${scopeText}`;
-
-                      return (
-                        <Interactive.Container
-                          key={pat.id}
-                          size="fit"
-                          width="full"
-                        >
-                          <div className="w-full bg-background-tint-01">
-                            <AttachmentItemLayout
-                              icon={SvgKey}
-                              title={pat.name}
-                              description={pat.token_display}
-                              middleText={middleText}
-                              rightChildren={
-                                <Button
-                                  icon={SvgTrash}
-                                  onClick={() => setTokenToDelete(pat)}
-                                  prominence="tertiary"
-                                  size="sm"
-                                  aria-label={`Delete token ${pat.name}`}
-                                />
-                              }
-                            />
-                          </div>
-                        </Interactive.Container>
-                      );
-                    })}
-                  </Section>
+                    return (
+                      <Interactive.Container
+                        key={pat.id}
+                        size="fit"
+                        width="full"
+                      >
+                        <div className="w-full bg-background-tint-01">
+                          <AttachmentItemLayout
+                            icon={SvgKey}
+                            title={pat.name}
+                            description={pat.token_display}
+                            middleText={middleText}
+                            rightChildren={
+                              <Button
+                                icon={SvgTrash}
+                                onClick={() => setTokenToDelete(pat)}
+                                prominence="tertiary"
+                                size="sm"
+                                aria-label={`Delete token ${pat.name}`}
+                              />
+                            }
+                          />
+                        </div>
+                      </Interactive.Container>
+                    );
+                  })}
                 </Section>
-              </Card>
-            ) : (
-              <Card>
-                <Section flexDirection="row" justifyContent="between">
-                  <Text font="secondary-body" color="text-03">
-                    Access tokens require an active paid subscription.
-                  </Text>
-                  <Button prominence="secondary" href="/admin/billing">
-                    Upgrade Plan
-                  </Button>
-                </Section>
-              </Card>
-            )}
-          </Section>
-        )}
+              </Section>
+            </Card>
+          ) : (
+            <Card>
+              <Section flexDirection="row" justifyContent="between">
+                <Text font="secondary-body" color="text-03">
+                  Access tokens require an active paid subscription.
+                </Text>
+                <Button prominence="secondary" href="/admin/billing">
+                  Upgrade Plan
+                </Button>
+              </Section>
+            </Card>
+          )}
+        </Section>
       </Section>
     </>
   );
