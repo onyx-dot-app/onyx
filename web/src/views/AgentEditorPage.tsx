@@ -51,6 +51,7 @@ import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgActions,
+  SvgBlocks,
   SvgExpand,
   SvgEye,
   SvgEyeOff,
@@ -79,8 +80,9 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
-import { InputTypeIn } from "@opal/components";
+import { InputTypeIn, Switch } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
+import useUserSkills from "@/hooks/useUserSkills";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { isDateInFuture } from "@/lib/dateUtils";
@@ -438,6 +440,125 @@ function MCPServerCard({
   );
 }
 
+/**
+ * Lets the user attach their visible skills to the agent. Attachment state
+ * lives in the Formik `skill_ids` string array. Skills are created/managed on
+ * the Skills page; this selector only attaches existing ones.
+ */
+function SkillsSelector() {
+  const { values, setFieldValue } = useFormikContext<{ skill_ids: string[] }>();
+  const { data, isLoading, error } = useUserSkills();
+
+  // Only custom skills are attachable; built-ins are always-on and aren't
+  // persisted on the persona.
+  const skills = data?.customs ?? [];
+  const {
+    query,
+    setQuery,
+    filtered: filteredSkills,
+  } = useFilter(skills, (skill) => `${skill.name} ${skill.description}`);
+
+  const attached = new Set(values.skill_ids);
+
+  function toggleSkill(skillId: string, checked: boolean) {
+    const next = new Set(values.skill_ids);
+    if (checked) next.add(skillId);
+    else next.delete(skillId);
+    setFieldValue("skill_ids", Array.from(next));
+  }
+
+  return (
+    <Card border="solid" rounding="lg" padding="sm">
+      <CardLayout.Header
+        bottomChildren={
+          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+            <InputTypeIn
+              placeholder="Search skills..."
+              variant="internal"
+              searchIcon
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </GeneralLayouts.Section>
+        }
+      >
+        <div className="p-2">
+          <ContentAction
+            icon={SvgBlocks}
+            title="Skills"
+            description="Attach your skills so this agent reaches for them in chat."
+            sizePreset="main-ui"
+            variant="section"
+            padding="fit"
+            rightChildren={
+              <EnabledCount
+                name="skill"
+                enabledCount={attached.size}
+                totalCount={skills.length}
+              />
+            }
+          />
+        </div>
+      </CardLayout.Header>
+
+      <GeneralLayouts.Section gap={0.5} padding={0.5}>
+        {isLoading && (
+          <GeneralLayouts.Section padding={1}>
+            <SvgSimpleLoader />
+          </GeneralLayouts.Section>
+        )}
+
+        {!isLoading && error && (
+          <Text mainUiBody text03 className="p-2">
+            Couldn&apos;t load your skills. Refresh to try again.
+          </Text>
+        )}
+
+        {!isLoading && !error && skills.length === 0 && (
+          <Text mainUiBody text03 className="p-2">
+            You have no skills yet. Create one on the Skills page to attach it
+            here.
+          </Text>
+        )}
+
+        {!isLoading &&
+          !error &&
+          skills.length > 0 &&
+          filteredSkills.length === 0 && (
+            <Text mainUiBody text03 className="p-2">
+              No skills match your search.
+            </Text>
+          )}
+
+        {!isLoading &&
+          !error &&
+          filteredSkills.map((skill) => (
+            <Card key={skill.id} border="solid" rounding="md" padding="sm">
+              <ContentAction
+                icon={SvgBlocks}
+                title={skill.name}
+                description={skill.description}
+                sizePreset="main-ui"
+                variant="section"
+                padding="fit"
+                rightChildren={
+                  <Switch
+                    checked={attached.has(skill.id)}
+                    onCheckedChange={(checked) =>
+                      toggleSkill(skill.id, checked)
+                    }
+                    aria-label={`Attach skill ${skill.name}`}
+                    data-testid={`SkillsSelector/toggle-${skill.slug}`}
+                  />
+                }
+              />
+            </Card>
+          ))}
+      </GeneralLayouts.Section>
+    </Card>
+  );
+}
+
 function AgentStarterMessages() {
   const max_starters = STARTER_MESSAGES_EXAMPLES.length;
 
@@ -700,6 +821,7 @@ export default function AgentEditorPage({
     user_file_ids: existingAgent?.user_file_ids ?? [],
     // Selected sources for the new knowledge UI - derived from document sets
     selected_sources: [] as ValidSources[],
+    skill_ids: existingAgent?.skill_ids ?? [],
 
     // Advanced
     default_model_configuration_id:
@@ -940,6 +1062,7 @@ export default function AgentEditorPage({
           (values as any).default_model_configuration_id ?? null,
         starter_messages: finalAgentStarterMessages,
         tool_ids: toolIds,
+        skill_ids: values.skill_ids,
         // uploaded_image: null, // Already uploaded separately
         remove_image: values.remove_image ?? false,
         uploaded_image_id: values.uploaded_image_id,
@@ -1698,6 +1821,8 @@ export default function AgentEditorPage({
                                   ))}
                                 </GeneralLayouts.Section>
                               )}
+
+                              <SkillsSelector />
                             </>
                           </GeneralLayouts.Section>
                         </SimpleCollapsible.Content>
