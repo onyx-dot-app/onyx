@@ -266,12 +266,15 @@ class ModelConfigurationView(BaseModel):
                         model_configuration_model.name, provider_name
                     )
                 ),
-                # Prefer the stored REASONING flow; fall back to a substring
-                # heuristic on model name/display name for legacy rows that
-                # were saved before the flow existed.
+                # Prefer the stored REASONING flow; fall back to the LiteLLM
+                # cost map, then a substring heuristic on model name/display
+                # name for models LiteLLM doesn't know.
                 supports_reasoning=(
                     LLMModelFlowType.REASONING
                     in model_configuration_model.llm_model_flow_types
+                    or model_is_reasoning_model(
+                        model_configuration_model.name, provider_name
+                    )
                     or is_reasoning_model(
                         model_configuration_model.name,
                         model_configuration_model.display_name or "",
