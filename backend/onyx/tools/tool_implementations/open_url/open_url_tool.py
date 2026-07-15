@@ -811,7 +811,6 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         return IndexFilters(
             source_type=None,
             document_set=None,
-            time_cutoff=None,
             tags=None,
             access_control_list=access_control_list,
             tenant_id=get_current_tenant_id() if MULTI_TENANT else None,

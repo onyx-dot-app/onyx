@@ -1,11 +1,13 @@
 from collections.abc import Sequence
 from datetime import datetime
+from datetime import timezone
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import SearchSettings
@@ -64,12 +66,45 @@ class Tag(BaseModel):
     tag_value: str
 
 
+class TimeRange(BaseModel):
+    """An inclusive [start, end] window; either bound may be None (open).
+    Naive (timezone-less) bounds are treated as UTC."""
+
+    start: datetime | None = None
+    end: datetime | None = None
+
+    @field_validator("start", "end")
+    @classmethod
+    def _assume_utc_when_naive(cls, value: datetime | None) -> datetime | None:
+        if value is None or value.tzinfo is not None:
+            return value
+        return value.replace(tzinfo=timezone.utc)
+
+    def has_bounds(self) -> bool:
+        return self.start is not None or self.end is not None
+
+
 class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None
     document_set: list[str] | None = None
-    time_cutoff: datetime | None = None
-    time_cutoff_upper: datetime | None = None
+    created_at_range: TimeRange | None = None
+    updated_at_range: TimeRange | None = None
     tags: list[Tag] | None = None
+
+    # Deprecated wire-compat alias for updated_at_range.start. Folded into
+    # updated_at_range on validation and cleared; internal code must never read
+    # it. Excluded from serialization so it doesn't propagate further.
+    time_cutoff: datetime | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def _fold_legacy_time_cutoff(self) -> "BaseFilters":
+        if self.time_cutoff is None:
+            return self
+        # An explicitly provided updated_at_range wins over the legacy alias.
+        if self.updated_at_range is None:
+            self.updated_at_range = TimeRange(start=self.time_cutoff)
+        self.time_cutoff = None
+        return self
 
 
 class UserFileFilters(BaseModel):
