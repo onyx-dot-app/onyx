@@ -1,4 +1,5 @@
-"""Tests for the shared Anthropic model-version parser and its gates.
+"""Tests for ``model_capabilities`` — currently the Anthropic model-version
+parser and its adaptive-thinking gates.
 
 The parser is the single source of truth for both the chat path
 (``multi_llm.py``: adaptive thinking required + sampling params rejected,
