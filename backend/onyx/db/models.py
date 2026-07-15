@@ -5298,6 +5298,10 @@ class MCPServer(Base):
         nullable=False,
         server_default="CREATED",
     )
+    # Whether the Craft agent may use this server (admin-controlled)
+    available_in_craft: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     # Admin connection config - used for the config page
     # and (when applicable) admin-managed auth
     # and (when applicable) per-user auth
