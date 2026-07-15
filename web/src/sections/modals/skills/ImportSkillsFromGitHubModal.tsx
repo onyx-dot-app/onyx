@@ -96,6 +96,9 @@ export default function ImportSkillsFromGitHubModal({
       onCreated(created);
       onClose();
     } catch (caught) {
+      if (!(caught instanceof Error)) {
+        console.error("Failed to import skills from GitHub:", caught);
+      }
       setError(
         caught instanceof Error
           ? caught

@@ -343,6 +343,23 @@ def test_reports_invalid_skill_with_its_repository_path(
         fetch_github_skill_bundles("owner/repo")
 
 
+def test_reports_truncated_archive_as_a_github_download_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = _repository_archive(
+        {
+            "skill/SKILL.md": _skill_md("Truncated", "Truncated archive"),
+            "skill/data.bin": b"x" * 100_000,
+        }
+    )
+    _mock_archive(monkeypatch, archive[:-32])
+
+    with pytest.raises(OnyxError, match="unreadable repository download") as exc_info:
+        fetch_github_skill_bundles("owner/repo")
+
+    assert exc_info.value.error_code == OnyxErrorCode.BAD_GATEWAY
+
+
 def test_private_repo_token_is_not_forwarded_to_archive_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

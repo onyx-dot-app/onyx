@@ -344,7 +344,7 @@ def fetch_github_skill_bundles(
         archive = tarfile.open(
             fileobj=io.BytesIO(b"".join(archive_chunks)), mode="r:gz"
         )
-    except tarfile.TarError as exc:
+    except (tarfile.TarError, EOFError, OSError) as exc:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
             "GitHub returned an unreadable repository download. Try again.",
@@ -352,55 +352,61 @@ def fetch_github_skill_bundles(
 
     files: dict[str, bytes] = {}
     total_size = 0
-    with archive:
-        for member_index, member in enumerate(archive, start=1):
-            if member_index > _ARCHIVE_MAX_MEMBERS:
-                raise OnyxError(
-                    OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                    f"Repository archive contains more than {_ARCHIVE_MAX_MEMBERS:,} entries. Use a smaller repository and try again.",
-                )
-            member_path = member.name.rstrip("/") if member.isdir() else member.name
-            path_parts = member_path.split("/")
-            if (
-                not member_path
-                or member_path.startswith("/")
-                or "\\" in member_path
-                or any(part in {"", ".", ".."} for part in path_parts)
-            ):
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    f"Repository contains unsupported path '{member.name}'. Remove or rename it and try again.",
-                )
-            if member.isdir():
-                continue
-            if not member.isfile():
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    f"Repository contains a symbolic link at '{member.name}'. Replace it with a regular file and try again.",
-                )
-            if member.size > DEFAULT_PER_FILE_MAX_BYTES:
-                raise OnyxError(
-                    OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                    f"Repository file '{member.name}' exceeds the {DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB limit. Reduce or remove the file and try again.",
-                )
-            total_size += member.size
-            if total_size > DEFAULT_TOTAL_MAX_BYTES:
-                raise OnyxError(
-                    OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                    f"Repository exceeds the {DEFAULT_TOTAL_MAX_BYTES // (1024 * 1024)} MiB uncompressed limit. Remove large files or move the skills to a smaller repository.",
-                )
-            extracted = archive.extractfile(member)
-            if extracted is None:
-                raise OnyxError(
-                    OnyxErrorCode.BAD_GATEWAY,
-                    f"Could not read repository file '{member.name}'. Try again.",
-                )
-            if member.name in files:
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    f"Repository contains duplicate path '{member.name}'. Remove the duplicate and try again.",
-                )
-            files[member.name] = extracted.read(DEFAULT_PER_FILE_MAX_BYTES + 1)
+    try:
+        with archive:
+            for member_index, member in enumerate(archive, start=1):
+                if member_index > _ARCHIVE_MAX_MEMBERS:
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        f"Repository archive contains more than {_ARCHIVE_MAX_MEMBERS:,} entries. Use a smaller repository and try again.",
+                    )
+                member_path = member.name.rstrip("/") if member.isdir() else member.name
+                path_parts = member_path.split("/")
+                if (
+                    not member_path
+                    or member_path.startswith("/")
+                    or "\\" in member_path
+                    or any(part in {"", ".", ".."} for part in path_parts)
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"Repository contains unsupported path '{member.name}'. Remove or rename it and try again.",
+                    )
+                if member.isdir():
+                    continue
+                if not member.isfile():
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"Repository contains a symbolic link at '{member.name}'. Replace it with a regular file and try again.",
+                    )
+                if member.size > DEFAULT_PER_FILE_MAX_BYTES:
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        f"Repository file '{member.name}' exceeds the {DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB limit. Reduce or remove the file and try again.",
+                    )
+                total_size += member.size
+                if total_size > DEFAULT_TOTAL_MAX_BYTES:
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        f"Repository exceeds the {DEFAULT_TOTAL_MAX_BYTES // (1024 * 1024)} MiB uncompressed limit. Remove large files or move the skills to a smaller repository.",
+                    )
+                extracted = archive.extractfile(member)
+                if extracted is None:
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_GATEWAY,
+                        f"Could not read repository file '{member.name}'. Try again.",
+                    )
+                if member.name in files:
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"Repository contains duplicate path '{member.name}'. Remove the duplicate and try again.",
+                    )
+                files[member.name] = extracted.read(DEFAULT_PER_FILE_MAX_BYTES + 1)
+    except (tarfile.TarError, EOFError, OSError) as exc:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "GitHub returned an unreadable repository download. Try again.",
+        ) from exc
 
     root_directories = {path.split("/", maxsplit=1)[0] for path in files}
     if len(root_directories) != 1:
