@@ -1,9 +1,5 @@
 export type ExtensionContext = "new_tab" | "side_panel" | null;
 
-// Returns the origin of the Chrome extension panel (our parent frame).
-// window.location.ancestorOrigins is Chrome-specific and only populated
-// when the page is loaded inside an iframe (e.g. the Chrome extension panel).
-// Falls back to "*" in regular browser contexts (no parent frame).
 export function getPanelOrigin(): string {
   return window.location.ancestorOrigins?.[0] ?? "*";
 }

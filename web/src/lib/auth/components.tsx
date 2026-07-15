@@ -185,14 +185,34 @@ export function SignInButton({ authorizeUrl, authType }: SignInButtonProps) {
 }
 
 // ---------------------------------------------------------------------------
-// PasswordRequirements
+// PasswordCondition
 // ---------------------------------------------------------------------------
 
-interface PasswordRequirementsProps {
+interface PasswordConditionProps {
+  label: string;
+  met: boolean;
+}
+
+export function PasswordCondition({ label, met }: PasswordConditionProps) {
+  return (
+    <Content
+      sizePreset="secondary"
+      variant="body"
+      icon={met ? SvgCheckCircle : SvgXCircle}
+      color={met ? "success" : "muted"}
+      title={label}
+    />
+  );
+}
+
+// PasswordConditions
+// ---------------------------------------------------------------------------
+
+interface PasswordConditionsProps {
   password: string;
 }
 
-export function PasswordRequirements({ password }: PasswordRequirementsProps) {
+export function PasswordConditions({ password }: PasswordConditionsProps) {
   const { authTypeMetadata } = useUser();
 
   if (!authTypeMetadata) return null;
@@ -238,14 +258,7 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
   return (
     <div className="flex flex-col gap-1">
       {rules.map((rule) => (
-        <Content
-          key={rule.label}
-          sizePreset="secondary"
-          variant="body"
-          icon={rule.met ? SvgCheckCircle : SvgXCircle}
-          color={rule.met ? "success" : "muted"}
-          title={rule.label}
-        />
+        <PasswordCondition key={rule.label} label={rule.label} met={rule.met} />
       ))}
     </div>
   );
@@ -361,17 +374,15 @@ export function EmailPasswordForm({
         return;
       }
 
-      // On verification-required deployments the server blocks login until the
-      // email is confirmed, so we must NOT call basicLogin first — it would
-      // fail and leave the user stranded even though the account was created.
       if (shouldVerify) {
+        const loginCaptchaToken = await getCaptchaToken("login");
+        await basicLogin(email, values.password, loginCaptchaToken);
         try {
           await requestEmailVerification(email);
         } catch (e) {
-          // Best-effort: the account already exists, so redirect regardless.
           console.warn("requestEmailVerification failed:", e);
         }
-        window.location.href = "/auth/waiting-on-verification";
+        window.location.href = "/auth/send-email-verification";
         return;
       }
     }
@@ -424,6 +435,7 @@ export function EmailPasswordForm({
                   placeholder="email@yourcompany.com"
                   data-testid="email"
                   autoComplete="username"
+                  variant={defaultEmail ? "disabled" : undefined}
                 />
               </InputVertical>
 
@@ -454,9 +466,7 @@ export function EmailPasswordForm({
                     }
                   />
                 </InputVertical>
-                {isSignup && (
-                  <PasswordRequirements password={values.password} />
-                )}
+                {isSignup && <PasswordConditions password={values.password} />}
               </div>
             </AuthLayouts.Fields>
 

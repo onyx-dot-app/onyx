@@ -11,13 +11,13 @@ import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
 import { getPanelOrigin } from "@/lib/extension/utils";
-import { sendSetDefaultNewTabMessage } from "@/lib/extension/svc";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
+import { sendSetDefaultNewTabMessage } from "@/lib/extension/svc";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import SidePanelHeader from "@/app/nrf/side-panel/SidePanelHeader";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
-import LoginPage from "@/app/auth/login/LoginPage";
+import { EmailPasswordForm } from "@/lib/auth/components";
 import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
@@ -635,11 +635,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
               {authTypeMetadata?.authType === AuthType.BASIC ? (
-                <LoginPage
-                  authUrl={null}
-                  authTypeMetadata={authTypeMetadata ?? null}
-                  nextUrl="/nrf"
-                />
+                <EmailPasswordForm label="submit" nextUrl="/nrf" />
               ) : (
                 <div className="flex flex-col items-center">
                   <Button

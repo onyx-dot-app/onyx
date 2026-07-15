@@ -1,4 +1,4 @@
-import { authErrorRedirect } from "@/app/auth/libSS";
+import { authErrorRedirect } from "@/lib/auth/svcSS";
 import { getDomain } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";

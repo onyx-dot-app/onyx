@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import type { Route } from "next";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
@@ -11,6 +12,8 @@ import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
 import { useCurrentUser } from "@/lib/users/hooks";
+import { getAuthRedirect, AuthPage } from "@/lib/auth/redirect";
+import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import { isAuthPath } from "@/lib/auth/paths";
 import { fetchAuthTypeMetadata } from "@/lib/auth/svc";
 
@@ -18,8 +21,23 @@ const REFRESH_INTERVAL = 600000;
 const MIN_REFRESH_GAP_MS = REFRESH_INTERVAL - 60000;
 const VISIBILITY_REFRESH_GAP_MS = 60000;
 
+const DEFAULT_AUTH_TYPE_METADATA: AuthTypeMetadata = {
+  authType: NEXT_PUBLIC_CLOUD_ENABLED ? AuthType.CLOUD : AuthType.BASIC,
+  autoRedirect: false,
+  requiresVerification: false,
+  anonymousUserEnabled: null,
+  passwordMinLength: 8,
+  passwordMaxLength: 64,
+  passwordRequireUppercase: false,
+  passwordRequireLowercase: false,
+  passwordRequireDigit: false,
+  passwordRequireSpecialChar: false,
+  hasUsers: false,
+  oauthEnabled: false,
+};
+
 export function useAuthTypeMetadata(): {
-  authTypeMetadata: AuthTypeMetadata | undefined;
+  authTypeMetadata: AuthTypeMetadata;
   isLoading: boolean;
   error: Error | undefined;
 } {
@@ -34,7 +52,40 @@ export function useAuthTypeMetadata(): {
     }
   );
 
-  return { authTypeMetadata: data, isLoading, error };
+  return {
+    authTypeMetadata: data ?? DEFAULT_AUTH_TYPE_METADATA,
+    isLoading,
+    error,
+  };
+}
+
+export function useAuthRedirect(currentPage: AuthPage): boolean {
+  const { user, isLoading } = useCurrentUser();
+  const { authTypeMetadata, isLoading: isAuthTypeLoading } =
+    useAuthTypeMetadata();
+  const signupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
+  const router = useRouter();
+  const isAuthStateLoading = isLoading || isAuthTypeLoading;
+
+  useEffect(() => {
+    if (isAuthStateLoading) return;
+    const destination = getAuthRedirect(
+      user,
+      authTypeMetadata,
+      currentPage,
+      signupDisabled
+    );
+    if (destination) router.replace(destination as Route);
+  }, [
+    isAuthStateLoading,
+    user,
+    authTypeMetadata,
+    currentPage,
+    signupDisabled,
+    router,
+  ]);
+
+  return isAuthStateLoading;
 }
 
 function computeSecondsUntilExpiration(user: User): number | null {

@@ -16,22 +16,32 @@ export function useCustomFooterContent(): string {
 }
 
 export function useAppDocumentTitle(): void {
-  const appFocus = useAppFocus();
   const { appName } = useSettings();
+  const appFocus = useAppFocus();
   const { currentChatSession } = useChatSessions();
+
   useLayoutEffect(() => {
-    const appendChatNameToDocumentTitle =
+    const appendChatName =
       (appFocus.isChat() || appFocus.isSharedChat()) && currentChatSession;
-    document.title = appendChatNameToDocumentTitle
+    document.title = appendChatName
       ? `${currentChatSession.name} — ${appName}`
       : appName;
   }, [currentChatSession?.name, appName, appFocus]);
 }
 
 export function useAdminDocumentTitle(): void {
-  const pathname = usePathname();
   const { appName } = useSettings();
+  const pathname = usePathname();
+
   useLayoutEffect(() => {
     document.title = `Admin — ${appName}`;
   }, [pathname, appName]);
+}
+
+export function useAuthDocumentTitle(): void {
+  const { appName } = useSettings();
+
+  useLayoutEffect(() => {
+    document.title = appName;
+  }, [appName]);
 }

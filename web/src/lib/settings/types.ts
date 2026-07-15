@@ -172,6 +172,7 @@ export interface CombinedSettings {
 export function toSettings({
   enterprise: _enterprise,
   appName: _appName,
+  logoUrl: _logoUrl,
   vectorDbEnabled: _vectorDbEnabled,
   isLoading: _isLoading,
   error: _error,

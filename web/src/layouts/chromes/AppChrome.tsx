@@ -555,7 +555,6 @@ interface AppChromeProps {
 
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
-
   const appFocus = useAppFocus();
   useAppDocumentTitle();
 
