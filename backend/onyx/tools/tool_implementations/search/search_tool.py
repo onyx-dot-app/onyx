@@ -142,7 +142,7 @@ class QueryExpansionAndScope(BaseModel):
     semantic_query: str | None
     keyword_queries: list[str]
     plan_scope: list[DocumentSource] | None
-    time_filter: TimeFilter = (None, None)
+    time_filter: TimeFilter | None = None
 
 
 def _build_scope_note(
@@ -307,7 +307,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self._search_cycles: list[SearchCycle] = []
         self._cached_expansion: tuple[str | None, list[str]] | None = None
         self._scope_decision_settled = False
-        self._time_filter: TimeFilter = (None, None)
+        self._time_filter: TimeFilter | None = None
         self._time_filter_computed = False
 
         self._id = tool_id
@@ -881,17 +881,26 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             if DocumentSource.SLACK not in resolved_scope:
                 slack_access_token = None
 
-        # The pipeline composes the lower bound with any persona time floor.
-        time_start, time_end = expansion.time_filter
-        if time_start is not None or time_end is not None:
-            effective_filters = (effective_filters or BaseFilters()).model_copy(
-                update={"updated_at_range": TimeRange(start=time_start, end=time_end)}
-            )
-            logger.info(
-                "Internal search - time window (updated_at): %s to %s",
-                time_start.isoformat() if time_start else "any",
-                time_end.isoformat() if time_end else "any",
-            )
+        # Apply the turn's cached time filter as field-aware ranges. Any persona
+        # time floor composes with these downstream in the search pipeline.
+        time_filter = expansion.time_filter
+        if time_filter is not None:
+            created_range, updated_range = time_filter.to_filter_ranges()
+            range_updates: dict[str, TimeRange] = {}
+            if created_range is not None:
+                range_updates["created_at_range"] = created_range
+            if updated_range is not None:
+                range_updates["updated_at_range"] = updated_range
+            if range_updates:
+                effective_filters = (effective_filters or BaseFilters()).model_copy(
+                    update=range_updates
+                )
+                logger.info(
+                    "Internal search - time filter: %s in [%s, %s]",
+                    time_filter.field.value,
+                    time_filter.start.isoformat() if time_filter.start else "any",
+                    time_filter.end.isoformat() if time_filter.end else "any",
+                )
 
         # Prepare queries with their weights and hybrid_alpha settings
         # Group 1: Keyword queries (use hybrid_alpha=0.2)

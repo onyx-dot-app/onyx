@@ -100,43 +100,51 @@ The user's query is:
 CRITICAL: output only the comma separated list of sources.
 """.strip()
 
-# Use the following for easy viewing of prompts
-if __name__ == "__main__":
-    print(TIME_FILTER_PROMPT)
-    print("------------------")
-    print(SOURCE_SCOPE_DECISION_PROMPT)
-
-
+# Used in time_filter.py: detect the time an internal search should be restricted
+# to and turn it into a "<field> (start, end)" decision — the date field (created
+# vs updated) plus an explicit (start, end) pair of ISO dates. The model is given
+# today's date and does the relative-date math itself, so ranges and named times
+# fall out naturally.
+# Filled with: {current_day_time_str}, {conversation_history}, {last_user_query}.
 TIME_SCOPE_DECISION_PROMPT = """
 You scope an internal search to a time filter, from the user's conversation. When the \
-conversation EXPLICITLY refers to a time the documents should fall within, set a filter on \
-each document's last-updated date; when it refers to none, return (None, None) (search \
-across all time). You scope only by time.
+conversation EXPLICITLY refers to a time the documents should fall within, decide WHICH date \
+the time is about ("created" vs "updated") and set the (start, end) bounds; when it refers to \
+none, return "updated (None, None)" (search across all time). You scope only by time.
 
 ## Guidance
 
 Set a time filter when a time is EXPLICITLY referenced — in the latest message, or in an \
-earlier turn it continues. NEVER infer a time from the topic alone. A date that names the \
-subject or title of the document sought ("the 2020 GDPR docs", "the FY21 plan") is NOT a \
-filter — it says WHAT the document is, not WHEN it was updated; let content search match it. \
-If no time is referenced, return (None, None).
+earlier turn it continues. NEVER infer a time from the topic alone. Only filter on a time \
+about the document itself — when it was created or updated. If no such time is referenced, \
+return "updated (None, None)".
 
-When a time IS referenced, the phrasing decides the bounds:
+A date that instead names the document's SUBJECT is NOT a filter — its title ("the 2020 GDPR \
+docs"), or when a real-world event it describes occurred ("the breach that occurred on \
+August 9"; a write-up is often authored before or after the event, and any clock time like \
+"9am–5pm" describes the event, not the document) — let content search match it. A date about \
+the documents themselves still IS a filter ("notes from April 4" filters to that day).
+
+When a time IS referenced, first decide WHICH date it is about: use "created" when the time \
+is about when the document was created ("created", "sent", "posted", "published", …); \
+otherwise use "updated" — for a change or activity ("edited", "changed", "closed", …) and \
+for anything not clearly about creation. When unsure, use "updated".
+
+Then the phrasing decides the bounds:
 
 - LOWER BOUND ONLY — an open-ended time toward now ("since March", "recently", "in the last \
-2 weeks"). Set start; leave end None — it has no upper bound, so do NOT set end to today.
+2 weeks"). Set start; leave end None — do NOT set end to today.
 
-- UPPER BOUND ONLY — an open-ended time toward the past ("before 2023", "older than \
-January", "more than 20 weeks ago"). Set end; leave start None.
+- UPPER BOUND ONLY — an open-ended time toward the past ("before 2023", "more than 20 weeks \
+ago"). Set end; leave start None.
 
-- BOTH BOUNDS — a completed, named calendar period ("last quarter", "last January", "Q1 \
-2025", "in 2022", "between March and June", a single day like "March 25 2024") or a numeric \
-range ("10 to 15 weeks ago"). A named period is NOT a rolling duration — "last quarter" is \
-the previous calendar quarter (both bounds), not the last 3 months. Set start to its first \
-day / larger offset, end to its last day / smaller offset.
+- BOTH BOUNDS — a completed, named calendar period ("last quarter", "in 2022", "between \
+March and June", a single day) or a numeric range ("10 to 15 weeks ago"). A named period is \
+NOT a rolling duration — "last quarter" is the previous calendar quarter, not the last 3 \
+months.
 
-- NO BOUND — a vague preference for fresh results with no actual time ("the latest", "most \
-recent"). Return (None, None).
+- NO BOUND — a vague freshness preference with no actual time ("the latest", "most \
+recent"). Return "updated (None, None)".
 
 ## Conversation history
 
@@ -144,46 +152,54 @@ recent"). Return (None, None).
 
 ## Current date
 
-Today is {current_day_time_str}. Use a token "-P<N><U>" — a signed ISO-8601 duration where \
-the leading minus means "before today" and U is D=days, W=weeks, M=months, Y=years (e.g. \
--P15W, -P5M, -P30D) — ONLY for a numeric offset — a number the message states followed by a \
-time unit ("15 weeks ago", "the last 5 months", "30 to 45 days ago"); then never compute the \
-date, the system resolves the token against today. A month or year NAME ("March 2024", "Q1 \
-2025", "2022") is NOT a numeric offset — resolve it to an absolute YYYY-MM-DD date yourself, \
-never a token.
+Today is {current_day_time_str}. Use a token "-P<N><U>" (U: D=days, W=weeks, M=months, \
+Y=years; e.g. -P15W) ONLY for a numeric offset — a number the message states followed by a \
+time unit ("15 weeks ago", "the last 5 months"); never compute the date, the system \
+resolves the token against today. A vague quantity of units ("a few weeks", "several \
+months") is still a numeric offset — estimate the number (e.g. "a few weeks" → -P3W). A \
+month or year NAME ("March 2024", "2022") is NOT a numeric offset — resolve it to an \
+absolute YYYY-MM-DD date yourself, never a token.
 
 ## Guidance reminder
 
-LOWER / UPPER BOUND: an open-ended time sets one bound and leaves the other None — one \
-toward now ("the last 2 weeks") leaves end None, not today.
-BOTH BOUNDS: a named calendar period ("last quarter", "in 2022") or a numeric range ("10 to \
-15 weeks ago") sets both bounds — a named period is never a rolling duration.
-A month or year NAME is an absolute date, never a token. NEVER filter on a date that names \
-the document's subject/title, and return (None, None) when no time is referenced.
+FIELD: "created" only when the phrasing is clearly about creation; otherwise "updated" (the \
+default).
+BOUNDS: an open-ended time sets one bound and leaves the other None ("the last 2 weeks" \
+leaves end None, not today); a named calendar period or numeric range sets both.
+NEVER filter on a date that names the document's subject; return "updated (None, None)" \
+when no time about the document is referenced.
 
 ## Output format
 
-Output ONLY the time filter as a pair: (start, end). Each side is a date "YYYY-MM-DD", a \
-token "-P<N><U>" (a signed ISO-8601 duration before today, e.g. -P15W), or None; bounds are \
-inclusive, and None means no bound on that side.
+Output ONLY the decision as "<field> (start, end)". <field> is "created" or "updated". Each \
+side of the pair is a date "YYYY-MM-DD", a token "-P<N><U>", or None; bounds are inclusive, \
+and None means no bound on that side.
 
 Examples:
-- "in the last 2 weeks" → (-P2W, None)
-- "10 to 15 weeks ago" → (-P15W, -P10W)
-- "more than 20 weeks ago" → (None, -P20W)
-- "in the last 5 months" → (-P5M, None)
-- "since March 2025" → (2025-03-01, None)
-- "before 2023" → (None, 2022-12-31)
-- "in January 2025" → (2025-01-01, 2025-01-31)
-- "the 2020 GDPR docs" → (None, None)
-- "the latest updates" → (None, None)
+- "in the last 2 weeks" → updated (-P2W, None)
+- "10 to 15 weeks ago" → updated (-P15W, -P10W)
+- "more than 20 weeks ago" → updated (None, -P20W)
+- "in January 2025" → updated (2025-01-01, 2025-01-31)
+- "created in 2022" → created (2022-01-01, 2022-12-31)
+- "posted before 2023" → created (None, 2022-12-31)
+- "the outage that occurred on March 3" → updated (None, None)
+- "the latest updates" → updated (None, None)
 
-Do not include any formatting, explanations, or other text aside from the pair.
+Do not include any formatting, explanations, or other text aside from the decision.
 
 ## Query reminder
 
 The user's latest message is:
 {last_user_query}
 
-CRITICAL: output only the (start, end) pair.
+CRITICAL: output only "<field> (start, end)".
 """.strip()
+
+
+# Use the following for easy viewing of prompts
+if __name__ == "__main__":
+    print(TIME_FILTER_PROMPT)
+    print("------------------")
+    print(TIME_SCOPE_DECISION_PROMPT)
+    print("------------------")
+    print(SOURCE_SCOPE_DECISION_PROMPT)

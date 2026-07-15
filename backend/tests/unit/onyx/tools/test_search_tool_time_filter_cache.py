@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.secondary_llm_flows.time_filter import decide_time_filter
+from onyx.secondary_llm_flows.time_filter import DocumentTimeField
 from onyx.secondary_llm_flows.time_filter import TimeFilter
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
@@ -18,14 +19,17 @@ def _make_tool() -> SearchTool:
     tool.auto_detect_filters = True
     tool._scope_decision_settled = True  # skip the source-scope job
     tool._cached_expansion = None
-    tool._time_filter = (None, None)
+    tool._time_filter = None
     tool._time_filter_computed = False
     return tool
 
 
 def test_time_filter_runs_once_and_caches_for_the_turn() -> None:
     tool = _make_tool()
-    decided: TimeFilter = (datetime(2025, 1, 1, tzinfo=timezone.utc), None)
+    decided = TimeFilter(
+        field=DocumentTimeField.UPDATED_AT,
+        start=datetime(2025, 1, 1, tzinfo=timezone.utc),
+    )
 
     scheduled: list[list] = []
 
@@ -90,5 +94,5 @@ def test_time_filter_skipped_when_auto_detect_disabled() -> None:
     assert scheduled == [] or all(
         decide_time_filter not in funcs for funcs in scheduled
     )
-    assert result.time_filter == (None, None)
+    assert result.time_filter is None
     assert tool._time_filter_computed is False
