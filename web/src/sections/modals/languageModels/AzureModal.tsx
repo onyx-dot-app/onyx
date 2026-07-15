@@ -3,7 +3,7 @@
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
+import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -28,7 +28,6 @@ import {
   isValidAzureTargetUri,
   parseAzureTargetUri,
 } from "@/lib/azureTargetUri";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 interface AzureModalValues extends BaseLLMFormValues {

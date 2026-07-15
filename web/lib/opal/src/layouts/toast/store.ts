@@ -8,16 +8,20 @@ export type ToastLevel = "success" | "error" | "warning" | "info" | "default";
 
 export interface ToastOptions {
   message: string;
+  /** @default "info" */
   level?: ToastLevel;
   description?: string;
-  duration?: number; // ms – default 4000, Infinity = persistent
-  dismissible?: boolean; // default true (shows close button)
+  /** Milliseconds before auto-dismiss. Infinity keeps the toast persistent. @default 4000 */
+  duration?: number;
+  /** Shows the close button. @default true */
+  dismissible?: boolean;
 }
 
 export interface Toast extends ToastOptions {
   id: string;
   createdAt: number;
-  leaving?: boolean; // true while exit‑animation plays
+  /** True while the exit animation plays. */
+  leaving?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,7 +42,7 @@ const TOAST_CONSOLE_METHOD: Record<
 };
 
 // ---------------------------------------------------------------------------
-// Module‑level store (external to React)
+// Module-level store (external to React)
 // ---------------------------------------------------------------------------
 
 let toasts: Toast[] = [];
@@ -134,7 +138,7 @@ function getSnapshot(): Toast[] {
 }
 
 // ---------------------------------------------------------------------------
-// Imperative API (works anywhere – components, hooks, plain .ts files)
+// Imperative API (works anywhere: components, hooks, plain .ts files)
 // ---------------------------------------------------------------------------
 
 interface ToastFn {
@@ -158,12 +162,11 @@ interface ToastFn {
   dismiss: (id: string) => void;
   clearAll: () => void;
   /**
-   * Reset (or cancel) a toast's auto-dismiss timer. Pass `Infinity` to make the
-   * toast persistent. Used by ToastContainer when the user expands a truncated
-   * toast and needs more time to read it.
+   * Reset (or cancel) a toast's auto-dismiss timer. Pass `Infinity` to make
+   * the toast persistent.
    */
   setAutoDismiss: (id: string, duration: number) => void;
-  /** @internal – used by ToastContainer for exit animation */
+  /** @internal Flags the toast as leaving so the exit animation plays. Caller dismisses after the animation. */
   _markLeaving: (id: string) => void;
 }
 
@@ -187,17 +190,13 @@ export const toast: ToastFn = Object.assign(toastBase, {
 });
 
 // ---------------------------------------------------------------------------
-// React hook (convenience wrapper)
+// React hooks
 // ---------------------------------------------------------------------------
 
 export function useToast() {
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return { toast, dismiss: toast.dismiss, clearAll: toast.clearAll };
 }
-
-// ---------------------------------------------------------------------------
-// Query-param toast hook
-// ---------------------------------------------------------------------------
 
 interface ToastFromQueryMessages {
   [key: string]: {
@@ -213,17 +212,16 @@ interface ToastFromQueryMessages {
 export function useToastFromQuery(messages: ToastFromQueryMessages) {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
-    const messageValue = searchParams?.get("message");
+    const messageValue = searchParams.get("message");
 
     if (messageValue && messageValue in messages) {
       searchParams.delete("message");
-      const newSearch = searchParams.toString()
-        ? "?" + searchParams.toString()
-        : "";
+      const query = searchParams.toString();
+      const newSearch = query ? `?${query}` : "";
       window.history.replaceState(
         null,
         "",
-        window.location.pathname + newSearch
+        window.location.pathname + newSearch + window.location.hash
       );
       const spec = messages[messageValue];
       if (spec !== undefined) {
@@ -233,11 +231,13 @@ export function useToastFromQuery(messages: ToastFromQueryMessages) {
         });
       }
     }
+    // Fires once on mount by design, the query param is consumed and removed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }
 
 // ---------------------------------------------------------------------------
-// Store accessors (used by ToastContainer)
+// Store accessors
 // ---------------------------------------------------------------------------
 
 export const toastStore = {

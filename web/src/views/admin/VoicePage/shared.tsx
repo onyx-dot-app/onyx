@@ -12,11 +12,10 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { InputVertical } from "@opal/layouts";
+import { InputVertical, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { SvgArrowExchange, SvgUnplug, SvgSimpleLoader } from "@opal/icons";
 import { Button, Text } from "@opal/components";
-import { toast } from "@/hooks/useToast";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
 import type {
   VoiceProviderView,

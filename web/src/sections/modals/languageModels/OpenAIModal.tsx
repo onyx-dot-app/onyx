@@ -18,9 +18,8 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
-import { InputDivider } from "@opal/layouts";
+import { InputDivider, toast } from "@opal/layouts";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
-import { toast } from "@/hooks/useToast";
 
 export default function OpenAIModal({
   variant = "llm-configuration",

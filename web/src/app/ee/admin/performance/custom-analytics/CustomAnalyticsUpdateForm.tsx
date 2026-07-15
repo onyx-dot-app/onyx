@@ -1,7 +1,7 @@
 "use client";
 
 import { Label, SubLabel } from "@/components/Field";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";

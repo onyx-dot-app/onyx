@@ -9,7 +9,7 @@ import InputSelectField from "@/refresh-components/form/InputSelectField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { InputDivider, InputPadder, InputVertical } from "@opal/layouts";
+import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -30,7 +30,6 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
-import { toast } from "@/hooks/useToast";
 import { useSettings } from "@/lib/settings/hooks";
 
 const VERTEXAI_DEFAULT_LOCATION = "global";

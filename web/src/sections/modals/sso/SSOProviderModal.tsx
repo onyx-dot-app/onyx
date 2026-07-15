@@ -5,9 +5,8 @@ import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { Button, Text } from "@opal/components";
 import { SvgCopy, SvgSimpleLoader } from "@opal/icons";
-import { InputVertical } from "@opal/layouts";
+import { InputVertical, toast } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import { toast } from "@/hooks/useToast";
 import type {
   SSOProviderCreateRequest,
   SSOProviderResponse,

@@ -7,7 +7,7 @@ import { SvgOnyxLogo } from "@opal/logos";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { connectTracingProvider } from "@/lib/tracing/svc";
 import type { TracingProviderDetail } from "@/lib/tracing/utils";
 import type {

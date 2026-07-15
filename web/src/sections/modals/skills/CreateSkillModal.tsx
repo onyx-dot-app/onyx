@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { createCustomSkill } from "@/lib/skills/api";
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 import type { CustomSkill } from "@/lib/skills/types";

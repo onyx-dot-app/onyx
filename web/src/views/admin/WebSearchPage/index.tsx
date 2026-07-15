@@ -1,14 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Content } from "@opal/layouts";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
 import { PageLoader } from "@/refresh-components/PageLoader";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { toast } from "@/hooks/useToast";
 import { SvgGlobe } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { MessageCard } from "@opal/components";

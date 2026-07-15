@@ -11,7 +11,6 @@ import { AuthType } from "@/lib/auth/types";
 import { SvgGoogle } from "@opal/logos";
 import type { IconProps } from "@opal/types";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
-import { toast } from "@/hooks/useToast";
 import { verifyCaptchaForOAuth } from "@/lib/auth/svc";
 import { basicLogin, basicSignup } from "@/lib/users/svc";
 import { Formik } from "formik";
@@ -32,6 +31,7 @@ import {
   Content,
   InputVertical,
   type AuthSubmitLabel,
+  toast,
 } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";

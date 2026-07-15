@@ -6,7 +6,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { toast } from "@/hooks/useToast";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
 import InputChipField, {
   type ChipItem,
@@ -18,6 +17,7 @@ import {
   InputVertical,
   Section,
   SettingsLayouts,
+  toast,
 } from "@opal/layouts";
 import { Card, Switch } from "@opal/components";
 import { markdown } from "@opal/utils";

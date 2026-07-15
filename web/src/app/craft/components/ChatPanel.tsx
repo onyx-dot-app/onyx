@@ -31,7 +31,7 @@ import {
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { isScheduledRunContextInFlight } from "@/app/craft/v1/tasks/utils";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import Dropzone from "react-dropzone";
 import CraftInputBar, {
   CraftInputBarHandle,

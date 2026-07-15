@@ -52,7 +52,7 @@ import {
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
 import { buildFilters } from "@/lib/search/utils";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
   usePathname,
