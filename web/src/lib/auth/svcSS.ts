@@ -37,10 +37,9 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
     }[];
   } = await res.json();
 
-  // Self-hosted OIDC/SAML/Google OAuth deployments still work here: next.config.js
-  // derives NEXT_PUBLIC_AUTH_TYPE from AUTH_TYPE at Next.js startup, so deployments
-  // that only set AUTH_TYPE at runtime (e.g. docker-compose) pick up the correct
-  // value without needing a separate NEXT_PUBLIC_AUTH_TYPE build arg.
+  // NEXT_PUBLIC_AUTH_TYPE is a build-time constant — production images must pass it
+  // as a build arg when running `next build`. The AUTH_TYPE fallback in next.config.js
+  // covers `next dev` only; client bundles in production always use the baked value.
   return {
     autoRedirect:
       NEXT_PUBLIC_AUTH_TYPE === AuthType.OIDC ||
