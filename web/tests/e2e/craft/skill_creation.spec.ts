@@ -3,11 +3,14 @@ import { expect, test } from "@playwright/test";
 test("SKILL.md populates the create form after confirmation", async ({
   page,
 }) => {
-  await page.goto("/craft/v1/skills/new");
+  const settingsResponse = await page.request.get("/api/settings");
+  const settings = settingsResponse.ok() ? await settingsResponse.json() : null;
   test.skip(
-    !new URL(page.url()).pathname.startsWith("/craft/v1/skills/new"),
+    settings?.settings?.onyx_craft_enabled !== true,
     "Onyx Craft is disabled in this environment"
   );
+
+  await page.goto("/craft/v1/skills/new");
 
   const intro = page.getByRole("dialog").filter({ hasText: "Meet Craft" });
   const introAppeared = await intro
