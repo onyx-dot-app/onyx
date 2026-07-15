@@ -118,7 +118,7 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                     "channels:history",
                     "channels:read",
                     "chat:write",
-                    "files:write",
+                    "files:write:user",
                     "groups:history",
                     "groups:read",
                     "im:history",
@@ -165,7 +165,7 @@ class SlackProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                 "Permissions, add this Onyx instance's callback URL "
                 "(/craft/v1/apps/oauth/callback) to Redirect URLs, and add the "
                 "User Token Scopes you want the agent to use (channels:history, "
-                "channels:read, chat:write, files:write, groups:history, "
+                "channels:read, chat:write, files:write:user, groups:history, "
                 "groups:read, im:history, im:read, im:write, search:read, "
                 "users:read). No "
                 "bot user is required. Then paste the app's Client ID and "
