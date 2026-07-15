@@ -144,6 +144,14 @@ def test_future_bounds_are_dropped() -> None:
     assert tf.start is not None and tf.end is None
 
 
+def test_today_window_keeps_its_start() -> None:
+    """ "created today" keeps start=today; only the end is unbounded."""
+    tf = _parse_time_decision("created (2026-07-15, 2026-07-15)", now=_NOW)
+    assert tf is not None
+    assert tf.start is not None and tf.start.date().isoformat() == "2026-07-15"
+    assert tf.end is None
+
+
 # ---- TimeFilter.apply_to (intersection with explicit filters) ----
 
 

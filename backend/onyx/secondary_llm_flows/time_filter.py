@@ -107,16 +107,6 @@ def _parse_bound(token: str, now: datetime) -> datetime | None:
     return _parse_absolute_date(token)
 
 
-def _drop_bound_at_or_after_today(
-    bound: datetime | None, now: datetime
-) -> datetime | None:
-    """Documents live in the past, so a bound at/after today only arises from a
-    model error (e.g. end=today for an open-ended time); treat it as unset."""
-    if bound is not None and bound.date() >= now.date():
-        return None
-    return bound
-
-
 def _parse_time_decision(
     content: str | None, now: datetime | None = None
 ) -> TimeFilter | None:
@@ -132,9 +122,16 @@ def _parse_time_decision(
         logger.warning("Time filter output was not a (start, end) pair: %s", content)
         return None
 
-    start = _drop_bound_at_or_after_today(_parse_bound(match.group(1), now), now)
+    # Documents live in the past: a start after today is a model error, and an
+    # end at/after today (e.g. wrongly closing an open-ended range) means
+    # unbounded. A start of today stays — that's a "today" window.
+    start = _parse_bound(match.group(1), now)
+    if start is not None and start.date() > now.date():
+        start = None
     # Push the upper bound to end-of-day so it includes the whole named day.
-    end_day = _drop_bound_at_or_after_today(_parse_bound(match.group(2), now), now)
+    end_day = _parse_bound(match.group(2), now)
+    if end_day is not None and end_day.date() >= now.date():
+        end_day = None
     end = (
         datetime.combine(end_day.date(), time.max, tzinfo=timezone.utc)
         if end_day
