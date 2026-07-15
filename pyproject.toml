@@ -117,7 +117,7 @@ backend = [
     "sendgrid==6.12.5",
     "exa_py==1.15.4",
     "braintrust==0.3.9",
-    "langfuse==3.10.0",
+    "langfuse==4.14.0",
     "nest_asyncio==1.6.0",
     "openinference-instrumentation==0.1.42",
     "opentelemetry-proto>=1.42.1",
