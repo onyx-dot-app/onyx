@@ -15,11 +15,6 @@ export function initPostHog(key: string, host?: string | null): void {
     ui_host: host || "https://us.posthog.com",
     person_profiles: "identified_only",
     capture_pageview: false,
-    // Scope the identity cookie to the exact host. Cloud tenants share
-    // *.onyx.app, so a top-level-domain cookie would link one browser's
-    // identity across tenants (and across st-dev/cloud). This also skips
-    // posthog's dmn_chk_* domain-probe cookie, which browsers log as
-    // "rejected for invalid domain".
     cross_subdomain_cookie: false,
     session_recording: {
       // Sensitive inputs should use data-ph-no-capture attribute
