@@ -22,7 +22,6 @@ import {
   Tooltip,
 } from "@opal/components";
 import {
-  SvgArrowLeft,
   SvgAlertTriangle,
   SvgBlocks,
   SvgShare,
@@ -226,18 +225,13 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
         description,
         instructions_markdown: instructionsMarkdown,
       });
-      const refreshed = await refreshSkill();
-      if (refreshed) {
-        syncEditableFields(refreshed);
-      } else {
-        const nextSkill: SkillEditableDetail = {
-          ...skill,
-          ...updated,
-          instructions_markdown: instructionsMarkdown.trim(),
-        };
-        await refreshSkill(nextSkill, { revalidate: false });
-        syncEditableFields(nextSkill);
-      }
+      const nextSkill: SkillEditableDetail = {
+        ...skill,
+        ...updated,
+        instructions_markdown: instructionsMarkdown.trim(),
+      };
+      await refreshSkill(nextSkill, { revalidate: false });
+      syncEditableFields(nextSkill);
       await refreshSkillList();
       toast.success(`Saved "${updated.name}"`);
     } catch (err) {
@@ -421,7 +415,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
               <Button
                 prominence="secondary"
                 type="button"
-                icon={SvgArrowLeft}
                 onClick={navigateBack}
               >
                 Cancel
