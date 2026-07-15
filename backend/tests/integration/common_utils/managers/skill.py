@@ -61,7 +61,6 @@ class SkillManager:
     def create_from_editor(
         user_performing_action: DATestUser,
         *,
-        slug: str,
         name: str,
         description: str,
         instructions_markdown: str,
@@ -69,7 +68,6 @@ class SkillManager:
         upload_filename: str = "supporting-file.txt",
     ) -> SkillResponse:
         create_request = SkillCreateRequest(
-            slug=slug,
             name=name,
             description=description,
             instructions_markdown=instructions_markdown,

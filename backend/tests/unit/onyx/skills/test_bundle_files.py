@@ -81,7 +81,8 @@ def test_skill_bundle_upload_replaces_all_existing_files() -> None:
         assert zf.read("new.txt") == b"new"
 
 
-def test_standalone_skill_md_replaces_existing_bundle() -> None:
+@pytest.mark.parametrize("filename", ["SKILL.md", "skill.md", "Skill.md"])
+def test_standalone_skill_md_replaces_existing_bundle(filename: str) -> None:
     existing = update_custom_bundle_files(
         _bundle(), b"old", filename="old.txt", slug="demo"
     )
@@ -90,7 +91,7 @@ def test_standalone_skill_md_replaces_existing_bundle() -> None:
     updated = update_custom_bundle_files(
         existing,
         skill_md,
-        filename="SKILL.md",
+        filename=filename,
         slug="demo",
     )
 

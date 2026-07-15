@@ -11,6 +11,7 @@ from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import parse_skill_md_metadata
 from onyx.skills.bundle import SKILL_MD_NAME
 from onyx.skills.bundle import slug_from_filename
+from onyx.skills.bundle import slug_from_skill_name
 from onyx.skills.bundle import validate_and_normalize_custom_bundle
 from onyx.utils.logger import setup_logger
 
@@ -63,7 +64,7 @@ def ingest_skill_bundle(
     if is_standalone_skill_md:
         metadata = parse_skill_md_metadata(bundle_bytes)
         if slug is None:
-            slug = metadata[0]
+            slug = slug_from_skill_name(metadata[0])
         bundle_bytes = build_single_file_bundle(SKILL_MD_NAME, bundle_bytes)
     else:
         if slug is None:

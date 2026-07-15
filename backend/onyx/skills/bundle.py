@@ -16,6 +16,7 @@ from typing import Final
 from typing import IO
 
 import yaml
+from slugify import slugify
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -66,6 +67,20 @@ def slug_from_filename(filename: str | None) -> str:
     candidate = filename
     if candidate.lower().endswith(".zip"):
         candidate = candidate[:-4]
+    check_slug(candidate)
+    return candidate
+
+
+def slug_from_skill_name(name: str) -> str:
+    """Derive a stable custom-skill identifier from its display name."""
+    candidate = slugify(name, max_length=64)
+    if not candidate:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Skill name must contain at least one letter or number.",
+        )
+    if not candidate[0].isalpha():
+        candidate = f"skill-{candidate}"[:64].rstrip("-")
     check_slug(candidate)
     return candidate
 
@@ -603,7 +618,12 @@ def update_custom_bundle_files(
             upload_archive_bytes = (
                 upload_bytes
                 if filename.lower().endswith(".zip")
-                else build_single_file_bundle(filename, upload_bytes)
+                else build_single_file_bundle(
+                    SKILL_MD_NAME
+                    if filename.lower() == SKILL_MD_NAME.lower()
+                    else filename,
+                    upload_bytes,
+                )
             )
             try:
                 upload_zip = archives.enter_context(

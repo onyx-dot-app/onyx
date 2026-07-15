@@ -65,12 +65,12 @@ def test_create_personal_skill_visibility(
 
 
 def test_create_personal_skill_from_editor(basic_user: DATestUser) -> None:
-    slug = f"personal-editor-{uuid4().hex[:6]}"
+    suffix = uuid4().hex[:6]
+    name = f"Editor Skill {suffix}"
 
     skill = SkillManager.create_from_editor(
         basic_user,
-        slug=slug,
-        name="Editor Skill",
+        name=name,
         description="Created without an uploaded bundle",
         instructions_markdown="# Workflow\n\nFollow these steps.",
         upload_bytes=b"supporting context",
@@ -78,7 +78,7 @@ def test_create_personal_skill_from_editor(basic_user: DATestUser) -> None:
     )
 
     editable = SkillManager.get_editable(skill.id, basic_user)
-    assert skill.slug == slug
+    assert skill.slug == f"editor-skill-{suffix}"
     assert skill.is_personal is True
     assert editable.instructions_markdown == "# Workflow\n\nFollow these steps."
     assert [file.path for file in editable.files] == ["context.txt"]
@@ -87,11 +87,10 @@ def test_create_personal_skill_from_editor(basic_user: DATestUser) -> None:
 def test_upload_supporting_files_merges_and_bundle_upload_replaces(
     basic_user: DATestUser,
 ) -> None:
-    slug = f"personal-files-{uuid4().hex[:6]}"
+    original_name = f"Original {uuid4().hex[:6]}"
     skill = SkillManager.create_from_editor(
         basic_user,
-        slug=slug,
-        name="Original",
+        name=original_name,
         description="Original description",
         instructions_markdown="Original instructions.",
     )
@@ -110,7 +109,7 @@ def test_upload_supporting_files_merges_and_bundle_upload_replaces(
         "references/context.md",
         "scripts/run.py",
     ]
-    assert merged.name == "Original"
+    assert merged.name == original_name
 
     after_removal = SkillManager.remove_file(skill, "scripts/run.py", basic_user)
     assert [file.path for file in after_removal.files] == ["references/context.md"]

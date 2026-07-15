@@ -16,7 +16,6 @@ from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.built_in import SKILL_SLUG_PATTERN
 from onyx.skills.models import SkillBundleFile
 
 
@@ -179,10 +178,16 @@ class SkillEditableDetailResponse(SkillResponse):
     files: list[SkillBundleFile]
 
 
+class SkillBundleInspectResponse(BaseModel):
+    name: str
+    description: str
+    instructions_markdown: str
+    files: list[SkillBundleFile]
+
+
 class SkillCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    slug: str = Field(pattern=SKILL_SLUG_PATTERN)
     name: str
     description: str
     instructions_markdown: str

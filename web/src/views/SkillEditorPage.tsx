@@ -42,6 +42,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   createCustomSkillFromEditor,
   deleteUserSkill,
+  inspectSkillBundle,
   patchUserSkill,
   removeUserSkillFile,
   uploadUserSkillFiles,
@@ -110,7 +111,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     errorHandlingFetcher
   );
 
-  const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructionsMarkdown, setInstructionsMarkdown] = useState("");
@@ -145,11 +145,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const isDirty = useMemo(() => {
     if (isCreating) {
       return Boolean(
-        slug ||
-        name ||
-        description ||
-        instructionsMarkdown ||
-        pendingFilesUpload
+        name || description || instructionsMarkdown || pendingFilesUpload
       );
     }
     if (!skill) return false;
@@ -165,7 +161,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     name,
     pendingFilesUpload,
     skill,
-    slug,
   ]);
 
   const canManageSkill =
@@ -185,7 +180,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     !isPreparingFiles &&
     !isUploadingFiles &&
     isDirty &&
-    (!isCreating || !!slug.trim()) &&
     !!name.trim() &&
     !!description.trim() &&
     !!instructionsMarkdown.trim() &&
@@ -214,7 +208,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
       if (isCreating) {
         const created = await createCustomSkillFromEditor(
           {
-            slug,
             name,
             description,
             instructions_markdown: instructionsMarkdown,
@@ -262,7 +255,29 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
   async function applyFilesUpload(upload: PreparedSkillFilesUpload) {
     if (isCreating) {
-      setPendingFilesUpload(upload);
+      if (!upload.containsSkillMd) {
+        setPendingFilesUpload(upload);
+        return;
+      }
+
+      setIsUploadingFiles(true);
+      try {
+        const bundle = await inspectSkillBundle(upload.file);
+        setName(bundle.name);
+        setDescription(bundle.description);
+        setInstructionsMarkdown(bundle.instructions_markdown);
+        setPendingFilesUpload({
+          ...upload,
+          entries: bundle.files,
+        });
+      } catch (err) {
+        console.error("Failed to inspect skill bundle", err);
+        toast.error(
+          err instanceof Error ? err.message : "Failed to inspect skill bundle"
+        );
+      } finally {
+        setIsUploadingFiles(false);
+      }
       return;
     }
     if (!skill || !canManageSkill || isDirty) return;
@@ -298,6 +313,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     try {
       const updated = await removeUserSkillFile(skill.id, path);
       await refreshSkill(updated, { revalidate: false });
+      await refreshSkillList();
       toast.success(`Removed "${path}"`);
     } catch (err) {
       console.error("Failed to remove skill file", err);
@@ -356,17 +372,15 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
       ? undefined
       : !canManageSkill
         ? "You don't have permission to edit this skill's details."
-        : isCreating && !slug.trim()
-          ? "Add a slug before creating the skill."
-          : !name.trim()
-            ? "Add a title before saving."
-            : !description.trim()
-              ? "Add a description before saving."
-              : !instructionsMarkdown.trim()
-                ? "Add instructions before saving."
-                : !isDirty
-                  ? "No changes have been made."
-                  : undefined;
+        : !name.trim()
+          ? "Add a name before saving."
+          : !description.trim()
+            ? "Add a description before saving."
+            : !instructionsMarkdown.trim()
+              ? "Add instructions before saving."
+              : !isDirty
+                ? "No changes have been made."
+                : undefined;
 
   const sharingStatus = skill ? getSharingStatus(skill) : null;
   const filesUploadDisabled =
@@ -397,7 +411,11 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
         <SettingsLayouts.Header
           icon={SvgBlocks}
           title={isCreating ? "Create skill" : "Edit skill"}
-          description={isCreating ? "Build a personal skill" : skill?.slug}
+          description={
+            isCreating
+              ? "Build a personal skill"
+              : "Update skill details and files"
+          }
           rightChildren={
             <div className="flex items-center gap-2">
               <Button
@@ -443,22 +461,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
           {(isCreating || skill) && !isLoading && !error && (
             <>
               <Section alignItems="stretch">
-                {isCreating && (
-                  <InputVertical
-                    withLabel="slug"
-                    title="Slug"
-                    description="A lowercase identifier used when Craft loads this skill. Use letters, numbers, and hyphens."
-                  >
-                    <InputTypeIn
-                      id="slug"
-                      name="slug"
-                      value={slug}
-                      onChange={(event) => setSlug(event.target.value)}
-                      placeholder="customer-research"
-                      variant={fieldsLocked ? "disabled" : "primary"}
-                    />
-                  </InputVertical>
-                )}
                 <InputVertical withLabel="name" title="Name">
                   <InputTypeIn
                     id="name"

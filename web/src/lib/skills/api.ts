@@ -8,6 +8,7 @@
 
 import type {
   CustomSkill,
+  SkillBundleContents,
   SkillEditableDetail,
   SkillSharePermission,
 } from "@/lib/skills/types";
@@ -50,7 +51,6 @@ export async function createCustomSkill(bundle: File): Promise<CustomSkill> {
 }
 
 export interface CreateCustomSkillInput {
-  slug: string;
   name: string;
   description: string;
   instructions_markdown: string;
@@ -61,7 +61,6 @@ export async function createCustomSkillFromEditor(
   upload?: File
 ): Promise<SkillEditableDetail> {
   const form = new FormData();
-  form.append("slug", input.slug);
   form.append("name", input.name);
   form.append("description", input.description);
   form.append("instructions_markdown", input.instructions_markdown);
@@ -105,6 +104,18 @@ export async function uploadUserSkillFiles(
     body: form,
   });
   return handle<SkillEditableDetail>(res);
+}
+
+export async function inspectSkillBundle(
+  upload: File
+): Promise<SkillBundleContents> {
+  const form = new FormData();
+  form.append("upload", upload);
+  const res = await fetch("/api/skills/custom/bundle/inspect", {
+    method: "POST",
+    body: form,
+  });
+  return handle<SkillBundleContents>(res);
 }
 
 export async function removeUserSkillFile(

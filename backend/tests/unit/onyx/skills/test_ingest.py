@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.ingest import ingested_skill_bundle
@@ -68,14 +67,14 @@ def test_ingest_standalone_skill_md_uses_frontmatter_name_and_stores_zip() -> No
     assert ingested.bundle_sha256 == hashlib.sha256(saved_bytes).hexdigest()
 
 
-def test_ingest_standalone_skill_md_requires_slug_compatible_name() -> None:
+def test_ingest_standalone_skill_md_derives_slug_from_display_name() -> None:
     skill_md = b"---\nname: Daily Summary\ndescription: Desc\n---\n\nBody\n"
     file_store = MagicMock(spec=FileStore)
+    file_store.save_file.return_value = "stored-bundle"
 
-    with pytest.raises(OnyxError, match="invalid slug 'Daily Summary'"):
-        ingest_skill_bundle(skill_md, "skill.MD", file_store)
+    ingested = ingest_skill_bundle(skill_md, "skill.MD", file_store)
 
-    file_store.save_file.assert_not_called()
+    assert ingested.slug == "daily-summary"
 
 
 def test_ingest_standalone_skill_md_replacement_keeps_existing_slug() -> None:

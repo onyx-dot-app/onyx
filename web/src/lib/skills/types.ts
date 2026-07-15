@@ -82,3 +82,10 @@ export interface SkillBundleFile {
   path: string;
   size: number;
 }
+
+export interface SkillBundleContents {
+  name: string;
+  description: string;
+  instructions_markdown: string;
+  files: SkillBundleFile[];
+}

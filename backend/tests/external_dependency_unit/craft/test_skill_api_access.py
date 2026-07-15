@@ -18,6 +18,7 @@ from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import create_custom_skill
+from onyx.server.features.skill.api import create_custom_skill_from_editor
 from onyx.server.features.skill.api import fetch_skill_for_current_user
 from onyx.server.features.skill.api import patch_current_user_skill
 from onyx.server.features.skill.api import remove_current_user_skill_file
@@ -136,6 +137,27 @@ def test_create_reserved_slug_rejects_before_reading_bundle(
     read_bundle_file.assert_not_called()
 
 
+def test_editor_create_rejects_whitespace_only_fields(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session, role=UserRole.BASIC)
+
+    with pytest.raises(OnyxError) as exc_info:
+        create_custom_skill_from_editor(
+            name=" ",
+            description="\t",
+            instructions_markdown="\n",
+            user=user,
+            db_session=db_session,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert exc_info.value.detail == (
+        "Skill name, description, and instructions cannot be empty."
+    )
+
+
 def test_replace_bundle_authorizes_before_reading_bundle(
     db_session: Session,
     test_user: User,  # noqa: ARG001
@@ -244,4 +266,35 @@ def test_remove_file_authorizes_before_reading_bundle(
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
+    read_bundle.assert_not_called()
+
+
+def test_remove_file_rejects_empty_path_before_reading_bundle(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = make_user(db_session, role=UserRole.BASIC)
+    private_skill = make_skill(
+        db_session,
+        is_public=False,
+        enabled=True,
+        author_user_id=owner.id,
+    )
+    read_bundle = MagicMock()
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        read_bundle,
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        remove_current_user_skill_file(
+            private_skill.id,
+            path="",
+            user=owner,
+            db_session=db_session,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert exc_info.value.detail == "Skill file path cannot be empty"
     read_bundle.assert_not_called()
