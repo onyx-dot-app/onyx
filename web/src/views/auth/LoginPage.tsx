@@ -10,6 +10,7 @@ import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata, useAuthRedirect } from "@/lib/auth/hooks";
 import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
 import { AuthType } from "@/lib/auth/types";
+import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { getAuthUrl } from "@/lib/auth/utils";
 import { markdown } from "@opal/utils";
@@ -31,16 +32,16 @@ export default function LoginPage() {
   useSendAuthRequiredMessage();
   const isLoading = useAuthRedirect("login");
 
-  const authUrl = getAuthUrl(authTypeMetadata.authType, nextUrl);
+  const authUrl = getAuthUrl(NEXT_PUBLIC_AUTH_TYPE, nextUrl);
   const effectiveNextUrl =
     nextUrl ?? (isFirstUser ? "/app?new_team=true" : null);
 
-  const isCloud = authTypeMetadata.authType === AuthType.CLOUD;
-  const isBasic = authTypeMetadata.authType === AuthType.BASIC;
+  const isCloud = NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD;
+  const isBasic = NEXT_PUBLIC_AUTH_TYPE === AuthType.BASIC;
   const isSso =
-    authTypeMetadata.authType === AuthType.GOOGLE_OAUTH ||
-    authTypeMetadata.authType === AuthType.OIDC ||
-    authTypeMetadata.authType === AuthType.SAML;
+    NEXT_PUBLIC_AUTH_TYPE === AuthType.GOOGLE_OAUTH ||
+    NEXT_PUBLIC_AUTH_TYPE === AuthType.OIDC ||
+    NEXT_PUBLIC_AUTH_TYPE === AuthType.SAML;
 
   useEffect(() => {
     if (isLoading) return;
@@ -55,7 +56,7 @@ export default function LoginPage() {
     // No users yet — send first-time visitors to signup, preserving nextUrl.
     if (
       !authTypeMetadata.hasUsers &&
-      authTypeMetadata.authType === AuthType.BASIC
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.BASIC
     ) {
       const params = nextUrl ? `?next=${encodeURIComponent(nextUrl)}` : "";
       router.replace(`/auth/signup${params}` as Route);
@@ -92,17 +93,14 @@ export default function LoginPage() {
       )}
 
       {authUrl && !isCloud && !isBasic && (
-        <SignInButton
-          authorizeUrl={authUrl}
-          authType={authTypeMetadata.authType}
-        />
+        <SignInButton authorizeUrl={authUrl} authType={NEXT_PUBLIC_AUTH_TYPE} />
       )}
 
       {isCloud && authUrl && (
         <>
           <SignInButton
             authorizeUrl={authUrl}
-            authType={authTypeMetadata.authType}
+            authType={NEXT_PUBLIC_AUTH_TYPE}
           />
           <AuthLayouts.OrSeparator />
         </>

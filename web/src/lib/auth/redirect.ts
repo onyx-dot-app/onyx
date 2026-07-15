@@ -1,4 +1,5 @@
 import { AuthType, type AuthTypeMetadata } from "@/lib/auth/types";
+import { NEXT_PUBLIC_AUTH_TYPE } from "@/lib/constants";
 import type { User } from "@/lib/types";
 
 export type AuthPage = "login" | "signup" | "join";
@@ -22,8 +23,8 @@ export function getAuthRedirect(
     if (signupDisabled) return "/auth/signup-unavailable";
 
     const supportsEmailAuth =
-      authTypeMetadata.authType === AuthType.BASIC ||
-      authTypeMetadata.authType === AuthType.CLOUD;
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.BASIC ||
+      NEXT_PUBLIC_AUTH_TYPE === AuthType.CLOUD;
     if (!supportsEmailAuth) return "/auth/login";
   }
 
