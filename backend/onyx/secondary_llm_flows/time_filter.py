@@ -69,29 +69,14 @@ def _resolve_relative_bound(token: str, now: datetime) -> datetime | None:
     return now - relativedelta(years=amount)
 
 
-def best_match_time(time_str: str) -> datetime | None:
-    preferred_formats = ["%m/%d/%Y", "%m-%d-%Y", "%Y-%m-%d"]
-
-    for fmt in preferred_formats:
-        try:
-            # As we don't know if the user is interacting with the API server from
-            # the same timezone as the API server, just assume the queries are UTC time
-            # the few hours offset (if any) shouldn't make any significant difference
-            dt = datetime.strptime(time_str, fmt)
-            return dt.replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
-
-    # If the above formats don't match, try using dateutil's parser
+def _parse_absolute_date(token: str) -> datetime | None:
+    """Parse a date string (the prompt asks for YYYY-MM-DD); naive values are
+    treated as UTC."""
     try:
-        dt = parse(time_str)
-        return (
-            dt.astimezone(timezone.utc)
-            if dt.tzinfo
-            else dt.replace(tzinfo=timezone.utc)
-        )
+        dt = parse(token)
     except (ValueError, OverflowError):
         return None
+    return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def _parse_bound(token: str, now: datetime) -> datetime | None:
@@ -102,7 +87,7 @@ def _parse_bound(token: str, now: datetime) -> datetime | None:
     relative = _resolve_relative_bound(token, now)
     if relative is not None:
         return relative
-    return best_match_time(token)
+    return _parse_absolute_date(token)
 
 
 def _parse_time_decision(
