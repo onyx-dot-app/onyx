@@ -55,7 +55,6 @@ from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.context.search.models import SearchDocsResponse
-from onyx.context.search.models import TimeRange
 from onyx.context.search.pipeline import merge_individual_chunks
 from onyx.context.search.pipeline import search_pipeline
 from onyx.context.search.preprocessing.access_filters import (
@@ -94,7 +93,6 @@ from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
 from onyx.secondary_llm_flows.source_filter import decide_search_scope
 from onyx.secondary_llm_flows.source_filter import SearchCycle
 from onyx.secondary_llm_flows.time_filter import decide_time_filter
-from onyx.secondary_llm_flows.time_filter import DocumentTimeField
 from onyx.secondary_llm_flows.time_filter import TimeFilter
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -885,16 +883,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # The pipeline composes the lower bound with any persona time floor.
         time_filter = expansion.time_filter
         if time_filter is not None:
-            range_field = (
-                "created_at_range"
-                if time_filter.field is DocumentTimeField.CREATED_AT
-                else "updated_at_range"
-            )
-            effective_filters = (effective_filters or BaseFilters()).model_copy(
-                update={
-                    range_field: TimeRange(start=time_filter.start, end=time_filter.end)
-                }
-            )
+            effective_filters = time_filter.apply_to(effective_filters or BaseFilters())
             logger.info(
                 "Internal search - time window (%s): %s to %s",
                 time_filter.field.value,

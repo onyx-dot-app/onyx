@@ -11,6 +11,8 @@ from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import datetime_to_utc
+from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import TimeRange
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import ReasoningEffort
@@ -40,6 +42,16 @@ class TimeFilter(BaseModel):
     field: DocumentTimeField
     start: datetime | None = None
     end: datetime | None = None
+
+    def apply_to(self, filters: BaseFilters) -> BaseFilters:
+        """Return a copy of `filters` with this window on the matching range field."""
+        filters = filters.model_copy()
+        window = TimeRange(start=self.start, end=self.end)
+        if self.field is DocumentTimeField.CREATED_AT:
+            filters.created_at_range = window
+        else:
+            filters.updated_at_range = window
+        return filters
 
 
 # The model's "(start, end)" output; each side is one comma/paren-free token.
