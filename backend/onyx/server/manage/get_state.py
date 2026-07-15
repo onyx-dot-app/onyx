@@ -10,7 +10,6 @@ from fastapi.concurrency import run_in_threadpool
 from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import user_needs_to_be_verified
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import OAUTH_ENABLED
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DEV_VERSION_PATTERN
@@ -41,11 +40,9 @@ _SSO_AUTHORIZE_ROUTER = {
 
 
 def _fetch_sso_provider_options() -> list[SSOProviderOption]:
-    # Single-tenant BASIC only. /auth/type runs before any tenant context, so a
-    # multi-tenant lookup has no tenant to key on, and only a BASIC deployment
-    # renders the provider buttons (legacy oidc/saml auto-redirect to the one IdP
-    # and never consume this list), so the query is pure overhead elsewhere.
-    if MULTI_TENANT or AUTH_TYPE != AuthType.BASIC:
+    # Single-tenant only. /auth/type runs before any tenant context, so a
+    # multi-tenant lookup has no tenant to key on.
+    if MULTI_TENANT:
         return []
     with get_session_with_shared_schema() as db_session:
         return [
@@ -90,7 +87,7 @@ async def get_auth_type(response: Response) -> AuthTypeResponse:
 
     security = get_security_settings()
     return AuthTypeResponse(
-        auth_type=AUTH_TYPE,
+        auth_type=AuthType.CLOUD if MULTI_TENANT else AuthType.BASIC,
         requires_verification=user_needs_to_be_verified(),
         anonymous_user_enabled=anonymous_user_enabled(),
         password_min_length=security.password_min_length,

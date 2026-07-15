@@ -95,7 +95,6 @@ from onyx.auth.schemas import UserRole
 from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
@@ -173,30 +172,25 @@ def is_user_admin(user: User) -> bool:
 
 
 def verify_auth_setting() -> None:
-    """Log warnings for AUTH_TYPE issues.
-
-    This only runs on app startup not during migrations/scripts.
-    """
+    """Warn operators about inert AUTH_TYPE env values so they get cleaned up.
+    Call at app startup only, not from migrations/scripts."""
     raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
 
-    if raw_auth_type == "cloud":
-        raise ValueError(
-            "'cloud' is not a valid auth type for self-hosted deployments."
-        )
     if raw_auth_type == "disabled":
         logger.warning(
-            "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
+            "AUTH_TYPE='disabled' is no longer supported. Authentication is "
+            "always enabled. Remove the env var."
         )
     if raw_auth_type in ("google_oauth", "oidc", "saml"):
         logger.warning(
             "AUTH_TYPE='%s' single-provider mode was removed and Onyx is running "
             "as 'basic'. SSO login is now served by SSO provider rows (Admin "
-            "Panel > Organization > SSO Providers). Update AUTH_TYPE to 'basic' "
-            "and remove the legacy SSO env vars.",
+            "Panel > Organization > SSO Providers). Remove AUTH_TYPE and the "
+            "legacy SSO env vars.",
             raw_auth_type,
         )
 
-    logger.notice("Using Auth Type: %s", AUTH_TYPE.value)
+    logger.notice("Using Auth Type: %s", "cloud" if MULTI_TENANT else "basic")
 
 
 def verify_user_auth_secret() -> None:

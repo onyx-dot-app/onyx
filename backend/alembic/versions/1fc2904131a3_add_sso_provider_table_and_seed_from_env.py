@@ -64,15 +64,13 @@ def _seed_from_env(table: sa.Table) -> None:
     Reads the already-resolved app_config constants for credentials and
     domains so the legacy GOOGLE_OAUTH_* fallbacks and the VALID_EMAIL_DOMAINS
     parsing stay in one place, but AUTH_TYPE comes from raw os.environ because
-    app_configs coerces legacy SSO values to BASIC. Skipped in multi-tenant
-    (cloud auth does not use per-instance provider rows) and when the table
-    already has any row.
+    app_configs does not read it. Skipped in multi-tenant (cloud auth does not
+    use per-instance provider rows) and when the table already has any row.
     """
     from onyx.configs.app_configs import OAUTH_CLIENT_ID
     from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
     from onyx.configs.app_configs import OPENID_CONFIG_URL
     from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
-    from onyx.configs.constants import AuthType
     from shared_configs.configs import MULTI_TENANT
 
     if MULTI_TENANT:
@@ -83,10 +81,10 @@ def _seed_from_env(table: sa.Table) -> None:
     # provider_type is the enum member NAME (Enum(native_enum=False) storage);
     # the login `name` matches the oauth_name existing linked accounts carry so
     # linkage survives the routing cutover.
-    if raw_auth_type == AuthType.GOOGLE_OAUTH.value:
+    if raw_auth_type == "google_oauth":
         provider_type, name = "GOOGLE_OAUTH", "google"
         display_name, config_url = "Continue with Google", None
-    elif raw_auth_type == AuthType.OIDC.value:
+    elif raw_auth_type == "oidc":
         if not OPENID_CONFIG_URL:
             return
         provider_type, name = "OIDC", "openid"

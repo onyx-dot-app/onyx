@@ -31,6 +31,7 @@ from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
 from onyx.auth.users import mobile_auth_backend
+from onyx.auth.users import verify_auth_setting
 from onyx.auth.users import verify_user_auth_secret
 from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import API_SERVER_THREADPOOL_SIZE
@@ -367,12 +368,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         "onyx.server.metrics.license_metrics", "register_license_metrics"
     )()
 
-    verify_auth = fetch_versioned_implementation(
-        "onyx.auth.users", "verify_auth_setting"
-    )
-
-    # Will throw exception if an issue is found
-    verify_auth()
+    # Warns on stale AUTH_TYPE env values.
+    verify_auth_setting()
 
     # Will throw exception if USER_AUTH_SECRET is missing on a real deployment
     verify_user_auth_secret()
@@ -587,8 +584,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, pat_router)
     include_router_with_global_prefix_prepended(application, captcha_router)
 
-    # AUTH_TYPE is always BASIC or CLOUD (legacy single-provider modes coerce
-    # to BASIC in app_configs), so password auth always mounts.
+    # Password login is served in every deployment mode.
     include_auth_router_with_prefix(
         application,
         fastapi_users.get_auth_router(auth_backend),

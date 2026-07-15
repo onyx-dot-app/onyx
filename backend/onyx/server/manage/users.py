@@ -36,7 +36,6 @@ from onyx.auth.users import enforce_seat_limit_locked
 from onyx.auth.users import optional_user
 from onyx.auth.users import scope_exempt
 from onyx.configs.app_configs import AUTH_BACKEND
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import EMAIL_CONFIGURED
@@ -615,7 +614,7 @@ def bulk_invite_users(
     else:
         try:
             for email in emails_needing_seats:
-                send_user_email_invite(email, current_user, AUTH_TYPE)
+                send_user_email_invite(email, current_user)
             email_invite_status = EmailInviteStatus.SENT
         except Exception as e:
             logger.error("Error sending email invite to invited users: %s", e)

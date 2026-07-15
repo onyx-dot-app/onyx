@@ -325,11 +325,8 @@ class DocumentIndexType(str, Enum):
 
 class AuthType(str, Enum):
     BASIC = "basic"
-    GOOGLE_OAUTH = "google_oauth"
-    OIDC = "oidc"
-    SAML = "saml"
 
-    # google auth and basic
+    # password plus Google login
     CLOUD = "cloud"
 
 
