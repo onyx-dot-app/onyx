@@ -1,7 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Button, InputTypeIn, type InputTypeInProps } from "@opal/components";
+import {
+  Button,
+  InputTypeIn,
+  type InputTypeInProps,
+  Text,
+} from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgEye, SvgEyeClosed } from "@opal/icons";
 
@@ -35,12 +40,24 @@ interface PasswordInputTypeInProps extends Omit<
   isNonRevealable?: boolean;
   /**
    * When true, the placeholder is shrunk to the same font-size as the masked
-   * dots while the field is hidden. Use this only with a masked-style
-   * placeholder (all ● glyphs, e.g. the login form) so the empty and filled
-   * states line up. Leave false (the default) for custom text placeholders
-   * (e.g. "AKIA…", "Your long-term API key") so they stay legible.
+   * dots while the field is hidden. Only meaningful with `mask="native"` and
+   * a masked-style placeholder (all ● glyphs, e.g. the login form) so the
+   * empty and filled states line up. Leave false (the default) for custom
+   * text placeholders (e.g. "AKIA…", "Your long-term API key") so they stay
+   * legible.
    */
   shrinkPlaceholder?: boolean;
+  /**
+   * Masked-state presentation (Figma Input/Type-In masked value).
+   * - `"asterisk"` (default): full-size ✱ glyphs while the field is hidden
+   *   and idle, drawn by an overlay (native masking can only render browser
+   *   dots). Focus anywhere in the field shows full-size native dots so the
+   *   caret tracks real glyph advances while typing.
+   * - `"native"`: the browser's own dots (Chromium masks via
+   *   -webkit-text-security: disc), shrunk for tighter spacing. For the
+   *   login flow, where the field pairs with a masked-style ● placeholder.
+   */
+  mask?: "asterisk" | "native";
 }
 
 /**
@@ -52,13 +69,8 @@ interface PasswordInputTypeInProps extends Omit<
  *
  * Using the native type (rather than a custom-masked `type="text"` field) is
  * what lets browsers and password managers recognize the field for autofill /
- * save-password. While masked, Chromium renders the value as U+2022 bullets
- * in the field's own font (-webkit-text-security: disc). The design calls for
- * smaller, tighter dots than full-size bullets, so we shrink the field's
- * font-size while masked. The placeholder is only shrunk to match when the
- * caller opts in via `shrinkPlaceholder` (used with a masked-style bullet
- * placeholder). Custom text placeholders (e.g. "AKIA…", "Your long-term API
- * key") keep their normal size so they stay legible.
+ * save-password. The masked presentation is gated by the `mask` prop (see its
+ * docs): an idle ✱ overlay by default, or the browser's shrunken dots.
  *
  * Features:
  * - Show/hide toggle button only visible when input has value or is focused
@@ -70,6 +82,7 @@ function PasswordInputTypeIn({
   ref,
   isNonRevealable = false,
   shrinkPlaceholder = false,
+  mask = "asterisk",
   value,
   onChange,
   onFocus,
@@ -111,27 +124,33 @@ function PasswordInputTypeIn({
       ? "Hide password"
       : "Show password";
 
+  const isNativeMask = mask === "native";
+  // The ✱ presentation only draws while idle. Focus anywhere in the field
+  // shows native dots, so the caret tracks real glyph advances while typing.
+  const showAsteriskOverlay =
+    !isNativeMask && isHidden && hasValue && !isFocused;
+
   return (
     <div
       ref={containerRef}
-      // While hidden we shrink the mask dots to 0.6rem for tighter spacing.
-      // The size goes on the input itself with
-      // !important, beating Opal's `font: inherit`, rather than on
-      // `.opal-input`, which carries Opal's `transition-all`. Keeping the
-      // change off that element makes toggling reveal instant instead of
-      // animating. rem (not em) avoids compounding. The placeholder carries
-      // its own absolute Opal size, so the input shrink never touches it.
-      // It only shrinks (also with !important) when the caller opts in via
-      // `shrinkPlaceholder` (masked-style ● placeholder), so it matches the
-      // dots. Custom text placeholders stay full-size. Only while hidden, so
-      // revealed text is full-size.
+      // Native mask: hidden dots shrink to 0.6rem on the input itself.
+      // !important beats Opal's `font: inherit`, and keeping the size off
+      // `.opal-input` (which carries `transition-all`) keeps reveal-toggling
+      // instant. rem (not em) avoids compounding. The placeholder shrinks
+      // only via the `shrinkPlaceholder` opt-in.
+      // Asterisk mask: the wrapper takes a real box (not `contents`) so the
+      // ✱ overlay can anchor over the input, whose text hides underneath.
       // ph-no-capture is posthog-js's native replay blockClass, so revealed
       // secrets stay out of session replay without server-side config.
       className={cn(
-        "contents",
+        isNativeMask ? "contents" : "relative w-full",
         "ph-no-capture",
-        isHidden && "[&_input]:!text-[0.6rem]",
-        isHidden && shrinkPlaceholder && "[&_input::placeholder]:!text-[0.6rem]"
+        isNativeMask && isHidden && "[&_input]:!text-[0.6rem]",
+        isNativeMask &&
+          isHidden &&
+          shrinkPlaceholder &&
+          "[&_input::placeholder]:!text-[0.6rem]",
+        showAsteriskOverlay && "[&_input]:opacity-0"
       )}
       onFocus={handleContainerFocus}
       onBlur={handleContainerBlur}
@@ -173,6 +192,19 @@ function PasswordInputTypeIn({
         }
         {...props}
       />
+      {showAsteriskOverlay && (
+        // Left inset = .opal-input border (1px) + padding (5px), and Text's
+        // px-[2px] mirrors .opal-input-field's p-0.5, so the glyphs line up
+        // with the hidden input text. The right inset clears the toggle.
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-[6px] right-10 flex items-center overflow-hidden"
+        >
+          <Text font="main-ui-body" color="text-04" nowrap>
+            {"✱".repeat(realValue.length)}
+          </Text>
+        </div>
+      )}
     </div>
   );
 }
