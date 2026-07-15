@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from onyx.db.document import delete_documents_complete__no_commit
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.search_settings import get_active_search_settings
-from onyx.db.tag import delete_orphan_tags__no_commit
+from onyx.db.tag import delete_orphan_tags_batched
 
 # Modify sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -83,7 +83,6 @@ def _unsafe_deletion(
             db_session=db_session,
             document_ids=[document.id for document in documents],
         )
-        delete_orphan_tags__no_commit(db_session=db_session)
 
         num_docs_deleted += len(documents)
 
@@ -134,6 +133,9 @@ def _unsafe_deletion(
         logger.debug("Found no credentials left for connector, deleting connector")
         db_session.delete(connector)
     db_session.commit()
+
+    # runs after the commit above since it commits per batch
+    delete_orphan_tags_batched(db_session)
 
     logger.notice(
         "Successfully deleted connector_credential_pair with connector_id: '%s' and credential_id: '%s'. Deleted %s docs.",
