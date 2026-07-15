@@ -29,10 +29,10 @@ from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import get_docs_to_update
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_response import Choice
 from onyx.llm.model_response import Message
 from onyx.llm.model_response import ModelResponse
-from onyx.llm.utils import get_max_input_tokens
 
 
 def create_test_document(
@@ -165,7 +165,7 @@ def test_filter_documents_empty_batch() -> None:
     assert len(failures) == 0
 
 
-@patch("onyx.llm.utils.GEN_AI_MAX_TOKENS", 4096)
+@patch("onyx.llm.model_capabilities.GEN_AI_MAX_TOKENS", 4096)
 @pytest.mark.parametrize("enable_contextual_rag", [True, False])
 def test_contextual_rag(
     embedder: DefaultIndexingEmbedder, enable_contextual_rag: bool

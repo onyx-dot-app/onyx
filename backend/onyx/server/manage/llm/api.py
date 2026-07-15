@@ -50,10 +50,10 @@ from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
-from onyx.llm.utils import get_bedrock_token_limit
+from onyx.llm.model_capabilities import get_bedrock_token_limit
+from onyx.llm.model_capabilities import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import is_sensitive_custom_config_key
-from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
