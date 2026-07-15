@@ -177,6 +177,9 @@ export const SWR_KEYS = {
   // ── Prompt shortcuts ──────────────────────────────────────────────────────
   promptShortcuts: "/api/input_prompt",
 
+  // ── Admin Banner ──────────────────────────────────────────────────────────
+  adminBanner: "/api/admin/banner",
+
   // ── License & Billing ─────────────────────────────────────────────────────
   license: "/api/license",
   billingInformationCloud: "/api/tenants/billing-information",

@@ -139,3 +139,21 @@ def test_delete_clears_banner_and_notifications(
     # A later read no longer re-creates it.
     ensure_system_announcement_notification(admin, db_session)
     assert _system_announcements(admin, db_session) == []
+
+
+def test_upsert_stores_show_as_popup(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    admin = create_test_user(db_session, "sys_announce_popup", role=UserRole.ADMIN)
+    admin_banner_api.upsert_admin_banner(
+        AdminBannerUpdateRequest(
+            title="Maintenance", content="Soon", show_as_popup=True
+        ),
+        admin,
+        db_session,
+    )
+
+    stored = get_admin_banner()
+    assert stored is not None
+    assert stored.show_as_popup is True
