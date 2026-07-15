@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { Modal } from "react-native";
 
 import { FilePickerSheet } from "@/components/chat/FilePickerSheet";
 import { makeProjectFile } from "@/chat/__tests__/fixtures";
@@ -11,6 +12,11 @@ jest.mock("react-native-safe-area-context", () => ({
 
 function recent(id: string, name: string): ProjectFile {
   return makeProjectFile({ id, name, file_id: id });
+}
+
+// Chosen action fires only after the modal reports dismissal (iOS presentation-conflict guard).
+function fireDismiss() {
+  fireEvent(screen.UNSAFE_getByType(Modal), "dismiss");
 }
 
 function renderSheet(
@@ -31,13 +37,15 @@ function renderSheet(
 }
 
 describe("FilePickerSheet", () => {
-  it("offers the two device-upload actions", () => {
+  it("offers the two device-upload actions (after the sheet dismisses)", () => {
     const props = renderSheet();
 
     fireEvent.press(screen.getByText("Upload from device"));
+    fireDismiss();
     expect(props.onUploadDocuments).toHaveBeenCalledTimes(1);
 
     fireEvent.press(screen.getByText("Choose photos"));
+    fireDismiss();
     expect(props.onUploadPhotos).toHaveBeenCalledTimes(1);
   });
 
@@ -48,6 +56,7 @@ describe("FilePickerSheet", () => {
 
     expect(screen.getByText("notes.txt")).toBeTruthy();
     fireEvent.press(screen.getByText("chart.png"));
+    fireDismiss();
     expect(props.onPickRecent).toHaveBeenCalledWith("f2");
   });
 
@@ -77,12 +86,13 @@ describe("FilePickerSheet", () => {
     expect(screen.getByText("Uploading…")).toBeTruthy();
     expect(screen.getByText("Indexing…")).toBeTruthy();
 
-    // No server id yet → not pickable.
+    // No server id yet → disabled, nothing to defer.
     fireEvent.press(screen.getByText("uploading.pdf"));
     expect(props.onPickRecent).not.toHaveBeenCalled();
 
     // Indexing (has a server id) → pickable.
     fireEvent.press(screen.getByText("indexing.pdf"));
+    fireDismiss();
     expect(props.onPickRecent).toHaveBeenCalledWith("idx");
   });
 });

@@ -18,10 +18,9 @@ import {
 } from "@/state/userFileStore";
 
 export interface UseUpload {
-  // Returns optimistic clientIds synchronously (chips render now); the transfer runs in the
-  // background. Upload errors surface as toasts. A project upload refetches project-details.
+  // Returns optimistic clientIds synchronously; the transfer runs in the background, errors toast.
   upload: (assets: NormalizedAsset[], target: UploadTarget) => string[];
-  // Pick, then upload — surfacing a picker error as a toast. The one place picker-error routing lives.
+  // Pick then upload; the one place picker-error-to-toast routing lives.
   pickAndUpload: (
     pick: () => Promise<NormalizedAsset[]>,
     target: UploadTarget,
@@ -31,7 +30,6 @@ export interface UseUpload {
   remove: (clientId: string, target: UploadTarget) => void;
 }
 
-// The only place upload logic lives; the engine store owns files + tasks + reconcile.
 export function useUpload(): UseUpload {
   const queryClient = useQueryClient();
   const serverUrl = useSession((state) => state.serverUrl);
@@ -67,7 +65,16 @@ export function useUpload(): UseUpload {
               setUploadCancel(tempId, handle.cancel);
               const result = await handle.result;
               if (result.user_files.length > 0) {
-                store.reconcile(result.user_files, epoch);
+                // Backend echoes temp_id only when its `size|name` file-key matches ours, but
+                // mobile picks routinely differ so it comes back null. Upload is 1:1, so the
+                // returned file is this record's — stamp our tempId when the server didn't echo one.
+                store.reconcile(
+                  result.user_files.map((file) => ({
+                    ...file,
+                    temp_id: file.temp_id ?? tempId,
+                  })),
+                  epoch,
+                );
               }
               if (result.rejected_files.length > 0) {
                 store.removeFile(tempId, target);
@@ -76,8 +83,8 @@ export function useUpload(): UseUpload {
                 );
               }
             } catch {
-              // Absent task = the user already removed this attachment, aborting the transfer
-              // (which rejects here). Intentional cancel, not a failure — don't toast.
+              // Absent task = user already removed this attachment, aborting the transfer (rejects
+              // here). Intentional cancel, not a failure — don't toast.
               if (useUserFileStore.getState().tasksById[tempId] == null) return;
               store.removeFile(tempId, target);
               uploadRejections.push(`${asset.name} could not be uploaded`);
@@ -85,8 +92,8 @@ export function useUpload(): UseUpload {
           }),
         );
 
-        // Project: the committed list renders from the store, hydrated by the project-details
-        // refetch. The optimistic record stays (deduped against the committed list) — no hand-off.
+        // Committed list renders from the store, hydrated by this refetch; the optimistic record
+        // stays (deduped against the committed list) — no hand-off.
         if (target.kind === "project") {
           try {
             await queryClient.invalidateQueries({

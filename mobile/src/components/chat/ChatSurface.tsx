@@ -25,9 +25,8 @@ import { useComposerDraft } from "@/hooks/useComposerDraft";
 
 const TRANSITION_MS = 150;
 
-// Persistent chat surface: one absolute overlay mounted in (app)/_layout, morphed in place
-// by route → focus so the header/composer never remount. null on non-chat routes (the Stack
-// screen shows through).
+// Persistent overlay mounted in (app)/_layout: morphed in place by route→focus so
+// header/composer never remount; null on non-chat routes (the Stack shows through).
 export function ChatSurface() {
   const pathname = usePathname();
   const focus = deriveFocus(pathname);
@@ -39,8 +38,8 @@ export function ChatSurface() {
   );
 }
 
-// Never keyed/remounted across new↔chat↔project — only `focus` changes, so the
-// chrome/composer persist and the body cross-fades.
+// Never remounted across new↔chat↔project — only `focus` changes, so chrome/composer
+// persist and the body cross-fades.
 function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   const sessionId = focus.kind === "chat" ? focus.sessionId : null;
   const projectId = focus.kind === "project" ? focus.projectId : null;
@@ -57,8 +56,8 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
 
   // Landing: agent from the route param. Existing session: its creation-time persona wins.
   const parsedAgentId = agentIdParam != null ? Number(agentIdParam) : NaN;
-  // Only a real agent id (non-negative integer) is honored; a bogus deep-link param
-  // (Infinity, float, negative) falls back to the default persona.
+  // Only a non-negative integer id is honored; a bogus deep-link param (Infinity/float/negative)
+  // falls back to the default persona.
   const selectedAgentId =
     Number.isInteger(parsedAgentId) && parsedAgentId >= 0
       ? parsedAgentId
@@ -78,8 +77,8 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   // re-attaches to an in-flight run when opened cold
   useChatSessionController(sessionId);
 
-  // Per-conversation composer draft (text + attachments), keyed so navigation restores it and it
-  // can't leak across the persistent composer. Lives in ComposerDraftContext above the surface.
+  // Per-conversation draft, keyed so navigation restores it and it can't leak across the
+  // persistent composer.
   const draft = useComposerDraft(`${sessionId ?? "new"}:${projectId ?? ""}`);
 
   const { data: details, isLoading } = useProjectDetails(projectId);
@@ -94,8 +93,8 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
         : UNNAMED_CHAT
       : undefined;
 
-  // Cleared only on an accepted send (submit's onAccepted). Gate on hasBlockingFiles so a
-  // still-uploading file can't be sent; a starter keeps the text (consumeAttachments), a send clears both.
+  // Gate on hasBlockingFiles so a still-uploading file can't be sent; a starter keeps the text
+  // (consumeAttachments), a send clears both.
   const sendWithAttachments = (message?: string) => {
     if (draft.hasBlockingFiles) return;
     submit(
@@ -182,7 +181,11 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
           exiting={FadeOut.duration(TRANSITION_MS)}
           className="flex-1"
         >
-          <MessageList messages={messages} />
+          <MessageList
+            key={sessionId ?? "new"}
+            messages={messages}
+            agent={liveAgent}
+          />
         </Animated.View>
       )}
     </ChatScreen>

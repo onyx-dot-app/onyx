@@ -25,13 +25,15 @@ jest.mock("@/state/session", () => ({
   useSession: (selector: (s: { serverUrl: string | null }) => unknown) =>
     selector({ serverUrl: "https://example.test" }),
 }));
-// Mock the transport; re-implement the trivial discriminators so we don't pull in expo/fetch.
+// Re-implement the trivial discriminators inline so we don't pull in expo/fetch.
 jest.mock("@/api/chat/stream", () => ({
   streamChatMessage: jest.fn(),
   isPacket: (event: { obj?: unknown; placement?: unknown }) =>
     "obj" in event && "placement" in event,
   isMessageIdInfo: (event: { user_message_id?: unknown }) =>
     "user_message_id" in event,
+  isStreamError: (event: { error?: unknown }) =>
+    "error" in event && typeof event.error === "string",
 }));
 jest.mock("@/api/chat/sessions", () => ({
   createChatSession: jest.fn(),
@@ -78,6 +80,9 @@ const idInfo = {
   user_message_id: 10,
   reserved_assistant_message_id: 11,
 } as StreamEvent;
+function streamError(error: string, errorCode?: string): StreamEvent {
+  return { error, error_code: errorCode ?? null } as unknown as StreamEvent;
+}
 
 async function* scripted(events: StreamEvent[]): AsyncGenerator<StreamEvent> {
   for (const event of events) yield event;
@@ -143,6 +148,62 @@ describe("useChatController", () => {
       (body as unknown as { parent_message_id: number | null })
         .parent_message_id,
     ).toBeNull();
+  });
+
+  it("surfaces a mid-stream backend error as an error node (no stuck placeholder)", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValue(
+      scripted([
+        startPacket("Partial "),
+        streamError("The model exploded.", "RATE_LIMIT"),
+      ]),
+    );
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    const messages = result.current.messages;
+    expect(messages.map((m) => m.type)).toEqual(["user", "error"]);
+    expect(messages[1]!.message).toBe("The model exploded.");
+    expect(messages[1]!.errorCode).toBe("RATE_LIMIT");
+  });
+
+  it("surfaces a bare backend error that arrives before any content", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValue(scripted([streamError("Boom.")]));
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    const messages = result.current.messages;
+    expect(messages.map((m) => m.type)).toEqual(["user", "error"]);
+    expect(messages[1]!.message).toBe("Boom.");
+  });
+
+  it("does not auto-name a new session whose first run errors", async () => {
+    createSessionMock.mockResolvedValue("err-session");
+    streamMock.mockReturnValue(scripted([streamError("nope")]));
+
+    const { result } = renderHook(() => useChatController(null), { wrapper });
+    await act(async () => {
+      await result.current.submit("first message");
+    });
+
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("err-session")?.chatState,
+      ).toBe("input"),
+    );
+    // Give any stray naming timer a chance to fire before asserting it never did.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(renameSessionMock).not.toHaveBeenCalled();
   });
 
   it("threads attachment descriptors into the send body and the optimistic user node", async () => {
@@ -251,8 +312,7 @@ describe("useChatController", () => {
       })(),
     );
 
-    // The hook stays bound to null; after create+navigate the store owns the new session, so drive
-    // and inspect it there (mirrors stop() aborting once the screen has navigated to the new id).
+    // Hook stays null-bound; after create the store owns the new session, so drive and inspect it there.
     const { result } = renderHook(() => useChatController(null), { wrapper });
     await act(async () => {
       await result.current.submit("first message");
@@ -349,7 +409,6 @@ describe("useChatController", () => {
     });
 
     expect(createSessionMock).toHaveBeenCalledWith(0, 7);
-    // From a project we navigate (push), not replace, so Back returns to it.
     expect(router.navigate).toHaveBeenCalledWith({
       pathname: "/chat/[id]",
       params: { id: "proj-session" },
@@ -378,7 +437,6 @@ describe("useChatController", () => {
   it("stop aborts the stream and stops the backend run", async () => {
     useChatSessionStore.getState().ensureSession("s1");
     stopSessionMock.mockResolvedValue();
-    // Keeps streaming until the controller's signal is aborted.
     streamMock.mockImplementation((_body, signal) =>
       (async function* () {
         yield startPacket("Hello");
