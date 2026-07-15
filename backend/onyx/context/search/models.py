@@ -83,6 +83,10 @@ class TimeRange(BaseModel):
     def has_bounds(self) -> bool:
         return self.start is not None or self.end is not None
 
+    def is_empty(self) -> bool:
+        """True when the window cannot match anything (start after end)."""
+        return self.start is not None and self.end is not None and self.start > self.end
+
     def intersect(self, other: "TimeRange | None") -> "TimeRange":
         """The overlap of the two windows (later start, earlier end); None is
         unbounded."""

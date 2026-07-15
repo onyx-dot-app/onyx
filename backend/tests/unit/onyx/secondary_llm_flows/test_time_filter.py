@@ -125,6 +125,25 @@ def test_partial_dates_fail_open() -> None:
     assert _parse_time_decision("updated (March, None)") is None
 
 
+_NOW = datetime(2026, 7, 15, 13, 45, tzinfo=timezone.utc)
+
+
+def test_end_at_today_is_treated_as_unbounded() -> None:
+    """The model closing an open-ended time with end=today must not exclude
+    documents updated later today."""
+    tf = _parse_time_decision("updated (2026-07-01, 2026-07-15)", now=_NOW)
+    assert tf is not None
+    assert tf.start is not None
+    assert tf.end is None
+
+
+def test_future_bounds_are_dropped() -> None:
+    assert _parse_time_decision("updated (2026-08-01, None)", now=_NOW) is None
+    tf = _parse_time_decision("updated (2026-07-01, 2026-09-30)", now=_NOW)
+    assert tf is not None
+    assert tf.start is not None and tf.end is None
+
+
 # ---- TimeFilter.apply_to (intersection with explicit filters) ----
 
 
@@ -150,6 +169,18 @@ def test_apply_to_never_widens_an_explicit_range() -> None:
     assert filters.updated_at_range is not None
     assert filters.updated_at_range.start == datetime(2025, 6, 1, tzinfo=timezone.utc)
     assert filters.updated_at_range.end == datetime(2025, 6, 30, tzinfo=timezone.utc)
+
+
+def test_apply_to_drops_a_disjoint_inferred_window() -> None:
+    """A conflicting inferred window must not silently match nothing."""
+    explicit_range = TimeRange(
+        start=datetime(2025, 6, 1, tzinfo=timezone.utc),
+        end=datetime(2025, 6, 30, tzinfo=timezone.utc),
+    )
+    tf = _parse_time_decision("updated (2025-09-01, 2025-09-30)")
+    assert tf is not None
+    filters = tf.apply_to(BaseFilters(updated_at_range=explicit_range))
+    assert filters.updated_at_range == explicit_range
 
 
 def test_apply_to_narrows_an_explicit_range() -> None:

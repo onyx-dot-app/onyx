@@ -44,13 +44,18 @@ class TimeFilter(BaseModel):
     def apply_to(self, filters: BaseFilters) -> BaseFilters:
         """Return a copy of `filters` with this window intersected onto the
         matching range field, so the inferred window can narrow but never widen
-        a caller-selected restriction."""
+        a caller-selected restriction. A disjoint inferred window is dropped —
+        the explicit range wins over silently matching nothing."""
         filters = filters.model_copy()
         window = TimeRange(start=self.start, end=self.end)
         if self.field is DocumentTimeField.CREATED_AT:
-            filters.created_at_range = window.intersect(filters.created_at_range)
+            merged = window.intersect(filters.created_at_range)
+            if not merged.is_empty():
+                filters.created_at_range = merged
         else:
-            filters.updated_at_range = window.intersect(filters.updated_at_range)
+            merged = window.intersect(filters.updated_at_range)
+            if not merged.is_empty():
+                filters.updated_at_range = merged
         return filters
 
 
@@ -102,6 +107,16 @@ def _parse_bound(token: str, now: datetime) -> datetime | None:
     return _parse_absolute_date(token)
 
 
+def _drop_bound_at_or_after_today(
+    bound: datetime | None, now: datetime
+) -> datetime | None:
+    """Documents live in the past, so a bound at/after today only arises from a
+    model error (e.g. end=today for an open-ended time); treat it as unset."""
+    if bound is not None and bound.date() >= now.date():
+        return None
+    return bound
+
+
 def _parse_time_decision(
     content: str | None, now: datetime | None = None
 ) -> TimeFilter | None:
@@ -117,9 +132,9 @@ def _parse_time_decision(
         logger.warning("Time filter output was not a (start, end) pair: %s", content)
         return None
 
-    start = _parse_bound(match.group(1), now)
+    start = _drop_bound_at_or_after_today(_parse_bound(match.group(1), now), now)
     # Push the upper bound to end-of-day so it includes the whole named day.
-    end_day = _parse_bound(match.group(2), now)
+    end_day = _drop_bound_at_or_after_today(_parse_bound(match.group(2), now), now)
     end = (
         datetime.combine(end_day.date(), time.max, tzinfo=timezone.utc)
         if end_day
