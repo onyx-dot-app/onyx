@@ -2,9 +2,12 @@ from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.oauth_claims_capture import get_idp_profile_fields
+from onyx.auth.oauth_claims_capture import get_idp_profile_placeholder_values
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.models import Memory
 from onyx.db.models import User
@@ -16,12 +19,22 @@ class UserInfo(BaseModel):
     name: str | None = None
     role: str | None = None
     email: str | None = None
+    # Directory profile from the IdP login snapshot (country, department, ...)
+    # as ordered {label: value} pairs. Fork feature: lets the model give
+    # location/role-aware answers (e.g. country-specific HR policies).
+    organization_profile: dict[str, str] = Field(default_factory=dict)
+    # Same directory profile plus basic identity, keyed by snake_case
+    # `{{user.<key>}}` placeholder key (e.g. department/job_title/city/email),
+    # for author-controlled placeholder substitution in agent prompts.
+    placeholder_values: dict[str, str] = Field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
             "name": self.name,
             "role": self.role,
             "email": self.email,
+            "organization_profile": self.organization_profile,
+            "placeholder_values": self.placeholder_values,
         }
 
 
@@ -51,6 +64,8 @@ class UserMemoryContext(BaseModel):
             result.append(f"User's role: {self.user_info.role}")
         if self.user_info.email:
             result.append(f"User's email: {self.user_info.email}")
+        for label, value in self.user_info.organization_profile.items():
+            result.append(f"User's {label.lower()}: {value}")
         if self.user_preferences:
             result.append(f"User preferences: {self.user_preferences}")
         result.extend(self.memories)
@@ -58,10 +73,23 @@ class UserMemoryContext(BaseModel):
 
 
 def get_memories(user: User, db_session: Session) -> UserMemoryContext:
+    # `{{user.<key>}}` placeholder values: IdP directory profile plus basic
+    # identity. Identity keys use setdefault so a directory field never gets
+    # clobbered (they don't overlap today, but keeps precedence explicit).
+    placeholder_values = get_idp_profile_placeholder_values(user.email)
+    if user.email:
+        placeholder_values.setdefault("email", user.email)
+    if user.personal_name:
+        placeholder_values.setdefault("name", user.personal_name)
+    if user.personal_role:
+        placeholder_values.setdefault("role", user.personal_role)
+
     user_info = UserInfo(
         name=user.personal_name,
         role=user.personal_role,
         email=user.email,
+        organization_profile=get_idp_profile_fields(user.email),
+        placeholder_values=placeholder_values,
     )
 
     user_preferences = None

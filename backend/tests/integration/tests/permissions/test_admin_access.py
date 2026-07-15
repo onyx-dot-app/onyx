@@ -23,6 +23,7 @@ ADMIN_ACCESS_ENDPOINTS: list[tuple[str, str]] = [
     ("GET", "/manage/users/invited"),
     ("GET", "/manage/admin/valid-domains"),
     ("GET", "/manage/users/download"),
+    ("GET", "/build/admin/base-instructions"),
 ]
 
 

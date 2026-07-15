@@ -163,14 +163,14 @@ SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0
 
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
-# Wall-clock budget for one user-message turn against opencode-serve.
-OPENCODE_PROMPT_TIMEOUT_SECONDS = float(
-    os.environ.get(
-        "OPENCODE_PROMPT_TIMEOUT_SECONDS",
-        # Legacy name, still honored so existing deployments keep their tuning.
-        os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0"),
-    )
+# Maximum time opencode-serve may go without emitting a turn event.
+OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS = float(
+    os.environ.get("OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS", "60.0")
 )
+
+# Hard ceiling for background prompt-slot renewal, so a leaked holder cannot
+# retain mutual exclusion indefinitely.
+PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS = 30 * 60.0
 
 # Prompt-slot lock lease; renewed on every sandbox event/keepalive, so a dead
 # holder strands the slot for at most this long.

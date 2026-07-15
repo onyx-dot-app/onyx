@@ -65,6 +65,7 @@ from onyx.db.models import UserRole
 from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
+from onyx.db.utils import is_unique_violation
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -245,15 +246,31 @@ def _assign_default_groups_or_error(
 ) -> ScimJSONResponse | None:
     """Assign *user* to the Basic/Admin default group, or return a SCIM error.
 
-    ``assign_user_to_default_groups__no_commit`` raises (e.g. ``RuntimeError``)
-    if the default group is missing, so failures are rolled back and surfaced
-    as a structured SCIM 500 instead of leaking a raw 500. Returns the error
-    response on failure, else ``None``.
+    Two distinct failure modes are handled:
+    - A concurrent provisioning request already committed the same user, so the
+      pending user INSERT is deferred and its ``ix_user_email`` unique violation
+      surfaces here via autoflush rather than at ``add_user``. That specific race
+      is expected — rolled back and surfaced as a clean 409, matching the
+      ``add_user`` fast-path.
+    - Any other failure (e.g. ``RuntimeError`` for a missing default group, or an
+      unrelated integrity error such as a FK violation) is rolled back and
+      surfaced as a structured SCIM 500 with a full traceback.
+
+    Returns the error response on failure, else ``None``.
     """
     try:
         assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
-    except Exception:
+    except Exception as e:
         dal.rollback()
+        # Only the duplicate-email race is an expected, benign 409. Every other
+        # failure — including non-email integrity errors — stays a 500 so real
+        # backend faults aren't masked as "already exists".
+        if isinstance(e, IntegrityError) and is_unique_violation(e, "ix_user_email"):
+            logger.info(
+                "SCIM user %s already exists (concurrent provisioning); returning 409",
+                email,
+            )
+            return _scim_error_response(409, f"User with email {email} already exists")
         logger.exception("Failed to assign SCIM user %s to default groups", email)
         return _scim_error_response(
             500, f"Failed to assign user {email} to default group"

@@ -95,6 +95,7 @@ async def test_on_after_forgot_password_emits_event(
 @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock)
 @patch("onyx.auth.users.get_security_settings")
 @patch("onyx.auth.users.verify_email_domain")
+@patch("onyx.auth.users.EMAIL_CONFIGURED", True)
 async def test_on_after_request_verify_emits_event(
     _mock_verify_domain: MagicMock,
     mock_settings: MagicMock,

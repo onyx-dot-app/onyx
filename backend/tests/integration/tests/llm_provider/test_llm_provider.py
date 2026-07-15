@@ -5,10 +5,10 @@ import httpx
 import pytest
 
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.llm.model_capabilities import litellm_thinks_model_supports_image_input
+from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.model_name_parser import parse_litellm_model_name
-from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import litellm_thinks_model_supports_image_input
-from onyx.llm.utils import model_is_reasoning_model
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_default_model_for_provider,
 )

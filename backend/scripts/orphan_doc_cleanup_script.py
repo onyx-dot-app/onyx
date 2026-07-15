@@ -16,7 +16,7 @@ from onyx.db.document import delete_documents_complete__no_commit  # noqa: E402
 from onyx.db.document import get_document  # noqa: E402
 from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
-from onyx.db.tag import delete_orphan_tags__no_commit  # noqa: E402
+from onyx.db.tag import delete_orphan_tags_batched  # noqa: E402
 from onyx.document_index.interfaces_new import DocumentSectionRequest  # noqa: E402
 from onyx.document_index.interfaces_new import TenantState  # noqa: E402
 from onyx.document_index.vespa.vespa_document_index import (  # noqa: E402
@@ -132,8 +132,8 @@ def main() -> None:
                 delete_documents_complete__no_commit(
                     db_session, successfully_vespa_deleted_doc_ids
                 )
-                delete_orphan_tags__no_commit(db_session)
                 db_session.commit()
+                delete_orphan_tags_batched(db_session)
             except Exception as e:
                 print(f"Error deleting documents from Postgres: {e}")
                 break

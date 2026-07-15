@@ -134,6 +134,119 @@ describe("useBuildStreaming thinking packets", () => {
     ).toBe(newerController);
   });
 
+  it("refreshes files only when an output write completes", async () => {
+    useBuildSessionStore.getState().updateFilesTabState(sessionId, {
+      expandedPaths: ["attachments", "attachments/reports"],
+    });
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        for (const status of ["pending", "in_progress", "completed"] as const) {
+          onPacket({
+            type: "tool_call_progress",
+            tool_call_id: "write-output",
+            kind: "edit",
+            status,
+            raw_input: { filePath: "outputs/report.txt" },
+            raw_output: null,
+            _meta: { toolName: "write" },
+          } as never);
+        }
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "write a report");
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.filesNeedsRefresh).toBe(1);
+    expect(session?.webappNeedsRefresh).toBe(0);
+    expect(session?.filesTabState.expandedPaths).toEqual([
+      "attachments",
+      "attachments/reports",
+    ]);
+  });
+
+  it("refreshes both files and preview for a completed output web write", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "write-web-output",
+          kind: "edit",
+          status: "completed",
+          raw_input: {
+            filePath:
+              "/workspace/sessions/323d7ce1-ea1b-42a8-bc34-ca5d8b4d27a3/outputs/web/app/page.tsx",
+          },
+          raw_output: null,
+          _meta: { toolName: "write" },
+        } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "update the web app");
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.filesNeedsRefresh).toBe(1);
+    expect(session?.webappNeedsRefresh).toBe(1);
+  });
+
+  it("reconciles files when a turn completes", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "mkdir-output",
+          kind: "execute",
+          status: "completed",
+          raw_input: { command: "mkdir -p outputs/report" },
+          raw_output: null,
+          _meta: { toolName: "bash" },
+        } as never);
+        onPacket({ type: "prompt_response" } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(
+        sessionId,
+        "create a report directory"
+      );
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.filesNeedsRefresh
+    ).toBe(1);
+  });
+
+  it("does not reconcile files after a text-only turn", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({ type: "text_chunk", text: "Done." } as never);
+        onPacket({ type: "prompt_response" } as never);
+      });
+
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "explain the project");
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.filesNeedsRefresh
+    ).toBe(0);
+  });
+
   it("seeds clickable subagent metadata from a task start packet", async () => {
     jest
       .mocked(processSSEStream)

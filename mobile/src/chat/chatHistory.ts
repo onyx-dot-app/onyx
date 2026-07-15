@@ -1,6 +1,4 @@
-// Builds the message tree from a loaded session. Ported from web's
-// processRawChatHistory; minimal Message (no rich types). `packets` align to
-// assistant messages by ordinal — one list per assistant turn, in order.
+// `packets` align to assistant messages by ordinal — one list per assistant turn, in order.
 
 import { BackendMessage, Message, MessageType } from "./interfaces";
 import { MessageTreeState } from "./messageTree";
@@ -22,10 +20,11 @@ export function processRawChatHistory(
     }
 
     const message: Message = {
-      // loaded messages reuse message_id as nodeId (only uniqueness matters)
+      // reuse message_id as nodeId — only uniqueness matters
       nodeId: messageInfo.message_id,
       messageId: messageInfo.message_id,
-      message: messageInfo.message,
+      // errored turns carry text in `error`; render it as the message (web parity)
+      message: messageInfo.error ?? messageInfo.message,
       type: messageInfo.error
         ? "error"
         : (messageInfo.message_type as MessageType),

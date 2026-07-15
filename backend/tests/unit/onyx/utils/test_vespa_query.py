@@ -6,6 +6,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import Tag
+from onyx.context.search.models import TimeRange
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
@@ -181,7 +182,9 @@ class TestBuildVespaFilters:
         """Test time cutoff filtering."""
         # With cutoff time
         cutoff_time = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        filters = IndexFilters(access_control_list=[], time_cutoff=cutoff_time)
+        filters = IndexFilters(
+            access_control_list=[], updated_at_range=TimeRange(start=cutoff_time)
+        )
         result = build_vespa_filters(filters)
         cutoff_secs = int(cutoff_time.timestamp())
         assert (
@@ -189,13 +192,15 @@ class TestBuildVespaFilters:
         )
 
         # No cutoff time
-        filters = IndexFilters(access_control_list=[], time_cutoff=None)
+        filters = IndexFilters(access_control_list=[], updated_at_range=None)
         result = build_vespa_filters(filters)
         assert f"!({HIDDEN}=true) and " == result
 
         # Test untimed logic (when cutoff is old enough)
         old_cutoff = datetime.now(timezone.utc) - timedelta(days=100)
-        filters = IndexFilters(access_control_list=[], time_cutoff=old_cutoff)
+        filters = IndexFilters(
+            access_control_list=[], updated_at_range=TimeRange(start=old_cutoff)
+        )
         result = build_vespa_filters(filters)
         old_cutoff_secs = int(old_cutoff.timestamp())
         assert (
@@ -204,12 +209,14 @@ class TestBuildVespaFilters:
         )
 
     def test_time_range_filter(self) -> None:
-        """A bounded range emits strict >= and <= clauses and excludes untimed
-        docs (no `!(... < ...)` form), even when the lower bound is old."""
+        """A bounded updated_at_range emits strict >= and <= clauses and
+        excludes untimed docs (no `!(... < ...)` form), even when the lower
+        bound is old."""
         start = datetime(2020, 1, 1, tzinfo=timezone.utc)
         end = datetime(2020, 1, 31, 23, 59, 59, tzinfo=timezone.utc)
         filters = IndexFilters(
-            access_control_list=[], time_cutoff=start, time_cutoff_upper=end
+            access_control_list=[],
+            updated_at_range=TimeRange(start=start, end=end),
         )
         result = build_vespa_filters(filters)
         start_secs = int(start.timestamp())
@@ -220,9 +227,12 @@ class TestBuildVespaFilters:
         )
 
     def test_time_upper_bound_only(self) -> None:
-        """An upper bound alone emits just a <= clause."""
+        """An upper bound alone (via updated_at_range) emits just a <= clause."""
         end = datetime(2023, 6, 1, tzinfo=timezone.utc)
-        filters = IndexFilters(access_control_list=[], time_cutoff_upper=end)
+        filters = IndexFilters(
+            access_control_list=[],
+            updated_at_range=TimeRange(end=end),
+        )
         result = build_vespa_filters(filters)
         end_secs = int(end.timestamp())
         assert f"!({HIDDEN}=true) and ({DOC_UPDATED_AT} <= {end_secs}) and " == result
@@ -240,7 +250,7 @@ class TestBuildVespaFilters:
             document_set=["set1"],
             project_id_filter=789,
             persona_id_filter=42,
-            time_cutoff=datetime(2023, 1, 1, tzinfo=timezone.utc),
+            updated_at_range=TimeRange(start=datetime(2023, 1, 1, tzinfo=timezone.utc)),
         )
 
         result = build_vespa_filters(filters)

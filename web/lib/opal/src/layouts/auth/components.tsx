@@ -115,13 +115,20 @@ function Fields({ children }: FieldsProps) {
 // Submit — full-width submit button
 // ---------------------------------------------------------------------------
 
-type SubmitLabel = "submit" | "create" | "join" | "reset" | "impersonate";
+type SubmitLabel =
+  | "submit"
+  | "create"
+  | "join"
+  | "reset"
+  | "impersonate"
+  | "logout";
 
 interface SubmitProps {
   label: SubmitLabel;
   isSubmitting?: boolean;
   isValid?: boolean;
   dirty?: boolean;
+  onClick?: () => void;
 }
 
 const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
@@ -130,13 +137,15 @@ const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
   join: "Join",
   reset: "Reset Password",
   impersonate: "Impersonate",
+  logout: "Sign Out",
 };
 
-function Submit({ label, isSubmitting, isValid, dirty }: SubmitProps) {
+function Submit({ label, isSubmitting, isValid, dirty, onClick }: SubmitProps) {
   return (
     <Button
       type="submit"
       width="full"
+      onClick={onClick}
       disabled={
         Boolean(isSubmitting) ||
         (isValid !== undefined && !isValid) ||

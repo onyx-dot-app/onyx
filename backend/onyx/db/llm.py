@@ -3,9 +3,11 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import load_only
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
@@ -20,6 +22,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.models import UserGroup
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
@@ -515,6 +518,49 @@ def fetch_existing_llm_providers(
     if only_public:
         return [provider for provider in providers if provider.is_public]
     return providers
+
+
+def fetch_first_accessible_llm_provider_by_type(
+    provider_type: str,
+    user: User,
+    db_session: Session,
+) -> LLMProviderModel | None:
+    """Fetch the lowest-ID provider usable without a persona context.
+
+    Load only the fields and relationships used by the existing access policy,
+    then load the API key for the selected provider.
+    """
+    providers = db_session.scalars(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.provider == provider_type)
+        .options(
+            load_only(
+                LLMProviderModel.id,
+                LLMProviderModel.is_public,
+            ),
+            selectinload(LLMProviderModel.groups).load_only(UserGroup.id),
+            selectinload(LLMProviderModel.personas).load_only(Persona.id),
+        )
+        .order_by(LLMProviderModel.id.asc())
+    )
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
+    provider = next(
+        (
+            provider
+            for provider in providers
+            if can_user_access_llm_provider(
+                provider,
+                user_group_ids,
+                persona=None,
+                is_admin=is_admin,
+            )
+        ),
+        None,
+    )
+    if provider is not None:
+        db_session.refresh(provider, attribute_names=["api_key"])
+    return provider
 
 
 def fetch_existing_llm_provider(

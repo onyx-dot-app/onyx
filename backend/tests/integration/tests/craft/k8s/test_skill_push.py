@@ -117,6 +117,23 @@ def _create_users(count: int) -> list[DATestUser]:
     return [UserManager.create(name=f"{prefix}-{idx}") for idx in range(count)]
 
 
+def _share_directly(
+    owner: DATestUser,
+    skill: SkillResponse,
+    user: DATestUser,
+) -> SkillResponse:
+    return SkillManager.share(
+        skill,
+        owner,
+        user_shares=[
+            SkillUserShareRequest(
+                user_id=UUID(user.id),
+                permission=SkillSharePermission.VIEWER,
+            )
+        ],
+    )
+
+
 @pytest.fixture
 def user_group_factory(
     k8s_admin_user: DATestUser,
@@ -501,6 +518,104 @@ class TestSkillPush:
         _replace_bundle(k8s_admin_user, skill, body="version two\n")
 
         _skill_file_path(workspace, skill.slug).wait_for_bytes(b"version two\n")
+
+    def test_owner_file_removal_propagates_to_shared_users_sandbox(
+        self,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        shared_user, owner = _create_users(2)
+        [workspace] = handle.provision_api_users([shared_user])
+
+        slug = f"remove-file-{uuid4().hex[:6]}"
+        skill = SkillManager.create_custom(
+            owner,
+            slug=slug,
+            bundle_bytes=_bundle(
+                slug,
+                "keep these instructions\n",
+                **{"references/context.md": "remove this context\n"},
+            ),
+            filename=f"{slug}.zip",
+        )
+        skill = _share_directly(owner, skill, shared_user)
+
+        skill_md = _skill_file_path(workspace, skill.slug)
+        context_file = _skill_file_path(workspace, skill.slug, "references/context.md")
+        skill_md.wait_for_bytes(b"keep these instructions\n")
+        context_file.wait_for_bytes(b"remove this context\n")
+
+        SkillManager.remove_file(skill, "references/context.md", owner)
+
+        context_file.wait_for_absent()
+        skill_md.wait_for_bytes(b"keep these instructions\n")
+
+    def test_owner_file_upload_propagates_to_shared_users_sandbox(
+        self,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        shared_user, owner = _create_users(2)
+        [workspace] = handle.provision_api_users([shared_user])
+
+        slug = f"upload-file-{uuid4().hex[:6]}"
+        skill = _create_skill(owner, slug, body="keep these instructions\n")
+        skill = _share_directly(owner, skill, shared_user)
+
+        skill_md = _skill_file_path(workspace, skill.slug)
+        context_file = _skill_file_path(workspace, skill.slug, "references/context.md")
+        skill_md.wait_for_bytes(b"keep these instructions\n")
+        context_file.wait_for_absent()
+
+        SkillManager.upload_files(
+            skill,
+            b"new shared context\n",
+            "references/context.md",
+            owner,
+        )
+
+        context_file.wait_for_bytes(b"new shared context\n")
+        skill_md.wait_for_bytes(b"keep these instructions\n")
+
+    def test_skill_md_upload_replaces_bundle_in_shared_users_sandbox(
+        self,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        shared_user, owner = _create_users(2)
+        [workspace] = handle.provision_api_users([shared_user])
+
+        slug = f"replace-files-{uuid4().hex[:6]}"
+        skill = SkillManager.create_custom(
+            owner,
+            slug=slug,
+            bundle_bytes=_bundle(
+                slug,
+                "old instructions\n",
+                **{"references/stale.md": "stale context\n"},
+            ),
+            filename=f"{slug}.zip",
+        )
+        skill = _share_directly(owner, skill, shared_user)
+
+        skill_md = _skill_file_path(workspace, skill.slug)
+        stale_file = _skill_file_path(workspace, skill.slug, "references/stale.md")
+        replacement_file = _skill_file_path(
+            workspace, skill.slug, "references/current.md"
+        )
+        skill_md.wait_for_bytes(b"old instructions\n")
+        stale_file.wait_for_bytes(b"stale context\n")
+
+        replacement = _bundle(
+            slug,
+            "new instructions\n",
+            **{"references/current.md": "current context\n"},
+        )
+        SkillManager.upload_files(skill, replacement, "replacement.zip", owner)
+
+        skill_md.wait_for_bytes(b"new instructions\n")
+        stale_file.wait_for_absent()
+        replacement_file.wait_for_bytes(b"current context\n")
 
     def test_delete_skill_removes_directory_from_all_affected_sandboxes(
         self,

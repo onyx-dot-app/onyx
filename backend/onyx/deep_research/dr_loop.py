@@ -32,8 +32,8 @@ from onyx.deep_research.utils import check_special_tool_calls
 from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
+from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.models import ToolChoiceOptions
-from onyx.llm.utils import model_is_reasoning_model
 from onyx.prompts.deep_research.orchestration_layer import CLARIFICATION_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import FINAL_REPORT_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import FIRST_CYCLE_REMINDER
