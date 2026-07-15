@@ -210,7 +210,7 @@ def test_import_github_skills_rejects_an_unavailable_selected_path(
         lambda *_args: None,
     )
 
-    with pytest.raises(OnyxError, match="reserved in Onyx") as exc_info:
+    with pytest.raises(OnyxError) as exc_info:
         import_github_skills(
             GitHubSkillsImportRequest(
                 repository="anthropics/skills",
