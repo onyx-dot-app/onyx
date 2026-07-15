@@ -4,6 +4,20 @@ test("SKILL.md populates the create form after confirmation", async ({
   page,
 }) => {
   await page.goto("/craft/v1/skills/new");
+  test.skip(
+    !new URL(page.url()).pathname.startsWith("/craft/v1/skills/new"),
+    "Onyx Craft is disabled in this environment"
+  );
+
+  const intro = page.getByRole("dialog").filter({ hasText: "Meet Craft" });
+  const introAppeared = await intro
+    .waitFor({ state: "visible", timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  if (introAppeared) {
+    await page.keyboard.press("Escape");
+    await expect(intro).toBeHidden();
+  }
 
   await page.locator('input[name="name"]').fill("Typed title");
   await page.locator('textarea[name="description"]').fill("Typed description");
@@ -11,7 +25,7 @@ test("SKILL.md populates the create form after confirmation", async ({
     .locator('textarea[name="instructions_markdown"]')
     .fill("Typed instructions");
 
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.getByLabel("Import existing skill").setInputFiles({
     name: "SKILL.md",
     mimeType: "text/markdown",
     buffer: Buffer.from(
@@ -23,8 +37,11 @@ test("SKILL.md populates the create form after confirmation", async ({
     ),
   });
 
-  await expect(page.getByText("Replace skill content?")).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
+  const confirmation = page
+    .getByRole("dialog")
+    .filter({ hasText: "Import this skill?" });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("button", { name: "Import skill" }).click();
 
   await expect(page.locator('input[name="slug"]')).toHaveCount(0);
   await expect(page.locator('input[name="name"]')).toHaveValue(

@@ -14,6 +14,9 @@ interface SkillFilesPickerProps {
   value?: PreparedSkillFilesUpload | null;
   disabled?: boolean;
   busyLabel?: string;
+  buttonLabel?: string;
+  inputLabel?: string;
+  prompt?: string;
   onChange: (upload: PreparedSkillFilesUpload) => void;
   onError: (message: string) => void;
   onPreparingChange?: (preparing: boolean) => void;
@@ -23,6 +26,9 @@ export default function SkillFilesPicker({
   value,
   disabled = false,
   busyLabel,
+  buttonLabel = "Add files",
+  inputLabel = "Add skill files",
+  prompt = "Choose files or a ZIP, or drop a folder here.",
   onChange,
   onError,
   onPreparingChange,
@@ -67,7 +73,7 @@ export default function SkillFilesPicker({
           : "border-border-01"
       )}
     >
-      <input {...getInputProps()} />
+      <input {...getInputProps({ "aria-label": inputLabel })} />
       <Button
         type="button"
         icon={SvgUploadCloud}
@@ -75,10 +81,10 @@ export default function SkillFilesPicker({
         disabled={disabled || preparing}
         onClick={open}
       >
-        {preparing ? "Preparing..." : (busyLabel ?? "Add files")}
+        {preparing ? "Preparing..." : (busyLabel ?? buttonLabel)}
       </Button>
       <Text font="secondary-body" color="text-03">
-        {value?.displayName ?? "Choose files or a ZIP, or drop a folder here."}
+        {value?.displayName ?? prompt}
       </Text>
     </div>
   );

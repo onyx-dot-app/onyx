@@ -295,10 +295,22 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
   function handleFilesSelected(upload: PreparedSkillFilesUpload) {
     if (upload.containsSkillMd) {
+      if (isCreating && !isDirty) {
+        void applyFilesUpload(upload);
+        return;
+      }
       setFilesUploadToConfirm(upload);
       return;
     }
     void applyFilesUpload(upload);
+  }
+
+  function handleImportSelected(upload: PreparedSkillFilesUpload) {
+    if (!upload.containsSkillMd) {
+      toast.error("Import a SKILL.md, ZIP, or folder containing SKILL.md.");
+      return;
+    }
+    handleFilesSelected(upload);
   }
 
   async function handleRemoveFile(path: string) {
@@ -453,7 +465,44 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
           {(isCreating || skill) && !isLoading && !error && (
             <>
+              {isCreating && (
+                <>
+                  <Section gap={0.5} alignItems="stretch" height="auto">
+                    <Card border="solid" rounding="lg" padding="sm">
+                      <Section gap={0.5} alignItems="stretch" height="auto">
+                        <Content
+                          title="Have an existing skill?"
+                          description="Import a SKILL.md, ZIP, or skill folder to prefill the form and include its files."
+                          sizePreset="main-content"
+                          variant="section"
+                        />
+                        <SkillFilesPicker
+                          disabled={filesUploadDisabled}
+                          busyLabel={
+                            isUploadingFiles ? "Importing..." : undefined
+                          }
+                          buttonLabel="Import skill"
+                          inputLabel="Import existing skill"
+                          prompt="Choose a SKILL.md or ZIP, or drop a skill folder here."
+                          onChange={handleImportSelected}
+                          onError={(message) => toast.error(message)}
+                          onPreparingChange={setIsPreparingFiles}
+                        />
+                      </Section>
+                    </Card>
+                  </Section>
+
+                  <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                </>
+              )}
+
               <Section alignItems="stretch">
+                <Content
+                  title="Details"
+                  description="Define when and how Craft should use this skill."
+                  sizePreset="main-content"
+                  variant="section"
+                />
                 <InputVertical withLabel="name" title="Name">
                   <InputTypeIn
                     id="name"
@@ -473,7 +522,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                   <InputTextArea
                     id="description"
                     name="description"
-                    rows={4}
+                    rows={2}
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
                     placeholder="What does this skill help with?"
@@ -505,7 +554,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                     <InputTextArea
                       id="instructions_markdown"
                       name="instructions_markdown"
-                      rows={22}
+                      rows={10}
                       value={instructionsMarkdown}
                       onChange={(event) =>
                         setInstructionsMarkdown(event.target.value)
@@ -528,8 +577,8 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
               <Section gap={0.5} alignItems="stretch" height="auto">
                 <Content
-                  title="Files"
-                  description="Add scripts, references, and other files this skill needs. ZIP files are unpacked. A bundle containing SKILL.md replaces the current bundle and editor content."
+                  title="Supporting files"
+                  description="Add references, scripts, assets, or other files used by this skill. ZIP files are unpacked automatically."
                   sizePreset="main-content"
                   variant="section"
                 />
@@ -554,6 +603,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                           <SkillFilesPicker
                             value={pendingFilesUpload}
                             disabled={filesUploadDisabled}
+                            inputLabel="Add supporting files"
                             busyLabel={
                               isUploadingFiles ? "Uploading..." : undefined
                             }
@@ -673,7 +723,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
       {filesUploadToConfirm && (
         <ConfirmationModalLayout
           icon={SvgAlertTriangle}
-          title="Replace skill content?"
+          title={isCreating ? "Import this skill?" : "Replace skill content?"}
           onClose={() => setFilesUploadToConfirm(null)}
           submit={
             <Button
@@ -684,12 +734,12 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                 void applyFilesUpload(upload);
               }}
             >
-              Continue
+              {isCreating ? "Import skill" : "Replace content"}
             </Button>
           }
         >
           This upload includes SKILL.md. Continuing will replace the current
-          title, description, instructions, and files with the uploaded bundle.
+          name, description, instructions, and files with the uploaded bundle.
         </ConfirmationModalLayout>
       )}
 
