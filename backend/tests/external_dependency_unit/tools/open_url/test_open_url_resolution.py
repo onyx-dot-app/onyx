@@ -19,6 +19,7 @@ from onyx.kg.models import KGStage
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
     _resolve_urls_to_document_ids,
 )
+from tests.utils.sharepoint import make_drive_item_id
 from tests.utils.sharepoint import make_sharing_token
 
 
@@ -91,7 +92,7 @@ def _seed_sharepoint_doc(
     Returns (doc_id, guid, stored_link).
     """
     guid = str(uuid4()).upper()
-    doc_id = f"01SFDIZ6{uuid4().hex.upper()[:24]}"
+    doc_id = make_drive_item_id(guid)
     stored_link = (
         "https://acme.sharepoint.com/sites/eng/_layouts/15/Doc.aspx"
         f"?sourcedoc=%7B{guid}%7D&file=Foo.docx&action=default&mobileredirect=true"

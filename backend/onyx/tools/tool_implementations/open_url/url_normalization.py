@@ -12,6 +12,8 @@ Usage:
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
 
+from sqlalchemy.orm import Session
+
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import identify_connector_class
 from onyx.utils.logger import setup_logger
@@ -102,6 +104,32 @@ def normalize_url_candidates(
 
     default = _default_url_normalizer(url)
     return [default] if default else []
+
+
+def resolve_url_document_id_candidates(
+    url: str,
+    db_session: Session,
+    source_type: DocumentSource | None = None,
+) -> list[str]:
+    """Connector-owned, index-aware resolution of a URL to candidate Document.ids.
+
+    Complements normalize_url_candidates for connectors whose ids aren't
+    computable from the URL alone. Returned candidates are unverified — the
+    caller keeps only ids that exist in the index.
+    """
+    if source_type is None:
+        source_type = _detect_source_type(url)
+    if not source_type:
+        return []
+
+    try:
+        connector_class = identify_connector_class(source_type)
+        return connector_class.resolve_url_candidates(url, db_session)
+    except Exception as exc:
+        logger.warning(
+            "Index-aware URL resolution failed for source %s: %s", source_type, exc
+        )
+        return []
 
 
 def _detect_source_type(url: str) -> DocumentSource | None:

@@ -18,6 +18,15 @@ from uuid import UUID
 _SOURCEDOC_PARAM = "sourcedoc"
 _SHARE_PARAM = "share"
 
+_BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+# Graph drive-item ids are "01" + base32(4-byte drive hash + item unique-ID GUID
+# little-endian). Undocumented but stable; verified against live Graph data.
+# An id prefix of this length pins 30 of the 32 drive-hash bits (the remaining
+# 2 bits straddle the next base32 char and are enumerated at lookup time).
+DRIVE_ITEM_ID_PREFIX = "01"
+DRIVE_ITEM_ID_PREFIX_LENGTH = 8
+
 # Sharing links look like /:w:/s/<site-name>/<base64url-token>. The token decodes
 # to a "!\x00" header followed by the item's unique-ID GUID in little-endian
 # (the same GUID Doc.aspx URLs carry in `sourcedoc=`), then opaque trailing bytes.
@@ -74,6 +83,42 @@ def _guid_from_sharing_token(path: str) -> str | None:
     if not match:
         return None
     return _guid_from_token(match.group(1))
+
+
+def sharepoint_drive_item_id_candidates(
+    guid: str, drive_id_prefixes: list[str]
+) -> list[str]:
+    """Construct the candidate drive-item Document.ids for a file's unique-ID GUID.
+
+    Each 8-char prefix ("01" + 6 base32 chars) fixes 30 drive-hash bits; the 2
+    unresolved bits give 4 candidate ids per prefix. Prefixes that aren't valid
+    drive-item id prefixes (other connectors' ids can also start with "01") are
+    skipped.
+    """
+    try:
+        guid_bytes = UUID(guid).bytes_le
+    except ValueError:
+        return []
+
+    candidates: list[str] = []
+    for prefix in drive_id_prefixes:
+        if len(prefix) != DRIVE_ITEM_ID_PREFIX_LENGTH or not prefix.startswith(
+            DRIVE_ITEM_ID_PREFIX
+        ):
+            continue
+        hash_bits = 0
+        try:
+            for char in prefix[len(DRIVE_ITEM_ID_PREFIX) :]:
+                hash_bits = (hash_bits << 5) | _BASE32_ALPHABET.index(char)
+        except ValueError:
+            continue
+        for low_bits in range(4):
+            drive_hash = ((hash_bits << 2) | low_bits).to_bytes(4, "big")
+            candidates.append(
+                DRIVE_ITEM_ID_PREFIX
+                + base64.b32encode(drive_hash + guid_bytes).decode()
+            )
+    return candidates
 
 
 def sharepoint_page_url_variants(url: str) -> list[str]:

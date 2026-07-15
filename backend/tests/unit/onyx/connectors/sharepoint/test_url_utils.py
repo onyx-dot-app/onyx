@@ -5,7 +5,9 @@ from urllib.parse import urlsplit
 import pytest
 
 from onyx.connectors.sharepoint.url_utils import extract_sharepoint_document_guid
+from onyx.connectors.sharepoint.url_utils import sharepoint_drive_item_id_candidates
 from onyx.connectors.sharepoint.url_utils import sharepoint_page_url_variants
+from tests.utils.sharepoint import make_drive_item_id
 from tests.utils.sharepoint import make_sharing_token as _make_sharing_token
 
 _GUID = "2AB3C4D5-6E7F-4A1B-9C0D-1E2F3A4B5C6D"
@@ -108,3 +110,54 @@ def test_page_url_variants_requote_decoded_spaces() -> None:
     assert f"{_SITE}/Shared%20Documents/Foo%20(2022).pdf" in (
         sharepoint_page_url_variants(mixed)
     )
+
+
+@pytest.mark.parametrize(
+    "prefix,guid,expected_id",
+    [
+        # real (prefix, sourcedoc GUID, drive-item id) triples from live Graph data
+        (
+            "01RWUU3P",
+            "0320E240-B69F-4D8D-A196-89674CD60485",
+            "01RWUU3PKA4IQAHH5WRVG2DFUJM5GNMBEF",
+        ),
+        (
+            "014NAK7T",
+            "0EFE1B85-688F-4CBE-B9B7-1B8215F3A796",
+            "014NAK7T4FDP7A5D3IXZGLTNY3QIK7HJ4W",
+        ),
+        (
+            "016GMXOK",
+            "054F6393-FA7A-4996-9188-6756BBC23BE2",
+            "016GMXOKETMNHQK6X2SZEZDCDHK254EO7C",
+        ),
+    ],
+)
+def test_drive_item_id_candidates_reconstruct_real_ids(
+    prefix: str, guid: str, expected_id: str
+) -> None:
+    candidates = sharepoint_drive_item_id_candidates(guid, [prefix])
+    assert len(candidates) == 4  # 2 unresolved drive-hash bits
+    assert expected_id in candidates
+    assert all(c.startswith(prefix) for c in candidates)
+
+
+def test_drive_item_id_candidates_roundtrip_synthetic_id() -> None:
+    guid = "2AB3C4D5-6E7F-4A1B-9C0D-1E2F3A4B5C6D"
+    doc_id = make_drive_item_id(guid)
+    assert doc_id in sharepoint_drive_item_id_candidates(guid, [doc_id[:8]])
+
+
+def test_drive_item_id_candidates_skip_invalid_prefixes() -> None:
+    assert (
+        sharepoint_drive_item_id_candidates(
+            _GUID,
+            # non-base32 chars / wrong shape / wrong length — e.g. other connectors' ids
+            ["01SFDIZ0", "https://", "01AB", "02RWUU3P", ""],
+        )
+        == []
+    )
+
+
+def test_drive_item_id_candidates_invalid_guid() -> None:
+    assert sharepoint_drive_item_id_candidates("not-a-guid", ["01RWUU3P"]) == []

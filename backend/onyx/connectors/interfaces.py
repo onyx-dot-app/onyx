@@ -4,8 +4,12 @@ from collections.abc import Iterator
 from types import TracebackType
 from typing import Any
 from typing import Generic
+from typing import TYPE_CHECKING
 from typing import TypeAlias
 from typing import TypeVar
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -111,9 +115,28 @@ class BaseConnector(abc.ABC, Generic[CT]):
         """Normalize a URL to match the canonical Document.id format used during ingestion.
 
         Connectors that use URLs as document IDs should override this method.
-        Returns NormalizationResult with use_default=True if not implemented.
+        Must be a pure function of the URL — no I/O; index-dependent resolution
+        belongs in resolve_url_candidates. Returns NormalizationResult with
+        use_default=True if not implemented.
         """
         return NormalizationResult(normalized_url=None, use_default=True)
+
+    @classmethod
+    def resolve_url_candidates(
+        cls,
+        url: str,  # noqa: ARG003
+        db_session: "Session",  # noqa: ARG003
+    ) -> list[str]:
+        """Resolve a URL to candidate Document.ids using deployment state.
+
+        Override for connectors whose Document.ids can't be computed from the
+        URL alone (e.g. SharePoint's Graph ids, which embed a per-drive hash
+        that appears in no URL) and require lookups through the caller's
+        session. Candidates may be speculative — the caller keeps only ids
+        that exist in the index. Keep implementations cheap: this runs once
+        per pasted URL in the chat flow.
+        """
+        return []
 
     def build_dummy_checkpoint(self) -> CT:
         return ConnectorCheckpoint(has_more=True)  # ty: ignore[invalid-return-type]
