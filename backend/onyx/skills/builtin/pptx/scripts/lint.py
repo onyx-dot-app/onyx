@@ -39,6 +39,7 @@ from pptx.enum.dml import MSO_COLOR_TYPE
 from pptx.enum.dml import MSO_FILL
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_AUTO_SIZE
+from pptx.shapes.base import BaseShape
 from pptx.util import Emu
 
 EMU_PER_INCH = 914400
@@ -175,9 +176,14 @@ def _shape_text(shape) -> str:
 
 
 def _is_full_bleed(box: Box, slide_w: int, slide_h: int) -> bool:
+    # A shape only counts as a full-bleed background if it actually covers the
+    # slide — full-bleed dimensions with most of the area off-slide don't qualify.
+    clipped = box.intersect(Box(0, 0, slide_w, slide_h))
     return (
         box.width >= FULL_BLEED_FRACTION * slide_w
         and box.height >= FULL_BLEED_FRACTION * slide_h
+        and box.area > 0
+        and clipped.area >= FULL_BLEED_FRACTION * box.area
     )
 
 
@@ -284,20 +290,26 @@ def _para_font(para) -> tuple[str, float, bool] | None:
     return family, size_pt, bold
 
 
-def _wrap_line_count(text: str, usable_w_pt: float, font, size_pt: float) -> int:
+def _wrap_line_count(
+    text: str, usable_w_pt: float, font: ImageFont.ImageFont, size_pt: float
+) -> int:
     if not text.strip():
         return 1
-    lines = 1
-    current = 0.0
+    lines = 0
     space_w = _text_width_pt(" ", font, size_pt)
-    for word in text.split():
-        w = _text_width_pt(word, font, size_pt)
-        w = min(w, usable_w_pt)  # a single over-wide word char-wraps; don't explode
-        if current > 0 and current + space_w + w > usable_w_pt:
-            lines += 1
-            current = w
-        else:
-            current = current + (space_w if current > 0 else 0.0) + w
+    # Hard line breaks (a:br) surface as "\v" in python-pptx paragraph text.
+    for hard_line in text.replace("\v", "\n").split("\n"):
+        lines += 1
+        current = 0.0
+        for word in hard_line.split():
+            w = _text_width_pt(word, font, size_pt)
+            # a single over-wide word char-wraps; don't explode
+            w = min(w, usable_w_pt)
+            if current > 0 and current + space_w + w > usable_w_pt:
+                lines += 1
+                current = w
+            else:
+                current = current + (space_w if current > 0 else 0.0) + w
     return lines
 
 
@@ -317,19 +329,24 @@ def _estimate_text_extent(shape, box: Box) -> tuple[float, float, float, float] 
     max_line_w_pt = 0.0
     min_line_h_pt: float | None = None
     for para in tf.paragraphs:
-        if not "".join(run.text for run in para.runs).strip():
+        # para.text includes hard line breaks (a:br) as "\v", unlike para.runs.
+        text = para.text
+        if not text.strip():
             continue  # blank spacer paragraph at unknown size — ignore
         para_font = _para_font(para)
         if para_font is None:
             return None
         family, size_pt, bold = para_font
         font = _load_font(family, size_pt, bold)
-        text = "".join(run.text for run in para.runs)
         if wrap:
             lines = _wrap_line_count(text, usable_w_pt, font, size_pt)
         else:
-            lines = 1
-            max_line_w_pt = max(max_line_w_pt, _text_width_pt(text, font, size_pt))
+            hard_lines = text.replace("\v", "\n").split("\n")
+            lines = len(hard_lines)
+            max_line_w_pt = max(
+                max_line_w_pt,
+                max(_text_width_pt(ln, font, size_pt) for ln in hard_lines),
+            )
         line_h = size_pt * LINE_SPACING_FACTOR
         spacing = para.line_spacing
         if isinstance(spacing, float):
@@ -432,7 +449,7 @@ def _run_rgb(run) -> tuple[int, int, int] | None:
 
 
 def check_bounds(
-    slide_no: int, shapes: list, slide_w: int, slide_h: int
+    slide_no: int, shapes: list[tuple[BaseShape, Box]], slide_w: int, slide_h: int
 ) -> list[Finding]:
     findings: list[Finding] = []
     slide_box = Box(0, 0, slide_w, slide_h)
@@ -479,7 +496,7 @@ def check_bounds(
 
 
 def check_margins(
-    slide_no: int, shapes: list, slide_w: int, slide_h: int
+    slide_no: int, shapes: list[tuple[BaseShape, Box]], slide_w: int, slide_h: int
 ) -> list[Finding]:
     findings: list[Finding] = []
     for shape, box in shapes:
@@ -522,7 +539,7 @@ def check_margins(
     return findings
 
 
-def check_overflow(slide_no: int, shapes: list) -> list[Finding]:
+def check_overflow(slide_no: int, shapes: list[tuple[BaseShape, Box]]) -> list[Finding]:
     findings: list[Finding] = []
     for shape, box in shapes:
         if not getattr(shape, "has_text_frame", False):
@@ -576,7 +593,7 @@ def check_overflow(slide_no: int, shapes: list) -> list[Finding]:
 
 
 def check_overlap(
-    slide_no: int, shapes: list, slide_w: int, slide_h: int
+    slide_no: int, shapes: list[tuple[BaseShape, Box]], slide_w: int, slide_h: int
 ) -> list[Finding]:
     findings: list[Finding] = []
     slide_area = slide_w * slide_h
@@ -667,7 +684,9 @@ def check_overlap(
     return findings
 
 
-def check_contrast(slide_no: int, slide, shapes: list) -> tuple[list[Finding], int]:
+def check_contrast(
+    slide_no: int, slide, shapes: list[tuple[BaseShape, Box]]
+) -> tuple[list[Finding], int]:
     """Returns (findings, skipped_run_count)."""
     findings: list[Finding] = []
     skipped = 0
@@ -786,7 +805,7 @@ def lint_presentation(prs) -> tuple[list[Finding], int]:
     findings: list[Finding] = []
     total_skipped = 0
     for slide_no, slide in enumerate(prs.slides, start=1):
-        shapes: list = []
+        shapes: list[tuple[BaseShape, Box]] = []
         for shape in slide.shapes:
             box = _shape_box(shape)
             if box is None or _is_rotated(shape):
@@ -833,7 +852,8 @@ def main() -> None:
     if contrast_skipped:
         print(
             f"note: contrast skipped for {contrast_skipped} run(s) over "
-            "image/unresolvable backgrounds — verify those visually"
+            "image/unresolvable backgrounds — verify those visually",
+            file=sys.stderr,
         )
     sys.exit(1 if errors else 0)
 
