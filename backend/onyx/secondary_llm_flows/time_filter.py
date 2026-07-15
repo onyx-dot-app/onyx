@@ -1,5 +1,4 @@
 import re
-from datetime import date
 from datetime import datetime
 from datetime import time
 from datetime import timedelta
@@ -11,7 +10,6 @@ from dateutil.relativedelta import relativedelta
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import TimeRange
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import ReasoningEffort
@@ -35,30 +33,12 @@ class DocumentTimeField(StrEnum):
 
 
 class TimeFilter(BaseModel):
-    """A conversation-derived time scope for an internal search.
-
-    `field` is the document date the user's phrasing is about — creation time
-    ("sent/created/opened in X") vs. update/activity time (anything else).
-    `start` / `end` are the inclusive window; either may be None (open).
-    `decide_time_filter` returns None when the conversation references no time.
-    """
+    """The document date the conversation scopes on (created vs updated) and
+    the inclusive (start, end) window; either bound may be None (open)."""
 
     field: DocumentTimeField
     start: datetime | None = None
     end: datetime | None = None
-
-    def to_filter_ranges(self) -> tuple[TimeRange | None, TimeRange | None]:
-        """Map this scope onto (created_at_range, updated_at_range) per
-        FILTER_SEMANTICS.md ("Time filtering"): created intent is a plain
-        created_at window; updated intent is the best-guess overlap
-        (last_updated >= start AND created_at <= end), since edit history is
-        unstored — the upper bound must NOT go on last_updated.
-        """
-        if self.field is DocumentTimeField.CREATED_AT:
-            return TimeRange(start=self.start, end=self.end), None
-        created = TimeRange(end=self.end) if self.end is not None else None
-        updated = TimeRange(start=self.start) if self.start is not None else None
-        return created, updated
 
 
 # The model's "(start, end)" output; each side is one comma/paren-free token.
@@ -73,28 +53,13 @@ _TIME_FILTER_FIELD_RE = re.compile(r"\b(created|updated)\b", re.IGNORECASE)
 _RELATIVE_BOUND_RE = re.compile(r"^-?\s*P\s*(\d+)\s*([DWMY])$", re.IGNORECASE)
 
 
-def _day_start(day: date) -> datetime:
-    return datetime.combine(day, time.min, tzinfo=timezone.utc)
-
-
-def _day_end(day: date) -> datetime:
-    return datetime.combine(day, time.max, tzinfo=timezone.utc)
-
-
-def _relative_token_parts(token: str) -> tuple[int, str] | None:
-    """The (amount, unit) of a "-P<N><U>" token, or None if it isn't one."""
+def _resolve_relative_bound(token: str, now: datetime) -> datetime | None:
+    """Resolve a duration token to `now` minus N units, or None if not one."""
     match = _RELATIVE_BOUND_RE.match(token)
     if match is None:
         return None
-    return int(match.group(1)), match.group(2).upper()
-
-
-def _resolve_relative_bound(token: str, now: datetime) -> datetime | None:
-    """Resolve a duration token to `now` minus N units, or None if not one."""
-    parts = _relative_token_parts(token)
-    if parts is None:
-        return None
-    amount, unit = parts
+    amount = int(match.group(1))
+    unit = match.group(2).upper()
     if unit == "D":
         return now - timedelta(days=amount)
     if unit == "W":
@@ -102,31 +67,6 @@ def _resolve_relative_bound(token: str, now: datetime) -> datetime | None:
     if unit == "M":
         return now - relativedelta(months=amount)
     return now - relativedelta(years=amount)
-
-
-def _period_bounds(token: str, now: datetime) -> tuple[datetime, datetime] | None:
-    """The calendar period a "-P<N><U>" token lands in, as (start, end): the
-    ISO week (Monday-Sunday), calendar month, or calendar year containing `now`
-    minus N units; for days, that single day. None if not a relative offset."""
-    parts = _relative_token_parts(token)
-    anchor_dt = _resolve_relative_bound(token, now)
-    if parts is None or anchor_dt is None:
-        return None
-    anchor = anchor_dt.date()
-    _, unit = parts
-    if unit == "D":
-        return _day_start(anchor), _day_end(anchor)
-    if unit == "W":
-        monday = anchor - timedelta(days=anchor.weekday())
-        return _day_start(monday), _day_end(monday + timedelta(days=6))
-    if unit == "M":
-        first = anchor.replace(day=1)
-        last = (first + relativedelta(months=1)) - timedelta(days=1)
-        return _day_start(first), _day_end(last)
-    return (
-        _day_start(anchor.replace(month=1, day=1)),
-        _day_end(anchor.replace(month=12, day=31)),
-    )
 
 
 def best_match_time(time_str: str) -> datetime | None:
@@ -168,15 +108,9 @@ def _parse_bound(token: str, now: datetime) -> datetime | None:
 def _parse_time_decision(
     content: str | None, now: datetime | None = None
 ) -> TimeFilter | None:
-    """Parse the model's "<field> (start, end)" output into a TimeFilter.
-
-    Bounds are inclusive of whole days: starts are floored to the start of
-    their day and ends pushed to the end of theirs. An identical relative token
-    on both sides can only mean "the Nth calendar period back" ("(-P1W, -P1W)"
-    is the previous week), never a rolling window, so it resolves to that
-    period's boundaries. Returns None on anything unparseable, or when neither
-    bound is set, so the caller searches across all time.
-    """
+    """Parse the model's "<field> (start, end)" output into a TimeFilter; the
+    field defaults to updated when absent. Returns None on anything unparseable,
+    or when neither bound is set, so the caller searches across all time."""
     now = now or datetime.now(timezone.utc)
     if not content:
         return None
@@ -186,25 +120,14 @@ def _parse_time_decision(
         logger.warning("Time filter output was not a (start, end) pair: %s", content)
         return None
 
-    start_token = match.group(1).strip().strip("'\"")
-    end_token = match.group(2).strip().strip("'\"")
-
-    start: datetime | None
-    end: datetime | None
-    start_parts = _relative_token_parts(start_token)
-    period = (
-        _period_bounds(start_token, now)
-        if start_parts is not None and start_parts == _relative_token_parts(end_token)
+    start = _parse_bound(match.group(1), now)
+    # Push the upper bound to end-of-day so it includes the whole named day.
+    end_day = _parse_bound(match.group(2), now)
+    end = (
+        datetime.combine(end_day.date(), time.max, tzinfo=timezone.utc)
+        if end_day
         else None
     )
-    if period is not None:
-        start, end = period
-    else:
-        start_day = _parse_bound(start_token, now)
-        start = _day_start(start_day.date()) if start_day else None
-        end_day = _parse_bound(end_token, now)
-        end = _day_end(end_day.date()) if end_day else None
-
     if start is None and end is None:
         return None
 

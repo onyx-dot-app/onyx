@@ -94,6 +94,7 @@ from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
 from onyx.secondary_llm_flows.source_filter import decide_search_scope
 from onyx.secondary_llm_flows.source_filter import SearchCycle
 from onyx.secondary_llm_flows.time_filter import decide_time_filter
+from onyx.secondary_llm_flows.time_filter import DocumentTimeField
 from onyx.secondary_llm_flows.time_filter import TimeFilter
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -881,26 +882,25 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             if DocumentSource.SLACK not in resolved_scope:
                 slack_access_token = None
 
-        # Apply the turn's cached time filter as field-aware ranges. Any persona
-        # time floor composes with these downstream in the search pipeline.
+        # The pipeline composes the lower bound with any persona time floor.
         time_filter = expansion.time_filter
         if time_filter is not None:
-            created_range, updated_range = time_filter.to_filter_ranges()
-            range_updates: dict[str, TimeRange] = {}
-            if created_range is not None:
-                range_updates["created_at_range"] = created_range
-            if updated_range is not None:
-                range_updates["updated_at_range"] = updated_range
-            if range_updates:
-                effective_filters = (effective_filters or BaseFilters()).model_copy(
-                    update=range_updates
-                )
-                logger.info(
-                    "Internal search - time filter: %s in [%s, %s]",
-                    time_filter.field.value,
-                    time_filter.start.isoformat() if time_filter.start else "any",
-                    time_filter.end.isoformat() if time_filter.end else "any",
-                )
+            range_field = (
+                "created_at_range"
+                if time_filter.field is DocumentTimeField.CREATED_AT
+                else "updated_at_range"
+            )
+            effective_filters = (effective_filters or BaseFilters()).model_copy(
+                update={
+                    range_field: TimeRange(start=time_filter.start, end=time_filter.end)
+                }
+            )
+            logger.info(
+                "Internal search - time window (%s): %s to %s",
+                time_filter.field.value,
+                time_filter.start.isoformat() if time_filter.start else "any",
+                time_filter.end.isoformat() if time_filter.end else "any",
+            )
 
         # Prepare queries with their weights and hybrid_alpha settings
         # Group 1: Keyword queries (use hybrid_alpha=0.2)
