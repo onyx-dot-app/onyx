@@ -42,14 +42,12 @@ from ee.onyx.utils.encryption import test_encryption
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
 from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import AuthType
 from onyx.main import get_application as get_application_base
 from onyx.main import include_auth_router_with_prefix
 from onyx.main import include_router_with_global_prefix_prepended
@@ -101,7 +99,7 @@ def get_application() -> FastAPI:
         # MT deployments use control plane gating via is_tenant_gated() instead
         add_license_enforcement_middleware(application, logger)
 
-    if AUTH_TYPE == AuthType.CLOUD:
+    if MULTI_TENANT:
         # For Google OAuth, refresh tokens are requested by:
         # 1. Adding the right scopes
         # 2. Properly configuring OAuth in Google Cloud Console to allow offline access
