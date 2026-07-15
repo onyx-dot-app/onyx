@@ -182,8 +182,7 @@ def decide_time_filter(
             response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
             record_llm_response(span_generation, response)
             content = response.choice.message.content
+        return _parse_time_decision(content, now)
     except Exception:
         logger.exception("Time filter decision failed; searching across all time")
         return None
-
-    return _parse_time_decision(content, now)
