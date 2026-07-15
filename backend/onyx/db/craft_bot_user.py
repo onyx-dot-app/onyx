@@ -24,6 +24,9 @@ def get_or_create_craft_bot_user(db_session: Session) -> User:
     (unlike BOT/EXT_PERM_USER) still eligible for default-group assignment
     and further group membership, so admins can widen its search ACL later.
     No login is possible: the password hash is a random, discarded secret.
+
+    Does NOT commit — new rows are flushed only, and the caller owns the
+    transaction on both the creation and found-existing paths.
     """
     existing = db_session.scalar(
         select(User).where(User.email == CRAFT_BOT_EMAIL)  # ty: ignore[invalid-argument-type]
@@ -57,5 +60,5 @@ def get_or_create_craft_bot_user(db_session: Session) -> User:
         return existing
 
     assign_user_to_default_groups__no_commit(db_session, bot_user, is_admin=False)
-    db_session.commit()
+    db_session.flush()
     return bot_user

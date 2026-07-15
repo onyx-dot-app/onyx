@@ -79,6 +79,7 @@ def test_concurrent_create_race_returns_winner(
                 race_fired = True
                 with get_session_with_current_tenant() as other_session:
                     winner = get_or_create_craft_bot_user(other_session)
+                    other_session.commit()
                     winner_ids.append(winner.id)
             return real_helper.hash(password)
 
