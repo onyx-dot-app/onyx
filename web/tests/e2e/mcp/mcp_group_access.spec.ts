@@ -6,10 +6,8 @@ import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
 /**
  * Group/public access control for MCP servers (CE surface).
  *
- * On CE, private / group-restricted creates are coerced to public (no EE write
- * path). Group read/filter behaviour is covered by external-dependency unit
- * tests that seed access rows directly. The create/edit access selector is
- * EE/business-tier only.
+ * Group read/filter behaviour is covered by external-dependency unit tests that
+ * seed access rows directly. The create/edit selector is EE/business-tier only.
  */
 test.describe("MCP server group access control", () => {
   test.describe.configure({ mode: "serial" });
@@ -35,26 +33,21 @@ test.describe("MCP server group access control", () => {
     expect(body.groups).toEqual([]);
   });
 
-  test("CE coerces private+groups create to public", async ({
-    page,
-    eeEnabled,
-  }) => {
+  test("CE rejects private server creation", async ({ page, eeEnabled }) => {
     test.skip(eeEnabled, "CE-only: EE persists private + group grants");
     await loginAs(page, "admin");
     const res = await page.request.post("/api/admin/mcp/server", {
       data: {
         name: `Restricted MCP ${suffix}`,
-        description: "coerced public on CE",
+        description: "private server on CE",
         server_url: "https://example.com/mcp",
         is_public: false,
         groups: [999999],
       },
     });
-    expect(res.ok()).toBeTruthy();
+    expect(res.status()).toBe(403);
     const body = await res.json();
-    createdServerIds.push(body.id);
-    expect(body.is_public).toBe(true);
-    expect(body.groups).toEqual([]);
+    expect(body.error_code).toBe("EE_REQUIRED");
   });
 
   test("Add-Server modal exposes the access (public/groups) selector", async ({

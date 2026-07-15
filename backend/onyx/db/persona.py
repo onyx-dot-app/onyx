@@ -1333,15 +1333,24 @@ def upsert_persona(
         if not tools and tool_ids:
             raise ValueError("Tools not found")
 
-        # Attach ACL: cannot put inaccessible MCP tools on a persona.
+        # Existing tools survive access revocation; newly attached tools require access.
         if user is not None:
             # local import to avoid circular import (mirrors built_in_tools below)
             from onyx.db.mcp import user_can_access_mcp_server
 
+            existing_tool_ids = (
+                {tool.id for tool in existing_persona.tools}
+                if existing_persona
+                else set()
+            )
             checked_servers: set[int] = set()
             for tool in tools:
                 server_id = tool.mcp_server_id
-                if server_id is None or server_id in checked_servers:
+                if (
+                    tool.id in existing_tool_ids
+                    or server_id is None
+                    or server_id in checked_servers
+                ):
                     continue
                 checked_servers.add(server_id)
                 if not user_can_access_mcp_server(user, server_id, db_session):

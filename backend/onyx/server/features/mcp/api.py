@@ -1554,6 +1554,7 @@ def _db_mcp_server_to_api_mcp_server(
         status=db_server.status,
         is_public=db_server.is_public,
         groups=[group.id for group in db_server.user_groups],
+        users=[user.id for user in db_server.users],
         last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
         auth_template=auth_template,
@@ -1915,41 +1916,39 @@ def _apply_mcp_server_access(
     *,
     mcp_server: DbMCPServer,
     acting_user: User,
-    is_public: bool,
-    user_ids: list[UUID],
-    group_ids: list[int],
+    is_public: bool | None,
+    user_ids: list[UUID] | None,
+    group_ids: list[int] | None,
     is_new: bool,
     db_session: Session,
 ) -> None:
     """Validate the acting user may assign these groups (EE; no-op in MIT), set
     the public flag, and reconcile the user/group access rows (EE write). Public
     servers clear any existing grants."""
-    fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_object_creation_for_user", None
-    )(
-        db_session=db_session,
-        user=acting_user,
-        target_group_ids=group_ids,
-        object_is_public=is_public,
-        object_is_new=is_new,
-    )
-    # all CE MCP servers are public
-    is_public = is_public or not global_version.is_ee_version()
-    mcp_server.is_public = is_public
-    try:
-        fetch_versioned_implementation("onyx.db.mcp", "make_mcp_server_private")(
-            server_id=mcp_server.id,
-            user_ids=[] if is_public else user_ids,
-            group_ids=[] if is_public else group_ids,
-            db_session=db_session,
-        )
-    except NotImplementedError:
-        # CE can't persist user/group grants; surface a clean 403 instead of 500.
+    is_public = mcp_server.is_public if is_public is None else is_public
+    if not is_public and not global_version.is_ee_version():
         raise OnyxError(
             OnyxErrorCode.EE_REQUIRED,
             "Restricting MCP servers to specific users or groups requires "
             "Enterprise Edition.",
         )
+
+    fetch_ee_implementation_or_noop(
+        "onyx.db.user_group", "validate_object_creation_for_user", None
+    )(
+        db_session=db_session,
+        user=acting_user,
+        target_group_ids=group_ids or [],
+        object_is_public=is_public,
+        object_is_new=is_new,
+    )
+    mcp_server.is_public = is_public
+    fetch_versioned_implementation("onyx.db.mcp", "make_mcp_server_private")(
+        server_id=mcp_server.id,
+        user_ids=[] if is_public else user_ids,
+        group_ids=[] if is_public else group_ids,
+        db_session=db_session,
+    )
 
 
 def _upsert_mcp_server(
@@ -2172,15 +2171,16 @@ def _upsert_mcp_server(
             "Created new MCP server '%s' with ID %s", request.name, mcp_server.id
         )
 
-    # Access is owned by the create/edit form; only touch it if this request
-    # explicitly carries an access decision (None = leave unchanged).
-    if request.is_public is not None:
+    if any(
+        value is not None
+        for value in (request.is_public, request.users, request.groups)
+    ):
         _apply_mcp_server_access(
             mcp_server=mcp_server,
             acting_user=user,
             is_public=request.is_public,
-            user_ids=request.users or [],
-            group_ids=request.groups or [],
+            user_ids=request.users,
+            group_ids=request.groups,
             is_new=request.existing_server_id is None,
             db_session=db_session,
         )
@@ -2639,6 +2639,7 @@ def create_mcp_server_simple(
         status=mcp_server.status,
         is_public=mcp_server.is_public,
         groups=[group.id for group in mcp_server.user_groups],
+        users=[user.id for user in mcp_server.users],
         tool_count=0,  # New server, no tools yet
         auth_template=None,
         user_credentials=None,
@@ -2672,14 +2673,16 @@ def update_mcp_server_simple(
         server_url=request.server_url,
     )
 
-    # Only touch access when this request carries a decision (None = unchanged).
-    if request.is_public is not None:
+    if any(
+        value is not None
+        for value in (request.is_public, request.users, request.groups)
+    ):
         _apply_mcp_server_access(
             mcp_server=updated_server,
             acting_user=user,
             is_public=request.is_public,
-            user_ids=request.users or [],
-            group_ids=request.groups or [],
+            user_ids=request.users,
+            group_ids=request.groups,
             is_new=False,
             db_session=db_session,
         )

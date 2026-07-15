@@ -494,6 +494,7 @@ class MCPServer(BaseModel):
     status: MCPServerStatus
     is_public: bool = True
     groups: list[int] = Field(default_factory=list)
+    users: list[UUID] = Field(default_factory=list)
     last_refreshed_at: Optional[datetime.datetime] = None
     tool_count: int = Field(
         default=0, description="Number of tools associated with this server"

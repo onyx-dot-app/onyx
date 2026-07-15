@@ -73,6 +73,7 @@ export default function AddMCPServerModal({
     server_url: server?.server_url || "",
     is_public: server?.is_public ?? true,
     groups: server?.groups ?? [],
+    users: server?.users ?? [],
   };
 
   const handleSubmit = async (values: MCPServerCreateRequest) => {
@@ -82,6 +83,7 @@ export default function AddMCPServerModal({
     const payload: MCPServerCreateRequest = {
       ...values,
       groups: values.is_public ? [] : values.groups,
+      users: values.is_public ? [] : values.users,
     };
 
     try {
