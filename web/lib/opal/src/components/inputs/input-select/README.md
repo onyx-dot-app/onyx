@@ -4,6 +4,23 @@
 
 Styled dropdown on Radix Select, the Figma `Input/Select`. Compound component: the root owns value state (controlled or uncontrolled), `Trigger` renders the `.opal-input` chrome with the selected item's icon and label (truncating with a tooltip when clipped), `Content` is the popper matching the trigger width, `Item`s render as `ContentAction` rows with Radix driving highlight and selection.
 
+For filterable lists, render `Search` as the first child of `Content`. It is a sticky query row: the consumer owns the query state and renders only the matching `Item`s. The row keeps printable keys in its input (Radix typeahead never fires), focuses itself when the menu opens, hands focus to the option list on ArrowDown (Radix then drives highlight and Enter), and lets Escape close the menu. Clear the query in `onOpenChange` so each open starts unfiltered.
+
+```tsx
+<InputSelect.Content>
+  <InputSelect.Search
+    value={query}
+    onChange={(e) => setQuery(e.target.value)}
+    placeholder="Search agents..."
+  />
+  {filtered.map((a) => (
+    <InputSelect.Item key={a.id} value={String(a.id)}>
+      {a.name}
+    </InputSelect.Item>
+  ))}
+</InputSelect.Content>
+```
+
 ```tsx
 <InputSelect value={value} onValueChange={setValue} error={touched && !value}>
   <InputSelect.Trigger placeholder="Choose a model" />

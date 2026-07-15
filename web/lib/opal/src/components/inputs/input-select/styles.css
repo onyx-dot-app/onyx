@@ -49,6 +49,12 @@
   width: var(--radix-select-trigger-width);
 }
 
+/* Full-bleed over the content's p-1 (negative margins) so scrolling items
+   pass behind a solid, bordered row pinned to the scrollport top. */
+.opal-input-select-search {
+  @apply sticky -top-1 z-1 -mx-1 -mt-1 mb-1 border-b bg-background-neutral-00 p-1;
+}
+
 /* The rows sit outside any .interactive ancestor (portaled), so the item
    provides the base foreground vars ContentAction's interactive color reads,
    plus the shared Interactive timing so highlight animates like every other

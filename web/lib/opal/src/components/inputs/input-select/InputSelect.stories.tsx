@@ -103,3 +103,51 @@ export const Disabled: Story = {
     </div>
   ),
 };
+
+const AGENTS = [
+  "General Assistant",
+  "Search Copilot",
+  "Sales Researcher",
+  "Support Triage",
+  "Code Reviewer",
+  "Data Analyst",
+  "Meeting Notetaker",
+  "Onboarding Guide",
+];
+
+function SearchableHarness() {
+  const [value, setValue] = useState("");
+  const [query, setQuery] = useState("");
+  const filtered = AGENTS.filter((name) =>
+    name.toLowerCase().includes(query.toLowerCase())
+  );
+  return (
+    <div className="w-72">
+      <InputSelect
+        value={value}
+        onValueChange={setValue}
+        onOpenChange={(open) => {
+          if (open) setQuery("");
+        }}
+      >
+        <InputSelect.Trigger placeholder="Select an agent" />
+        <InputSelect.Content>
+          <InputSelect.Search
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search agents..."
+          />
+          {filtered.map((name) => (
+            <InputSelect.Item key={name} value={name}>
+              {name}
+            </InputSelect.Item>
+          ))}
+        </InputSelect.Content>
+      </InputSelect>
+    </div>
+  );
+}
+
+export const Searchable: Story = {
+  render: () => <SearchableHarness />,
+};

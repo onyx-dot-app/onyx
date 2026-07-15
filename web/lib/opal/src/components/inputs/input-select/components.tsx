@@ -12,7 +12,7 @@ import type {
   RichStr,
   WithoutStyles,
 } from "@opal/types";
-import { Divider, Text, Tooltip } from "@opal/components";
+import { Divider, InputTypeIn, Text, Tooltip } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { ContentAction } from "@opal/layouts";
 import { SvgChevronDownSmall } from "@opal/icons";
@@ -450,13 +450,87 @@ function InputSelectSeparator({
 }
 
 // ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+interface InputSelectSearchProps {
+  /** Controlled query. The consumer filters its own Items from it. */
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+}
+
+/**
+ * Sticky search row at the top of Content for filterable selects. The
+ * consumer owns the query and renders only the Items that match. The row
+ * owns focus and keyboard isolation: printable keys stay in the input so
+ * Radix's item typeahead never fires, and ArrowDown hands focus to the
+ * option list where Radix drives highlight and Enter natively.
+ */
+function InputSelectSearch({
+  value,
+  onChange,
+  placeholder = "Search...",
+}: InputSelectSearchProps) {
+  const rowRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  // Focus a frame after mount, past Radix's own open autofocus in the
+  // normal path, so typing searches immediately instead of jumping the
+  // highlight via typeahead.
+  React.useEffect(() => {
+    const id = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  function focusFirstOption() {
+    const listbox = rowRef.current?.closest('[role="listbox"]');
+    listbox
+      ?.querySelector<HTMLElement>('[role="option"]:not([data-disabled])')
+      ?.focus();
+  }
+
+  return (
+    <div
+      ref={rowRef}
+      className="opal-input-select-search"
+      // Mousedown must not reach Content, whose preventDefault would kill
+      // caret placement and text selection in the input.
+      onMouseDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          e.stopPropagation();
+          focusFirstOption();
+          return;
+        }
+        // Keep keys out of Radix's item typeahead. Escape still closes the
+        // menu: Radix listens at document capture, ahead of this handler.
+        e.stopPropagation();
+      }}
+    >
+      <InputTypeIn
+        ref={inputRef}
+        variant="internal"
+        searchIcon
+        clearButton
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
 /**
  * InputSelect (Figma Input/Select): styled dropdown on Radix Select.
  * Compound: Trigger opens the popper Content, Items are Radix options
- * rendered as ContentAction rows, Group/Label/Separator organize them.
+ * rendered as ContentAction rows, Group/Label/Separator organize them, and
+ * Search makes the list filterable.
  */
 const InputSelect = Object.assign(InputSelectRoot, {
   Trigger: InputSelectTrigger,
@@ -465,6 +539,7 @@ const InputSelect = Object.assign(InputSelectRoot, {
   Group: InputSelectGroup,
   Label: InputSelectLabel,
   Separator: InputSelectSeparator,
+  Search: InputSelectSearch,
 });
 
 export {
@@ -472,4 +547,5 @@ export {
   type InputSelectRootProps,
   type InputSelectTriggerProps,
   type InputSelectItemProps,
+  type InputSelectSearchProps,
 };

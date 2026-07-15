@@ -159,6 +159,7 @@ export {
   type InputSelectRootProps,
   type InputSelectTriggerProps,
   type InputSelectItemProps,
+  type InputSelectSearchProps,
 } from "@opal/components/inputs/input-select/components";
 
 /* InputTags */
