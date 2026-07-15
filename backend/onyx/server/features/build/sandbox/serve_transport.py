@@ -472,9 +472,9 @@ class _ServeMixin:
             password=info.password,
             event_bus=bus,
             # Self-heal a 401 on any unary call (peer pod rotated the password).
-            reload_password=lambda: self._reload_serve_connection_info(
-                sandbox_id
-            ).password,
+            reload_password=lambda: (
+                self._reload_serve_connection_info(sandbox_id).password
+            ),
         )
 
     def answer_connect_app_permission(
@@ -841,9 +841,8 @@ class _ServeMixin:
                     fetch_message=fetch_message,
                     parent_resolver=bus.parent_of,
                     children_resolver=bus.list_children,
-                    fetch_message_by_session=lambda session_id,
-                    message_id: client.get_message(
-                        session_id, message_id, directory=directory
+                    fetch_message_by_session=lambda session_id, message_id: (
+                        client.get_message(session_id, message_id, directory=directory)
                     ),
                 ):
                     if pending_text_event is not None:
