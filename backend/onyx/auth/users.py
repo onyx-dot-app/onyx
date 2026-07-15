@@ -1673,7 +1673,7 @@ mobile_auth_backend = AuthenticationBackend(
 )
 
 
-class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
+class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
     def get_refresh_router(
         self,
         backend: AuthenticationBackend,
@@ -1758,7 +1758,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         return router
 
 
-fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
+fastapi_users = FastAPIUserWithRefreshRouter[User, uuid.UUID](
     get_user_manager, [auth_backend, mobile_auth_backend]
 )
 
