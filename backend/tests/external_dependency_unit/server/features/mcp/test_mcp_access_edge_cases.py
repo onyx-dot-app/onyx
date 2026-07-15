@@ -51,7 +51,7 @@ def _restrict_groups(db: Session, server: MCPServer, groups: list[UserGroup]) ->
     db.commit()
 
 
-def _ids(user: User | None, db: Session) -> set[int]:
+def _ids(user: User, db: Session) -> set[int]:
     return {s.id for s in get_mcp_servers_accessible_to_user(user, db)}
 
 

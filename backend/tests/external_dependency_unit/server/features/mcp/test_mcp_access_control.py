@@ -46,7 +46,9 @@ def _add_user_to_group(db_session: Session, user: User, group: UserGroup) -> Non
     db_session.commit()
 
 
-def _restrict_to_group(db_session: Session, server: MCPServer, group: UserGroup) -> None:
+def _restrict_to_group(
+    db_session: Session, server: MCPServer, group: UserGroup
+) -> None:
     db_session.add(
         MCPServer__UserGroup(mcp_server_id=server.id, user_group_id=group.id)
     )
@@ -58,7 +60,7 @@ def _restrict_to_user(db_session: Session, server: MCPServer, user: User) -> Non
     db_session.commit()
 
 
-def _accessible_ids(user: User | None, db_session: Session) -> set[int]:
+def _accessible_ids(user: User, db_session: Session) -> set[int]:
     return {s.id for s in get_mcp_servers_accessible_to_user(user, db_session)}
 
 
