@@ -2,6 +2,11 @@
 
 # §8 Scoped Permissions (Group Manager) — PR Roadmap
 
+> **Primitives per [03 §2](03-detailed-design.md) (single-classifier model).** `has_permission` →
+> `PermissionAuthority` (one classifier; `has_permission` removed); `has_global_permission` is the
+> GLOBAL-only bool helper. GATE 1 = `require_permission(..., allow_scope=True)` threshold; GATE 2 =
+> `assert_within_scope` / `assert_global`. Names below updated to match.
+
 Six PRs, dependency-ordered. **Safety invariant:** every enforcement PR lands its read-filter + write-side gate
 + endpoint `allow_scope` switch **together** — a manager can never reach an endpoint before its GATE 2 exists, so
 there is no escalation window at any merge boundary. (Pre-GA branch: existing curators were already collapsed to
@@ -87,8 +92,8 @@ highest-value resource types, exercised by the escalation integration suite (man
 ## PR 2 — Authorization primitives (inert core)
 - **Goal:** land the reusable scope logic and the route-gate extension with no behavior change.
 - **Scope (in):** new `backend/onyx/auth/scoped_permissions.py` — `SCOPED_MANAGER_PERMISSIONS`,
-  `scoped_group_ids_subquery`, `get_scoped_groups`, `has_permission_or_scope` (reads cached flag),
-  `within_managed_scope_clause`, `assert_group_set_within_scope`; extend `require_permission(allow_scope=False)`.
+  `scoped_group_ids_subquery`, `get_scoped_groups`, `has_permission` (reads cached flag),
+  `within_managed_scope_clause`, `assert_within_scope`; extend `require_permission(allow_scope=False)`.
 - **Out of scope:** wiring any endpoint/filter to them (PR3+).
 - **Files:**
   | File | New/Modified | This PR's slice |
@@ -99,7 +104,7 @@ highest-value resource types, exercised by the escalation integration suite (man
 - **Est. size:** ~330 LOC
 - **Depends on:** PR 1
 - **Feature-flag state:** N/A — nothing calls these yet.
-- **Tests on merge:** unit/external-dependency unit — `assert_group_set_within_scope` invariants (⊆ managed,
+- **Tests on merge:** unit/external-dependency unit — `assert_within_scope` invariants (⊆ managed,
   non-empty, private, fail-closed, admin/global bypass); `within_managed_scope_clause` selects the right rows.
 - **Drift checkpoint:** confirm the bundle is the 7-token set — includes `manage:actions` (D4, scoped via
   agents at GATE 2) and the new `manage:skills` (D5); confirm `require_permission`'s token-cap branch is
@@ -108,7 +113,7 @@ highest-value resource types, exercised by the escalation integration suite (man
 ## PR 3 — Enforce scope on connectors & document sets (walking skeleton)
 - **Goal:** prove the full two-gate model end-to-end on the two highest-value resources.
 - **Scope (in):** rewrite editable filters in `connector_credential_pair.py` and `document_set.py` (the latter
-  built from today's `sa_false()`) onto `within_managed_scope_clause`; insert `assert_group_set_within_scope` in
+  built from today's `sa_false()`) onto `within_managed_scope_clause`; insert `assert_within_scope` in
   cc_pair create/update + doc-set create/update DB fns (re-reading current groups in-txn); switch the **full set**
   of manager-reachable endpoints (§11.4) to `require_permission(<token>, allow_scope=True)` — connector create
   (mock-cred `connector.py:1568` **and** bare `:1538`), associate-credential `cc_pair.py:716`, cc_pair status

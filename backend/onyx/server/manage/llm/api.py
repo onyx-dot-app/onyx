@@ -15,7 +15,7 @@ from fastapi import Query
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_permission
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine.sql_engine import get_session
@@ -761,7 +761,7 @@ def list_llm_provider_basics(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch user-accessible LLM providers")
 
-    can_manage_llms = has_permission(user, Permission.MANAGE_LLMS)
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     user_group_ids = (
         set() if can_manage_llms else fetch_user_group_ids(db_session, user)
     )
@@ -830,7 +830,7 @@ def get_valid_model_names_for_persona(
     if not persona:
         return []
 
-    can_manage_llms = has_permission(user, Permission.MANAGE_LLMS)
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     all_providers = fetch_existing_llm_providers(
         db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
@@ -862,7 +862,7 @@ def get_valid_model_configuration_ids_for_persona(
     Unlike `get_valid_model_names_for_persona`, this check is unambiguous when
     multiple providers expose a model with the same name.
     """
-    can_manage_llms = has_permission(user, Permission.MANAGE_LLMS)
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     all_providers = fetch_existing_llm_providers(
         db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
@@ -910,7 +910,7 @@ def list_llm_providers_for_persona(
             "You don't have access to this assistant",
         )
 
-    can_manage_llms = has_permission(user, Permission.MANAGE_LLMS)
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     user_group_ids = (
         set() if can_manage_llms else fetch_user_group_ids(db_session, user)
     )

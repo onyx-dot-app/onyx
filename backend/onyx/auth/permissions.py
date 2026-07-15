@@ -17,6 +17,7 @@ from pydantic import field_validator
 
 from onyx.db.enums import AccountType
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.models import User
 from onyx.db.permissions import parse_permission_values
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -89,6 +90,22 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
 CE_UNGATED_PERMISSIONS: frozenset[Permission] = frozenset(
     {
         Permission.ADD_AGENTS,
+    }
+)
+
+# Abilities a group manager may exercise, scoped to the groups they manage.
+# Never persisted to permission_grant or merged into effective_permissions
+# (which stays global-only); has_permission reads it to classify SCOPED
+# authority, so it lives here, not in scoped_permissions.py (one-way import).
+SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset(
+    {
+        Permission.MANAGE_CONNECTORS,
+        Permission.MANAGE_DOCUMENT_SETS,
+        Permission.MANAGE_AGENTS,
+        Permission.ADD_AGENTS,
+        Permission.MANAGE_USER_GROUPS,
+        Permission.MANAGE_ACTIONS,  # scoped via its agents at GATE 2
+        Permission.MANAGE_SKILLS,  # inert until PR4 adds registry + enforcement
     }
 )
 
@@ -249,20 +266,41 @@ def get_effective_permissions(user: User) -> set[Permission]:
     return {Permission(p) for p in expanded}
 
 
-def has_permission(user: User, permission: Permission) -> bool:
-    """Check whether *user* holds *permission* (directly or via implication/admin override)."""
-    return permission in get_effective_permissions(user)
+def has_permission(user: User, permission: Permission) -> PermissionAuthority:
+    """Classify *user*'s authority for *permission*: GLOBAL (holds it outright /
+    admin), SCOPED (group manager — only within managed groups), or NONE.
+
+    A scoped grant is group-qualified, so it cannot be a flat bool; callers act
+    on the kind (GLOBAL → unrestricted, SCOPED → check resource scope at GATE 2).
+    """
+    if permission in get_effective_permissions(user):
+        return PermissionAuthority.GLOBAL
+    if permission in SCOPED_MANAGER_PERMISSIONS and user.is_group_manager:
+        return PermissionAuthority.SCOPED
+    return PermissionAuthority.NONE
+
+
+def has_global_permission(user: User, permission: Permission) -> bool:
+    """True iff *user* holds *permission* outright (global grant / admin) — the
+    GLOBAL-only convenience over has_permission, for checks that must exclude
+    scoped managers."""
+    return has_permission(user, permission) is PermissionAuthority.GLOBAL
 
 
 def require_permission(
     required: Permission,
     *,
     allow_anonymous: bool = False,
+    allow_scope: bool = False,
 ) -> Callable[..., Coroutine[Any, Any, User]]:
     """FastAPI dependency factory: require ``required`` of the caller, capped by the
     authenticating token's scopes (unrestricted PAT / session / API key = no cap).
-    allow_anonymous admits the anonymous user where the tenant permits it (the
-    anonymous-capable chat surface)."""
+    allow_anonymous admits the anonymous user on the chat surface.
+
+    allow_scope (GATE 1) also lets a SCOPED group manager *reach* the handler — reach
+    only, never authorize. If you set it, the handler MUST scope the manager itself
+    (GATE 2 assert_within_scope for writes, within_managed_scope_clause for reads) or
+    they get every resource. Never on delete / set_group_permissions routes."""
     # Lazy import to break the circular dependency between permissions and users
     # (users.py imports has_permission from this module at top level).
     from onyx.auth.users import current_chat_accessible_user
@@ -274,7 +312,12 @@ def require_permission(
         token_scopes: list[Permission] | None = getattr(
             request.state, "token_scopes", None
         )
-        permitted_by_user = required in get_effective_permissions(user)
+        authority = has_permission(user, required)
+        # allow_scope: GATE 1 lets a SCOPED manager reach the route; default GLOBAL-only.
+        if allow_scope:
+            permitted_by_user = authority is not PermissionAuthority.NONE
+        else:
+            permitted_by_user = authority is PermissionAuthority.GLOBAL
         permitted_by_token = token_scopes is None or required.value in (
             resolve_effective_permissions({s.value for s in token_scopes})
         )

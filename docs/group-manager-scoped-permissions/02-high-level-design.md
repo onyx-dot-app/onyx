@@ -2,6 +2,11 @@
 
 # §8 Scoped Permissions (Group Manager) — High-Level Design
 
+> **Primitives superseded by [03 §2](03-detailed-design.md) (single-classifier model).** `has_permission`
+> now returns `PermissionAuthority` (GLOBAL/SCOPED/NONE) — it is the one classifier; the separate `has_permission_or_scope`
+> is gone. GATE 1 is `require_permission(..., allow_scope=True)` (a threshold on `has_permission`); GATE 2 is
+> `assert_within_scope` / `assert_global`. Names below are updated to match; see 03 §2 for signatures.
+
 > **Revised by the 2026-06-29 regression review.** Bundle/coverage decisions here are updated by
 > **D4** (`manage:actions` stays in the bundle, scoped via agents at GATE 2), **D5** (skills = a 7th scoped resource under a
 > new `manage:skills` token), **D6** (managers do everything **except delete**) and **D7** (attaching an agent
@@ -54,14 +59,14 @@ Every manager action passes **two** independent checks. The first lets them *rea
         │
         ▼
   ┌─────────────────────────── GATE 1: ROUTE GATE ───────────────────────────┐
-  │ require_permission(...) → has_permission_or_scope(MANAGE_DOCUMENT_SETS)   │
+  │ require_permission(...) → has_permission(MANAGE_DOCUMENT_SETS)   │
   │   passes if: holds the token GLOBALLY  OR  manages ANY group.            │
   │   COARSE. Can only reject. Does NOT authorize the action.                │
   └──────────────────────────────────────────────────────────────────────────┘
         │ (reached the handler)
         ▼
   ┌──────────────────── GATE 2: PER-RESOURCE WRITE-SIDE GATE ─────────────────┐
-  │ assert_group_set_within_scope(user, resource, new_groups, access_type)    │
+  │ assert_within_scope(user, resource, new_groups, access_type)    │
   │   runs INSIDE the DB write, in the same transaction. Re-reads the          │
   │   resource's CURRENT groups from the DB (not the client's list). Allows    │
   │   only if the resource ends up:                                            │
@@ -109,14 +114,14 @@ The gate therefore loads the resource's **current** groups in the same transacti
    filter."
 
 ### Write path (Alice edits an Engineering connector)
-1. Route gate `has_permission_or_scope(MANAGE_CONNECTORS)` → passes (she manages a group).
+1. Route gate `has_permission(MANAGE_CONNECTORS)` → passes (she manages a group).
 2. Handler calls the connector update DB fn.
-3. **Inside the DB write**, `assert_group_set_within_scope` re-reads the cc_pair's current groups, checks
+3. **Inside the DB write**, `assert_within_scope` re-reads the cc_pair's current groups, checks
    `current ∪ requested ⊆ get_scoped_groups(Alice)`, checks `access_type == PRIVATE`. Pass → write; fail →
    `OnyxError(INSUFFICIENT_PERMISSIONS)`, transaction rolls back.
 
 ### Membership path (Alice adds Bob to Engineering)
-1. Route gate `has_permission_or_scope(MANAGE_USER_GROUPS)` → passes.
+1. Route gate `has_permission(MANAGE_USER_GROUPS)` → passes.
 2. `add_users_to_user_group(... group_id=Engineering ...)`.
 3. Write-side gate: `Engineering ∈ get_scoped_groups(Alice)`? Yes → add. (If Alice targeted Marketing → reject.)
    `set_group_permissions` is **untouched** — it stays `FULL_ADMIN_PANEL_ACCESS`-only, so a manager can never
@@ -128,8 +133,8 @@ The gate therefore loads the resource's **current** groups in the same transacti
         ┌────────────────────────── auth/permissions.py ──────────────────────────┐
         │  SCOPED_MANAGER_PERMISSIONS   (code-defined bundle)                       │
         │  get_scoped_groups(user, perm)         → live indexed read of is_manager  │
-        │  has_permission_or_scope(user, perm)   → GATE 1 (route)                   │
-        │  assert_group_set_within_scope(...)    → GATE 2 (write-side)              │
+        │  has_permission(user, perm)   → GATE 1 (route)                   │
+        │  assert_within_scope(...)    → GATE 2 (write-side)              │
         └───────▲───────────────▲────────────────────────────▲─────────────────────┘
                 │               │                             │
    route deps   │   6× _add_user_filters       group + resource DB write fns
@@ -176,8 +181,8 @@ The gate therefore loads the resource's **current** groups in the same transacti
    can never go stale.
 
 2. **GATE 2 lives inside each group/resource DB-write function** (re-reading current groups in-txn), exposed as
-   one shared helper `assert_group_set_within_scope`. *Not* a second FastAPI dependency (a dependency can't see
-   the resource's current groups or run in the write transaction). The route dependency `has_permission_or_scope`
+   one shared helper `assert_within_scope`. *Not* a second FastAPI dependency (a dependency can't see
+   the resource's current groups or run in the write transaction). The route dependency `has_permission`
    is only GATE 1.
 
 3. **PAT composition** — a PAT stays a flat permission cap (`request.state.token_scopes`, already implemented). A
