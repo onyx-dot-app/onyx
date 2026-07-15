@@ -27,8 +27,10 @@ interface ScrollableRef {
   scrollToEnd: (params?: { animated?: boolean }) => void;
 }
 
-// Anchoring-only MVCP: enabled (its `disabled` defaults to false) but with no autoscroll threshold,
-// so FlashList never auto-follows — we do. Stable identity avoids re-initializing MVCP per render.
+// Anchoring-only MVCP: no autoscroll threshold, so FlashList never auto-follows — we do — while its
+// default-on anchoring holds the read position. FlashList's MVCP is its own recycler-level feature
+// (not RN ScrollView's): it supplies `minIndexForVisible: 0` to the underlying ScrollView itself, so
+// an empty config still anchors. Stable identity avoids re-initializing MVCP per render.
 export const ANCHOR_ONLY_MVCP = {} as const;
 
 // Fallback window for ignoring the animated jump's own scroll events, in case it never reports
@@ -71,6 +73,7 @@ export function useChatAutoScroll(
   const isAutoScrollingRef = useRef(false);
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevSignatureRef = useRef(contentSignature);
+  const prevEnabledRef = useRef(enabled);
   const rafRef = useRef<number | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
@@ -175,6 +178,16 @@ export function useChatAutoScroll(
       }
     };
   }, [contentSignature, enabled, listRef]);
+
+  // Re-enabling auto-scroll while parked at the bottom resumes following immediately: catch up to the
+  // latest turn (which also clears the jump button) instead of waiting for the next flush — otherwise,
+  // if the stream already ended, the list would sit below content that grew while auto-scroll was off.
+  // If the user is scrolled up, leave them be; following resumes when they return to the bottom.
+  useEffect(() => {
+    const reEnabled = !prevEnabledRef.current && enabled;
+    prevEnabledRef.current = enabled;
+    if (reEnabled && pinnedRef.current) scrollToBottom();
+  }, [enabled, scrollToBottom]);
 
   useEffect(
     () => () => {

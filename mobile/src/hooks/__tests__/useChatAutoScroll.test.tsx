@@ -232,6 +232,37 @@ describe("useChatAutoScroll", () => {
     expect(scrollToEnd).not.toHaveBeenCalled();
   });
 
+  // Re-enabling auto-scroll while at the bottom should catch up to the latest (and hide the button),
+  // not blindly hide a button that reflects real content grown below while auto-scroll was off.
+  it("catches up to the bottom when auto-scroll is re-enabled while pinned", () => {
+    const { result, rerender, scrollToEnd } = setup({
+      enabled: false,
+      contentSignature: "0",
+    });
+    act(() => result.current.onLoad());
+    act(() => result.current.onLayout(layoutEvent(600)));
+    act(() => result.current.onScroll(scrollEvent(400))); // at bottom → pinned
+    act(() => result.current.onContentSizeChange(0, 2000)); // grew below → button shows
+    expect(result.current.showScrollButton).toBe(true);
+
+    scrollToEnd.mockClear();
+    act(() => rerender({ enabled: true, contentSignature: "0" })); // re-enable, no content change
+    expect(scrollToEnd).toHaveBeenCalledWith({ animated: true });
+    expect(result.current.showScrollButton).toBe(false);
+  });
+
+  it("does not catch up on re-enable when the user is scrolled up", () => {
+    const { result, rerender, scrollToEnd } = setup({
+      enabled: false,
+      contentSignature: "0",
+    });
+    act(() => result.current.onScroll(scrollEvent(200))); // scrolled up → not pinned
+    scrollToEnd.mockClear();
+    act(() => rerender({ enabled: true, contentSignature: "0" }));
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    expect(result.current.showScrollButton).toBe(true);
+  });
+
   it("exposes anchoring-only MVCP (no autoscroll threshold that would fight the manual follow)", () => {
     const { result } = setup();
     expect(result.current.maintainVisibleContentPosition).toEqual({});
