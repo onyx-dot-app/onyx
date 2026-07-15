@@ -11,10 +11,10 @@ from pydantic import Field
 from pydantic import field_validator
 
 from onyx.db.enums import LLMModelFlowType
+from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_capabilities import litellm_thinks_model_supports_image_input
 from onyx.llm.model_capabilities import model_is_reasoning_model
-from onyx.server.manage.llm.utils import DYNAMIC_LLM_PROVIDERS
 from onyx.server.manage.llm.utils import extract_vendor_from_model_name
 from onyx.server.manage.llm.utils import filter_model_configurations
 from onyx.server.manage.llm.utils import is_reasoning_model
