@@ -10,6 +10,17 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# TODO(bo): root-cause and properly fix why heartbeat_counter can stall for the
+# full watchdog timeout (~30m) while the worker is alive. The corroboration in
+# validate_active_indexing_attempts (completed-batch progress + Celery
+# worker-liveness ping) stops us destroying live attempts, but it is a
+# mitigation, not a root fix. Candidate mechanisms, none yet confirmed from logs:
+#   - this heartbeat write starving on the shared worker DB pool (pool_size =
+#     concurrency + 8) while task threads block on a saturated embedder;
+#   - row-lock contention on the index_attempt row (no lock_timeout is set);
+#   - CPU/GIL starvation of the docprocessing pod's daemon threads.
+# The escalated ERROR logging below is the diagnostic hook to tell these apart.
+
 # After this many consecutive failed beats we escalate WARNING -> ERROR. A
 # stalled heartbeat is dangerous: the stall watchdog reads the counter as a
 # liveness signal, so a silently-wedged heartbeat (e.g. the write starving for a
