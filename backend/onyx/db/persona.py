@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
-from onyx.auth.permissions import has_permission
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
@@ -77,9 +77,9 @@ class PersonaLoadType(Enum):
 def _add_user_filters(
     stmt: Select[tuple[Persona]], user: User, get_editable: bool = True
 ) -> Select[tuple[Persona]]:
-    if has_permission(user, Permission.MANAGE_AGENTS):
+    if has_global_permission(user, Permission.MANAGE_AGENTS):
         return stmt
-    if not get_editable and has_permission(user, Permission.READ_AGENTS):
+    if not get_editable and has_global_permission(user, Permission.READ_AGENTS):
         return stmt
 
     stmt = stmt.distinct()
@@ -198,7 +198,7 @@ def _get_persona_by_name(
     - Non-admin users: can only see their own personas
     """
     stmt = select(Persona).where(Persona.name == persona_name)
-    if user and not has_permission(user, Permission.MANAGE_AGENTS):
+    if user and not has_global_permission(user, Permission.MANAGE_AGENTS):
         stmt = stmt.where(Persona.user_id == user.id)
     result = db_session.execute(stmt).scalar_one_or_none()
     return result
@@ -334,7 +334,7 @@ def create_update_persona(
     try:
         # Featured persona validation
         if create_persona_request.is_featured:
-            if not has_permission(user, Permission.MANAGE_AGENTS):
+            if not has_global_permission(user, Permission.MANAGE_AGENTS):
                 raise ValueError(
                     "Only users with agent management permissions can make a featured persona"
                 )
@@ -507,7 +507,7 @@ def update_persona_public_status(
         and persona.owner_group_id in get_user_group_ids_for_user(db_session, user.id)
     )
     if (
-        not has_permission(user, Permission.MANAGE_AGENTS)
+        not has_global_permission(user, Permission.MANAGE_AGENTS)
         and persona.user_id != user.id
         and not is_owner_group_member
     ):
@@ -1201,7 +1201,7 @@ def upsert_persona(
         # Featured/listed changes are curator/admin-only (ENG-4179): shared
         # editors saving the form must never flip them, so non-privileged
         # updates silently preserve the stored values.
-        user_can_set_admin_flags = user is None or has_permission(
+        user_can_set_admin_flags = user is None or has_global_permission(
             user, Permission.MANAGE_AGENTS
         )
         if is_listed is not None and user_can_set_admin_flags:
@@ -1381,8 +1381,8 @@ def get_persona_by_id(
 
     if (
         not user
-        or has_permission(user, Permission.MANAGE_AGENTS)
-        or (not is_for_edit and has_permission(user, Permission.READ_AGENTS))
+        or has_global_permission(user, Permission.MANAGE_AGENTS)
+        or (not is_for_edit and has_global_permission(user, Permission.READ_AGENTS))
     ):
         result = db_session.execute(persona_stmt)
         persona = result.scalar_one_or_none()

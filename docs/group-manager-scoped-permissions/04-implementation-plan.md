@@ -2,6 +2,11 @@
 
 # §8 Scoped Permissions (Group Manager) — Implementation Plan
 
+> **Primitives per [03 §2](03-detailed-design.md) (single-classifier model).** `has_permission` returns
+> `PermissionAuthority` (one classifier; `has_permission` removed) and lives in `permissions.py` with
+> the bundle; `has_global_permission` is the GLOBAL-only bool helper. GATE 1 = `require_permission(...,
+> allow_scope=True)` (threshold); GATE 2 = `assert_within_scope` / `assert_global`. Names below updated to match.
+
 ## Issues to Address
 
 The base group-permission system (§1–7) grants tokens to a whole group — every member gets them everywhere.
@@ -18,8 +23,8 @@ PRIVATE and strictly within their managed groups — enforced authoritatively at
 - **§8 is greenfield on §1–7; PR0+PR1 now built.** Base system complete (`01-research.md`). PR1 shipped the
   schema migration as `c71a18ea7d07` (down_revision `c8e316473aaa`, now head) — the earlier placeholder
   `4fa09af6ca14` was never used. Scoped artifacts (PR2+) remain absent.
-- **Two-gate model is non-negotiable.** Route gate (`has_permission_or_scope`, cached flag) only grants
-  *reachability*; the **authorization of record** is `assert_group_set_within_scope`, run **inside the DB write**,
+- **Two-gate model is non-negotiable.** Route gate (`has_permission`, cached flag) only grants
+  *reachability*; the **authorization of record** is `assert_within_scope`, run **inside the DB write**,
   re-reading the resource's **current** groups (`02/03`). The route gate must never authorize.
 - **D1 (cache the boolean):** new cached `user.is_group_manager` (sibling to `effective_permissions`, which stays
   global-only), recomputed via `recompute_user_permissions__no_commit` (`db/permissions.py:43`) on membership
@@ -74,15 +79,15 @@ columns, role-gated `is_manager` backfill (CURATOR + GLOBAL_CURATOR), and `is_gr
 result. Extend `recompute_user_permissions__no_commit` (`db/permissions.py:43`) to recompute `is_group_manager`.
 
 **Step 2 — Auth primitives.** New `auth/scoped_permissions.py`: `SCOPED_MANAGER_PERMISSIONS`,
-`scoped_group_ids_subquery`, `get_scoped_groups`, `has_permission_or_scope` (reads cached flag),
-`within_managed_scope_clause`, `assert_group_set_within_scope`. Extend `require_permission` with
+`scoped_group_ids_subquery`, `get_scoped_groups`, `has_permission` (reads cached flag),
+`within_managed_scope_clause`, `assert_within_scope`. Extend `require_permission` with
 `allow_scope: bool` (`auth/permissions.py`). Unit-coverable, no endpoints wired yet.
 
 **Step 3 — Manager assignment.** `make_group_manager` / `revoke_group_manager` (`ee/onyx/db/user_group.py`) with
 a recompute trigger for the affected user. New EE endpoint `PUT …/user-group/{group_id}/manager`
 (`ee/onyx/server/user_group/api.py`) gated `admin ∨ group_id ∈ managed` (D3); reject non-member targets.
 
-**Step 4 — Write-side gates (the security core).** Insert `assert_group_set_within_scope` into each scoped write
+**Step 4 — Write-side gates (the security core).** Insert `assert_within_scope` into each scoped write
 fn, re-reading current groups in-txn: connector create/update (`db/connector_credential_pair.py:496` +
 cc_pair update), document set create/update (`db/document_set.py:220/296`), persona
 (`db/persona.py:325`→`ee/persona.py:68`), group update/add-users (`ee/user_group.py:504/462`). Switch those
@@ -151,7 +156,7 @@ gate in its write fn; the `within_managed_scope_clause` helper is reused, no har
 per-item gate — avoids N indexed reads on batch edits. The route-gate cost is O(1) (cached `is_group_manager`).
 
 ### 2. Fragility: CONCERN → hardened
-The model's load-bearing assumption is *every* scoped write path calls `assert_group_set_within_scope`; a future
+The model's load-bearing assumption is *every* scoped write path calls `assert_within_scope`; a future
 write path that forgets it is an escalation. Hardenings added to the plan:
 - **Minimize insertion sites** — route resource→group attaches through the existing single junction writers
   (e.g. `_relate_groups_to_cc_pair__no_commit`) so the gate has few, obvious homes, not scattered call sites.

@@ -526,6 +526,8 @@ class Permission(str, PyEnum):
     # Toggle tokens
     READ_AGENT_ANALYTICS = "read:agent_analytics"
     MANAGE_ACTIONS = "manage:actions"
+    # In the scoped-manager bundle; registry/enforcement land in a later PR.
+    MANAGE_SKILLS = "manage:skills"
     READ_QUERY_HISTORY = "read:query_history"
     MANAGE_USER_GROUPS = "manage:user_groups"
     CREATE_USER_API_KEYS = "create:user_api_keys"
@@ -553,6 +555,19 @@ Permission.IMPLIED = frozenset(
         Permission.READ_ADMIN,
     }
 )
+
+
+class PermissionAuthority(PyEnum):
+    """The authority a user holds for a permission, returned by has_permission.
+
+    GLOBAL: holds the token outright / admin — unrestricted. SCOPED: group
+    manager — only within managed groups. NONE: not authorized. A scoped grant
+    is group-qualified, so it can't be a flat bool; callers act on the kind.
+    """
+
+    GLOBAL = "global"
+    SCOPED = "scoped"
+    NONE = "none"
 
 
 class PersonaSharePermission(str, PyEnum):

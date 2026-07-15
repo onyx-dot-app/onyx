@@ -83,7 +83,7 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
 from onyx.auth.pat import get_hashed_pat_from_request
-from onyx.auth.permissions import has_permission
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
@@ -160,7 +160,7 @@ REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
 
 
 def is_user_admin(user: User) -> bool:
-    return has_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
+    return has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
 
 
 def verify_auth_setting() -> None:

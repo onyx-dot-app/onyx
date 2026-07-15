@@ -13,7 +13,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_permission
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
@@ -40,13 +40,13 @@ logger = setup_logger()
 
 def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
     # MANAGE → always return all
-    if has_permission(user, Permission.MANAGE_DOCUMENT_SETS):
+    if has_global_permission(user, Permission.MANAGE_DOCUMENT_SETS):
         return stmt
     # Editing requires MANAGE; readers and group-members cannot edit.
     if get_editable:
         return stmt.where(sa_false())
     # READ → return all when reading, nothing when editing
-    if has_permission(user, Permission.READ_DOCUMENT_SETS):
+    if has_global_permission(user, Permission.READ_DOCUMENT_SETS):
         return stmt
 
     # Otherwise: public document sets, plus those owned by groups the user

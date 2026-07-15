@@ -107,10 +107,12 @@ release — keeps a code rollback possible while §8 is unproven.
 
 ## 2. Code design — new authorization primitives
 
-New module: **`backend/onyx/auth/scoped_permissions.py`** (keeps DB-querying scope logic out of the pure
-`permissions.py`; imports `User`, `Permission`, `User__UserGroup`).
+**One classifier decides authority everywhere — no `allow_scope` fork, no separate `has_permission_or_scope`.**
+`has_permission` itself returns the authority. The classifier + bundle live in the pure `permissions.py`; the
+DB-querying scope logic (scope resolution, write gates, read clause) lives in
+**`backend/onyx/auth/scoped_permissions.py`** (imports `User`, `User__UserGroup`, the bundle — one direction).
 
-### 2.1 The manager ability bundle
+### 2.1 The manager ability bundle (in `permissions.py`)
 
 ```python
 SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset({
@@ -120,19 +122,54 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset({
     Permission.ADD_AGENTS,
     Permission.MANAGE_USER_GROUPS,   # membership + resource sharing of the managed group only
     Permission.MANAGE_SKILLS,        # NEW dedicated token (D5) — also grantable globally in the groups UI
-    Permission.MANAGE_ACTIONS,       # tools/MCP — in the bundle for GATE 1 reach; scoped via agents at GATE 2 (D4)
+    Permission.MANAGE_ACTIONS,       # tools/MCP — reach via GATE 1; scoped via agents at GATE 2 (D4)
 })
 ```
-Code-defined, never written to `permission_grant`. Expanded live; never merged into
-`effective_permissions` (which stays global-only).
+Code-defined, never written to `permission_grant`, never merged into `effective_permissions` (which stays
+global-only). Lives in `permissions.py` (not `scoped_permissions.py`) so `has_permission` can read it to
+classify SCOPED authority without an import cycle.
 
-> **`MANAGE_ACTIONS` is in the bundle (D4), scoped via agents.** It must be — GATE 1
-> (`has_permission_or_scope`) would 403 a scoped manager on every action endpoint otherwise. "Agent-mediated"
-> describes GATE 2's scope resolution, not bundle membership: the route gate lets the manager *reach* the
-> tool/MCP endpoints; GATE 2 derives an action's groups from the agents that reference it
-> (`Tool → Persona__Tool → Persona__UserGroup`) and requires them ⊆ managed. See §11.1.
+> **`MANAGE_ACTIONS` is in the bundle (D4), scoped via agents.** GATE 1 would 403 a scoped manager on every
+> action endpoint otherwise. The route gate lets the manager *reach* the tool/MCP endpoints; GATE 2 derives an
+> action's groups from the agents that reference it (`Tool → Persona__Tool → Persona__UserGroup`) and requires
+> them ⊆ managed. See §11.1.
 
-### 2.2 Live scope resolution (two forms)
+### 2.2 `has_permission` — the single 3-state classifier
+
+A scoped grant is **group-qualified** ("manage:connectors for groups {3,7}") — it has no flat token
+representation, so it can never live in `effective_permissions`, and `has_permission` can never answer a plain
+`True` for a manager: 7 existing call sites treat `True` as global "do anything" (see-all filters, set
+featured/listed/public, fetch-any — call-site audit), so a bool returning `True` for a manager would leak
+org-wide powers. So `has_permission` returns **which** authority the user holds:
+
+```python
+class PermissionAuthority(Enum):
+    GLOBAL   # holds the token outright / admin → unrestricted
+    SCOPED   # group manager → only within managed groups
+    NONE     # not authorized
+
+def has_permission(user: User, permission: Permission) -> PermissionAuthority:
+    if permission in get_effective_permissions(user):        # global token / admin override
+        return PermissionAuthority.GLOBAL
+    if permission in SCOPED_MANAGER_PERMISSIONS and user.is_group_manager:
+        return PermissionAuthority.SCOPED                    # cached flag → zero query
+    return PermissionAuthority.NONE
+
+
+def has_global_permission(user: User, permission: Permission) -> bool:
+    """GLOBAL-only convenience for the many checks that must exclude scoped managers."""
+    return has_permission(user, permission) is PermissionAuthority.GLOBAL
+```
+
+Existing callers migrate by a behavior-preserving rule — a `SCOPED` manager reproduces the old `False` at
+those sites, so nothing leaks and the feature stays inert until each filter opts into `SCOPED` (§3):
+
+```
+has_permission(user, X)        →  has_global_permission(user, X)
+not has_permission(user, X)    →  not has_global_permission(user, X)
+```
+
+### 2.3 Live scope resolution (in `scoped_permissions.py`)
 
 ```python
 def scoped_group_ids_subquery(user: User) -> Select:
@@ -151,59 +188,70 @@ def get_scoped_groups(user: User, db_session: Session,
     return set(db_session.scalars(scoped_group_ids_subquery(user)).all())
 ```
 
-### 2.3 GATE 1 — route gate
+### 2.4 GATE 1 — route gate (one classifier, per-endpoint threshold)
 
-```python
-def has_permission_or_scope(user: User, permission: Permission) -> bool:
-    if has_permission(user, permission):          # global token or admin override
-        return True
-    # D1: cached flag → zero query. scopable + manages something ⇒ reachable.
-    return permission in SCOPED_MANAGER_PERMISSIONS and user.is_group_manager
-```
-
-FastAPI wiring — **extend the existing `require_permission`** with `allow_scope: bool = False` rather than add a
-second factory. Because GATE 1 now reads the cached `user.is_group_manager`, **no DB session dependency is
-needed** at the route:
+`require_permission` keeps the single `has_permission` classifier; `allow_scope` only sets the **acceptance
+threshold** — it is NOT a second resolution path, and `has_permission_or_scope` is gone:
 
 ```python
 # permissions.py — require_permission(required, *, allow_anonymous=False, allow_scope=False)
-# when allow_scope: pass-condition becomes
-#   has_permission_or_scope(user, required) AND permitted_by_token
-# token cap (request.state.token_scopes) is unchanged and still applies.
+permitted_by_user = (has_permission(user, required) is GLOBAL)        if not allow_scope \
+               else (has_permission(user, required) is not NONE)
+# pass:  permitted_by_user AND permitted_by_token     (token cap unchanged)
 ```
-Endpoints a manager must reach (resource + group writes/lists) switch to
-`require_permission(<token>, allow_scope=True)`. `set_group_permissions` stays
-`require_permission(FULL_ADMIN_PANEL_ACCESS)` — **no** `allow_scope`.
 
-### 2.4 GATE 2 — per-resource write-side gate (authorization of record)
+- **default (`allow_scope=False`)**: `is GLOBAL` → identical to today; a manager is rejected. The safe default
+  for every endpoint whose GATE 2 has not landed.
+- **`allow_scope=True`**: `is not NONE` → a manager *reaches* the endpoint. Set this **only when the endpoint's
+  GATE 2 exists** (PR3/PR4). This per-endpoint opt-in **is** the lands-together / no-escalation invariant:
+  ~101 bundle-token endpoints exist today with no GATE 2, and managers already exist (PR1 backfills
+  `is_manager` for ex-curators), so admitting `SCOPED` universally would let an ex-curator create resources in
+  arbitrary groups. No DB session at the route (reads the cached flag).
+
+Admin-only endpoints on a **non-bundle** token (`set_group_permissions` → `FULL_ADMIN_PANEL_ACCESS`) classify a
+manager as NONE regardless of `allow_scope` → reject automatically.
+
+### 2.5 GATE 2 — per-resource write gates (authorization of record)
+
+Two gates, both built on the one classifier:
 
 ```python
-def assert_group_set_within_scope(
-    user: User,
-    db_session: Session,
-    *,
+def assert_within_scope(
+    user: User, db_session: Session, *,
     permission: Permission,                 # the manage:* token this write needs
     current_group_ids: Collection[int],     # re-read from DB, in this txn
     requested_group_ids: Collection[int],   # client-supplied target groups
     is_private: bool,                        # access_type==PRIVATE / not is_public
 ) -> None:
-    # Global authority (admin or holds the token globally) → base-system rules already govern.
-    if has_permission(user, permission):
-        return
-    managed = get_scoped_groups(user, db_session, permission)
-    final = set(current_group_ids) | set(requested_group_ids)
-    if not managed or not final or not final.issubset(managed) or not is_private:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Group managers can only act on private resources within the groups they manage.",
-        )
+    authority = has_permission(user, permission)
+    if authority is PermissionAuthority.GLOBAL:
+        return                                               # base-system rules govern
+    if authority is PermissionAuthority.SCOPED:
+        managed = get_scoped_groups(user, db_session, permission)
+        final = set(current_group_ids) | set(requested_group_ids)
+        if managed and final and final.issubset(managed) and is_private:
+            return
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        "Group managers can only act on private resources within the groups they manage.",
+    )                                                        # NONE, or out-of-scope
+
+def assert_global(user: User, *, permission: Permission) -> None:   # delete / admin-only on a bundle token
+    if has_permission(user, permission) is not PermissionAuthority.GLOBAL:
+        raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS, "Admin only.")   # SCOPED manager rejected
 ```
 
-Invariants enforced: `final ⊆ managed` (no group outside scope, closes capture-by-reassign),
-`final` non-empty (resource stays in ≥1 group — covers detach), `is_private` (PRIVATE-only),
-**fail-closed** (empty `managed` ⇒ reject, never "no filter").
+`assert_within_scope` invariants: `final ⊆ managed` (closes capture-by-reassign), `final` non-empty (stays in
+≥1 group — covers detach), `is_private` (PRIVATE-only), **fail-closed** (empty `managed` ⇒ reject).
+`assert_global` (D6, **rule A**) keeps delete/admin-only ops admin-only even though they share a bundle token
+with scoped create/update: the route admits the manager (SCOPED ≠ NONE), the handler's `assert_global` rejects
+them.
 
-### 2.5 Manager assignment helpers (EE)
+> **GATE 2 attaches to the group-share / access-change step, not to owner self-edits.** An owner editing their
+> own private persona holds `NONE` for `MANAGE_AGENTS` and must still pass — `assert_within_scope` guards the
+> `update_persona_access` (group_ids / is_public) write specifically, not every mutation (§11.5).
+
+### 2.6 Manager assignment helpers (EE)
 
 ```python
 # backend/ee/onyx/db/user_group.py
@@ -214,7 +262,7 @@ def revoke_group_manager(db_session: Session, user_id: UUID, group_id: int) -> N
     """Flip is_manager=false. Idempotent."""
 ```
 
-### 2.6 Cached-flag recompute (D1 plumbing)
+### 2.7 Cached-flag recompute (D1 plumbing)
 
 `backend/onyx/db/permissions.py:43` `recompute_user_permissions__no_commit` — **extend** to also set
 `user.is_group_manager = EXISTS(is_manager=true for that user)` in the same write. This already fires on
@@ -231,32 +279,59 @@ manager flip (no membership change) refreshes the cached flag. `effective_permis
 > unchanged (no feedback permission in the bundle). The table below still applies row-by-row except the
 > feedback row, which is now NO CHANGE.
 
-Each `get_editable=True` branch gains a scoped-manager case using `scoped_group_ids_subquery(user)`. The
-read-side predicate mirrors GATE 2: a resource is editable-by-manager iff **every** group it belongs to is
-managed, it belongs to **≥1** group, and it is **private**.
+**The scope clause is OR-ed *into* each existing editable predicate — it does NOT replace the filter.** Each
+`_add_user_filters` keeps its full structure; only two things change: (1) the global short-circuit flips to
+`has_permission(user, MANAGE_X) is GLOBAL`; (2) inside the **`get_editable=True`** branch, when
+`has_permission(user, MANAGE_X) is SCOPED`, OR in `within_managed_scope_clause(...)`.
 
-Reusable clause (new helper in `scoped_permissions.py`):
+```python
+def _add_user_filters(stmt, user, get_editable=True):
+    if has_permission(user, MANAGE_X) is GLOBAL:
+        return stmt                                       # global → all
+    if not get_editable and has_permission(user, READ_X) is GLOBAL:
+        return stmt                                       # global read → all (persona/doc-set)
+    ... existing joins ...
+    if get_editable:
+        where_clause = <existing owner/share/member/creator predicate>   # PRESERVED
+        if has_permission(user, MANAGE_X) is SCOPED:                     # NEW, additive
+            where_clause |= within_managed_scope_clause(...)
+    else:
+        where_clause = <existing read predicate>          # PRESERVED — manager reads as a member
+    return stmt.where(where_clause)
+```
+
+Why additive, not replacement — the regressions this prevents:
+- **`get_editable` must be respected.** The read path keeps its own visibility (public/SYNC for cc_pair,
+  public+member for doc-set, owner/share/READ for persona); a manager reads there as a normal member. Only the
+  editable branch gains the scope term.
+- **A `NONE` user keeps their access.** persona owners, cc_pair creators, EDITOR-shares hold no manage token;
+  their existing predicate stays. A blanket `NONE → sa_false()` would strip every normal editor.
+- **A `SCOPED` manager is also a normal user.** They may own a persona / have created a cc_pair *outside* their
+  managed groups; OR-ing (not replacing) preserves that on top of the scoped-editable set.
+
+The editable read-side predicate mirrors GATE 2: editable-by-manager iff every group is managed, in ≥1 group,
+and private — exactly `within_managed_scope_clause` (new helper in `scoped_permissions.py`):
 
 ```python
 def within_managed_scope_clause(
-    resource_id_col, junction_model, junction_resource_col, junction_group_col,
-    is_public_col, managed_subq: Select,
+    resource_id_col, junction_resource_col, junction_group_col,
+    is_private: ColumnElement[bool],         # a predicate, NOT a bool column — cc_pair passes
+    managed_subq: Select,                    #   access_type == AccessType.PRIVATE; doc-set/persona is_public.is_(False)
 ) -> ColumnElement[bool]:
-    """resource is fully inside managed groups, in ≥1 group, and private."""
-    # NOT EXISTS(group not in managed)  AND  EXISTS(group in managed)  AND  is_public = false
+    # NOT EXISTS(group not in managed)  AND  EXISTS(group in managed)  AND  is_private
 ```
 
-| File | Today (`get_editable`) | Change |
+| File | Existing editable fallback | Integration |
 |---|---|---|
-| `backend/onyx/db/document_set.py:41` | returns `sa_false()` (only global MANAGE edits) | add manager branch: editable = `within_managed_scope_clause(...)` over `DocumentSet__UserGroup`. **Biggest build** — currently fully short-circuited. |
-| `backend/onyx/db/connector_credential_pair.py:50` | builds membership/manage join (no short-circuit) | re-key the editable branch onto `scoped_group_ids_subquery` + `within_managed_scope_clause` over `UserGroup__ConnectorCredentialPair`; require PRIVATE. |
-| `backend/onyx/db/persona.py:77` | owner + EDITOR group shares | add manager branch over `Persona__UserGroup`; `add:agents` ownership tier unchanged. |
-| `backend/onyx/db/feedback.py:46` | admin-only (`FULL_ADMIN_PANEL_ACCESS`) | **NO CHANGE** — not in the bundle; admin-only. (§11.7 — the old "mirror connector" label was wrong.) |
-| `backend/onyx/db/credentials.py:41` | owner-keyed (`Credential.user_id==user.id`), no `get_editable` | **NO CHANGE** — credentials stay owner-scoped by design; a manager never inherits others' credentials. Document the deliberate no-op. |
-| `backend/ee/onyx/db/token_limit.py` | no `_add_user_filters`; direct group query | enforce managed-scope in the group-token-limit **write/endpoint** path (manager may set limits only on managed groups). Minor. |
+| `backend/onyx/db/document_set.py:41` | `sa_false()` (no owner/share concept) | `|=` scope clause over `DocumentSet__UserGroup` (`is_public.is_(False)`). The one resource where a standalone scope filter *happens* to match (`false() OR clause == clause`); still expressed as `|=` for uniformity. |
+| `backend/onyx/db/connector_credential_pair.py:50` | member-of-owning-group (all groups ⊆ mine) ∨ creator | `|=` scope clause over `UserGroup__ConnectorCredentialPair` (`access_type == PRIVATE`). |
+| `backend/onyx/db/persona.py:77` | owner ∨ owning-group member ∨ EDITOR direct/group share ∨ org-edit | `|=` scope clause over `Persona__UserGroup` (`is_public.is_(False)`); `add:agents` ownership tier unchanged. |
+| `backend/onyx/db/feedback.py:46` | admin-only (`FULL_ADMIN_PANEL_ACCESS`) | **NO CHANGE** — not in the bundle. (§11.7) |
+| `backend/onyx/db/credentials.py:41` | owner-keyed (`Credential.user_id==user.id`) | **NO CHANGE** — credentials stay owner-scoped; document the deliberate no-op. |
+| `backend/ee/onyx/db/token_limit.py` | no `_add_user_filters`; direct group query | enforce managed-scope in the group-token-limit **write/endpoint** path. Minor. |
 
-**Fail-closed rule for every rewrite:** if `scoped_group_ids_subquery` yields no rows, the manager branch must
-resolve to empty, never to an unfiltered statement.
+**Fail-closed:** `scoped_group_ids_subquery` yields no rows for a non-manager, so `within_managed_scope_clause`
+contributes nothing — never an unfiltered statement.
 
 ---
 
@@ -268,7 +343,8 @@ resolve to empty, never to an unfiltered statement.
 > and cc_pair-reattach fix (§11.6). Use §11.4 as the source of truth.
 
 Each DB-write fn loads the resource's **current** groups in-txn, then calls
-`assert_group_set_within_scope(...)` before mutating. Endpoints switch to `allow_scope=True`.
+`assert_within_scope(...)` before mutating (delete/admin-only ops call `assert_global(...)` instead — rule A).
+Endpoints switch to `allow_scope=True`.
 
 | Resource / action | DB fn (insert gate here) | Endpoint → new dep |
 |---|---|---|
@@ -341,10 +417,11 @@ model `db/pat.py`). A manager's **group** scope is never encoded in the token �
 backend/
   onyx/
     auth/
-      scoped_permissions.py            ← NEW: SCOPED_MANAGER_PERMISSIONS, scoped_group_ids_subquery,
-                                              get_scoped_groups, has_permission_or_scope,
-                                              assert_group_set_within_scope, within_managed_scope_clause
-    auth/permissions.py                ← MOD: require_permission(..., allow_scope=False)
+      scoped_permissions.py            ← NEW: scoped_group_ids_subquery, get_scoped_groups,
+                                              assert_within_scope, assert_global, within_managed_scope_clause
+    db/enums.py                        ← MOD: PermissionAuthority enum (GLOBAL/SCOPED/NONE)
+    auth/permissions.py                ← MOD: SCOPED_MANAGER_PERMISSIONS; has_permission → PermissionAuthority;
+                                              require_permission(..., allow_scope=False) threshold
     db/models.py                       ← MOD: User__UserGroup.is_manager + User.is_group_manager
     db/permissions.py                  ← MOD: recompute_user_permissions__no_commit sets is_group_manager (§11.7)
     db/document_set.py                 ← MOD: _add_user_filters editable manager branch (was sa_false)
@@ -377,7 +454,7 @@ web/
 ## 9. Pre-implementation notes (must honor)
 
 1. **GATE 2 is the authorization of record.** Route gate (`allow_scope`) only widens *reachability*; never let
-   it authorize. Every scoped write path must call `assert_group_set_within_scope`.
+   it authorize. Every scoped write path must call `assert_within_scope` (or `assert_global` for admin-only ops).
 2. **Re-read current groups in-txn.** Never trust the client's group list alone (capture-by-reassign).
 3. **PRIVATE-only.** Reject any manager create/edit that sets/keeps PUBLIC or SYNC.
 4. **Fail closed.** Empty managed set ⇒ no access; guard every filter against an unfiltered fallback.
@@ -426,8 +503,8 @@ everything. Add an `import onyx.main` smoke test to CI so a deleted auth dep fai
 
 ### 11.1 Actions (D4 — `MANAGE_ACTIONS` in the bundle; scoped via agents at GATE 2)
 - **`MANAGE_ACTIONS` stays in `SCOPED_MANAGER_PERMISSIONS`** (§2.1). Bundle membership is what GATE 1
-  (`has_permission_or_scope`) checks — drop it and a scoped manager 403s at the route on every action endpoint.
-  "Agent-mediated" is GATE 2's scope resolution, not a reason to omit the token.
+  (`has_permission` → SCOPED, admitted when `allow_scope=True`) checks — drop it and a scoped manager 403s at
+  the route on every action endpoint. "Agent-mediated" is GATE 2's scope resolution, not a reason to omit it.
 - **Reaching the endpoints (GATE 1):** switch the standalone tool/MCP admin endpoints (`tool/api.py`
   POST/PUT/DELETE, `mcp/api.py`) to `require_permission(MANAGE_ACTIONS, allow_scope=True)` so managers can reach
   them. (Delete stays admin-only per D6.)

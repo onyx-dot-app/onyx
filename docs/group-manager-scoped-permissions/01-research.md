@@ -2,6 +2,11 @@
 
 # §8 Scoped Permissions (Group Manager) — Research
 
+> **Historical research.** Final primitive names/shapes differ — see [03 §2](03-detailed-design.md):
+> `has_permission` returns `PermissionAuthority` (the one classifier; the proposed `has_permission_or_scope`
+> was folded into it), and the write gate is `assert_within_scope` / `assert_global` (not
+> `assert_group_set_within_scope`). The names below reflect the original investigation, not the shipped API.
+
 ## Requirement
 
 Implement **§8 of the Group-Based Permissions System V2** solution design — the **Group Manager**
