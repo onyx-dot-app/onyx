@@ -730,7 +730,7 @@ if __name__ == "__main__":
     from onyx.db.persona import get_default_behavior_persona
     from onyx.llm.factory import get_default_llm
     from onyx.llm.factory import get_llm_token_counter
-    from onyx.llm.utils import model_is_reasoning_model
+    from onyx.llm.model_capabilities import model_is_reasoning_model
     from onyx.server.query_and_chat.placement import Placement
     from onyx.tools.models import ToolCallKickoff
     from onyx.tools.tool_constructor import construct_tools
