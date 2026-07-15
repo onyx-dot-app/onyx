@@ -142,7 +142,6 @@ class QueryExpansionAndScope(BaseModel):
     semantic_query: str | None
     keyword_queries: list[str]
     plan_scope: list[DocumentSource] | None
-    # The turn's cached time window (computed once, reused across cycles).
     time_filter: TimeFilter = (None, None)
 
 
@@ -606,11 +605,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         Repeat calls reuse the cached expansion instead of re-expanding. Once the
         scope decision finds no source directive it latches off for the rest of the
         turn, since the conversation cannot introduce one mid-turn. The time-window
-        decision is computed exactly once and cached for the rest of the turn.
-
-        The source and time decisions are gated by ``auto_detect_filters`` (the
-        workspace toggle): when it is off, neither runs and only user/persona
-        selected filters apply.
+        decision is computed once per turn and cached. Both auto decisions are
+        gated by ``auto_detect_filters``.
         """
         expand_queries = not skip_query_expansion
         decide_scope = self.auto_detect_filters and not self._scope_decision_settled
@@ -885,8 +881,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             if DocumentSource.SLACK not in resolved_scope:
                 slack_access_token = None
 
-        # Apply the turn's cached time window as an updated_at range. The lower
-        # bound composes with any persona time floor downstream in the pipeline.
+        # The pipeline composes the lower bound with any persona time floor.
         time_start, time_end = expansion.time_filter
         if time_start is not None or time_end is not None:
             effective_filters = (effective_filters or BaseFilters()).model_copy(

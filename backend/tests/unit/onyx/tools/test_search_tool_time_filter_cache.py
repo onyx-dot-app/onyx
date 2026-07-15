@@ -15,7 +15,7 @@ def _make_tool() -> SearchTool:
     avoiding the heavy __init__ (DB, emitter, etc.)."""
     tool = SearchTool.__new__(SearchTool)
     tool.llm = MagicMock()
-    tool.auto_detect_filters = True  # workspace toggle enabling auto filters
+    tool.auto_detect_filters = True
     tool._scope_decision_settled = True  # skip the source-scope job
     tool._cached_expansion = None
     tool._time_filter = (None, None)
@@ -54,20 +54,17 @@ def test_time_filter_runs_once_and_caches_for_the_turn() -> None:
             decide_args=(),
         )
 
-    # The first cycle schedules the time-filter job; the second schedules nothing
-    # (expansion skipped, scope settled, time cached), so the parallel runner is
-    # only ever invoked once and never re-runs the time decision.
+    # Only the first cycle schedules the time-filter job; the second has
+    # nothing to run.
     assert len(scheduled) == 1
     assert decide_time_filter in scheduled[0]
 
-    # Both cycles surface the same cached decision.
     assert first.time_filter == decided
     assert second.time_filter == decided
     assert tool._time_filter_computed is True
 
 
 def test_time_filter_skipped_when_auto_detect_disabled() -> None:
-    """With the workspace toggle off, the time decision never runs."""
     tool = _make_tool()
     tool.auto_detect_filters = False
 
@@ -90,7 +87,6 @@ def test_time_filter_skipped_when_auto_detect_disabled() -> None:
             decide_args=(),
         )
 
-    # No jobs scheduled at all (expansion skipped, scope settled, time gated off).
     assert scheduled == [] or all(
         decide_time_filter not in funcs for funcs in scheduled
     )

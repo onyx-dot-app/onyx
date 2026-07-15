@@ -21,32 +21,24 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Only the most recent user turns carry time intent; older turns add tokens and
-# stale directives. Mirrors MAX_SOURCE_FILTER_USER_TURNS in source_filter.py.
+# Mirrors MAX_SOURCE_FILTER_USER_TURNS in source_filter.py.
 MAX_TIME_FILTER_USER_TURNS = 5
 
 
-# An inclusive (start, end) bound on a document's last-updated date, detected
-# from the conversation. Either side may be None, meaning that bound is not
-# applied; (None, None) means search across all time.
+# Inclusive (start, end) bounds on a document's last-updated date; None on
+# either side means unbounded.
 TimeFilter = tuple[datetime | None, datetime | None]
 
-# Matches the model's "(start, end)" output. Each side is captured as a token
-# (a date, a relative "-P<N><unit>" offset, or "None"); neither may contain a
-# comma or parenthesis.
+# The model's "(start, end)" output; each side is one comma/paren-free token.
 _TIME_FILTER_PAIR_RE = re.compile(r"\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)")
 
-# A relative offset the model emits for a plain numeric "N units ago" / "last N
-# units" phrasing, as a signed ISO-8601 duration (e.g. "-P15W" = 15 weeks before
-# today). Resolved in code so the model never does the error-prone date
-# arithmetic itself. The leading minus is optional — every offset we accept is in
-# the past. Unit: D=days, W=weeks, M=months, Y=years.
+# Signed ISO-8601 duration before today (e.g. "-P15W"), emitted for numeric
+# offsets so the model never does date arithmetic itself.
 _RELATIVE_BOUND_RE = re.compile(r"^-?\s*P\s*(\d+)\s*([DWMY])$", re.IGNORECASE)
 
 
 def _resolve_relative_bound(token: str, now: datetime) -> datetime | None:
-    """Resolve a "-P<N><unit>" ISO-8601 duration token to an absolute datetime N
-    units before `now`, or None if the token isn't a relative offset."""
+    """Resolve a duration token to `now` minus N units, or None if not one."""
     match = _RELATIVE_BOUND_RE.match(token)
     if match is None:
         return None
@@ -87,8 +79,7 @@ def best_match_time(time_str: str) -> datetime | None:
 
 
 def _parse_bound(token: str, now: datetime) -> datetime | None:
-    """Parse one side of the model's pair: a "YYYY-MM-DD" date, a relative
-    "-P<N><unit>" ISO-8601 offset (resolved against `now`), or None."""
+    """Parse one side of the pair: a date, a relative offset, or None."""
     token = token.strip().strip("'\"")
     if token.lower() in ("none", "null"):
         return None
@@ -101,22 +92,19 @@ def _parse_bound(token: str, now: datetime) -> datetime | None:
 def _parse_time_decision(
     content: str | None, now: datetime | None = None
 ) -> TimeFilter:
-    """Parse the model's "(start, end)" output into an inclusive (start, end)
-    window. Each side is a "YYYY-MM-DD" date, a "-P<N><unit>" relative offset,
-    or None. Returns (None, None) on anything unparseable so the caller searches
-    across all time."""
+    """Parse the model's "(start, end)" output into a TimeFilter, failing open
+    to (None, None) on anything unparseable."""
     now = now or datetime.now(timezone.utc)
     if not content:
         return (None, None)
-    # Tolerates code fences / stray text some models wrap the pair in.
+    # search() tolerates code fences / stray text around the pair.
     match = _TIME_FILTER_PAIR_RE.search(content)
     if match is None:
         logger.warning("Time filter output was not a (start, end) pair: %s", content)
         return (None, None)
 
     start = _parse_bound(match.group(1), now)
-    # The upper bound is inclusive of the whole named day, so push it to the end
-    # of that day before comparing against second-granularity document times.
+    # Push the upper bound to end-of-day so it includes the whole named day.
     end_day = _parse_bound(match.group(2), now)
     end = (
         datetime.combine(end_day.date(), time.max, tzinfo=timezone.utc)
@@ -131,15 +119,8 @@ def decide_time_filter(
     history: list[ChatMinimalTextMessage],
     llm: LLM,
 ) -> TimeFilter:
-    """Detect, in one LLM call, the time window this turn's internal search should
-    be restricted to, from the conversation.
-
-    Returns an inclusive (start, end) window; either side is None to leave that
-    bound unset, and (None, None) means search across all time. Fails open to
-    (None, None) on any error. The decision is conversation-derived and stable
-    across the repeated search cycles within a turn, so the caller computes it
-    once and caches it.
-    """
+    """Detect, in one LLM call, the time window the conversation restricts this
+    turn's internal search to. Fails open to (None, None) on any error."""
     user_turns = [
         msg.message.strip()
         for msg in history

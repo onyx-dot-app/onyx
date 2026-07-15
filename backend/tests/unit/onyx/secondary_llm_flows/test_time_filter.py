@@ -55,7 +55,7 @@ def test_lower_bound_only() -> None:
 def test_upper_bound_only() -> None:
     start, end = _parse_time_decision("(None, 2022-12-31)")
     assert start is None
-    # End is pushed to the end of the day so a <= comparison includes the whole day.
+    # The end bound is pushed to end-of-day to include the whole day.
     assert end is not None and end.isoformat() == "2022-12-31T23:59:59.999999+00:00"
 
 
@@ -72,7 +72,6 @@ def test_named_month_becomes_full_span_range() -> None:
 
 
 def test_pair_is_extracted_from_surrounding_text() -> None:
-    """The pair is recovered even when the model adds fences or prose."""
     start, end = _parse_time_decision("```\n(2025-01-01, 2025-01-31)\n```")
     assert start is not None and end is not None
     assert start.date().isoformat() == "2025-01-01"
@@ -94,7 +93,6 @@ def test_empty_content_has_no_bounds() -> None:
 
 
 def test_unparseable_dates_have_no_bounds() -> None:
-    """A pair whose sides aren't dates yields no usable bound."""
     assert _parse_time_decision("(banana, None)") == (None, None)
 
 
