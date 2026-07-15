@@ -2065,7 +2065,6 @@ def get_openai_compatible_server_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    # Vision support from the LiteLLM cost map, not a hardcoded list
                     supports_image_input=litellm_thinks_model_supports_image_input(
                         model_id, LlmProviderNames.OPENAI_COMPATIBLE
                     ),
