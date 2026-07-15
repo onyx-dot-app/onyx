@@ -14,6 +14,7 @@ from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
 from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -268,6 +269,44 @@ if _OIDC_SCOPE_OVERRIDE:
 # Enables PKCE for OIDC login flow. Disabled by default to preserve
 # backwards compatibility for existing OIDC deployments.
 OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
+
+# Opt-in: capture IdP claims at OAuth login and enrich the chat experience
+# with the user's directory profile (country, department, job title, ...) —
+# an "Organization Profile" block in the system prompt plus `{{user.<key>}}`
+# placeholders in agent prompts. Off by default: it sends directory data to
+# the configured LLM, which deployments must consciously opt into.
+# Forced off under multi-tenancy: claims are captured in the unauthenticated
+# OAuth callback, where the tenant is not yet resolved, so the snapshot would be
+# written under the default tenant id and never read back. Single-tenant only
+# until per-tenant capture lands.
+IDP_PROFILE_ENRICHMENT_ENABLED = (
+    os.environ.get("IDP_PROFILE_ENRICHMENT_ENABLED", "").lower() == "true"
+    and not MULTI_TENANT
+)
+
+# Optional per-deployment claim-alias overrides for the directory profile,
+# as JSON mapping placeholder key -> ordered claim-name list, e.g.
+# '{"department": ["dept", "division"], "country": ["c"]}'. Configured
+# aliases are checked before the built-in ones.
+IDP_PROFILE_CLAIM_MAP: dict[str, list[str]] = {}
+_IDP_PROFILE_CLAIM_MAP_RAW = os.environ.get("IDP_PROFILE_CLAIM_MAP")
+if _IDP_PROFILE_CLAIM_MAP_RAW:
+    try:
+        _parsed_claim_map = json.loads(_IDP_PROFILE_CLAIM_MAP_RAW)
+        if isinstance(_parsed_claim_map, dict):
+            IDP_PROFILE_CLAIM_MAP = {
+                str(key): [str(alias) for alias in aliases]
+                for key, aliases in _parsed_claim_map.items()
+                if isinstance(aliases, list)
+            }
+    except json.JSONDecodeError:
+        # Import-time, so plain logging: a silently ignored map would make the
+        # misconfiguration invisible (placeholders just stay empty).
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "IDP_PROFILE_CLAIM_MAP is not valid JSON — ignoring it"
+        )
 
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
@@ -1354,6 +1393,19 @@ INDEXING_WORKER_MEMORY_LIMIT_MB = int(
 # per-allocation CPU/memory overhead — enable only while chasing a leak.
 INDEXING_WORKER_TRACEMALLOC = (
     os.environ.get("INDEXING_WORKER_TRACEMALLOC", "").lower() == "true"
+)
+
+# When set, every successfully indexed public-connector document is POSTed to
+# this endpoint. Intended for non-EE deployments; EE users should prefer the
+# Document Push hook (admin UI / /admin/hooks API) instead — it adds endpoint
+# validation, execution logs, and reachability tracking. If both are set, this
+# env config takes precedence and the hook does not fire. Not supported in
+# multi-tenant deployments. See onyx/indexing/document_push.py.
+DOCUMENT_PUSH_ENDPOINT_URL = os.environ.get("DOCUMENT_PUSH_ENDPOINT_URL") or None
+# Sent as "Authorization: Bearer <key>" on each push request.
+DOCUMENT_PUSH_API_KEY = os.environ.get("DOCUMENT_PUSH_API_KEY") or None
+DOCUMENT_PUSH_TIMEOUT_SECONDS = float(
+    os.environ.get("DOCUMENT_PUSH_TIMEOUT_SECONDS") or 30
 )
 
 MAX_FILE_SIZE_BYTES = int(

@@ -348,6 +348,8 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                         semantic_identifier=f"[{node['identifier']}] {node['title']}",
                         title=node["title"],
                         doc_updated_at=time_str_to_utc(node["updatedAt"]),
+                        # NOTE: doc_created_at population not yet verified against live data
+                        doc_created_at=time_str_to_utc(node["createdAt"]),
                         doc_metadata={
                             "hierarchy": {
                                 "source_path": [team_name],

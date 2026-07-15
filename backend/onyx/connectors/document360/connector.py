@@ -132,6 +132,9 @@ class Document360Connector(LoadConnector, PollConnector):
             updated_at = datetime.strptime(
                 article_details["modified_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
             ).replace(tzinfo=timezone.utc)
+            created_at = datetime.strptime(
+                article_details["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
+            ).replace(tzinfo=timezone.utc)
             if start is not None and updated_at < start:
                 continue
             if end is not None and updated_at > end:
@@ -165,6 +168,8 @@ class Document360Connector(LoadConnector, PollConnector):
                 source=DocumentSource.DOCUMENT360,
                 semantic_identifier=article_details["title"],
                 doc_updated_at=updated_at,
+                # NOTE: doc_created_at population not yet verified against live data
+                doc_created_at=created_at,
                 primary_owners=authors,
                 metadata={
                     "workspace": self.workspace,

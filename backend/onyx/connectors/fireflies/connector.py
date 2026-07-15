@@ -133,6 +133,7 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
             }.items()
             if v is not None
         },
+        doc_created_at=meeting_date,
         doc_updated_at=meeting_date,
         primary_owners=organizer_email_user_info,
         secondary_owners=meeting_participants_email_list,

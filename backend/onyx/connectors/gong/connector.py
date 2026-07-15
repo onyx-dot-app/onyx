@@ -353,6 +353,9 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
             sections=[TextSection(link=call_metadata["url"], text=transcript_text)],
             source=DocumentSource.GONG,
             semantic_identifier=call_title or "Untitled",
+            doc_created_at=datetime.fromisoformat(call_time_str).astimezone(
+                timezone.utc
+            ),
             doc_updated_at=datetime.fromisoformat(call_time_str).astimezone(
                 timezone.utc
             ),

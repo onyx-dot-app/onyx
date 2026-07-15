@@ -2,6 +2,7 @@ from collections.abc import Generator
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
+from ee.onyx.external_permissions.utils import credential_json
 from ee.onyx.external_permissions.utils import generic_doc_sync
 from onyx.access.models import ElementExternalAccess
 from onyx.configs.constants import DocumentSource
@@ -25,12 +26,7 @@ def teams_doc_sync(
     teams_connector = TeamsConnector(
         **cc_pair.connector.connector_specific_config,
     )
-    credential_json = (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
-    )
-    teams_connector.load_credentials(credential_json)
+    teams_connector.load_credentials(credential_json(cc_pair))
 
     yield from generic_doc_sync(
         cc_pair=cc_pair,

@@ -23,6 +23,9 @@ class FakeLock(CacheLock):
     def release(self) -> None:
         self._owned = False
 
+    def extend(self, ttl_seconds: float) -> None:
+        pass
+
     def owned(self) -> bool:
         return self._owned
 

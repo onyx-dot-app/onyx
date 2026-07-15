@@ -72,6 +72,8 @@ interface InputLayoutProps {
 
 interface VerticalProps extends InputLayoutProps {
   subDescription?: string | RichStr;
+  /** Optional text or markdown rendered at the top-right of the label row. */
+  topRight?: string | RichStr;
 }
 
 function Vertical({
@@ -80,6 +82,7 @@ function Vertical({
   ref,
   children,
   subDescription,
+  topRight,
   title,
   tag,
   description,
@@ -88,16 +91,37 @@ function Vertical({
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
+  const titleRow = topRight ? (
+    <ContentAction
+      title={title}
+      description={description}
+      suffix={suffix}
+      tag={tag}
+      sizePreset="main-ui"
+      variant="section"
+      width="full"
+      padding="fit"
+      rightChildren={
+        <Text font="secondary-body" color="text-03" as="p">
+          {topRight}
+        </Text>
+      }
+      center
+    />
+  ) : (
+    <Content
+      title={title}
+      description={description}
+      suffix={suffix}
+      tag={tag}
+      sizePreset="main-ui"
+      variant="section"
+    />
+  );
+
   const content = (
     <Section ref={ref} gap={0.25} alignItems="start">
-      <Content
-        title={title}
-        description={description}
-        suffix={suffix}
-        tag={tag}
-        sizePreset="main-ui"
-        variant="section"
-      />
+      {titleRow}
       {children}
       {fieldName && <FormikInputError name={fieldName} />}
       {subDescription && (

@@ -597,18 +597,32 @@ import { cn } from '@/lib/utils'
 
 ## 6. Custom Hooks Organization
 
-**Follow a "hook-per-file" layout. Each hook should live in its own file within `web/src/hooks`.**
+**Place hooks in the `hooks.ts` file of the most relevant `lib/` feature directory.
+Only fall back to `web/src/hooks/` for genuinely general-purpose hooks with no feature home.**
 
-**Reason:** This is just a layout preference. Keeps code clean.
+Priority order:
+1. **Feature hook** (`web/src/lib/<feature>/hooks.ts`) — if the hook is specific to a domain
+   (users, billing, connectors, etc.), it lives alongside the rest of that feature's code.
+2. **Opal** (`web/lib/opal/src/`) — if the hook is a reusable UI primitive with no
+   app-specific knowledge (e.g. `useClickOutside`, `useScreenSize`), consider contributing
+   it to Opal so it can be shared across products.
+3. **`web/src/hooks/`** — last resort for general-purpose hooks that don't belong to any
+   feature and aren't Opal-worthy.
 
 ```typescript
-// web/src/hooks/useUserData.ts
-export function useUserData(userId: string) {
-  // hook implementation
-}
+// ✅ Good — feature hook lives next to the feature's other lib code
+// web/src/lib/users/hooks.ts
+export function useCurrentUser() { ... }
+export function useSessionWatcher() { ... }
 
-// web/src/hooks/useLocalStorage.ts
-export function useLocalStorage<T>(key: string, initialValue: T) {
-  // hook implementation
-}
+// ✅ Good — general-purpose UI hook with no app knowledge → Opal candidate
+// web/lib/opal/src/hooks/useClickOutside.ts
+export function useClickOutside(...) { ... }
+
+// ✅ Good — genuinely cross-cutting, no feature home, not Opal-worthy
+// web/src/hooks/useToast.ts
+export function useToast() { ... }
+
+// ❌ Bad — user/session hook dumped in the global hooks directory
+// web/src/hooks/useSessionWatcher.ts
 ```

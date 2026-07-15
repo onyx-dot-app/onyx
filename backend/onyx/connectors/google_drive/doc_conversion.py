@@ -209,6 +209,8 @@ _FALLBACK_WEB_VIEW_LINK_TEMPLATES = {
     GDriveMimeType.SPREADSHEET.value: "https://docs.google.com/spreadsheets/d/{}/view",
     GDriveMimeType.PPT.value: "https://docs.google.com/presentation/d/{}/view",
 }
+# Fallback template for non-native (uploaded binary) Drive files.
+_FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE = "https://drive.google.com/file/d/{}/view"
 
 MAX_RETRIEVER_EMAILS = 20
 CHUNK_SIZE_BUFFER = 64  # extra bytes past the limit to read
@@ -244,7 +246,7 @@ def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
         mime_type = file.get("mimeType", "")
         template = _FALLBACK_WEB_VIEW_LINK_TEMPLATES.get(mime_type)
         if template is None:
-            link = f"https://drive.google.com/file/d/{file_id}/view"
+            link = _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE.format(file_id)
         else:
             link = template.format(file_id)
         logger.debug(
@@ -885,6 +887,11 @@ def _convert_drive_item_to_document(
                     owner.get("displayName", "") for owner in file.get("owners", [])
                 ),
             },
+            doc_created_at=(
+                datetime.fromisoformat(created_time.replace("Z", "+00:00"))
+                if (created_time := file.get("createdTime"))
+                else None
+            ),
             doc_updated_at=datetime.fromisoformat(
                 file.get("modifiedTime", "").replace("Z", "+00:00")
             ),
@@ -961,4 +968,9 @@ def build_slim_document(
         id=onyx_document_id_from_drive_file(file),
         external_access=external_access,
         parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
+        doc_created_at=(
+            datetime.fromisoformat(created_time.replace("Z", "+00:00"))
+            if (created_time := file.get("createdTime"))
+            else None
+        ),
     )

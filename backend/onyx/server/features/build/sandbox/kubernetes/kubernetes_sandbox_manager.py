@@ -127,6 +127,7 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 from onyx.server.features.build.sandbox.serve_transport import (
     OPENCODE_SERVE_READY_TIMEOUT_SECONDS,
 )
@@ -141,6 +142,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
 )
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -277,60 +279,6 @@ def _build_targz(files: FileSet) -> tuple[bytes, str]:
             tar.addfile(info, io.BytesIO(data))
     raw = buf.getvalue()
     return raw, hashlib.sha256(raw).hexdigest()
-
-
-def _build_nextjs_start_script(
-    session_path: str,
-    nextjs_port: int,
-    check_node_modules: bool = False,
-) -> str:
-    """Builds shell script to start the NextJS dev server.
-
-    Args:
-        session_path: Path to the session directory (should be shell-safe).
-        nextjs_port: Port number for the NextJS dev server.
-        check_node_modules: If True, check for node_modules and run bun install
-            if missing.
-
-    Returns:
-        Shell script string to start the NextJS server.
-    """
-    install_check = ""
-    if check_node_modules:
-        install_check = f"""
-if [ ! -d "node_modules" ]; then
-    echo "Installing dependencies with bun..."
-    BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
-        bun install --frozen-lockfile --backend=hardlink
-fi
-"""
-
-    return f"""
-set -e
-cd {session_path}/outputs/web
-{install_check}
-export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename {session_path})/webapp"
-if grep -q "WEBAPP_ASSET_PREFIX" next.config.ts 2>/dev/null; then
-    cat > next.config.ts <<'EOF'
-import type {{ NextConfig }} from "next";
-
-const webappBasePath = process.env.ONYX_WEBAPP_BASE_PATH || undefined;
-
-const nextConfig: NextConfig = {{
-  ...(webappBasePath
-    ? {{ basePath: webappBasePath, assetPrefix: webappBasePath }}
-    : {{}}),
-}};
-
-export default nextConfig;
-EOF
-fi
-echo "Starting Next.js dev server on port {nextjs_port}..."
-nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
-NEXTJS_PID=$!
-echo "Next.js server started with PID $NEXTJS_PID"
-echo $NEXTJS_PID > {session_path}/nextjs.pid
-"""
 
 
 class KubernetesSandboxManager(SandboxManager):
@@ -543,6 +491,7 @@ class KubernetesSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             disabled_tools=disabled_tools,
             user_name=user_name,
+            organization_instructions=load_settings().craft_instructions,
         )
 
     def _create_sandbox_pod(
@@ -1512,7 +1461,7 @@ fi
         # Headless callers (scheduled tasks) pass nextjs_port=None — the
         # agent's tools work without a dev server.
         nextjs_start_script = (
-            _build_nextjs_start_script(
+            build_nextjs_start_script(
                 session_path, nextjs_port, check_node_modules=False
             )
             if nextjs_port is not None
@@ -1956,7 +1905,7 @@ echo "Session cleanup complete"
             )
 
             if nextjs_port is not None:
-                start_script = _build_nextjs_start_script(
+                start_script = build_nextjs_start_script(
                     safe_session_path, nextjs_port, check_node_modules=True
                 )
                 k8s_stream(

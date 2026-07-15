@@ -10,6 +10,7 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
+from onyx.connectors.salesforce.utils import CREATED_FIELD
 from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.connectors.salesforce.utils import MODIFIED_FIELD
 from onyx.connectors.salesforce.utils import NAME_FIELD
@@ -170,6 +171,8 @@ def convert_sf_query_result_to_doc(
 
     base_url = f"https://{sf_client.sf_instance}"
     extracted_doc_updated_at = time_str_to_utc(record[MODIFIED_FIELD])
+    created_date = record.get(CREATED_FIELD)
+    extracted_doc_created_at = time_str_to_utc(created_date) if created_date else None
     extracted_semantic_identifier = record.get(NAME_FIELD) or record.get(
         ID_FIELD, "Unknown Object"
     )
@@ -194,6 +197,8 @@ def convert_sf_query_result_to_doc(
         source=DocumentSource.SALESFORCE,
         semantic_identifier=extracted_semantic_identifier,
         doc_updated_at=extracted_doc_updated_at,
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=extracted_doc_created_at,
         primary_owners=primary_owner_list,
         metadata={},
     )
@@ -211,6 +216,8 @@ def convert_sf_object_to_doc(
     onyx_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
     base_url = f"https://{sf_instance}"
     extracted_doc_updated_at = time_str_to_utc(object_dict[MODIFIED_FIELD])
+    created_date = object_dict.get(CREATED_FIELD)
+    extracted_doc_created_at = time_str_to_utc(created_date) if created_date else None
     extracted_semantic_identifier = object_dict.get(NAME_FIELD) or object_dict.get(
         ID_FIELD, "Unknown Object"
     )
@@ -237,6 +244,8 @@ def convert_sf_object_to_doc(
         source=DocumentSource.SALESFORCE,
         semantic_identifier=extracted_semantic_identifier,
         doc_updated_at=extracted_doc_updated_at,
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=extracted_doc_created_at,
         primary_owners=primary_owner_list,
         metadata={},
     )

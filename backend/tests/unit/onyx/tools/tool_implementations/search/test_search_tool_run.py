@@ -20,7 +20,10 @@ MODULE = "onyx.tools.tool_implementations.search.search_tool"
 ScopeDecision = list[DocumentSource] | None
 
 
-def _make_tool(user_selected_filters: BaseFilters | None = None) -> SearchTool:
+def _make_tool(
+    user_selected_filters: BaseFilters | None = None,
+    auto_detect_filters: bool = True,
+) -> SearchTool:
     """Instantiate SearchTool with non-DB deps mocked; DB/LLM calls are patched in _run."""
     return SearchTool(
         tool_id=1,
@@ -32,6 +35,7 @@ def _make_tool(user_selected_filters: BaseFilters | None = None) -> SearchTool:
         user_selected_filters=user_selected_filters,
         project_id_filter=None,
         enable_slack_search=False,
+        auto_detect_filters=auto_detect_filters,
     )
 
 
@@ -301,3 +305,45 @@ def test_prior_cycles_accumulate_across_calls_for_the_walk() -> None:
     assert second_cycles[0].searched_sources == ["zendesk"]
     assert second_cycles[0].queries == ["ticket"]
     assert second_cycles[0].cycle_number == 1
+
+
+def test_auto_detect_disabled_skips_scope_decision() -> None:
+    """With auto-detect off, no scope decision runs and the search stays unscoped."""
+    tool = _make_tool(auto_detect_filters=False)
+    connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
+    decide_mock = MagicMock(return_value=[DocumentSource.ZENDESK])
+
+    mock_search_pipeline = _run(
+        tool, decide_mock=decide_mock, connected_sources=connected
+    )
+
+    decide_mock.assert_not_called()
+    assert _emitted_filter_sources(tool) == []
+    filters = _filters_passed_to_search(mock_search_pipeline)
+    assert filters, "search_pipeline was never called"
+    for applied in filters:
+        assert applied is None or applied.source_type is None
+
+
+def test_auto_detect_disabled_keeps_user_selected_filters() -> None:
+    """With auto-detect off, user/persona-selected filters are still applied."""
+    restriction = [DocumentSource.CONFLUENCE, DocumentSource.GITHUB]
+    tool = _make_tool(BaseFilters(source_type=restriction), auto_detect_filters=False)
+    decide_mock = MagicMock(return_value=[DocumentSource.CONFLUENCE])
+
+    mock_search_pipeline = _run(
+        tool,
+        decide_mock=decide_mock,
+        connected_sources=[
+            DocumentSource.CONFLUENCE,
+            DocumentSource.GITHUB,
+            DocumentSource.SLACK,
+        ],
+    )
+
+    decide_mock.assert_not_called()
+    filters = _filters_passed_to_search(mock_search_pipeline)
+    assert filters, "search_pipeline was never called"
+    for applied in filters:
+        assert applied is not None
+        assert applied.source_type == restriction

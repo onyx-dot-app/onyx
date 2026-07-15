@@ -5,7 +5,6 @@ from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
-from dateutil import parser
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
@@ -120,6 +119,8 @@ class ProductboardConnector(PollConnector):
                 semantic_identifier=feature["name"],
                 source=DocumentSource.PRODUCTBOARD,
                 doc_updated_at=time_str_to_utc(feature["updatedAt"]),
+                # NOTE: doc_created_at population not yet verified against live data
+                doc_created_at=time_str_to_utc(feature["createdAt"]),
                 primary_owners=experts,
                 metadata=metadata,
             )
@@ -143,6 +144,8 @@ class ProductboardConnector(PollConnector):
                 semantic_identifier=component["name"],
                 source=DocumentSource.PRODUCTBOARD,
                 doc_updated_at=time_str_to_utc(component["updatedAt"]),
+                # NOTE: doc_created_at population not yet verified against live data
+                doc_created_at=time_str_to_utc(component["createdAt"]),
                 primary_owners=experts,
                 metadata={
                     "entity_type": "component",
@@ -169,6 +172,8 @@ class ProductboardConnector(PollConnector):
                 semantic_identifier=product["name"],
                 source=DocumentSource.PRODUCTBOARD,
                 doc_updated_at=time_str_to_utc(product["updatedAt"]),
+                # NOTE: doc_created_at population not yet verified against live data
+                doc_created_at=time_str_to_utc(product["createdAt"]),
                 primary_owners=experts,
                 metadata={
                     "entity_type": "product",
@@ -199,28 +204,23 @@ class ProductboardConnector(PollConnector):
                 semantic_identifier=objective["name"],
                 source=DocumentSource.PRODUCTBOARD,
                 doc_updated_at=time_str_to_utc(objective["updatedAt"]),
+                # NOTE: doc_created_at population not yet verified against live data
+                doc_created_at=time_str_to_utc(objective["createdAt"]),
                 primary_owners=experts,
                 metadata=metadata,
             )
 
-    def _is_updated_at_out_of_time_range(
+    def _is_out_of_time_range(
         self,
         document: Document,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
     ) -> bool:
-        updated_at = cast(str, document.metadata.get("updated_at", ""))
-        if updated_at:
-            updated_at_datetime = parser.parse(updated_at)
-            if (
-                updated_at_datetime.timestamp() < start
-                or updated_at_datetime.timestamp() > end
-            ):
-                return True
-        else:
+        if document.doc_updated_at is None:
             logger.debug("Unable to find updated_at for document '%s'", document.id)
+            return False
 
-        return False
+        return not (start <= document.doc_updated_at.timestamp() <= end)
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
@@ -247,7 +247,7 @@ class ProductboardConnector(PollConnector):
             objective_documents,
         ):
             # skip documents that are not in the time range
-            if self._is_updated_at_out_of_time_range(document, start, end):
+            if self._is_out_of_time_range(document, start, end):
                 continue
 
             document_batch.append(document)

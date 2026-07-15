@@ -170,6 +170,8 @@ class ZulipConnector(LoadConnector, PollConnector):
             semantic_identifier=f"{message.display_recipient} > {message.subject}",
             metadata=metadata,
             doc_updated_at=doc_time,  # Use most recent edit time or post time
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=post_time,
         )
 
     def _get_docs(

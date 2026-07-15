@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { unstable_noStore as noStore } from "next/cache";
-import { requireAuth } from "@/lib/auth/requireAuth";
+import { requireAuth } from "@/lib/auth/svcSS";
 import { fetchSettingsSS } from "@/lib/settings/svcSS";
 
 export interface LayoutProps {

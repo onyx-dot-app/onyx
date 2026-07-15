@@ -312,7 +312,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "6"
+      onyx.app/nginx-config-version: "7"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -1022,6 +1022,9 @@ mcpServer:
 celery_worker_docfetching:
   extraEnv: []
   replicaCount: 1
+  # Grace for the watchdog to mark its in-flight attempt INTERRUPTED and stop its
+  # subprocess on SIGTERM. Must exceed the watchdog poll interval + subprocess grace.
+  terminationGracePeriodSeconds: 60
   # Per-worker log level override. Empty (default) means use the global
   # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
   # this worker only — this becomes `--loglevel=<value>` on the celery worker
@@ -1478,6 +1481,13 @@ configMap:
   AUTH_TYPE: "basic"
   # Enable PKCE for OIDC login flow. Leave empty/false for backward compatibility.
   OIDC_PKCE_ENABLED: ""
+  # Opt-in: capture IdP directory claims at OAuth/OIDC login and use them to
+  # enrich chat prompts and resolve {{user.<key>}} agent placeholders. Sends
+  # directory data to the configured LLM, so off by default. Single-tenant only.
+  IDP_PROFILE_ENRICHMENT_ENABLED: ""
+  # Optional JSON overriding the directory claim aliases per profile field, e.g.
+  # '{"department": ["dept", "division"], "country": ["c"]}'.
+  IDP_PROFILE_CLAIM_MAP: ""
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
@@ -1536,8 +1546,17 @@ configMap:
   CONFLUENCE_CONNECTOR_LABELS_TO_SKIP: ""
   JIRA_CLOUD_API_VERSION: ""
   JIRA_SERVER_API_VERSION: ""
+  CANVAS_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
+  # Push every successfully indexed public-connector document to an external
+  # HTTP endpoint (failures never fail indexing). Intended for non-EE
+  # deployments — EE users should configure the Document Push hook in the
+  # admin UI instead. Not supported in multi-tenant deployments.
+  DOCUMENT_PUSH_ENDPOINT_URL: ""
+  DOCUMENT_PUSH_API_KEY: ""
+  DOCUMENT_PUSH_TIMEOUT_SECONDS: ""
   # Worker Parallelism
   CELERY_WORKER_DOCPROCESSING_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
@@ -1635,10 +1654,10 @@ sandboxProxy:
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 512Mi
     limits:
       cpu: 1000m
-      memory: 1Gi
+      memory: 2Gi
   nodeSelector: {}
   tolerations: []
   affinity: {}

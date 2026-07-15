@@ -44,6 +44,7 @@ from onyx.db.connector import mark_ccpair_as_pruned
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.document import backfill_docs_created_at__no_commit
 from onyx.db.document import get_documents_for_connector_credential_pair
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
@@ -667,6 +668,13 @@ def connector_pruning_generator_task(
                 source=source,
                 raw_id_to_parent=all_connector_doc_ids,
             )
+
+            # Backfill source creation time collected during enumeration.
+            backfill_docs_created_at__no_commit(
+                ids_to_created_at=extraction_result.id_to_created_at,
+                db_session=db_session,
+            )
+            db_session.commit()
 
             diff_start = time.monotonic()
             try:

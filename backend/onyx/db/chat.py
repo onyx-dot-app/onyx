@@ -370,7 +370,7 @@ def delete_chat_session(
 
 
 def get_chat_sessions_older_than(
-    days_old: int, db_session: Session
+    days_old: float, db_session: Session, limit: int | None = None
 ) -> list[tuple[UUID | None, UUID]]:
     """
     Retrieves chat sessions whose last activity is older than a specified number of days.
@@ -382,6 +382,9 @@ def get_chat_sessions_older_than(
     Args:
         days_old: The number of days to consider as "old".
         db_session: The database session.
+        limit: Optional cap on the number of sessions returned. When set, the
+            oldest sessions are returned first so callers can drain the backlog
+            in bounded batches without loading every matching row at once.
 
     Returns:
         A list of tuples, where each tuple contains the user_id (can be None) and the chat_session_id of an old chat session.
@@ -391,11 +394,16 @@ def get_chat_sessions_older_than(
     last_activity = func.coalesce(
         func.max(ChatMessage.time_sent), ChatSession.time_created
     )
-    old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
+    stmt = (
         select(ChatSession.user_id, ChatSession.id)
         .outerjoin(ChatMessage, ChatMessage.chat_session_id == ChatSession.id)
         .group_by(ChatSession.id, ChatSession.user_id)
         .having(last_activity < cutoff_time)
+    )
+    if limit is not None:
+        stmt = stmt.order_by(last_activity.asc()).limit(limit)
+    old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
+        stmt
     ).fetchall()
 
     # convert old_sessions to a conventional list of tuples

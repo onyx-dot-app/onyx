@@ -36,15 +36,12 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
-from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
-from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import ArtifactResponse
@@ -65,14 +62,21 @@ from onyx.server.features.build.session.models import WebappInfo
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
 )
+from onyx.server.features.build.session.sandbox_lifecycle import hydrate_managed_content
 from onyx.server.features.build.session.sandbox_lifecycle import (
-    snapshot_opencode_history_before_recovery,
+    mark_sandbox_provisioning,
+)
+from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    recover_unhealthy_sandbox,
+)
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    rollback_failed_provisioning,
 )
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
 from onyx.skills.push import build_user_skills_payload
-from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -414,12 +418,8 @@ def restore_session(
                     "Sandbox %s marked as RUNNING but pod is unhealthy/missing. Entering recovery mode.",
                     sandbox.id,
                 )
-                snapshot_opencode_history_before_recovery(
-                    sandbox_manager, sandbox.id, tenant_id
-                )
-                sandbox_manager.terminate(sandbox.id)
-                update_sandbox_status__no_commit(
-                    db_session, sandbox.id, SandboxStatus.TERMINATED
+                recover_unhealthy_sandbox(
+                    db_session, sandbox_manager, sandbox, tenant_id
                 )
                 db_session.commit()
                 db_session.refresh(sandbox)
@@ -427,25 +427,18 @@ def restore_session(
         llm_config, all_llm_configs = SessionManager(db_session).build_llm_configs(user)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
-            # Mint the PAT before flipping to PROVISIONING so a failure is retriable.
-            onyx_pat = ensure_sandbox_pat(db_session, sandbox, user)
+            mark_sandbox_provisioning(db_session, sandbox)
 
-            update_sandbox_status__no_commit(
-                db_session, sandbox.id, SandboxStatus.PROVISIONING
-            )
-            db_session.commit()
-
-            sandbox_manager.provision(
-                sandbox_id=sandbox.id,
-                user_id=user.id,
-                tenant_id=tenant_id,
-                llm_config=llm_config,
-                onyx_pat=onyx_pat,
-                all_llm_configs=all_llm_configs,
-            )
-
-            update_sandbox_status__no_commit(
-                db_session, sandbox.id, SandboxStatus.RUNNING
+            # Provisions, hydrates managed content, and stages the new status;
+            # a failure rolls the row back to SLEEPING in the handler below.
+            provision_sandbox(
+                db_session,
+                sandbox_manager,
+                sandbox,
+                user,
+                user.id,
+                tenant_id,
+                all_llm_configs,
             )
             db_session.commit()
 
@@ -463,6 +456,16 @@ def restore_session(
 
                 skills_section, connectable_apps_section, skills_files = (
                     build_user_skills_payload(user, db_session)
+                )
+                # Push the exact fileset AGENTS.md is rendered from, before
+                # rendering it — a skill can never be advertised while
+                # missing from disk.
+                hydrate_managed_content(
+                    sandbox_manager,
+                    sandbox.id,
+                    user,
+                    db_session,
+                    skills_files=skills_files,
                 )
                 if snapshot:
                     try:
@@ -496,25 +499,6 @@ def restore_session(
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()
 
-                try:
-                    hydrate_sandbox_skills(
-                        sandbox.id, user, db_session, files=skills_files
-                    )
-                except Exception:
-                    logger.warning(
-                        "Failed to push skills to sandbox %s",
-                        sandbox.id,
-                        exc_info=True,
-                    )
-
-                try:
-                    hydrate_user_library(sandbox.id, user.id, db_session)
-                except Exception:
-                    logger.warning(
-                        "Failed to push user library to sandbox %s",
-                        sandbox.id,
-                        exc_info=True,
-                    )
         else:
             logger.warning(
                 "Sandbox %s status is %s after re-provision, expected RUNNING",
@@ -531,24 +515,17 @@ def restore_session(
         try:
             db_session.rollback()
             stuck = get_sandbox_by_user_id(db_session, user.id)
-            if stuck is not None and stuck.status == SandboxStatus.PROVISIONING:
-                # provision() failed — back to SLEEPING so it isn't stuck.
-                update_sandbox_status__no_commit(
-                    db_session, stuck.id, SandboxStatus.SLEEPING
-                )
-                db_session.commit()
-                logger.info(
-                    "Rolled sandbox %s back to SLEEPING after failed restore",
-                    stuck.id,
-                )
-            elif stuck is not None and stuck.status == SandboxStatus.RUNNING:
-                # Workspace load failed after provision — drop the partial dir
-                # so session_workspace_exists() doesn't later report it restored.
-                sandbox_manager.cleanup_session_workspace(stuck.id, session_id)
-                logger.info(
-                    "Cleaned up partial workspace for session %s after failed restore",
-                    session_id,
-                )
+            if stuck is not None and not rollback_failed_provisioning(
+                db_session, stuck
+            ):
+                if stuck.status == SandboxStatus.RUNNING:
+                    # Workspace load failed after provision — drop the partial dir
+                    # so session_workspace_exists() doesn't later report it restored.
+                    sandbox_manager.cleanup_session_workspace(stuck.id, session_id)
+                    logger.info(
+                        "Cleaned up partial workspace for session %s after failed restore",
+                        session_id,
+                    )
         except Exception as rollback_err:
             logger.warning(
                 "Failed to recover sandbox state after restore failure: %s",

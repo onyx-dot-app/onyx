@@ -99,6 +99,7 @@ from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.db.enums import SkillSharePermission
+from onyx.db.enums import SSOProviderType
 from onyx.db.enums import SwitchoverType
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
@@ -326,6 +327,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         nullable=False,
         default=AccountType.STANDARD,
         server_default="STANDARD",
+    )
+    # Admin-controlled per-user Craft override: None = follow the workspace
+    # default (Settings.craft_default_enabled). ANDed with the deployment-level
+    # Craft gate (PostHog flag / ENABLE_CRAFT).
+    craft_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
     )
 
     """
@@ -1028,6 +1035,11 @@ class Document(Base):
     # with the local last modified time of the doc and any associated metadata
     # it should just be the server timestamp of the source doc
     doc_updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Source creation time. Null for docs indexed before this column.
+    doc_created_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
@@ -4321,8 +4333,25 @@ class KVStore(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    # TODO(cleanup): legacy, do not write. Nothing writes it anymore (the encrypt
+    # flag is gone); the only reader is the load() fallback for rows written
+    # before that, when value was null. Slated for a drop migration in a later
+    # release, held back so the drop rolls out after every pod is on this release.
+    # Deferred so it is never SELECTed eagerly, which is what makes that drop safe.
     encrypted_value: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
-        EncryptedJson(), nullable=True
+        EncryptedJson(), nullable=True, deferred=True
+    )
+
+
+class EncryptedKeyValueStore(Base):
+    """Encrypted-at-rest key/value storage for instance-level secrets. Postgres
+    only, never cached, so secrets stay out of Redis."""
+
+    __tablename__ = "encrypted_key_value_store"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(), nullable=False
     )
 
 
@@ -6561,4 +6590,43 @@ class ExternalAppPolicy(Base):
             "action_id",
             name="uq_external_app_policy_app_action",
         ),
+    )
+
+
+class SSOProvider(Base):
+    """A configured SSO identity provider. Providers are rows, not startup
+    wiring: login routes resolve the row at request time, so adding or editing
+    one requires no restart. Fields common to every auth method are columns. The
+    protocol-specific settings live in the encrypted `config` blob, validated
+    per provider_type on write."""
+
+    __tablename__ = "sso_provider"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # URL path segment for the login routes and the oauth_name stored on
+    # linked login accounts. Renaming a provider orphans those links.
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    provider_type: Mapped[SSOProviderType] = mapped_column(
+        Enum(SSOProviderType, native_enum=False), nullable=False
+    )
+    # Protocol-specific settings: OAuth client creds + discovery URL for
+    # GOOGLE/OIDC, or IdP metadata for SAML. Encrypted at rest, validated
+    # against provider_type on write.
+    config: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson(), nullable=False
+    )
+    # Email domains admitted through this provider's login, lowercased
+    allowed_email_domains: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )

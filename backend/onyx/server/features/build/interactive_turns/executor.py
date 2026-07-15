@@ -21,6 +21,12 @@ from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILE
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCEEDED
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.serve_transport import (
+    PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+)
+from onyx.server.features.build.sandbox.serve_transport import (
+    PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
+)
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.interrupt_signal import clear_interrupt
 from onyx.server.features.build.session.interrupt_signal import is_interrupt_requested
@@ -106,6 +112,7 @@ def run_claimed_interactive_build_turn(
             turn_index=turn.turn_index,
             budget_seconds=budget_seconds,
             runner_id=runner_id,
+            reclaimed=turn.reclaimed,
         )
     except Exception as exc:
         logger.exception(
@@ -130,6 +137,7 @@ def _drive_interactive_turn(
     turn_index: int,
     budget_seconds: int,
     runner_id: str | None,
+    reclaimed: bool,
 ) -> None:
     cache = get_cache_backend()
     with get_session_with_current_tenant() as db_session:
@@ -162,8 +170,17 @@ def _drive_interactive_turn(
                 )
                 return False
 
-        prompt_slot_cm = session_manager.prompt_slot(sandbox.id, session_id)
-        if not prompt_slot_cm.__enter__():
+        prompt_slot_cm = session_manager.prompt_slot(
+            sandbox.id,
+            session_id,
+            acquire_timeout=(
+                PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS
+                if reclaimed
+                else PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS
+            ),
+        )
+        slot = prompt_slot_cm.__enter__()
+        if not slot.acquired:
             finish_turn(
                 cache=cache,
                 turn_id=turn_id,
@@ -175,6 +192,13 @@ def _drive_interactive_turn(
             return
 
         try:
+            # Re-fence after the (possibly long) slot wait: a reclaim acquire
+            # can block past RUNNER_STALE_AFTER_SECONDS, letting another
+            # runner steal the turn — it must not reach the prompt POST.
+            if not touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):
+                logger.info("Interactive turn %s runner ownership lost", turn_id)
+                return
+
             update_session_activity(session_id, db_session)
 
             if interrupt_requested():
@@ -188,11 +212,14 @@ def _drive_interactive_turn(
                 )
                 return
 
+            ownership_lost = False
+
             event_stream = session_manager.yield_sandbox_events(
                 sandbox.id,
                 session_id,
                 prompt,
                 should_interrupt=interrupt_requested,
+                should_abort_on_teardown=lambda: not ownership_lost,
             )
 
             for sandbox_event in event_stream:
@@ -203,6 +230,20 @@ def _drive_interactive_turn(
 
                 if not touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):
                     logger.info("Interactive turn %s runner ownership lost", turn_id)
+                    ownership_lost = True
+                    return
+                slot.extend()
+                if slot.lost:
+                    ownership_lost = True
+                    session_manager.finalize_persist(session_id, state)
+                    db_session.commit()
+                    finish_turn(
+                        cache=cache,
+                        turn_id=turn_id,
+                        status=TURN_STATUS_FAILED,
+                        error_detail="Prompt slot lease lost mid-turn.",
+                        runner_id=runner_id,
+                    )
                     return
                 if isinstance(sandbox_event, SSEKeepalive):
                     continue

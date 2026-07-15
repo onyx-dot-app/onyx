@@ -8,6 +8,55 @@ from onyx.tools.tool_implementations.open_url.url_normalization import (
     _detect_source_type,
 )
 from onyx.tools.tool_implementations.open_url.url_normalization import normalize_url
+from onyx.tools.tool_implementations.open_url.url_normalization import (
+    normalize_url_candidates,
+)
+
+# A native Google Doc is indexed under the docs.google.com/document/d form regardless
+# of the URL shape the user pastes, so every form must offer it as a candidate.
+_GDRIVE_ID = "1RXOtmTndA5HXj-V5HoEF0gJaHb8Dc_ivSpb3Xcm1qzU"
+_GDRIVE_DOC_ID = f"https://docs.google.com/document/d/{_GDRIVE_ID}"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        # type-ambiguous file/d form (the reported bug)
+        f"https://drive.google.com/file/d/{_GDRIVE_ID}",
+        f"https://drive.google.com/file/d/{_GDRIVE_ID}/view",
+        # multi-account /u/N/ form
+        f"https://docs.google.com/document/u/0/d/{_GDRIVE_ID}/edit",
+        # ?id= share form
+        f"https://drive.google.com/open?id={_GDRIVE_ID}",
+        # already-canonical native doc form
+        f"{_GDRIVE_DOC_ID}/edit?usp=sharing",
+    ],
+)
+def test_google_drive_candidates_include_native_doc_form(url: str) -> None:
+    """Every Drive URL form must yield the native-doc canonical id as a candidate."""
+    candidates = normalize_url_candidates(url, source_type=DocumentSource.GOOGLE_DRIVE)
+    assert _GDRIVE_DOC_ID in candidates
+
+
+def test_google_drive_candidates_cover_all_type_forms() -> None:
+    """A type-ambiguous file/d URL should offer doc, sheet, slide, and file forms."""
+    candidates = normalize_url_candidates(
+        f"https://drive.google.com/file/d/{_GDRIVE_ID}",
+        source_type=DocumentSource.GOOGLE_DRIVE,
+    )
+    assert set(candidates) >= {
+        _GDRIVE_DOC_ID,
+        f"https://docs.google.com/spreadsheets/d/{_GDRIVE_ID}",
+        f"https://docs.google.com/presentation/d/{_GDRIVE_ID}",
+        f"https://drive.google.com/file/d/{_GDRIVE_ID}",
+    }
+
+
+def test_non_drive_candidates_fall_back_to_single_value() -> None:
+    """Non-connector URLs return just the default-normalized value."""
+    assert normalize_url_candidates("https://example.com/some/page?a=1#x") == [
+        "https://example.com/some/page"
+    ]
 
 
 @pytest.mark.parametrize(

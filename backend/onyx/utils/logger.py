@@ -272,23 +272,34 @@ def _add_file_handlers(logger: logging.Logger, formatter: logging.Formatter) -> 
             if is_containerized
             else f"./log/{LOG_FILE_NAME}_{level}.log"
         )
-        # Ensure the log directory exists
-        log_dir = os.path.dirname(file_name)
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir, exist_ok=True)
+        try:
+            # Ensure the log directory exists
+            log_dir = os.path.dirname(file_name)
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
 
-        # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
-        if DEV_LOGGING_ENABLED and os.path.exists(file_name):
-            try:
-                open(file_name, "w").close()  # Truncate the file
-            except Exception:
-                pass  # Ignore errors, just proceed with normal logging
+            # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
+            if DEV_LOGGING_ENABLED and os.path.exists(file_name):
+                try:
+                    open(file_name, "w").close()  # Truncate the file
+                except Exception:
+                    pass  # Ignore errors, just proceed with normal logging
 
-        file_handler = RotatingFileHandler(
-            file_name,
-            maxBytes=25 * 1024 * 1024,  # 25 MB
-            backupCount=5,  # Keep 5 backup files
-        )
+            file_handler = RotatingFileHandler(
+                file_name,
+                maxBytes=25 * 1024 * 1024,  # 25 MB
+                backupCount=5,  # Keep 5 backup files
+            )
+        except OSError:
+            # The log location isn't writable by this process — e.g. a nonroot
+            # container whose mounted /var/log/onyx volume is owned by another UID.
+            # Fall back to the stdout handler instead of crashing at import time.
+            logger.warning(
+                "Cannot write log files under %s; falling back to stdout logging.",
+                os.path.dirname(file_name),
+            )
+            return
+
         file_handler.setLevel(get_log_level_from_str(level))
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)

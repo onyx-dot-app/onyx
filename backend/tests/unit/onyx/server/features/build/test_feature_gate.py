@@ -1,6 +1,6 @@
 """Feature gating tests.
 
-`is_onyx_craft_enabled` decides whether a user sees Craft. The decision
+`is_craft_enabled_for_user` decides whether a user sees Craft. The decision
 collapses two inputs: the `ENABLE_CRAFT` env var (used when no real feature
 flag provider is configured) and the PostHog `onyx-craft-enabled` flag
 (used otherwise). These tests pin the precedence: PostHog wins when present,
@@ -16,10 +16,12 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.db.enums import AccountType
 from onyx.feature_flags.interface import FeatureFlagProvider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.server.features.build import utils as build_utils
-from onyx.server.features.build.utils import is_onyx_craft_enabled
+from onyx.server.features.build.utils import is_craft_enabled_for_user
+from onyx.server.settings.models import Settings
 
 
 class _StubPostHogProvider(FeatureFlagProvider):
@@ -45,10 +47,13 @@ class _StubPostHogProvider(FeatureFlagProvider):
 
 
 def _make_user() -> MagicMock:
-    """Build a minimal stand-in for `User` - only `.id` and `.email` are read."""
+    """Build a minimal stand-in for `User` - only `.id`, `.email`,
+    `.account_type`, and `.craft_enabled` are read."""
     user = MagicMock()
     user.id = uuid4()
     user.email = "user@tenant-dev.example"
+    user.account_type = AccountType.STANDARD
+    user.craft_enabled = True
     return user
 
 
@@ -63,7 +68,7 @@ def test_disabled_when_env_and_flag_both_false(
         lambda: NoOpFeatureFlagProvider(),
     )
 
-    assert is_onyx_craft_enabled(_make_user()) is False
+    assert is_craft_enabled_for_user(_make_user()) is False
 
 
 def test_enabled_via_env_when_no_flag_provider(
@@ -86,7 +91,101 @@ def test_enabled_via_env_when_no_flag_provider(
         ),
     )
 
-    assert is_onyx_craft_enabled(_make_user()) is True
+    assert is_craft_enabled_for_user(_make_user()) is True
+
+
+def test_no_override_follows_workspace_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """craft_enabled=None means "inherit the workspace default": enabled when
+    the default is on, disabled when it is off — always a strict bool."""
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+
+    user = _make_user()
+    user.craft_enabled = None
+
+    monkeypatch.setattr(
+        build_utils,
+        "load_settings",
+        lambda: Settings(craft_default_enabled=True),
+    )
+    assert is_craft_enabled_for_user(user) is True
+
+    monkeypatch.setattr(
+        build_utils,
+        "load_settings",
+        lambda: Settings(craft_default_enabled=False),
+    )
+    assert is_craft_enabled_for_user(user) is False
+
+
+def test_override_beats_workspace_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit per-user override wins over the workspace default (in both
+    directions), without reading settings at all."""
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+    monkeypatch.setattr(
+        build_utils,
+        "load_settings",
+        lambda: pytest.fail("settings should not be read for overridden users"),
+    )
+
+    user = _make_user()
+    user.craft_enabled = True
+    assert is_craft_enabled_for_user(user) is True
+
+    user.craft_enabled = False
+    assert is_craft_enabled_for_user(user) is False
+
+
+def test_anonymous_user_never_gets_craft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The shared anonymous identity is excluded regardless of the deployment
+    gate, without consulting the flag provider."""
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: pytest.fail(
+            "the flag provider should not be consulted for the anonymous user"
+        ),
+    )
+
+    user = _make_user()
+    user.account_type = AccountType.ANONYMOUS
+    user.craft_enabled = None
+    assert is_craft_enabled_for_user(user) is False
+
+
+def test_admin_disabled_user_short_circuits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """User.craft_enabled=False wins over any deployment-level enablement,
+    without consulting the flag provider."""
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: pytest.fail(
+            "the flag provider should not be consulted for a disabled user"
+        ),
+    )
+
+    user = _make_user()
+    user.craft_enabled = False
+    assert is_craft_enabled_for_user(user) is False
 
 
 def test_posthog_flag_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,7 +198,7 @@ def test_posthog_flag_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     user = _make_user()
-    assert is_onyx_craft_enabled(user) is True
+    assert is_craft_enabled_for_user(user) is True
     # The provider was consulted with the craft-enabled flag key for this user.
     assert provider.calls == [
         (
@@ -120,7 +219,7 @@ def test_posthog_flag_disables_when_false(monkeypatch: pytest.MonkeyPatch) -> No
     )
 
     user = _make_user()
-    assert is_onyx_craft_enabled(user) is False
+    assert is_craft_enabled_for_user(user) is False
     assert provider.calls == [
         (
             "onyx-craft-enabled",

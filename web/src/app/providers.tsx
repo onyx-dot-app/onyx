@@ -15,6 +15,7 @@ export function initPostHog(key: string, host?: string | null): void {
     ui_host: host || "https://us.posthog.com",
     person_profiles: "identified_only",
     capture_pageview: false,
+    cross_subdomain_cookie: false,
     session_recording: {
       // Sensitive inputs should use data-ph-no-capture attribute
       maskAllInputs: false,

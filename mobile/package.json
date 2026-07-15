@@ -68,6 +68,7 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "preinstall": "cd ../web/lib/shared && bun install && bun run build",
     "start": "expo start --port 8082",
     "ios": "expo start --ios --port 8082",
     "android": "expo start --android --port 8082",

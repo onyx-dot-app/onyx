@@ -12,6 +12,7 @@ import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import InsertUserVariableMenu from "@/sections/agents/InsertUserVariableMenu";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
 import {
@@ -552,6 +553,9 @@ export default function AgentEditorPage({
 
   const agentDraftStorageKey = draftKey("agent-editor", "new");
   const clearAgentDraftRef = useRef<(() => void) | null>(null);
+  // Tracks the latest user_file_ids so async upload callbacks reconcile against
+  // current form state rather than a stale snapshot from when the upload began.
+  const userFileIdsRef = useRef<string[]>([]);
 
   // Labels are edited in the Share Agent section and saved with the form
   const { labels: allLabels, createLabel } = useLabels();
@@ -1082,7 +1086,15 @@ export default function AgentEditorPage({
     const files = e.target.files;
     if (!files || files.length === 0) return;
     try {
-      let selectedIds = [...(currentFileIds || [])];
+      // Seed lazily from the latest form state on the first async callback so
+      // selections the user changed while the upload was in flight are kept.
+      // onFailure and onSuccess share this variable and both run in the same
+      // resolution, so their edits stay consistent with each other.
+      let workingIds: string[] | null = null;
+      const seed = () => {
+        if (workingIds === null) workingIds = [...userFileIdsRef.current];
+        return workingIds;
+      };
       const optimistic = await beginUpload(
         Array.from(files),
         null,
@@ -1094,17 +1106,23 @@ export default function AgentEditorPage({
               .filter((f) => f.temp_id)
               .map((f) => [f.temp_id as string, f.id])
           );
-          const replaced = (selectedIds || []).map(
-            (id: string) => tempToFinal.get(id) ?? id
-          );
-          selectedIds = replaced;
-          setFieldValue("user_file_ids", replaced);
+          workingIds = seed().map((id) => tempToFinal.get(id) ?? id);
+          setFieldValue("user_file_ids", workingIds);
+        },
+        (failedTempIds) => {
+          // Drop optimistic ids for rejected files (e.g. size/token limit) so
+          // they don't linger as "uploading" and keep the submit button disabled.
+          const failed = new Set(failedTempIds);
+          workingIds = seed().filter((id) => !failed.has(id));
+          setFieldValue("user_file_ids", workingIds);
         }
       );
       if (optimistic) {
         const optimisticIds = optimistic.map((f) => f.id);
-        selectedIds = [...selectedIds, ...optimisticIds];
-        setFieldValue("user_file_ids", selectedIds);
+        setFieldValue("user_file_ids", [
+          ...(currentFileIds || []),
+          ...optimisticIds,
+        ]);
       }
     } catch (error) {
       console.error("Upload error:", error);
@@ -1144,6 +1162,9 @@ export default function AgentEditorPage({
           initialStatus={{ warnings: {} }}
         >
           {({ isSubmitting, isValid, dirty, values, setFieldValue }) => {
+            // Keep the ref in sync so async upload callbacks read current ids.
+            userFileIdsRef.current = values.user_file_ids;
+
             const fileStatusMap = new Map(
               allRecentFiles.map((f) => [f.id, f.status])
             );
@@ -1382,6 +1403,9 @@ export default function AgentEditorPage({
                           <InputTextAreaField
                             name="instructions"
                             placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
+                            rightSection={
+                              <InsertUserVariableMenu fieldName="instructions" />
+                            }
                           />
                         </InputVertical>
 
@@ -1744,6 +1768,9 @@ export default function AgentEditorPage({
                                 <InputTextAreaField
                                   name="reminders"
                                   placeholder="Remember, I want you to always format your response as a numbered list."
+                                  rightSection={
+                                    <InsertUserVariableMenu fieldName="reminders" />
+                                  }
                                 />
                               </InputVertical>
                               <Text text03 secondaryBody>

@@ -17,6 +17,7 @@ from onyx.connectors.bitbucket.utils import build_auth_client
 from onyx.connectors.bitbucket.utils import list_repositories
 from onyx.connectors.bitbucket.utils import map_pr_to_document
 from onyx.connectors.bitbucket.utils import paginate
+from onyx.connectors.bitbucket.utils import parse_bitbucket_datetime
 from onyx.connectors.bitbucket.utils import PR_LIST_RESPONSE_FIELDS
 from onyx.connectors.bitbucket.utils import SLIM_PR_LIST_RESPONSE_FIELDS
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -287,7 +288,15 @@ class BitbucketConnector(
                 ):
                     pr_id = pr["id"]
                     doc_id = f"{DocumentSource.BITBUCKET.value}:{self.workspace}:{slug}:pr:{pr_id}"
-                    batch.append(SlimDocument(id=doc_id))
+                    batch.append(
+                        SlimDocument(
+                            id=doc_id,
+                            # NOTE: doc_created_at population not yet verified against live data
+                            doc_created_at=parse_bitbucket_datetime(
+                                pr.get("created_on")
+                            ),
+                        )
+                    )
                     if len(batch) >= self.batch_size:
                         yield batch
                         batch = []

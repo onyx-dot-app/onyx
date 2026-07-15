@@ -210,6 +210,22 @@ def _start_celery_workers(
     log_dir = os.path.join(BACKEND_DIR, "log")
     os.makedirs(log_dir, exist_ok=True)
 
+    # onyx isn't installed into the venv, and celery keeps the cwd on
+    # sys.path only transiently while importing the app (cwd_in_path). The
+    # indexing pipeline's spawn-context children (SimpleJobClient) inherit
+    # the worker's sys.path, so without a persistent entry they die with
+    # ModuleNotFoundError. PYTHONPATH pins it for the whole worker tree,
+    # mirroring the backend Dockerfile's `ENV PYTHONPATH=/app`.
+    _inherited_pythonpath = os.environ.get("PYTHONPATH")
+    worker_env = {
+        **os.environ,
+        "PYTHONPATH": (
+            f"{BACKEND_DIR}{os.pathsep}{_inherited_pythonpath}"
+            if _inherited_pythonpath
+            else BACKEND_DIR
+        ),
+    }
+
     processes: list[tuple[str, subprocess.Popen[bytes]]] = []
     log_handles: list[Any] = []
     for app_name, queues in _CELERY_WORKER_PROGRAMS:
@@ -231,6 +247,7 @@ def _start_celery_workers(
         proc = subprocess.Popen(
             cmd,
             cwd=BACKEND_DIR,
+            env=worker_env,
             stdout=log_file,
             stderr=subprocess.STDOUT,
             start_new_session=True,
@@ -253,6 +270,7 @@ def _start_celery_workers(
             "--loglevel=info",
         ],
         cwd=BACKEND_DIR,
+        env=worker_env,
         stdout=beat_log_file,
         stderr=subprocess.STDOUT,
         start_new_session=True,

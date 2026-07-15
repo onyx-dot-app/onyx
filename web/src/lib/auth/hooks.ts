@@ -1,0 +1,199 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
+import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { User } from "@/lib/types";
+import { getSecondsUntilExpiration } from "@opal/time";
+import { logout } from "@/lib/users/svc";
+import { useCurrentUser } from "@/lib/users/hooks";
+import { isAuthPath } from "@/lib/auth/paths";
+import { fetchAuthTypeMetadata } from "@/lib/auth/svc";
+
+const REFRESH_INTERVAL = 600000;
+const MIN_REFRESH_GAP_MS = REFRESH_INTERVAL - 60000;
+const VISIBILITY_REFRESH_GAP_MS = 60000;
+
+export function useAuthTypeMetadata(): {
+  authTypeMetadata: AuthTypeMetadata | undefined;
+  isLoading: boolean;
+  error: Error | undefined;
+} {
+  const { data, error, isLoading } = useSWR<AuthTypeMetadata>(
+    SWR_KEYS.authType,
+    fetchAuthTypeMetadata,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 30_000,
+    }
+  );
+
+  return { authTypeMetadata: data, isLoading, error };
+}
+
+function computeSecondsUntilExpiration(user: User): number | null {
+  if (!user.token_expires_at) return null;
+  return getSecondsUntilExpiration(new Date(user.token_expires_at));
+}
+
+/**
+ * Detects whether the user's session has ended mid-use.
+ *
+ * Schedules a `mutateUser()` call at `token_expires_at` so the server's 403
+ * response is the single mechanism for both timer-based and unexpected
+ * revocation. The backend transparently refreshes near-expiry OAuth tokens on
+ * every request via `_maybe_refresh_oauth_tokens`, so a successful `/api/me`
+ * response returns a fresh `token_expires_at` and re-arms the timer.
+ *
+ * Suppressed on auth routes. Entering `/auth` also resets the
+ * hasSeenAuthenticatedUser latch so a lingering 403 can't resurface the
+ * "logged out" modal on the login page.
+ *
+ * Side effect: calls `logout()` to clear the server session on a 403 for a
+ * previously-authenticated user.
+ */
+export function useSessionWatcher(): boolean {
+  const pathname = usePathname();
+  const inAuthFlow = isAuthPath(pathname);
+
+  const { user, mutateUser, userError } = useCurrentUser();
+  const expiryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasSeenAuthenticatedUserRef = useRef(false);
+
+  // Entering login/logout is a session boundary: forget the prior session so a
+  // lingering 403 can't resurface the "logged out" modal on the login page.
+  if (inAuthFlow) {
+    hasSeenAuthenticatedUserRef.current = false;
+  } else if (user) {
+    hasSeenAuthenticatedUserRef.current = true;
+  }
+
+  useEffect(() => {
+    if (inAuthFlow || !user) return;
+    const seconds = computeSecondsUntilExpiration(user);
+    if (seconds === null) return;
+    if (expiryTimeoutRef.current) clearTimeout(expiryTimeoutRef.current);
+    expiryTimeoutRef.current = setTimeout(() => mutateUser(), seconds * 1000);
+  }, [inAuthFlow, user, mutateUser]);
+
+  useEffect(() => {
+    return () => {
+      if (expiryTimeoutRef.current) clearTimeout(expiryTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (inAuthFlow) return;
+    if (userError?.status === 403 && hasSeenAuthenticatedUserRef.current) {
+      logout();
+    }
+  }, [inAuthFlow, userError]);
+
+  return (
+    !inAuthFlow &&
+    userError?.status === 403 &&
+    hasSeenAuthenticatedUserRef.current
+  );
+}
+
+export function useAuthType(): AuthType | null {
+  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
+  // camelCase-mapped shape — a raw fetcher here would poison the cache for
+  // every other consumer of the key.
+  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
+
+  if (NEXT_PUBLIC_CLOUD_ENABLED) {
+    return AuthType.CLOUD;
+  }
+
+  if (error || isLoading) {
+    return null;
+  }
+
+  return authTypeMetadata?.authType ?? null;
+}
+
+export function useTokenRefresh(
+  user: User | null,
+  authTypeMetadata: AuthTypeMetadata | undefined,
+  authTypeMetadataLoading: boolean,
+  onRefreshFail: () => Promise<void>
+) {
+  const lastAttemptRef = useRef<number>(Date.now());
+  const isFirstLoadRef = useRef(true);
+
+  useEffect(() => {
+    // Wait for the first load to complete; don't wait on a persistent error —
+    // if metadata is unavailable we conservatively allow refresh so that BASIC
+    // sessions aren't silently killed by a transient /auth/type failure.
+    if (authTypeMetadataLoading) return;
+
+    if (
+      !user ||
+      user.id === NO_AUTH_USER_ID ||
+      user.is_anonymous_user ||
+      authTypeMetadata?.authType === AuthType.OIDC ||
+      authTypeMetadata?.authType === AuthType.SAML
+    ) {
+      return;
+    }
+
+    const refreshTokenPeriodically = async () => {
+      const isTimeToRefresh =
+        isFirstLoadRef.current ||
+        Date.now() - lastAttemptRef.current > MIN_REFRESH_GAP_MS;
+
+      if (!isTimeToRefresh) return;
+
+      isFirstLoadRef.current = false;
+      lastAttemptRef.current = Date.now();
+
+      try {
+        const response = await fetch("/api/auth/refresh", {
+          method: "POST",
+          credentials: "include",
+        });
+
+        if (response.ok) {
+          console.debug("Auth token refreshed successfully");
+        } else {
+          console.warn("Failed to refresh auth token:", response.status);
+          await onRefreshFail();
+        }
+      } catch (error) {
+        console.error("Error refreshing auth token:", error);
+      }
+    };
+
+    if (!document.hidden) {
+      refreshTokenPeriodically();
+    }
+
+    const intervalId = setInterval(() => {
+      if (document.hidden) return;
+      refreshTokenPeriodically();
+    }, REFRESH_INTERVAL);
+
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - lastAttemptRef.current > VISIBILITY_REFRESH_GAP_MS
+      ) {
+        refreshTokenPeriodically();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [user, authTypeMetadata, authTypeMetadataLoading, onRefreshFail]);
+}

@@ -11,13 +11,11 @@ import { SettingsLayouts } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
-import { useUser } from "@/providers/UserProvider";
 import SkillCard, {
   type CustomSkillCardItem,
   type SkillCardItem,
 } from "@/sections/cards/SkillCard";
-import CreatePersonalSkillModal from "@/views/SkillsPage/CreatePersonalSkillModal";
-import UploadSkillModal from "@/sections/modals/skills/UploadSkillModal";
+import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 
@@ -28,10 +26,8 @@ import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 export default function SkillsPage() {
   const router = useRouter();
   const { data, error, isLoading, refresh } = useUserSkills();
-  const { isAdmin, isCurator } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
-  const [personalCreateOpen, setPersonalCreateOpen] = useState(false);
-  const [orgUploadOpen, setOrgUploadOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<SkillCardItem | null>(
     null
   );
@@ -40,16 +36,6 @@ export default function SkillsPage() {
   useOnMount(() => {
     searchInputRef.current?.focus();
   });
-
-  const canManageOrgSkills = isAdmin || isCurator;
-
-  function handleCreateClick() {
-    if (canManageOrgSkills) {
-      setOrgUploadOpen(true);
-    } else {
-      setPersonalCreateOpen(true);
-    }
-  }
 
   function handleEdit(item: CustomSkillCardItem) {
     router.push(`/craft/v1/skills/edit/${item.id}` as Route);
@@ -123,7 +109,7 @@ export default function SkillsPage() {
         description="Capability bundles your Craft agent can reach for. This page shows built-in skills, skills shared with you, and your own personal skills."
         rightChildren={
           <div className="flex items-center gap-2">
-            <Button icon={SvgPlus} onClick={handleCreateClick}>
+            <Button icon={SvgPlus} onClick={() => setCreateOpen(true)}>
               Create skill
             </Button>
           </div>
@@ -201,16 +187,10 @@ export default function SkillsPage() {
         )}
       </SettingsLayouts.Body>
 
-      <CreatePersonalSkillModal
-        open={personalCreateOpen}
-        onClose={() => setPersonalCreateOpen(false)}
-        onCreated={refresh}
-      />
-
-      <UploadSkillModal
-        open={orgUploadOpen}
-        onClose={() => setOrgUploadOpen(false)}
-        onUploaded={(created) => {
+      <CreateSkillModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(created) => {
           refresh();
           router.push(`/craft/v1/skills/edit/${created.id}` as Route);
         }}

@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.db.llm import can_user_access_llm_provider
@@ -225,23 +224,6 @@ def delete_build_session__no_commit(
 # Sandbox operations
 # NOTE: Most sandbox operations have moved to sandbox.py
 # These remain here for convenience in session-related workflows
-
-
-def update_sandbox_status(
-    sandbox_id: UUID,
-    status: SandboxStatus,
-    db_session: Session,
-    container_id: str | None = None,
-) -> None:
-    """Update the status of a sandbox."""
-    sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
-    if sandbox:
-        sandbox.status = status
-        if container_id is not None:
-            sandbox.container_id = container_id
-        sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
-        db_session.commit()
-        logger.info("Updated sandbox %s status to %s", sandbox_id, status)
 
 
 def update_sandbox_heartbeat(
@@ -602,10 +584,13 @@ def fetch_all_supported_build_llm_providers(
 ) -> list[LLMProviderView]:
     """Every provider of a Craft-supported type (anthropic, openai, openrouter)
     that the ``user`` can access. Respects is_public / group restrictions so a
-    user never gets a sandbox keyed with a provider they can't use."""
+    user never gets a sandbox keyed with a provider they can't use. Providers
+    are ordered by ID so provisioning and proxy credential selection agree on
+    the first provider of each type."""
     provider_models = db_session.scalars(
         select(LLMProviderModel)
         .where(LLMProviderModel.provider.in_(BUILD_MODE_ALLOWED_PROVIDER_TYPES))
+        .order_by(LLMProviderModel.id.asc())
         .options(
             selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),

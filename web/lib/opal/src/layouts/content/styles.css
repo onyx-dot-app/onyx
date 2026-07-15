@@ -41,6 +41,12 @@
   color: var(--content-foreground);
 }
 
+[data-content-color="success"] {
+  --content-foreground: var(--text-04);
+  --content-foreground-icon: var(--status-success-05);
+  color: var(--content-foreground);
+}
+
 [data-content-color="danger"] {
   --content-foreground: var(--status-error-05);
   --content-foreground-icon: var(--status-error-05);

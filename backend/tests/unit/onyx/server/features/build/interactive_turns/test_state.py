@@ -135,6 +135,16 @@ def test_claim_turn_for_runner_sets_running_owner() -> None:
     assert claim_turn_for_runner(cache=cache, turn_id=turn.turn_id) is None
 
 
+def test_fresh_claim_is_not_reclaimed() -> None:
+    cache = FakeCache()
+    _, _, turn = _create_turn(cache)
+
+    claimed = claim_turn_for_runner(cache=cache, turn_id=turn.turn_id)
+
+    assert claimed is not None
+    assert claimed.reclaimed is False
+
+
 def test_stale_running_turn_can_be_reclaimed_by_new_runner() -> None:
     cache = FakeCache()
     session_id, user_id, turn = _create_turn(cache)
@@ -151,6 +161,7 @@ def test_stale_running_turn_can_be_reclaimed_by_new_runner() -> None:
     )
 
     assert reclaimed is not None
+    assert reclaimed.reclaimed is True
     assert reclaimed.runner_id is not None
     assert reclaimed.runner_id != first_runner_id
     assert not touch_turn(cache=cache, turn_id=turn.turn_id, runner_id=first_runner_id)
@@ -166,6 +177,24 @@ def test_stale_running_turn_can_be_reclaimed_by_new_runner() -> None:
     active = get_active_turn(cache=cache, session_id=session_id, user_id=user_id)
     assert active is not None
     assert active.runner_id == reclaimed.runner_id
+
+
+def test_reclaimed_flag_is_not_persisted_across_reload() -> None:
+    cache = FakeCache()
+    _, _, turn = _create_turn(cache)
+
+    claim_turn_for_runner(cache=cache, turn_id=turn.turn_id)
+    reclaimed = claim_turn_for_runner(
+        cache=cache,
+        turn_id=turn.turn_id,
+        stale_after_seconds=0,
+    )
+    assert reclaimed is not None
+    assert reclaimed.reclaimed is True
+
+    reloaded = get_turn(cache, turn.turn_id)
+    assert reloaded is not None
+    assert reloaded.reclaimed is False
 
 
 def test_finish_turn_does_not_clobber_concurrent_reclaim() -> None:

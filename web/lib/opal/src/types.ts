@@ -150,6 +150,7 @@ export type BackgroundVariants = "none" | "light" | "heavy";
 export type ColorTypes =
   | "default"
   | "muted"
+  | "success"
   | "danger"
   | "warning"
   | "interactive";

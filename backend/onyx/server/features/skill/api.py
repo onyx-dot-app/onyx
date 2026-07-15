@@ -39,7 +39,6 @@ from onyx.server.features.skill.response_helpers import skill_preview_response
 from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.server.features.skill.response_helpers import skills_list_response_for_user
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import read_bundle_file
 from onyx.skills.bundle import read_custom_bundle_instructions
@@ -120,12 +119,13 @@ def create_custom_skill(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    slug = slug_from_filename(bundle.filename)
-    reserved_slugs = frozenset(BUILT_IN_SKILLS) | frozenset(
-        EXTERNAL_APP_BUILT_IN_SKILL_IDS.values()
-    )
-    if slug in reserved_slugs:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
+    if bundle.filename is not None and bundle.filename.lower().endswith(".zip"):
+        slug = slug_from_filename(bundle.filename)
+        if slug in BUILT_IN_SKILLS:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"slug '{slug}' is reserved",
+            )
 
     file_store = get_default_file_store()
     with ingested_skill_bundle(
