@@ -293,7 +293,10 @@ def test_reindex_port_instant_switchover(
     new_settings = ReindexPortManager.wait_for_swap(original_index_name, admin_user)
     assert new_settings["index_name"] != original_index_name
 
-    # The port then backfills the now-live index; wait for it to drain and unpin the source.
+    # The port then backfills the now-live index. INSTANT keeps reporting progress against
+    # the promoted PRESENT (it carries port_backfill_source_id), so this blocks while the
+    # backfill drains and fast-fails on a FAILED/PAUSED unit -- it is NOT a no-op here.
+    # _wait_for_backfill_unpin then waits out the final tick that clears the source pin.
     ReindexPortManager.wait_for_reindex_completion(admin_user)
     _wait_for_backfill_unpin()
 
