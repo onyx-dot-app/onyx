@@ -147,6 +147,12 @@ export {
   type InputTypeInProps,
 } from "@opal/components/inputs/input-type-in/components";
 
+/* InputDatePicker */
+export {
+  InputDatePicker,
+  type InputDatePickerProps,
+} from "@opal/components/inputs/input-date-picker/components";
+
 /* InputTags */
 export {
   InputTags,
