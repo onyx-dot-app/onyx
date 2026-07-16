@@ -23,6 +23,7 @@ from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCE
 from onyx.server.features.build.sandbox.event_schema import ActivityTimeoutError
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
 from onyx.server.features.build.sandbox.serve_transport import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
 )
@@ -788,7 +789,9 @@ def test_runner_continues_after_tool_timeout(
         "hello",
         executor._TOOL_TIMEOUT_CONTINUATION_PROMPT,
     ]
-    assert result.finalized == [result.session_id]
+    # The aborted step is flushed before the re-prompt, then the turn is
+    # finalized once more at the end.
+    assert result.finalized == [result.session_id, result.session_id]
     assert result.prompt_slot.exited
 
 
@@ -809,6 +812,49 @@ def test_runner_fails_after_max_timeout_continuations(
     assert len(result.prompts_seen) == executor.MAX_TIMEOUT_CONTINUATIONS + 1
     assert result.persisted == [timeout]
     assert result.prompt_slot.exited
+
+
+def test_runner_does_not_continue_on_absolute_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A hard absolute/budget timeout is a plain Error with the same code -2 as the
+    # recoverable inactivity timeout; only the TYPE differs. It must fail the turn
+    # immediately, never re-prompt.
+    absolute = SandboxError(
+        code=TURN_ERROR_CODE_TIMEOUT, message="Turn exceeded maximum duration"
+    )
+
+    result = _run_turn_with_batches(monkeypatch, [[absolute]])
+
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None
+    assert finished.status == TURN_STATUS_FAILED
+    assert finished.error_detail == "Turn exceeded maximum duration"
+    assert result.prompts_seen == ["hello"]
+    assert result.persisted == [absolute]
+    assert result.prompt_slot.exited
+
+
+def test_runner_preserves_output_before_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = object()
+    after = object()
+    timeout = ActivityTimeoutError(message="Timeout waiting for activity")
+    done = PromptResponse.model_validate({"stopReason": "end_turn"})
+
+    result = _run_turn_with_batches(monkeypatch, [[before, timeout], [after, done]])
+
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None
+    assert finished.status == TURN_STATUS_SUCCEEDED
+    # Output emitted before the timeout is persisted; the timeout event itself is
+    # not, and the continuation's output follows it.
+    assert result.persisted == [before, after, done]
+    assert result.prompts_seen == [
+        "hello",
+        executor._TOOL_TIMEOUT_CONTINUATION_PROMPT,
+    ]
 
 
 def test_start_interactive_turn_runner_skips_fresh_running_turn(

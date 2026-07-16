@@ -26,7 +26,8 @@ TURN_ERROR_CODE_TRANSPORT = -3
 
 class ActivityTimeoutError(Error):
     """A step produced no output within the inactivity window — recoverable by
-    re-prompting, unlike a hard absolute/budget timeout."""
+    re-prompting, unlike a hard absolute/budget timeout. The distinction is
+    carried by the type, not ``code`` (which it shares with the hard timeout)."""
 
     code: int = TURN_ERROR_CODE_TIMEOUT
 

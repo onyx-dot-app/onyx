@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import dataclass
+from enum import auto
+from enum import Enum
 from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend
@@ -46,11 +49,24 @@ DEFAULT_INTERACTIVE_TURN_BUDGET_SECONDS = 30 * 60
 
 MAX_TIMEOUT_CONTINUATIONS = 2
 _TOOL_TIMEOUT_CONTINUATION_PROMPT = (
-    f"Your last step was cancelled — it exceeded the "
+    "Your last step was cancelled — it exceeded the "
     f"{int(OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS)}s activity limit with no "
     "output. Don't just retry it; split the work into shorter steps or run it in "
     "the background, then continue."
 )
+
+
+class _PromptOutcome(Enum):
+    TERMINATED = auto()  # the turn was already finished; the caller returns
+    TIMED_OUT = auto()  # step went silent; the caller re-prompts
+    COMPLETED = auto()  # the opencode stream ended; run the terminal handling
+
+
+@dataclass
+class _PromptResult:
+    outcome: _PromptOutcome
+    final_event_seen: bool = False
+    cancelled: bool = False
 
 
 def _can_clear_interrupt_fence(
@@ -164,7 +180,6 @@ def _drive_interactive_turn(
         state = BuildStreamingState(turn_index=turn_index)
         deadline = time.monotonic() + budget_seconds
         deadline_exceeded = False
-        timeout_continuations = 0
 
         def interrupt_requested() -> bool:
             nonlocal deadline_exceeded
@@ -223,12 +238,17 @@ def _drive_interactive_turn(
                 )
                 return
 
-            current_prompt = prompt
-            while True:
+            def drive_one_prompt(
+                current_prompt: str, *, can_continue: bool
+            ) -> _PromptResult:
+                """Stream one opencode prompt to completion, timeout, or a
+                turn-ending failure. On the recoverable inactivity timeout it
+                returns TIMED_OUT (only while ``can_continue``); failures finish
+                the turn here and return TERMINATED so the caller just returns."""
+                nonlocal deadline_exceeded
                 ownership_lost = False
                 final_event_seen = False
                 cancelled_event_seen = False
-                timed_out_for_continuation = False
 
                 event_stream = session_manager.yield_sandbox_events(
                     sandbox.id,
@@ -251,7 +271,7 @@ def _drive_interactive_turn(
                             "Interactive turn %s runner ownership lost", turn_id
                         )
                         ownership_lost = True
-                        return
+                        return _PromptResult(_PromptOutcome.TERMINATED)
                     slot.extend()
                     if slot.lost:
                         ownership_lost = True
@@ -264,18 +284,14 @@ def _drive_interactive_turn(
                             error_detail="Prompt slot lease lost mid-turn.",
                             runner_id=runner_id,
                         )
-                        return
+                        return _PromptResult(_PromptOutcome.TERMINATED)
                     if isinstance(sandbox_event, SSEKeepalive):
                         continue
 
-                    # The transport already aborted the timed-out step; re-prompt.
-                    if (
-                        isinstance(sandbox_event, ActivityTimeoutError)
-                        and not deadline_exceeded
-                        and timeout_continuations < MAX_TIMEOUT_CONTINUATIONS
-                    ):
-                        timed_out_for_continuation = True
-                        continue
+                    # The transport already aborted the timed-out step; the caller
+                    # re-prompts so the agent can adapt.
+                    if isinstance(sandbox_event, ActivityTimeoutError) and can_continue:
+                        return _PromptResult(_PromptOutcome.TIMED_OUT)
 
                     session_manager.persist_sandbox_event(
                         session_id, state, sandbox_event
@@ -292,7 +308,7 @@ def _drive_interactive_turn(
                             error_detail=sandbox_event.message,
                             runner_id=runner_id,
                         )
-                        return
+                        return _PromptResult(_PromptOutcome.TERMINATED)
 
                     if isinstance(sandbox_event, PromptResponse):
                         final_event_seen = True
@@ -300,18 +316,35 @@ def _drive_interactive_turn(
                             getattr(sandbox_event, "stop_reason", None) == "cancelled"
                         )
 
-                if timed_out_for_continuation:
-                    timeout_continuations += 1
-                    logger.info(
-                        "Interactive turn %s step timed out; re-prompting (%s/%s)",
-                        turn_id,
-                        timeout_continuations,
-                        MAX_TIMEOUT_CONTINUATIONS,
-                    )
-                    current_prompt = _TOOL_TIMEOUT_CONTINUATION_PROMPT
-                    continue
+                return _PromptResult(
+                    _PromptOutcome.COMPLETED,
+                    final_event_seen=final_event_seen,
+                    cancelled=cancelled_event_seen,
+                )
 
-                break
+            result = _PromptResult(_PromptOutcome.COMPLETED)
+            current_prompt = prompt
+            for attempt in range(MAX_TIMEOUT_CONTINUATIONS + 1):
+                result = drive_one_prompt(
+                    current_prompt,
+                    can_continue=attempt < MAX_TIMEOUT_CONTINUATIONS,
+                )
+                if result.outcome is not _PromptOutcome.TIMED_OUT:
+                    break
+                # Flush the aborted step's partial output as its own message so it
+                # can't merge with the continuation, then steer the agent.
+                session_manager.finalize_persist(session_id, state)
+                db_session.commit()
+                logger.info(
+                    "Interactive turn %s step timed out; re-prompting (%s/%s)",
+                    turn_id,
+                    attempt + 1,
+                    MAX_TIMEOUT_CONTINUATIONS,
+                )
+                current_prompt = _TOOL_TIMEOUT_CONTINUATION_PROMPT
+
+            if result.outcome is _PromptOutcome.TERMINATED:
+                return
 
             session_manager.finalize_persist(session_id, state)
             db_session.commit()
@@ -326,7 +359,7 @@ def _drive_interactive_turn(
                 )
                 return
 
-            if not final_event_seen:
+            if not result.final_event_seen:
                 finish_turn(
                     cache=cache,
                     turn_id=turn_id,
@@ -336,7 +369,7 @@ def _drive_interactive_turn(
                 )
                 return
 
-            if cancelled_event_seen:
+            if result.cancelled:
                 finish_turn(
                     cache=cache,
                     turn_id=turn_id,
