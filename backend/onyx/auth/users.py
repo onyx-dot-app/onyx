@@ -1417,8 +1417,11 @@ async def get_user_manager(
     yield UserManager(user_db)
 
 
+# The cookie outlives the logical expiry by the grace window so a dead token is
+# still presented and can be classified (expired/terminated) instead of the
+# browser silently dropping it.
 cookie_transport = CookieTransport(
-    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS,
+    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS + SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     cookie_secure=WEB_DOMAIN.startswith("https"),
     cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
 )
