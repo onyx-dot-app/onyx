@@ -24,6 +24,7 @@ from onyx.server.manage.llm.models import LMStudioFinalModelResponse
 from onyx.server.manage.llm.models import LMStudioModelsRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelsRequest
+from onyx.server.manage.llm.models import OpenAICompatibleModelsRequest
 from onyx.server.manage.llm.models import OpenRouterFinalModelResponse
 from onyx.server.manage.llm.models import OpenRouterModelsRequest
 
@@ -1413,6 +1414,49 @@ class TestGetBifrostAvailableModels:
             assert gpt4o.supports_image_input is True
             assert deepseek.supports_image_input is False
 
+    def test_infers_reasoning_support(self) -> None:
+        """Reasoning support comes from the LiteLLM cost map first — Bifrost's
+        vendor-prefixed IDs (e.g. anthropic/claude-sonnet-4-5) don't match the
+        substring heuristic — with the heuristic as fallback."""
+        from onyx.server.manage.llm.api import get_bifrost_available_models
+
+        mock_session = MagicMock()
+        response = {
+            "data": [
+                {
+                    "id": "anthropic/claude-sonnet-4-5",
+                    "name": "Claude Sonnet 4.5",
+                    "context_length": 200000,
+                },
+                {
+                    "id": "openai/gpt-4o",
+                    "name": "GPT-4o",
+                    "context_length": 128000,
+                },
+                {
+                    "id": "deepseek/deepseek-r1",
+                    "name": "DeepSeek R1",
+                    "context_length": 64000,
+                },
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = BifrostModelsRequest(api_base="https://bifrost.example.com")
+            results = get_bifrost_available_models(request, MagicMock(), mock_session)
+
+            by_name = {r.name: r.supports_reasoning for r in results}
+            # Cost map hit; the substring heuristic alone would say False
+            assert by_name["anthropic/claude-sonnet-4-5"] is True
+            assert by_name["openai/gpt-4o"] is False
+            # Reasoning-named model stays True (heuristic covers cost-map misses)
+            assert by_name["deepseek/deepseek-r1"] is True
+
     def test_existing_v1_suffix_is_not_duplicated(self) -> None:
         """Test that an existing /v1 suffix still hits a single /v1/models endpoint."""
         from onyx.server.manage.llm.api import get_bifrost_available_models
@@ -1491,6 +1535,44 @@ class TestGetBifrostAvailableModels:
 
         assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
         assert exc_info.value.status_code == 400
+
+
+class TestGetOpenAICompatibleAvailableModels:
+    """Tests for the generic OpenAI-compatible model fetch endpoint."""
+
+    def test_infers_reasoning_support(self) -> None:
+        """Reasoning support comes from the LiteLLM cost map first, with the
+        substring heuristic as fallback for models LiteLLM doesn't know."""
+        from onyx.server.manage.llm.api import (
+            get_openai_compatible_server_available_models,
+        )
+
+        mock_session = MagicMock()
+        response = {
+            "data": [
+                {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro"},
+                {"id": "gpt-4o", "name": "GPT-4o"},
+                {"id": "deepseek-r1", "name": "DeepSeek R1"},
+            ]
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = response
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            request = OpenAICompatibleModelsRequest(api_base="https://llm.example.com")
+            results = get_openai_compatible_server_available_models(
+                request, MagicMock(), mock_session
+            )
+
+            by_name = {r.name: r.supports_reasoning for r in results}
+            # Cost map hit; the substring heuristic alone would say False
+            assert by_name["gemini-2.5-pro"] is True
+            assert by_name["gpt-4o"] is False
+            # Reasoning-named model stays True (heuristic covers cost-map misses)
+            assert by_name["deepseek-r1"] is True
 
 
 class _StopBeforeSend(Exception):
