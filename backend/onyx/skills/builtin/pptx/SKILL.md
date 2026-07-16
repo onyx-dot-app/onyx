@@ -183,6 +183,7 @@ python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx
 - **Fix every ERROR** before moving on. Review each WARN and fix it unless the layout is genuinely intentional (e.g., a deliberate design overlap).
 - Re-run after each fix batch — it's instant, so lint until clean before spending time on rendering.
 - The linter checks contrast only for explicit solid colors; text over images/gradients is skipped and noted — verify those visually.
+- **Content-dense decks** (analytical / consulting-style slides with intentionally tight margins) generate many advisory MARGIN warnings under the default profile. For those, lint with `--profile dense` (relaxes the margin warning from 0.5" to 0.25"); error-level checks are unchanged. Tight margins on a dense analytical slide are a deliberate style, not a defect — don't strip density to silence standard-profile MARGIN warnings.
 
 ### Content QA
 

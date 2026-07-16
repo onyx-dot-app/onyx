@@ -127,6 +127,21 @@ def test_sub_margin_text_is_warned() -> None:
     assert "left" in finding.detail
 
 
+def test_dense_profile_relaxes_margin_warning() -> None:
+    prs = _new_deck()
+    slide = _add_blank_slide(prs)
+    # 0.3" from the left: inside the 0.5" standard margin, outside 0.25" dense.
+    _add_textbox(slide, 0.3, 2.0, 4.0, 1.0, "Consulting-dense label")
+    standard = [f for f in lint.lint_presentation(prs)[0] if f.check == "MARGIN"]
+    dense = [
+        f
+        for f in lint.lint_presentation(prs, profile="dense")[0]
+        if f.check == "MARGIN"
+    ]
+    assert len(standard) == 1 and standard[0].severity == "WARN"
+    assert dense == []
+
+
 def test_full_bleed_shape_exempt_from_margins_and_bounds() -> None:
     prs = _new_deck()
     slide = _add_blank_slide(prs)
