@@ -34,25 +34,40 @@ def test_verify_auth_setting_warns_for_disabled(
     assert "no longer supported" in mock_logger.warning.call_args[0][0]
 
 
-@pytest.mark.parametrize(
-    "auth_type",
-    [AuthType.BASIC, AuthType.GOOGLE_OAUTH, AuthType.OIDC, AuthType.SAML],
-)
-def test_verify_auth_setting_valid_auth_types(
+def test_verify_auth_setting_basic_no_warning(
     monkeypatch: pytest.MonkeyPatch,
-    auth_type: AuthType,
 ) -> None:
-    """Valid auth types work without errors or warnings."""
-    monkeypatch.setenv("AUTH_TYPE", auth_type.value)
+    """Basic auth starts without errors or warnings."""
+    monkeypatch.setenv("AUTH_TYPE", "basic")
 
     mock_logger = MagicMock()
     monkeypatch.setattr(users, "logger", mock_logger)
-    monkeypatch.setattr(users, "AUTH_TYPE", auth_type)
+    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.BASIC)
 
     verify_auth_setting()
 
     mock_logger.warning.assert_not_called()
-    mock_logger.notice.assert_called_once_with("Using Auth Type: %s", auth_type.value)
+    mock_logger.notice.assert_called_once_with("Using Auth Type: %s", "basic")
+
+
+@pytest.mark.parametrize("legacy_value", ["google_oauth", "oidc", "saml"])
+def test_verify_auth_setting_warns_for_legacy_sso_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    legacy_value: str,
+) -> None:
+    """Legacy single-provider modes warn that the config migrated to a
+    provider row and the deployment runs as basic."""
+    monkeypatch.setenv("AUTH_TYPE", legacy_value)
+
+    mock_logger = MagicMock()
+    monkeypatch.setattr(users, "logger", mock_logger)
+    # app_configs coerces these values to BASIC at import
+    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.BASIC)
+
+    verify_auth_setting()
+
+    mock_logger.warning.assert_called_once()
+    assert "SSO provider row" in mock_logger.warning.call_args[0][0]
 
 
 def test_verify_user_auth_secret_rejects_empty_secret_in_production(

@@ -138,6 +138,13 @@ if _auth_type_str in [auth_type.value for auth_type in AuthType]:
 else:
     AUTH_TYPE = AuthType.BASIC
 
+# Legacy single-provider SSO values run as BASIC. Login for those deployments
+# is served by sso_provider rows instead. verify_auth_setting warns at startup,
+# and the row seeds (alembic 1fc2904131a3 and the SAML conf-dir import) read
+# raw os.environ because this coercion hides the legacy value.
+if AUTH_TYPE in (AuthType.GOOGLE_OAUTH, AuthType.OIDC, AuthType.SAML):
+    AUTH_TYPE = AuthType.BASIC
+
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
 PASSWORD_REQUIRE_UPPERCASE = (

@@ -108,7 +108,6 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import ANONYMOUS_USER_EMAIL
 from onyx.configs.constants import ANONYMOUS_USER_UUID
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
@@ -188,6 +187,14 @@ def verify_auth_setting() -> None:
         logger.warning(
             "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
         )
+    if raw_auth_type in ("google_oauth", "oidc", "saml"):
+        logger.warning(
+            "AUTH_TYPE='%s' single-provider mode was removed and Onyx is running "
+            "as 'basic'. SSO login is now served by SSO provider rows (Admin "
+            "Panel > Organization > SSO Providers). Update AUTH_TYPE to 'basic' "
+            "and remove the legacy SSO env vars.",
+            raw_auth_type,
+        )
 
     logger.notice("Using Auth Type: %s", AUTH_TYPE.value)
 
@@ -259,12 +266,9 @@ def generate_password() -> str:
 
 
 def user_needs_to_be_verified() -> bool:
-    if AUTH_TYPE == AuthType.BASIC or AUTH_TYPE == AuthType.CLOUD:
-        return REQUIRE_EMAIL_VERIFICATION
-
-    # For other auth types, if the user is authenticated it's assumed that
-    # the user is already verified via the external IDP
-    return False
+    # SSO-provisioned users are created is_verified, so this only ever bites
+    # password signups.
+    return REQUIRE_EMAIL_VERIFICATION
 
 
 def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
@@ -289,11 +293,6 @@ def verify_email_is_invited(email: str, *, sso_managed: bool = False) -> None:
     # allowed_email_domains is the admin's per-provider control, so the
     # workspace invite list does not apply.
     if sso_managed:
-        return
-
-    # Legacy single-provider modes imply every signup is IdP-provisioned.
-    # Dies with those modes.
-    if AUTH_TYPE in {AuthType.SAML, AuthType.OIDC}:
         return
 
     if not workspace_invite_only_enabled():
@@ -1674,49 +1673,7 @@ mobile_auth_backend = AuthenticationBackend(
 )
 
 
-class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
-    def get_logout_router(
-        self,
-        backend: AuthenticationBackend,
-        requires_verification: bool = REQUIRE_EMAIL_VERIFICATION,
-    ) -> APIRouter:
-        """
-        Provide a router for logout only for OAuth/OIDC Flows.
-        This way the login router does not need to be included
-        """
-        router = APIRouter()
-
-        get_current_user_token = self.authenticator.current_user_token(
-            active=True, verified=requires_verification
-        )
-
-        logout_responses: OpenAPIResponseType = {
-            **{
-                status.HTTP_401_UNAUTHORIZED: {
-                    "description": "Missing token or inactive user."
-                }
-            },
-            **backend.transport.get_openapi_logout_responses_success(),
-        }
-
-        @router.post(
-            "/logout", name=f"auth:{backend.name}.logout", responses=logout_responses
-        )
-        async def logout(
-            user_token: Tuple[models.UP, str] = Depends(get_current_user_token),
-            strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
-        ) -> Response:
-            user, token = user_token
-            result = await backend.logout(strategy, user, token)
-            emit_audit_event(
-                AuditAction.LOGOUT,
-                AuditOutcome.SUCCESS,
-                actor=AuditActor(user_id=str(user.id), email=user.email),
-            )
-            return result
-
-        return router
-
+class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
     def get_refresh_router(
         self,
         backend: AuthenticationBackend,
@@ -1801,7 +1758,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         return router
 
 
-fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
+fastapi_users = FastAPIUserWithRefreshRouter[User, uuid.UUID](
     get_user_manager, [auth_backend, mobile_auth_backend]
 )
 

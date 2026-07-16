@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import SAML_CONF_DIR
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import AuthType
@@ -182,8 +182,10 @@ def seed_saml_provider_from_conf_dir(db_session: Session) -> None:
         logger.debug("Skipping legacy SAML seed because multi-tenant mode is enabled")
         return
 
-    if AUTH_TYPE != AuthType.SAML:
-        logger.debug("Skipping legacy SAML seed because auth type is %s", AUTH_TYPE)
+    # Raw env read: app_configs coerces legacy SSO values to BASIC, which
+    # would hide the AUTH_TYPE=saml deployments this seed exists to migrate.
+    if (os.environ.get("AUTH_TYPE") or "").lower() != AuthType.SAML.value:
+        logger.debug("Skipping legacy SAML seed because auth type is not saml")
         return
 
     for provider in fetch_sso_providers(db_session):
