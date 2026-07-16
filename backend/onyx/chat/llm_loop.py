@@ -24,6 +24,7 @@ from onyx.chat.models import ToolCallSimple
 from onyx.chat.prompt_utils import build_reminder_message
 from onyx.chat.prompt_utils import build_system_prompt
 from onyx.chat.prompt_utils import get_default_base_system_prompt
+from onyx.chat.prompt_utils import process_prompt_template
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource
@@ -784,15 +785,27 @@ def run_llm_loop(
             # Handling the system prompt and custom agent prompt
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
+            persona_datetime_aware = persona.datetime_aware if persona else True
+            cite_documents = should_cite_documents or always_cite_documents
             if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
-                system_prompt = (
-                    ChatMessageSimple(
-                        message=persona_system_prompt,
-                        token_count=token_counter(persona_system_prompt),
-                        message_type=MessageType.SYSTEM,
+                processed_system_prompt = (
+                    process_prompt_template(
+                        persona_system_prompt,
+                        datetime_aware=persona_datetime_aware,
+                        append_datetime_if_aware=True,
+                        should_cite_documents=cite_documents,
                     )
                     if persona_system_prompt
+                    else None
+                )
+                system_prompt = (
+                    ChatMessageSimple(
+                        message=processed_system_prompt,
+                        token_count=token_counter(processed_system_prompt),
+                        message_type=MessageType.SYSTEM,
+                    )
+                    if processed_system_prompt
                     else None
                 )
                 custom_agent_prompt_msg = None
@@ -810,45 +823,74 @@ def run_llm_loop(
                     )
                     system_prompt_str = build_system_prompt(
                         base_system_prompt=default_base_system_prompt,
-                        datetime_aware=persona.datetime_aware if persona else True,
+                        datetime_aware=persona_datetime_aware,
                         user_memory_context=prompt_memory_context,
                         tools=tools,
-                        should_cite_documents=should_cite_documents
-                        or always_cite_documents,
+                        should_cite_documents=cite_documents,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
                         token_count=token_counter(system_prompt_str),
                         message_type=MessageType.SYSTEM,
                     )
-                    custom_agent_prompt_msg = (
-                        ChatMessageSimple(
-                            message=custom_agent_prompt,
-                            token_count=token_counter(custom_agent_prompt),
-                            message_type=MessageType.USER,
+                    processed_custom_agent_prompt = (
+                        process_prompt_template(
+                            custom_agent_prompt,
+                            datetime_aware=persona_datetime_aware,
+                            append_datetime_if_aware=False,
+                            should_cite_documents=cite_documents,
                         )
                         if custom_agent_prompt
+                        else None
+                    )
+                    custom_agent_prompt_msg = (
+                        ChatMessageSimple(
+                            message=processed_custom_agent_prompt,
+                            token_count=token_counter(processed_custom_agent_prompt),
+                            message_type=MessageType.USER,
+                        )
+                        if processed_custom_agent_prompt
                         else None
                     )
                 else:
                     # If there is a custom agent prompt, it replaces the system prompt when the default system prompt is empty
-                    system_prompt = (
-                        ChatMessageSimple(
-                            message=custom_agent_prompt,
-                            token_count=token_counter(custom_agent_prompt),
-                            message_type=MessageType.SYSTEM,
+                    processed_custom_agent_prompt = (
+                        process_prompt_template(
+                            custom_agent_prompt,
+                            datetime_aware=persona_datetime_aware,
+                            append_datetime_if_aware=True,
+                            should_cite_documents=cite_documents,
                         )
                         if custom_agent_prompt
                         else None
                     )
+                    system_prompt = (
+                        ChatMessageSimple(
+                            message=processed_custom_agent_prompt,
+                            token_count=token_counter(processed_custom_agent_prompt),
+                            message_type=MessageType.SYSTEM,
+                        )
+                        if processed_custom_agent_prompt
+                        else None
+                    )
                     custom_agent_prompt_msg = None
 
+            processed_task_prompt = (
+                process_prompt_template(
+                    persona_task_prompt,
+                    datetime_aware=persona_datetime_aware,
+                    append_datetime_if_aware=False,
+                    should_cite_documents=cite_documents,
+                )
+                if persona_task_prompt
+                else None
+            )
             reminder_message_text = select_reminder_text(
                 ran_image_gen=ran_image_gen,
                 just_ran_web_search=just_ran_web_search,
                 has_open_url_tool=has_open_url_tool,
                 out_of_cycles=out_of_cycles,
-                persona_task_prompt=persona_task_prompt,
+                persona_task_prompt=processed_task_prompt,
                 include_citation_reminder=should_cite_documents
                 or always_cite_documents,
                 include_file_reminder=code_interpreter_file_generated,
