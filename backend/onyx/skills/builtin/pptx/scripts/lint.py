@@ -51,6 +51,7 @@ MARGIN_MIN_EMU_BY_PROFILE = {
     "standard": int(0.45 * EMU_PER_INCH),  # nominal 0.5"
     "dense": int(0.22 * EMU_PER_INCH),  # nominal 0.25"
 }
+MARGIN_NOMINAL_IN_BY_PROFILE = {"standard": 0.5, "dense": 0.25}
 DEFAULT_PROFILE = "standard"
 FULL_BLEED_FRACTION = 0.9  # shape covering >=90% of a slide dimension is exempt
 BOUNDS_OVERSHOOT_EMU = int(0.1 * EMU_PER_INCH)  # ignore bleed smaller than this
@@ -506,6 +507,7 @@ def check_margins(
     slide_w: int,
     slide_h: int,
     margin_min_emu: int,
+    margin_nominal_in: float,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for shape, box in shapes:
@@ -541,7 +543,7 @@ def check_margins(
                     shape.shape_id,
                     "WARN",
                     "MARGIN",
-                    f'text within 0.5" of slide edge ({desc})',
+                    f'text within {margin_nominal_in:g}" of slide edge ({desc})',
                     text,
                 )
             )
@@ -808,7 +810,11 @@ def check_fonts(prs) -> list[Finding]:
 
 def lint_presentation(prs, profile: str = DEFAULT_PROFILE) -> tuple[list[Finding], int]:
     """Lint an open Presentation. Returns (findings, contrast_skipped_runs)."""
+    if profile not in MARGIN_MIN_EMU_BY_PROFILE:
+        valid = ", ".join(sorted(MARGIN_MIN_EMU_BY_PROFILE))
+        raise ValueError(f"unknown profile {profile!r}; valid profiles: {valid}")
     margin_min_emu = MARGIN_MIN_EMU_BY_PROFILE[profile]
+    margin_nominal_in = MARGIN_NOMINAL_IN_BY_PROFILE[profile]
     slide_w = int(prs.slide_width or Emu(int(10 * EMU_PER_INCH)))
     slide_h = int(prs.slide_height or Emu(int(7.5 * EMU_PER_INCH)))
 
@@ -824,7 +830,9 @@ def lint_presentation(prs, profile: str = DEFAULT_PROFILE) -> tuple[list[Finding
 
         findings.extend(check_bounds(slide_no, shapes, slide_w, slide_h))
         findings.extend(
-            check_margins(slide_no, shapes, slide_w, slide_h, margin_min_emu)
+            check_margins(
+                slide_no, shapes, slide_w, slide_h, margin_min_emu, margin_nominal_in
+            )
         )
         findings.extend(check_overflow(slide_no, shapes))
         findings.extend(check_overlap(slide_no, shapes, slide_w, slide_h))

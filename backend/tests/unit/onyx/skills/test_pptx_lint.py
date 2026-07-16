@@ -141,6 +141,27 @@ def test_dense_profile_relaxes_margin_warning() -> None:
     assert dense == []
 
 
+def test_margin_finding_reports_profile_nominal_limit() -> None:
+    prs = _new_deck()
+    slide = _add_blank_slide(prs)
+    # 0.1" from the left: inside both the standard (0.5") and dense (0.25") margins.
+    _add_textbox(slide, 0.1, 2.0, 4.0, 1.0, "Edge-hugging label")
+    standard = [f for f in lint.lint_presentation(prs)[0] if f.check == "MARGIN"]
+    dense = [
+        f
+        for f in lint.lint_presentation(prs, profile="dense")[0]
+        if f.check == "MARGIN"
+    ]
+    assert len(standard) == 1 and '0.5"' in standard[0].detail
+    assert len(dense) == 1 and '0.25"' in dense[0].detail
+
+
+def test_unknown_profile_raises_value_error() -> None:
+    prs = _new_deck()
+    with pytest.raises(ValueError, match="unknown profile"):
+        lint.lint_presentation(prs, profile="premium")
+
+
 def test_full_bleed_shape_exempt_from_margins_and_bounds() -> None:
     prs = _new_deck()
     slide = _add_blank_slide(prs)
