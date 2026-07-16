@@ -1313,7 +1313,7 @@ def get_mcp_servers_for_user(
     return MCPServersResponse(mcp_servers=mcp_servers)
 
 
-@router.get("/servers/craft")
+@router.get("/servers/craft", response_model=MCPServersResponse)
 def get_craft_mcp_servers_for_user(
     db: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),

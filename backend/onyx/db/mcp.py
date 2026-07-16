@@ -62,9 +62,7 @@ def get_craft_enabled_mcp_servers(db_session: Session) -> list[MCPServer]:
     """Get all MCP servers an admin has made available to the Craft agent"""
     return list(
         db_session.scalars(
-            select(MCPServer)
-            .where(MCPServer.available_in_craft.is_(True))
-            .order_by(MCPServer.created_at)
+            select(MCPServer).where(MCPServer.available_in_craft.is_(True))
         ).all()
     )
 
