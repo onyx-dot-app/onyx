@@ -30,8 +30,12 @@ CI runs this via `.github/workflows/pr-connector-filter-eval.yml`, which
 triggers ONLY when `onyx/prompts/filter_extration.py`,
 `onyx/secondary_llm_flows/source_filter.py`, or this suite changes — a prompt
 tweak gets scored against the full dataset before it merges, and no other PR
-pays for the LLM calls. Everywhere else the suite is skipped unless
-`RUN_CONNECTOR_FILTER_EVAL=1` is set.
+pays for the LLM calls. The suite lives under `tests/evals` (not
+`tests/external_dependency_unit`) so the External Dependency Unit Tests CI
+matrix doesn't discover and spin up a job for it on every backend PR; it
+still reuses that tree's fixtures via explicit imports in `conftest.py`.
+Everywhere else the suite is skipped unless `RUN_CONNECTOR_FILTER_EVAL=1`
+is set.
 
 ## Run locally
 
@@ -39,7 +43,7 @@ pays for the LLM calls. Everywhere else the suite is skipped unless
 RUN_CONNECTOR_FILTER_EVAL=1 \
     EVAL_LLM_PROVIDER="<provider display name>" EVAL_LLM_MODEL="claude-haiku-4-5" \
     python -m dotenv -f .vscode/.env run -- \
-    pytest -sv backend/tests/external_dependency_unit/connector_filter_eval
+    pytest -sv backend/tests/evals/connector_filter_eval
 ```
 
 Requires Postgres/Redis up. `EVAL_LLM_PROVIDER` is the provider's *configured

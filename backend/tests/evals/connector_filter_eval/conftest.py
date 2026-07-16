@@ -15,6 +15,10 @@ from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+
+# This suite lives outside tests/external_dependency_unit (so the EDU CI
+# matrix doesn't discover it) but runs against the same live dependencies,
+# so it reuses that tree's fixtures via explicit imports.
 from tests.external_dependency_unit.answer.conftest import (  # noqa: F401
     mock_external_deps,
 )
@@ -26,6 +30,8 @@ from tests.external_dependency_unit.answer.conftest import (  # noqa: F401
 from tests.external_dependency_unit.answer.conftest import (  # noqa: F401
     mock_vespa_query,
 )
+from tests.external_dependency_unit.conftest import db_session  # noqa: F401
+from tests.external_dependency_unit.conftest import full_deployment_setup  # noqa: F401
 
 # This suite makes real LLM calls, so it is disabled by default and only runs
 # when explicitly opted in.
@@ -47,7 +53,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(skip)
 
 
-def _ensure_llm_provider(db_session: Session) -> None:
+def _ensure_llm_provider(db_session: Session) -> None:  # noqa: F811
     """Create a default OpenAI provider from OPENAI_API_KEY if none exists."""
     if fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT]):
         return
@@ -73,8 +79,8 @@ def _ensure_llm_provider(db_session: Session) -> None:
 
 @pytest.fixture
 def eval_llm(
-    db_session: Session,
-    full_deployment_setup: None,  # noqa: ARG001
+    db_session: Session,  # noqa: F811
+    full_deployment_setup: None,  # noqa: ARG001, F811
     mock_external_deps: None,  # noqa: ARG001, F811
 ) -> LLM:
     """The LLM the eval runs against. Honors the EVAL_LLM_* env vars so the

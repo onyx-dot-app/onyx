@@ -4,7 +4,7 @@ concurrency:
   cancel-in-progress: true
 
 # Regression gate for the source-scope filter extraction prompt. Runs the
-# scored eval in backend/tests/external_dependency_unit/connector_filter_eval/
+# scored eval in backend/tests/evals/connector_filter_eval/
 # test_filter_extraction_regression.py, which makes real LLM calls — so it is
 # triggered ONLY when the prompt (or the flow/suite around it) changes.
 on:
@@ -13,7 +13,7 @@ on:
     paths:
       - "backend/onyx/prompts/filter_extration.py"
       - "backend/onyx/secondary_llm_flows/source_filter.py"
-      - "backend/tests/external_dependency_unit/connector_filter_eval/**"
+      - "backend/tests/evals/connector_filter_eval/**"
       - ".github/workflows/pr-connector-filter-eval.yml"
   workflow_dispatch:
 
@@ -98,7 +98,7 @@ jobs:
           py.test \
             -o junit_family=xunit2 \
             -sv \
-            backend/tests/external_dependency_unit/connector_filter_eval/test_filter_extraction_regression.py
+            backend/tests/evals/connector_filter_eval/test_filter_extraction_regression.py
 
       - name: Collect Docker logs on failure
         if: failure()

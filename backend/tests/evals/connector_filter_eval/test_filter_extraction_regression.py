@@ -32,12 +32,8 @@ from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.source_filter import decide_search_scope
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from tests.external_dependency_unit.connector_filter_eval.scope_eval_cases import (
-    SCOPE_EVAL_CASES,
-)
-from tests.external_dependency_unit.connector_filter_eval.scope_eval_cases import (
-    ScopeEvalCase,
-)
+from tests.evals.connector_filter_eval.scope_eval_cases import SCOPE_EVAL_CASES
+from tests.evals.connector_filter_eval.scope_eval_cases import ScopeEvalCase
 
 _ATTEMPTS_PER_CASE = int(os.environ.get("CONNECTOR_FILTER_EVAL_ATTEMPTS", "2"))
 _MAX_WORKERS = 4
