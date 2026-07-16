@@ -200,6 +200,7 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     from onyx.connectors.models import ExternalAccess
     from onyx.connectors.models import SlimDocument
     from onyx.connectors.sharepoint.connector import DriveItemData
+    from tests.utils.sharepoint import make_drive_item_id
 
     connector = _make_connector()
     connector.include_site_documents = True
@@ -209,11 +210,12 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     site.url = SITE_URL
     mock_fetch_sites.return_value = [site]
 
-    driveitem = MagicMock(spec=DriveItemData)
-    driveitem.id = "item-1"
-    driveitem.web_url = SITE_URL + "/doc.docx"
-    driveitem.parent_reference_path = None
-    driveitem.created_datetime = None
+    file_guid = "2ab3c4d5-6e7f-4a1b-9c0d-1e2f3a4b5c6d"
+    driveitem = DriveItemData(
+        id=make_drive_item_id(file_guid),
+        name="doc.docx",
+        web_url=SITE_URL + "/doc.docx",
+    )
     mock_fetch_driveitems.return_value = [
         (driveitem, "Documents", None),
     ]
@@ -232,7 +234,8 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     # Permissions were never fetched — no REST client context created.
     mock_create_ctx.assert_not_called()
 
-    assert any(d.id == "item-1" for d in results)
+    # Files are keyed by their unique-ID GUID, not the drive-item id.
+    assert any(d.id == file_guid for d in results)
     assert any(d.id == "page-1" for d in results)
     for doc in results:
         assert doc.external_access == ExternalAccess.empty()

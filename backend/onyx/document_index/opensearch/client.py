@@ -1748,13 +1748,14 @@ class OpenSearchIndexClient(OpenSearchClient):
         search_after: list[object] | None = None,
         page_size: int = _PIT_SCAN_PAGE_SIZE,
         keep_alive: str = PIT_KEEP_ALIVE,
+        include_vectors: bool = False,
     ) -> tuple[list[DocumentChunkWithoutVectors], list[object] | None, str]:
         """Fetches one page of regular chunks for a batch of documents from a PIT.
 
         Filters to regular chunks (max_chunk_size == DEFAULT_MAX_CHUNK_SIZE),
         sorts by (document_id, chunk_index), and pages with search_after.
-        Vectors are excluded — the port re-embeds. If the PIT expired the scan
-        re-opens it and retries once.
+        Vectors are excluded by default — the port re-embeds. If the PIT
+        expired the scan re-opens it and retries once.
 
         Args:
             pit_id: The point-in-time id from open_pit.
@@ -1763,6 +1764,9 @@ class OpenSearchIndexClient(OpenSearchClient):
                 first page.
             page_size: Max chunks per page.
             keep_alive: PIT lease extension applied on each search.
+            include_vectors: Keep title/content vectors in the results, which
+                are then parsed as full DocumentChunk instances. For flows that
+                re-key chunks without re-embedding.
 
         Raises:
             OpenSearchServerSideTimeout: The search timed out server-side; the
@@ -1783,7 +1787,12 @@ class OpenSearchIndexClient(OpenSearchClient):
         try:
             result = self._client.search(
                 body=self._pit_scan_body(
-                    pit_id, doc_ids, search_after, page_size, keep_alive
+                    pit_id,
+                    doc_ids,
+                    search_after,
+                    page_size,
+                    keep_alive,
+                    include_vectors=include_vectors,
                 )
             )
         except NotFoundError as e:
@@ -1797,7 +1806,12 @@ class OpenSearchIndexClient(OpenSearchClient):
             pit_id = self.open_pit(keep_alive)
             result = self._client.search(
                 body=self._pit_scan_body(
-                    pit_id, doc_ids, search_after, page_size, keep_alive
+                    pit_id,
+                    doc_ids,
+                    search_after,
+                    page_size,
+                    keep_alive,
+                    include_vectors=include_vectors,
                 )
             )
 
@@ -1809,6 +1823,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
 
         hits: list[dict[str, Any]] = result.get("hits", {}).get("hits", [])
+        chunk_model = DocumentChunk if include_vectors else DocumentChunkWithoutVectors
         chunks: list[DocumentChunkWithoutVectors] = []
         last_sort: list[object] | None = None
         for hit in hits:
@@ -1817,7 +1832,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 raise RuntimeError(
                     f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
                 )
-            chunks.append(DocumentChunkWithoutVectors.model_validate(source))
+            chunks.append(chunk_model.model_validate(source))
             last_sort = hit.get("sort")
 
         # A short page means the batch is exhausted; a full page means resume from
@@ -1830,6 +1845,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         doc_ids: list[str],
         page_size: int = _PIT_SCAN_PAGE_SIZE,
         keep_alive: str = PIT_KEEP_ALIVE,
+        include_vectors: bool = False,
     ) -> Iterator[list[DocumentChunkWithoutVectors]]:
         """Scans regular chunks for a batch of documents, one page at a time.
 
@@ -1841,6 +1857,8 @@ class OpenSearchIndexClient(OpenSearchClient):
             doc_ids: The document ids whose chunks to scan.
             page_size: Max chunks per page.
             keep_alive: PIT lease extension applied on each search.
+            include_vectors: Keep title/content vectors; pages then hold full
+                DocumentChunk instances (for re-keying without re-embedding).
 
         Yields:
             One page (list) of chunks at a time.
@@ -1857,6 +1875,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                     search_after=search_after,
                     page_size=page_size,
                     keep_alive=keep_alive,
+                    include_vectors=include_vectors,
                 )
                 if chunks:
                     yield chunks
@@ -1872,6 +1891,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         search_after: list[object] | None,
         page_size: int,
         keep_alive: str,
+        include_vectors: bool = False,
     ) -> dict[str, Any]:
         """Builds the PIT search body for one page.
 
@@ -1881,9 +1901,11 @@ class OpenSearchIndexClient(OpenSearchClient):
         body: dict[str, Any] = {
             "pit": {"id": pit_id, "keep_alive": keep_alive},
             "size": page_size,
-            "_source": {
-                "excludes": [CONTENT_VECTOR_FIELD_NAME, TITLE_VECTOR_FIELD_NAME]
-            },
+            "_source": (
+                True
+                if include_vectors
+                else {"excludes": [CONTENT_VECTOR_FIELD_NAME, TITLE_VECTOR_FIELD_NAME]}
+            ),
             "query": {
                 "bool": {
                     "filter": [

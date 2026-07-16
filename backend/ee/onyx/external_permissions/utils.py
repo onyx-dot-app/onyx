@@ -10,6 +10,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.sharepoint.url_utils import sharepoint_guid_from_drive_item_id
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -98,6 +99,27 @@ def generic_doc_sync(
     existing_doc_ids: list[str] = fetch_all_existing_docs_ids_fn()
 
     missing_doc_ids = set(existing_doc_ids) - newly_fetched_doc_ids
+
+    if doc_source == DocumentSource.SHAREPOINT:
+        # Transition guard for the drive-item-id → unique-ID-GUID Document.id
+        # switch: a doc still indexed under a legacy drive-item id is fetched
+        # under its GUID id, so it looks "missing" here even though the file
+        # still exists. Revoking would black out the whole legacy corpus, so
+        # leave such docs' access untouched — they are rewritten by the id
+        # migration or cleaned up by pruning once their replacement is indexed.
+        still_present = {
+            doc_id
+            for doc_id in missing_doc_ids
+            if (guid := sharepoint_guid_from_drive_item_id(doc_id)) is not None
+            and guid in newly_fetched_doc_ids
+        }
+        if still_present:
+            logger.info(
+                "Skipping access revocation for %s legacy-id SharePoint docs "
+                "that were fetched under their GUID ids",
+                len(still_present),
+            )
+            missing_doc_ids -= still_present
 
     if not missing_doc_ids:
         return

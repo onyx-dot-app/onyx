@@ -19,6 +19,7 @@ from typing import cast
 from urllib.parse import quote
 from urllib.parse import unquote
 from urllib.parse import urlsplit
+from uuid import UUID
 
 import msal
 import requests
@@ -77,7 +78,12 @@ from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_a
 from onyx.connectors.sharepoint.url_utils import DRIVE_ITEM_ID_PREFIX
 from onyx.connectors.sharepoint.url_utils import DRIVE_ITEM_ID_PREFIX_LENGTH
 from onyx.connectors.sharepoint.url_utils import extract_sharepoint_document_guid
+from onyx.connectors.sharepoint.url_utils import (
+    sharepoint_drive_hash_from_drive_item_id,
+)
 from onyx.connectors.sharepoint.url_utils import sharepoint_drive_item_id_candidates
+from onyx.connectors.sharepoint.url_utils import sharepoint_drive_item_id_from_guid
+from onyx.connectors.sharepoint.url_utils import sharepoint_guid_from_drive_item_id
 from onyx.connectors.sharepoint.url_utils import sharepoint_page_url_variants
 from onyx.db.document import fetch_document_id_prefixes
 from onyx.db.document import fetch_document_ids_by_links
@@ -155,6 +161,18 @@ GRAPH_API_BASE = f"{DEFAULT_GRAPH_API_HOST}/v1.0"
 GRAPH_API_MAX_RETRIES = 5
 GRAPH_API_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 
+# Every field DriveItemData reads plus the traversal facets (folder/deleted).
+# Explicit because listing endpoints omit sharepointIds (the durable unique-ID
+# GUID used as Document.id) unless selected, and once $select is used the
+# @microsoft.graph.downloadUrl annotation must be requested as
+# content.downloadUrl (verified against live Graph on both /children and
+# /delta).
+DRIVE_ITEM_SELECT_FIELDS = (
+    "id,name,webUrl,size,file,folder,deleted,parentReference,"
+    "createdDateTime,lastModifiedDateTime,lastModifiedBy,sharepointIds,"
+    "content.downloadUrl"
+)
+
 # Cap how many configured sites the perm-sync RoleAssignments probe checks at
 # validation time. Each probe is one HTTP round-trip, so we trade exhaustive
 # coverage for keeping connector creation responsive on tenants with many
@@ -181,6 +199,7 @@ class DriveItemData(BaseModel):
     last_modified_by_email: str | None = None
     parent_reference_path: str | None = None
     drive_id: str | None = None
+    list_item_unique_id: str | None = None
 
     @classmethod
     def from_graph_json(cls, item: dict[str, Any]) -> "DriveItemData":
@@ -196,6 +215,7 @@ class DriveItemData(BaseModel):
 
         last_modified_by = item.get("lastModifiedBy", {}).get("user", {})
         parent_ref = item.get("parentReference", {})
+        sharepoint_ids = item.get("sharepointIds", {})
 
         return cls(
             id=item["id"],
@@ -213,7 +233,47 @@ class DriveItemData(BaseModel):
             ),
             parent_reference_path=parent_ref.get("path"),
             drive_id=parent_ref.get("driveId"),
+            list_item_unique_id=sharepoint_ids.get("listItemUniqueId"),
         )
+
+    def document_id(self) -> str:
+        """The Onyx Document.id for this item: its unique-ID GUID, lowercase.
+
+        Unlike the Graph drive-item id (a location handle that changes when the
+        item moves between document libraries), the unique-ID GUID is durable
+        across renames and moves, and matches the GUID Doc.aspx URLs and
+        sharing links carry. Prefer the GUID Graph declares (sharepointIds),
+        cross-checked against the one embedded in the drive-item id; warn on
+        mismatch since the embedding assumption is undocumented.
+        """
+        derived = sharepoint_guid_from_drive_item_id(self.id)
+        declared: str | None = None
+        if self.list_item_unique_id:
+            try:
+                declared = str(UUID(self.list_item_unique_id))
+            except ValueError:
+                logger.warning(
+                    "Malformed sharepointIds.listItemUniqueId '%s' for item %s",
+                    self.list_item_unique_id,
+                    self.id,
+                )
+        if declared and derived and declared != derived:
+            logger.warning(
+                "Drive-item id %s embeds GUID %s but Graph declares %s; "
+                "using the declared GUID",
+                self.id,
+                derived,
+                declared,
+            )
+        unique_id = declared or derived
+        if unique_id is None:
+            logger.error(
+                "Could not determine unique-ID GUID for drive item %s; "
+                "falling back to the drive-item id as Document.id",
+                self.id,
+            )
+            return self.id
+        return unique_id
 
     def to_sdk_driveitem(self, graph_client: GraphClient) -> DriveItem:
         """Construct a lazy SDK DriveItem for permission lookups."""
@@ -573,7 +633,7 @@ def _create_document_failure(
     """Helper method to create a ConnectorFailure for document processing errors."""
     return ConnectorFailure(
         failed_document=DocumentFailure(
-            document_id=driveitem.id or "unknown",
+            document_id=driveitem.document_id() or "unknown",
             document_link=driveitem.web_url,
         ),
         failure_message=f"SharePoint document '{driveitem.name or 'unknown'}': {error_message}",
@@ -947,7 +1007,7 @@ def _convert_driveitem_to_document_with_permissions(
         external_access = ExternalAccess.empty()
 
     doc = Document(
-        id=driveitem.id,
+        id=driveitem.document_id(),
         sections=sections,
         source=DocumentSource.SHAREPOINT,
         semantic_identifier=driveitem.name,
@@ -1170,7 +1230,7 @@ def _convert_driveitem_to_slim_document(
     )
 
     return SlimDocument(
-        id=driveitem.id,
+        id=driveitem.document_id(),
         external_access=external_access,
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         doc_created_at=(
@@ -1288,10 +1348,12 @@ class SharepointConnector(
     def normalize_url(cls, url: str) -> NormalizationResult:
         """Pure part of URL → Document.id resolution.
 
-        A site page's unique-ID GUID (carried by Doc.aspx URLs, sharing-link
-        tokens, and share= params) *is* its Document.id, so it's offered as a
-        speculative candidate that open_url keeps only if indexed. File ids and
-        plain page URLs need index state — see resolve_url_candidates.
+        A document's unique-ID GUID (carried by Doc.aspx URLs, sharing-link
+        tokens, and share= params) *is* its Document.id — for site pages and
+        for files indexed under the GUID scheme — so it's offered as a
+        speculative candidate that open_url keeps only if indexed. Files still
+        indexed under legacy drive-item ids and plain page URLs need index
+        state — see resolve_url_candidates.
         """
         split = urlsplit(url)
 
@@ -1314,11 +1376,14 @@ class SharepointConnector(
     def resolve_url_candidates(cls, url: str, db_session: Session) -> list[str]:
         """Index-aware part of URL → Document.id resolution.
 
-        A file's drive-item Document.id embeds its unique-ID GUID next to a
-        4-byte drive hash that appears in no URL form, so candidate ids are
-        reconstructed from the drive-hash prefixes present in the index. Plain
-        page URLs (no GUID) match the stored page link directly, modulo
-        encoding. Candidates are validated against the index by the caller.
+        Legacy fallback for files indexed before the GUID id scheme: their
+        drive-item Document.id embeds the unique-ID GUID next to a 4-byte
+        drive hash that appears in no URL form, so candidate ids are
+        reconstructed from the drive-hash prefixes present in the index. (Files
+        indexed under the GUID scheme already resolve via normalize_url's pure
+        GUID candidate.) Plain page URLs (no GUID) match the stored page link
+        directly, modulo encoding. Candidates are validated against the index
+        by the caller.
         """
         split = urlsplit(url)
 
@@ -2064,7 +2129,10 @@ class SharepointConnector(
 
         while folder_queue:
             page_url: str | None = folder_queue.popleft()
-            params: dict[str, str] | None = {"$top": str(page_size)}
+            params: dict[str, str] | None = {
+                "$top": str(page_size),
+                "$select": DRIVE_ITEM_SELECT_FIELDS,
+            }
 
             while page_url:
                 data = self._graph_api_get_json(page_url, params)
@@ -2144,7 +2212,10 @@ class SharepointConnector(
         restarts with a full delta enumeration.
         """
         page_url: str | None = initial_url
-        params: dict[str, str] | None = {"$top": str(page_size)}
+        params: dict[str, str] | None = {
+            "$top": str(page_size),
+            "$select": DRIVE_ITEM_SELECT_FIELDS,
+        }
 
         while page_url:
             try:
@@ -2203,7 +2274,10 @@ class SharepointConnector(
         stored in a checkpoint without needing a separate params dict.
         """
         base_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta"
-        params = [f"$top={page_size}"]
+        params = [
+            f"$top={page_size}",
+            f"$select={quote(DRIVE_ITEM_SELECT_FIELDS, safe=',')}",
+        ]
         if start is not None and start > _EPOCH:
             token = quote(start.isoformat(timespec="seconds"))
             params.append(f"token={token}")
@@ -2234,7 +2308,11 @@ class SharepointConnector(
                     "Delta token expired (410 Gone) for drive '%s'. Will restart with full delta enumeration.",
                     drive_id,
                 )
-                full_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta?$top={page_size}"
+                full_url = (
+                    f"{self.graph_api_base}/drives/{drive_id}/root/delta"
+                    f"?$top={page_size}"
+                    f"&$select={quote(DRIVE_ITEM_SELECT_FIELDS, safe=',')}"
+                )
                 return [], full_url
             raise
 
@@ -2350,7 +2428,7 @@ class SharepointConnector(
                                 raise ValueError("DriveItem ID is required")
                             doc_batch.append(
                                 SlimDocument(
-                                    id=driveitem.id,
+                                    id=driveitem.document_id(),
                                     external_access=ExternalAccess.empty(),
                                     parent_hierarchy_raw_node_id=parent_hierarchy_url,
                                     doc_created_at=(
@@ -2721,7 +2799,7 @@ class SharepointConnector(
                 yield _create_document_failure(driveitem, "excluded by path denylist")
             return
 
-        if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
+        if driveitem.id and driveitem.document_id() in checkpoint.seen_document_ids:
             logger.debug(
                 "Skipping duplicate document %s (%s)",
                 driveitem.id,
@@ -3317,11 +3395,26 @@ class SharepointConnector(
             ]
         return site_drives_cache[site_url]
 
+    def _get_drive_hash(
+        self, drive_id: str, drive_hash_cache: dict[str, bytes | None]
+    ) -> bytes | None:
+        """The 4-byte hash a drive stamps into all its drive-item ids, read off
+        the drive's root-folder id. Memoized; None if the id doesn't decode."""
+        if drive_id not in drive_hash_cache:
+            root_json = self._graph_api_get_json(
+                f"{self.graph_api_base}/drives/{drive_id}/root", {"$select": "id"}
+            )
+            drive_hash_cache[drive_id] = sharepoint_drive_hash_from_drive_item_id(
+                root_json.get("id", "")
+            )
+        return drive_hash_cache[drive_id]
+
     def _resolve_driveitem_by_link(
         self,
         document_id: str,
         document_link: str,
         site_drives_cache: dict[str, list[SiteDrive]],
+        drive_hash_cache: dict[str, bytes | None],
     ) -> ResolvedDriveItem:
         """Resolve a failed drive item's web URL to what's needed to re-fetch it.
 
@@ -3330,20 +3423,41 @@ class SharepointConnector(
         library/folder is not recoverable from the URL. We parse the site via
         ``_extract_site_and_drive_info``, list its drives, and probe each by item
         id until one resolves — all under the existing ``Sites.Read.All`` grant.
-        ``site_drives_cache`` memoizes the per-site drive listing since targets
-        cluster heavily by site. Raises ``ValueError`` if no drive resolves it.
+        Graph only addresses items by drive-item id, so a GUID Document.id is
+        first converted to the exact per-drive item id using the drive's hash
+        (read from its root-folder id); legacy drive-item Document.ids are
+        probed as-is. ``site_drives_cache`` / ``drive_hash_cache`` memoize the
+        per-site and per-drive lookups since targets cluster heavily by site.
+        Raises ``ValueError`` if no drive resolves it.
         """
         descriptors = self._extract_site_and_drive_info([document_link])
         if not descriptors:
             raise ValueError(f"Could not parse a site from link '{document_link}'")
         site_url = descriptors[0].url
 
+        guid: str | None = None
+        try:
+            guid = str(UUID(document_id))
+        except ValueError:
+            pass  # legacy drive-item Document.id
+
         for drive in self._list_site_drives(site_url, site_drives_cache):
-            item_url = (
-                f"{self.graph_api_base}/drives/{drive.drive_id}/items/{document_id}"
-            )
+            if guid is not None:
+                drive_hash = self._get_drive_hash(drive.drive_id, drive_hash_cache)
+                item_id = (
+                    sharepoint_drive_item_id_from_guid(drive_hash, guid)
+                    if drive_hash is not None
+                    else None
+                )
+                if item_id is None:
+                    continue
+            else:
+                item_id = document_id
+            item_url = f"{self.graph_api_base}/drives/{drive.drive_id}/items/{item_id}"
             try:
-                item_json = self._graph_api_get_json(item_url)
+                item_json = self._graph_api_get_json(
+                    item_url, {"$select": DRIVE_ITEM_SELECT_FIELDS}
+                )
             except HTTPError as e:
                 if e.response is not None and e.response.status_code == 404:
                     continue
@@ -3365,10 +3479,11 @@ class SharepointConnector(
         document_link: str,
         dedup: SharepointConnectorCheckpoint,
         site_drives_cache: dict[str, list[SiteDrive]],
+        drive_hash_cache: dict[str, bytes | None],
         include_permissions: bool,
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
         resolved = self._resolve_driveitem_by_link(
-            document_id, document_link, site_drives_cache
+            document_id, document_link, site_drives_cache, drive_hash_cache
         )
         # Emit the ancestor chain (site -> drive). The crawl yields these outside
         # the per-item loop, so the shared helper only emits folder nodes.
@@ -3433,10 +3548,11 @@ class SharepointConnector(
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
         """Re-fetch and re-index individual failed documents (Resolver).
 
-        SharePoint doc ids are bare Graph driveItem/page ids that can't be fetched
-        without their drive/site, so resolution is driven off each failure's
-        recorded web URL (``document_link``). Targets with no usable link (e.g.
-        admin-typed targets) yield an informative ConnectorFailure.
+        SharePoint doc ids are bare unique-ID GUIDs (legacy docs: Graph
+        driveItem ids) that can't be fetched without their drive/site, so
+        resolution is driven off each failure's recorded web URL
+        (``document_link``). Targets with no usable link (e.g. admin-typed
+        targets) yield an informative ConnectorFailure.
         """
         if self._graph_client is None:
             raise ConnectorMissingCredentialError("Sharepoint")
@@ -3445,6 +3561,7 @@ class SharepointConnector(
         # helpers (seen_document_ids / seen_hierarchy_node_raw_ids).
         dedup = self.build_dummy_checkpoint()
         site_drives_cache: dict[str, list[SiteDrive]] = {}
+        drive_hash_cache: dict[str, bytes | None] = {}
         # TODO(evan): Resolver.reindex is one-call-per-job and resolves targets
         # sequentially. If the interface grows batch semantics, Graph $batch
         # (20 sub-requests) could cut round trips on the per-item fetches.
@@ -3479,6 +3596,7 @@ class SharepointConnector(
                         document_link,
                         dedup,
                         site_drives_cache,
+                        drive_hash_cache,
                         include_permissions,
                     )
             except Exception as e:

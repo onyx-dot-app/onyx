@@ -144,6 +144,37 @@ def test_sharepoint_file_url_form_resolves(
     assert matches[0].original_url == pasted
 
 
+def test_sharepoint_file_indexed_under_guid_scheme_resolves(
+    db_session: Session,
+    doc_cleanup: list[str],
+) -> None:
+    """A file indexed under the unique-ID-GUID Document.id scheme resolves via
+    the pure GUID candidate — no drive-item reconstruction involved. Legacy
+    drive-item-id docs keep resolving via the reconstruction fallback (covered
+    by test_sharepoint_file_url_form_resolves)."""
+    guid = str(uuid4())
+    stored_link = (
+        "https://acme.sharepoint.com/sites/eng/_layouts/15/Doc.aspx"
+        f"?sourcedoc=%7B{guid.upper()}%7D&file=Foo.docx&action=default"
+    )
+    _seed_doc(db_session, doc_cleanup, guid, link=stored_link)
+
+    for pasted in (
+        stored_link,
+        f"https://acme.sharepoint.com/:w:/s/eng/{make_sharing_token(guid.upper())}?e=u4Gcoi",
+        (
+            "https://acme.sharepoint.com/:w:/r/sites/eng/_layouts/15/Doc.aspx"
+            f"?sourcedoc=%7B{guid.upper()}%7D&file=Foo.docx&action=default"
+        ),
+    ):
+        matches, unresolved = _resolve_urls_to_document_ids([pasted], db_session)
+
+        assert unresolved == []
+        assert len(matches) == 1
+        assert matches[0].document_id == guid
+        assert matches[0].original_url == pasted
+
+
 def test_sharepoint_site_page_resolves_via_stored_link(
     db_session: Session,
     doc_cleanup: list[str],

@@ -40,6 +40,7 @@ from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
+from onyx.connectors.sharepoint.url_utils import sharepoint_guid_from_drive_item_id
 from onyx.db.connector import mark_ccpair_as_pruned
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -463,6 +464,38 @@ def try_creating_prune_generator_task(
     return payload_id
 
 
+def _drop_sharepoint_legacy_ids_awaiting_replacement(
+    doc_ids_to_remove: list[str],
+    yielded_doc_ids: set[str],
+    indexed_doc_ids: set[str],
+) -> list[str]:
+    """Guard for the SharePoint drive-item-id → unique-ID-GUID transition.
+
+    While a deployment still holds docs indexed under legacy drive-item ids,
+    the connector already yields their GUID ids, so every legacy id looks
+    "removed from the source" and an unguarded prune would mass-delete the
+    entire SharePoint corpus before the GUID replacements are indexed. A
+    legacy id is kept out of the prune set when its embedded GUID was yielded
+    (the file still exists) but is not yet indexed (no replacement to serve
+    it). Once the replacement is indexed — or the id-rewrite migration has
+    run — the legacy duplicate prunes normally.
+    """
+    kept = [
+        doc_id
+        for doc_id in doc_ids_to_remove
+        if (guid := sharepoint_guid_from_drive_item_id(doc_id)) is None
+        or guid not in yielded_doc_ids
+        or guid in indexed_doc_ids
+    ]
+    if len(kept) != len(doc_ids_to_remove):
+        task_logger.info(
+            "Pruning: protected %s legacy-id SharePoint docs whose GUID "
+            "replacements are not indexed yet",
+            len(doc_ids_to_remove) - len(kept),
+        )
+    return kept
+
+
 @shared_task(
     name=OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
     acks_late=False,
@@ -692,6 +725,15 @@ def connector_pruning_generator_task(
                 doc_ids_to_remove = list(
                     all_indexed_document_ids - all_connector_doc_ids.keys()
                 )
+
+                if connector_source == DocumentSource.SHAREPOINT:
+                    doc_ids_to_remove = (
+                        _drop_sharepoint_legacy_ids_awaiting_replacement(
+                            doc_ids_to_remove,
+                            yielded_doc_ids=set(all_connector_doc_ids.keys()),
+                            indexed_doc_ids=all_indexed_document_ids,
+                        )
+                    )
 
                 task_logger.info(
                     "Pruning set collected: "

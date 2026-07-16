@@ -5,7 +5,12 @@ from urllib.parse import urlsplit
 import pytest
 
 from onyx.connectors.sharepoint.url_utils import extract_sharepoint_document_guid
+from onyx.connectors.sharepoint.url_utils import (
+    sharepoint_drive_hash_from_drive_item_id,
+)
 from onyx.connectors.sharepoint.url_utils import sharepoint_drive_item_id_candidates
+from onyx.connectors.sharepoint.url_utils import sharepoint_drive_item_id_from_guid
+from onyx.connectors.sharepoint.url_utils import sharepoint_guid_from_drive_item_id
 from onyx.connectors.sharepoint.url_utils import sharepoint_page_url_variants
 from tests.utils.sharepoint import make_drive_item_id
 from tests.utils.sharepoint import make_sharing_token as _make_sharing_token
@@ -112,27 +117,27 @@ def test_page_url_variants_requote_decoded_spaces() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "prefix,guid,expected_id",
-    [
-        # real (prefix, sourcedoc GUID, drive-item id) triples from live Graph data
-        (
-            "01RWUU3P",
-            "0320E240-B69F-4D8D-A196-89674CD60485",
-            "01RWUU3PKA4IQAHH5WRVG2DFUJM5GNMBEF",
-        ),
-        (
-            "014NAK7T",
-            "0EFE1B85-688F-4CBE-B9B7-1B8215F3A796",
-            "014NAK7T4FDP7A5D3IXZGLTNY3QIK7HJ4W",
-        ),
-        (
-            "016GMXOK",
-            "054F6393-FA7A-4996-9188-6756BBC23BE2",
-            "016GMXOKETMNHQK6X2SZEZDCDHK254EO7C",
-        ),
-    ],
-)
+# real (prefix, sourcedoc GUID, drive-item id) triples from live Graph data
+_REAL_TRIPLES = [
+    (
+        "01RWUU3P",
+        "0320E240-B69F-4D8D-A196-89674CD60485",
+        "01RWUU3PKA4IQAHH5WRVG2DFUJM5GNMBEF",
+    ),
+    (
+        "014NAK7T",
+        "0EFE1B85-688F-4CBE-B9B7-1B8215F3A796",
+        "014NAK7T4FDP7A5D3IXZGLTNY3QIK7HJ4W",
+    ),
+    (
+        "016GMXOK",
+        "054F6393-FA7A-4996-9188-6756BBC23BE2",
+        "016GMXOKETMNHQK6X2SZEZDCDHK254EO7C",
+    ),
+]
+
+
+@pytest.mark.parametrize("prefix,guid,expected_id", _REAL_TRIPLES)
 def test_drive_item_id_candidates_reconstruct_real_ids(
     prefix: str, guid: str, expected_id: str
 ) -> None:
@@ -161,3 +166,43 @@ def test_drive_item_id_candidates_skip_invalid_prefixes() -> None:
 
 def test_drive_item_id_candidates_invalid_guid() -> None:
     assert sharepoint_drive_item_id_candidates("not-a-guid", ["01RWUU3P"]) == []
+
+
+@pytest.mark.parametrize("_prefix,guid,drive_item_id", _REAL_TRIPLES)
+def test_guid_decodes_from_real_drive_item_ids(
+    _prefix: str, guid: str, drive_item_id: str
+) -> None:
+    assert sharepoint_guid_from_drive_item_id(drive_item_id) == guid.lower()
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "",
+        "not-a-drive-item-id",
+        "02" + "A" * 32,  # wrong prefix
+        "01" + "A" * 31,  # wrong length
+        "01" + "a" * 32,  # lowercase — not Graph's base32 alphabet
+        "01" + "1" * 32,  # '1' is outside the base32 alphabet
+        "2ab3c4d5-6e7f-4a1b-9c0d-1e2f3a4b5c6d",  # already a GUID
+    ],
+)
+def test_guid_decode_rejects_malformed_ids(bad_id: str) -> None:
+    assert sharepoint_guid_from_drive_item_id(bad_id) is None
+    assert sharepoint_drive_hash_from_drive_item_id(bad_id) is None
+
+
+@pytest.mark.parametrize("_prefix,guid,drive_item_id", _REAL_TRIPLES)
+def test_drive_item_id_reconstructs_from_hash_and_guid(
+    _prefix: str, guid: str, drive_item_id: str
+) -> None:
+    """Any item id from a drive (e.g. its root folder's) carries the drive hash
+    needed to reconstruct the exact id of any other item from its GUID."""
+    drive_hash = sharepoint_drive_hash_from_drive_item_id(drive_item_id)
+    assert drive_hash is not None
+    assert sharepoint_drive_item_id_from_guid(drive_hash, guid) == drive_item_id
+
+
+def test_drive_item_id_from_guid_rejects_bad_inputs() -> None:
+    assert sharepoint_drive_item_id_from_guid(b"\x01\x02\x03", _GUID) is None
+    assert sharepoint_drive_item_id_from_guid(b"\x01\x02\x03\x04", "not-a-guid") is None

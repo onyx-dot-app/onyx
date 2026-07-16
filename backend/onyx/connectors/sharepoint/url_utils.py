@@ -26,6 +26,10 @@ _BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 # 2 bits straddle the next base32 char and are enumerated at lookup time).
 DRIVE_ITEM_ID_PREFIX = "01"
 DRIVE_ITEM_ID_PREFIX_LENGTH = 8
+# 20 payload bytes (4 drive hash + 16 GUID) encode to exactly 32 unpadded
+# base32 chars, so every drive-item id is 34 chars long.
+DRIVE_ITEM_ID_LENGTH = 34
+_DRIVE_HASH_BYTES = 4
 
 # Sharing links look like /:w:/s/<site-name>/<base64url-token>. The token decodes
 # to a "!\x00" header followed by the item's unique-ID GUID in little-endian
@@ -83,6 +87,57 @@ def _guid_from_sharing_token(path: str) -> str | None:
     if not match:
         return None
     return _guid_from_token(match.group(1))
+
+
+def sharepoint_guid_from_drive_item_id(drive_item_id: str) -> str | None:
+    """Decode the unique-ID GUID embedded in a Graph drive-item id.
+
+    Inverse of sharepoint_drive_item_id_candidates: the GUID occupies bytes
+    4-19 of the base32 payload, little-endian. Returns the lowercase dashed
+    GUID (the Document.id format for SharePoint files), or None when the input
+    isn't a well-formed drive-item id.
+    """
+    if (
+        len(drive_item_id) != DRIVE_ITEM_ID_LENGTH
+        or not drive_item_id.startswith(DRIVE_ITEM_ID_PREFIX)
+        or any(
+            char not in _BASE32_ALPHABET
+            for char in drive_item_id[len(DRIVE_ITEM_ID_PREFIX) :]
+        )
+    ):
+        return None
+    raw = base64.b32decode(drive_item_id[len(DRIVE_ITEM_ID_PREFIX) :])
+    return str(UUID(bytes_le=raw[_DRIVE_HASH_BYTES:]))
+
+
+def sharepoint_drive_hash_from_drive_item_id(drive_item_id: str) -> bytes | None:
+    """Extract the 4-byte drive hash from a Graph drive-item id (e.g. a drive's
+    root-folder id). Every item in a drive shares this hash, so it lets a full
+    drive-item id be reconstructed exactly from an item's unique-ID GUID."""
+    if (
+        len(drive_item_id) != DRIVE_ITEM_ID_LENGTH
+        or not drive_item_id.startswith(DRIVE_ITEM_ID_PREFIX)
+        or any(
+            char not in _BASE32_ALPHABET
+            for char in drive_item_id[len(DRIVE_ITEM_ID_PREFIX) :]
+        )
+    ):
+        return None
+    return base64.b32decode(drive_item_id[len(DRIVE_ITEM_ID_PREFIX) :])[
+        :_DRIVE_HASH_BYTES
+    ]
+
+
+def sharepoint_drive_item_id_from_guid(drive_hash: bytes, guid: str) -> str | None:
+    """Reconstruct the exact Graph drive-item id for an item's unique-ID GUID,
+    given the containing drive's 4-byte hash."""
+    if len(drive_hash) != _DRIVE_HASH_BYTES:
+        return None
+    try:
+        guid_bytes = UUID(guid).bytes_le
+    except ValueError:
+        return None
+    return DRIVE_ITEM_ID_PREFIX + base64.b32encode(drive_hash + guid_bytes).decode()
 
 
 def sharepoint_drive_item_id_candidates(
