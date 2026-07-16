@@ -277,6 +277,7 @@ const AppInputBar = React.memo(
           return;
         }
         handleSubmit(trimmed);
+        clearChatDraft();
       },
       [handleSubmit, clearChatDraft]
     );
@@ -799,7 +800,7 @@ const AppInputBar = React.memo(
               } else if (isVoicePlaybackControllable) {
                 stopTTS({ manual: true });
               } else if (trimmedMessage) {
-                submitMessage(message);
+                submitMessage(trimmedMessage);
               }
             }}
           />
@@ -1035,7 +1036,7 @@ const AppInputBar = React.memo(
                       if (chatState == "streaming") {
                         stopGenerating();
                       } else if (trimmedMessage) {
-                        submitMessage(message);
+                        submitMessage(trimmedMessage);
                       }
                     }}
                     prominence="tertiary"
