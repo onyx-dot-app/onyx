@@ -57,6 +57,7 @@ const meta: Meta<typeof ImportSkillsFromGitHubModalView> = {
     isAdmin: false,
     externalApps: [],
     onRepositoryChange: () => undefined,
+    onResetPreview: () => undefined,
     onSelectedPathsChange: () => undefined,
     onSubmit: () => undefined,
   },

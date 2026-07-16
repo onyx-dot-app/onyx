@@ -9,7 +9,7 @@ import {
   MessageCard,
   Text,
 } from "@opal/components";
-import { Content, InputVertical, toast } from "@opal/layouts";
+import { Content, ContentAction, InputVertical, toast } from "@opal/layouts";
 import { SvgGithub } from "@opal/logos";
 import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
 import type { CustomSkill, GitHubSkillsPreview } from "@/lib/skills/types";
@@ -36,6 +36,7 @@ interface ImportSkillsFromGitHubModalViewProps {
   isAdmin: boolean;
   externalApps: ExternalAppUserResponse[] | undefined;
   onRepositoryChange: (repository: string) => void;
+  onResetPreview: () => void;
   onSelectedPathsChange: (paths: string[]) => void;
   onSubmit: () => void;
 }
@@ -128,6 +129,11 @@ export default function ImportSkillsFromGitHubModal({
         setSelectedPaths([]);
         setError(null);
       }}
+      onResetPreview={() => {
+        setPreview(null);
+        setSelectedPaths([]);
+        setError(null);
+      }}
       onSelectedPathsChange={setSelectedPaths}
       onSubmit={() => void submit()}
     />
@@ -145,40 +151,24 @@ export function ImportSkillsFromGitHubModalView({
   isAdmin,
   externalApps,
   onRepositoryChange,
+  onResetPreview,
   onSelectedPathsChange,
   onSubmit,
 }: ImportSkillsFromGitHubModalViewProps) {
   const githubApp = externalApps?.find((app) => app.app_type === "GITHUB");
-  const privateRepositoryGuidance = githubApp?.authenticated
-    ? {
-        message:
-          "You can import public repositories and any private repositories your GitHub account can access.",
-        action: null,
-      }
+  const privateRepositoryAction = githubApp?.authenticated
+    ? null
     : githubApp
       ? {
-          message:
-            "Public repositories don't require a GitHub connection. Connect GitHub to import private repositories.",
-          action: {
-            label: "Connect GitHub",
-            href: "/craft/v1/apps?connect=github" as const,
-          },
+          label: "Connect GitHub for private repositories",
+          href: "/craft/v1/apps?connect=github" as const,
         }
       : externalApps && isAdmin
         ? {
-            message:
-              "Public repositories don't require a GitHub connection. Set up the GitHub App to import private repositories.",
-            action: {
-              label: "Set up GitHub",
-              href: "/admin/craft/apps" as const,
-            },
+            label: "Set up private repository access",
+            href: "/admin/craft/apps" as const,
           }
-        : {
-            message: externalApps
-              ? "Public repositories don't require a GitHub connection. Ask a workspace admin to set up the GitHub App to import private repositories."
-              : "Public repositories don't require a GitHub connection. Private repositories require a GitHub connection.",
-            action: null,
-          };
+        : null;
   const errorCode =
     error instanceof FetchError &&
     error.info &&
@@ -211,49 +201,98 @@ export function ImportSkillsFromGitHubModalView({
           }
         : null
     : null;
+  const importablePaths =
+    preview?.skills
+      .filter((skill) => skill.unavailable_reason === null)
+      .map((skill) => skill.path) ?? [];
+  const allImportableSelected =
+    importablePaths.length > 0 &&
+    importablePaths.every((path) => selectedPaths.includes(path));
+  const unavailableCount = preview
+    ? preview.skills.length - importablePaths.length
+    : 0;
+  const previewSource = preview?.subpath
+    ? `${preview.repository}/${preview.subpath}`
+    : preview?.repository;
+  const selectionSummary = [
+    `${selectedPaths.length} selected`,
+    unavailableCount > 0 ? `${unavailableCount} unavailable` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <Modal open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
       <Modal.Content width="md" height="lg">
         <Modal.Header
           icon={SvgGithub}
-          title="Import skills from GitHub"
-          description="Choose one or more skills from a GitHub repository."
+          title="Import from GitHub"
+          description={
+            preview
+              ? "Choose the skills you want to import."
+              : "Paste a repository URL to find skills you can import."
+          }
           onClose={onClose}
         />
         <Modal.Body>
-          <InputVertical
-            title="GitHub repository"
-            withLabel="github-repository"
-            description="Enter a repository URL or owner/repository."
-          >
-            <InputTypeIn
-              id="github-repository"
-              value={repository}
-              placeholder="https://github.com/owner/repository"
-              variant={loading ? "disabled" : "primary"}
-              onChange={(event) => onRepositoryChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onSubmit();
-              }}
-            />
-          </InputVertical>
-
-          <div className="flex w-full items-center justify-between gap-3">
-            <Text as="p" font="secondary-body" color="text-03">
-              {privateRepositoryGuidance.message}
-            </Text>
-            {privateRepositoryGuidance.action && (
-              <Button
-                href={privateRepositoryGuidance.action.href}
-                variant="default"
-                prominence="secondary"
-                size="sm"
+          {!preview ? (
+            <>
+              <InputVertical
+                title="Repository"
+                withLabel="github-repository"
+                description="Paste a GitHub URL or enter owner/repository."
               >
-                {privateRepositoryGuidance.action.label}
-              </Button>
-            )}
-          </div>
+                <InputTypeIn
+                  id="github-repository"
+                  value={repository}
+                  placeholder="https://github.com/owner/repository"
+                  variant={loading ? "disabled" : "primary"}
+                  onChange={(event) => onRepositoryChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      onSubmit();
+                    }
+                  }}
+                />
+              </InputVertical>
+
+              {privateRepositoryAction ? (
+                <Button
+                  href={privateRepositoryAction.href}
+                  variant="action"
+                  prominence="tertiary"
+                  size="sm"
+                >
+                  {privateRepositoryAction.label}
+                </Button>
+              ) : externalApps && !githubApp ? (
+                <Text as="p" font="secondary-body" color="text-03">
+                  Private repositories require GitHub access configured by a
+                  workspace admin.
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            <ContentAction
+              title={previewSource ?? preview.repository}
+              description="GitHub repository"
+              sizePreset="main-ui"
+              variant="section"
+              padding="fit"
+              center
+              rightChildren={
+                <Button
+                  prominence="tertiary"
+                  size="sm"
+                  disabled={loading}
+                  onClick={onResetPreview}
+                >
+                  Change
+                </Button>
+              }
+            />
+          )}
 
           {error && (
             <MessageCard
@@ -288,74 +327,75 @@ export function ImportSkillsFromGitHubModalView({
 
           {preview && (
             <div className="flex w-full flex-col gap-2">
-              <Content
+              <ContentAction
                 title={`${preview.skills.length} ${preview.skills.length === 1 ? "skill" : "skills"} found`}
                 description={
-                  preview.skills.every(
-                    (skill) => skill.unavailable_reason !== null
-                  )
-                    ? `None of the skills found in ${preview.repository} can be imported.`
-                    : `Select the skills to import from ${preview.repository}.`
+                  importablePaths.length === 0
+                    ? "None are available to import."
+                    : selectionSummary
                 }
                 sizePreset="main-content"
                 variant="section"
-              />
-              <div className="flex w-full flex-col gap-1">
-                {preview.skills.map((skill) => {
-                  const checked = selectedPaths.includes(skill.path);
-                  const unavailable = skill.unavailable_reason !== null;
-                  return (
-                    <div
-                      key={skill.path}
-                      className={unavailable ? "opacity-60" : undefined}
+                padding="fit"
+                center
+                rightChildren={
+                  importablePaths.length > 1 ? (
+                    <Button
+                      prominence="tertiary"
+                      size="sm"
+                      disabled={loading}
+                      onClick={() =>
+                        onSelectedPathsChange(
+                          allImportableSelected ? [] : importablePaths
+                        )
+                      }
                     >
-                      <Card border="solid" padding="sm">
-                        <label
-                          aria-disabled={unavailable}
-                          className={`flex w-full items-start gap-3 ${unavailable ? "cursor-not-allowed" : "cursor-pointer"}`}
-                        >
-                          <Checkbox
-                            checked={checked}
-                            disabled={loading || unavailable}
-                            aria-label={`Select ${skill.name}`}
-                            onCheckedChange={(nextChecked) =>
-                              onSelectedPathsChange(
-                                nextChecked
-                                  ? [...selectedPaths, skill.path]
-                                  : selectedPaths.filter(
-                                      (path) => path !== skill.path
-                                    )
-                              )
-                            }
-                          />
-                          <div className="min-w-0 flex-1">
-                            <Text as="p" font="main-ui-action" color="text-04">
-                              {skill.name}
-                            </Text>
-                            <Text as="p" font="secondary-body" color="text-03">
-                              {skill.description}
-                            </Text>
-                            <Text as="p" font="secondary-body" color="text-02">
-                              {skill.path === "."
-                                ? "Repository root"
-                                : skill.path}
-                            </Text>
-                            {skill.unavailable_reason && (
-                              <Text
-                                as="p"
-                                font="secondary-body"
-                                color="text-03"
-                              >
-                                {skill.unavailable_reason}
-                              </Text>
-                            )}
-                          </div>
-                        </label>
-                      </Card>
-                    </div>
-                  );
-                })}
-              </div>
+                      {allImportableSelected ? "Clear all" : "Select all"}
+                    </Button>
+                  ) : undefined
+                }
+              />
+              <Card border="solid" padding="fit" rounding="sm">
+                <div className="divide-y divide-border-01">
+                  {preview.skills.map((skill) => {
+                    const checked = selectedPaths.includes(skill.path);
+                    const unavailable = skill.unavailable_reason !== null;
+                    return (
+                      <label
+                        key={skill.path}
+                        aria-disabled={unavailable}
+                        className={`flex w-full items-start gap-3 p-3 ${unavailable ? "cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          disabled={loading || unavailable}
+                          aria-label={`Select ${skill.name}`}
+                          onCheckedChange={(nextChecked) =>
+                            onSelectedPathsChange(
+                              nextChecked
+                                ? [...selectedPaths, skill.path]
+                                : selectedPaths.filter(
+                                    (path) => path !== skill.path
+                                  )
+                            )
+                          }
+                        />
+                        <Content
+                          title={skill.name}
+                          description={
+                            skill.unavailable_reason ?? skill.description
+                          }
+                          titleMaxLines={1}
+                          descriptionMaxLines={2}
+                          sizePreset="main-ui"
+                          variant="section"
+                          color={unavailable ? "muted" : "default"}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </Card>
             </div>
           )}
         </Modal.Body>
@@ -373,13 +413,15 @@ export function ImportSkillsFromGitHubModalView({
           >
             {loading
               ? preview
-                ? "Importing..."
-                : "Searching..."
+                ? "Importing…"
+                : "Finding skills…"
               : preview
                 ? selectedPaths.length === 0
-                  ? "Nothing to import"
+                  ? importablePaths.length === 0
+                    ? "No skills available"
+                    : "Select skills"
                   : `Import ${selectedPaths.length === 1 ? "skill" : `${selectedPaths.length} skills`}`
-                : "Search repository"}
+                : "Find skills"}
           </Button>
         </Modal.Footer>
       </Modal.Content>

@@ -129,43 +129,45 @@ export default function SkillsPage() {
             <Popover.Trigger asChild>
               <Button icon={SvgPlus}>Create skill</Button>
             </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="xl">
-              <Popover.Menu>
-                <LineItem
-                  icon={SvgEdit}
-                  description="Write instructions and add supporting files in Onyx."
-                  wrapDescription
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    router.push("/craft/v1/skills/new" as Route);
-                  }}
-                >
-                  Create in Onyx
-                </LineItem>
-                <LineItem
-                  icon={SvgUploadCloud}
-                  description="Upload a SKILL.md file, ZIP file, or skill folder."
-                  wrapDescription
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setCreateOpen(true);
-                  }}
-                >
-                  Upload a skill
-                </LineItem>
-                <LineItem
-                  icon={SvgGithub}
-                  description="Import one or more skills from a GitHub repository."
-                  wrapDescription
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setGitHubImportOpen(true);
-                  }}
-                >
-                  Import from GitHub
-                </LineItem>
-              </Popover.Menu>
-            </Popover.Content>
+            {createMenuOpen && (
+              <Popover.Content align="end" sideOffset={4} width="xl">
+                <Popover.Menu>
+                  <LineItem
+                    icon={SvgEdit}
+                    description="Write instructions and add supporting files in Onyx."
+                    wrapDescription
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      router.push("/craft/v1/skills/new" as Route);
+                    }}
+                  >
+                    Create in Onyx
+                  </LineItem>
+                  <LineItem
+                    icon={SvgUploadCloud}
+                    description="Upload a SKILL.md file, ZIP file, or skill folder."
+                    wrapDescription
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      setCreateOpen(true);
+                    }}
+                  >
+                    Upload a skill
+                  </LineItem>
+                  <LineItem
+                    icon={SvgGithub}
+                    description="Import one or more skills from a GitHub repository."
+                    wrapDescription
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      setGitHubImportOpen(true);
+                    }}
+                  >
+                    Import from GitHub
+                  </LineItem>
+                </Popover.Menu>
+              </Popover.Content>
+            )}
           </Popover>
         }
       >

@@ -97,7 +97,7 @@ describe("ImportSkillsFromGitHubModal", () => {
       screen.getByRole("textbox"),
       "https://github.com/owner/repo"
     );
-    await user.click(screen.getByRole("button", { name: "Search repository" }));
+    await user.click(screen.getByRole("button", { name: "Find skills" }));
 
     expect(await screen.findByText("3 skills found")).toBeInTheDocument();
     expect(
@@ -109,6 +109,7 @@ describe("ImportSkillsFromGitHubModal", () => {
     expect(
       screen.getByText("Can't import: 'pptx' is a reserved skill name in Onyx.")
     ).toBeInTheDocument();
+    expect(screen.queryByText("skills/alpha")).not.toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Select Beta" }));
     await user.click(screen.getByRole("button", { name: "Import skill" }));
 
@@ -121,6 +122,65 @@ describe("ImportSkillsFromGitHubModal", () => {
       );
     });
     expect(onCreated).toHaveBeenCalledWith([{ name: "Alpha" }]);
+  });
+
+  it("supports bulk selection and returning to the repository step", async () => {
+    const user = userEvent.setup();
+    mockedPreviewGitHubSkills.mockResolvedValueOnce({
+      repository: "owner/repository",
+      revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      subpath: null,
+      skills: [
+        {
+          path: "skills/alpha",
+          name: "Alpha",
+          description: "First skill",
+          unavailable_reason: null,
+        },
+        {
+          path: "skills/beta",
+          name: "Beta",
+          description: "Second skill",
+          unavailable_reason: null,
+        },
+      ],
+    });
+    mockedImportGitHubSkills.mockClear();
+
+    render(
+      <ImportSkillsFromGitHubModal
+        open
+        onClose={jest.fn()}
+        onCreated={jest.fn()}
+      />
+    );
+
+    const repositoryInput = screen.getByRole("textbox");
+    await user.type(repositoryInput, "owner/repository{enter}");
+
+    expect(await screen.findByText("2 skills found")).toBeInTheDocument();
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(mockedImportGitHubSkills).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    expect(
+      screen.getByRole("button", { name: "Select skills" })
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("checkbox", { name: "Select Alpha" })
+    ).not.toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Select all" }));
+    expect(
+      screen.getByRole("checkbox", { name: "Select Alpha" })
+    ).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Select Beta" })).toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByRole("textbox")).toHaveValue("owner/repository");
+    expect(screen.queryByText("2 skills found")).not.toBeInTheDocument();
+    expect(mockedImportGitHubSkills).not.toHaveBeenCalled();
   });
 
   it("offers the existing GitHub connection flow for private repositories", () => {
@@ -140,15 +200,14 @@ describe("ImportSkillsFromGitHubModal", () => {
     );
 
     expect(
-      screen.getByText(
-        "Public repositories don't require a GitHub connection. Connect GitHub to import private repositories."
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Connect GitHub" })
+      screen.getByRole("link", {
+        name: "Connect GitHub for private repositories",
+      })
     ).toHaveAttribute("href", "/craft/v1/apps?connect=github");
     expect(
-      screen.getByRole("link", { name: "Connect GitHub" })
+      screen.getByRole("link", {
+        name: "Connect GitHub for private repositories",
+      })
     ).not.toHaveAttribute("target");
   });
 
@@ -163,11 +222,13 @@ describe("ImportSkillsFromGitHubModal", () => {
 
     expect(
       screen.getByText(
-        "Public repositories don't require a GitHub connection. Ask a workspace admin to set up the GitHub App to import private repositories."
+        "Private repositories require GitHub access configured by a workspace admin."
       )
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Connect GitHub" })
+      screen.queryByRole("link", {
+        name: "Connect GitHub for private repositories",
+      })
     ).not.toBeInTheDocument();
   });
 
@@ -185,20 +246,18 @@ describe("ImportSkillsFromGitHubModal", () => {
     );
 
     expect(
-      screen.getByText(
-        "Public repositories don't require a GitHub connection. Set up the GitHub App to import private repositories."
-      )
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Set up GitHub" })).toHaveAttribute(
-      "href",
-      "/admin/craft/apps"
-    );
+      screen.getByRole("link", {
+        name: "Set up private repository access",
+      })
+    ).toHaveAttribute("href", "/admin/craft/apps");
     expect(
-      screen.getByRole("link", { name: "Set up GitHub" })
+      screen.getByRole("link", {
+        name: "Set up private repository access",
+      })
     ).not.toHaveAttribute("target");
   });
 
-  it("quietly confirms private repository support when GitHub is connected", () => {
+  it("does not add private repository guidance when GitHub is connected", () => {
     mockedUseUserExternalApps.mockReturnValue({
       data: [{ ...githubApp, authenticated: true }],
       error: undefined,
@@ -214,14 +273,7 @@ describe("ImportSkillsFromGitHubModal", () => {
       />
     );
 
-    expect(
-      screen.getByText(
-        "You can import public repositories and any private repositories your GitHub account can access."
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "Connect GitHub" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/private repositories/i)).not.toBeInTheDocument();
   });
 
   it("shows a preview failure next to the repository controls", async () => {
@@ -243,7 +295,7 @@ describe("ImportSkillsFromGitHubModal", () => {
     );
 
     await user.type(screen.getByRole("textbox"), "owner/repository");
-    await user.click(screen.getByRole("button", { name: "Search repository" }));
+    await user.click(screen.getByRole("button", { name: "Find skills" }));
 
     expect(
       await screen.findByText("Couldn’t load repository")
@@ -287,7 +339,7 @@ describe("ImportSkillsFromGitHubModal", () => {
     );
 
     await user.type(screen.getByRole("textbox"), "owner/repository");
-    await user.click(screen.getByRole("button", { name: "Search repository" }));
+    await user.click(screen.getByRole("button", { name: "Find skills" }));
     await user.click(
       await screen.findByRole("button", { name: "Import skill" })
     );
@@ -327,7 +379,7 @@ describe("ImportSkillsFromGitHubModal", () => {
     );
 
     await user.type(screen.getByRole("textbox"), "owner/private-repository");
-    await user.click(screen.getByRole("button", { name: "Search repository" }));
+    await user.click(screen.getByRole("button", { name: "Find skills" }));
 
     expect(
       await screen.findByRole("link", { name: "Reconnect GitHub" })
