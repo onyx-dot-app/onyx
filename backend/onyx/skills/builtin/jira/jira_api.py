@@ -84,7 +84,7 @@ def _resolve_cloud_id(cloud_id: str | None, site: str | None) -> str:
         for res in resources:
             name = str(res.get("name", "")).lower()
             url = str(res.get("url", "")).lower()
-            if needle in (name, url) or needle in name or needle in url:
+            if needle in name or needle in url:
                 return str(res["id"])
         raise ValueError(f"No accessible site matched --site {site!r}.")
     return str(resources[0]["id"])
@@ -111,9 +111,7 @@ def _adf(text: str) -> dict[str, Any]:
     }
 
 
-def _paginate_search(
-    cloud_id: str, jql: str, limit: int
-) -> dict[str, Any]:
+def _paginate_search(cloud_id: str, jql: str, limit: int) -> dict[str, Any]:
     """Page through JQL issue search (GET with `jql`, `startAt`, `maxResults`
     query params; the body carries `issues` and `total`)."""
     results: list[Any] = []

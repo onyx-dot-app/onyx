@@ -17,12 +17,6 @@ from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.base import OrgCredentialField
 from onyx.external_apps.providers.base import TokenExchangeRequest
 
-# Atlassian Cloud's Jira REST API is versioned; v3 is the current stable
-# version and models issue/comment bodies as Atlassian Document Format (ADF).
-# Pinned across the provider and the sandbox skill so request-shaping stays
-# consistent with what the OAuth exchange negotiated.
-_JIRA_API_VERSION = "3"
-
 
 class JiraAction(ExternalAppAction):
     """Strongly-typed catalog ids for the Jira (Atlassian Cloud) provider."""
@@ -121,7 +115,9 @@ _ENDPOINTS: list[EndpointSpec] = [
         id=JiraAction.ISSUE_CREATE,
         normalised_name="Create an issue",
         description="Create a new issue in a project.",
-        matches=(RestRoute(method="POST", path="/ex/jira/{cloud_id}/rest/api/3/issue"),),
+        matches=(
+            RestRoute(method="POST", path="/ex/jira/{cloud_id}/rest/api/3/issue"),
+        ),
     ),
     EndpointSpec(
         id=JiraAction.ISSUE_UPDATE,
@@ -219,7 +215,9 @@ class JiraProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             setup_instructions=(
                 "In Atlassian: developer.atlassian.com → Create → OAuth 2.0 "
                 "integration. Add the Jira API to the app and enable the "
-                "read:jira-work, read:jira-user, and write:jira-work scopes. "
+                "read:jira-work, read:jira-user, write:jira-work, and "
+                "offline_access scopes (offline_access is required for refresh "
+                "tokens; without it users must reconnect hourly). "
                 "Under Authorization, set the callback URL to this Onyx "
                 "instance's callback (/craft/v1/apps/oauth/callback). Save, then "
                 "copy the Client ID and Secret from Settings and paste them below."
