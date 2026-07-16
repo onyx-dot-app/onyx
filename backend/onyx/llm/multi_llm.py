@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from contextlib import AbstractContextManager
 from contextlib import contextmanager
 from contextlib import nullcontext
-from functools import lru_cache
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -295,11 +294,17 @@ def _anthropic_omits_sampling_params(model_name: str) -> bool:
     return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
 
 
-@lru_cache(maxsize=256)
+_warned_dropped_keys: set[tuple[str, tuple[str, ...]]] = set()
+
+
 def _warn_dropped_env_only_keys(
     model_provider: str, dropped_keys: tuple[str, ...]
 ) -> None:
-    """Warn once per process per (provider, key-set) instead of on every call."""
+    """Warn once per (provider, key-set); best-effort under concurrency."""
+    warned_key = (model_provider, dropped_keys)
+    if warned_key in _warned_dropped_keys:
+        return
+    _warned_dropped_keys.add(warned_key)
     logger.warning(
         "Dropping custom_config key(s) with no LiteLLM kwarg equivalent for "
         "provider %s (env injection is disabled on this deployment): %s",
@@ -754,9 +759,8 @@ class LitellmLLM(LLM):
             if tools and tool_choice is not None:
                 optional_kwargs["tool_choice"] = tool_choice
 
-            # The flag is process-constant: when injection is disabled there
-            # can be no env writer anywhere in the process, so calls skip the
-            # rwlock entirely instead of taking its read side.
+            # Injection disabled means no env writer exists anywhere in the
+            # process, so skip the rwlock entirely.
             env_ctx: AbstractContextManager[None]
             if LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED:
                 env_ctx = temporary_env_and_lock(self._env_only_custom_config)
@@ -1031,11 +1035,9 @@ def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
         return
 
     if MULTI_TENANT:
-        # Env injection is process-global; in a multi-tenant deployment one
-        # tenant's env vars are a cross-tenant risk. The call-site gate on
-        # LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED (always False here) makes
-        # this unreachable — refuse rather than inject if a future caller
-        # bypasses the gate.
+        # Unreachable via the LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED gate;
+        # process-global env vars are a cross-tenant risk, so refuse rather
+        # than inject if a future caller bypasses it.
         logger.error(
             "Refusing LLM custom_config env injection in a multi-tenant "
             "deployment; proceeding without the env var(s)."

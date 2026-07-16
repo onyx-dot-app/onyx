@@ -42,13 +42,38 @@ def test_bedrock_bearer_token_maps_to_api_key() -> None:
 
 
 def test_bedrock_converse_uses_bedrock_mapping() -> None:
+    """Converse shares Bedrock's mapping: LiteLLM's BaseAWSLLM backs both paths
+    and treats api_key as the bearer token."""
     mapping = map_custom_config_to_model_kwargs(
         model_provider=LlmProviderNames.BEDROCK_CONVERSE,
-        custom_config={"AWS_REGION_NAME": "eu-west-1"},
+        custom_config={
+            "AWS_REGION_NAME": "eu-west-1",
+            "AWS_BEARER_TOKEN_BEDROCK": "bearer",
+        },
         api_key=None,
         api_base=None,
     )
-    assert mapping.model_kwargs == {"aws_region_name": "eu-west-1"}
+    assert mapping.model_kwargs == {
+        "aws_region_name": "eu-west-1",
+        "api_key": "bearer",
+    }
+
+
+def test_vertex_api_key_stays_env_only() -> None:
+    """Vertex auths via credentials, never a bare API key: a VERTEX_AI_API_KEY
+    entry must not be consumed by the generic <PROVIDER>_API_KEY matcher."""
+    custom_config = {"VERTEX_AI_API_KEY": "key"}
+    mapping = map_custom_config_to_model_kwargs(
+        model_provider=LlmProviderNames.VERTEX_AI,
+        custom_config=custom_config,
+        api_key=None,
+        api_base=None,
+    )
+    assert mapping.model_kwargs == {}
+    assert mapping.consumed_keys == frozenset()
+    assert get_unsupported_custom_config_keys(
+        LlmProviderNames.VERTEX_AI, custom_config
+    ) == {"VERTEX_AI_API_KEY"}
 
 
 def test_vertex_service_account_maps_credentials() -> None:
