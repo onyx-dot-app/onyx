@@ -15,7 +15,7 @@ mkdir -p "$XDG_DATA_HOME"
 # opencode's bash tool defaults to 120s, which is too tight for legitimately slow
 # tools (e.g. image generation). Raise it so opencode bounds long tools itself
 # rather than the coarser api-server inactivity backstop killing the whole turn.
-export OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS="${OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS:-300000}"
+export OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS="${OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS:-180000}"
 
 child_pid=
 trap 'if [ -n "$child_pid" ]; then kill -TERM "$child_pid" 2>/dev/null || true; fi; exit 0' SIGTERM SIGINT
