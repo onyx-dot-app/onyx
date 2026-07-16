@@ -1,6 +1,6 @@
 {
-  "version": "1.8",
-  "updated_at": "2026-07-14T00:00:00Z",
+  "version": "1.9",
+  "updated_at": "2026-07-16T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-5.6-sol",
@@ -69,8 +69,8 @@
           "display_name": "Qwen3.7 Plus"
         },
         {
-          "name": "moonshotai/kimi-k2.6",
-          "display_name": "Kimi K2.6"
+          "name": "moonshotai/kimi-k3",
+          "display_name": "Kimi K3"
         }
       ]
     }
