@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
 from fastapi import status
+from fastapi.responses import RedirectResponse
 from fastapi_users import exceptions
 from fastapi_users.authentication import Strategy
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
@@ -281,6 +282,26 @@ async def _process_saml_callback(
 
     response = await auth_backend.login(strategy, user)
     await user_manager.on_after_login(user, request, response)
+
+    # Honor RelayState if present. The OneLogin toolkit puts it under
+    # post_data (POST binding) or get_data (Redirect binding). Without
+    # this, the IdP-originated POST lands on a bare 204 response and the
+    # browser has no signal to navigate, leaving the user stranded on the
+    # IdP's "Redirecting, please wait." intermediate page.
+    relay_state_raw = (
+        req.get("post_data", {}).get("RelayState")
+        or req.get("get_data", {}).get("RelayState")
+    )
+    relay_state = _sanitize_relay_state(relay_state_raw)
+    if relay_state:
+        redirect = RedirectResponse(url=relay_state, status_code=303)
+        # Preserve Set-Cookie header(s) emitted by auth_backend.login so the
+        # session cookie survives the redirect.
+        for header_name, header_value in response.raw_headers:
+            if header_name.lower() == b"set-cookie":
+                redirect.raw_headers.append((header_name, header_value))
+        return redirect
+
     return response
 
 
