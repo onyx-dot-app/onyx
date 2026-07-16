@@ -7,8 +7,6 @@ from langchain_core.messages import BaseMessage
 from onyx.auth.oauth_claims_capture import IDP_PLACEHOLDER_KEYS
 from onyx.configs.constants import DocumentSource
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
-from onyx.prompts.chat_prompts import ALT_CITATION_GUIDANCE_REPLACEMENT_PAT
-from onyx.prompts.chat_prompts import ALT_DATETIME_REPLACEMENT_PAT
 from onyx.prompts.chat_prompts import CITATION_GUIDANCE_REPLACEMENT_PAT
 from onyx.prompts.chat_prompts import COMPANY_DESCRIPTION_BLOCK
 from onyx.prompts.chat_prompts import COMPANY_NAME_BLOCK
@@ -46,13 +44,6 @@ def get_current_llm_day_time(
     return f"{formatted_datetime}"
 
 
-def _datetime_placeholder_present(prompt_str: str) -> bool:
-    return (
-        DATETIME_REPLACEMENT_PAT in prompt_str
-        or ALT_DATETIME_REPLACEMENT_PAT in prompt_str
-    )
-
-
 def replace_current_datetime_tag(
     prompt_str: str,
     *,
@@ -64,9 +55,8 @@ def replace_current_datetime_tag(
         include_day_of_week=include_day_of_week,
     )
 
-    for pattern in (DATETIME_REPLACEMENT_PAT, ALT_DATETIME_REPLACEMENT_PAT):
-        if pattern in prompt_str:
-            prompt_str = prompt_str.replace(pattern, datetime_str)
+    if DATETIME_REPLACEMENT_PAT in prompt_str:
+        prompt_str = prompt_str.replace(DATETIME_REPLACEMENT_PAT, datetime_str)
 
     return prompt_str
 
@@ -79,7 +69,7 @@ def replace_citation_guidance_tag(
     append_citation_if_missing: bool = True,
 ) -> tuple[str, bool]:
     """
-    Replace {{CITATION_GUIDANCE}} or [[CITATION_GUIDANCE]] placeholder with citation guidance if needed.
+    Replace {{CITATION_GUIDANCE}} placeholder with citation guidance if needed.
 
     Returns:
         tuple[str, bool]: (prompt_with_replacement, should_append_fallback)
@@ -87,10 +77,7 @@ def replace_citation_guidance_tag(
         - should_append_fallback: True if citation guidance should be appended
             (placeholder is not present and citations are needed)
     """
-    placeholder_was_present = (
-        CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
-        or ALT_CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
-    )
+    placeholder_was_present = CITATION_GUIDANCE_REPLACEMENT_PAT in prompt_str
 
     if not placeholder_was_present:
         # Placeholder not present - caller should append if citations are needed
@@ -107,11 +94,10 @@ def replace_citation_guidance_tag(
         else ""
     )
 
-    for pattern in (
+    prompt_str = prompt_str.replace(
         CITATION_GUIDANCE_REPLACEMENT_PAT,
-        ALT_CITATION_GUIDANCE_REPLACEMENT_PAT,
-    ):
-        prompt_str = prompt_str.replace(pattern, citation_guidance)
+        citation_guidance,
+    )
 
     return prompt_str, False
 
@@ -138,8 +124,8 @@ def apply_prompt_placeholders(
     """Apply standard Onyx prompt placeholders to any prompt string.
 
     Supported placeholders:
-    - {{CURRENT_DATETIME}} / [[CURRENT_DATETIME]]
-    - {{CITATION_GUIDANCE}} / [[CITATION_GUIDANCE]]
+    - {{CURRENT_DATETIME}}
+    - {{CITATION_GUIDANCE}}
     - {{REMINDER_TAG_DESCRIPTION}}
 
     Returns:
@@ -153,12 +139,8 @@ def apply_prompt_placeholders(
         full_sentence=False,
         include_day_of_week=True,
     )
-    if (
-        prompt_str == original_prompt
-        and append_datetime_if_aware
-        and datetime_aware
-        and not _datetime_placeholder_present(original_prompt)
-    ):
+    # If no datetime tag was present (string unchanged), optionally append the date.
+    if prompt_str == original_prompt and append_datetime_if_aware and datetime_aware:
         prompt_str = prompt_str + ADDITIONAL_INFO.format(
             datetime_info=_BASIC_TIME_STR.format(
                 datetime_info=get_current_llm_day_time()

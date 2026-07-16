@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-from onyx.prompts.chat_prompts import ALT_DATETIME_REPLACEMENT_PAT
 from onyx.prompts.chat_prompts import CITATION_GUIDANCE_REPLACEMENT_PAT
 from onyx.prompts.chat_prompts import DATETIME_REPLACEMENT_PAT
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
@@ -120,17 +119,6 @@ def test_frontend_placeholder_catalog_matches_backend_allowlist() -> None:
 )
 def test_replace_current_datetime_tag(mock_get_time: MagicMock) -> None:
     prompt = f"The current date is {DATETIME_REPLACEMENT_PAT}."
-    result = replace_current_datetime_tag(prompt)
-    assert result == "The current date is Wednesday July 15, 2026."
-    mock_get_time.assert_called_once()
-
-
-@patch(
-    "onyx.prompts.prompt_utils.get_current_llm_day_time",
-    return_value="Wednesday July 15, 2026",
-)
-def test_replace_current_datetime_tag_alt_pattern(mock_get_time: MagicMock) -> None:
-    prompt = f"The current date is {ALT_DATETIME_REPLACEMENT_PAT}."
     result = replace_current_datetime_tag(prompt)
     assert result == "The current date is Wednesday July 15, 2026."
     mock_get_time.assert_called_once()

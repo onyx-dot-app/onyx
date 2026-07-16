@@ -46,7 +46,7 @@ class PromptTemplate:
         return self._pattern.sub(repl, self._template)
 
     def _postprocess(self, text: str) -> str:
-        """Apply global replacements such as {{CURRENT_DATETIME}} and [[CURRENT_DATETIME]]."""
+        """Apply global replacements such as {{CURRENT_DATETIME}}."""
         if not text:
             return text
         # Ensure datetime placeholders match shared prompt formatting
