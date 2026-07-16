@@ -101,19 +101,6 @@ class ReindexPortManager:
         return [ReindexErrorRow(**row) for row in response.json()]
 
     @staticmethod
-    def resume(
-        user_performing_action: DATestUser,
-        cc_pair_id: int | None = None,
-        user_id: str | None = None,
-    ) -> None:
-        response = client.post(
-            f"{SEARCH_SETTINGS_URL}/reindex/port/resume",
-            json={"cc_pair_id": cc_pair_id, "user_id": user_id},
-            headers=user_performing_action.headers,
-        )
-        response.raise_for_status()
-
-    @staticmethod
     def wait_for_reindex_completion(
         user_performing_action: DATestUser,
         timeout: float = MAX_DELAY,
