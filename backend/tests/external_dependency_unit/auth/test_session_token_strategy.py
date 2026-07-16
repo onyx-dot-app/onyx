@@ -315,17 +315,30 @@ async def test_refresh_extends_expiry_and_preserves_issue_time(
         _delete_key(token)
 
 
-def test_not_found_never_overwrites_stored_value_rejection() -> None:
+def test_first_stored_value_rejection_wins() -> None:
     def scenario() -> None:
-        stored_value_rejection = SessionRejection(
+        not_found = SessionRejection(
+            reason=SessionRejectionReason.NOT_FOUND, token_value=None
+        )
+        expired = SessionRejection(
             reason=SessionRejectionReason.EXPIRED,
             token_value=SessionTokenValue(sub="some-user"),
         )
-        record_session_rejection(stored_value_rejection)
-        record_session_rejection(
-            SessionRejection(reason=SessionRejectionReason.NOT_FOUND, token_value=None)
+        terminated = SessionRejection(
+            reason=SessionRejectionReason.TERMINATED,
+            token_value=SessionTokenValue(sub="some-user"),
         )
-        assert get_session_rejection() == stored_value_rejection
+
+        # A stored-value-backed rejection replaces a bare miss.
+        record_session_rejection(not_found)
+        record_session_rejection(expired)
+        assert get_session_rejection() == expired
+
+        # But nothing replaces it: not a later strong rejection, not a miss.
+        record_session_rejection(terminated)
+        assert get_session_rejection() == expired
+        record_session_rejection(not_found)
+        assert get_session_rejection() == expired
 
     # copy_context so this sync test doesn't leak the var into later tests
     contextvars.copy_context().run(scenario)

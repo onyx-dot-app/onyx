@@ -91,8 +91,8 @@ def build_session_token_value(
     *,
     user_id: str,
     tenant_id: str | None,
-    issued_at: datetime,
-    expires_at: datetime | None,
+    issued_at: AwareDatetime,
+    expires_at: AwareDatetime | None,
 ) -> str:
     return SessionTokenValue(
         sub=user_id,
@@ -123,8 +123,8 @@ def build_session_tombstone_value(
 
 
 def compute_session_expires_at(
-    issued_at: datetime, lifetime_seconds: int | None
-) -> datetime | None:
+    issued_at: AwareDatetime, lifetime_seconds: int | None
+) -> AwareDatetime | None:
     if lifetime_seconds is None:
         return None
     return issued_at + timedelta(seconds=lifetime_seconds)
@@ -181,13 +181,15 @@ def classify_session_token_value(
 
 def record_session_rejection(rejection: SessionRejection) -> None:
     """
-    A rejection backed by a stored value outranks a bare NOT_FOUND miss from a
-    second presented credential.
+    The first rejection backed by a stored value wins; a bare NOT_FOUND miss
+    only fills a void.
     """
     existing = _SESSION_REJECTION.get()
-    if existing is not None and rejection.reason == SessionRejectionReason.NOT_FOUND:
-        return
-    _SESSION_REJECTION.set(rejection)
+    if existing is None or (
+        existing.reason == SessionRejectionReason.NOT_FOUND
+        and rejection.reason != SessionRejectionReason.NOT_FOUND
+    ):
+        _SESSION_REJECTION.set(rejection)
 
 
 def get_session_rejection() -> SessionRejection | None:
