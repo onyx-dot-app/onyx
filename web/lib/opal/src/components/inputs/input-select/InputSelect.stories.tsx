@@ -116,7 +116,7 @@ const AGENTS = [
 ];
 
 function SearchableHarness() {
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState<string | undefined>(undefined);
   const [query, setQuery] = useState("");
   const filtered = AGENTS.filter((name) =>
     name.toLowerCase().includes(query.toLowerCase())

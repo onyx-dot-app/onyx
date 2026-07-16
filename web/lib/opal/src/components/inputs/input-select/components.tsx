@@ -496,7 +496,16 @@ function InputSelectSearch({
       className="opal-input-select-search"
       // Mousedown must not reach Content, whose preventDefault would kill
       // caret placement and text selection in the input.
-      onMouseDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        // Keep focus in the input when the clear (×) button is clicked, so
+        // typing resumes immediately. Its action fires on click, which
+        // preventDefault on mousedown does not suppress.
+        if ((e.target as HTMLElement).closest("button")) {
+          e.preventDefault();
+          inputRef.current?.focus();
+        }
+      }}
       onKeyDown={(e) => {
         if (e.key === "ArrowDown") {
           e.preventDefault();
