@@ -186,7 +186,7 @@ def create_custom_skill(
     ) as ingested:
         skill = create_skill__no_commit(
             slug=ingested.canonical_name,
-            name=ingested.name,
+            name=ingested.canonical_name,
             description=ingested.description,
             bundle_file_id=ingested.bundle_file_id,
             bundle_sha256=ingested.bundle_sha256,
@@ -255,7 +255,7 @@ def create_custom_skill_from_editor(
     ) as ingested:
         skill = create_skill__no_commit(
             slug=ingested.canonical_name,
-            name=ingested.name,
+            name=ingested.canonical_name,
             description=ingested.description,
             bundle_file_id=ingested.bundle_file_id,
             bundle_sha256=ingested.bundle_sha256,

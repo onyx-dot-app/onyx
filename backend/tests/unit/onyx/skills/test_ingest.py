@@ -37,7 +37,7 @@ def test_ingest_normalizes_wrapped_bundle_before_hashing_and_storage() -> None:
         assert set(zf.namelist()) == {"SKILL.md", "scripts/helper.py"}
         assert zf.read("scripts/helper.py") == b"print('hello')\n"
 
-    assert ingested.name == "example"
+    assert ingested.canonical_name == "example"
     assert ingested.description == "Wrapped skill"
     assert ingested.bundle_file_id == "stored-bundle"
     assert ingested.bundle_sha256 == hashlib.sha256(saved_bytes).hexdigest()
@@ -55,7 +55,6 @@ def test_ingest_standalone_skill_md_uses_frontmatter_name_and_stores_zip() -> No
     ingested = ingest_skill_bundle(skill_md, "SKILL.md", file_store)
 
     assert ingested.canonical_name == "daily-summary"
-    assert ingested.name == "daily-summary"
     assert ingested.description == "Summarizes the day"
     saved_stream = file_store.save_file.call_args.kwargs["content"]
     saved_bytes = saved_stream.getvalue()
@@ -112,7 +111,6 @@ def test_ingest_zip_uses_frontmatter_name_instead_of_filename() -> None:
     ingested = ingest_skill_bundle(source.getvalue(), "unrelated.zip", file_store)
 
     assert ingested.canonical_name == "canonical-name"
-    assert ingested.name == "canonical-name"
 
 
 def test_ingest_rejects_wrapped_directory_name_mismatch() -> None:
@@ -139,7 +137,6 @@ def test_ingested_skill_bundle_deletes_new_blob_on_failure(
             canonical_name="helper-skill",
             bundle_file_id="new-bundle",
             bundle_sha256="0" * 64,
-            name="Helper Skill",
             description="Description",
         ),
     )

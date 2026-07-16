@@ -23,7 +23,6 @@ class IngestedBundle(NamedTuple):
     canonical_name: str
     bundle_file_id: str
     bundle_sha256: str
-    name: str
     description: str
 
 
@@ -95,7 +94,6 @@ def ingest_skill_bundle(
         canonical_name=name,
         bundle_file_id=bundle_file_id,
         bundle_sha256=sha,
-        name=name,
         description=description,
     )
 

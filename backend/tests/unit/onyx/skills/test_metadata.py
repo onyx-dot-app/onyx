@@ -98,6 +98,15 @@ def test_parse_skill_document_rejects_non_string_frontmatter_key() -> None:
         )
 
 
+def test_parse_skill_document_rejects_duplicate_frontmatter_key() -> None:
+    with pytest.raises(OnyxError, match="duplicate key 'name'"):
+        parse_skill_document(
+            _skill_md(
+                "name: reports\nname: other\ndescription: Use this skill for reports."
+            )
+        )
+
+
 @pytest.mark.parametrize("frontmatter", ["false", "[]", "skill"])
 def test_parse_skill_document_requires_frontmatter_mapping(
     frontmatter: str,

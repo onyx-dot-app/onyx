@@ -29,7 +29,6 @@ def test_create_custom_external_app_cleans_new_bundle_on_failure(
             canonical_name="helper-skill",
             bundle_file_id="new-bundle",
             bundle_sha256="0" * 64,
-            name="Helper Skill",
             description="Bundle description",
         ),
     )
@@ -80,7 +79,6 @@ def test_replace_custom_app_bundle_cleans_new_bundle_on_failure(
             canonical_name="helper-skill",
             bundle_file_id="replacement-bundle",
             bundle_sha256="1" * 64,
-            name="Helper Skill",
             description="Bundle description",
         ),
     )

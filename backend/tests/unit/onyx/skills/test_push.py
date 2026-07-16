@@ -161,11 +161,13 @@ def test_assemble_normalizes_wrapped_known_valid_skill(
         _bundle("canonical-name", wrapper="canonical-name")
     )
     persist = MagicMock()
+    validate = MagicMock()
     skill = _skill(is_valid=True)
     user = cast(User, SimpleNamespace())
 
     monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
     monkeypatch.setattr(push, "persist_skill_validity", persist)
+    monkeypatch.setattr(push, "validate_stored_custom_skill", validate)
 
     hydrated_skills, files = push._assemble_fileset(
         [skill], user, MagicMock(spec=Session)
@@ -176,6 +178,30 @@ def test_assemble_normalizes_wrapped_known_valid_skill(
     assert files["canonical-name/scripts/run.py"] == b"print('hello')\n"
     assert "canonical-name/canonical-name/SKILL.md" not in files
     persist.assert_called_once_with([])
+    validate.assert_not_called()
+
+
+def test_assemble_hydrates_when_validity_persistence_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = io.BytesIO(_bundle("canonical-name"))
+    skill = _skill()
+    user = cast(User, SimpleNamespace())
+
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(
+        push,
+        "persist_skill_validity",
+        MagicMock(side_effect=RuntimeError("database unavailable")),
+    )
+
+    hydrated_skills, files = push._assemble_fileset(
+        [skill], user, MagicMock(spec=Session)
+    )
+
+    assert hydrated_skills == [skill]
+    assert files["canonical-name/SKILL.md"].startswith(b"---\n")
 
 
 def test_user_payload_advertises_only_hydrated_skills(

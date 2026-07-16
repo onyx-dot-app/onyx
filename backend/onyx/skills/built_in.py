@@ -37,12 +37,11 @@ from onyx.db.enums import ExternalAppType
 from onyx.image_gen.generation import is_image_generation_configured
 from onyx.server.features.build.configs import ENABLE_BROWSER
 from onyx.skills.metadata import parse_skill_document
+from onyx.skills.models import SKILL_NAME_PATTERN
 
 # On-disk root for built-in skill content (one ``<skill_id>/`` dir each). Pushed
 # to sandboxes at session setup; not baked into the sandbox image.
 BUILTIN_SKILLS_PATH: Final[Path] = Path(__file__).parent / "builtin"
-
-SKILL_NAME_PATTERN: Final[str] = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
 
 
 def _always_available(_: Session) -> bool:

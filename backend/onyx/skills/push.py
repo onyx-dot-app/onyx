@@ -35,6 +35,7 @@ from onyx.skills.built_in import COMPANY_SEARCH
 from onyx.skills.built_in import EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
 from onyx.skills.rendering import render_company_search_skill
 from onyx.skills.rendering import render_external_app_skill
+from onyx.skills.validation import load_stored_custom_skill_bundle
 from onyx.skills.validation import validate_stored_custom_skill
 from onyx.utils.logger import setup_logger
 
@@ -142,25 +143,41 @@ def _assemble_fileset(
             if skill.is_valid is False:
                 continue
 
-            validation = validate_stored_custom_skill(skill, file_store)
-            if skill.is_valid is None and validation.is_valid is not None:
-                validity_updates.append(
-                    SkillValidityUpdate(
-                        skill_id=skill.id,
-                        bundle_file_id=skill.bundle_file_id,
-                        is_valid=validation.is_valid,
+            if skill.is_valid is None:
+                validation = validate_stored_custom_skill(skill, file_store)
+                if validation.is_valid is not None:
+                    validity_updates.append(
+                        SkillValidityUpdate(
+                            skill_id=skill.id,
+                            bundle_file_id=skill.bundle_file_id,
+                            is_valid=validation.is_valid,
+                        )
                     )
-                )
+                if validation.normalized_bundle is None:
+                    logger.warning(
+                        "Skipping unvalidated skill %s: %s",
+                        skill.id,
+                        validation.detail,
+                    )
+                    continue
+                bundle_bytes = validation.normalized_bundle
+            else:
+                try:
+                    if skill.bundle_file_id is None:
+                        continue
+                    bundle_bytes = load_stored_custom_skill_bundle(
+                        skill.bundle_file_id,
+                        file_store,
+                    ).content
+                except Exception as exc:
+                    logger.warning(
+                        "Skipping unreadable valid skill %s: %s",
+                        skill.id,
+                        exc,
+                    )
+                    continue
 
-            if validation.normalized_bundle is None:
-                logger.warning(
-                    "Skipping unvalidated skill %s: %s",
-                    skill.id,
-                    validation.detail,
-                )
-                continue
-
-            if _add_bundle_bytes(files, skill, validation.normalized_bundle):
+            if _add_bundle_bytes(files, skill, bundle_bytes):
                 hydrated_skills.append(skill)
             continue
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
@@ -176,7 +193,10 @@ def _assemble_fileset(
         if definition.has_template:
             _render_template(files, skill, definition, db_session, user)
 
-    persist_skill_validity(validity_updates)
+    try:
+        persist_skill_validity(validity_updates)
+    except Exception:
+        logger.exception("Failed to persist skill validity classifications")
     return hydrated_skills, files
 
 

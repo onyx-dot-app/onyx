@@ -12,6 +12,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import normalize_custom_bundle
+from onyx.skills.bundle import NormalizedSkillBundle
 from onyx.skills.bundle import read_bundle_file
 from onyx.skills.bundle import SKILL_MD_NAME
 from onyx.skills.metadata import parse_skill_document
@@ -23,6 +24,18 @@ class SkillValidationResult:
     is_valid: bool | None
     normalized_bundle: bytes | None
     detail: str | None = None
+
+
+def load_stored_custom_skill_bundle(
+    bundle_file_id: str,
+    file_store: FileStore,
+) -> NormalizedSkillBundle:
+    bundle_stream = file_store.read_file(bundle_file_id)
+    try:
+        bundle_bytes = read_bundle_file(bundle_stream)
+    finally:
+        bundle_stream.close()
+    return normalize_custom_bundle(bundle_bytes)
 
 
 def _is_missing_file_error(exc: Exception) -> bool:
@@ -66,17 +79,22 @@ def validate_stored_custom_skill(
         )
 
     try:
-        bundle_stream = file_store.read_file(skill.bundle_file_id)
-        try:
-            bundle_bytes = read_bundle_file(bundle_stream)
-        finally:
-            bundle_stream.close()
+        normalized = load_stored_custom_skill_bundle(
+            skill.bundle_file_id,
+            file_store,
+        )
     except Exception as exc:
         if _is_missing_file_error(exc):
             return SkillValidationResult(
                 is_valid=False,
                 normalized_bundle=None,
                 detail="stored bundle does not exist",
+            )
+        if isinstance(exc, OnyxError):
+            return SkillValidationResult(
+                is_valid=False,
+                normalized_bundle=None,
+                detail=f"stored bundle is invalid: {exc.detail}",
             )
         return SkillValidationResult(
             is_valid=None,
@@ -85,7 +103,6 @@ def validate_stored_custom_skill(
         )
 
     try:
-        normalized = normalize_custom_bundle(bundle_bytes)
         with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
             raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
         document = parse_skill_document(
