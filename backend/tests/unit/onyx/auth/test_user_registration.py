@@ -243,7 +243,9 @@ class TestMultiTenantInviteLogic:
             pass
 
         # Verify invite check WAS called (user_count > 0)
-        mock_verify_invited.assert_called_once_with(mock_user_create.email)
+        mock_verify_invited.assert_called_once_with(
+            mock_user_create.email, sso_managed=False
+        )
 
 
 class TestSingleTenantInviteLogic:
@@ -293,7 +295,9 @@ class TestSingleTenantInviteLogic:
             pass
 
         # Verify invite check was called
-        mock_verify_invited.assert_called_once_with(mock_user_create.email)
+        mock_verify_invited.assert_called_once_with(
+            mock_user_create.email, sso_managed=False
+        )
 
 
 class TestSAMLOIDCBehavior:

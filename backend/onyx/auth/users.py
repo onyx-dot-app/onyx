@@ -284,9 +284,16 @@ def workspace_invite_only_enabled() -> bool:
     return settings.invite_only_enabled
 
 
-def verify_email_is_invited(email: str) -> None:
+def verify_email_is_invited(email: str, *, sso_managed: bool = False) -> None:
+    # An SSO provider manages membership for users it provisions, and its
+    # allowed_email_domains is the admin's per-provider control, so the
+    # workspace invite list does not apply.
+    if sso_managed:
+        return
+
+    # Legacy single-provider modes imply every signup is IdP-provisioned.
+    # Dies with those modes.
     if AUTH_TYPE in {AuthType.SAML, AuthType.OIDC}:
-        # SSO providers manage membership; allow JIT provisioning regardless of invites
         return
 
     if not workspace_invite_only_enabled():
@@ -323,10 +330,12 @@ def verify_email_is_invited(email: str) -> None:
     )
 
 
-def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
+def verify_email_in_whitelist(
+    email: str, tenant_id: str, *, sso_managed: bool = False
+) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         if not get_user_by_email(email, db_session):
-            verify_email_is_invited(email)
+            verify_email_is_invited(email, sso_managed=sso_managed)
 
 
 def verify_email_domain(
@@ -548,6 +557,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user_create: schemas.UC | UserCreate,
         safe: bool = False,
         request: Optional[Request] = None,
+        *,
+        sso_managed: bool = False,
     ) -> User:
         # Check for disposable emails FIRST so obvious throwaway domains are
         # rejected before hitting Google's siteverify API. Cheap local check.
@@ -630,10 +641,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user_count = await get_user_count()
                     if user_count > 0:
                         # Tenant already has users - require invite for new users
-                        verify_email_is_invited(user_create.email)
+                        verify_email_is_invited(
+                            user_create.email, sso_managed=sso_managed
+                        )
                 else:
-                    # Single-tenant: Check invite list (skips if SAML/OIDC or no list configured)
-                    verify_email_is_invited(user_create.email)
+                    # Single-tenant: the gate self-skips for SSO-managed users
+                    # and when invite-only is off
+                    verify_email_is_invited(user_create.email, sso_managed=sso_managed)
                 if MULTI_TENANT:
                     tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                         db_session, User, OAuthAccount
@@ -865,6 +879,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         associate_by_email: bool = False,
         is_verified_by_default: bool = False,
         allowed_email_domains_override: Sequence[str] | None = None,
+        sso_managed: bool = False,
     ) -> User:
         referral_source = (
             getattr(request.state, "referral_source", None) if request else None
@@ -888,7 +903,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         async with get_async_session_context_manager(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-            verify_email_in_whitelist(account_email, tenant_id)
+            verify_email_in_whitelist(account_email, tenant_id, sso_managed=sso_managed)
             oauth_security_settings = get_security_settings()
             effective_valid_email_domains = (
                 allowed_email_domains_override
@@ -2348,6 +2363,7 @@ async def complete_login_flow(
     associate_by_email: bool,
     is_verified_by_default: bool,
     allowed_email_domains_override: Sequence[str] | None = None,
+    sso_managed: bool = False,
 ) -> RedirectResponse:
     """Shared post-token OAuth/OIDC login: read the verified identity, create or
     authenticate the user, and return a web or mobile redirect."""
@@ -2397,6 +2413,7 @@ async def complete_login_flow(
             associate_by_email=associate_by_email,
             is_verified_by_default=is_verified_by_default,
             allowed_email_domains_override=allowed_email_domains_override,  # ty: ignore[unknown-argument]
+            sso_managed=sso_managed,  # ty: ignore[unknown-argument]
         )
     except UserAlreadyExists:
         raise OnyxError(
