@@ -9,11 +9,14 @@ export interface WorkspaceSettings {
   disable_default_assistant: boolean;
   // admin hard cap for uploads (MB); null = no cap
   user_file_max_upload_size_mb: number | null;
+  // admin gate for the deep-research toggle; absent → treated as enabled (matches web's `?? true`).
+  deep_research_enabled: boolean;
 }
 
 interface WorkspaceSettingsResponse {
   disable_default_assistant?: boolean | null;
   user_file_max_upload_size_mb?: number | null;
+  deep_research_enabled?: boolean | null;
 }
 
 export function useWorkspaceSettings() {
@@ -30,6 +33,7 @@ export function useWorkspaceSettings() {
     disable_default_assistant: query.data?.disable_default_assistant ?? false,
     user_file_max_upload_size_mb:
       query.data?.user_file_max_upload_size_mb ?? null,
+    deep_research_enabled: query.data?.deep_research_enabled ?? true,
   };
 
   return { ...query, settings };
