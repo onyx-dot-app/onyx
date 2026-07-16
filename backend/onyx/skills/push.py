@@ -16,7 +16,7 @@ from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.skill import list_skills
 from onyx.db.skill import persist_skill_validity
 from onyx.db.skill import SkillAccessPolicy
-from onyx.file_store.file_store import FileStore
+from onyx.db.skill import SkillValidityUpdate
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -33,7 +33,6 @@ from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.built_in import COMPANY_SEARCH
 from onyx.skills.built_in import EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
-from onyx.skills.bundle import read_bundle_file
 from onyx.skills.rendering import render_company_search_skill
 from onyx.skills.rendering import render_external_app_skill
 from onyx.skills.validation import validate_stored_custom_skill
@@ -122,25 +121,6 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> bool
         return False
 
 
-def _read_stored_bundle(skill: Skill, file_store: FileStore) -> bytes | None:
-    if skill.bundle_file_id is None:
-        return None
-    try:
-        bundle_stream = file_store.read_file(skill.bundle_file_id)
-        try:
-            return read_bundle_file(bundle_stream)
-        finally:
-            bundle_stream.close()
-    except Exception:
-        logger.warning(
-            "Failed to read bundle for skill %s (%s), skipping",
-            skill.slug,
-            skill.bundle_file_id,
-            exc_info=True,
-        )
-        return None
-
-
 def _assemble_fileset(
     skills: Iterable[Skill],
     user: User,
@@ -154,36 +134,33 @@ def _assemble_fileset(
     """
     files: FileSet = {}
     hydrated_skills: list[Skill] = []
-    validity_updates: dict[UUID, tuple[str | None, bool]] = {}
+    validity_updates: list[SkillValidityUpdate] = []
     file_store = get_default_file_store()
 
     for skill in skills:
         if skill.built_in_skill_id is None:
-            bundle_bytes: bytes | None = None
-            if skill.is_valid is None:
-                validation = validate_stored_custom_skill(skill, file_store)
-                if validation.is_valid is not None:
-                    validity_updates[skill.id] = (
-                        skill.bundle_file_id,
-                        validation.is_valid,
-                    )
-                    skill.is_valid = validation.is_valid
-                if validation.is_valid is not True:
-                    logger.warning(
-                        "Skipping unvalidated skill %s: %s",
-                        skill.id,
-                        validation.detail,
-                    )
-                    continue
-                bundle_bytes = validation.normalized_bundle
-            elif skill.is_valid:
-                bundle_bytes = _read_stored_bundle(skill, file_store)
-            else:
+            if skill.is_valid is False:
                 continue
 
-            if bundle_bytes is not None and _add_bundle_bytes(
-                files, skill, bundle_bytes
-            ):
+            validation = validate_stored_custom_skill(skill, file_store)
+            if skill.is_valid is None and validation.is_valid is not None:
+                validity_updates.append(
+                    SkillValidityUpdate(
+                        skill_id=skill.id,
+                        bundle_file_id=skill.bundle_file_id,
+                        is_valid=validation.is_valid,
+                    )
+                )
+
+            if validation.normalized_bundle is None:
+                logger.warning(
+                    "Skipping unvalidated skill %s: %s",
+                    skill.id,
+                    validation.detail,
+                )
+                continue
+
+            if _add_bundle_bytes(files, skill, validation.normalized_bundle):
                 hydrated_skills.append(skill)
             continue
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)

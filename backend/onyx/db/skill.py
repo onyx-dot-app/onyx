@@ -18,7 +18,9 @@ These helpers never commit — callers control the transaction boundary so a
 multi-step admin flow (e.g. create row + replace shares) can roll back atomically.
 """
 
+from collections.abc import Iterable
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import Enum
 from uuid import UUID
 
@@ -60,6 +62,13 @@ class SkillAccessPolicy(str, Enum):
     VIEW = "view"
     EDIT = "edit"
     USE = "use"
+
+
+@dataclass(frozen=True)
+class SkillValidityUpdate:
+    skill_id: UUID
+    bundle_file_id: str | None
+    is_valid: bool
 
 
 def _is_shared_with_user(
@@ -636,26 +645,26 @@ def delete_skill(skill: Skill, db_session: Session) -> str | None:
 
 
 def persist_skill_validity(
-    updates: Mapping[UUID, tuple[str | None, bool]],
+    updates: Iterable[SkillValidityUpdate],
 ) -> None:
     """Persist classifications if each skill still references the observed bundle."""
     if not updates:
         return
 
     with get_session_with_current_tenant() as db_session:
-        for skill_id, (bundle_file_id, is_valid) in updates.items():
+        for validity_update in updates:
             bundle_matches = (
-                Skill.bundle_file_id == bundle_file_id
-                if bundle_file_id is not None
+                Skill.bundle_file_id == validity_update.bundle_file_id
+                if validity_update.bundle_file_id is not None
                 else Skill.bundle_file_id.is_(None)
             )
             db_session.execute(
                 update(Skill)
                 .where(
-                    Skill.id == skill_id,
+                    Skill.id == validity_update.skill_id,
                     bundle_matches,
                     Skill.is_valid.is_(None),
                 )
-                .values(is_valid=is_valid)
+                .values(is_valid=validity_update.is_valid)
             )
         db_session.commit()
