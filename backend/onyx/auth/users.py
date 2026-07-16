@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import json
 import os
 import random
 import secrets
@@ -92,6 +91,16 @@ from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
+from onyx.auth.session_tokens import build_session_rejection_error
+from onyx.auth.session_tokens import build_session_token_value
+from onyx.auth.session_tokens import build_session_tombstone_value
+from onyx.auth.session_tokens import classify_session_token_value
+from onyx.auth.session_tokens import compute_session_expires_at
+from onyx.auth.session_tokens import may_be_session_token
+from onyx.auth.session_tokens import physical_session_ttl_seconds
+from onyx.auth.session_tokens import record_session_rejection
+from onyx.auth.session_tokens import SESSION_TOKEN_GRACE_PERIOD_SECONDS
+from onyx.auth.session_tokens import SessionRejection
 from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
@@ -1446,6 +1455,9 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
     """
     A custom strategy that fetches the actual async Redis connection inside each method.
     We do NOT pass a synchronous or "coroutine" redis object to the constructor.
+
+    Token values embed their logical expiry and outlive it by a grace window;
+    see ``onyx/auth/session_tokens.py``.
     """
 
     def __init__(
@@ -1465,41 +1477,63 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             async_return_default_schema,
         )(email=user.email)
 
-        token_data = {
-            "sub": str(user.id),
-            "tenant_id": tenant_id,
-        }
+        now = datetime.now(timezone.utc)
         token = secrets.token_urlsafe()
         await redis.set(
             f"{self.key_prefix}{token}",
-            json.dumps(token_data),
-            ex=self.lifetime_seconds,
+            build_session_token_value(
+                user_id=str(user.id),
+                tenant_id=tenant_id,
+                issued_at=now,
+                expires_at=compute_session_expires_at(now, self.lifetime_seconds),
+            ),
+            ex=physical_session_ttl_seconds(self.lifetime_seconds),
         )
         return token
 
     async def read_token(
         self, token: Optional[str], user_manager: BaseUserManager[User, uuid.UUID]
     ) -> Optional[User]:
+        if token is None:
+            return None
+
         redis = await get_async_redis_connection()
-        token_data_str = await redis.get(f"{self.key_prefix}{token}")
-        if not token_data_str:
+        raw_value = await redis.get(f"{self.key_prefix}{token}")
+        if raw_value is None and not may_be_session_token(token):
+            # Expected miss for API keys / PATs / JWTs on the bearer transport.
+            return None
+
+        result = classify_session_token_value(raw_value)
+        if isinstance(result, SessionRejection):
+            record_session_rejection(result)
+            return None
+        if result.sub is None:
             return None
 
         try:
-            token_data = json.loads(token_data_str)
-            user_id = token_data["sub"]
-            parsed_id = user_manager.parse_id(user_id)
+            parsed_id = user_manager.parse_id(result.sub)
             return await user_manager.get(parsed_id)
-        except (exceptions.UserNotExists, exceptions.InvalidID, KeyError):
+        except (exceptions.UserNotExists, exceptions.InvalidID):
             return None
 
-    async def destroy_token(self, token: str, user: User) -> None:  # noqa: ARG002
-        """Properly delete the token from async redis."""
+    async def destroy_token(self, token: str, user: User) -> None:
+        """
+        Overwrites the token with a tombstone so other tabs' rejections classify
+        as a sign-out rather than an anomalous drop.
+        """
         redis = await get_async_redis_connection()
-        await redis.delete(f"{self.key_prefix}{token}")
+        token_key = f"{self.key_prefix}{token}"
+        previous_raw_value = await redis.get(token_key)
+        await redis.set(
+            token_key,
+            build_session_tombstone_value(
+                previous_raw_value, fallback_user_id=str(user.id)
+            ),
+            ex=SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+        )
 
     async def refresh_token(self, token: Optional[str], user: User) -> str:
-        """Refresh a token by extending its expiration time in Redis."""
+        """Refreshes a token by extending its expiration time in Redis."""
         if token is None:
             # If no token provided, create a new one
             return await self.write_token(user)
@@ -1507,18 +1541,23 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         redis = await get_async_redis_connection()
         token_key = f"{self.key_prefix}{token}"
 
-        # Check if token exists
-        token_data_str = await redis.get(token_key)
-        if not token_data_str:
-            # Token not found, create new one
+        raw_value = await redis.get(token_key)
+        result = classify_session_token_value(raw_value)
+        if isinstance(result, SessionRejection) or result.sub is None:
+            # Only a live session is extendable; mint a fresh one otherwise.
             return await self.write_token(user)
 
-        # Token exists, extend its lifetime
-        token_data = json.loads(token_data_str)
+        # Extend the logical expiry; keep the original issue time.
+        now = datetime.now(timezone.utc)
         await redis.set(
             token_key,
-            json.dumps(token_data),
-            ex=self.lifetime_seconds,
+            build_session_token_value(
+                user_id=result.sub,
+                tenant_id=result.tenant_id,
+                issued_at=result.issued_at or now,
+                expires_at=compute_session_expires_at(now, self.lifetime_seconds),
+            ),
+            ex=physical_session_ttl_seconds(self.lifetime_seconds),
         )
 
         return token
@@ -2032,6 +2071,10 @@ async def double_check_user(
 
     if allow_anonymous_access:
         return get_anonymous_user()
+
+    session_rejection_error = build_session_rejection_error()
+    if session_rejection_error is not None:
+        raise session_rejection_error
 
     raise BasicAuthenticationError(
         detail="Access denied. User is not authenticated.",
