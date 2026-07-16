@@ -233,19 +233,15 @@ class MCPTool(Tool[None]):
                     # swap in the fresh Authorization header. Any failure is
                     # non-fatal — fall back to the stored token.
                     try:
-                        from onyx.db.engine.sql_engine import (
-                            get_session_with_current_tenant,
-                        )
                         from onyx.server.features.mcp.api import (
                             refresh_mcp_oauth_token_if_expired,
                         )
 
-                        with get_session_with_current_tenant() as refresh_session:
-                            refreshed_header = refresh_mcp_oauth_token_if_expired(
-                                self.mcp_server,
-                                self.connection_config.id,
-                                refresh_session,
-                            )
+                        refreshed_header = refresh_mcp_oauth_token_if_expired(
+                            self.mcp_server,
+                            self.connection_config.id,
+                            self._user_id,
+                        )
                         if refreshed_header:
                             headers["Authorization"] = refreshed_header
                     except Exception:
