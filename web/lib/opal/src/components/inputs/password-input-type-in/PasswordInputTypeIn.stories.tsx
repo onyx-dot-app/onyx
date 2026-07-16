@@ -14,7 +14,6 @@ type Story = StoryObj<typeof PasswordInputTypeIn>;
 function Harness(props: {
   initialValue?: string;
   isNonRevealable?: boolean;
-  shrinkPlaceholder?: boolean;
   placeholder?: string;
   error?: boolean;
   disabled?: boolean;
@@ -51,10 +50,6 @@ export const NonRevealable: Story = {
 
 export const AutoDetectedStoredSecret: Story = {
   render: () => <Harness initialValue="••••••••" />,
-};
-
-export const ShrunkMaskedPlaceholder: Story = {
-  render: () => <Harness placeholder="●●●●●●●●●●" shrinkPlaceholder />,
 };
 
 export const Error: Story = {
