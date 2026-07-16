@@ -54,9 +54,9 @@ export interface ChatScrollContainerProps {
   /** Hide the scrollbar (scroll still works, just invisible) */
   hideScrollbar?: boolean;
 
-  /** Full-width mode: edge-to-edge scroll container with input-bar-matching
-   *  content padding, instead of the centered reading layout. */
-  flushContent?: boolean;
+  /** Full-width mode: edge-to-edge scroll container instead of the centered
+   *  reading layout (drops the reserved scrollbar gutter). */
+  fullWidth?: boolean;
 }
 
 // Build a CSS mask that fades content opacity at top/bottom edges
@@ -78,7 +78,7 @@ const ChatScrollContainer = React.memo(
         onScrollButtonVisibilityChange,
         sessionId,
         hideScrollbar = false,
-        flushContent = false,
+        fullWidth = false,
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
@@ -369,7 +369,7 @@ const ChatScrollContainer = React.memo(
             style={{
               // Full-width drops the reserved gutters so content sits flush with
               // the chat edge; centered mode keeps both-edges to avoid shift.
-              scrollbarGutter: flushContent ? "auto" : "stable both-edges",
+              scrollbarGutter: fullWidth ? "auto" : "stable both-edges",
               // Apply mask to fade content opacity at edges
               maskImage: contentMask,
               WebkitMaskImage: contentMask,
@@ -378,9 +378,8 @@ const ChatScrollContainer = React.memo(
             <div
               ref={contentWrapperRef}
               className={cn(
-                "w-full flex-1 flex flex-col items-center",
-                // Full-width matches the input bar's px-2 sm:px-4; centered uses px-4.
-                flushContent ? "px-2 sm:px-4" : "px-4"
+                // px-2 sm:px-4 matches the input bar's horizontal padding.
+                "w-full flex-1 flex flex-col items-center px-2 sm:px-4"
               )}
               data-scroll-ready={isScrollReady}
               style={{

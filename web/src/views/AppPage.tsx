@@ -811,7 +811,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       autoScroll={autoScrollEnabled}
                       isStreaming={isStreaming}
                       onScrollButtonVisibilityChange={setShowScrollButton}
-                      flushContent={fullWidthActive}
+                      fullWidth={fullWidthActive}
                     >
                       <ChatUI
                         liveAgent={liveAgent!}
