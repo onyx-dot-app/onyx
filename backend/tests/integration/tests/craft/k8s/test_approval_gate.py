@@ -92,7 +92,6 @@ def _upsert_slack_external_app(
         "upstream_url_patterns": ["https://slack\\.com/api/.*"],
         "auth_template": {"Authorization": "Bearer {access_token}"},
         "organization_credentials": organization_credentials,
-        "enabled": True,
         "action_policies": {"slack.messages.write": EndpointPolicy.ASK},
     }
     if existing is None:
@@ -113,7 +112,7 @@ def _action_policies_for_restore(
 def _seed_slack_external_app(
     k8s_admin_user: DATestUser,
 ) -> Generator[None, None, None]:
-    """Seed an enabled Slack ``external_app`` so the matcher claims ``chat.postMessage``."""
+    """Seed a Slack ``external_app`` so the matcher claims ``chat.postMessage``."""
     app_id, previous = _upsert_slack_external_app(
         k8s_admin_user,
         organization_credentials=_SEEDED_SLACK_CREDENTIALS,
@@ -133,7 +132,6 @@ def _seed_slack_external_app(
                 upstream_url_patterns=previous.upstream_url_patterns,
                 auth_template=previous.auth_template,
                 organization_credentials=previous.organization_credentials,
-                enabled=previous.enabled,
                 action_policies=_action_policies_for_restore(previous),
             )
 

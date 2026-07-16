@@ -96,6 +96,21 @@ def test_admin_can_edit_custom_skill_regardless_of_share_state() -> None:
     )
 
 
+def test_external_app_skill_is_not_editable() -> None:
+    author = _user()
+    admin = _user(UserRole.ADMIN)
+
+    assert (
+        user_permission_for_skill(
+            _skill(author, is_public=True),
+            admin,
+            set(),
+            is_external_app=True,
+        )
+        == SkillAccessLevel.VIEWER
+    )
+
+
 def test_viewer_grants_do_not_grant_editor() -> None:
     author = _user()
     basic = _user()
