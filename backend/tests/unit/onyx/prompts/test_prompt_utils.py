@@ -1,3 +1,4 @@
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.prompts.chat_prompts import ALT_DATETIME_REPLACEMENT_PAT
@@ -117,7 +118,7 @@ def test_frontend_placeholder_catalog_matches_backend_allowlist() -> None:
     "onyx.prompts.prompt_utils.get_current_llm_day_time",
     return_value="Wednesday July 15, 2026",
 )
-def test_replace_current_datetime_tag(mock_get_time: object) -> None:
+def test_replace_current_datetime_tag(mock_get_time: MagicMock) -> None:
     prompt = f"The current date is {DATETIME_REPLACEMENT_PAT}."
     result = replace_current_datetime_tag(prompt)
     assert result == "The current date is Wednesday July 15, 2026."
@@ -128,7 +129,7 @@ def test_replace_current_datetime_tag(mock_get_time: object) -> None:
     "onyx.prompts.prompt_utils.get_current_llm_day_time",
     return_value="Wednesday July 15, 2026",
 )
-def test_replace_current_datetime_tag_alt_pattern(mock_get_time: object) -> None:
+def test_replace_current_datetime_tag_alt_pattern(mock_get_time: MagicMock) -> None:
     prompt = f"The current date is {ALT_DATETIME_REPLACEMENT_PAT}."
     result = replace_current_datetime_tag(prompt)
     assert result == "The current date is Wednesday July 15, 2026."
@@ -140,7 +141,7 @@ def test_replace_current_datetime_tag_alt_pattern(mock_get_time: object) -> None
     return_value="Wednesday July 15, 2026",
 )
 def test_apply_prompt_placeholders_appends_datetime_when_aware(
-    mock_get_time: object,
+    mock_get_time: MagicMock,
 ) -> None:
     prompt = "Custom agent instructions."
     result, should_append_citation = apply_prompt_placeholders(
@@ -158,7 +159,7 @@ def test_apply_prompt_placeholders_appends_datetime_when_aware(
     return_value="Wednesday July 15, 2026",
 )
 def test_apply_prompt_placeholders_replaces_citation_guidance(
-    _mock_get_time: object,
+    _mock_get_time: MagicMock,
 ) -> None:
     prompt = f"Answer with citations. {CITATION_GUIDANCE_REPLACEMENT_PAT}"
     result, should_append_citation = apply_prompt_placeholders(
