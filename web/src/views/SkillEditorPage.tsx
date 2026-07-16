@@ -503,26 +503,34 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                 <InputVertical
                   withLabel="name"
                   title="Name"
+                  disabled={fieldsLocked || !isCreating}
                   description={
                     isCreating
                       ? "Use lowercase letters, numbers, and single hyphens."
                       : "Skill names cannot be changed after creation."
                   }
                 >
-                  <InputTypeIn
-                    id="name"
-                    name="name"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Name your skill"
-                    variant={
-                      fieldsLocked
-                        ? "disabled"
-                        : isCreating
-                          ? "primary"
-                          : "readOnly"
+                  <Tooltip
+                    tooltip={
+                      isCreating
+                        ? undefined
+                        : "Skill names cannot be changed after creation."
                     }
-                  />
+                    side="top"
+                  >
+                    <div className="w-full">
+                      <InputTypeIn
+                        id="name"
+                        name="name"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        placeholder="Name your skill"
+                        variant={
+                          fieldsLocked || !isCreating ? "disabled" : "primary"
+                        }
+                      />
+                    </div>
+                  </Tooltip>
                 </InputVertical>
 
                 <InputVertical
