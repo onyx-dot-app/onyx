@@ -93,7 +93,7 @@ def read_bundle_file(bundle_file: BinaryIO) -> bytes:
 
 
 def parse_skill_md_metadata(raw: bytes) -> tuple[str, str]:
-    """Legacy metadata reader; strict Agent Skills adoption follows in slice 3."""
+    """Legacy metadata reader; stricter validation will follow."""
     parsed, _ = parse_skill_md_frontmatter(raw)
 
     name = parsed.get("name")
