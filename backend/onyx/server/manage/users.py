@@ -898,7 +898,9 @@ def get_current_auth_token_expiry_redis(
     """
     Reads the logical expiry embedded in the Redis token value; the physical TTL
     outlives it by the grace window, so TTL back-calculation would overstate the
-    remaining session time.
+    remaining session time. Pre-upgrade values are the exception: written
+    without the grace window, their TTL is the exact logical expiry, so it is
+    used directly.
     """
     # Anonymous users don't have auth tokens.
     if user.is_anonymous:
