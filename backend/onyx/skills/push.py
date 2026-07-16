@@ -14,6 +14,7 @@ from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.skill import list_skills
+from onyx.db.skill import persist_skill_validity
 from onyx.db.skill import SkillAccessPolicy
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
@@ -32,11 +33,10 @@ from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.built_in import COMPANY_SEARCH
 from onyx.skills.built_in import EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
-from onyx.skills.bundle import SKILL_MD_NAME
-from onyx.skills.metadata import parse_skill_md_frontmatter
-from onyx.skills.metadata import serialize_skill_md
+from onyx.skills.bundle import read_bundle_file
 from onyx.skills.rendering import render_company_search_skill
 from onyx.skills.rendering import render_external_app_skill
+from onyx.skills.validation import validate_stored_custom_skill
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -102,54 +102,89 @@ def _render_template(
     )
 
 
-def _add_from_bundle(files: FileSet, skill: Skill, file_store: FileStore) -> None:
-    """Unzip a custom skill's FileStore bundle into the fileset."""
-    if not skill.bundle_file_id:
-        return
+def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> bool:
     try:
-        zip_bytes = file_store.read_file(skill.bundle_file_id).read()
         bundle_files: FileSet = {}
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as zf:
             for info in zf.infolist():
                 if info.is_dir():
                     continue
-                content = zf.read(info)
-                if info.filename == SKILL_MD_NAME:
-                    frontmatter, instructions_markdown = parse_skill_md_frontmatter(
-                        content
-                    )
-                    if frontmatter.get("name") != skill.slug:
-                        frontmatter["name"] = skill.slug
-                        content = serialize_skill_md(
-                            frontmatter,
-                            instructions_markdown,
-                        ).encode("utf-8")
-                bundle_files[f"{skill.slug}/{info.filename}"] = content
+                bundle_files[f"{skill.slug}/{info.filename}"] = zf.read(info)
         files.update(bundle_files)
+        return True
+    except Exception:
+        logger.warning(
+            "Failed to unpack bundle for skill %s (%s), skipping",
+            skill.slug,
+            skill.bundle_file_id,
+            exc_info=True,
+        )
+        return False
+
+
+def _read_stored_bundle(skill: Skill, file_store: FileStore) -> bytes | None:
+    if skill.bundle_file_id is None:
+        return None
+    try:
+        bundle_stream = file_store.read_file(skill.bundle_file_id)
+        try:
+            return read_bundle_file(bundle_stream)
+        finally:
+            bundle_stream.close()
     except Exception:
         logger.warning(
             "Failed to read bundle for skill %s (%s), skipping",
             skill.slug,
             skill.bundle_file_id,
+            exc_info=True,
         )
+        return None
 
 
 def _assemble_fileset(
     skills: Iterable[Skill],
     user: User,
     db_session: Session,
-) -> FileSet:
-    """Render every skill row into a flat ``{path: bytes}`` map.
+) -> tuple[list[Skill], FileSet]:
+    """Return hydrated skills and their flat ``{path: bytes}`` map.
 
-    Built-in rows are rendered from disk; custom rows are unpacked from
-    their FileStore bundle. A row whose ``built_in_skill_id`` no longer
-    matches a codified definition is skipped with a warning."""
+    Built-ins render from disk. Custom rows must already be valid or pass lazy
+    validation before their FileStore bundle is unpacked. Invalid,
+    indeterminate, and unknown built-in rows are skipped.
+    """
     files: FileSet = {}
+    hydrated_skills: list[Skill] = []
+    validity_updates: dict[UUID, tuple[str | None, bool]] = {}
     file_store = get_default_file_store()
 
     for skill in skills:
         if skill.built_in_skill_id is None:
-            _add_from_bundle(files, skill, file_store)
+            bundle_bytes: bytes | None = None
+            if skill.is_valid is None:
+                validation = validate_stored_custom_skill(skill, file_store)
+                if validation.is_valid is not None:
+                    validity_updates[skill.id] = (
+                        skill.bundle_file_id,
+                        validation.is_valid,
+                    )
+                    skill.is_valid = validation.is_valid
+                if validation.is_valid is not True:
+                    logger.warning(
+                        "Skipping unvalidated skill %s: %s",
+                        skill.id,
+                        validation.detail,
+                    )
+                    continue
+                bundle_bytes = validation.normalized_bundle
+            elif skill.is_valid:
+                bundle_bytes = _read_stored_bundle(skill, file_store)
+            else:
+                continue
+
+            if bundle_bytes is not None and _add_bundle_bytes(
+                files, skill, bundle_bytes
+            ):
+                hydrated_skills.append(skill)
             continue
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
@@ -159,11 +194,13 @@ def _assemble_fileset(
                 skill.built_in_skill_id,
             )
             continue
+        hydrated_skills.append(skill)
         _add_static_builtin(files, skill, definition)
         if definition.has_template:
             _render_template(files, skill, definition, db_session, user)
 
-    return files
+    persist_skill_validity(validity_updates)
+    return hydrated_skills, files
 
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
@@ -173,7 +210,8 @@ def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
         user=user,
         db_session=db_session,
     )
-    return _assemble_fileset(skills, user, db_session)
+    _, files = _assemble_fileset(skills, user, db_session)
+    return files
 
 
 def build_user_skills_payload(
@@ -188,11 +226,11 @@ def build_user_skills_payload(
         user=user,
         db_session=db_session,
     )
-    skills_section = build_skills_section_from_data(skills)
+    hydrated_skills, files = _assemble_fileset(skills, user, db_session)
+    skills_section = build_skills_section_from_data(hydrated_skills)
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )
-    files = _assemble_fileset(skills, user, db_session)
     return skills_section, connectable_apps_section, files
 
 

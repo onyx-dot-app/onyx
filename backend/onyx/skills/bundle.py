@@ -11,7 +11,6 @@ import zipfile
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
-from typing import BinaryIO
 from typing import Final
 from typing import IO
 
@@ -48,7 +47,7 @@ class NormalizedSkillBundle:
     source_directory: str | None
 
 
-def read_bundle_file(bundle_file: BinaryIO) -> bytes:
+def read_bundle_file(bundle_file: IO[bytes]) -> bytes:
     """Read a bundle stream without buffering an arbitrarily large body."""
     data = bundle_file.read(DEFAULT_TOTAL_MAX_BYTES + 1)
     if len(data) > DEFAULT_TOTAL_MAX_BYTES:

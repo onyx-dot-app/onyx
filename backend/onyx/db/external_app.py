@@ -374,6 +374,7 @@ def update_external_app(
         old_bundle_file_id = app.skill.bundle_file_id
         app.skill.bundle_file_id = new_bundle_file_id
         app.skill.bundle_sha256 = new_bundle_sha256
+        app.skill.is_valid = True
 
     if is_set(upstream_url_patterns):
         app.upstream_url_patterns = upstream_url_patterns
