@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_chat_accessible_user
+from onyx.configs.app_configs import LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.enums import Permission
@@ -47,6 +48,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
+from onyx.llm.custom_config_mapping import get_unsupported_custom_config_keys
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
@@ -367,6 +369,30 @@ def _validate_and_normalize_vertex_auth(
     )
 
 
+def _validate_custom_config_keys_supported(
+    provider: str,
+    custom_config: dict[str, str] | None,
+) -> None:
+    """Reject custom_config keys that would silently be dropped at call time.
+
+    Only enforced when env injection is disabled (multi-tenant cloud): keys the
+    kwarg mapping doesn't recognize have no way to reach LiteLLM there. On
+    deployments with env injection enabled, arbitrary keys remain supported.
+    """
+    if LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED:
+        return
+
+    unsupported = get_unsupported_custom_config_keys(provider, custom_config)
+    if unsupported:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Custom config key(s) {', '.join(sorted(unsupported))} are not "
+            "supported on this deployment: they have no LiteLLM parameter "
+            "equivalent. On self-hosted deployments such values can be set as "
+            "environment variables on the deployment itself.",
+        )
+
+
 @admin_router.get("/custom-provider-names")
 def fetch_custom_provider_names(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -451,6 +477,12 @@ def test_llm_configuration(
         provider=test_llm_request.provider,
         custom_config=test_custom_config,
     )
+
+    if test_llm_request.custom_config_changed or not test_llm_request.id:
+        _validate_custom_config_keys_supported(
+            provider=test_llm_request.provider,
+            custom_config=test_custom_config,
+        )
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
     # Therefore, instead of performing additional, more complex logic, we just use a dummy value
@@ -612,6 +644,15 @@ def put_llm_provider(
         provider=llm_provider_upsert_request.provider,
         custom_config=llm_provider_upsert_request.custom_config,
     )
+
+    # Only enforced for new or edited configs so unrelated edits to a
+    # pre-existing provider with legacy env-only keys aren't blocked (those
+    # keys are dropped with a warning at call time instead).
+    if is_creation or llm_provider_upsert_request.custom_config_changed:
+        _validate_custom_config_keys_supported(
+            provider=llm_provider_upsert_request.provider,
+            custom_config=llm_provider_upsert_request.custom_config,
+        )
 
     # Check if we're transitioning to Auto mode
     transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
