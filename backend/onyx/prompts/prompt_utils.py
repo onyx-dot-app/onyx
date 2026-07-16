@@ -64,6 +64,7 @@ def replace_citation_guidance_tag(
     *,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
+    append_citation_if_missing: bool = True,
 ) -> tuple[str, bool]:
     """
     Replace {{CITATION_GUIDANCE}} placeholder with citation guidance if needed.
@@ -79,8 +80,10 @@ def replace_citation_guidance_tag(
     if not placeholder_was_present:
         # Placeholder not present - caller should append if citations are needed
         should_append = (
-            should_cite_documents or include_all_guidance
-        ) and REQUIRE_CITATION_GUIDANCE not in prompt_str
+            append_citation_if_missing
+            and (should_cite_documents or include_all_guidance)
+            and REQUIRE_CITATION_GUIDANCE not in prompt_str
+        )
         return prompt_str, should_append
 
     citation_guidance = (
@@ -107,35 +110,47 @@ def replace_reminder_tag(prompt_str: str) -> str:
     return prompt_str
 
 
-def handle_onyx_date_awareness(
+def apply_prompt_placeholders(
     prompt_str: str,
-    # We always replace the pattern {{CURRENT_DATETIME}} if it shows up
-    # but if it doesn't show up and the prompt is datetime aware, add it to the prompt at the end.
+    *,
     datetime_aware: bool = False,
-) -> str:
-    """
-    If there is a {{CURRENT_DATETIME}} tag, replace it with the current date and time no matter what.
-    If the prompt is datetime aware, and there are no datetime tags, add it to the prompt.
-    Do nothing otherwise.
-    This can later be expanded to support other tags.
-    """
+    append_datetime_if_aware: bool = False,
+    should_cite_documents: bool = False,
+    include_all_guidance: bool = False,
+    append_citation_if_missing: bool = False,
+) -> tuple[str, bool]:
+    """Apply standard Onyx prompt placeholders to any prompt string.
 
-    prompt_with_datetime = replace_current_datetime_tag(
+    Supported placeholders:
+    - {{CURRENT_DATETIME}}
+    - {{CITATION_GUIDANCE}}
+    - {{REMINDER_TAG_DESCRIPTION}}
+
+    Returns:
+        tuple[str, bool]: (processed prompt, whether citation guidance should be appended)
+    """
+    prompt_str = replace_reminder_tag(prompt_str)
+
+    original_prompt = prompt_str
+    prompt_str = replace_current_datetime_tag(
         prompt_str,
         full_sentence=False,
         include_day_of_week=True,
     )
-    if prompt_with_datetime != prompt_str:
-        return prompt_with_datetime
-
-    if datetime_aware:
-        return prompt_str + ADDITIONAL_INFO.format(
+    # If no datetime tag was present (string unchanged), optionally append the date.
+    if prompt_str == original_prompt and append_datetime_if_aware and datetime_aware:
+        prompt_str = prompt_str + ADDITIONAL_INFO.format(
             datetime_info=_BASIC_TIME_STR.format(
                 datetime_info=get_current_llm_day_time()
             )
         )
 
-    return prompt_str
+    return replace_citation_guidance_tag(
+        prompt_str,
+        should_cite_documents=should_cite_documents,
+        include_all_guidance=include_all_guidance,
+        append_citation_if_missing=append_citation_if_missing,
+    )
 
 
 def get_company_context() -> str | None:
