@@ -39,8 +39,8 @@ stages:
               docker build \
                 --build-arg BASE_IMAGE_REGISTRY=$(ECRRegistry)/docker-hub \
                 -f backend/Dockerfile \
-                -t data/onyx-backend:latest \
-                -t data/onyx-backend:$(short_hash) \
+                -t data-onyx/onyx-backend:latest \
+                -t data-onyx/onyx-backend:$(short_hash) \
                 backend/
             displayName: "Build backend image"
 
@@ -50,9 +50,9 @@ stages:
               awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
               regionName: "eu-west-1"
               imageSource: imagename
-              sourceImageName: "data/onyx-backend"
+              sourceImageName: "data-onyx/onyx-backend"
               sourceImageTag: latest
-              repositoryName: "data/onyx-backend"
+              repositoryName: "data-onyx/onyx-backend"
               pushTag: latest
 
           - task: ECRPushImage@1
@@ -61,17 +61,17 @@ stages:
               awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
               regionName: "eu-west-1"
               imageSource: imagename
-              sourceImageName: "data/onyx-backend"
+              sourceImageName: "data-onyx/onyx-backend"
               sourceImageTag: latest
-              repositoryName: "data/onyx-backend"
+              repositoryName: "data-onyx/onyx-backend"
               pushTag: "$(short_hash)"
 
           - script: |
               docker build \
                 --build-arg BASE_IMAGE_REGISTRY=$(ECRRegistry)/docker-hub \
                 -f backend/Dockerfile.model_server \
-                -t data/onyx-model-server:latest \
-                -t data/onyx-model-server:$(short_hash) \
+                -t data-onyx/onyx-model-server:latest \
+                -t data-onyx/onyx-model-server:$(short_hash) \
                 backend/
             displayName: "Build model server image"
 
@@ -81,9 +81,9 @@ stages:
               awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
               regionName: "eu-west-1"
               imageSource: imagename
-              sourceImageName: "data/onyx-model-server"
+              sourceImageName: "data-onyx/onyx-model-server"
               sourceImageTag: latest
-              repositoryName: "data/onyx-model-server"
+              repositoryName: "data-onyx/onyx-model-server"
               pushTag: latest
 
           - task: ECRPushImage@1
@@ -92,17 +92,17 @@ stages:
               awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
               regionName: "eu-west-1"
               imageSource: imagename
-              sourceImageName: "data/onyx-model-server"
+              sourceImageName: "data-onyx/onyx-model-server"
               sourceImageTag: latest
-              repositoryName: "data/onyx-model-server"
+              repositoryName: "data-onyx/onyx-model-server"
               pushTag: "$(short_hash)"
 
           - script: |
               docker build \
                 --build-arg BASE_IMAGE_REGISTRY=$(ECRRegistry)/docker-hub \
                 -f web/Dockerfile \
-                -t data/onyx-web-server:latest \
-                -t data/onyx-web-server:$(short_hash) \
+                -t data-onyx/onyx-web-server:latest \
+                -t data-onyx/onyx-web-server:$(short_hash) \
                 .
             displayName: "Build web server image"
 
@@ -112,9 +112,9 @@ stages:
               awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
               regionName: "eu-west-1"
               imageSource: imagename
-              sourceImageName: "data/onyx-web-server"
+              sourceImageName: "data-onyx/onyx-web-server"
               sourceImageTag: latest
-              repositoryName: "data/onyx-web-server"
+              repositoryName: "data-onyx/onyx-web-server"
               pushTag: latest
 
           - task: ECRPushImage@1
@@ -123,7 +123,7 @@ stages:
               awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
               regionName: "eu-west-1"
               imageSource: imagename
-              sourceImageName: "data/onyx-web-server"
+              sourceImageName: "data-onyx/onyx-web-server"
               sourceImageTag: latest
-              repositoryName: "data/onyx-web-server"
+              repositoryName: "data-onyx/onyx-web-server"
               pushTag: "$(short_hash)"
