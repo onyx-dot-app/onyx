@@ -122,7 +122,6 @@ export default function SkillsPage() {
         source: "builtin",
         enabled: optimisticEnabledById.get(b.id) ?? b.enabled,
         can_toggle: b.can_toggle,
-        is_external_app: b.is_external_app,
         is_available: b.is_available,
         unavailable_reason: b.unavailable_reason,
       }));
@@ -138,7 +137,6 @@ export default function SkillsPage() {
         is_personal: c.is_personal && c.user_permission === "OWNER",
         enabled: optimisticEnabledById.get(c.id) ?? c.enabled,
         can_toggle: c.can_toggle,
-        is_external_app: c.is_external_app,
       }));
     // Group order: built-in, then custom (org-wide), then personal; alphabetical within each group.
     const groupRank = (item: SkillCardItem): number => {

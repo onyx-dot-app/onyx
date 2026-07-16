@@ -1,13 +1,13 @@
 """DB operations for skill rows.
 
 Access model:
-- `VIEW` applies normal ownership and sharing visibility; admins can view all
-  skills for management.
+- `VIEW` excludes external-app-backed rows, applies normal ownership and
+  sharing visibility, and lets admins view all remaining skills.
 - `EDIT` is the skill mutation policy. It excludes external-app-backed
   and built-in rows, and only returns rows the user can modify.
 - `USE` is the runtime/sandbox policy. It applies user visibility without an
-  admin bypass, resolves per-user enablement, includes available
-  external-app-backed rows, and hides unavailable built-ins.
+  admin bypass, resolves per-user enablement for ordinary skills, includes
+  authenticated external-app-backed rows, and hides unavailable built-ins.
 
 Delete is a hard delete — `delete_skill` removes the row and returns its
 `bundle_file_id` so the caller can drop the blob from the file store
@@ -77,7 +77,6 @@ class SkillValidityUpdate:
 class SkillUserState:
     enabled: bool
     can_toggle: bool
-    is_external_app: bool
 
 
 def _is_shared_with_user(
@@ -186,7 +185,6 @@ def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
         and_(
             explicit_preference.is_(None),
             Skill.built_in_skill_id.isnot(None),
-            ExternalApp.id.is_(None),
         ),
     )
 
@@ -234,6 +232,7 @@ def _skill_select_for_access_policy(
         ExternalApp.skill_id == Skill.id,
     )
     if policy == SkillAccessPolicy.VIEW:
+        stmt = stmt.where(ExternalApp.id.is_(None))
         if user.role == UserRole.ADMIN:
             return stmt
         stmt = stmt.where(skill_visible_to_user(user))
@@ -252,16 +251,19 @@ def _skill_select_for_access_policy(
         available_external_app_skill_ids = available_external_app_skill_ids_for_user(
             db_session, user
         )
-        # Non-external-app skills are always available; external-app skills
-        # need credentials from the user to be available
-        available_in_sandbox = or_(
-            ExternalApp.id.is_(None),
-            Skill.id.in_(available_external_app_skill_ids),
+        enabled_in_sandbox = or_(
+            and_(
+                ExternalApp.id.isnot(None),
+                Skill.id.in_(available_external_app_skill_ids),
+            ),
+            and_(
+                ExternalApp.id.is_(None),
+                _is_enabled_for_user(user),
+            ),
         )
         stmt = stmt.where(
-            available_in_sandbox,
+            enabled_in_sandbox,
             skill_visible_to_user(user),
-            _is_enabled_for_user(user),
             or_(
                 Skill.built_in_skill_id.isnot(None),
                 Skill.is_valid.is_(None),
@@ -479,24 +481,17 @@ def skill_user_states(
             _is_enabled_for_user(user).label("enabled"),
             skill_visible_to_user(user).label("visible"),
             and_(
-                or_(
-                    Skill.built_in_skill_id.is_(None),
-                    ExternalApp.id.isnot(None),
-                ),
+                Skill.built_in_skill_id.is_(None),
                 Skill.is_valid.is_not(False),
             ).label("supports_preference"),
-            ExternalApp.id.isnot(None).label("is_external_app"),
-        )
-        .outerjoin(ExternalApp, ExternalApp.skill_id == Skill.id)
-        .where(Skill.id.in_(requested_ids))
+        ).where(Skill.id.in_(requested_ids))
     )
     return {
         skill_id: SkillUserState(
             enabled=enabled,
             can_toggle=visible and supports_preference,
-            is_external_app=is_external_app,
         )
-        for skill_id, enabled, visible, supports_preference, is_external_app in rows
+        for skill_id, enabled, visible, supports_preference in rows
     }
 
 

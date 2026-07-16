@@ -82,19 +82,6 @@ def upgrade() -> None:
         """
     )
 
-    # Existing external apps remain enabled for every user. New apps created
-    # after the migration start disabled until each user enables them. Native
-    # built-ins are always enabled and therefore need no preference rows.
-    op.execute(
-        """
-        INSERT INTO user_skill_preference (user_id, skill_id, enabled)
-        SELECT "user".id, skill.id, true
-        FROM "user"
-        CROSS JOIN external_app
-        JOIN skill ON skill.id = external_app.skill_id
-        """
-    )
-
     op.drop_column("skill", "enabled")
 
 

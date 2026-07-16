@@ -18,7 +18,6 @@ interface SkillCardItemBase {
   description: string;
   enabled: boolean;
   can_toggle: boolean;
-  is_external_app: boolean;
 }
 
 export interface BuiltinSkillCardItem extends SkillCardItemBase {
@@ -143,9 +142,7 @@ export default function SkillCard({
                   />
                 </div>
               )}
-              {item.is_external_app ? (
-                <Tag title="App" color="blue" />
-              ) : item.source === "builtin" ? (
+              {item.source === "builtin" ? (
                 item.is_available ? (
                   <Tag title="Built-in" color="blue" />
                 ) : (

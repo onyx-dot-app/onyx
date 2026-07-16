@@ -27,10 +27,8 @@ def user_permission_for_skill(
     user: User,
     user_group_ids: set[int],
     curated_user_group_ids: set[int] | None = None,
-    *,
-    is_external_app: bool = False,
 ) -> SkillAccessLevel | None:
-    if skill.built_in_skill_id is not None or is_external_app:
+    if skill.built_in_skill_id is not None:
         return SkillAccessLevel.VIEWER
 
     if skill.author_user_id == user.id:
@@ -97,7 +95,6 @@ def skill_response_for_user(
             db_session,
             enabled=state.enabled,
             can_toggle=state.can_toggle,
-            is_external_app=state.is_external_app,
         )
 
     if user_group_ids is None:
@@ -110,13 +107,11 @@ def skill_response_for_user(
         skill,
         enabled=state.enabled,
         can_toggle=state.can_toggle,
-        is_external_app=state.is_external_app,
         user_permission=user_permission_for_skill(
             skill,
             user,
             user_group_ids,
             curated_user_group_ids,
-            is_external_app=state.is_external_app,
         ),
         include_share_details=include_share_details,
     )

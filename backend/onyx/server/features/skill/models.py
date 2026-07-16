@@ -43,7 +43,6 @@ class SkillResponse(BaseModel):
 
     enabled: bool
     can_toggle: bool
-    is_external_app: bool
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
@@ -64,7 +63,6 @@ class SkillResponse(BaseModel):
         db_session: Session,
         enabled: bool,
         can_toggle: bool,
-        is_external_app: bool,
     ) -> "SkillResponse":
         return cls(
             source="builtin",
@@ -76,7 +74,6 @@ class SkillResponse(BaseModel):
             unavailable_reason=definition.unavailable_reason,
             enabled=enabled,
             can_toggle=can_toggle,
-            is_external_app=is_external_app,
             user_permission=SkillAccessLevel.VIEWER,
         )
 
@@ -87,7 +84,6 @@ class SkillResponse(BaseModel):
         *,
         enabled: bool,
         can_toggle: bool = True,
-        is_external_app: bool = False,
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
     ) -> "SkillResponse":
@@ -119,7 +115,6 @@ class SkillResponse(BaseModel):
             is_valid=skill.is_valid,
             enabled=enabled,
             can_toggle=can_toggle,
-            is_external_app=is_external_app,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
             owner=(

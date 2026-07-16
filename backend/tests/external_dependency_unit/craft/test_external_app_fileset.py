@@ -5,9 +5,8 @@ External-app providers are *built-in skills* created on demand: their ``Skill``
 row carries a ``built_in_skill_id`` (e.g. ``slack``) so it renders through the
 exact same disk-backed path as a seeded built-in — there is no external-app
 special case in the push pipeline. These tests verify that an authenticated
-provider delivers its on-disk content under its stable directory,
-and the USE access policy (per-user preference + credential completeness) keeps
-content out otherwise.
+provider delivers its on-disk content under its stable directory, and the USE
+access policy keeps content out when credentials are incomplete.
 
 Uses the real Slack provider directory on disk so the wiring
 (``built_in_skill_id -> source dir``) is exercised end to end. The DB-layer
@@ -22,7 +21,6 @@ from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import Skill
 from onyx.db.models import User
-from onyx.db.models import UserSkillPreference
 from onyx.external_apps.providers.slack import SlackAction
 from onyx.skills.built_in import SLACK
 from onyx.skills.push import build_skills_fileset_for_user
@@ -48,16 +46,6 @@ def _slack_skill(db_session: Session) -> Skill:
     )
 
 
-def _enable_for_user(db_session: Session, skill: Skill, user: User) -> None:
-    db_session.add(
-        UserSkillPreference(
-            user_id=user.id,
-            skill_id=skill.id,
-            enabled=True,
-        )
-    )
-
-
 def _has_slack_content(files: dict[str, bytes]) -> bool:
     return f"{_SLACK_ID}/SKILL.md" in files
 
@@ -75,7 +63,6 @@ def test_authenticated_provider_delivers_content_under_stable_dir(
         auth_template=_AUTH_TEMPLATE,
     )
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
-    _enable_for_user(db_session, skill, user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -120,7 +107,6 @@ def test_denied_action_listed_as_unavailable(
         action_policies={SlackAction.MESSAGES_WRITE.value: EndpointPolicy.DENY},
     )
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
-    _enable_for_user(db_session, skill, user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -151,7 +137,6 @@ def test_no_disabled_actions_omits_section(
         auth_template=_AUTH_TEMPLATE,
     )
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
-    _enable_for_user(db_session, skill, user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)

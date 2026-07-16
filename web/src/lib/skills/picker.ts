@@ -39,14 +39,8 @@ export function toPickerSections(
 
   const skills: PickerSkill[] = [];
   const apps: PickerApp[] = [];
-  const enabledAppSlugs = new Set(
-    [...(skillsData?.builtins ?? []), ...(skillsData?.customs ?? [])]
-      .filter((skill) => skill.is_external_app && skill.enabled)
-      .map((skill) => skill.slug)
-  );
-
   for (const b of skillsData?.builtins ?? []) {
-    if (!b.is_available || !b.enabled || b.is_external_app) continue;
+    if (!b.is_available || !b.enabled) continue;
     skills.push({
       kind: "skill",
       slug: b.slug,
@@ -56,7 +50,7 @@ export function toPickerSections(
   }
 
   for (const c of skillsData?.customs ?? []) {
-    if (!c.enabled || c.is_valid === false || c.is_external_app) continue;
+    if (!c.enabled || c.is_valid === false) continue;
     skills.push({
       kind: "skill",
       slug: c.slug,
@@ -66,7 +60,6 @@ export function toPickerSections(
   }
 
   for (const app of externalApps ?? []) {
-    if (!enabledAppSlugs.has(app.slug)) continue;
     apps.push({
       kind: "app",
       slug: app.slug,

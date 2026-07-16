@@ -49,7 +49,6 @@ def test_newly_shared_skill_is_visible_but_disabled(
     [shared_skill] = [skill for skill in user_skills.customs if skill.slug == slug]
     assert shared_skill.enabled is False
     assert shared_skill.can_toggle is True
-    assert shared_skill.is_external_app is False
 
 
 def test_user_does_not_see_private_skill_without_share(

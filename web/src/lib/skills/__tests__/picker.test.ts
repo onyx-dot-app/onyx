@@ -104,21 +104,6 @@ describe("toPickerSections", () => {
   });
 
   it("builds the Apps section from the external-apps payload with auth state", () => {
-    const data = skillsList({
-      builtins: [
-        builtinFixture({ slug: "pptx" }),
-        builtinFixture({
-          slug: "slack",
-          is_external_app: true,
-          can_toggle: true,
-        }),
-        builtinFixture({
-          slug: "gmail",
-          is_external_app: true,
-          can_toggle: true,
-        }),
-      ],
-    });
     const apps = [
       appFixture({ slug: "slack", app_type: "SLACK", authenticated: true }),
       appFixture({
@@ -128,7 +113,7 @@ describe("toPickerSections", () => {
         authenticated: false,
       }),
     ];
-    const { apps: result } = toPickerSections(data, apps);
+    const { apps: result } = toPickerSections(skillsList(), apps);
     expect(result.map((a) => [a.slug, a.name, a.authenticated])).toEqual([
       ["gmail", "Gmail", false],
       ["slack", "slack", true],
@@ -139,11 +124,11 @@ describe("toPickerSections", () => {
     expect(toPickerSections(skillsList(), []).apps).toEqual([]);
   });
 
-  it("does not expose Apps when skill enablement is unknown", () => {
+  it("builds Apps independently of skill data", () => {
     const apps = [appFixture({ slug: "slack", app_type: "SLACK" })];
     const result = toPickerSections(undefined, apps);
     expect(result.skills).toEqual([]);
-    expect(result.apps).toEqual([]);
+    expect(result.apps.map((app) => app.slug)).toEqual(["slack"]);
   });
 });
 

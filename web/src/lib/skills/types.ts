@@ -36,7 +36,6 @@ export interface Skill {
   is_personal: boolean;
   enabled: boolean;
   can_toggle: boolean;
-  is_external_app: boolean;
   author_user_id: string | null;
   author_email: string | null;
   owner: {
