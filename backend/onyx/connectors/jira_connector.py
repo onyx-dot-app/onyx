@@ -48,7 +48,7 @@ class JiraConnector(PollConnector):
         max_results = 50
         while True:
             url = f"{self.url}/rest/api/2/search"
-            query = {
+            query: dict[str, Any] = {
                 "jql": f"project = '{self.project_key}'",
                 "fields": ["summary", "status", "description"],
                 "startAt": start_at,
