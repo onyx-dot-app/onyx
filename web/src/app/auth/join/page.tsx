@@ -70,7 +70,7 @@ const Page = async (props: {
 
           {cloud && authUrl && (
             <div className="w-full justify-center">
-              <SignInButton authorizeUrl={authUrl} multiTenant={cloud} />
+              <SignInButton authorizeUrl={authUrl} />
               <div className="flex items-center w-full my-4">
                 <div className="grow border-t border-background-300"></div>
                 <span className="px-4 text-text-500">or</span>

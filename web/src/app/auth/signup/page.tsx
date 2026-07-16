@@ -77,7 +77,7 @@ const Page = async (props: {
           </div>
           {cloud && authUrl && (
             <div className="w-full justify-center mt-6">
-              <SignInButton authorizeUrl={authUrl} multiTenant={cloud} />
+              <SignInButton authorizeUrl={authUrl} />
               <div className="flex items-center w-full my-4">
                 <div className="grow border-t border-border-01" />
                 <Text as="p" mainUiMuted text03 className="mx-2">

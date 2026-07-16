@@ -47,10 +47,7 @@ export default function LoginPage({
           <LoginText />
           {authUrl && authTypeMetadata && (
             <>
-              <SignInButton
-                authorizeUrl={authUrl}
-                multiTenant={authTypeMetadata.multiTenant}
-              />
+              <SignInButton authorizeUrl={authUrl} />
               <div className="flex flex-row items-center w-full gap-2">
                 <div className="flex-1 border-t border-text-01" />
                 <Text as="p" text03 mainUiMuted>

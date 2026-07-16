@@ -8,7 +8,6 @@ import Modal from "@/refresh-components/Modal";
 import { Button, Text } from "@opal/components";
 import { SvgLogOut, SvgCheckCircle, SvgXCircle } from "@opal/icons";
 import { SvgGoogle } from "@opal/logos";
-import type { IconProps } from "@opal/types";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
 import { verifyCaptchaForOAuth } from "@/lib/auth/svc";
 import { basicLogin, basicSignup } from "@/lib/users/svc";
@@ -114,24 +113,11 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
 
 interface SignInButtonProps {
   authorizeUrl: string;
-  multiTenant: boolean;
 }
 
-export function SignInButton({ authorizeUrl, multiTenant }: SignInButtonProps) {
+export function SignInButton({ authorizeUrl }: SignInButtonProps) {
   const { getCaptchaToken, isCaptchaEnabled } = useCaptcha();
   const [isVerifying, setIsVerifying] = useState(false);
-
-  let button: string | undefined;
-  let icon: React.FunctionComponent<IconProps> | undefined;
-
-  if (multiTenant) {
-    button = "Continue with Google";
-    icon = SvgGoogle;
-  }
-
-  if (!button) {
-    throw new Error(`Unhandled multiTenant value: ${multiTenant}`);
-  }
 
   async function handleClick(e: React.MouseEvent) {
     e.preventDefault();
@@ -157,20 +143,20 @@ export function SignInButton({ authorizeUrl, multiTenant }: SignInButtonProps) {
     }
   }
 
-  // Only the Google OAuth callback is gated by CaptchaCookieMiddleware on the
-  // backend, so the reCAPTCHA interception applies only to the Google sign-in.
-  const intercepted = isCaptchaEnabled && multiTenant;
+  // The Google OAuth callback is gated by CaptchaCookieMiddleware on the
+  // backend, so the click is intercepted whenever reCAPTCHA is enabled.
+  const intercepted = isCaptchaEnabled;
 
   return (
     <Button
       prominence="secondary"
       width="full"
-      icon={icon}
+      icon={SvgGoogle}
       href={intercepted ? undefined : authorizeUrl}
       onClick={intercepted ? handleClick : undefined}
       disabled={isVerifying}
     >
-      {button}
+      Continue with Google
     </Button>
   );
 }
