@@ -193,13 +193,24 @@ class ImapConnector(
                 )
                 continue
 
-            email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
+            # A single malformed or unparseable email (bad headers, missing
+            # required fields, etc.) shouldn't abort indexing for the rest of
+            # the mailbox; log it and move on to the next email instead.
+            try:
+                email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
+                document = _convert_email_headers_and_body_into_document(
+                    email_msg=email_msg,
+                    email_headers=email_headers,
+                    include_perm_sync=include_perm_sync,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to parse email into a document; skipping email_id=%r",
+                    email_id,
+                )
+                continue
 
-            yield _convert_email_headers_and_body_into_document(
-                email_msg=email_msg,
-                email_headers=email_headers,
-                include_perm_sync=include_perm_sync,
-            )
+            yield document
 
         return checkpoint
 
