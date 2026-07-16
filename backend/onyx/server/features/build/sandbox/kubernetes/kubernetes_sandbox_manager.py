@@ -154,7 +154,7 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 POD_READY_TIMEOUT_SECONDS = 30
 
 # Shared deadline for IP assignment (scheduling + image pull) and the restore.
-OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 60.0
+OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 90.0
 POD_IP_POLL_INTERVAL_SECONDS = 0.5
 
 # Resource deletion timeout and polling interval
