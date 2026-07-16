@@ -791,7 +791,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center px-2 sm:px-4">
+                {/* No horizontal padding here: the chat scroll container fills the
+                    full width so its scrollbar sits flush with the edge (it applies
+                    its own content padding internally). Non-chat siblings below add
+                    their own px-2 sm:px-4. */}
+                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
                   {/* ChatUI */}
                   <Fade
                     show={
@@ -833,7 +837,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* Session fetch error (404 / 403) */}
                   <Fade
                     show={appFocus.isChat() && sessionFetchError !== null}
-                    className="h-full w-full flex flex-col items-center justify-center"
+                    className="h-full w-full flex flex-col items-center justify-center px-2 sm:px-4"
                   >
                     {sessionFetchError && (
                       <Section
@@ -871,7 +875,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
-                    <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none">
+                    <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none px-2 sm:px-4">
                       <ProjectContextPanel
                         projectTokenCount={projectContextTokenCount}
                         availableContextTokens={availableContextTokens}
@@ -886,7 +890,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       (appFocus.isNewSession() || appFocus.isAgent()) &&
                       (state.phase === "idle" || state.phase === "classifying")
                     }
-                    className="w-full flex-1 flex flex-col items-center justify-end"
+                    className="w-full flex-1 flex flex-col items-center justify-end px-2 sm:px-4"
                   >
                     <Section
                       flexDirection="row"
