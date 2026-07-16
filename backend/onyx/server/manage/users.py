@@ -910,7 +910,8 @@ def get_current_auth_token_expiry_redis(
             return None
 
         redis = get_raw_redis_client()
-        raw_value = redis.get(REDIS_AUTH_KEY_PREFIX + token)
+        redis_key = REDIS_AUTH_KEY_PREFIX + token
+        raw_value = redis.get(redis_key)
         result = classify_session_token_value(cast(str | bytes | None, raw_value))
         if isinstance(result, SessionRejection):
             logger.error(
@@ -921,7 +922,7 @@ def get_current_auth_token_expiry_redis(
 
         if result.issued_at is None:
             # Pre-upgrade value: its physical TTL is its logical expiry.
-            ttl = cast(int, redis.ttl(REDIS_AUTH_KEY_PREFIX + token))
+            ttl = cast(int, redis.ttl(redis_key))
             if ttl <= 0:
                 return None
             return datetime.now(timezone.utc) + timedelta(seconds=ttl)
