@@ -39,7 +39,14 @@ class EmailHeaders(BaseModel):
             decoded_value, encoding = email.header.decode_header(value)[0]
             if isinstance(decoded_value, bytes):
                 encoding = encoding or "utf-8"
-                return decoded_value.decode(encoding, errors="replace")
+                try:
+                    return decoded_value.decode(encoding, errors="replace")
+                except LookupError:
+                    # Some senders emit non-standard charset labels (e.g. the
+                    # RFC 1428 placeholder `unknown-8bit`) that Python's codec
+                    # registry doesn't recognize. Fall back to latin-1, which
+                    # maps every byte 0-255 to a code point and never raises.
+                    return decoded_value.decode("latin-1", errors="replace")
             elif isinstance(decoded_value, str):
                 return decoded_value
             else:

@@ -7,6 +7,8 @@ Regression coverage for:
   RuntimeError.
 - A single malformed email (unparseable headers, etc.) used to raise out of
   `_load_from_checkpoint` and abort indexing for the rest of the mailbox.
+- An unrecognized header charset label (e.g. the RFC 1428 `unknown-8bit`
+  placeholder) used to raise `LookupError` out of header decoding.
 """
 
 import email
@@ -19,6 +21,7 @@ import pytest
 from onyx.connectors.imap.connector import _parse_addrs
 from onyx.connectors.imap.connector import _parse_singular_addr
 from onyx.connectors.imap.connector import ImapConnector
+from onyx.connectors.imap.models import EmailHeaders
 from onyx.connectors.models import Document
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector_from_checkpoint,
@@ -145,3 +148,15 @@ def test_load_from_checkpoint_skips_email_that_fails_to_parse():
     assert len(documents) == 1
     assert documents[0].id == "<good@example.com>"
     assert outputs[-1].next_checkpoint.has_more is False
+
+
+# EmailHeaders.from_email_msg: charset decoding (models._decode)
+
+
+def test_from_email_msg_unknown_8bit_charset_does_not_crash():
+    # "=?unknown-8bit?B?SGVsbG8=?=" is the RFC 2047 encoded form of "Hello"
+    # tagged with the non-standard `unknown-8bit` charset label, which is not
+    # a registered Python codec and used to raise LookupError.
+    msg = _make_email_msg({"Subject": "=?unknown-8bit?B?SGVsbG8=?="})
+    headers = EmailHeaders.from_email_msg(email_msg=msg)
+    assert headers.subject == "Hello"
