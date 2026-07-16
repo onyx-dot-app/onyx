@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import io
 import os
-import re
 import stat
 import sys
 import zipfile
@@ -15,13 +14,15 @@ from typing import BinaryIO
 from typing import Final
 from typing import IO
 
-import yaml
 from slugify import slugify
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import SLUG_REGEX
+from onyx.skills.metadata import parse_skill_md_frontmatter
+from onyx.skills.metadata import serialize_skill_md
+from onyx.skills.metadata import split_skill_md
 from onyx.skills.models import CustomSkillBundleContents
 from onyx.skills.models import SkillBundleFile
 
@@ -34,11 +35,6 @@ DEFAULT_TOTAL_MAX_BYTES: Final[int] = int(
 
 SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"
-
-_FRONTMATTER_REGEX: Final[re.Pattern[str]] = re.compile(
-    r"\A---[ \t]*\r?\n(?P<frontmatter>.*?)(?:\r?\n)---[ \t]*(?:\r?\n|\Z)",
-    re.DOTALL,
-)
 
 _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
 
@@ -97,34 +93,8 @@ def read_bundle_file(bundle_file: BinaryIO) -> bytes:
 
 
 def parse_skill_md_metadata(raw: bytes) -> tuple[str, str]:
-    """Extract and validate ``(name, description)`` from SKILL.md bytes."""
-    try:
-        content = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md must be UTF-8 encoded",
-        ) from exc
-
-    match = _FRONTMATTER_REGEX.match(content)
-    if match is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md must start with YAML frontmatter delimited by two --- lines",
-        )
-
-    try:
-        parsed = yaml.safe_load(match.group("frontmatter")) or {}
-    except yaml.YAMLError as exc:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"SKILL.md frontmatter is not valid YAML: {exc}",
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md frontmatter must be a mapping",
-        )
+    """Legacy metadata reader; strict Agent Skills adoption follows in slice 3."""
+    parsed, _ = parse_skill_md_frontmatter(raw)
 
     name = parsed.get("name")
     description = parsed.get("description")
@@ -142,10 +112,11 @@ def parse_skill_md_metadata(raw: bytes) -> tuple[str, str]:
 
 
 def strip_skill_md_frontmatter(content: str) -> str:
-    match = _FRONTMATTER_REGEX.match(content)
-    if match is None:
+    try:
+        _, instructions_markdown = split_skill_md(content.encode("utf-8"))
+    except OnyxError:
         return content.strip()
-    return content[match.end() :].strip()
+    return instructions_markdown.strip()
 
 
 def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
@@ -214,12 +185,10 @@ def build_skill_md(
             "Skill instructions cannot be empty.",
         )
 
-    frontmatter = yaml.safe_dump(
+    return serialize_skill_md(
         {"name": name, "description": description},
-        sort_keys=False,
-        allow_unicode=True,
-    ).strip()
-    return f"---\n{frontmatter}\n---\n\n{instructions_markdown}\n"
+        instructions_markdown,
+    )
 
 
 def build_single_file_bundle(filename: str, content: bytes) -> bytes:
@@ -250,12 +219,12 @@ def rewrite_custom_bundle_skill_md(
     if slug in BUILT_IN_SKILLS:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
 
-    new_skill_md = build_skill_md(
+    base_skill_md = build_skill_md(
         name=name,
         description=description,
         instructions_markdown=instructions_markdown,
     ).encode("utf-8")
-    if len(new_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
+    if len(base_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
         raise OnyxError(
             OnyxErrorCode.PAYLOAD_TOO_LARGE,
             f"file '{SKILL_MD_NAME}' exceeds "
@@ -290,6 +259,26 @@ def rewrite_custom_bundle_skill_md(
             if normalized == SKILL_MD_NAME:
                 if saw_skill_md:
                     continue
+                try:
+                    original_skill_md = source_zip.read(info)
+                except Exception as exc:
+                    raise OnyxError(
+                        OnyxErrorCode.INTERNAL_ERROR,
+                        "Failed to read stored skill bundle entry.",
+                    ) from exc
+                frontmatter, _ = parse_skill_md_frontmatter(original_skill_md)
+                frontmatter["name"] = name
+                frontmatter["description"] = description
+                new_skill_md = serialize_skill_md(
+                    frontmatter,
+                    instructions_markdown,
+                ).encode("utf-8")
+                if len(new_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        f"file '{SKILL_MD_NAME}' exceeds "
+                        f"{DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB",
+                    )
                 fresh_info = zipfile.ZipInfo(filename=SKILL_MD_NAME)
                 fresh_info.compress_type = zipfile.ZIP_DEFLATED
                 target_zip.writestr(fresh_info, new_skill_md)

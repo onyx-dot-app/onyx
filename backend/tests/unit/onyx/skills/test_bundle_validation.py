@@ -385,6 +385,42 @@ def test_rewrite_custom_bundle_skill_md_preserves_supporting_files() -> None:
         assert zf.read("docs/notes.md") == b"# Notes\n"
 
 
+def test_rewrite_custom_bundle_skill_md_preserves_other_frontmatter() -> None:
+    original = _build_zip(
+        [
+            (
+                "SKILL.md",
+                b"---\n"
+                b"name: Old\n"
+                b"description: Old desc\n"
+                b"license: Apache-2.0\n"
+                b"compatibility: Requires git\n"
+                b"metadata:\n"
+                b"  author: onyx\n"
+                b"allowed-tools: Read\n"
+                b"x-custom: preserved\n"
+                b"---\n\nOld instructions.\n",
+            )
+        ]
+    )
+
+    rewritten = rewrite_custom_bundle_skill_md(
+        original,
+        slug="hello",
+        name="New",
+        description="New desc",
+        instructions_markdown="New instructions.",
+    )
+
+    with zipfile.ZipFile(io.BytesIO(rewritten)) as zf:
+        skill_md = zf.read("SKILL.md").decode()
+    assert "license: Apache-2.0" in skill_md
+    assert "compatibility: Requires git" in skill_md
+    assert "author: onyx" in skill_md
+    assert "allowed-tools: Read" in skill_md
+    assert "x-custom: preserved" in skill_md
+
+
 def test_rewrite_custom_bundle_skill_md_rejects_oversized_skill_md_before_zip_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
