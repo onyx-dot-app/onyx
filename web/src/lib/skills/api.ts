@@ -8,26 +8,37 @@
 
 import type {
   CustomSkill,
+  GitHubSkillsPreview,
   SkillBundleContents,
   SkillEditableDetail,
   SkillSharePermission,
 } from "@/lib/skills/types";
-
-async function readErrorDetail(res: Response): Promise<string> {
-  try {
-    const body = await res.json();
-    if (typeof body?.detail === "string") return body.detail;
-    if (Array.isArray(body?.detail) && body.detail[0]?.msg)
-      return body.detail[0].msg;
-  } catch {
-    // fall through
-  }
-  return `Request failed (${res.status})`;
-}
+import { FetchError } from "@/lib/fetcher";
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    throw new Error(await readErrorDetail(res));
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch (error) {
+      console.error("Failed to parse skills API error response:", error);
+      body = undefined;
+    }
+    const detail =
+      body && typeof body === "object" && "detail" in body
+        ? body.detail
+        : undefined;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail) &&
+            detail[0] &&
+            typeof detail[0] === "object" &&
+            "msg" in detail[0] &&
+            typeof detail[0].msg === "string"
+          ? detail[0].msg
+          : `Request failed (${res.status})`;
+    throw new FetchError(message, res.status, body);
   }
   if (res.status === 204) {
     return undefined as T;
@@ -48,6 +59,31 @@ export async function createCustomSkill(bundle: File): Promise<CustomSkill> {
     body: form,
   });
   return handle<CustomSkill>(res);
+}
+
+export async function previewGitHubSkills(
+  repository: string
+): Promise<GitHubSkillsPreview> {
+  const res = await fetch("/api/skills/github/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repository }),
+  });
+  return handle<GitHubSkillsPreview>(res);
+}
+
+export async function importGitHubSkills(
+  repository: string,
+  revision: string,
+  subpath: string | null,
+  paths: string[]
+): Promise<CustomSkill[]> {
+  const res = await fetch("/api/skills/github/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repository, revision, subpath, paths }),
+  });
+  return handle<CustomSkill[]>(res);
 }
 
 export interface CreateCustomSkillInput {

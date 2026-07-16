@@ -1,5 +1,6 @@
 import io
 import zipfile
+from contextlib import ExitStack
 from typing import Annotated
 from uuid import UUID
 
@@ -14,9 +15,12 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import AccountType
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import Permission
 from onyx.db.enums import SkillSharePermission
+from onyx.db.external_app import get_built_in_external_app
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
@@ -32,7 +36,13 @@ from onyx.db.skill import update_skill_fields
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.credentials import resolve_injection_headers
+from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.skill.models import GitHubSkillPreview
+from onyx.server.features.skill.models import GitHubSkillsImportRequest
+from onyx.server.features.skill.models import GitHubSkillsPreviewRequest
+from onyx.server.features.skill.models import GitHubSkillsPreviewResponse
 from onyx.server.features.skill.models import SkillBundleInspectResponse
 from onyx.server.features.skill.models import SkillCreateRequest
 from onyx.server.features.skill.models import SkillEditableDetailResponse
@@ -60,13 +70,39 @@ from onyx.skills.bundle import slug_from_skill_name
 from onyx.skills.bundle import update_custom_bundle_files
 from onyx.skills.bundle import validate_and_normalize_custom_bundle
 from onyx.skills.content import read_custom_skill_bundle_bytes
+from onyx.skills.github_import import fetch_github_skill_bundles
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingested_skill_bundle
 from onyx.skills.ingest import save_skill_bundle_bytes
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
+from shared_configs.contextvars import get_current_tenant_id
 
 user_router = APIRouter(prefix="/skills")
+
+
+def _github_authorization_header(user: User) -> str | None:
+    tenant_id = get_current_tenant_id()
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        github_app = get_built_in_external_app(db_session, ExternalAppType.GITHUB)
+        if (
+            github_app is None
+            or fetch_skill(
+                github_app.skill_id,
+                policy=SkillAccessPolicy.USE,
+                user=user,
+                db_session=db_session,
+            )
+            is None
+        ):
+            return None
+        github_app_id = github_app.id
+
+    ensure_fresh_credentials(tenant_id, github_app_id, user.id)
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        return resolve_injection_headers(db_session, github_app_id, user.id).get(
+            "Authorization"
+        )
 
 
 def _ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
@@ -284,6 +320,127 @@ def create_custom_skill_from_editor(
 
     push_skill_to_affected_sandboxes(skill, db_session)
     return _editable_skill_response(skill, user, db_session)
+
+
+@user_router.post("/github/preview")
+def preview_github_skills(
+    request: GitHubSkillsPreviewRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> GitHubSkillsPreviewResponse:
+    repository, skills = fetch_github_skill_bundles(
+        request.repository,
+        _github_authorization_header(user),
+    )
+    if repository.ref is None:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "GitHub did not return a repository revision.",
+        )
+    return GitHubSkillsPreviewResponse(
+        repository=f"{repository.owner}/{repository.repo}",
+        revision=repository.ref,
+        subpath=repository.subpath,
+        skills=[
+            GitHubSkillPreview(
+                path=skill.path,
+                name=skill.name,
+                description=skill.description,
+                unavailable_reason=skill.unavailable_reason,
+            )
+            for skill in skills
+        ],
+    )
+
+
+@user_router.post("/github/import")
+def import_github_skills(
+    request: GitHubSkillsImportRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[SkillResponse]:
+    _, available_skills = fetch_github_skill_bundles(
+        request.repository,
+        _github_authorization_header(user),
+        revision=request.revision,
+        subpath=request.subpath,
+    )
+    skills_by_path = {skill.path: skill for skill in available_skills}
+    selected_paths = list(dict.fromkeys(request.paths))
+    missing_paths = [path for path in selected_paths if path not in skills_by_path]
+    if missing_paths:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"These skills are no longer available in the repository: {', '.join(missing_paths)}. Search the repository again.",
+        )
+    selected_skills = [skills_by_path[path] for path in selected_paths]
+    unavailable_reason = next(
+        (
+            skill.unavailable_reason
+            for skill in selected_skills
+            if skill.unavailable_reason is not None
+        ),
+        None,
+    )
+    if unavailable_reason is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            unavailable_reason,
+        )
+    slugs = [skill.slug for skill in selected_skills]
+    if len(slugs) != len(set(slugs)):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Two or more selected skills have the same name. Rename one in SKILL.md, then try again.",
+        )
+
+    file_store = get_default_file_store()
+    created_skills: list[Skill] = []
+    with ExitStack() as ingested_bundles:
+        for selected_skill in selected_skills:
+            if selected_skill.bundle_bytes is None:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Skill at '{selected_skill.path}' cannot be imported.",
+                )
+            ingested = ingested_bundles.enter_context(
+                ingested_skill_bundle(
+                    selected_skill.bundle_bytes,
+                    f"{selected_skill.slug}.zip",
+                    file_store,
+                    slug=selected_skill.slug,
+                )
+            )
+            try:
+                skill = create_skill__no_commit(
+                    slug=ingested.slug,
+                    name=ingested.name,
+                    description=ingested.description,
+                    bundle_file_id=ingested.bundle_file_id,
+                    bundle_sha256=ingested.bundle_sha256,
+                    is_public=False,
+                    author_user_id=user.id,
+                    db_session=db_session,
+                )
+            except OnyxError as exc:
+                if exc.error_code == OnyxErrorCode.DUPLICATE_RESOURCE:
+                    raise OnyxError(
+                        OnyxErrorCode.DUPLICATE_RESOURCE,
+                        f'A skill named "{selected_skill.name}" already exists in this workspace. Rename it in SKILL.md, then try again.',
+                    ) from exc
+                raise
+            created_skills.append(skill)
+        db_session.commit()
+
+    push_skills_for_users({user.id}, db_session)
+    return [
+        skill_response_for_user(
+            skill,
+            user,
+            db_session,
+            include_share_details=True,
+        )
+        for skill in created_skills
+    ]
 
 
 @user_router.get("/custom/{skill_id}/edit")

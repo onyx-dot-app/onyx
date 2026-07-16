@@ -28,9 +28,11 @@ import SkillCard, {
   type SkillCardItem,
 } from "@/sections/cards/SkillCard";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
+import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
+import { SvgGithub } from "@opal/logos";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -41,6 +43,7 @@ export default function SkillsPage() {
   const { data, error, isLoading, refresh } = useUserSkills();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [githubImportOpen, setGitHubImportOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<SkillCardItem | null>(
     null
@@ -126,32 +129,45 @@ export default function SkillsPage() {
             <Popover.Trigger asChild>
               <Button icon={SvgPlus}>Create skill</Button>
             </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="xl">
-              <Popover.Menu>
-                <LineItem
-                  icon={SvgEdit}
-                  description="Write the instructions and add supporting files in Onyx."
-                  wrapDescription
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    router.push("/craft/v1/skills/new" as Route);
-                  }}
-                >
-                  Start from scratch
-                </LineItem>
-                <LineItem
-                  icon={SvgUploadCloud}
-                  description="Import a SKILL.md file, ZIP file, or skill folder."
-                  wrapDescription
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    setCreateOpen(true);
-                  }}
-                >
-                  Upload a skill
-                </LineItem>
-              </Popover.Menu>
-            </Popover.Content>
+            {createMenuOpen && (
+              <Popover.Content align="end" sideOffset={4} width="xl">
+                <Popover.Menu>
+                  <LineItem
+                    icon={SvgEdit}
+                    description="Write instructions and add supporting files in Onyx."
+                    wrapDescription
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      router.push("/craft/v1/skills/new" as Route);
+                    }}
+                  >
+                    Create in Onyx
+                  </LineItem>
+                  <LineItem
+                    icon={SvgUploadCloud}
+                    description="Upload a SKILL.md file, ZIP file, or skill folder."
+                    wrapDescription
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      setCreateOpen(true);
+                    }}
+                  >
+                    Upload a skill
+                  </LineItem>
+                  <LineItem
+                    icon={SvgGithub}
+                    description="Import one or more skills from a GitHub repository."
+                    wrapDescription
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      setGitHubImportOpen(true);
+                    }}
+                  >
+                    Import from GitHub
+                  </LineItem>
+                </Popover.Menu>
+              </Popover.Content>
+            )}
           </Popover>
         }
       >
@@ -234,6 +250,12 @@ export default function SkillsPage() {
           refresh();
           router.push(`/craft/v1/skills/edit/${created.id}` as Route);
         }}
+      />
+
+      <ImportSkillsFromGitHubModal
+        open={githubImportOpen}
+        onClose={() => setGitHubImportOpen(false)}
+        onCreated={() => refresh()}
       />
 
       <SkillPreviewModal
