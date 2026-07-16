@@ -30,13 +30,6 @@ Ephemeral VM with Python 3.11 and Node v22. A Python virtual environment is alre
 Install anything else with `pip install <pkg>`, or `bun install <pkg>` from
 `outputs/web`. Your LLM is {{LLM_PROVIDER_NAME}} / {{LLM_MODEL_NAME}}.
 
-Long commands have limits. The bash tool stops a command after ~3 minutes by default, and a
-hard ~200s turn-level backstop kills the whole turn if any single command runs that long
-without producing output. Most slow commands (image generation, installs) finish well under
-this. For work that would exceed it, split it into steps or run it in the background — do not
-raise a command's `timeout` past the backstop, which just kills the turn instead of failing
-the one command.
-
 ### Workspace layout
 
 Your working directory is the session root. Everything you produce goes under `outputs/`.

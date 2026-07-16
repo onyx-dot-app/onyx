@@ -10,6 +10,9 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.server.features.build.configs import (
+    OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.interactive_turns.state import claim_turn_for_runner
 from onyx.server.features.build.interactive_turns.state import finish_turn
@@ -19,6 +22,7 @@ from onyx.server.features.build.interactive_turns.state import touch_turn
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_CANCELLED
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCEEDED
+from onyx.server.features.build.sandbox.event_schema import ActivityTimeoutError
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.serve_transport import (
@@ -39,6 +43,14 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 DEFAULT_INTERACTIVE_TURN_BUDGET_SECONDS = 30 * 60
+
+MAX_TIMEOUT_CONTINUATIONS = 2
+_TOOL_TIMEOUT_CONTINUATION_PROMPT = (
+    f"Your last step was cancelled — it exceeded the "
+    f"{int(OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS)}s activity limit with no "
+    "output. Don't just retry it; split the work into shorter steps or run it in "
+    "the background, then continue."
+)
 
 
 def _can_clear_interrupt_fence(
@@ -152,8 +164,7 @@ def _drive_interactive_turn(
         state = BuildStreamingState(turn_index=turn_index)
         deadline = time.monotonic() + budget_seconds
         deadline_exceeded = False
-        final_event_seen = False
-        cancelled_event_seen = False
+        timeout_continuations = 0
 
         def interrupt_requested() -> bool:
             nonlocal deadline_exceeded
@@ -212,61 +223,95 @@ def _drive_interactive_turn(
                 )
                 return
 
-            ownership_lost = False
+            current_prompt = prompt
+            while True:
+                ownership_lost = False
+                final_event_seen = False
+                cancelled_event_seen = False
+                timed_out_for_continuation = False
 
-            event_stream = session_manager.yield_sandbox_events(
-                sandbox.id,
-                session_id,
-                prompt,
-                should_interrupt=interrupt_requested,
-                should_abort_on_teardown=lambda: not ownership_lost,
-            )
+                event_stream = session_manager.yield_sandbox_events(
+                    sandbox.id,
+                    session_id,
+                    current_prompt,
+                    should_interrupt=interrupt_requested,
+                    should_abort_on_teardown=lambda: not ownership_lost,
+                )
 
-            for sandbox_event in event_stream:
-                if time.monotonic() > deadline:
-                    deadline_exceeded = True
-                if deadline_exceeded:
+                for sandbox_event in event_stream:
+                    if time.monotonic() > deadline:
+                        deadline_exceeded = True
+                    if deadline_exceeded:
+                        continue
+
+                    if not touch_turn(
+                        cache=cache, turn_id=turn_id, runner_id=runner_id
+                    ):
+                        logger.info(
+                            "Interactive turn %s runner ownership lost", turn_id
+                        )
+                        ownership_lost = True
+                        return
+                    slot.extend()
+                    if slot.lost:
+                        ownership_lost = True
+                        session_manager.finalize_persist(session_id, state)
+                        db_session.commit()
+                        finish_turn(
+                            cache=cache,
+                            turn_id=turn_id,
+                            status=TURN_STATUS_FAILED,
+                            error_detail="Prompt slot lease lost mid-turn.",
+                            runner_id=runner_id,
+                        )
+                        return
+                    if isinstance(sandbox_event, SSEKeepalive):
+                        continue
+
+                    # The transport already aborted the timed-out step; re-prompt.
+                    if (
+                        isinstance(sandbox_event, ActivityTimeoutError)
+                        and not deadline_exceeded
+                        and timeout_continuations < MAX_TIMEOUT_CONTINUATIONS
+                    ):
+                        timed_out_for_continuation = True
+                        continue
+
+                    session_manager.persist_sandbox_event(
+                        session_id, state, sandbox_event
+                    )
+                    db_session.commit()
+
+                    if isinstance(sandbox_event, SandboxError):
+                        session_manager.finalize_persist(session_id, state)
+                        db_session.commit()
+                        finish_turn(
+                            cache=cache,
+                            turn_id=turn_id,
+                            status=TURN_STATUS_FAILED,
+                            error_detail=sandbox_event.message,
+                            runner_id=runner_id,
+                        )
+                        return
+
+                    if isinstance(sandbox_event, PromptResponse):
+                        final_event_seen = True
+                        cancelled_event_seen = (
+                            getattr(sandbox_event, "stop_reason", None) == "cancelled"
+                        )
+
+                if timed_out_for_continuation:
+                    timeout_continuations += 1
+                    logger.info(
+                        "Interactive turn %s step timed out; re-prompting (%s/%s)",
+                        turn_id,
+                        timeout_continuations,
+                        MAX_TIMEOUT_CONTINUATIONS,
+                    )
+                    current_prompt = _TOOL_TIMEOUT_CONTINUATION_PROMPT
                     continue
 
-                if not touch_turn(cache=cache, turn_id=turn_id, runner_id=runner_id):
-                    logger.info("Interactive turn %s runner ownership lost", turn_id)
-                    ownership_lost = True
-                    return
-                slot.extend()
-                if slot.lost:
-                    ownership_lost = True
-                    session_manager.finalize_persist(session_id, state)
-                    db_session.commit()
-                    finish_turn(
-                        cache=cache,
-                        turn_id=turn_id,
-                        status=TURN_STATUS_FAILED,
-                        error_detail="Prompt slot lease lost mid-turn.",
-                        runner_id=runner_id,
-                    )
-                    return
-                if isinstance(sandbox_event, SSEKeepalive):
-                    continue
-                session_manager.persist_sandbox_event(session_id, state, sandbox_event)
-                db_session.commit()
-
-                if isinstance(sandbox_event, SandboxError):
-                    session_manager.finalize_persist(session_id, state)
-                    db_session.commit()
-                    finish_turn(
-                        cache=cache,
-                        turn_id=turn_id,
-                        status=TURN_STATUS_FAILED,
-                        error_detail=sandbox_event.message,
-                        runner_id=runner_id,
-                    )
-                    return
-
-                if isinstance(sandbox_event, PromptResponse):
-                    final_event_seen = True
-                    cancelled_event_seen = (
-                        getattr(sandbox_event, "stop_reason", None) == "cancelled"
-                    )
+                break
 
             session_manager.finalize_persist(session_id, state)
             db_session.commit()
