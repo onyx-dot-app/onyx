@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Table, createTableColumns } from "@opal/components";
-import { Content, IllustrationContent } from "@opal/layouts";
+import { Content, IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import Text from "@/refresh-components/texts/Text";
 import { PageLoader } from "@/refresh-components/PageLoader";
@@ -11,7 +11,6 @@ import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import type { MinimalAgent, Agent } from "@/lib/agents/types";
 import { useAdminAgents } from "@/lib/agents/hooks";
-import { toast } from "@/hooks/useToast";
 import AgentRowActions from "@/views/admin/AgentsPage/AgentRowActions";
 import { updateAgentDisplayPriorities } from "@/lib/agents/svc";
 import { SvgUser } from "@opal/icons";

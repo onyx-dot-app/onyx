@@ -28,6 +28,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -82,9 +83,7 @@ def _parse_dt(value: Any) -> datetime | None:
             return _epoch_to_dt(float(value))
         except ValueError:
             return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    return datetime_to_utc(parsed)
 
 
 class LumAppsConnector(CheckpointedConnector[LumAppsCheckpoint], SlimConnector):

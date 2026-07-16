@@ -52,6 +52,7 @@ from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.model_capabilities import get_bedrock_token_limit
 from onyx.llm.model_capabilities import litellm_thinks_model_supports_image_input
+from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import is_sensitive_custom_config_key
 from onyx.llm.utils import test_llm
@@ -1826,7 +1827,12 @@ def get_bifrost_available_models(
                     supports_image_input=litellm_thinks_model_supports_image_input(
                         model_id, LlmProviderNames.BIFROST
                     ),
-                    supports_reasoning=is_reasoning_model(model_id, model_name),
+                    # Reasoning support from the LiteLLM cost map, with the
+                    # substring heuristic covering models LiteLLM doesn't know
+                    supports_reasoning=model_is_reasoning_model(
+                        model_id, LlmProviderNames.BIFROST
+                    )
+                    or is_reasoning_model(model_id, model_name),
                 )
             )
         except Exception as e:
@@ -1962,7 +1968,11 @@ def get_nebius_tokenfactory_available_models(
                 supports_reasoning = "reasoning" in feature_list
             else:
                 feature_list = []
-                supports_reasoning = is_reasoning_model(model_id, display_name)
+                # No feature data from the source; fall back to the LiteLLM
+                # cost map, then the substring heuristic
+                supports_reasoning = model_is_reasoning_model(
+                    model_id, LlmProviderNames.NEBIUS_TOKENFACTORY
+                ) or is_reasoning_model(model_id, display_name)
 
             # Display-only metadata for the model picker.
             regions = model.get("regions") or []
@@ -2066,7 +2076,12 @@ def get_openai_compatible_server_available_models(
                     supports_image_input=litellm_thinks_model_supports_image_input(
                         model_id, LlmProviderNames.OPENAI_COMPATIBLE
                     ),
-                    supports_reasoning=is_reasoning_model(model_id, model_name),
+                    # Reasoning support from the LiteLLM cost map, with the
+                    # substring heuristic covering models LiteLLM doesn't know
+                    supports_reasoning=model_is_reasoning_model(
+                        model_id, LlmProviderNames.OPENAI_COMPATIBLE
+                    )
+                    or is_reasoning_model(model_id, model_name),
                 )
             )
         except Exception as e:

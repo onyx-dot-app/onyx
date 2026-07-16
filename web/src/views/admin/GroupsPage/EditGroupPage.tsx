@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import { Table, Button, Divider } from "@opal/components";
-import { IllustrationContent, InputHorizontal } from "@opal/layouts";
+import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
 import {
   SvgUsers,
   SvgTrash,
@@ -22,7 +22,6 @@ import { Section } from "@/layouts/general-layouts";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";

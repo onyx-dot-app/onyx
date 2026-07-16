@@ -2,10 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { useSWRConfig } from "swr";
-import { toast } from "@/hooks/useToast";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import { PageLoader } from "@/refresh-components/PageLoader";
-import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
+import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import {
   Button,
   Divider,

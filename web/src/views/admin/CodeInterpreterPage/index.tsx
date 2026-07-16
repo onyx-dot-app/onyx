@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgCheckCircle,
@@ -22,7 +22,6 @@ import useCodeInterpreter, {
   type CodeInterpreterHealthStatus,
 } from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/views/admin/CodeInterpreterPage/svc";
-import { toast } from "@/hooks/useToast";
 import { cn } from "@opal/utils";
 
 const route = ADMIN_ROUTES.CODE_INTERPRETER;

@@ -1,6 +1,5 @@
 import os
 from datetime import datetime
-from datetime import timezone
 from io import BytesIO
 from typing import Any
 from typing import Dict
@@ -28,6 +27,7 @@ from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -42,9 +42,7 @@ def _parse_highspot_timestamp(value: Any) -> datetime | None:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except (ValueError, TypeError):
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    return datetime_to_utc(parsed)
 
 
 class HighspotSpot(BaseModel):

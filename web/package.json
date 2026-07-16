@@ -15,7 +15,7 @@
     "start": "next start",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "types:check": "node node_modules/typescript-7/bin/tsc --noEmit --project tsconfig.types.json",
+    "types:check": "next typegen && node node_modules/typescript-7/bin/tsc --noEmit --project tsconfig.types.json",
     "format": "oxfmt src",
     "format:check": "oxfmt --check src",
     "playwright": "playwright test",

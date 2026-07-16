@@ -23,11 +23,19 @@ logger = setup_logger()
 
 
 def verify_auth_setting() -> None:
-    # All the Auth flows are valid for EE version, but warn about deprecated 'disabled'
+    # Unlike the MIT version, 'cloud' is valid here. Warn on removed legacy values.
     raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
     if raw_auth_type == "disabled":
         logger.warning(
             "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
+        )
+    if raw_auth_type in ("google_oauth", "oidc", "saml"):
+        logger.warning(
+            "AUTH_TYPE='%s' single-provider mode was removed and Onyx is running "
+            "as 'basic'. SSO login is now served by SSO provider rows (Admin "
+            "Panel > Organization > SSO Providers). Update AUTH_TYPE to 'basic' "
+            "and remove the legacy SSO env vars.",
+            raw_auth_type,
         )
     logger.notice("Using Auth Type: %s", AUTH_TYPE.value)
 

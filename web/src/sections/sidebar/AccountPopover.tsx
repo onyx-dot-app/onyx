@@ -24,9 +24,8 @@ import {
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
-import { Content } from "@opal/layouts";
+import { Content, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";

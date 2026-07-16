@@ -3,33 +3,26 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { cn } from "@opal/utils";
 import { MessageCard, Text } from "@opal/components";
-import type { StatusVariants } from "@opal/types";
-import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
-import { toast, toastStore, MAX_VISIBLE_TOASTS } from "@/hooks/useToast";
-import type { Toast, ToastLevel } from "@/hooks/useToast";
+import {
+  MAX_VISIBLE_TOASTS,
+  toast,
+  toastStore,
+  type Toast,
+} from "@opal/layouts/toast/store";
 
 const ANIMATION_DURATION = 200; // matches tailwind fade-out-scale (0.2s)
 const MAX_TOAST_MESSAGE_LENGTH = 150;
 // How long a toast lingers after the user clicks to expand it. Long enough to
-// read a multi-line stack trace / API error without forcing a manual dismiss.
+// read a multi-line stack trace or API error without forcing a manual dismiss.
 const EXPANDED_DURATION_MS = 30000;
 
-const LEVEL_TO_VARIANT: Record<ToastLevel, StatusVariants> = {
-  success: "success",
-  error: "error",
-  warning: "warning",
-  info: "info",
-  default: "default",
-};
-
-function buildDescription(t: Toast): string | undefined {
+function buildDescription(
+  t: Toast,
+  errorAppendix?: string
+): string | undefined {
   const parts: string[] = [];
   if (t.description) parts.push(t.description);
-  if (t.level === "error" && NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK) {
-    parts.push(
-      "Need help? Join our community at https://discord.gg/4NA5SbzrWb for support!"
-    );
-  }
+  if (t.level === "error" && errorAppendix) parts.push(errorAppendix);
   return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
@@ -39,7 +32,7 @@ interface ExpandedDetailsProps {
 
 function ExpandedDetails({ message }: ExpandedDetailsProps) {
   return (
-    <div className="px-3 py-2 max-h-72 overflow-y-auto whitespace-pre-wrap wrap-break-word">
+    <div className="max-h-72 overflow-y-auto whitespace-pre-wrap px-3 py-2 wrap-break-word">
       <Text font="secondary-body" color="text-03" as="p">
         {message}
       </Text>
@@ -47,7 +40,11 @@ function ExpandedDetails({ message }: ExpandedDetailsProps) {
   );
 }
 
-function ToastContainer() {
+interface ToastContainerProps {
+  errorAppendix?: string;
+}
+
+function ToastContainer({ errorAppendix }: ToastContainerProps) {
   const allToasts = useSyncExternalStore(
     toastStore.subscribe,
     toastStore.getSnapshot,
@@ -70,16 +67,18 @@ function ToastContainer() {
     }, ANIMATION_DURATION);
   }, []);
 
-  const handleExpand = useCallback((id: string) => {
+  const handleExpand = useCallback((t: Toast) => {
     setExpandedIds((prev) => {
-      if (prev.has(id)) return prev;
+      if (prev.has(t.id)) return prev;
       const next = new Set(prev);
-      next.add(id);
+      next.add(t.id);
       return next;
     });
-    // Reset the auto-dismiss timer so the user has time to read the full
-    // message before it fades.
-    toast.setAutoDismiss(id, EXPANDED_DURATION_MS);
+    // Restart auto-dismiss with reading time for the full message. Persistent
+    // toasts stay persistent.
+    if (t.duration !== Infinity) {
+      toast.setAutoDismiss(t.id, EXPANDED_DURATION_MS);
+    }
   }, []);
 
   if (visible.length === 0) return null;
@@ -87,13 +86,13 @@ function ToastContainer() {
   return (
     <div
       data-testid="toast-container"
-      className="fixed bottom-4 right-4 z-(--z-toast) flex flex-col gap-2 items-end max-w-(--toast-width) w-full"
+      className="fixed bottom-4 right-4 z-(--z-toast) flex w-full max-w-(--toast-width) flex-col items-end gap-2"
     >
       {visible.map((t) => {
         const isTruncatable = t.message.length > MAX_TOAST_MESSAGE_LENGTH;
         const isExpanded = expandedIds.has(t.id);
         const truncatedTitle = isTruncatable
-          ? t.message.slice(0, MAX_TOAST_MESSAGE_LENGTH) + "\u2026"
+          ? t.message.slice(0, MAX_TOAST_MESSAGE_LENGTH) + "…"
           : t.message;
         const expandable = isTruncatable && !isExpanded;
         return (
@@ -115,15 +114,15 @@ function ToastContainer() {
                     ) {
                       return;
                     }
-                    handleExpand(t.id);
+                    handleExpand(t);
                   }
                 : undefined
             }
           >
             <MessageCard
-              variant={LEVEL_TO_VARIANT[t.level ?? "info"]}
+              variant={t.level ?? "info"}
               title={truncatedTitle}
-              description={buildDescription(t)}
+              description={buildDescription(t, errorAppendix)}
               padding="xs"
               onClose={t.dismissible ? () => handleClose(t.id) : undefined}
               bottomChildren={
@@ -139,13 +138,23 @@ function ToastContainer() {
 
 interface ToastProviderProps {
   children: React.ReactNode;
+
+  /** Appended to every error toast's description (e.g. a support link). */
+  errorAppendix?: string;
 }
 
-export default function ToastProvider({ children }: ToastProviderProps) {
+/**
+ * Renders the app's toast stack bottom-right, driven by the module-level
+ * store in `toast/store` (fire toasts from anywhere via `toast(...)` or the
+ * `useToast` hook). Long messages truncate and expand on click.
+ */
+function ToastProvider({ children, errorAppendix }: ToastProviderProps) {
   return (
     <>
       {children}
-      <ToastContainer />
+      <ToastContainer errorAppendix={errorAppendix} />
     </>
   );
 }
+
+export { ToastProvider, type ToastProviderProps };

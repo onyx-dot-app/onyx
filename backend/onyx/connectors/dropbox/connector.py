@@ -1,4 +1,3 @@
-from datetime import timezone
 from io import BytesIO
 from typing import Any
 
@@ -22,6 +21,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -83,14 +83,7 @@ class DropboxConnector(LoadConnector, PollConnector):
             batch: list[Document | HierarchyNode] = []
             for entry in result.entries:
                 if isinstance(entry, FileMetadata):
-                    modified_time = entry.client_modified
-                    if modified_time.tzinfo is None:
-                        # If no timezone info, assume it is UTC
-                        modified_time = modified_time.replace(tzinfo=timezone.utc)
-                    else:
-                        # If not in UTC, translate it
-                        modified_time = modified_time.astimezone(timezone.utc)
-
+                    modified_time = datetime_to_utc(entry.client_modified)
                     time_as_seconds = int(modified_time.timestamp())
                     if start and time_as_seconds < start:
                         continue

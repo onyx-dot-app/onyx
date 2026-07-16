@@ -1,6 +1,6 @@
 "use client";
 
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Button } from "@opal/components";
 import {
@@ -9,7 +9,6 @@ import {
 } from "./AppearanceThemeSettings";
 import { useRef, useState } from "react";
 import { useSettings } from "@/lib/settings/hooks";
-import { toast } from "@/hooks/useToast";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { EnterpriseSettings } from "@/lib/settings/types";

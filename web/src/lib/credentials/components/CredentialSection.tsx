@@ -10,7 +10,7 @@ import {
   updateCredential,
   updateCredentialWithPrivateKey,
 } from "@/lib/credential";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
 import { Card, Text } from "@opal/components";
 import {

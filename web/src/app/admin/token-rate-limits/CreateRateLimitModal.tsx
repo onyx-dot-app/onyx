@@ -8,7 +8,7 @@ import { Form, Formik } from "formik";
 import { SelectorFormField, TextFormField } from "@/components/Field";
 import { UserGroup } from "@/lib/types";
 import { Scope } from "./types";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { SvgSettings } from "@opal/icons";
 interface CreateRateLimitModalProps {
   isOpen: boolean;

@@ -121,9 +121,9 @@ def test_repeated_error_state_detection_and_recovery(
             )
             assert cc_pair_obj is not None
             if cc_pair_obj.in_repeated_error_state:
-                # Pausing only happens for cloud deployments and the IT don't run with
-                # that auth type :(
-                # if AUTH_TYPE == AuthType.CLOUD:
+                # Pausing only happens on Cloud (multi-tenant) and the IT suite
+                # doesn't run multi-tenant.
+                # if MULTI_TENANT:
                 #     assert cc_pair_obj.status == ConnectorCredentialPairStatus.PAUSED, (
                 #         f"Expected status to be PAUSED when in repeated error state, "
                 #         f"but got {cc_pair_obj.status}"

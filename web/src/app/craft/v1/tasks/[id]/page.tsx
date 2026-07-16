@@ -3,9 +3,8 @@
 import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Button, Text } from "@opal/components";
-import { toast } from "@/hooks/useToast";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import {
   SvgClock,

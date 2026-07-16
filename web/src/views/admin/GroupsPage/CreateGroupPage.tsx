@@ -3,14 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Table, Button, Divider } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
+import { IllustrationContent, toast } from "@opal/layouts";
 import { SvgUsers, SvgSimpleLoader } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { toast } from "@/hooks/useToast";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import {
   createGroup,

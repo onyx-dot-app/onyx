@@ -8,6 +8,8 @@ import { textPresets, varsDark, varsLight } from "@onyx-ai/shared/native";
 interface StreamingMarkdownProps {
   content: string;
   isStreaming: boolean;
+  // Tap on any markdown link (incl. `[[n]](url)` citation markers) → the link's URL.
+  onLinkPress?: (url: string) => void;
 }
 
 // 14px body: deliberate reduction from web's 16px, which reads oversized on a phone.
@@ -111,6 +113,7 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
 export function StreamingMarkdown({
   content,
   isStreaming,
+  onLinkPress,
 }: StreamingMarkdownProps) {
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
   const markdownStyle = useMemo(() => buildMarkdownStyle(scheme), [scheme]);
@@ -121,6 +124,7 @@ export function StreamingMarkdown({
       flavor="github"
       // no selection mid-stream — growing content fights an active selection
       selectable={!isStreaming}
+      onLinkPress={onLinkPress ? (event) => onLinkPress(event.url) : undefined}
     />
   );
 }

@@ -4,9 +4,8 @@ Unit tests for the user registration workflow in UserManager.create().
 Tests cover:
 1. Disposable email validation (before tenant provisioning)
 2. Multi-tenant vs single-tenant invite logic
-3. SAML/OIDC SSO bypass behavior
-4. Empty whitelist vs populated whitelist scenarios
-5. Case-insensitive email matching for existing user checks
+3. Empty whitelist vs populated whitelist scenarios
+4. Case-insensitive email matching for existing user checks
 """
 
 from types import TracebackType
@@ -19,7 +18,6 @@ from fastapi_users import exceptions
 
 from onyx.auth.schemas import UserCreate
 from onyx.auth.users import UserManager
-from onyx.configs.constants import AuthType
 from onyx.error_handling.exceptions import OnyxError
 
 # Note: Only async test methods are marked with @pytest.mark.asyncio individually
@@ -243,7 +241,9 @@ class TestMultiTenantInviteLogic:
             pass
 
         # Verify invite check WAS called (user_count > 0)
-        mock_verify_invited.assert_called_once_with(mock_user_create.email)
+        mock_verify_invited.assert_called_once_with(
+            mock_user_create.email, sso_managed=False
+        )
 
 
 class TestSingleTenantInviteLogic:
@@ -293,52 +293,9 @@ class TestSingleTenantInviteLogic:
             pass
 
         # Verify invite check was called
-        mock_verify_invited.assert_called_once_with(mock_user_create.email)
-
-
-class TestSAMLOIDCBehavior:
-    """Test SSO (SAML/OIDC) bypass of invite whitelist."""
-
-    @pytest.mark.parametrize("auth_type", [AuthType.SAML, AuthType.OIDC])
-    @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
-    @patch("onyx.auth.users.AUTH_TYPE")
-    def test_sso_bypasses_whitelist(
-        self,
-        mock_auth_type: MagicMock,
-        _mock_invite_only: MagicMock,
-        mock_get_invited: MagicMock,
-        auth_type: AuthType,
-    ) -> None:
-        """SAML/OIDC should bypass invite whitelist."""
-        from onyx.auth.users import verify_email_is_invited
-
-        # Setup
-        mock_auth_type.return_value = auth_type
-        mock_get_invited.return_value = ["allowed@example.com"]
-
-        # Execute - should not raise even with populated whitelist
-        with patch("onyx.auth.users.AUTH_TYPE", auth_type):
-            verify_email_is_invited("newuser@example.com")  # Should not raise
-
-    @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
-    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
-    def test_basic_auth_enforces_whitelist(
-        self,
-        mock_get_invited: MagicMock,
-        _mock_invite_only: MagicMock,
-    ) -> None:
-        """Basic auth should enforce invite whitelist."""
-        from onyx.auth.users import verify_email_is_invited
-
-        # Setup
-        mock_get_invited.return_value = ["allowed@example.com"]
-
-        # Execute & Assert
-        with pytest.raises(OnyxError) as exc:
-            verify_email_is_invited("newuser@example.com")
-        assert exc.value.status_code == 403
+        mock_verify_invited.assert_called_once_with(
+            mock_user_create.email, sso_managed=False
+        )
 
 
 class TestWhitelistBehavior:
@@ -346,7 +303,6 @@ class TestWhitelistBehavior:
 
     @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=False)
     @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_empty_whitelist_allows_all(
         self,
         mock_get_invited: MagicMock,
@@ -363,7 +319,6 @@ class TestWhitelistBehavior:
 
     @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=False)
     @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_invite_only_disabled_allows_non_invited_users(
         self,
         mock_get_invited: MagicMock,
@@ -377,7 +332,6 @@ class TestWhitelistBehavior:
 
     @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
     @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_whitelist_blocks_non_invited(
         self,
         mock_get_invited: MagicMock,
@@ -397,7 +351,6 @@ class TestWhitelistBehavior:
 
     @patch("onyx.auth.users.workspace_invite_only_enabled", return_value=True)
     @patch("onyx.auth.users.get_invited_users")
-    @patch("onyx.auth.users.AUTH_TYPE", AuthType.BASIC)
     def test_whitelist_allows_invited_case_insensitive(
         self,
         mock_get_invited: MagicMock,

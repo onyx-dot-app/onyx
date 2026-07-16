@@ -39,7 +39,9 @@ from onyx.auth.users import OAuth2AuthorizeResponse
 from onyx.auth.users import STATE_TOKEN_LIFETIME_SECONDS
 from onyx.auth.users import UserManager
 from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
+from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import OIDC_PKCE_ENABLED
+from onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
@@ -94,18 +96,23 @@ def _resolve_oidc_provider(
 
 def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[Any]:
     if provider.provider_type is SSOProviderType.OIDC:
+        # Env override lets deployments request extra API scopes (e.g. MS Graph
+        # User.Read for claims capture). offline_access secures refresh tokens.
+        scopes = list(OIDC_SCOPE_OVERRIDE or BASE_SCOPES)
+        if "offline_access" not in scopes:
+            scopes.append("offline_access")
         return VerifiedEmailOpenID(
             config["client_id"],
             config["client_secret"],
             config["openid_config_url"],
             name=provider.name,
-            base_scopes=list(BASE_SCOPES) + ["offline_access"],
+            base_scopes=scopes,
         )
     if provider.provider_type is SSOProviderType.GOOGLE_OAUTH:
         return GoogleOAuth2(
             config["client_id"],
             config["client_secret"],
-            scopes=list(GOOGLE_LOGIN_BASE_SCOPES),
+            scopes=list(GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES),
             name=provider.name,
         )
 
@@ -299,6 +306,8 @@ async def oidc_login_callback_for_provider(
         associate_by_email=_ALLOW_AUTO_LINK,
         is_verified_by_default=True,
         allowed_email_domains_override=provider.allowed_email_domains,
+        # Provider rows delegate membership to the IdP.
+        sso_managed=True,
     )
 
     if OIDC_PKCE_ENABLED:

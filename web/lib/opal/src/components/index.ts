@@ -147,12 +147,24 @@ export {
   type InputTypeInProps,
 } from "@opal/components/inputs/input-type-in/components";
 
+/* InputDatePicker */
+export {
+  InputDatePicker,
+  type InputDatePickerProps,
+} from "@opal/components/inputs/input-date-picker/components";
+
 /* InputTags */
 export {
   InputTags,
   type InputTagsProps,
   type TagItem,
 } from "@opal/components/inputs/input-tags/components";
+
+/* PasswordInputTypeIn */
+export {
+  PasswordInputTypeIn,
+  type PasswordInputTypeInProps,
+} from "@opal/components/inputs/password-input-type-in/components";
 
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";

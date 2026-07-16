@@ -29,6 +29,7 @@ from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
@@ -305,16 +306,7 @@ def build_confluence_document_id(
 
 
 def datetime_from_string(datetime_string: str) -> datetime:
-    datetime_object = datetime.fromisoformat(datetime_string)
-
-    if datetime_object.tzinfo is None:
-        # If no timezone info, assume it is UTC
-        datetime_object = datetime_object.replace(tzinfo=timezone.utc)
-    else:
-        # If not in UTC, translate it
-        datetime_object = datetime_object.astimezone(timezone.utc)
-
-    return datetime_object
+    return datetime_to_utc(datetime.fromisoformat(datetime_string))
 
 
 def confluence_refresh_tokens(
