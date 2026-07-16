@@ -47,12 +47,6 @@ EMU_PER_INCH = 914400
 EMU_PER_PT = 12700
 
 # --- Thresholds (lenient by design) ---
-# Margin threshold is density-profile-dependent. "standard" enforces the
-# nominal 0.5" (0.45" with rounding tolerance); "dense" relaxes to a nominal
-# 0.25" for intentionally content-dense analytical/consulting decks, whose
-# tight margins are a deliberate style, not a defect. Only the MARGIN *warning*
-# scales with profile — every ERROR-level check (off-slide clipping, unreadable
-# contrast, unknown font, genuinely-overflowing text) is profile-independent.
 MARGIN_MIN_EMU_BY_PROFILE = {
     "standard": int(0.45 * EMU_PER_INCH),  # nominal 0.5"
     "dense": int(0.22 * EMU_PER_INCH),  # nominal 0.25"
