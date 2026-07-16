@@ -138,19 +138,25 @@ function charW(sizePt, bold) {
 
 function estLines(text, usableWIn, sizePt, bold) {
   const usablePt = Math.max(usableWIn * 72 - 10, 20);
-  let lines = 1;
-  let cur = 0;
   const spaceW = charW(sizePt, bold) * 0.5;
-  for (const word of String(text).split(/\s+/).filter(Boolean)) {
-    const w = Math.min(word.length * charW(sizePt, bold), usablePt);
-    if (cur > 0 && cur + spaceW + w > usablePt) {
-      lines += 1;
-      cur = w;
-    } else {
-      cur += (cur > 0 ? spaceW : 0) + w;
+  // Count each hard-broken line separately, then word-wrap within it: a "\n"
+  // always starts a new rendered line and never collapses into a space.
+  let total = 0;
+  for (const hardLine of String(text).split("\n")) {
+    let lines = 1;
+    let cur = 0;
+    for (const word of hardLine.split(/\s+/).filter(Boolean)) {
+      const w = Math.min(word.length * charW(sizePt, bold), usablePt);
+      if (cur > 0 && cur + spaceW + w > usablePt) {
+        lines += 1;
+        cur = w;
+      } else {
+        cur += (cur > 0 ? spaceW : 0) + w;
+      }
     }
+    total += lines;
   }
-  return lines;
+  return Math.max(total, 1);
 }
 
 function truncate(text, maxChars) {
@@ -634,6 +640,9 @@ function statCallouts(pres, theme, { title, stats = [] } = {}) {
   slide.background = { color: theme.background };
   addTitle(slide, theme, title || "");
   const kept = stats.slice(0, 4);
+  if (kept.filter((s) => s.hero).length > 1) {
+    throw new Error("statCallouts allows at most one stat with hero: true (the slide's single emphasis element)");
+  }
   const cols = columnRegions(kept.length || 1, { top: 1.85, height: 2.7 });
   columnRules(slide, theme, cols, { y: 1.95, h: 2.55 });
   kept.forEach((stat, i) => {
@@ -774,10 +783,12 @@ function timeline(pres, theme, { title, steps = [] } = {}) {
 // side (half-bleed only): "right" (default) or "left".
 function imageSlide(pres, theme, { title, body, image, bleed = "half", side = "right" } = {}) {
   const slide = pres.addSlide();
-  if (!image || (!image.path && !image.data)) throw new Error("imageSlide requires image { path } or { data }");
-  const imgSrc = image.data ? { data: image.data } : { path: image.path };
+  if (bleed !== "half" && bleed !== "full") throw new Error(`imageSlide bleed must be "half" or "full" (got "${bleed}")`);
+  if (side !== "left" && side !== "right") throw new Error(`imageSlide side must be "left" or "right" (got "${side}")`);
+  const imgRef = imgSrc(image);
+  if (!imgRef) throw new Error("imageSlide requires image { path } or { data }");
   if (bleed === "full") {
-    slide.addImage({ ...imgSrc, x: 0, y: 0, w: PAGE.W, h: PAGE.H, sizing: { type: "cover", w: PAGE.W, h: PAGE.H } });
+    slide.addImage({ ...imgRef, x: 0, y: 0, w: PAGE.W, h: PAGE.H, sizing: { type: "cover", w: PAGE.W, h: PAGE.H } });
     slide.addShape("rect", {
       x: 0,
       y: 3.55,
@@ -821,7 +832,7 @@ function imageSlide(pres, theme, { title, body, image, bleed = "half", side = "r
   const textX = side === "left" ? imgW + 0.5 : MARGIN;
   const textW = PAGE.W - imgW - 1.0;
   slide.background = { color: theme.background };
-  slide.addImage({ ...imgSrc, x: imgX, y: 0, w: imgW, h: PAGE.H, sizing: { type: "cover", w: imgW, h: PAGE.H } });
+  slide.addImage({ ...imgRef, x: imgX, y: 0, w: imgW, h: PAGE.H, sizing: { type: "cover", w: imgW, h: PAGE.H } });
   addTitle(slide, theme, title || "", { x: textX, w: textW, y: 0.7 });
   if (body) {
     const items = Array.isArray(body) ? body : [body];
@@ -1376,7 +1387,7 @@ function logoWall(pres, theme, { title = "Trusted by", logos = [] } = {}) {
   slide.background = { color: theme.background };
   addTitle(slide, theme, title || "");
   const kept = logos.slice(0, 12);
-  const perRow = kept.length <= 4 ? Math.max(kept.length, 1) : kept.length <= 8 ? 4 : 4;
+  const perRow = kept.length <= 4 ? Math.max(kept.length, 1) : 4;
   const rows = Math.ceil(kept.length / perRow);
   const top = BODY_TOP + 0.35;
   const areaH = CONTENT_BOTTOM - top;
