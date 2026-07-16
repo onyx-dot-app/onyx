@@ -5,6 +5,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import status
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -223,8 +224,17 @@ def set_new_search_settings(
                 poll_range_end=poll_range_end,
             )
 
-    # Atomic: FUTURE row and its seeds become visible together.
-    db_session.commit()
+    # Atomic: FUTURE row and its seeds become visible together. A concurrent second
+    # reindex races here; the partial unique index on status=FUTURE lets only one commit,
+    # so surface the loser as a clean 409 rather than an unhandled IntegrityError (500).
+    try:
+        db_session.commit()
+    except IntegrityError:
+        db_session.rollback()
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "A reindex is already in progress; wait for it to finish or cancel it.",
+        )
     return IdReturn(id=new_search_settings.id)
 
 
