@@ -519,7 +519,7 @@ def set_skill_enabled_for_user(
     if not state.can_toggle:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Native built-in skills are always enabled.",
+            "This skill cannot be enabled or disabled.",
         )
 
     preference_upsert = (
