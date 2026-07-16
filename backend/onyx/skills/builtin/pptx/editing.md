@@ -126,7 +126,7 @@ Slide order is in `outputs/unpacked/ppt/presentation.xml` → `<p:sldIdLst>`.
 For each slide:
 1. Read the slide's XML
 2. Identify ALL placeholder content—text, images, charts, icons, captions
-3. Replace each placeholder with final content
+3. Replace each placeholder with final content — for chart placeholders produce deck-styled PNGs per [charts.md](charts.md); for icon placeholders render PNGs with `.opencode/skills/pptx/scripts/icon.js` (see [pptxgenjs.md](pptxgenjs.md#icons)); insert either as slide media at the placeholder's size
 
 **Use the Edit tool, not sed or Python scripts.** The Edit tool forces specificity about what to replace and where, yielding better reliability.
 

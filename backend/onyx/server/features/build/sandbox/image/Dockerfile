@@ -146,8 +146,15 @@ RUN python3 -m venv /workspace/.venv && \
 ENV PATH="/workspace/.venv/bin:${PATH}"
 ENV PYTHONPATH="/workspace"
 
+# pptxgenjs: from-scratch deck generation. lucide-static/@tabler/icons: plain
+# .svg icon files + sharp as rasterizer, for the pptx skill's scripts/icon.js.
+# sharp pulls its per-arch prebuilt libvips binary via optionalDependencies
+# (@img/sharp-linux-x64 / @img/sharp-linux-arm64, no install scripts); the
+# smoke test fails the build if the native binary didn't resolve for the
+# target arch, and verifies one known SVG exists from each icon package.
 RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
-    npm install -g pptxgenjs && \
+    npm install -g pptxgenjs@4.0.1 lucide-static@1.24.0 @tabler/icons@3.44.0 sharp@0.35.3 && \
+    NODE_PATH=/usr/local/lib/node_modules node -e "require('pptxgenjs'); require('sharp'); const fs = require('fs'); fs.accessSync('/usr/local/lib/node_modules/lucide-static/icons/circle-check.svg'); fs.accessSync('/usr/local/lib/node_modules/@tabler/icons/icons/outline/shield-check.svg')" && \
     npm cache clean --force && \
     rm -rf /root/.npm; \
     fi
