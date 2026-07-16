@@ -1,12 +1,17 @@
 // Memoized on packet count, not array identity: a row re-renders only when its own packets grow.
-import { memo } from "react";
+import { memo, useMemo, useState } from "react";
 import { View } from "react-native";
 
+import { selectSources } from "@/chat/citations";
 import { Message } from "@/chat/interfaces";
 import { MinimalAgent } from "@/chat/agents";
 import { getErrorTitle } from "@/chat/errorHelpers";
 import { fileDescriptorToDisplayFile } from "@/chat/fileDescriptors";
 import { AgentTimeline } from "@/components/chat/AgentTimeline";
+import {
+  CitedSourcesBar,
+  CitedSourcesSheet,
+} from "@/components/chat/CitedSources";
 import { FileCard } from "@/components/chat/FileCard";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
@@ -67,18 +72,43 @@ function AssistantMessage({
   node: Message;
   agent: MinimalAgent | null;
 }) {
-  const { renderer, packets, isComplete } = usePacketDisplay(node);
+  const { renderer, packets, processed } = usePacketDisplay(node);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const Renderer = renderer?.Component;
   const hasContent = Renderer != null && packets.length > 0;
+
+  // Sources appear only once the answer completes (web parity; avoids mid-stream layout shift).
+  // Memoized on `processed` so toggling the sheet open/closed doesn't re-run the selector.
+  const sources = useMemo(
+    () => (processed.isComplete ? selectSources(processed) : null),
+    [processed],
+  );
 
   // Web AgentMessage: timeline (avatar + status) above the answer; the timeline owns the loader.
   return (
     <View className="gap-12 py-6">
-      <AgentTimeline agent={agent} isLoading={!hasContent && !isComplete} />
+      <AgentTimeline
+        agent={agent}
+        isLoading={!hasContent && !processed.isComplete}
+      />
       {hasContent ? (
         // Inset (px-12) aligns the answer under the avatar rail, matching web's px-3.
         <View className="px-12">
-          <Renderer packets={packets} isComplete={isComplete} />
+          <Renderer packets={packets} processed={processed} />
+        </View>
+      ) : null}
+      {sources && sources.hasSources ? (
+        <View className="px-12">
+          <CitedSourcesBar
+            iconDocs={sources.iconDocs}
+            count={sources.count}
+            onPress={() => setSourcesOpen(true)}
+          />
+          <CitedSourcesSheet
+            visible={sourcesOpen}
+            onClose={() => setSourcesOpen(false)}
+            sources={sources}
+          />
         </View>
       ) : null}
     </View>
