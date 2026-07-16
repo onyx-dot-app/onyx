@@ -36,6 +36,7 @@ ANONYMOUS_USER_PRINCIPAL_TYPE = 3  # Anonymous/unauthenticated users (public acc
 AZURE_AD_GROUP_PRINCIPAL_TYPE = 4  # Azure Active Directory security groups
 SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site)
 MICROSOFT_DOMAIN = ".onmicrosoft"
+SHAREPOINT_GROUP_SCOPE_SEPARATOR = "::"
 # Limited Access role type, limited access is a travel through permission not a actual permission
 LIMITED_ACCESS_ROLE_TYPES = [1, 9]
 LIMITED_ACCESS_ROLE_NAMES = ["Limited Access", "Web-Only Limited Access"]
@@ -194,49 +195,6 @@ def _get_group_guid_from_identifier(
         return None
 
 
-def _get_security_group_owners(graph_client: GraphClient, group_id: str) -> list[str]:
-    try:
-        # Get group owners using Graph API
-        group = graph_client.groups[group_id]
-        owners = sleep_and_retry(
-            group.owners.get_all(page_loaded=lambda _: None),
-            "get_security_group_owners",
-        )
-
-        owner_emails: list[str] = []
-        logger.info("Owners: %s", owners)
-
-        for owner in owners:
-            owner_data = owner.to_json()
-
-            # Extract email from the JSON data
-            mail: str | None = owner_data.get("mail")
-            user_principal_name: str | None = owner_data.get("userPrincipalName")
-
-            # Check if owner is a user and has an email
-            if mail:
-                if MICROSOFT_DOMAIN in mail:
-                    mail = mail.replace(MICROSOFT_DOMAIN, "")
-                owner_emails.append(mail)
-            elif user_principal_name:
-                if MICROSOFT_DOMAIN in user_principal_name:
-                    user_principal_name = user_principal_name.replace(
-                        MICROSOFT_DOMAIN, ""
-                    )
-                owner_emails.append(user_principal_name)
-
-        logger.info(
-            "Retrieved %s owners from security group %s", len(owner_emails), group_id
-        )
-        return owner_emails
-
-    except Exception as e:
-        logger.error(
-            "Failed to get security group owners for group %s: %s", group_id, e
-        )
-        return []
-
-
 def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
     try:
         # First try to get the list item directly from the drive item
@@ -315,6 +273,14 @@ def _get_group_name_with_suffix(
     return f"{group_name}_{ad_group_suffix}"
 
 
+def _get_site_scoped_group_name(
+    client_context: ClientContext,
+    group_name: str,
+) -> str:
+    site_url = client_context.base_url.rstrip("/")
+    return f"{site_url}{SHAREPOINT_GROUP_SCOPE_SEPARATOR}{group_name}"
+
+
 def _get_sharepoint_groups(
     client_context: ClientContext, group_name: str, graph_client: GraphClient
 ) -> tuple[set[SharepointGroup], set[str]]:
@@ -351,6 +317,8 @@ def _get_sharepoint_groups(
                     name = _get_group_name_with_suffix(
                         user.login_name, name, graph_client
                     )
+                else:
+                    name = _get_site_scoped_group_name(client_context, name)
                 groups.add(
                     SharepointGroup(
                         login_name=user.login_name,
@@ -457,9 +425,6 @@ def _get_azuread_groups(
     sleep_and_retry(
         group.members.get_all(page_loaded=process_members), "get_azuread_groups"
     )
-
-    owner_emails = _get_security_group_owners(graph_client, group_id)
-    user_emails.update(owner_emails)
 
     return groups, user_emails
 
@@ -588,6 +553,8 @@ def get_external_access_from_sharepoint(
                         name = _get_group_name_with_suffix(
                             member.login_name, name, graph_client
                         )
+                    else:
+                        name = _get_site_scoped_group_name(client_context, name)
                     groups.add(
                         SharepointGroup(
                             login_name=member.login_name,
@@ -776,6 +743,8 @@ def get_sharepoint_external_groups(
                         name = _get_group_name_with_suffix(
                             member.login_name, name, graph_client
                         )
+                    else:
+                        name = _get_site_scoped_group_name(client_context, name)
 
                     groups.add(
                         SharepointGroup(
