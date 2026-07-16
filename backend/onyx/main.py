@@ -64,6 +64,7 @@ from onyx.db.sso_provider import seed_saml_provider_from_conf_dir
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.hooks.registry import validate_registry
+from onyx.redis.redis_pool import log_redis_server_diagnostics
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth.captcha_api import CaptchaCookieMiddleware
 from onyx.server.auth.captcha_api import LoginCaptchaMiddleware
@@ -373,6 +374,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
     # Will throw exception if USER_AUTH_SECRET is missing on a real deployment
     verify_user_auth_secret()
+
+    # Surface Redis config that can silently drop session keys.
+    await log_redis_server_diagnostics()
 
     if OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET:
         logger.notice("Both OAuth Client ID and Secret are configured.")
