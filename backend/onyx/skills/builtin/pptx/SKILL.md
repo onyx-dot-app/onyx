@@ -44,6 +44,7 @@ built. To reuse figures from a source PDF, extract the embedded images
 directly — no rendering, no cropping, no visual inspection:
 
 ```bash
+mkdir -p outputs/figs/
 pdfimages -png -p source.pdf outputs/figs/fig   # fig-<page>-<n>.png per image
 python -c "from PIL import Image; import glob; [print(p, Image.open(p).size) for p in sorted(glob.glob('outputs/figs/*.png'))]"
 ```
