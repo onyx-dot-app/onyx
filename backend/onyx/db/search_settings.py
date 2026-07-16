@@ -93,11 +93,16 @@ def get_next_index_name(db_session: Session, base_index_name: str) -> str:
     """
     prefix = f"{base_index_name}_"
     latest = 0
-    for name in db_session.scalars(select(SearchSettings.index_name)):
-        if name.startswith(prefix):
-            suffix = name[len(prefix) :]
-            if suffix.isdigit():
-                latest = max(latest, int(suffix))
+    # autoescape keeps the underscores in the model name literal rather than LIKE
+    # single-char wildcards, so the predicate matches exactly this base's names.
+    for name in db_session.scalars(
+        select(SearchSettings.index_name).where(
+            SearchSettings.index_name.startswith(prefix, autoescape=True)
+        )
+    ):
+        suffix = name[len(prefix) :]
+        if suffix.isdigit():
+            latest = max(latest, int(suffix))
     return f"{base_index_name}_{latest + 1:06d}"
 
 
