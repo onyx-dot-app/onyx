@@ -48,6 +48,11 @@ interface ChatSessionData {
   // Queued messages
   queuedMessages: QueuedMessage[];
 
+  // MCP server ids that need (re)auth this session. Extended at runtime by
+  // observed tool-call auth errors and unioned (in the input-bar
+  // ActionsPopover) with the GET /mcp/servers/auth-status load-time signal.
+  mcpServersNeedingReauth: Set<number>;
+
   // True once the latest assistant message has fully rendered to the
   // user (backend stream done AND smooth-streaming typewriter caught up).
   // Gates queued-message dispatch so a follow-up isn't sent while the
@@ -162,6 +167,12 @@ interface ChatSessionStore {
   ) => void;
   setIsStreamDraining: (sessionId: string, draining: boolean) => void;
 
+  // Actions - MCP re-authentication
+  addMcpServerNeedingReauth: (sessionId: string, serverId: number) => void;
+  clearMcpServerNeedingReauth: (sessionId: string, serverId: number) => void;
+  addCurrentMcpServerNeedingReauth: (serverId: number) => void;
+  clearCurrentMcpServerNeedingReauth: (serverId: number) => void;
+
   // Actions - Abort Controllers
   setAbortController: (sessionId: string, controller: AbortController) => void;
   abortSession: (sessionId: string) => void;
@@ -204,6 +215,7 @@ const createInitialSessionData = (
   queuedMessages: [],
   latestMessageRenderComplete: true,
   isStreamDraining: false,
+  mcpServersNeedingReauth: new Set<number>(),
   ...initialData,
 });
 
@@ -577,6 +589,57 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().updateSessionData(sessionId, { isStreamDraining: draining });
   },
 
+  // MCP Re-authentication Actions
+  addMcpServerNeedingReauth: (sessionId: string, serverId: number) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      // Guard membership so the Set ref stays stable when nothing changes,
+      // avoiding needless re-renders in subscribers.
+      if (!session || session.mcpServersNeedingReauth.has(serverId)) {
+        return state;
+      }
+      const next = new Set(session.mcpServersNeedingReauth);
+      next.add(serverId);
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, {
+        ...session,
+        mcpServersNeedingReauth: next,
+      });
+      return { sessions: newSessions };
+    });
+  },
+
+  clearMcpServerNeedingReauth: (sessionId: string, serverId: number) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session || !session.mcpServersNeedingReauth.has(serverId)) {
+        return state;
+      }
+      const next = new Set(session.mcpServersNeedingReauth);
+      next.delete(serverId);
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, {
+        ...session,
+        mcpServersNeedingReauth: next,
+      });
+      return { sessions: newSessions };
+    });
+  },
+
+  addCurrentMcpServerNeedingReauth: (serverId: number) => {
+    const { currentSessionId } = get();
+    if (currentSessionId) {
+      get().addMcpServerNeedingReauth(currentSessionId, serverId);
+    }
+  },
+
+  clearCurrentMcpServerNeedingReauth: (serverId: number) => {
+    const { currentSessionId } = get();
+    if (currentSessionId) {
+      get().clearMcpServerNeedingReauth(currentSessionId, serverId);
+    }
+  },
+
   // Abort Controller Actions
   setAbortController: (sessionId: string, controller: AbortController) => {
     get().updateSessionData(sessionId, { abortController: controller });
@@ -769,4 +832,14 @@ export const useCurrentIsStreamDraining = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.isStreamDraining ?? false;
+  });
+
+const EMPTY_REAUTH_SET = new Set<number>();
+export const useCurrentMcpServersNeedingReauth = (): Set<number> =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.mcpServersNeedingReauth ?? EMPTY_REAUTH_SET;
   });

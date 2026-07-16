@@ -1,5 +1,8 @@
 "use client";
 
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   CODING_AGENT_TOOL_ID,
   FILE_READER_TOOL_ID,
@@ -47,7 +50,11 @@ import {
   SvgSliders,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, Tag, Text } from "@opal/components";
+import {
+  useChatSessionStore,
+  useCurrentMcpServersNeedingReauth,
+} from "@/app/app/stores/useChatSessionStore";
 
 function buildTooltipMessage(
   actionDescription: string,
@@ -258,6 +265,23 @@ export default function ActionsPopover({
     onSuccess: undefined,
     isAuthenticated: false,
   });
+
+  // Session-scoped MCP servers that hit a 401 this chat session.
+  const mcpServersNeedingReauth = useCurrentMcpServersNeedingReauth();
+  const clearMcpServerNeedingReauth = useChatSessionStore(
+    (state) => state.clearCurrentMcpServerNeedingReauth
+  );
+  // Caller-scoped re-auth status for this agent's PER_USER servers, derived
+  // server-side from stored config. Seeds the badge on load instead of waiting
+  // for a runtime 401.
+  const { data: authStatusData, mutate: mutateAuthStatus } = useSWR<{
+    auth_statuses: { server_id: number; needs_reauth: boolean }[];
+  }>(
+    selectedAgent?.id != null
+      ? SWR_KEYS.mcpServersAuthStatus(selectedAgent.id)
+      : null,
+    errorHandlingFetcher
+  );
 
   // Get the agent preference for this assistant
   const { agentPreferences, setSpecificAgentPreferences } =
@@ -620,6 +644,9 @@ export default function ActionsPopover({
               isLoading: false,
             },
           }));
+          clearMcpServerNeedingReauth(server.id);
+          // Refresh the derived signal so the badge clears immediately.
+          mutateAuthStatus();
         },
         isAuthenticated: server.user_authenticated,
         existingCredentials: server.user_credentials,
@@ -644,6 +671,21 @@ export default function ActionsPopover({
     const searchLower = searchTerm.toLowerCase();
     return server.name.toLowerCase().includes(searchLower);
   });
+
+  // Servers the user can re-auth, flagged either by a runtime 401 this session
+  // (session store) or by the derived auth-status endpoint (lights on load).
+  const serversNeedingReauth = useMemo(() => {
+    const flagged = new Set<number>(mcpServersNeedingReauth);
+    authStatusData?.auth_statuses.forEach((status) => {
+      if (status.needs_reauth) flagged.add(status.server_id);
+    });
+    return mcpServers.filter(
+      (server) =>
+        flagged.has(server.id) &&
+        server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+        server.auth_type !== MCPAuthenticationType.NONE
+    );
+  }, [mcpServers, mcpServersNeedingReauth, authStatusData]);
 
   const selectedMcpServerId =
     secondaryView?.type === "mcp" ? secondaryView.serverId : null;
@@ -841,6 +883,32 @@ export default function ActionsPopover({
           variant="internal"
         />,
 
+        // Needs re-authentication: servers that 401'd this session.
+        serversNeedingReauth.length > 0 ? (
+          <div key="reauth-section" className="flex flex-col gap-1 px-2 pt-1">
+            <Text font="secondary-body" color="text-03">
+              Needs re-authentication
+            </Text>
+          </div>
+        ) : undefined,
+        ...serversNeedingReauth.map((server) => (
+          <LineItem
+            key={`reauth-${server.id}`}
+            icon={SvgKey}
+            rightChildren={
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => handleServerAuthentication(server)}
+              >
+                Re-authenticate
+              </Button>
+            }
+          >
+            {server.name}
+          </LineItem>
+        )),
+
         // Actions
         ...filteredTools.map((tool) =>
           (() => {
@@ -971,7 +1039,7 @@ export default function ActionsPopover({
     <>
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Trigger asChild>
-          <div data-testid="action-management-toggle">
+          <div className="relative" data-testid="action-management-toggle">
             <Button
               disabled={disabled}
               icon={SvgSliders}
@@ -979,6 +1047,11 @@ export default function ActionsPopover({
               prominence="tertiary"
               tooltip="Manage Actions"
             />
+            {serversNeedingReauth.length > 0 && (
+              <div className="absolute -right-1 -top-1 pointer-events-none">
+                <Tag color="red" title={String(serversNeedingReauth.length)} />
+              </div>
+            )}
           </div>
         </Popover.Trigger>
         <Popover.Content side="bottom" align="start" width="lg">
