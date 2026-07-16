@@ -52,10 +52,13 @@ export default function SkillCard({ item, onClick, onEdit }: SkillCardProps) {
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
   const isDisabled = item.source === "custom" && item.enabled === false;
+  const isInvalid = item.source === "custom" && item.skill.is_valid === false;
   const isBuiltinUnavailable = item.source === "builtin" && !item.is_available;
-  const tooltip = isBuiltinUnavailable
-    ? "Skill is currently unavailable. Click to view details."
-    : undefined;
+  const tooltip = isInvalid
+    ? "This skill is invalid. Delete it and create a new skill."
+    : isBuiltinUnavailable
+      ? "Skill is currently unavailable. Click to view details."
+      : undefined;
   const canEdit =
     item.source === "custom" &&
     (item.skill.user_permission === "OWNER" ||
@@ -72,7 +75,11 @@ export default function SkillCard({ item, onClick, onEdit }: SkillCardProps) {
     <Tooltip tooltip={tooltip} side="top">
       <Interactive.Simple onClick={handleClick} group="group/SkillCard">
         <Card
-          variant={isDisabled || isBuiltinUnavailable ? "disabled" : "primary"}
+          variant={
+            isDisabled || isInvalid || isBuiltinUnavailable
+              ? "disabled"
+              : "primary"
+          }
           padding={0}
           gap={0}
           height="full"
@@ -81,7 +88,11 @@ export default function SkillCard({ item, onClick, onEdit }: SkillCardProps) {
             <CardItemLayout
               icon={SvgBlocks}
               title={item.name}
-              description={item.description}
+              description={
+                isInvalid
+                  ? "Delete this invalid skill and create a new one."
+                  : item.description
+              }
               rightChildren={
                 item.source === "custom" && canEdit ? (
                   <div className="opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100">
@@ -118,6 +129,8 @@ export default function SkillCard({ item, onClick, onEdit }: SkillCardProps) {
                     color="amber"
                   />
                 )
+              ) : isInvalid ? (
+                <Tag title="Invalid" color="amber" />
               ) : item.is_personal ? (
                 <Tag title="Personal" color="purple" />
               ) : (

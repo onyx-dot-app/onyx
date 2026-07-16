@@ -51,7 +51,7 @@ export function toPickerSections(
   }
 
   for (const c of skillsData?.customs ?? []) {
-    if (!c.enabled) continue;
+    if (!c.enabled || c.is_valid === false) continue;
     skills.push({
       kind: "skill",
       slug: c.slug,

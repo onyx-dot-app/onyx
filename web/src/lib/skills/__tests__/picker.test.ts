@@ -91,6 +91,18 @@ describe("toPickerSections", () => {
     ]);
   });
 
+  it("filters out invalid customs", () => {
+    const data = skillsList({
+      customs: [
+        customFixture({ slug: "valid-skill" }),
+        customFixture({ slug: "invalid-skill", is_valid: false }),
+      ],
+    });
+    expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([
+      "valid-skill",
+    ]);
+  });
+
   it("builds the Apps section from the external-apps payload with auth state", () => {
     const data = skillsList({ builtins: [builtinFixture({ slug: "pptx" })] });
     const apps = [

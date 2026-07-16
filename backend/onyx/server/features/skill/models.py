@@ -39,6 +39,7 @@ class SkillResponse(BaseModel):
 
     is_available: bool | None = None
     unavailable_reason: str | None = None
+    is_valid: bool | None = None
 
     enabled: bool | None = None
     author_user_id: UUID | None = None
@@ -104,6 +105,7 @@ class SkillResponse(BaseModel):
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
+            is_valid=skill.is_valid,
             enabled=skill.enabled,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
