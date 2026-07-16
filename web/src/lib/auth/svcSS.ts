@@ -4,11 +4,7 @@ import { buildUrl, UrlBuilder } from "@/lib/utilsSS";
 import { getDomain } from "@/lib/redirectSS";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
-import {
-  AuthType,
-  AuthTypeMetadata,
-  type SSOProviderType,
-} from "@/lib/auth/types";
+import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 
@@ -19,7 +15,7 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
   }
 
   const data: {
-    auth_type: string;
+    multi_tenant: boolean;
     requires_verification: boolean;
     anonymous_user_enabled: boolean | null;
     password_min_length: number;
@@ -38,15 +34,12 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
     }[];
   } = await res.json();
 
-  const authType: AuthType = NEXT_PUBLIC_CLOUD_ENABLED
-    ? AuthType.CLOUD
-    : (data.auth_type as AuthType);
+  const multiTenant: boolean = NEXT_PUBLIC_CLOUD_ENABLED
+    ? true
+    : data.multi_tenant;
 
   return {
-    authType,
-    // for SAML / OIDC, we auto-redirect the user to the IdP when the user visits
-    // Onyx in an un-authenticated state
-    autoRedirect: authType === AuthType.OIDC || authType === AuthType.SAML,
+    multiTenant,
     requiresVerification: data.requires_verification,
     anonymousUserEnabled: data.anonymous_user_enabled,
     passwordMinLength: data.password_min_length,
@@ -66,13 +59,6 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
   };
 }
 
-async function getOIDCAuthUrlSS(nextUrl: string | null): Promise<string> {
-  const url = UrlBuilder.fromClientUrl("/api/auth/oidc/authorize");
-  if (nextUrl) url.addParam("next", nextUrl);
-  url.addParam("redirect", true);
-  return url.toString();
-}
-
 async function getGoogleOAuthUrlSS(nextUrl: string | null): Promise<string> {
   const url = UrlBuilder.fromClientUrl("/api/auth/oauth/authorize");
   if (nextUrl) url.addParam("next", nextUrl);
@@ -80,52 +66,19 @@ async function getGoogleOAuthUrlSS(nextUrl: string | null): Promise<string> {
   return url.toString();
 }
 
-async function getSAMLAuthUrlSS(nextUrl: string | null): Promise<string> {
-  const url = UrlBuilder.fromInternalUrl("/auth/saml/authorize");
-  if (nextUrl) url.addParam("next", nextUrl);
-
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error("Failed to fetch data");
-
-  const data: { authorization_url: string } = await res.json();
-  return data.authorization_url;
-}
-
 export async function getAuthUrlSS(
-  authType: AuthType,
+  multiTenant: boolean,
   nextUrl: string | null
 ): Promise<string> {
-  switch (authType) {
-    case AuthType.BASIC:
-      return "";
-    case AuthType.GOOGLE_OAUTH:
-    case AuthType.CLOUD:
-      return getGoogleOAuthUrlSS(nextUrl);
-    case AuthType.SAML:
-      return getSAMLAuthUrlSS(nextUrl);
-    case AuthType.OIDC:
-      return getOIDCAuthUrlSS(nextUrl);
-  }
+  return multiTenant ? getGoogleOAuthUrlSS(nextUrl) : "";
 }
 
 async function logoutStandardSS(headers: Headers): Promise<Response> {
   return fetch(buildUrl("/auth/logout"), { method: "POST", headers });
 }
 
-async function logoutSAMLSS(headers: Headers): Promise<Response> {
-  return fetch(buildUrl("/auth/saml/logout"), { method: "POST", headers });
-}
-
-export async function logoutSS(
-  authType: AuthType,
-  headers: Headers
-): Promise<Response | null> {
-  switch (authType) {
-    case AuthType.SAML:
-      return logoutSAMLSS(headers);
-    default:
-      return logoutStandardSS(headers);
-  }
+export async function logoutSS(headers: Headers): Promise<Response | null> {
+  return logoutStandardSS(headers);
 }
 
 export async function authErrorRedirect(

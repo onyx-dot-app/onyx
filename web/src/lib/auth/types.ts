@@ -1,11 +1,3 @@
-export enum AuthType {
-  BASIC = "basic",
-  GOOGLE_OAUTH = "google_oauth",
-  OIDC = "oidc",
-  SAML = "saml",
-  CLOUD = "cloud",
-}
-
 export type SSOProviderType = "GOOGLE_OAUTH" | "OIDC" | "SAML";
 
 export interface SSOProviderOption {
@@ -16,8 +8,7 @@ export interface SSOProviderOption {
 }
 
 export interface AuthTypeMetadata {
-  authType: AuthType;
-  autoRedirect: boolean;
+  multiTenant: boolean;
   requiresVerification: boolean;
   anonymousUserEnabled: boolean | null;
   passwordMinLength: number;
@@ -28,7 +19,7 @@ export interface AuthTypeMetadata {
   passwordRequireSpecialChar: boolean;
   hasUsers: boolean;
   oauthEnabled: boolean;
-  // DB-backed SSO providers, one login button each. Absent on the client-hook
-  // path that does not fetch them. The login page treats absent as none.
+  // Enabled DB-backed SSO providers, one login button each. Empty on cloud
+  // and when no provider rows exist.
   ssoProviders?: SSOProviderOption[];
 }

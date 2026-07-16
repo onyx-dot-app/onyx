@@ -2,30 +2,14 @@
 // Auth URL helpers
 // ---------------------------------------------------------------------------
 
-import { AuthType } from "@/lib/auth/types";
-
 export function getAuthUrl(
-  authType: AuthType,
+  multiTenant: boolean,
   nextUrl: string | null
 ): string | null {
   const params = new URLSearchParams({ redirect: "true" });
   if (nextUrl) params.set("next", nextUrl);
 
-  switch (authType) {
-    case AuthType.BASIC:
-      return null;
-    case AuthType.GOOGLE_OAUTH:
-    case AuthType.CLOUD:
-      return `/api/auth/oauth/authorize?${params}`;
-    case AuthType.OIDC:
-      return `/api/auth/oidc/authorize?${params}`;
-    case AuthType.SAML:
-      // SAML authorize returns JSON ({authorization_url}), not a redirect —
-      // the IdP URL must be resolved server-side via getAuthUrlSS.
-      return null;
-    default:
-      return null;
-  }
+  return multiTenant ? `/api/auth/oauth/authorize?${params}` : null;
 }
 
 // ---------------------------------------------------------------------------

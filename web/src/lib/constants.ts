@@ -1,5 +1,3 @@
-import { AuthType } from "@/lib/auth/types";
-
 export const IS_DEV = process.env.NODE_ENV === "development";
 
 export const HOST_URL = process.env.WEB_DOMAIN || "http://localhost:3000";
@@ -12,11 +10,6 @@ export const DOCS_ADMINS_PATH = `${DOCS_BASE_URL}/admins`;
 
 export const MCP_INTERNAL_URL =
   process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090";
-
-// NOTE: this should ONLY be used on the server-side (including middleware).
-// The AUTH_TYPE environment variable is set in the backend and shared with Next.js
-export const SERVER_SIDE_ONLY__AUTH_TYPE = (process.env.AUTH_TYPE ||
-  AuthType.BASIC) as AuthType;
 
 export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
   process.env.NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED?.toLowerCase() ===

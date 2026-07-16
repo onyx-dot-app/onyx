@@ -17,6 +17,7 @@ from onyx.db.sso_provider import set_sso_provider_enabled
 from onyx.db.sso_provider import update_sso_provider
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.get_state import invalidate_sso_provider_options_cache
 from onyx.server.manage.sso.models import SSOProviderCreateRequest
 from onyx.server.manage.sso.models import SSOProviderEnabledRequest
 from onyx.server.manage.sso.models import SSOProviderResponse
@@ -93,6 +94,7 @@ def create_sso_provider_endpoint(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
+    invalidate_sso_provider_options_cache()
     return SSOProviderResponse.from_model(provider, WEB_DOMAIN)
 
 
@@ -129,6 +131,7 @@ def update_sso_provider_endpoint(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
+    invalidate_sso_provider_options_cache()
     return SSOProviderResponse.from_model(updated_provider, WEB_DOMAIN)
 
 
@@ -149,4 +152,5 @@ def set_sso_provider_enabled_endpoint(
         provider_id=provider_id,
         enabled=request.enabled,
     )
+    invalidate_sso_provider_options_cache()
     return SSOProviderResponse.from_model(provider, WEB_DOMAIN)

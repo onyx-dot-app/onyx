@@ -7,7 +7,6 @@ from typing import cast
 
 from onyx.auth.schemas import AuthBackend
 from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import QueryHistoryType
 from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
@@ -130,21 +129,6 @@ POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
 #####
 # Auth Configs
 #####
-# Silently default to basic - warnings/errors logged in verify_auth_setting()
-# which only runs on app startup, not during migrations/scripts
-_auth_type_str = (os.environ.get("AUTH_TYPE") or "").lower()
-if _auth_type_str in [auth_type.value for auth_type in AuthType]:
-    AUTH_TYPE = AuthType(_auth_type_str)
-else:
-    AUTH_TYPE = AuthType.BASIC
-
-# Legacy single-provider SSO values run as BASIC. Login for those deployments
-# is served by sso_provider rows instead. verify_auth_setting warns at startup,
-# and the row seeds (alembic 1fc2904131a3 and the SAML conf-dir import) read
-# raw os.environ because this coercion hides the legacy value.
-if AUTH_TYPE in (AuthType.GOOGLE_OAUTH, AuthType.OIDC, AuthType.SAML):
-    AUTH_TYPE = AuthType.BASIC
-
 PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
 PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
 PASSWORD_REQUIRE_UPPERCASE = (
@@ -233,9 +217,8 @@ OAUTH_CLIENT_SECRET = (
 # Whether Google OAuth is enabled (requires both client ID and secret)
 OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
 
-# Default scopes requested when signing in with Google (AUTH_TYPE=google_oauth
-# or AUTH_TYPE=cloud, and the BASIC + OAuth fallback path). These are the
-# minimum required to identify the user via OpenID Connect.
+# Default Google sign-in scopes, the minimum required to identify the user
+# via OpenID Connect.
 GOOGLE_LOGIN_BASE_SCOPES = ["openid", "email", "profile"]
 
 # Applicable for Google OAuth login, allows you to override the scopes that
@@ -1961,7 +1944,7 @@ INSTANCE_TYPE = (
     "managed"
     if os.environ.get("IS_MANAGED_INSTANCE", "").lower() == "true"
     else "cloud"
-    if AUTH_TYPE == AuthType.CLOUD
+    if MULTI_TENANT
     else "self_hosted"
 )
 

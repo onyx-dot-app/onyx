@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
-import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
@@ -102,26 +102,38 @@ export function useSessionWatcher(): boolean {
   );
 }
 
-export function useAuthType(): AuthType | null {
+export function useIsMultiTenant(): boolean | null {
   // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
   // camelCase-mapped shape — a raw fetcher here would poison the cache for
   // every other consumer of the key.
   const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
 
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return AuthType.CLOUD;
+    return true;
   }
 
   if (error || isLoading) {
     return null;
   }
 
-  return authTypeMetadata?.authType ?? null;
+  return authTypeMetadata?.multiTenant ?? null;
+}
+
+// Pass-through forwards the logged-in user's OAuth access token, so offer it
+// only when users authenticate with an OAuth-capable method (Google/OIDC).
+// SAML grants no OAuth token, so a SAML-only deployment must not enable it.
+export function useOAuthPassThroughEnabled(): boolean {
+  const { authTypeMetadata } = useAuthTypeMetadata();
+  return (
+    authTypeMetadata?.oauthEnabled === true ||
+    (authTypeMetadata?.ssoProviders ?? []).some(
+      (p) => p.providerType === "OIDC" || p.providerType === "GOOGLE_OAUTH"
+    )
+  );
 }
 
 export function useTokenRefresh(
   user: User | null,
-  authTypeMetadata: AuthTypeMetadata | undefined,
   authTypeMetadataLoading: boolean,
   onRefreshFail: () => Promise<void>
 ) {
@@ -129,18 +141,11 @@ export function useTokenRefresh(
   const isFirstLoadRef = useRef(true);
 
   useEffect(() => {
-    // Wait for the first load to complete; don't wait on a persistent error —
-    // if metadata is unavailable we conservatively allow refresh so that BASIC
-    // sessions aren't silently killed by a transient /auth/type failure.
+    // Wait only for the initial metadata load. On persistent error we still
+    // refresh so a transient /auth/type failure cannot silently kill sessions.
     if (authTypeMetadataLoading) return;
 
-    if (
-      !user ||
-      user.id === NO_AUTH_USER_ID ||
-      user.is_anonymous_user ||
-      authTypeMetadata?.authType === AuthType.OIDC ||
-      authTypeMetadata?.authType === AuthType.SAML
-    ) {
+    if (!user || user.id === NO_AUTH_USER_ID || user.is_anonymous_user) {
       return;
     }
 
@@ -195,5 +200,5 @@ export function useTokenRefresh(
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [user, authTypeMetadata, authTypeMetadataLoading, onRefreshFail]);
+  }, [user, authTypeMetadataLoading, onRefreshFail]);
 }
