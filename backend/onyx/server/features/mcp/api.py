@@ -395,40 +395,24 @@ async def _refresh_mcp_oauth_token_if_expired(
     connection_config_id: int,
     user_id: str,
 ) -> str | None:
-    """Proactively refresh a per-user MCP OAuth token when it is at/near expiry.
+    """Refresh an SSE-transport MCP server's OAuth token via the same
+    `OAuthClientProvider`/`OnyxTokenStorage` every other MCP OAuth path uses
+    (see `make_oauth_provider`) — the SDK's own httpx.Auth refresh can't run
+    over an open SSE stream, so this drives the provider's refresh step
+    directly instead of the full httpx.Auth flow. That gets client-auth-method
+    handling (`client_secret_basic` vs. `client_secret_post`) and token
+    persistence for free, instead of a second implementation to keep in sync.
 
-    The MCP SDK's ``OAuthClientProvider`` (an ``httpx.Auth``) normally drives
-    refresh transparently, but it's disabled for SSE transport because
-    ``requires_response_body`` is incompatible with an open SSE stream (see
-    ``mcp_client.py``). That leaves the stored ``Authorization: Bearer
-    <access_token>`` header frozen, so once the token expires every SSE tool
-    call fails with an auth error until the user manually reconnects
-    (DST-1273).
+    Uses private SDK methods (`_initialize`/`_refresh_token`/
+    `_handle_refresh_response`) since there's no public "refresh if needed"
+    API — may need adjusting on MCP SDK upgrades.
 
-    Rather than reimplementing the refresh grant, this drives the same
-    ``OAuthClientProvider`` used by every other MCP OAuth path (see
-    ``make_oauth_provider``, used for the initial connect handshake and for
-    non-SSE tool calls) through its refresh step directly, outside the
-    ``httpx.Auth`` flow that SSE can't use. That gets us, for free, the same
-    client-authentication handling (``client_secret_basic`` vs.
-    ``client_secret_post``, negotiated via DCR — see the comment in
-    ``_build_oauth_admin_config_data_for_update``) and the same
-    ``OnyxTokenStorage``-backed persistence (rotated tokens/expiry/header,
-    refresh-token preservation) as the rest of the codebase, instead of a
-    second, independently-maintained implementation.
-
-    ``provider._initialize``/``_refresh_token``/``_handle_refresh_response``
-    are private SDK methods — there's no public "just refresh if needed" API
-    — so this may need adjusting on MCP SDK upgrades.
-
-    Returns the ``Authorization`` header value to use for the current call,
-    or ``None`` when we have no opinion (no refresh token / no client info)
-    and the caller should fall back to whatever header it already built. All
-    failures raise; the caller is expected to treat a refresh failure as
-    non-fatal.
+    Returns the `Authorization` header to use now, or `None` with no opinion
+    (no refresh token / client info) — caller falls back to its own header.
+    Raises on failure; caller treats that as non-fatal.
     """
-    # user_id is only consulted by redirect_handler/callback_handler, which
-    # UNUSED_RETURN_PATH ensures we never invoke here (see make_oauth_provider).
+    # user_id only matters to redirect/callback handlers, never invoked here
+    # since UNUSED_RETURN_PATH short-circuits them.
     provider = make_oauth_provider(
         mcp_server,
         user_id,
@@ -443,10 +427,8 @@ async def _refresh_mcp_oauth_token_if_expired(
         return None
 
     if context.is_token_valid():
-        # Not expired — either it never was (no persisted expiry: treated as
-        # valid, same as the SDK's own is_token_valid()), or a racing call
-        # already refreshed it. Either way, hand back whatever's currently
-        # persisted so the caller doesn't use a pre-refresh header snapshot.
+        # Valid (no persisted expiry also reads as valid), or a racing call
+        # already refreshed it — hand back the current header either way.
         current_tokens = context.current_tokens
         assert current_tokens is not None  # implied by can_refresh_token()
         return f"{current_tokens.token_type} {current_tokens.access_token}"
@@ -476,8 +458,8 @@ def refresh_mcp_oauth_token_if_expired(
     connection_config_id: int,
     user_id: str,
 ) -> str | None:
-    """Sync wrapper for ``_refresh_mcp_oauth_token_if_expired`` (see there for
-    behavior), for the sync ``MCPTool.run`` call site."""
+    """Sync wrapper for `_refresh_mcp_oauth_token_if_expired` (see there for
+    behavior), for the sync `MCPTool.run` call site."""
     return run_async_sync_no_cancel(
         _refresh_mcp_oauth_token_if_expired(mcp_server, connection_config_id, user_id)
     )

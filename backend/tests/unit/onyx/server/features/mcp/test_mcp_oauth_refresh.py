@@ -1,14 +1,10 @@
-"""Unit tests for transport-independent MCP OAuth refresh.
+"""Regression coverage for SSE-transport MCP OAuth refresh: SSE can't use the
+SDK's httpx.Auth refresh (open stream), so refresh_mcp_oauth_token_if_expired
+drives OAuthClientProvider's refresh step directly instead.
 
-The SDK OAuthClientProvider that drives refresh is disabled for SSE transport,
-so an SSE server's access token never rotates and tool calls start failing
-once the token expires. refresh_mcp_oauth_token_if_expired drives that same
-provider's refresh step directly, outside the httpx.Auth flow SSE can't use.
-
-These tests exercise the REAL OAuthClientProvider/OnyxTokenStorage/OAuthContext
-SDK code (client-auth-method branching, token endpoint resolution, persistence)
-end-to-end — only the DB layer and the outbound network call are mocked, so no
-services are required.
+Exercises the real OAuthClientProvider/OAuthContext/OnyxTokenStorage code —
+client-auth-method branching, endpoint resolution, persistence — mocking only
+the DB layer and the outbound network call.
 """
 
 import time
@@ -31,11 +27,9 @@ _REDIRECT_URI = "https://onyx.example.com/mcp/oauth/callback"
 
 
 def _server_stub() -> DbMCPServer:
-    # AUTO_DISCOVERY: token endpoint resolution comes from persisted METADATA
-    # (via OnyxTokenStorage.get_tokens' re-seed), same as real DCR-registered
-    # servers -- KNOWN_PROVIDER servers never negotiate client_secret_basic
-    # (see _build_oauth_admin_config_data), so this mode is what actually
-    # exercises that branch.
+    # AUTO_DISCOVERY: token endpoint comes from persisted METADATA, matching
+    # real DCR-registered servers (KNOWN_PROVIDER never negotiates
+    # client_secret_basic — see _build_oauth_admin_config_data).
     return cast(
         DbMCPServer,
         SimpleNamespace(
@@ -80,12 +74,9 @@ def _install_mocks(
     *,
     response: httpx.Response | None,
 ) -> dict[str, Any]:
-    """Patch the DB layer OnyxTokenStorage touches and the outbound network
-    call, leaving the real OAuthClientProvider/OAuthContext/OnyxTokenStorage
-    SDK code paths untouched.
-
-    Returns a ``captured`` dict recording the outbound refresh request and the
-    persisted config so tests can assert on them.
+    """Patch the DB layer OnyxTokenStorage uses and the outbound network call;
+    the real OAuthClientProvider/OAuthContext/OnyxTokenStorage code runs
+    untouched. Returns a dict capturing the outbound request + persisted config.
     """
     captured: dict[str, Any] = {}
 
@@ -165,8 +156,7 @@ def test_refreshes_expired_token_with_client_secret_post(
         "client_secret": ["csecret"],
     }
     assert "Authorization" not in sent_request.headers
-    # Persisted via the real OnyxTokenStorage.set_tokens, same as every other
-    # MCP OAuth path.
+    # Persisted via the real OnyxTokenStorage.set_tokens.
     persisted = captured["updated_config_data"]
     assert persisted[MCPOAuthKeys.TOKENS.value]["access_token"] == "NEW"
     assert persisted[MCPOAuthKeys.TOKENS.value]["refresh_token"] == "REFRESH_2"
@@ -177,11 +167,9 @@ def test_refreshes_expired_token_with_client_secret_post(
 def test_refresh_uses_basic_auth_for_client_secret_basic(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """DCR can negotiate `client_secret_basic` (see the "healing stale
-    records" comment in `_build_oauth_admin_config_data_for_update`). Sending
-    the secret in the body instead of a Basic auth header gets `invalid_client`
-    from IdPs that require it. This drives the real
-    OAuthContext.prepare_token_auth, not a hand-rolled copy of it."""
+    """DCR can negotiate `client_secret_basic` (`_build_oauth_admin_config_data_for_update`);
+    IdPs that require it reject a body-embedded secret. Exercises the real
+    `OAuthContext.prepare_token_auth`, not a hand-rolled copy."""
     config_data: dict[str, Any] = {
         "headers": {"Authorization": "Bearer OLD"},
         MCPOAuthKeys.TOKENS.value: {
@@ -281,10 +269,8 @@ def test_no_refresh_without_client_info(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_no_refresh_without_persisted_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Connections created before expiry was persisted have no
-    `token_expires_at` — the SDK's own `is_token_valid()` treats an unknown
-    expiry as valid, so these are deliberately left to the one-time manual
-    reconnect rather than refreshed on every call."""
+    """No persisted `token_expires_at` reads as valid per `is_token_valid()` —
+    left to manual reconnect rather than refreshed every call."""
     config_data: dict[str, Any] = {
         "headers": {"Authorization": "Bearer OLD"},
         MCPOAuthKeys.TOKENS.value: {
@@ -308,12 +294,9 @@ def test_no_refresh_without_persisted_expiry(monkeypatch: pytest.MonkeyPatch) ->
 def test_refresh_persists_via_real_onyx_token_storage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A successful refresh persists through the real
-    `OnyxTokenStorage.set_tokens` — same call every other MCP OAuth path uses
-    — so it inherits that path's exact persistence semantics (e.g. `headers`
-    is replaced with just the new `Authorization` header, not merged; any
-    other static headers on the connection are dropped, same as a non-SSE
-    refresh would do today)."""
+    """Persists via the real `OnyxTokenStorage.set_tokens`, so `headers` is
+    replaced with just the new `Authorization` value (not merged) — other
+    static headers are dropped, same as a non-SSE refresh."""
     config_data: dict[str, Any] = {
         "headers": {"Authorization": "Bearer OLD", "X-Custom": "static-value"},
         MCPOAuthKeys.TOKENS.value: {

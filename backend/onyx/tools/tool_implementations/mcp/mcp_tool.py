@@ -227,11 +227,8 @@ class MCPTool(Tool[None]):
                 and self._user_id
             ):
                 if self.mcp_server.transport == MCPTransport.SSE:
-                    # The SDK OAuthClientProvider (httpx.Auth) that drives refresh
-                    # is incompatible with an open SSE stream, so refresh it
-                    # ourselves before the call: rotate the token when expired and
-                    # swap in the fresh Authorization header. Any failure is
-                    # non-fatal — fall back to the stored token.
+                    # httpx.Auth refresh can't run over an open SSE stream;
+                    # refresh proactively here instead. Non-fatal on failure.
                     try:
                         from onyx.server.features.mcp.api import (
                             refresh_mcp_oauth_token_if_expired,
