@@ -384,3 +384,48 @@ def test_set_new_search_settings_replaces_previous_secondary(
     assert secondary["contextual_rag_model_configuration_id"] == mc_id
 
     _cancel_new_embedding(admin_user)
+
+
+def test_reindex_uses_unique_index_name_per_call(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+) -> None:
+    """Every reindex must target a fresh, never-reused index name.
+
+    Regression: the old scheme toggled between "<base>" and "<base>__danswer_alt_index",
+    so two same-model reindexes from the same PRESENT both produced "<base>__danswer_alt_index".
+    Reusing a name lets the port's create-only write silently skip chunks already in a
+    stale index, promoting a stale index with no error. Each reindex now gets a per-model
+    versioned name (latest same-model version + 1), so it is never reused.
+    """
+    current = _get_current_search_settings(admin_user)
+    current_index = current["index_name"]
+
+    _set_new_search_settings(
+        user=admin_user, current_settings=current
+    ).raise_for_status()
+    first_secondary = _get_secondary_search_settings(admin_user)
+    assert first_secondary is not None
+    first_index = first_secondary["index_name"]
+    _cancel_new_embedding(admin_user)
+
+    _set_new_search_settings(
+        user=admin_user, current_settings=current
+    ).raise_for_status()
+    second_secondary = _get_secondary_search_settings(admin_user)
+    assert second_secondary is not None
+    second_index = second_secondary["index_name"]
+    _cancel_new_embedding(admin_user)
+
+    # Both are versioned (numeric suffix) and distinct from the live index, and the second
+    # reindex increments the first's version by one (latest same-model version + 1).
+    assert first_index != current_index
+    assert second_index != current_index
+    assert first_index.startswith("danswer_chunk_")
+    assert second_index.startswith("danswer_chunk_")
+    first_suffix = first_index.rsplit("_", 1)[-1]
+    second_suffix = second_index.rsplit("_", 1)[-1]
+    # Zero-padded 6-digit sequence (OpenSearch rollover convention), incrementing by one.
+    assert len(first_suffix) == 6 and first_suffix.isdigit()
+    assert len(second_suffix) == 6 and second_suffix.isdigit()
+    assert int(second_suffix) == int(first_suffix) + 1

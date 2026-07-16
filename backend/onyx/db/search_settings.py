@@ -82,6 +82,25 @@ def create_search_settings(
     return embedding_model
 
 
+def get_next_index_name(db_session: Session, base_index_name: str) -> str:
+    """Next reindex index name: "<base>_<NNNNNN>", a zero-padded six-digit sequence that is
+    the latest existing same-model sequence + 1 (000001 if none). Mirrors the OpenSearch
+    rollover convention (my-index-000001) so indices sort in order. Each reindex increments,
+    so a name is never reused -- the reindex port writes create-only, and reusing a name
+    lets it silently skip chunks already present in a stale index. Legacy names with no
+    numeric suffix (the bare base, or the old "<base>__danswer_alt_index") are ignored, so a
+    model starts at 000001.
+    """
+    prefix = f"{base_index_name}_"
+    latest = 0
+    for name in db_session.scalars(select(SearchSettings.index_name)):
+        if name.startswith(prefix):
+            suffix = name[len(prefix) :]
+            if suffix.isdigit():
+                latest = max(latest, int(suffix))
+    return f"{base_index_name}_{latest + 1:06d}"
+
+
 def get_embedding_provider_from_provider_type(
     db_session: Session, provider_type: EmbeddingProvider
 ) -> CloudEmbeddingProvider | None:

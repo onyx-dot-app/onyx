@@ -41,6 +41,7 @@ from onyx.db.search_settings import create_search_settings
 from onyx.db.search_settings import delete_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_embedding_provider_from_provider_type
+from onyx.db.search_settings import get_next_index_name
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
@@ -57,7 +58,6 @@ from onyx.server.manage.models import FullModelVersionResponse
 from onyx.server.models import IdReturn
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import ALT_INDEX_SUFFIX
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -121,15 +121,14 @@ def set_new_search_settings(
         )
 
     if search_settings_new.index_name is None:
-        # We define index name here.
-        index_name = f"danswer_chunk_{clean_model_name(search_settings_new.model_name)}"
-        if (
-            search_settings_new.model_name == search_settings.model_name
-            and not search_settings.index_name.endswith(ALT_INDEX_SUFFIX)
-        ):
-            index_name += ALT_INDEX_SUFFIX
+        # Version the index per model so each reindex targets a fresh, never-reused name
+        # (latest same-model version + 1). The old scheme toggled between "<base>" and
+        # "<base>__danswer_alt_index", so a repeated same-model reindex cycled back onto a
+        # still-existing prior index; the port writes create-only and skips any existing
+        # _id as a benign 409, so it would silently promote a STALE index.
+        base = f"danswer_chunk_{clean_model_name(search_settings_new.model_name)}"
         search_values = search_settings_new.model_dump()
-        search_values["index_name"] = index_name
+        search_values["index_name"] = get_next_index_name(db_session, base)
         new_search_settings_request = SavedSearchSettings(**search_values)
     else:
         new_search_settings_request = SavedSearchSettings(
