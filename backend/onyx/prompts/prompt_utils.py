@@ -173,27 +173,6 @@ def apply_prompt_placeholders(
     )
 
 
-def handle_onyx_date_awareness(
-    prompt_str: str,
-    # We always replace the pattern {{CURRENT_DATETIME}} or [[CURRENT_DATETIME]] if it shows up
-    # but if it doesn't show up and the prompt is datetime aware, add it to the prompt at the end.
-    datetime_aware: bool = False,
-) -> str:
-    """
-    If there is a {{CURRENT_DATETIME}} or [[CURRENT_DATETIME]] tag, replace it with the current
-    date and time no matter what.
-    If the prompt is datetime aware, and there are no datetime tags, add it to the prompt.
-    Do nothing otherwise.
-    This can later be expanded to support other tags.
-    """
-    processed_prompt, _ = apply_prompt_placeholders(
-        prompt_str,
-        datetime_aware=datetime_aware,
-        append_datetime_if_aware=True,
-    )
-    return processed_prompt
-
-
 # Basic identity placeholder keys, sourced from the user record rather than the
 # IdP directory profile. Combined with the IdP-derived keys to form the full
 # catalog of author-usable `{{user.<key>}}` placeholders.

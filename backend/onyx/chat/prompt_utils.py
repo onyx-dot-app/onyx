@@ -137,9 +137,6 @@ def build_reminder_message(
     return reminder if reminder else None
 
 
-    return reminder if reminder else None
-
-
 def process_prompt_template(
     prompt_str: str,
     *,
