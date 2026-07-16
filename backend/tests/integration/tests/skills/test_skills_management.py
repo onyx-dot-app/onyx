@@ -92,7 +92,6 @@ def test_preview_returns_instructions_without_share_details(
     skill = SkillManager.create_custom(
         basic_user,
         slug=f"preview-custom-{uuid4().hex[:6]}",
-        name="Preview Skill",
         description="Preview description",
     )
     skill_id = _skill_id(skill)
@@ -111,7 +110,7 @@ def test_preview_returns_instructions_without_share_details(
 
     assert preview.source == "custom"
     assert preview.id == skill_id
-    assert preview.name == "Preview Skill"
+    assert preview.name == skill.name
     assert preview.description == "Preview description"
     assert preview.instructions_markdown == "Skill instructions."
     assert not hasattr(preview, "user_shares")
@@ -137,7 +136,6 @@ def test_patch_details_rewrites_bundle_without_changing_slug(
     skill = SkillManager.create_custom(
         basic_user,
         slug=slug,
-        name="Original Name",
         description="Original description",
     )
     skill_id = _skill_id(skill)
@@ -146,25 +144,24 @@ def test_patch_details_rewrites_bundle_without_changing_slug(
         skill,
         basic_user,
         SkillPatchRequest(
-            name="Updated Name",
             description="Updated description",
             instructions_markdown="# Updated instructions\n\nUse the revised workflow.",
         ),
     )
 
     assert updated.slug == slug
-    assert updated.name == "Updated Name"
+    assert updated.name == slug
     assert updated.description == "Updated description"
 
     editable = SkillManager.get_editable(skill_id, basic_user)
-    assert editable.name == "Updated Name"
+    assert editable.name == slug
     assert editable.description == "Updated description"
     assert editable.instructions_markdown == (
         "# Updated instructions\n\nUse the revised workflow."
     )
 
     preview = SkillManager.preview(skill_id, basic_user)
-    assert preview.name == "Updated Name"
+    assert preview.name == slug
     assert preview.description == "Updated description"
     assert preview.instructions_markdown == (
         "# Updated instructions\n\nUse the revised workflow."

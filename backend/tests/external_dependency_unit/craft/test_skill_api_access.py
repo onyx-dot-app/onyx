@@ -25,6 +25,9 @@ from onyx.server.features.skill.api import remove_current_user_skill_file
 from onyx.server.features.skill.api import replace_current_user_skill_bundle
 from onyx.server.features.skill.api import upload_current_user_skill_files
 from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.skills.bundle import build_single_file_bundle
+from onyx.skills.bundle import build_skill_md
+from onyx.skills.bundle import SKILL_MD_NAME
 from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
 from tests.external_dependency_unit.craft.db_helpers import make_group
 from tests.external_dependency_unit.craft.db_helpers import make_skill
@@ -33,10 +36,10 @@ from tests.external_dependency_unit.craft.db_helpers import share_skill_with_gro
 from tests.external_dependency_unit.craft.db_helpers import share_skill_with_user
 
 
-def _upload(filename: str) -> UploadFile:
+def _upload(filename: str, content: bytes = b"bundle") -> UploadFile:
     return cast(
         UploadFile,
-        SimpleNamespace(file=io.BytesIO(b"bundle"), filename=filename),
+        SimpleNamespace(file=io.BytesIO(content), filename=filename),
     )
 
 
@@ -114,27 +117,29 @@ def test_viewer_share_cannot_patch_skill(
     assert private_skill.enabled is True
 
 
-def test_create_reserved_slug_rejects_before_reading_bundle(
+def test_create_reserved_name_rejects_from_bundle_metadata(
     db_session: Session,
     test_user: User,  # noqa: ARG001
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = make_user(db_session, role=UserRole.BASIC)
-    read_bundle_file = MagicMock()
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_bundle_file",
-        read_bundle_file,
+    bundle = build_single_file_bundle(
+        SKILL_MD_NAME,
+        build_skill_md(
+            name="pptx",
+            description="Reserved built-in name",
+            instructions_markdown="Do the thing.",
+        ).encode("utf-8"),
     )
 
     with pytest.raises(OnyxError) as exc_info:
         create_custom_skill(
-            bundle=_upload("pptx.zip"),
+            bundle=_upload("unrelated-filename.zip", bundle),
             user=user,
             db_session=db_session,
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
-    read_bundle_file.assert_not_called()
+    assert exc_info.value.detail == "skill name 'pptx' is reserved"
 
 
 def test_editor_create_rejects_whitespace_only_fields(

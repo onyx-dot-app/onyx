@@ -66,7 +66,7 @@ def test_create_personal_skill_visibility(
 
 def test_create_personal_skill_from_editor(basic_user: DATestUser) -> None:
     suffix = uuid4().hex[:6]
-    name = f"Editor Skill {suffix}"
+    name = f"editor-skill-{suffix}"
 
     skill = SkillManager.create_from_editor(
         basic_user,
@@ -87,7 +87,7 @@ def test_create_personal_skill_from_editor(basic_user: DATestUser) -> None:
 def test_upload_supporting_files_merges_and_bundle_upload_replaces(
     basic_user: DATestUser,
 ) -> None:
-    original_name = f"Original {uuid4().hex[:6]}"
+    original_name = f"original-{uuid4().hex[:6]}"
     skill = SkillManager.create_from_editor(
         basic_user,
         name=original_name,
@@ -118,18 +118,18 @@ def test_upload_supporting_files_merges_and_bundle_upload_replaces(
     replacement = io.BytesIO()
     with zipfile.ZipFile(replacement, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
-            "replacement/SKILL.md",
-            "---\nname: Replacement\ndescription: Replaced bundle\n---\n\n"
+            f"{original_name}/SKILL.md",
+            f"---\nname: {original_name}\ndescription: Replaced bundle\n---\n\n"
             "Replacement instructions.",
         )
-        zf.writestr("replacement/new.txt", "new")
+        zf.writestr(f"{original_name}/new.txt", "new")
     replaced = SkillManager.upload_files(
         skill,
         replacement.getvalue(),
         "replacement.zip",
         basic_user,
     )
-    assert replaced.name == "Replacement"
+    assert replaced.name == original_name
     assert replaced.description == "Replaced bundle"
     assert replaced.instructions_markdown == "Replacement instructions."
     assert [file.path for file in replaced.files] == ["new.txt"]
@@ -143,7 +143,7 @@ def test_create_personal_skill_accepts_wrapped_directory(
     with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
             f"{slug}/SKILL.md",
-            "---\nname: Wrapped Skill\ndescription: Wrapped directory\n---\n\n"
+            f"---\nname: {slug}\ndescription: Wrapped directory\n---\n\n"
             "Use the supporting script.",
         )
 
@@ -153,7 +153,7 @@ def test_create_personal_skill_accepts_wrapped_directory(
         bundle_bytes=bundle.getvalue(),
     )
 
-    assert skill.name == "Wrapped Skill"
+    assert skill.name == slug
     assert skill.description == "Wrapped directory"
 
 
@@ -170,11 +170,9 @@ def test_owner_can_replace_bundle_and_delete(basic_user: DATestUser) -> None:
     slug = f"personal-mutate-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
 
-    new_bundle = build_minimal_bundle(
-        slug, name="Renamed Personal", description="Updated personal desc"
-    )
+    new_bundle = build_minimal_bundle(slug, description="Updated personal desc")
     updated = SkillManager.replace_personal_bundle(skill, new_bundle, basic_user)
-    assert updated.name == "Renamed Personal"
+    assert updated.name == slug
     assert updated.description == "Updated personal desc"
     assert updated.is_personal is True
 
@@ -278,11 +276,9 @@ def test_owner_can_share_org_wide_and_retain_edit_permissions(
     assert len(visible) == 1
     assert visible[0].is_personal is False
 
-    new_bundle = build_minimal_bundle(
-        slug, name="Retained Owner Edit", description="Owner can still edit"
-    )
+    new_bundle = build_minimal_bundle(slug, description="Owner can still edit")
     updated = SkillManager.replace_personal_bundle(skill, new_bundle, basic_user)
-    assert updated.name == "Retained Owner Edit"
+    assert updated.name == slug
 
     disabled = SkillManager.patch_personal(
         skill, basic_user, SkillPatchRequest(enabled=False)

@@ -39,6 +39,7 @@ class SkillResponse(BaseModel):
 
     is_available: bool | None = None
     unavailable_reason: str | None = None
+    is_valid: bool | None = None
 
     enabled: bool | None = None
     author_user_id: UUID | None = None
@@ -104,6 +105,7 @@ class SkillResponse(BaseModel):
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
+            is_valid=skill.is_valid,
             enabled=skill.enabled,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
@@ -205,7 +207,6 @@ class SkillCreateRequest(BaseModel):
 class SkillPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: str | None = None
     description: str | None = None
     instructions_markdown: str | None = None
     public_permission: SkillSharePermission | None = None
@@ -218,7 +219,6 @@ class SkillPatchRequest(BaseModel):
         fields; null ``public_permission`` is valid and revokes org access."""
         if isinstance(data, dict):
             for field in (
-                "name",
                 "description",
                 "instructions_markdown",
                 "enabled",
@@ -229,7 +229,7 @@ class SkillPatchRequest(BaseModel):
 
     @model_validator(mode="after")
     def _strip_values(self) -> "SkillPatchRequest":
-        for field in ("name", "description", "instructions_markdown"):
+        for field in ("description", "instructions_markdown"):
             value = getattr(self, field)
             if value is None:
                 continue
@@ -241,9 +241,7 @@ class SkillPatchRequest(BaseModel):
 
     @property
     def has_details_update(self) -> bool:
-        return bool(
-            self.model_fields_set & {"name", "description", "instructions_markdown"}
-        )
+        return bool(self.model_fields_set & {"description", "instructions_markdown"})
 
     @property
     def has_db_field_update(self) -> bool:

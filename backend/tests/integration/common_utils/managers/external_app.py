@@ -20,14 +20,15 @@ from tests.integration.common_utils.test_models import DATestUser
 _BUILD_PREFIX = f"{API_SERVER_URL}/build"
 
 
-def _minimal_bundle_zip() -> bytes:
+def _minimal_bundle_zip(skill_name: str) -> bytes:
     """A valid skill bundle (SKILL.md + helper file) for creating bundle-backed
     custom apps through the admin endpoint."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr(
             "SKILL.md",
-            "---\nname: Bundle Name\ndescription: Bundle description\n---\n\nDo things.\n",
+            f"---\nname: {skill_name}\ndescription: Bundle description\n"
+            "---\n\nDo things.\n",
         )
         zf.writestr("helper.py", "print('hello')\n")
     return buf.getvalue()
@@ -172,12 +173,13 @@ class ExternalAppManager:
             "organization_credentials": json.dumps(organization_credentials),
             "enabled": str(enabled).lower(),
         }
-        # Unique filename → unique slug, so repeated creates within one test
-        # don't collide on the bundle-derived skill slug.
+        # Each bundle needs a unique canonical name while slug uniqueness is
+        # still enforced by the current persistence model.
+        skill_name = f"custom-{uuid4().hex[:8]}"
         files: dict[str, tuple[str, bytes, str]] = {
             "bundle": (
-                f"custom-{uuid4().hex[:8]}.zip",
-                _minimal_bundle_zip(),
+                f"{skill_name}.zip",
+                _minimal_bundle_zip(skill_name),
                 "application/zip",
             )
         }

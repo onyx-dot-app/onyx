@@ -36,13 +36,19 @@ def _noop(*_args: object, **_kwargs: object) -> None:
     return None
 
 
-def _bundle_zip(*, with_skill_md: bool = True, marker: str = "v1") -> bytes:
+def _bundle_zip(
+    *,
+    skill_name: str,
+    with_skill_md: bool = True,
+    marker: str = "v1",
+) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         if with_skill_md:
             zf.writestr(
                 "SKILL.md",
-                "---\nname: Bundle Name\ndescription: Bundle description\n---\n\nDo things.\n",
+                f"---\nname: {skill_name}\ndescription: Bundle description\n"
+                "---\n\nDo things.\n",
             )
         zf.writestr("helper.py", f"print('{marker}')\n")
     return buf.getvalue()
@@ -51,8 +57,15 @@ def _bundle_zip(*, with_skill_md: bool = True, marker: str = "v1") -> bytes:
 def _upload(
     filename: str, *, with_skill_md: bool = True, marker: str = "v1"
 ) -> UploadFile:
+    skill_name = filename.removesuffix(".zip")
     return UploadFile(
-        file=io.BytesIO(_bundle_zip(with_skill_md=with_skill_md, marker=marker)),
+        file=io.BytesIO(
+            _bundle_zip(
+                skill_name=skill_name,
+                with_skill_md=with_skill_md,
+                marker=marker,
+            )
+        ),
         filename=filename,
     )
 

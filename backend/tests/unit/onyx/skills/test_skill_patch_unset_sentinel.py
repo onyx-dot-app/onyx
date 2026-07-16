@@ -45,12 +45,10 @@ def test_empty_request_has_no_update_intent() -> None:
 
 def test_detail_fields_track_intent() -> None:
     req = SkillPatchRequest(
-        name=" Updated name ",
         description=" Updated description ",
         instructions_markdown=" Updated instructions ",
     )
 
-    assert req.name == "Updated name"
     assert req.description == "Updated description"
     assert req.instructions_markdown == "Updated instructions"
     assert req.has_details_update is True
@@ -60,7 +58,6 @@ def test_detail_fields_track_intent() -> None:
 @pytest.mark.parametrize(
     "field",
     [
-        "name",
         "description",
         "instructions_markdown",
         "enabled",
@@ -80,7 +77,7 @@ def test_public_permission_null_allowed() -> None:
     assert req.has_db_field_update is True
 
 
-@pytest.mark.parametrize("field", ["name", "description", "instructions_markdown"])
+@pytest.mark.parametrize("field", ["description", "instructions_markdown"])
 def test_empty_strings_rejected(field: str) -> None:
     with pytest.raises(ValidationError, match=f"{field} cannot be empty"):
         SkillPatchRequest.model_validate({field: "  "})
@@ -89,3 +86,6 @@ def test_empty_strings_rejected(field: str) -> None:
 def test_extra_fields_rejected() -> None:
     with pytest.raises(ValidationError):
         SkillPatchRequest.model_validate({"slug": "new-slug"})
+
+    with pytest.raises(ValidationError):
+        SkillPatchRequest.model_validate({"name": "new-name"})

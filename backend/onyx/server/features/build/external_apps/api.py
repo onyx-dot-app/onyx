@@ -315,7 +315,7 @@ def create_custom_external_app(
             organization_credentials=parsed_org_credentials,
             enabled=enabled,
             is_public=True,
-            slug=ingested.slug,
+            slug=ingested.canonical_name,
         )
         # Push before commit so a failure rolls back the create + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
@@ -347,7 +347,7 @@ def replace_custom_app_bundle(
         read_bundle_file(bundle.file),
         bundle.filename,
         file_store,
-        slug=app.skill.slug,
+        expected_name=app.skill.slug,
     ) as ingested:
         app, old_bundle_file_id = update_external_app(
             db_session=db_session,

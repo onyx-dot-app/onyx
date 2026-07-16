@@ -130,7 +130,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
-    setName(nextSkill.name);
+    setName(nextSkill.slug);
     setDescription(nextSkill.description);
     setInstructionsMarkdown(nextSkill.instructions_markdown);
   }, []);
@@ -149,7 +149,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     }
     if (!skill) return false;
     return (
-      name !== skill.name ||
       description !== skill.description ||
       instructionsMarkdown !== skill.instructions_markdown
     );
@@ -157,7 +156,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
     description,
     instructionsMarkdown,
     isCreating,
-    name,
     pendingFilesUpload,
     skill,
   ]);
@@ -221,7 +219,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
       if (!skill) return;
       const updated = await patchUserSkill(skill.id, {
-        name,
         description,
         instructions_markdown: instructionsMarkdown,
       });
@@ -503,15 +500,37 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                   sizePreset="main-content"
                   variant="section"
                 />
-                <InputVertical withLabel="name" title="Name">
-                  <InputTypeIn
-                    id="name"
-                    name="name"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Name your skill"
-                    variant={fieldsLocked ? "disabled" : "primary"}
-                  />
+                <InputVertical
+                  withLabel="name"
+                  title="Name"
+                  disabled={fieldsLocked || !isCreating}
+                  description={
+                    isCreating
+                      ? "Use lowercase letters, numbers, and single hyphens."
+                      : "Skill names cannot be changed after creation."
+                  }
+                >
+                  <Tooltip
+                    tooltip={
+                      isCreating
+                        ? undefined
+                        : "Skill names cannot be changed after creation."
+                    }
+                    side="top"
+                  >
+                    <div className="w-full">
+                      <InputTypeIn
+                        id="name"
+                        name="name"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        placeholder="Name your skill"
+                        variant={
+                          fieldsLocked || !isCreating ? "disabled" : "primary"
+                        }
+                      />
+                    </div>
+                  </Tooltip>
                 </InputVertical>
 
                 <InputVertical
@@ -738,8 +757,9 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
             </Button>
           }
         >
-          This upload includes SKILL.md. Continuing will replace the current
-          name, description, instructions, and files with the uploaded bundle.
+          {isCreating
+            ? "This upload includes SKILL.md. Continuing will replace the current name, description, instructions, and files with the uploaded bundle."
+            : "This upload must use the same skill name. Continuing will replace the description, instructions, and files with the uploaded bundle."}
         </ConfirmationModalLayout>
       )}
 

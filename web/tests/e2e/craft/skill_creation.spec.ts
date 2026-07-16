@@ -33,7 +33,7 @@ test("SKILL.md populates the create form after confirmation", async ({
     mimeType: "text/markdown",
     buffer: Buffer.from(
       "---\n" +
-        "name: Uploaded Skill\n" +
+        "name: uploaded-skill\n" +
         "description: Uploaded description\n" +
         "---\n\n" +
         "Uploaded instructions\n"
@@ -48,7 +48,7 @@ test("SKILL.md populates the create form after confirmation", async ({
 
   await expect(page.locator('input[name="slug"]')).toHaveCount(0);
   await expect(page.locator('input[name="name"]')).toHaveValue(
-    "Uploaded Skill"
+    "uploaded-skill"
   );
   await expect(page.locator('textarea[name="description"]')).toHaveValue(
     "Uploaded description"

@@ -22,7 +22,7 @@ def _bundle() -> bytes:
     return build_single_file_bundle(
         "SKILL.md",
         build_skill_md(
-            name="Demo",
+            name="demo",
             description="Demo description",
             instructions_markdown="# Instructions\n\nDo the work.",
         ).encode(),
@@ -34,7 +34,6 @@ def test_merge_supporting_zip_preserves_skill_md_and_unrelated_files() -> None:
         _bundle(),
         b"old reference",
         filename="references/context.txt",
-        slug="demo",
     )
 
     merged = update_custom_bundle_files(
@@ -46,7 +45,6 @@ def test_merge_supporting_zip_preserves_skill_md_and_unrelated_files() -> None:
             ]
         ),
         filename="supporting-files.zip",
-        slug="demo",
     )
 
     with zipfile.ZipFile(io.BytesIO(merged)) as zf:
@@ -56,9 +54,7 @@ def test_merge_supporting_zip_preserves_skill_md_and_unrelated_files() -> None:
 
 
 def test_skill_bundle_upload_replaces_all_existing_files() -> None:
-    existing = update_custom_bundle_files(
-        _bundle(), b"old", filename="old.txt", slug="demo"
-    )
+    existing = update_custom_bundle_files(_bundle(), b"old", filename="old.txt")
     replacement = _zip(
         [
             (
@@ -73,7 +69,6 @@ def test_skill_bundle_upload_replaces_all_existing_files() -> None:
         existing,
         replacement,
         filename="replacement.zip",
-        slug="demo",
     )
 
     with zipfile.ZipFile(io.BytesIO(updated)) as zf:
@@ -83,16 +78,13 @@ def test_skill_bundle_upload_replaces_all_existing_files() -> None:
 
 @pytest.mark.parametrize("filename", ["SKILL.md", "skill.md", "Skill.md"])
 def test_standalone_skill_md_replaces_existing_bundle(filename: str) -> None:
-    existing = update_custom_bundle_files(
-        _bundle(), b"old", filename="old.txt", slug="demo"
-    )
+    existing = update_custom_bundle_files(_bundle(), b"old", filename="old.txt")
     skill_md = b"---\nname: New\ndescription: New desc\n---\n\nNew instructions.\n"
 
     updated = update_custom_bundle_files(
         existing,
         skill_md,
         filename=filename,
-        slug="demo",
     )
 
     with zipfile.ZipFile(io.BytesIO(updated)) as zf:
@@ -105,13 +97,11 @@ def test_remove_supporting_file_preserves_skill_md_and_other_files() -> None:
         _bundle(),
         _zip([("scripts/run.py", b"run"), ("references/context.md", b"context")]),
         filename="files.zip",
-        slug="demo",
     )
 
     updated = update_custom_bundle_files(
         existing,
         remove_path="scripts/run.py",
-        slug="demo",
     )
 
     with zipfile.ZipFile(io.BytesIO(updated)) as zf:
@@ -127,16 +117,14 @@ def test_remove_rejects_required_or_missing_file(path: str) -> None:
     )
 
     with pytest.raises(OnyxError, match=expected_message):
-        update_custom_bundle_files(_bundle(), remove_path=path, slug="demo")
+        update_custom_bundle_files(_bundle(), remove_path=path)
 
 
 def test_zip_with_misplaced_skill_md_is_rejected_instead_of_merged() -> None:
     upload = _zip([("outer/inner/SKILL.md", b"invalid")])
 
     with pytest.raises(OnyxError, match="SKILL.md missing at bundle root"):
-        update_custom_bundle_files(
-            _bundle(), upload, filename="nested.zip", slug="demo"
-        )
+        update_custom_bundle_files(_bundle(), upload, filename="nested.zip")
 
 
 def test_inspect_custom_bundle_returns_instructions_and_sorted_supporting_files() -> (
@@ -146,7 +134,6 @@ def test_inspect_custom_bundle_returns_instructions_and_sorted_supporting_files(
         _bundle(),
         _zip([("z.txt", b"zz"), ("docs/a.md", b"a")]),
         filename="files.zip",
-        slug="demo",
     )
 
     contents = inspect_custom_bundle(bundle)

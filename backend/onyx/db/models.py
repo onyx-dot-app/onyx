@@ -4493,6 +4493,8 @@ class Skill(Base):
     # files live on disk under BUILTIN_SKILLS_PATH).
     bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Existing custom rows are classified lazily before sandbox hydration.
+    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),

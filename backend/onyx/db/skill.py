@@ -18,7 +18,9 @@ These helpers never commit — callers control the transaction boundary so a
 multi-step admin flow (e.g. create row + replace shares) can roll back atomically.
 """
 
+from collections.abc import Iterable
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import Enum
 from uuid import UUID
 
@@ -29,11 +31,13 @@ from sqlalchemy import exists
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SkillSharePermission
 from onyx.db.external_app import is_user_authenticated_for_app
@@ -58,6 +62,13 @@ class SkillAccessPolicy(str, Enum):
     VIEW = "view"
     EDIT = "edit"
     USE = "use"
+
+
+@dataclass(frozen=True)
+class SkillValidityUpdate:
+    skill_id: UUID
+    bundle_file_id: str | None
+    is_valid: bool
 
 
 def _is_shared_with_user(
@@ -265,6 +276,11 @@ def _skill_select_for_access_policy(
             Skill.enabled.is_(True),
             available_in_sandbox,
             visible_to_user,
+            or_(
+                Skill.built_in_skill_id.isnot(None),
+                Skill.is_valid.is_(None),
+                Skill.is_valid.is_(True),
+            ),
         )
         return _exclude_unavailable_built_in_skills(stmt, db_session)
 
@@ -396,6 +412,7 @@ def create_skill__no_commit(
         description=description,
         bundle_file_id=bundle_file_id,
         bundle_sha256=bundle_sha256,
+        is_valid=True,
         public_permission=_public_permission_for_update(
             current_permission=None,
             is_public=is_public,
@@ -445,6 +462,7 @@ def create_built_in_skill_row__no_commit(
         built_in_skill_id=built_in_skill_id,
         bundle_file_id=None,
         bundle_sha256=None,
+        is_valid=True,
         public_permission=_public_permission_for_update(
             current_permission=None,
             is_public=is_public,
@@ -471,17 +489,13 @@ def replace_skill_bundle(
     skill: Skill,
     new_bundle_file_id: str,
     new_bundle_sha256: str,
-    new_name: str,
     new_description: str,
     db_session: Session,
 ) -> str:
-    """Swap a skill's bundle blob and refresh its display metadata.
+    """Swap a skill's bundle blob and refresh its description.
 
     Returns the old bundle file id so the caller can delete the old blob from
     FileStore after the transaction commits.
-
-    Name and description come from the new bundle's SKILL.md frontmatter so
-    the DB row stays in lockstep with what's actually pushed to sandboxes.
 
     Rejects built-in rows — they have no bundle.
     """
@@ -502,8 +516,8 @@ def replace_skill_bundle(
     old_bundle_file_id = skill.bundle_file_id
     skill.bundle_file_id = new_bundle_file_id
     skill.bundle_sha256 = new_bundle_sha256
-    skill.name = new_name
     skill.description = new_description
+    skill.is_valid = True
     db_session.flush()
     return old_bundle_file_id
 
@@ -628,3 +642,29 @@ def delete_skill(skill: Skill, db_session: Session) -> str | None:
     db_session.delete(skill)
     db_session.flush()
     return bundle_file_id
+
+
+def persist_skill_validity(
+    updates: Iterable[SkillValidityUpdate],
+) -> None:
+    """Persist classifications if each skill still references the observed bundle."""
+    if not updates:
+        return
+
+    with get_session_with_current_tenant() as db_session:
+        for validity_update in updates:
+            bundle_matches = (
+                Skill.bundle_file_id == validity_update.bundle_file_id
+                if validity_update.bundle_file_id is not None
+                else Skill.bundle_file_id.is_(None)
+            )
+            db_session.execute(
+                update(Skill)
+                .where(
+                    Skill.id == validity_update.skill_id,
+                    bundle_matches,
+                    Skill.is_valid.is_(None),
+                )
+                .values(is_valid=validity_update.is_valid)
+            )
+        db_session.commit()
