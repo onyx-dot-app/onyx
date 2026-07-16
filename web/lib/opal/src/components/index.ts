@@ -166,6 +166,12 @@ export {
   type PasswordInputTypeInProps,
 } from "@opal/components/inputs/password-input-type-in/components";
 
+/* InputTextArea */
+export {
+  InputTextArea,
+  type InputTextAreaProps,
+} from "@opal/components/inputs/input-text-area/components";
+
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";
 
