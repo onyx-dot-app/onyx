@@ -27,7 +27,7 @@ function humanizeSource(source: DocumentSource): string {
 }
 
 // Per-connector logos + labels; a source absent here falls back to a generic icon + humanized name.
-export const SOURCE_META: Record<DocumentSource, SourceMeta> = {};
+export const SOURCE_META: Partial<Record<DocumentSource, SourceMeta>> = {};
 
 export function getSourceMeta(source: DocumentSource): SourceMeta {
   return (
