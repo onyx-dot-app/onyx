@@ -6,8 +6,10 @@ from mcp.client.auth import OAuthClientProvider
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
+from onyx.db.mcp import ResolvedMCPCredentials
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
+from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -20,13 +22,6 @@ from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-# Headers that cannot be overridden by user requests to prevent security issues
-# Host header is particularly critical - it can be used for Host Header Injection attacks
-# to route requests to unintended internal servers
-DENYLISTED_MCP_HEADERS = {
-    "host",  # Prevents Host Header Injection attacks
-}
 
 # TODO: for now we're fitting MCP tool responses into the CustomToolCallSummary class
 # In the future we may want custom handling for MCP tool responses
@@ -159,14 +154,14 @@ class MCPTool(Tool[None]):
                         denylisted_provided,
                     )
 
-            # Priority 2: Base headers from connection config (DB) - overrides request
-            if self.connection_config and self.connection_config.config:
-                config_dict = self.connection_config.config.get_value(apply_mask=False)
-                headers.update(config_dict.get("headers", {}))
-
-            # Priority 3: For pass-through OAuth, use the user's login OAuth token
-            if self._user_oauth_token:
-                headers["Authorization"] = f"Bearer {self._user_oauth_token}"
+            # Priority 2 + 3: stored connection-config headers, then the
+            # PT_OAuth login token — both override request headers.
+            headers.update(
+                ResolvedMCPCredentials(
+                    connection_config=self.connection_config,
+                    user_oauth_token=self._user_oauth_token,
+                ).build_headers()
+            )
 
             # Check if this is an authentication issue before making the call
             is_passthrough_oauth = (

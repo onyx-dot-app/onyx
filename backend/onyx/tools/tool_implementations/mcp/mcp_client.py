@@ -289,6 +289,22 @@ async def initialize_mcp_client(
     )
 
 
+def initialize_mcp_client_sync(
+    server_url: str,
+    connection_headers: dict[str, str] | None = None,
+    transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
+    auth: OAuthClientProvider | None = None,
+) -> InitializeResult:
+    """Synchronous wrapper for initializing an MCP session."""
+    return _call_mcp_client_function_sync(
+        lambda session: session.initialize(),
+        server_url,
+        connection_headers,
+        transport,
+        auth,
+    )
+
+
 async def _discover_mcp_tools(session: ClientSession) -> list[MCPLibTool]:
     # 1) initialize
     import time

@@ -358,6 +358,17 @@ class ResolvedMCPCredentials(BaseModel):
     connection_config: MCPConnectionConfig | None
     user_oauth_token: str | None
 
+    def build_headers(self) -> dict[str, str]:
+        """Auth headers for a request to the server: the stored
+        connection-config headers, with PT_OAUTH's login token taking
+        precedence. Empty when no credentials are stored."""
+        headers = dict(
+            extract_connection_data(self.connection_config).get("headers", {})
+        )
+        if self.user_oauth_token:
+            headers["Authorization"] = f"Bearer {self.user_oauth_token}"
+        return headers
+
 
 def resolve_mcp_credentials(
     mcp_server: MCPServer,
