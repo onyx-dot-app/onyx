@@ -92,42 +92,15 @@ def test_patch_updates_config_on_non_managed_built_in(
     }
 
 
-def test_partial_patch_leaves_other_fields_untouched(
-    db_session: Session,
-    test_user: User,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
-    app = _slack_app(db_session)
-    app_id = app.id
-
-    api.update_external_app_admin(
-        external_app_id=app_id,
-        request=UpdateExternalAppRequest(enabled=False),
-        _=test_user,
-        db_session=db_session,
-    )
-
-    db_session.expire_all()
-    stored = get_external_app_by_id(db_session, app_id)
-    assert stored is not None
-    assert stored.skill.enabled is False
-    assert stored.skill.name == "Slack"
-    assert list(stored.upstream_url_patterns) == _PATTERNS
-    assert stored.auth_template == _AUTH_TEMPLATE
-
-
 def test_patch_rolls_back_when_push_fails(
     db_session: Session,
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Push runs before commit, so a push failure leaves the DB unchanged. After
-    rolling back, the enabled flag is back to its original value (a committed
-    change wouldn't be) — proving commit was never reached."""
+    """Push failure leaves the app update uncommitted."""
     app = _slack_app(db_session)
     app_id = app.id
-    assert app.skill.enabled is True
+    original_description = app.skill.description
 
     def _boom(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("push failed")
@@ -137,7 +110,7 @@ def test_patch_rolls_back_when_push_fails(
     with pytest.raises(RuntimeError):
         api.update_external_app_admin(
             external_app_id=app_id,
-            request=UpdateExternalAppRequest(enabled=False),
+            request=UpdateExternalAppRequest(description="changed"),
             _=test_user,
             db_session=db_session,
         )
@@ -145,4 +118,4 @@ def test_patch_rolls_back_when_push_fails(
     db_session.rollback()
     stored = get_external_app_by_id(db_session, app_id)
     assert stored is not None
-    assert stored.skill.enabled is True
+    assert stored.skill.description == original_description

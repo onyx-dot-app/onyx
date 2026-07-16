@@ -280,9 +280,7 @@ def test_owner_can_share_org_wide_and_retain_edit_permissions(
     updated = SkillManager.replace_personal_bundle(skill, new_bundle, basic_user)
     assert updated.name == slug
 
-    disabled = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(enabled=False)
-    )
+    disabled = SkillManager.set_enabled(skill, basic_user, False)
     assert disabled.enabled is False
 
 
@@ -293,9 +291,7 @@ def test_owner_can_toggle_personal_skill(
     slug = f"personal-toggle-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
 
-    toggled = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(enabled=False)
-    )
+    toggled = SkillManager.set_enabled(skill, basic_user, False)
     assert toggled.enabled is False
     assert toggled.is_personal is True
 
@@ -311,14 +307,10 @@ def test_owner_can_toggle_personal_skill(
     # still invisible to everyone else
     assert slug not in _user_custom_slugs(other_basic_user)
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.patch_personal(
-            skill, other_basic_user, SkillPatchRequest(enabled=True)
-        )
+        SkillManager.set_enabled(skill, other_basic_user, True)
     assert exc_info.value.response.status_code == 404
 
-    reenabled = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(enabled=True)
-    )
+    reenabled = SkillManager.set_enabled(skill, basic_user, True)
     assert reenabled.enabled is True
 
 
@@ -333,18 +325,15 @@ def test_owner_can_toggle_after_sharing_org_wide(
         SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
     )
 
-    disabled = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(enabled=False)
-    )
+    disabled = SkillManager.set_enabled(skill, basic_user, False)
     assert disabled.enabled is False
 
 
-def test_admin_disable_then_owner_reenable(
+def test_user_enablement_is_independent(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
-    """Admin disable is a reversible mute, not a sticky lock: the skill stays
-    listed (greyed) for the owner and the owner can re-enable it."""
+    """One user's preference does not change another user's preference."""
     slug = f"personal-admin-toggle-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
     SkillManager.patch_personal(
@@ -353,17 +342,13 @@ def test_admin_disable_then_owner_reenable(
         SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
     )
 
-    SkillManager.patch_custom(skill, admin_user, SkillPatchRequest(enabled=False))
+    SkillManager.set_enabled(skill, admin_user, False)
     own = [
         skill
         for skill in SkillManager.list_for_user(basic_user).customs
         if skill.slug == slug
     ]
-    assert len(own) == 1 and own[0].enabled is False
+    assert len(own) == 1 and own[0].enabled is True
 
-    # enabled is a shared flag with no who-disabled tracking, so the owner can
-    # turn it back on.
-    reenabled = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(enabled=True)
-    )
-    assert reenabled.enabled is True
+    admin_view = SkillManager.get_for_user(skill.id, admin_user)
+    assert admin_view.enabled is False

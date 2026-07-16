@@ -9,22 +9,14 @@ from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.db.skill import fetch_skill
 from onyx.db.skill import list_skills
+from onyx.db.skill import set_skill_public_permission
 from onyx.db.skill import SkillAccessPolicy
-from onyx.db.skill import update_skill_fields
 from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
 from tests.external_dependency_unit.craft.db_helpers import make_group
 from tests.external_dependency_unit.craft.db_helpers import make_skill
 from tests.external_dependency_unit.craft.db_helpers import make_user
 from tests.external_dependency_unit.craft.db_helpers import share_skill_with_group
 from tests.external_dependency_unit.craft.db_helpers import share_skill_with_user
-
-
-def _admin_skills(admin: User, db_session: Session):
-    return list_skills(
-        policy=SkillAccessPolicy.VIEW,
-        user=admin,
-        db_session=db_session,
-    )
 
 
 def _user_skills(user: User, db_session: Session):
@@ -36,45 +28,13 @@ def _user_skills(user: User, db_session: Session):
 
 
 class TestSkillVisibility:
-    def test_admin_sees_disabled_skill(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        admin = make_user(db_session, role=UserRole.ADMIN)
-        disabled_skill = make_skill(db_session, enabled=False, is_public=True)
-
-        admin_list = _admin_skills(admin, db_session)
-        admin_ids = {s.id for s in admin_list}
-
-        assert disabled_skill.id in admin_ids
-        # Sanity: fetched row is actually disabled.
-        admin_seen = next(s for s in admin_list if s.id == disabled_skill.id)
-        assert admin_seen.enabled is False
-        # And the admin path *also* bypasses the user filter — this user
-        # exists but does not change what the admin skill listing returns.
-        assert admin is not None
-
-    def test_user_does_not_see_disabled_skill(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        disabled_skill = make_skill(db_session, enabled=False, is_public=True)
-
-        user_list = _user_skills(user, db_session)
-        user_ids = {s.id for s in user_list}
-
-        assert disabled_skill.id not in user_ids
-
     def test_user_sees_public_skill(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
         user = make_user(db_session, role=UserRole.BASIC)
-        public_skill = make_skill(db_session, is_public=True, enabled=True)
+        public_skill = make_skill(db_session, is_public=True)
 
         user_list = _user_skills(user, db_session)
         user_ids = {s.id for s in user_list}
@@ -89,7 +49,7 @@ class TestSkillVisibility:
         user = make_user(db_session, role=UserRole.BASIC)
         # Another group has a share; this user is not in it.
         other_group = make_group(db_session)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, other_group)
 
         user_list = _user_skills(user, db_session)
@@ -105,7 +65,7 @@ class TestSkillVisibility:
         user = make_user(db_session, role=UserRole.BASIC)
         group = make_group(db_session)
         add_user_to_group(db_session, user, group)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
 
         user_list = _user_skills(user, db_session)
@@ -119,7 +79,7 @@ class TestSkillVisibility:
         test_user: User,  # noqa: ARG002
     ) -> None:
         user = make_user(db_session, role=UserRole.BASIC)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_user(db_session, private_skill, user)
 
         result = fetch_skill(
@@ -138,7 +98,7 @@ class TestSkillVisibility:
         test_user: User,  # noqa: ARG002
     ) -> None:
         user = make_user(db_session, role=UserRole.BASIC)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_user(
             db_session,
             private_skill,
@@ -161,7 +121,7 @@ class TestSkillVisibility:
         test_user: User,  # noqa: ARG002
     ) -> None:
         user = make_user(db_session, role=UserRole.BASIC)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_user(
             db_session,
             private_skill,
@@ -187,7 +147,7 @@ class TestSkillVisibility:
         user = make_user(db_session, role=UserRole.BASIC)
         group = make_group(db_session)
         add_user_to_group(db_session, user, group)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(
             db_session,
             private_skill,
@@ -212,7 +172,7 @@ class TestSkillVisibility:
         user = make_user(db_session, role=UserRole.BASIC)
         group = make_group(db_session)
         add_user_to_group(db_session, user, group)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(
             db_session,
             private_skill,
@@ -240,7 +200,6 @@ class TestSkillVisibility:
             db_session,
             is_public=True,
             public_permission=SkillSharePermission.VIEWER,
-            enabled=True,
         )
 
         result = fetch_skill(
@@ -262,7 +221,6 @@ class TestSkillVisibility:
             db_session,
             is_public=True,
             public_permission=SkillSharePermission.EDITOR,
-            enabled=True,
         )
 
         result = fetch_skill(
@@ -275,65 +233,41 @@ class TestSkillVisibility:
         assert result is not None
         assert result.id == public_skill.id
 
-    def test_admin_edit_fetch_allows_personal_disabled_skill(
+    def test_admin_edit_fetch_allows_personal_skill(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
         admin = make_user(db_session, role=UserRole.ADMIN)
-        private_disabled_skill = make_skill(
-            db_session,
-            is_public=False,
-            enabled=False,
-        )
+        private_skill = make_skill(db_session, is_public=False)
 
         result = fetch_skill(
-            private_disabled_skill.id,
+            private_skill.id,
             policy=SkillAccessPolicy.EDIT,
             user=admin,
             db_session=db_session,
         )
 
         assert result is not None
-        assert result.id == private_disabled_skill.id
+        assert result.id == private_skill.id
 
-    def test_disabled_skill_visible_to_editor_share_but_not_viewer_share(
+    def test_admin_view_includes_all_skills(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        viewer = make_user(db_session, role=UserRole.BASIC)
-        editor = make_user(db_session, role=UserRole.BASIC)
-        disabled_skill = make_skill(db_session, is_public=False, enabled=False)
-        share_skill_with_user(
-            db_session,
-            disabled_skill,
-            viewer,
-            SkillSharePermission.VIEWER,
-        )
-        share_skill_with_user(
-            db_session,
-            disabled_skill,
-            editor,
-            SkillSharePermission.EDITOR,
-        )
+        admin = make_user(db_session, role=UserRole.ADMIN)
+        private_skill = make_skill(db_session, is_public=False)
 
-        viewer_result = fetch_skill(
-            disabled_skill.id,
-            policy=SkillAccessPolicy.VIEW,
-            user=viewer,
-            db_session=db_session,
+        assert (
+            fetch_skill(
+                private_skill.id,
+                policy=SkillAccessPolicy.VIEW,
+                user=admin,
+                db_session=db_session,
+            )
+            is not None
         )
-        editor_result = fetch_skill(
-            disabled_skill.id,
-            policy=SkillAccessPolicy.VIEW,
-            user=editor,
-            db_session=db_session,
-        )
-
-        assert viewer_result is None
-        assert editor_result is not None
-        assert editor_result.id == disabled_skill.id
 
     def test_public_permission_null_controls_org_visibility(
         self,
@@ -341,7 +275,7 @@ class TestSkillVisibility:
         test_user: User,  # noqa: ARG002
     ) -> None:
         user = make_user(db_session, role=UserRole.BASIC)
-        skill = make_skill(db_session, is_public=False, enabled=True)
+        skill = make_skill(db_session, is_public=False)
         assert (
             fetch_skill(
                 skill.id,
@@ -352,7 +286,7 @@ class TestSkillVisibility:
             is None
         )
 
-        update_skill_fields(
+        set_skill_public_permission(
             skill=skill,
             public_permission=SkillSharePermission.EDITOR,
             db_session=db_session,
@@ -366,7 +300,11 @@ class TestSkillVisibility:
         assert editor_result is not None
         assert editor_result.id == skill.id
 
-        update_skill_fields(skill=skill, is_public=False, db_session=db_session)
+        set_skill_public_permission(
+            skill=skill,
+            public_permission=None,
+            db_session=db_session,
+        )
         assert (
             fetch_skill(
                 skill.id,
@@ -385,7 +323,7 @@ class TestSkillVisibility:
         user = make_user(db_session, role=UserRole.BASIC)
         group = make_group(db_session)
         membership = add_user_to_group(db_session, user, group)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
 
         before_ids = {s.id for s in _user_skills(user, db_session)}
@@ -411,11 +349,11 @@ class TestSkillVisibility:
 
         # A private skill shared with a group the curator is NOT in.
         other_group = make_group(db_session)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, other_group)
 
         # A public skill — both should see it.
-        public_skill = make_skill(db_session, is_public=True, enabled=True)
+        public_skill = make_skill(db_session, is_public=True)
 
         curator_ids = {s.id for s in _user_skills(curator, db_session)}
         basic_ids = {s.id for s in _user_skills(basic, db_session)}
@@ -435,7 +373,7 @@ class TestSkillVisibility:
     ) -> None:
         user = make_user(db_session, role=UserRole.BASIC)
         other_group = make_group(db_session)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, other_group)
 
         result = fetch_skill(
@@ -457,7 +395,7 @@ class TestSkillVisibility:
         membership = add_user_to_group(db_session, curator, group)
         membership.is_curator = True
         db_session.flush()
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
 
         result = fetch_skill(
@@ -478,7 +416,7 @@ class TestSkillVisibility:
         curator = make_user(db_session, role=UserRole.CURATOR)
         group = make_group(db_session)
         add_user_to_group(db_session, curator, group)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
 
         result = fetch_skill(
@@ -501,7 +439,7 @@ class TestSkillVisibility:
         membership = add_user_to_group(db_session, curator, curated_group)
         membership.is_curator = True
         db_session.flush()
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, curated_group)
         share_skill_with_group(db_session, private_skill, other_group)
 
@@ -522,7 +460,7 @@ class TestSkillVisibility:
         curator = make_user(db_session, role=UserRole.GLOBAL_CURATOR)
         group = make_group(db_session)
         add_user_to_group(db_session, curator, group)
-        private_skill = make_skill(db_session, is_public=False, enabled=True)
+        private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
 
         result = fetch_skill(
@@ -541,7 +479,7 @@ class TestSkillVisibility:
         test_user: User,  # noqa: ARG002
     ) -> None:
         curator = make_user(db_session, role=UserRole.CURATOR)
-        public_skill = make_skill(db_session, is_public=True, enabled=True)
+        public_skill = make_skill(db_session, is_public=True)
 
         result = fetch_skill(
             public_skill.id,

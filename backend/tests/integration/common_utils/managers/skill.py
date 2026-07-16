@@ -283,6 +283,20 @@ class SkillManager:
         return _response_model(response, SkillsList)
 
     @staticmethod
+    def set_enabled(
+        skill: SkillResponse,
+        user_performing_action: DATestUser,
+        enabled: bool,
+    ) -> SkillResponse:
+        response = client.put(
+            f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+            json={"enabled": enabled},
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillResponse)
+
+    @staticmethod
     def get_for_user(
         skill_id: str | UUID,
         user_performing_action: DATestUser,

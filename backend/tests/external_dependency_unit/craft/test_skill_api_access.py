@@ -50,20 +50,18 @@ def test_curator_without_group_scope_cannot_patch_shared_skill(
     curator = make_user(db_session, role=UserRole.CURATOR)
     group = make_group(db_session)
     add_user_to_group(db_session, curator, group)
-    private_skill = make_skill(db_session, is_public=False, enabled=True)
+    private_skill = make_skill(db_session, is_public=False)
     share_skill_with_group(db_session, private_skill, group)
 
     with pytest.raises(OnyxError) as exc_info:
         patch_current_user_skill(
             private_skill.id,
-            SkillPatchRequest(enabled=False),
+            SkillPatchRequest(description="unauthorized edit"),
             user=curator,
             db_session=db_session,
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
-    db_session.refresh(private_skill)
-    assert private_skill.enabled is True
 
 
 def test_fetch_direct_shared_skill_is_not_personal(
@@ -71,7 +69,7 @@ def test_fetch_direct_shared_skill_is_not_personal(
     test_user: User,  # noqa: ARG001
 ) -> None:
     user = make_user(db_session, role=UserRole.BASIC)
-    private_skill = make_skill(db_session, is_public=False, enabled=True)
+    private_skill = make_skill(db_session, is_public=False)
     share_skill_with_user(db_session, private_skill, user)
 
     response = fetch_skill_for_current_user(
@@ -94,7 +92,6 @@ def test_viewer_share_cannot_patch_skill(
     private_skill = make_skill(
         db_session,
         is_public=False,
-        enabled=True,
         author_user_id=owner.id,
     )
     share_skill_with_user(
@@ -107,14 +104,12 @@ def test_viewer_share_cannot_patch_skill(
     with pytest.raises(OnyxError) as exc_info:
         patch_current_user_skill(
             private_skill.id,
-            SkillPatchRequest(enabled=False),
+            SkillPatchRequest(description="unauthorized edit"),
             user=shared_user,
             db_session=db_session,
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
-    db_session.refresh(private_skill)
-    assert private_skill.enabled is True
 
 
 def test_create_reserved_name_rejects_from_bundle_metadata(
@@ -173,7 +168,6 @@ def test_replace_bundle_authorizes_before_reading_bundle(
     private_skill = make_skill(
         db_session,
         is_public=False,
-        enabled=True,
         author_user_id=owner.id,
     )
     share_skill_with_user(
@@ -210,7 +204,6 @@ def test_upload_files_authorizes_before_reading_upload(
     private_skill = make_skill(
         db_session,
         is_public=False,
-        enabled=True,
         author_user_id=owner.id,
     )
     share_skill_with_user(
@@ -247,7 +240,6 @@ def test_remove_file_authorizes_before_reading_bundle(
     private_skill = make_skill(
         db_session,
         is_public=False,
-        enabled=True,
         author_user_id=owner.id,
     )
     share_skill_with_user(
@@ -283,7 +275,6 @@ def test_remove_file_rejects_empty_path_before_reading_bundle(
     private_skill = make_skill(
         db_session,
         is_public=False,
-        enabled=True,
         author_user_id=owner.id,
     )
     read_bundle = MagicMock()

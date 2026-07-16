@@ -4,10 +4,10 @@
 External-app providers are *built-in skills* created on demand: their ``Skill``
 row carries a ``built_in_skill_id`` (e.g. ``slack``) so it renders through the
 exact same disk-backed path as a seeded built-in — there is no external-app
-special case in the push pipeline. These tests verify that an authenticated,
-    enabled provider delivers its on-disk content under its stable directory, and
-    that the USE access policy (enabled + per-user credential completeness) keeps
-    content out otherwise.
+special case in the push pipeline. These tests verify that an authenticated
+provider delivers its on-disk content under its stable directory,
+and the USE access policy (per-user preference + credential completeness) keeps
+content out otherwise.
 
 Uses the real Slack provider directory on disk so the wiring
 (``built_in_skill_id -> source dir``) is exercised end to end. The DB-layer
@@ -22,6 +22,7 @@ from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import Skill
 from onyx.db.models import User
+from onyx.db.models import UserSkillPreference
 from onyx.external_apps.providers.slack import SlackAction
 from onyx.skills.built_in import SLACK
 from onyx.skills.push import build_skills_fileset_for_user
@@ -36,7 +37,7 @@ _FULL_CREDS = {"token": "xoxp-test"}
 _SLACK_ID = SLACK.built_in_skill_id  # == slug == on-disk dir ("slack")
 
 
-def _slack_skill(db_session: Session, *, enabled: bool = True) -> Skill:
+def _slack_skill(db_session: Session) -> Skill:
     """A built-in Slack skill row (slug == built_in_skill_id), mirroring what
     ``create_external_app`` makes for a connected Slack app. ``reset_*`` keeps
     it independent of the migration-seeded built-in rows."""
@@ -44,7 +45,16 @@ def _slack_skill(db_session: Session, *, enabled: bool = True) -> Skill:
         db_session,
         built_in_skill_id=_SLACK_ID,
         is_public=True,
-        enabled=enabled,
+    )
+
+
+def _enable_for_user(db_session: Session, skill: Skill, user: User) -> None:
+    db_session.add(
+        UserSkillPreference(
+            user_id=user.id,
+            skill_id=skill.id,
+            enabled=True,
+        )
     )
 
 
@@ -65,6 +75,7 @@ def test_authenticated_provider_delivers_content_under_stable_dir(
         auth_template=_AUTH_TEMPLATE,
     )
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    _enable_for_user(db_session, skill, user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -109,6 +120,7 @@ def test_denied_action_listed_as_unavailable(
         action_policies={SlackAction.MESSAGES_WRITE.value: EndpointPolicy.DENY},
     )
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    _enable_for_user(db_session, skill, user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -139,6 +151,7 @@ def test_no_disabled_actions_omits_section(
         auth_template=_AUTH_TEMPLATE,
     )
     make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
+    _enable_for_user(db_session, skill, user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -148,12 +161,12 @@ def test_no_disabled_actions_omits_section(
     assert "unavailable and should not be attempted" not in rendered
 
 
-def test_disabled_provider_delivers_nothing_even_when_authenticated(
+def test_provider_without_enabled_preference_delivers_nothing(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
     user = make_user(db_session)
-    skill = _slack_skill(db_session, enabled=False)
+    skill = _slack_skill(db_session)
     app = make_external_app(
         db_session,
         skill=skill,

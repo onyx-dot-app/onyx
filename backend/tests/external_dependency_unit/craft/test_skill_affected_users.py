@@ -98,21 +98,18 @@ class TestAffectedUserIdsForSkill:
         assert shared_user.id in result
         assert unshared_user.id not in result
 
-    def test_disabled_skill_still_returns_affected_users(
+    def test_skill_returns_affected_users_regardless_of_preferences(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        # Per the `affected_user_ids_for_skill` docstring, this deliberately
-        # does NOT filter on `enabled`. This is required so that
-        # when an admin disables a skill, the push pipeline can still target
-        # the sandboxes that previously had it (to deliver the new
-        # sans-skill fileset).
+        # Preference changes still need to target the user's running sandbox so
+        # the next fileset can add or remove the skill.
         user = make_user(db_session)
         group = make_group(db_session)
         add_user_to_group(db_session, user, group)
         make_sandbox(db_session, user)
-        skill = make_skill(db_session, is_public=False, enabled=False)
+        skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, skill, group)
 
         result = affected_user_ids_for_skill(skill, db_session)

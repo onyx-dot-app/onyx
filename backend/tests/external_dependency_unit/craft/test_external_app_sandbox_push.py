@@ -6,7 +6,7 @@ These tests call the endpoint functions directly with the push helpers
 monkeypatched, asserting each mutation triggers the right push:
 
 - user fills credentials  -> push scoped to the calling user
-- admin create/enable     -> push to all affected sandboxes
+- admin create/update     -> push to all affected sandboxes
 - admin delete            -> push to users affected *before* the cascade
 
 The push helpers themselves are exercised by ``test_skill_push``; here we only
@@ -103,7 +103,6 @@ def test_create_pushes_to_affected_sandboxes(
         request=CreateBuiltInExternalAppRequest(
             name="Slack",
             description="Slack",
-            enabled=True,
             app_type=ExternalAppType.SLACK,
             upstream_url_patterns=[],
             auth_template=_AUTH_TEMPLATE,

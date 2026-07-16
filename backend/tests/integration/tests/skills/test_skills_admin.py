@@ -86,9 +86,7 @@ def test_patch_skill_metadata(admin_user: DATestUser) -> None:
     )
     assert public.public_permission == SkillSharePermission.VIEWER
 
-    disabled = SkillManager.patch_custom(
-        skill, admin_user, SkillPatchRequest(enabled=False)
-    )
+    disabled = SkillManager.set_enabled(skill, admin_user, False)
     assert disabled.enabled is False
 
 
@@ -209,7 +207,6 @@ def test_create_skill_201_persists_row_group_shares_bundle(
     assert row is not None, "skill row missing after create"
     assert row.slug == slug
     assert row.public_permission is None
-    assert row.enabled is True
     assert row.bundle_file_id, "skill row has no bundle_file_id"
     assert _bundle_blob_exists(row.bundle_file_id), (
         f"bundle blob {row.bundle_file_id} not present in file store after create"

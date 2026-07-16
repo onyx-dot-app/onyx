@@ -34,7 +34,9 @@ export interface Skill {
 
   /** True for private personal skills: not public, no direct/group shares. */
   is_personal: boolean;
-  enabled: boolean | null;
+  enabled: boolean;
+  can_toggle: boolean;
+  is_external_app: boolean;
   author_user_id: string | null;
   author_email: string | null;
   owner: {
@@ -57,7 +59,6 @@ export type BuiltinSkill = Skill & {
 
 export type CustomSkill = Skill & {
   source: "custom";
-  enabled: boolean;
 };
 
 export interface SkillsList {
