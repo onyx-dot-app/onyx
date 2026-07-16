@@ -8,6 +8,7 @@ import pytest
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     _enumerate_ad_groups_paginated,
 )
+from ee.onyx.external_permissions.sharepoint.permission_utils import _get_azuread_groups
 from ee.onyx.external_permissions.sharepoint.permission_utils import _is_public_item
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     _iter_graph_collection,
@@ -23,6 +24,9 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
 from ee.onyx.external_permissions.sharepoint.permission_utils import GroupsResult
+from ee.onyx.external_permissions.sharepoint.permission_utils import (
+    SHAREPOINT_GROUP_PRINCIPAL_TYPE,
+)
 
 MODULE = "ee.onyx.external_permissions.sharepoint.permission_utils"
 GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
@@ -172,6 +176,43 @@ def test_enumerate_ad_groups_circuit_breaker(mock_get: MagicMock) -> None:
     assert len(results) <= AD_GROUP_ENUMERATION_THRESHOLD
 
 
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+def test_azuread_group_owners_are_not_treated_as_members(
+    _mock_sleep: MagicMock,
+) -> None:
+    member = MagicMock()
+    member.to_json.return_value = {
+        "userPrincipalName": "member@contoso.com",
+        "mail": "member@contoso.com",
+    }
+    owner = MagicMock()
+    owner.to_json.return_value = {
+        "userPrincipalName": "owner@contoso.com",
+        "mail": "owner@contoso.com",
+    }
+    members = MagicMock()
+    members.current_page = [member]
+
+    group = MagicMock()
+
+    def get_all(*, page_loaded: Any) -> MagicMock:
+        page_loaded(members)
+        return members
+
+    group.members.get_all.side_effect = get_all
+    group.owners.get_all.return_value = [owner]
+    graph_client = MagicMock()
+    graph_client.groups.__getitem__.return_value = group
+
+    _, user_emails = _get_azuread_groups(
+        graph_client,
+        "11111111-1111-1111-1111-111111111111",
+    )
+
+    assert user_emails == {"member@contoso.com"}
+    group.owners.get_all.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # get_sharepoint_external_groups
 # ---------------------------------------------------------------------------
@@ -212,6 +253,72 @@ def test_default_skips_ad_enumeration(
     assert len(results) == 1
     assert results[0].id == "SiteGroup_abc"
     assert results[0].user_emails == ["alice@contoso.com"]
+
+
+@patch(f"{MODULE}._get_groups_and_members_recursively")
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+def test_sharepoint_group_ids_are_scoped_to_their_site(
+    _mock_sleep: MagicMock,
+    mock_recursive: MagicMock,
+) -> None:
+    def resolve_groups(
+        client_context: MagicMock,
+        _graph_client: MagicMock,
+        groups: set[Any],
+        is_group_sync: bool = False,
+    ) -> GroupsResult:
+        assert is_group_sync
+        group_name = next(iter(groups)).name
+        email = (
+            "alice@contoso.com"
+            if client_context.base_url.endswith("/first")
+            else "bob@contoso.com"
+        )
+        return GroupsResult(
+            groups_to_emails={group_name: {email}},
+            found_public_group=False,
+        )
+
+    mock_recursive.side_effect = resolve_groups
+
+    def make_site_context(site_url: str) -> MagicMock:
+        member = MagicMock()
+        member.principal_type = SHAREPOINT_GROUP_PRINCIPAL_TYPE
+        member.title = "Project Members"
+        member.login_name = "Project Members"
+        assignment = MagicMock()
+        assignment.role_definition_bindings = None
+        assignment.member = member
+        assignments = MagicMock()
+        assignments.current_page = [assignment]
+
+        def get_all(*, page_size: int, page_loaded: Any) -> MagicMock:
+            assert page_size > 0
+            page_loaded(assignments)
+            return assignments
+
+        client_context = MagicMock()
+        client_context.base_url = site_url
+        client_context.web.role_assignments.expand.return_value.get_all.side_effect = (
+            get_all
+        )
+        return client_context
+
+    first_site = make_site_context("https://contoso.sharepoint.com/sites/first")
+    second_site = make_site_context("https://contoso.sharepoint.com/sites/second")
+
+    first_groups = get_sharepoint_external_groups(
+        client_context=first_site,
+        graph_client=MagicMock(),
+        graph_api_base=GRAPH_API_BASE,
+    )
+    second_groups = get_sharepoint_external_groups(
+        client_context=second_site,
+        graph_client=MagicMock(),
+        graph_api_base=GRAPH_API_BASE,
+    )
+
+    assert first_groups[0].id != second_groups[0].id
 
 
 @patch(f"{MODULE}._enumerate_ad_groups_paginated")
