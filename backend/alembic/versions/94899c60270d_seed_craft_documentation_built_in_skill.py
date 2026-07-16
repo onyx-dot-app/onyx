@@ -91,8 +91,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.get_bind().execute(
-        sa.text(
-            "DELETE FROM skill WHERE slug = :slug AND built_in_skill_id = :slug"
-        ),
+        sa.text("DELETE FROM skill WHERE slug = :slug AND built_in_skill_id = :slug"),
         {"slug": _CRAFT_DOCUMENTATION_SLUG},
     )
