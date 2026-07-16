@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from onyx.configs.app_configs import MCP_TOOL_CALL_TIMEOUT_SECONDS
 from onyx.db.enums import MCPTransport
-from onyx.tools.tool_implementations.mcp.mcp_ssrf import mcp_ssrf_httpx_client_factory
+from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 

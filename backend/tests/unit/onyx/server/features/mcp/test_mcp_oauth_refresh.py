@@ -16,11 +16,11 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-import onyx.server.features.mcp.api as mcp_api
+import onyx.server.features.mcp.oauth as mcp_oauth
 from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.models import MCPServer as DbMCPServer
-from onyx.server.features.mcp.api import refresh_mcp_oauth_token_if_expired
 from onyx.server.features.mcp.models import MCPOAuthKeys
+from onyx.server.features.mcp.oauth import refresh_mcp_oauth_token_if_expired
 
 _TOKEN_ENDPOINT = "https://gitlab.example.com/oauth/token"
 _REDIRECT_URI = "https://onyx.example.com/mcp/oauth/callback"
@@ -81,16 +81,16 @@ def _install_mocks(
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(
-        mcp_api, "get_session_with_current_tenant", lambda: _FakeDbSession()
+        mcp_oauth, "get_session_with_current_tenant", lambda: _FakeDbSession()
     )
     monkeypatch.setattr(
-        mcp_api,
+        mcp_oauth,
         "get_connection_config_by_id",
         lambda config_id, _db_session: SimpleNamespace(id=config_id),
     )
     # extract_connection_data returns the same dict the SDK storage mutates.
     monkeypatch.setattr(
-        mcp_api,
+        mcp_oauth,
         "extract_connection_data",
         lambda _config, _apply_mask=False: config_data,
     )
@@ -99,10 +99,10 @@ def _install_mocks(
         captured["updated_config_data"] = data
         return SimpleNamespace(id=config_id)
 
-    monkeypatch.setattr(mcp_api, "update_connection_config", _fake_update)
+    monkeypatch.setattr(mcp_oauth, "update_connection_config", _fake_update)
 
     fake_client = _FakeAsyncHttpClient(response or httpx.Response(400), captured)
-    monkeypatch.setattr(mcp_api, "mcp_ssrf_httpx_client_factory", lambda: fake_client)
+    monkeypatch.setattr(mcp_oauth, "mcp_ssrf_httpx_client_factory", lambda: fake_client)
     return captured
 
 

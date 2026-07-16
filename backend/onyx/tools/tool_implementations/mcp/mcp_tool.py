@@ -9,7 +9,11 @@ from onyx.db.enums import MCPTransport
 from onyx.db.mcp import ResolvedMCPCredentials
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
+from onyx.server.features.mcp.client import call_mcp_tool
 from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
+from onyx.server.features.mcp.oauth import make_oauth_provider
+from onyx.server.features.mcp.oauth import refresh_mcp_oauth_token_if_expired
+from onyx.server.features.mcp.oauth import UNUSED_RETURN_PATH
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -17,7 +21,6 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
@@ -225,10 +228,6 @@ class MCPTool(Tool[None]):
                     # httpx.Auth refresh can't run over an open SSE stream;
                     # refresh proactively here instead. Non-fatal on failure.
                     try:
-                        from onyx.server.features.mcp.api import (
-                            refresh_mcp_oauth_token_if_expired,
-                        )
-
                         refreshed_header = refresh_mcp_oauth_token_if_expired(
                             self.mcp_server,
                             self.connection_config.id,
@@ -242,9 +241,6 @@ class MCPTool(Tool[None]):
                             self._name,
                         )
                 else:
-                    from onyx.server.features.mcp.api import make_oauth_provider
-                    from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
-
                     # user_id is the requesting user's UUID; safe here because
                     # UNUSED_RETURN_PATH ensures redirect_handler raises immediately
                     # and user_id is never consulted for Redis state lookups.
