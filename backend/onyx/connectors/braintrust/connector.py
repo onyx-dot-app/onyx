@@ -30,6 +30,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -90,8 +91,7 @@ def _parse_time(time_str: str | None) -> datetime | None:
     if not time_str:
         return None
     try:
-        dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        return datetime_to_utc(datetime.fromisoformat(time_str.replace("Z", "+00:00")))
     except ValueError:
         return None
 
