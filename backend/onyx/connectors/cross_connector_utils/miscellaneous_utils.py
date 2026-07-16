@@ -17,19 +17,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import IGNORE_FOR_QA
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import OnyxMetadata
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import is_valid_email
 
 T = TypeVar("T")
 U = TypeVar("U")
 logger = setup_logger()
-
-
-def datetime_to_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-
-    return dt.astimezone(timezone.utc)
 
 
 def time_str_to_utc(datetime_str: str) -> datetime:

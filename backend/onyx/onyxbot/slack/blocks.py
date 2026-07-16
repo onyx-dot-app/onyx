@@ -42,6 +42,7 @@ from onyx.onyxbot.slack.utils import build_continue_in_web_ui_id
 from onyx.onyxbot.slack.utils import build_feedback_id
 from onyx.onyxbot.slack.utils import build_publish_ephemeral_message_id
 from onyx.onyxbot.slack.utils import remove_slack_text_interactions
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.text_processing import decode_escapes
 
 _MAX_BLURB_LEN = 45
@@ -52,12 +53,7 @@ def _format_doc_updated_at(updated_at: datetime | None) -> str | None:
     if updated_at is None:
         return None
 
-    if updated_at.tzinfo is None or updated_at.tzinfo.utcoffset(updated_at) is None:
-        aware_updated_at = updated_at.replace(tzinfo=pytz.utc)
-    else:
-        aware_updated_at = updated_at.astimezone(pytz.utc)
-
-    return timeago.format(aware_updated_at, datetime.now(pytz.utc))
+    return timeago.format(datetime_to_utc(updated_at), datetime.now(pytz.utc))
 
 
 def get_feedback_reminder_blocks(thread_link: str, include_followup: bool) -> Block:
