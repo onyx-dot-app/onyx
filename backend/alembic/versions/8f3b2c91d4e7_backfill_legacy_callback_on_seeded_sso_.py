@@ -9,7 +9,6 @@ Create Date: 2026-07-16 15:30:00.000000
 from __future__ import annotations
 
 import json
-import os
 
 import sqlalchemy as sa
 from alembic import op
@@ -38,14 +37,15 @@ def upgrade() -> None:
     deployment that already removed its env credentials has either registered
     the parametric URI or reconfigured, and flipping it here could break it.
     """
+    from onyx.configs.app_configs import OAUTH_CLIENT_ID
     from shared_configs.configs import MULTI_TENANT
 
     if MULTI_TENANT:
         return
 
-    env_client_id = os.environ.get("OAUTH_CLIENT_ID") or os.environ.get(
-        "GOOGLE_OAUTH_CLIENT_ID"
-    )
+    # Resolve the credential exactly as the 1fc2904131a3 seed did, so the
+    # match sees the same value the seed stored.
+    env_client_id = OAUTH_CLIENT_ID
     if not env_client_id:
         return
 
