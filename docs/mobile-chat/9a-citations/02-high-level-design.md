@@ -67,7 +67,7 @@ packets — the work is to *process* and *render* them:
                         ▼
  MessageRow.AssistantMessage
    │  const { renderer, packets, processed } = usePacketDisplay(node)   [MODIFIED: hosts processor]
-   │        └─ messageProcessor.processPackets(stateRef, packets)       [NEW · FOUNDATION]
+   │        └─ useMemo: processPackets(createInitialState(nodeId), packets)   [NEW · FOUNDATION]
    │              → processed { citationMap, citations[], documentMap, isComplete, stopReason }
    │
    ├─► <AgentTimeline isLoading={!hasContent && !processed.isComplete}/>          [shell, unchanged]
@@ -130,8 +130,8 @@ packets — the work is to *process* and *render* them:
 
 1. Controller appends each streamed packet to `node.packets` (unchanged).
 2. `MessageRow.AssistantMessage` calls `usePacketDisplay(node)`.
-3. `usePacketDisplay` advances `messageProcessor` over the *new* packets → updates `processed`
-   (citationMap, citations, documentMap, isComplete) in a ref.
+3. `usePacketDisplay` recomputes `processed` via `useMemo` — a full pass of `messageProcessor` over
+   `node.packets` (citationMap, citations, documentMap, isComplete) whenever the array changes.
 4. The text renderer renders the answer markdown with an `onLinkPress` handler.
 5. On marker/link tap → open the URL in the in-app browser (or no-op for empty-URL file markers).
 6. On `stop`/complete → `MessageRow` shows the Sources button when `hasSources(processed)`.
