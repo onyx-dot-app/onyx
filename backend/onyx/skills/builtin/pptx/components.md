@@ -63,7 +63,7 @@ Every component has the signature `component(pres, theme, opts)` and returns the
 | `statCallouts` | `{ title, stats }` | 2-4 of `{ value, label, desc?, hero? }` — display numeral, monospace label. Mark **one** stat `hero: true` to set it on the notched plate. Use for headline numbers instead of fabricating a chart. |
 | `timeline` | `{ title, steps }` | 3-5 of `{ label, desc? }` — filled ink squares on a 1pt ink spine, monospace step numbers. |
 | `imageSlide` | `{ title, body?, image, bleed?, side? }` | `image` = `{ path }`. `bleed: "half"` (default; image fills one half, text in safe zone, `side: "right"\|"left"`) or `"full"` (image fills slide, text on a solid dark bottom panel). |
-| `chartSlide` | `{ title, chart, takeaway? }` | `chart` = `{ path }`, a PNG from [charts.md](charts.md) / `chart.py`. Chart region is 6.1 × 3.7" — render the PNG at that size. `takeaway` = one-line so-what, hairline-separated beside the chart. |
+| `chartSlide` | `{ title, chart, takeaway? }` | `chart` = `{ path }` / `{ data }`, a PNG from [charts.md](charts.md) / `chart.py`. Chart region is 6.1 × 3.7" — render the PNG at that size. `takeaway` = one-line so-what, hairline-separated beside the chart. |
 | `quoteSlide` | `{ quote, attribution? }` | Pull-quote framed by full-width hairline rules above and below; monospace attribution. |
 | `closingSlide` | `{ title?, subtitle?, contact? }` | Dark bookend; `title` defaults to "Thank you.". `contact` renders on an inverted notched plate. |
 | `contentSlide` | `{ title, body }` | Use for a straightforward text slide with no visual. `body` = bullet array or a paragraph string; single column, generous whitespace. |
