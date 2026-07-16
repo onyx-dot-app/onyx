@@ -63,7 +63,10 @@ def test_create_and_fetch_roundtrip(db_session: Session, provider_name: str) -> 
     assert fetched.allowed_email_domains == ["companya.com"]
     # config decrypts to the original and masks the secret by default
     assert fetched.config is not None
-    assert fetched.config.get_value(apply_mask=False) == _GOOGLE_CONFIG
+    assert fetched.config.get_value(apply_mask=False) == {
+        **_GOOGLE_CONFIG,
+        "legacy_callback": False,
+    }
     assert fetched.config.get_value(apply_mask=True)["client_secret"] != "super-secret"
 
 
