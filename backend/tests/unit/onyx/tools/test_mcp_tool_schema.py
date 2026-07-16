@@ -13,6 +13,7 @@ a JSON-Schema-valid `parameters` dict with a `properties` key.
 from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
+from uuid import UUID
 
 import pytest
 
@@ -23,6 +24,8 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.tool_constructor import _disambiguate_mcp_tool_names
 from onyx.tools.tool_implementations.mcp.mcp_tool import _normalize_parameters_schema
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from onyx.tools.tool_implementations.mcp.mcp_tool import ONYX_CHAT_SESSION_ID_HEADER
+from onyx.tools.tool_implementations.mcp.mcp_tool import ONYX_PERSONA_ID_HEADER
 
 
 class TestNormalizeParametersSchema:
@@ -121,6 +124,9 @@ def _make_tool(
     input_schema: dict,
     tool_name: str = "aws___list_regions",
     server_name: str = "aws-knowledge",
+    chat_session_id: UUID | None = None,
+    persona_id: int | None = None,
+    additional_headers: dict[str, str] | None = None,
 ) -> MCPTool:
     mcp_server = MagicMock()
     mcp_server.name = server_name
@@ -134,6 +140,9 @@ def _make_tool(
         tool_name=tool_name,
         tool_description="List AWS regions",
         tool_definition=input_schema,
+        chat_session_id=chat_session_id,
+        persona_id=persona_id,
+        additional_headers=additional_headers,
     )
 
 
@@ -230,6 +239,48 @@ class TestMCPToolLLMNames:
 
         mock_call_mcp_tool.assert_called_once()
         assert mock_call_mcp_tool.call_args.args[1] == "shared"
+
+
+class TestMCPToolContextHeaders:
+    def test_forwards_chat_session_and_persona_headers(self) -> None:
+        session_id = UUID("3f2a1b4c-5d6e-7f89-a0b1-c2d3e4f56789")
+        tool = _make_tool(
+            {"type": "object"},
+            chat_session_id=session_id,
+            persona_id=237,
+        )
+
+        with patch(
+            "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
+            return_value={"ok": True},
+        ) as mock_call_mcp_tool:
+            tool.run(Placement(turn_index=0))
+
+        headers = mock_call_mcp_tool.call_args.kwargs["connection_headers"]
+        assert headers[ONYX_CHAT_SESSION_ID_HEADER] == str(session_id)
+        assert headers[ONYX_PERSONA_ID_HEADER] == "237"
+
+    def test_context_headers_override_spoofed_mcp_headers(self) -> None:
+        session_id = UUID("3f2a1b4c-5d6e-7f89-a0b1-c2d3e4f56789")
+        tool = _make_tool(
+            {"type": "object"},
+            chat_session_id=session_id,
+            persona_id=42,
+            additional_headers={
+                ONYX_CHAT_SESSION_ID_HEADER: "spoofed-session",
+                ONYX_PERSONA_ID_HEADER: "999",
+            },
+        )
+
+        with patch(
+            "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
+            return_value={"ok": True},
+        ) as mock_call_mcp_tool:
+            tool.run(Placement(turn_index=0))
+
+        headers = mock_call_mcp_tool.call_args.kwargs["connection_headers"]
+        assert headers[ONYX_CHAT_SESSION_ID_HEADER] == str(session_id)
+        assert headers[ONYX_PERSONA_ID_HEADER] == "42"
 
 
 if __name__ == "__main__":

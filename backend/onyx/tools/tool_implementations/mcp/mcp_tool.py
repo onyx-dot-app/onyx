@@ -1,5 +1,6 @@
 import json
 from typing import Any
+from uuid import UUID
 
 from mcp.client.auth import OAuthClientProvider
 
@@ -21,11 +22,17 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Trusted context headers set by Onyx (not the LLM or API caller).
+ONYX_CHAT_SESSION_ID_HEADER = "X-Onyx-Chat-Session-Id"
+ONYX_PERSONA_ID_HEADER = "X-Onyx-Persona-Id"
+
 # Headers that cannot be overridden by user requests to prevent security issues
 # Host header is particularly critical - it can be used for Host Header Injection attacks
 # to route requests to unintended internal servers
 DENYLISTED_MCP_HEADERS = {
     "host",  # Prevents Host Header Injection attacks
+    ONYX_CHAT_SESSION_ID_HEADER.lower(),
+    ONYX_PERSONA_ID_HEADER.lower(),
 }
 
 # TODO: for now we're fitting MCP tool responses into the CustomToolCallSummary class
@@ -65,6 +72,8 @@ class MCPTool(Tool[None]):
         user_id: str = "",
         user_oauth_token: str | None = None,
         additional_headers: dict[str, str] | None = None,
+        chat_session_id: UUID | None = None,
+        persona_id: int | None = None,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -75,6 +84,8 @@ class MCPTool(Tool[None]):
         self._user_id = user_id
         self._user_oauth_token = user_oauth_token
         self._additional_headers = additional_headers or {}
+        self._chat_session_id = chat_session_id
+        self._persona_id = persona_id
 
         self._mcp_tool_name = tool_name
         self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
@@ -122,6 +133,14 @@ class MCPTool(Tool[None]):
             )
         )
 
+    def _context_headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if self._chat_session_id is not None:
+            headers[ONYX_CHAT_SESSION_ID_HEADER] = str(self._chat_session_id)
+        if self._persona_id is not None:
+            headers[ONYX_PERSONA_ID_HEADER] = str(self._persona_id)
+        return headers
+
     def run(
         self,
         placement: Placement,
@@ -132,8 +151,9 @@ class MCPTool(Tool[None]):
         try:
             # Build headers with proper precedence:
             # 1. Start with additional headers from API request (filled in first, excluding denylisted)
-            # 2. Override with connection config headers (from DB) - these take precedence
+            # 2. Override with connection config headers (from DB)
             # 3. Override Authorization header with OAuth token if present
+            # 4. Trusted chat context from Onyx (session/persona) — always wins
             headers: dict[str, str] = {}
 
             # Priority 1: Additional headers from API request (filled in first)
@@ -167,6 +187,9 @@ class MCPTool(Tool[None]):
             # Priority 3: For pass-through OAuth, use the user's login OAuth token
             if self._user_oauth_token:
                 headers["Authorization"] = f"Bearer {self._user_oauth_token}"
+
+            # Priority 4: Trusted chat context from Onyx — always wins over caller/config
+            headers.update(self._context_headers())
 
             # Check if this is an authentication issue before making the call
             is_passthrough_oauth = (
