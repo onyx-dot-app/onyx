@@ -73,11 +73,15 @@ import { useAgents, useLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import { AgentUpsertParameters } from "@/lib/agents/types";
-import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
+import { useMcpServersForPersonaEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
+import {
+  AgentEditorMCPServer,
+  MCPTool,
+  ToolSnapshot,
+} from "@/lib/tools/interfaces";
 import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
@@ -297,7 +301,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
 }
 
 interface MCPServerCardProps {
-  server: MCPServer;
+  server: AgentEditorMCPServer;
   tools: MCPTool[];
   isLoading: boolean;
 }
@@ -367,73 +371,78 @@ function MCPServerCard({
   }
 
   return (
-    <Card
-      expandable
-      expanded={!isFolded}
-      border="solid"
-      rounding="lg"
-      padding="sm"
-      expandedContent={cardContent}
+    <Disabled
+      disabled={!server.can_attach}
+      tooltip="You no longer have access to this MCP server. Its existing tools will be preserved."
     >
-      <CardLayout.Header
-        bottomChildren={
-          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-            <InputTypeIn
-              placeholder="Search tools..."
-              variant="internal"
-              searchIcon
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {enabledTools.length > 0 && (
-              <Button
-                prominence="internal"
-                rightIcon={isFolded ? SvgExpand : SvgFold}
-                onClick={() => setIsFolded((prev) => !prev)}
-              >
-                {isFolded ? "Expand" : "Fold"}
-              </Button>
-            )}
-          </GeneralLayouts.Section>
-        }
+      <Card
+        expandable
+        expanded={!isFolded}
+        border="solid"
+        rounding="lg"
+        padding="sm"
+        expandedContent={cardContent}
       >
-        <div className="p-2">
-          <ContentAction
-            icon={getActionIcon(server.server_url, server.name)}
-            title={server.name}
-            description={server.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding="fit"
-            rightChildren={
-              <GeneralLayouts.Section
-                flexDirection="row"
-                gap={0.5}
-                alignItems="start"
-              >
-                <EnabledCount
-                  enabledCount={enabledCount}
-                  totalCount={enabledTools.length}
-                />
-                <SwitchField
-                  name={`${serverFieldName}.enabled`}
-                  onCheckedChange={(checked) => {
-                    enabledTools.forEach((tool) => {
-                      setFieldValue(
-                        `${serverFieldName}.tool_${tool.id}`,
-                        checked
-                      );
-                    });
-                    if (!checked) return;
-                    setIsFolded(false);
-                  }}
-                />
-              </GeneralLayouts.Section>
-            }
-          />
-        </div>
-      </CardLayout.Header>
-    </Card>
+        <CardLayout.Header
+          bottomChildren={
+            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+              <InputTypeIn
+                placeholder="Search tools..."
+                variant="internal"
+                searchIcon
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              {enabledTools.length > 0 && (
+                <Button
+                  prominence="internal"
+                  rightIcon={isFolded ? SvgExpand : SvgFold}
+                  onClick={() => setIsFolded((prev) => !prev)}
+                >
+                  {isFolded ? "Expand" : "Fold"}
+                </Button>
+              )}
+            </GeneralLayouts.Section>
+          }
+        >
+          <div className="p-2">
+            <ContentAction
+              icon={getActionIcon(server.server_url, server.name)}
+              title={server.name}
+              description={server.description}
+              sizePreset="main-ui"
+              variant="section"
+              padding="fit"
+              rightChildren={
+                <GeneralLayouts.Section
+                  flexDirection="row"
+                  gap={0.5}
+                  alignItems="start"
+                >
+                  <EnabledCount
+                    enabledCount={enabledCount}
+                    totalCount={enabledTools.length}
+                  />
+                  <SwitchField
+                    name={`${serverFieldName}.enabled`}
+                    onCheckedChange={(checked) => {
+                      enabledTools.forEach((tool) => {
+                        setFieldValue(
+                          `${serverFieldName}.tool_${tool.id}`,
+                          checked
+                        );
+                      });
+                      if (!checked) return;
+                      setIsFolded(false);
+                    }}
+                  />
+                </GeneralLayouts.Section>
+              }
+            />
+          </div>
+        </CardLayout.Header>
+      </Card>
+    </Disabled>
   );
 }
 
@@ -611,11 +620,12 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpData, isLoading: isMcpLoading } = useMcpServersForAgentEditor();
+  const { mcpServers, isLoading: isMcpLoading } = useMcpServersForPersonaEditor(
+    existingAgent?.id
+  );
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
     useOpenApiTools();
 
-  const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
 
   // Check if the *BUILT-IN* tools are available.
@@ -648,16 +658,19 @@ export default function AgentEditorPage({
     ? undefined
     : "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin.";
 
-  // Group MCP server tools from availableTools by server ID
+  // Include inaccessible attached tools so edits preserve them.
   const mcpServersWithTools = mcpServers.map((server) => {
-    const serverTools: MCPTool[] = (availableTools || [])
+    const candidateTools = server.can_attach
+      ? availableTools
+      : (existingAgent?.tools ?? []);
+    const serverTools: MCPTool[] = candidateTools
       .filter((tool) => tool.mcp_server_id === server.id)
       .map((tool) => ({
         id: tool.id.toString(),
         icon: getActionIcon(server.server_url, server.name),
         name: tool.display_name || tool.name,
         description: tool.description,
-        isAvailable: true,
+        isAvailable: server.can_attach,
         isEnabled: tool.enabled,
       }));
 

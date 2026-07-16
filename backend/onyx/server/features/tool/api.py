@@ -12,6 +12,7 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.mcp import get_mcp_servers_accessible_to_user
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
@@ -250,12 +251,22 @@ def get_custom_tool(
 @router.get("", tags=PUBLIC_API_TAGS)
 def list_tools(
     db_session: Session = Depends(get_session),
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session, only_enabled=True, only_connected_mcp=True)
 
+    # Attach catalog: omit MCP tools the user cannot put on a persona.
+    accessible_mcp_server_ids = {
+        server.id for server in get_mcp_servers_accessible_to_user(user, db_session)
+    }
+
     filtered_tools: list[ToolSnapshot] = []
     for tool in tools:
+        if (
+            tool.mcp_server_id is not None
+            and tool.mcp_server_id not in accessible_mcp_server_ids
+        ):
+            continue
         if not should_expose_tool_to_fe(tool):
             continue
 

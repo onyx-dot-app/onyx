@@ -265,6 +265,7 @@ repos:
       - id: typescript-check
         name: TypeScript type check
         entry: bash -c 'cd web && bun run types:check'
+
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$
