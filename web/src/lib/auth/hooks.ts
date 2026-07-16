@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
-import { AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthTypeMetadata, SessionEndReason } from "@/lib/auth/types";
+import { FetchError } from "@/lib/fetcher";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
@@ -42,6 +43,20 @@ function computeSecondsUntilExpiration(user: User): number | null {
   return getSecondsUntilExpiration(new Date(user.token_expires_at));
 }
 
+function parseSessionEndReason(error: unknown): SessionEndReason | null {
+  if (!(error instanceof FetchError)) return null;
+  const errorCode: unknown = error.info?.error_code;
+  return (Object.values(SessionEndReason) as unknown[]).includes(errorCode)
+    ? (errorCode as SessionEndReason)
+    : null;
+}
+
+export interface SessionWatcherResult {
+  sessionEnded: boolean;
+  /** Rejection code from the 403 that ended the session; null when absent. */
+  sessionEndReason: SessionEndReason | null;
+}
+
 /**
  * Detects whether the user's session has ended mid-use.
  *
@@ -58,13 +73,14 @@ function computeSecondsUntilExpiration(user: User): number | null {
  * Side effect: calls `logout()` to clear the server session on a 403 for a
  * previously-authenticated user.
  */
-export function useSessionWatcher(): boolean {
+export function useSessionWatcher(): SessionWatcherResult {
   const pathname = usePathname();
   const inAuthFlow = isAuthPath(pathname);
 
   const { user, mutateUser, userError } = useCurrentUser();
   const expiryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasSeenAuthenticatedUserRef = useRef(false);
+  const sessionEndReasonRef = useRef<SessionEndReason | null>(null);
 
   // Entering login/logout is a session boundary: forget the prior session so a
   // lingering 403 can't resurface the "logged out" modal on the login page.
@@ -74,12 +90,33 @@ export function useSessionWatcher(): boolean {
     hasSeenAuthenticatedUserRef.current = true;
   }
 
+  const sessionEnded =
+    !inAuthFlow &&
+    userError?.status === 403 &&
+    hasSeenAuthenticatedUserRef.current;
+
+  // Latch the first 403's reason: a later refetch can reclassify (e.g. EXPIRED
+  // becomes UNRECOGNIZED once the server-side grace window lapses) and must
+  // not flip the modal copy while it is up.
+  if (!sessionEnded) {
+    sessionEndReasonRef.current = null;
+  } else if (sessionEndReasonRef.current === null) {
+    sessionEndReasonRef.current = parseSessionEndReason(userError);
+  }
+
   useEffect(() => {
     if (inAuthFlow || !user) return;
     const seconds = computeSecondsUntilExpiration(user);
     if (seconds === null) return;
     if (expiryTimeoutRef.current) clearTimeout(expiryTimeoutRef.current);
-    expiryTimeoutRef.current = setTimeout(() => mutateUser(), seconds * 1000);
+    // Fire 2s past the wall: firing at (or, via flooring, just before) it gets
+    // a 200 with deep-equal data, which never re-runs this effect — the
+    // one-shot timer disarms and the session dies unwatched. A 200 after the
+    // wall means the session moved, and its new expiry re-arms us.
+    expiryTimeoutRef.current = setTimeout(
+      () => mutateUser(),
+      (seconds + 2) * 1000
+    );
   }, [inAuthFlow, user, mutateUser]);
 
   useEffect(() => {
@@ -95,11 +132,7 @@ export function useSessionWatcher(): boolean {
     }
   }, [inAuthFlow, userError]);
 
-  return (
-    !inAuthFlow &&
-    userError?.status === 403 &&
-    hasSeenAuthenticatedUserRef.current
-  );
+  return { sessionEnded, sessionEndReason: sessionEndReasonRef.current };
 }
 
 export function useIsMultiTenant(): boolean | null {
