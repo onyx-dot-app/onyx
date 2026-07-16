@@ -14,7 +14,7 @@ license: Proprietary. LICENSE.txt has complete terms
 |------|-------|
 | Read/analyze content | `python -m markitdown presentation.pptx` |
 | Edit or create from template | Read [editing.md](editing.md) |
-| Create from scratch | Read [pptxgenjs.md](pptxgenjs.md) |
+| Create from scratch | Read [components.md](components.md) — tested layout library (default); [pptxgenjs.md](pptxgenjs.md) for raw layouts it doesn't cover |
 | Lint layout (QA step 0) | `python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx` |
 
 ---
@@ -33,7 +33,7 @@ ls /workspace/templates/pptx/*.pptx 2>/dev/null
 - **If any templates are found**: present them to the user as two clearly labeled groups — **"Your uploaded templates"** (from `user_library/` and `attachments/`) and **"Built-in templates"** (from `/workspace/templates/pptx/`) — listing the user's own templates first. Briefly describe each (use `thumbnail.py` to preview if helpful), then **ask which one to use** — or whether to build from scratch — and wait for their answer before building. Never silently pick one: a user's own brand deck and a generic built-in are not interchangeable, and only the user knows which they want. This is one of the few cases where you should pause and ask rather than act autonomously.
 - **If none are found**: build from scratch, and let the user know they can upload a brand/template `.pptx` for a more polished, on-brand result next time.
 
-Once a template is chosen, follow [editing.md](editing.md). Use the from-scratch path ([pptxgenjs.md](pptxgenjs.md)) only when the user has no template or explicitly opts for it.
+Once a template is chosen, follow [editing.md](editing.md). Use the from-scratch path only when the user has no template or explicitly opts for it — default to the tested layout library ([components.md](components.md)), and fall back to raw [pptxgenjs.md](pptxgenjs.md) for layouts it doesn't cover.
 
 ---
 
