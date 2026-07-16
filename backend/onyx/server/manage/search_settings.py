@@ -48,6 +48,7 @@ from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.unstructured import delete_unstructured_api_key
@@ -129,7 +130,15 @@ def set_new_search_settings(
         # _id as a benign 409, so it would silently promote a STALE index.
         base = f"danswer_chunk_{clean_model_name(search_settings_new.model_name)}"
         search_values = search_settings_new.model_dump()
-        search_values["index_name"] = get_next_index_name(db_session, base)
+        # Skip any version whose OpenSearch index still exists (e.g. an orphan left by a
+        # deleted PAST row) so the port never writes into a lingering, possibly stale index.
+        search_values["index_name"] = get_next_index_name(
+            db_session,
+            base,
+            index_exists=lambda name: OpenSearchIndexClient(
+                index_name=name
+            ).index_exists(),
+        )
         new_search_settings_request = SavedSearchSettings(**search_values)
     else:
         new_search_settings_request = SavedSearchSettings(

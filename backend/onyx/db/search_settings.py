@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import inspect as sa_inspect
@@ -82,7 +84,11 @@ def create_search_settings(
     return embedding_model
 
 
-def get_next_index_name(db_session: Session, base_index_name: str) -> str:
+def get_next_index_name(
+    db_session: Session,
+    base_index_name: str,
+    index_exists: Callable[[str], bool] | None = None,
+) -> str:
     """Next reindex index name: "<base>_<NNNNNN>", a zero-padded six-digit sequence that is
     the latest existing same-model sequence + 1 (000001 if none). Mirrors the OpenSearch
     rollover convention (my-index-000001) so indices sort in order. Each reindex increments,
@@ -90,6 +96,11 @@ def get_next_index_name(db_session: Session, base_index_name: str) -> str:
     lets it silently skip chunks already present in a stale index. Legacy names with no
     numeric suffix (the bare base, or the old "<base>__danswer_alt_index") are ignored, so a
     model starts at 000001.
+
+    The DB max alone isn't enough: deleting a PAST row frees its version while its
+    OpenSearch index lingers (deletion doesn't drop the index), so `index_exists` -- when
+    provided -- is consulted to skip any candidate whose index still physically exists,
+    guaranteeing the target starts empty regardless of DB/index divergence.
     """
     prefix = f"{base_index_name}_"
     latest = 0
@@ -103,7 +114,13 @@ def get_next_index_name(db_session: Session, base_index_name: str) -> str:
         suffix = name[len(prefix) :]
         if suffix.isdigit():
             latest = max(latest, int(suffix))
-    return f"{base_index_name}_{latest + 1:06d}"
+
+    version = latest + 1
+    candidate = f"{base_index_name}_{version:06d}"
+    while index_exists is not None and index_exists(candidate):
+        version += 1
+        candidate = f"{base_index_name}_{version:06d}"
+    return candidate
 
 
 def get_embedding_provider_from_provider_type(
