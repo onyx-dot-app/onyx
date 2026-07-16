@@ -1,0 +1,129 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - name: ECRRegistry
+    value: "294185804746.dkr.ecr.eu-west-1.amazonaws.com"
+
+stages:
+  - stage: build
+    displayName: "Build and push images to ECR"
+    jobs:
+      - job: BuildImages
+        steps:
+          - checkout: self
+
+          - bash: |
+              short_hash=$(git rev-parse --short=7 HEAD)
+              echo "##vso[task.setvariable variable=short_hash]$short_hash"
+            displayName: "Set git short hash"
+
+          - task: AWSShellScript@1
+            displayName: "Login to ECR"
+            inputs:
+              awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
+              scriptType: inline
+              inlineScript: |
+                set -eux -o pipefail
+                aws ecr get-login-password --region eu-west-1 | \
+                  docker login --username AWS --password-stdin $(ECRRegistry)
+
+          - script: |
+              docker build \
+                --build-arg BASE_IMAGE_REGISTRY=$(ECRRegistry)/docker-hub \
+                -f backend/Dockerfile \
+                -t data/onyx-backend:latest \
+                -t data/onyx-backend:$(short_hash) \
+                backend/
+            displayName: "Build backend image"
+
+          - task: ECRPushImage@1
+            displayName: "Push backend:latest"
+            inputs:
+              awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
+              regionName: "eu-west-1"
+              imageSource: imagename
+              sourceImageName: "data/onyx-backend"
+              sourceImageTag: latest
+              repositoryName: "data/onyx-backend"
+              pushTag: latest
+
+          - task: ECRPushImage@1
+            displayName: "Push backend:$(short_hash)"
+            inputs:
+              awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
+              regionName: "eu-west-1"
+              imageSource: imagename
+              sourceImageName: "data/onyx-backend"
+              sourceImageTag: latest
+              repositoryName: "data/onyx-backend"
+              pushTag: "$(short_hash)"
+
+          - script: |
+              docker build \
+                --build-arg BASE_IMAGE_REGISTRY=$(ECRRegistry)/docker-hub \
+                -f backend/Dockerfile.model_server \
+                -t data/onyx-model-server:latest \
+                -t data/onyx-model-server:$(short_hash) \
+                backend/
+            displayName: "Build model server image"
+
+          - task: ECRPushImage@1
+            displayName: "Push model-server:latest"
+            inputs:
+              awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
+              regionName: "eu-west-1"
+              imageSource: imagename
+              sourceImageName: "data/onyx-model-server"
+              sourceImageTag: latest
+              repositoryName: "data/onyx-model-server"
+              pushTag: latest
+
+          - task: ECRPushImage@1
+            displayName: "Push model-server:$(short_hash)"
+            inputs:
+              awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
+              regionName: "eu-west-1"
+              imageSource: imagename
+              sourceImageName: "data/onyx-model-server"
+              sourceImageTag: latest
+              repositoryName: "data/onyx-model-server"
+              pushTag: "$(short_hash)"
+
+          - script: |
+              docker build \
+                --build-arg BASE_IMAGE_REGISTRY=$(ECRRegistry)/docker-hub \
+                -f web/Dockerfile \
+                -t data/onyx-web-server:latest \
+                -t data/onyx-web-server:$(short_hash) \
+                .
+            displayName: "Build web server image"
+
+          - task: ECRPushImage@1
+            displayName: "Push web-server:latest"
+            inputs:
+              awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
+              regionName: "eu-west-1"
+              imageSource: imagename
+              sourceImageName: "data/onyx-web-server"
+              sourceImageTag: latest
+              repositoryName: "data/onyx-web-server"
+              pushTag: latest
+
+          - task: ECRPushImage@1
+            displayName: "Push web-server:$(short_hash)"
+            inputs:
+              awsCredentials: "AWS TFG Labs prd-core-shared-services Account"
+              regionName: "eu-west-1"
+              imageSource: imagename
+              sourceImageName: "data/onyx-web-server"
+              sourceImageTag: latest
+              repositoryName: "data/onyx-web-server"
+              pushTag: "$(short_hash)"
