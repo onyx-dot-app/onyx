@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from datetime import timezone
 from email.message import Message
-from email.utils import parseaddr
+from email.utils import getaddresses
 from enum import Enum
 from typing import Any
 from typing import cast
@@ -429,9 +429,12 @@ def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
 
 
 def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
-    addrs = raw_header.split(",")
-    name_addr_pairs = [parseaddr(addr=addr) for addr in addrs if addr]
-    return [(name, addr) for name, addr in name_addr_pairs if addr]
+    if not raw_header:
+        return []
+    # `getaddresses` parses per RFC 5322 and correctly handles commas inside
+    # quoted display names (e.g. `"Halvantzis, Savvas" <s@example.com>`), which a
+    # naive `raw_header.split(",")` would break into two malformed addresses.
+    return [(name, addr) for name, addr in getaddresses([raw_header]) if addr]
 
 
 def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
@@ -440,9 +443,15 @@ def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
         raise RuntimeError(
             f"Parsing email header resulted in no addresses being found; {raw_header=}"
         )
-    elif len(addrs) >= 2:
-        raise RuntimeError(
-            f"Expected a singular address, but instead got multiple; {raw_header=} {addrs=}"
+    if len(addrs) >= 2:
+        # A singular field (e.g. Sender/From) occasionally carries multiple
+        # addresses. Don't abort the whole indexing run over it; log a warning
+        # and use the first parsed address instead.
+        logger.warning(
+            "Expected a singular address but got multiple; using the first. "
+            "raw_header=%r addrs=%r",
+            raw_header,
+            addrs,
         )
 
     return addrs[0]
