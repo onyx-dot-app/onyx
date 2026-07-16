@@ -14,7 +14,7 @@ license: Proprietary. LICENSE.txt has complete terms
 |------|-------|
 | Read/analyze content | `python -m markitdown presentation.pptx` |
 | Edit or create from template | Read [editing.md](editing.md) |
-| Create from scratch | Read [pptxgenjs.md](pptxgenjs.md) |
+| Create from scratch | Read [components.md](components.md) — tested layout library (default); [pptxgenjs.md](pptxgenjs.md) for raw layouts it doesn't cover |
 | Lint layout (QA step 0) | `python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx` |
 
 ---
