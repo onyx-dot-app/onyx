@@ -73,7 +73,7 @@ async def get_auth_type(response: Response) -> AuthTypeResponse:
     # The reason is this is used during the login flow, but we don't know which tenant the user is supposed to be
     # associated with until they auth.
     has_users = True
-    if AUTH_TYPE != AuthType.CLOUD:
+    if not MULTI_TENANT:
         user_count = await get_user_count()
         has_users = user_count > 0
 

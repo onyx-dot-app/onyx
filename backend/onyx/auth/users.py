@@ -342,8 +342,9 @@ def verify_email_domain(
     domain = domain.lower()
     local_part = local_part.lower()
 
-    if AUTH_TYPE == AuthType.CLOUD:
-        # Normalize googlemail.com to gmail.com (they deliver to the same inbox)
+    if MULTI_TENANT:
+        # Reject googlemail.com so gmail.com is the single canonical form
+        # (they deliver to the same inbox).
         if domain == "googlemail.com":
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
@@ -1624,7 +1625,7 @@ def get_jwt_strategy() -> SingleTenantJWTStrategy:
 
 
 if AUTH_BACKEND == AuthBackend.JWT:
-    if MULTI_TENANT or AUTH_TYPE == AuthType.CLOUD:
+    if MULTI_TENANT:
         raise ValueError(
             "JWT auth backend is only supported for single-tenant, self-hosted deployments. Use 'redis' or 'postgres' instead."
         )
