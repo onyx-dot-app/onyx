@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from onyx.server.features.build.sandbox import serve_transport
+from onyx.server.features.build.sandbox.kubernetes import kubernetes_sandbox_manager
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
@@ -13,6 +15,19 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 # ``-opencode-auth`` secret, so the longest derived name must still fit.
 _DNS_LABEL_MAX = 63
 _LONGEST_SUFFIX = "-opencode-auth"
+
+
+def test_provisioning_lock_covers_all_startup_timeouts() -> None:
+    expected_timeout = (
+        kubernetes_sandbox_manager.OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+        + kubernetes_sandbox_manager.POD_READY_TIMEOUT_SECONDS
+        + serve_transport.OPENCODE_SERVE_READY_TIMEOUT_SECONDS
+        + kubernetes_sandbox_manager.RESOURCE_DELETION_TIMEOUT_SECONDS
+    )
+
+    assert kubernetes_sandbox_manager.OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS == 90.0
+    assert kubernetes_sandbox_manager.PROVISION_LOCK_TIMEOUT_SECONDS == 180.0
+    assert kubernetes_sandbox_manager.PROVISION_LOCK_TIMEOUT_SECONDS == expected_timeout
 
 
 def test_pod_name_stays_within_dns_label_limit() -> None:
