@@ -791,10 +791,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
-                {/* No horizontal padding here: the chat scroll container fills the
-                    full width so its scrollbar sits flush with the edge (it applies
-                    its own content padding internally). Non-chat siblings below add
-                    their own px-2 sm:px-4. */}
+                {/* No horizontal padding: the scroll container reaches the edge so
+                    its scrollbar sits flush; non-chat siblings add their own px. */}
                 <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
                   {/* ChatUI */}
                   <Fade

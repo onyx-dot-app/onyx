@@ -54,11 +54,8 @@ export interface ChatScrollContainerProps {
   /** Hide the scrollbar (scroll still works, just invisible) */
   hideScrollbar?: boolean;
 
-  /**
-   * Full-width mode: the scroll container spans edge-to-edge (auto scrollbar
-   * gutter) and content uses the input-bar-matching px-2 sm:px-4 rather than the
-   * centered reading layout. The scrollbar stays flush with the edge either way.
-   */
+  /** Full-width mode: edge-to-edge scroll container with input-bar-matching
+   *  content padding, instead of the centered reading layout. */
   flushContent?: boolean;
 }
 
@@ -382,9 +379,7 @@ const ChatScrollContainer = React.memo(
               ref={contentWrapperRef}
               className={cn(
                 "w-full flex-1 flex flex-col items-center",
-                // Content stays padded in both modes; the scroll container itself
-                // reaches the edge so the scrollbar isn't inset. Full-width mirrors
-                // the input bar's px-2 sm:px-4 so messages line up with it.
+                // Full-width matches the input bar's px-2 sm:px-4; centered uses px-4.
                 flushContent ? "px-2 sm:px-4" : "px-4"
               )}
               data-scroll-ready={isScrollReady}
