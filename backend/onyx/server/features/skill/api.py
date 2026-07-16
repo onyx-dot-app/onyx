@@ -45,24 +45,21 @@ from onyx.server.features.skill.models import TransferSkillOwnershipRequest
 from onyx.server.features.skill.response_helpers import skill_preview_response
 from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.server.features.skill.response_helpers import skills_list_response_for_user
-from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import build_single_file_bundle
 from onyx.skills.bundle import build_skill_md
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import inspect_custom_bundle
-from onyx.skills.bundle import parse_skill_md_metadata
+from onyx.skills.bundle import normalize_custom_bundle
 from onyx.skills.bundle import read_bundle_file
 from onyx.skills.bundle import read_custom_bundle_instructions
 from onyx.skills.bundle import rewrite_custom_bundle_skill_md
 from onyx.skills.bundle import SKILL_MD_NAME
-from onyx.skills.bundle import slug_from_filename
-from onyx.skills.bundle import slug_from_skill_name
 from onyx.skills.bundle import update_custom_bundle_files
-from onyx.skills.bundle import validate_and_normalize_custom_bundle
 from onyx.skills.content import read_custom_skill_bundle_bytes
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingested_skill_bundle
 from onyx.skills.ingest import save_skill_bundle_bytes
+from onyx.skills.metadata import parse_skill_document
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
 
@@ -111,13 +108,12 @@ def _replace_skill_bundle_from_editor(
         bundle_bytes,
         f"{skill.slug}.zip",
         file_store,
-        slug=skill.slug,
+        expected_name=skill.slug,
     ) as ingested:
         old_file_id = replace_skill_bundle(
             skill=skill,
             new_bundle_file_id=ingested.bundle_file_id,
             new_bundle_sha256=ingested.bundle_sha256,
-            new_name=ingested.name,
             new_description=ingested.description,
             db_session=db_session,
         )
@@ -182,14 +178,6 @@ def create_custom_skill(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    if bundle.filename is not None and bundle.filename.lower().endswith(".zip"):
-        slug = slug_from_filename(bundle.filename)
-        if slug in BUILT_IN_SKILLS:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"slug '{slug}' is reserved",
-            )
-
     file_store = get_default_file_store()
     with ingested_skill_bundle(
         read_bundle_file(bundle.file),
@@ -197,7 +185,7 @@ def create_custom_skill(
         file_store,
     ) as ingested:
         skill = create_skill__no_commit(
-            slug=ingested.slug,
+            slug=ingested.canonical_name,
             name=ingested.name,
             description=ingested.description,
             bundle_file_id=ingested.bundle_file_id,
@@ -245,33 +233,28 @@ def create_custom_skill_from_editor(
             instructions_markdown=create_request.instructions_markdown,
         ).encode("utf-8"),
     )
-    provisional_slug = slug_from_skill_name(create_request.name)
-    bundle_bytes = validate_and_normalize_custom_bundle(
-        bundle_bytes, slug=provisional_slug
-    )
+    canonical_name = create_request.name
     if upload is not None:
         bundle_bytes = update_custom_bundle_files(
             bundle_bytes,
             read_bundle_file(upload.file),
             filename=upload.filename,
-            slug=provisional_slug,
         )
     bundle_bytes = rewrite_custom_bundle_skill_md(
         bundle_bytes,
-        slug=provisional_slug,
-        name=create_request.name,
+        canonical_name=canonical_name,
         description=create_request.description,
         instructions_markdown=create_request.instructions_markdown,
     )
     file_store = get_default_file_store()
     with ingested_skill_bundle(
         bundle_bytes,
-        f"{provisional_slug}.zip",
+        f"{canonical_name}.zip",
         file_store,
-        slug=provisional_slug,
+        expected_name=canonical_name,
     ) as ingested:
         skill = create_skill__no_commit(
-            slug=ingested.slug,
+            slug=ingested.canonical_name,
             name=ingested.name,
             description=ingested.description,
             bundle_file_id=ingested.bundle_file_id,
@@ -321,16 +304,16 @@ def inspect_custom_skill_bundle_upload(
             "upload must be SKILL.md or a ZIP containing SKILL.md",
         )
 
-    normalized_bundle = validate_and_normalize_custom_bundle(
-        upload_bytes,
-        slug="bundle-preview",
-    )
-    with zipfile.ZipFile(io.BytesIO(normalized_bundle)) as bundle_zip:
-        name, description = parse_skill_md_metadata(bundle_zip.read(SKILL_MD_NAME))
-    contents = inspect_custom_bundle(normalized_bundle)
+    normalized = normalize_custom_bundle(upload_bytes)
+    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+        document = parse_skill_document(
+            bundle_zip.read(SKILL_MD_NAME),
+            directory_name=normalized.source_directory,
+        )
+    contents = inspect_custom_bundle(normalized.content)
     return SkillBundleInspectResponse(
-        name=name,
-        description=description,
+        name=document.metadata.name,
+        description=document.metadata.description,
         instructions_markdown=contents.instructions_markdown,
         files=contents.files,
     )
@@ -358,13 +341,12 @@ def replace_current_user_skill_bundle(
         read_bundle_file(bundle.file),
         bundle.filename,
         file_store,
-        slug=skill.slug,
+        expected_name=skill.slug,
     ) as ingested:
         old_file_id = replace_skill_bundle(
             skill=skill,
             new_bundle_file_id=ingested.bundle_file_id,
             new_bundle_sha256=ingested.bundle_sha256,
-            new_name=ingested.name,
             new_description=ingested.description,
             db_session=db_session,
         )
@@ -403,7 +385,6 @@ def upload_current_user_skill_files(
         existing_bundle_bytes,
         read_bundle_file(upload.file),
         filename=upload.filename,
-        slug=skill.slug,
     )
     return _replace_skill_bundle_from_editor(
         skill, updated_bundle_bytes, user, db_session
@@ -432,7 +413,6 @@ def remove_current_user_skill_file(
     updated_bundle_bytes = update_custom_bundle_files(
         read_custom_skill_bundle_bytes(skill),
         remove_path=path,
-        slug=skill.slug,
     )
     return _replace_skill_bundle_from_editor(
         skill, updated_bundle_bytes, user, db_session
@@ -457,7 +437,6 @@ def patch_current_user_skill(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     if "public_permission" in patch_req.model_fields_set:
         _ensure_can_edit_org_visibility(skill, user)
-
     if not (patch_req.has_details_update or patch_req.has_db_field_update):
         return skill_response_for_user(
             skill,
@@ -475,7 +454,6 @@ def patch_current_user_skill(
     try:
         if file_store is not None:
             old_bundle_bytes = read_custom_skill_bundle_bytes(skill, file_store)
-            name = patch_req.name if patch_req.name is not None else skill.name
             description = (
                 patch_req.description
                 if patch_req.description is not None
@@ -488,8 +466,7 @@ def patch_current_user_skill(
                 )
             new_bundle_bytes = rewrite_custom_bundle_skill_md(
                 old_bundle_bytes,
-                slug=skill.slug,
-                name=name,
+                canonical_name=skill.slug,
                 description=description,
                 instructions_markdown=instructions_markdown,
             )
@@ -502,7 +479,6 @@ def patch_current_user_skill(
                 skill=skill,
                 new_bundle_file_id=new_bundle_file_id,
                 new_bundle_sha256=compute_bundle_sha256(new_bundle_bytes),
-                new_name=name,
                 new_description=description,
                 db_session=db_session,
             )

@@ -32,6 +32,9 @@ from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.built_in import COMPANY_SEARCH
 from onyx.skills.built_in import EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
+from onyx.skills.bundle import SKILL_MD_NAME
+from onyx.skills.metadata import parse_skill_md_frontmatter
+from onyx.skills.metadata import serialize_skill_md
 from onyx.skills.rendering import render_company_search_skill
 from onyx.skills.rendering import render_external_app_skill
 from onyx.utils.logger import setup_logger
@@ -105,11 +108,24 @@ def _add_from_bundle(files: FileSet, skill: Skill, file_store: FileStore) -> Non
         return
     try:
         zip_bytes = file_store.read_file(skill.bundle_file_id).read()
+        bundle_files: FileSet = {}
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             for info in zf.infolist():
                 if info.is_dir():
                     continue
-                files[f"{skill.slug}/{info.filename}"] = zf.read(info)
+                content = zf.read(info)
+                if info.filename == SKILL_MD_NAME:
+                    frontmatter, instructions_markdown = parse_skill_md_frontmatter(
+                        content
+                    )
+                    if frontmatter.get("name") != skill.slug:
+                        frontmatter["name"] = skill.slug
+                        content = serialize_skill_md(
+                            frontmatter,
+                            instructions_markdown,
+                        ).encode("utf-8")
+                bundle_files[f"{skill.slug}/{info.filename}"] = content
+        files.update(bundle_files)
     except Exception:
         logger.warning(
             "Failed to read bundle for skill %s (%s), skipping",

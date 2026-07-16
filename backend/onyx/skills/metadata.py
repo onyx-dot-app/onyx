@@ -39,8 +39,8 @@ def split_skill_md(raw: bytes) -> tuple[str, str]:
     return match.group("frontmatter"), content[match.end() :]
 
 
-def parse_skill_md_frontmatter(raw: bytes) -> tuple[dict[str, Any], str]:
-    """Parse frontmatter and return it with the unmodified Markdown body."""
+def parse_skill_md_frontmatter(raw: bytes) -> tuple[dict[Any, Any], str]:
+    """Parse frontmatter without applying the current metadata schema."""
     frontmatter_yaml, instructions_markdown = split_skill_md(raw)
 
     try:
@@ -57,11 +57,6 @@ def parse_skill_md_frontmatter(raw: bytes) -> tuple[dict[str, Any], str]:
             OnyxErrorCode.INVALID_INPUT,
             "SKILL.md frontmatter must be a mapping",
         )
-    if any(not isinstance(key, str) for key in parsed):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md frontmatter keys must be strings",
-        )
     return parsed, instructions_markdown
 
 
@@ -71,6 +66,11 @@ def parse_skill_document(
     directory_name: str | None = None,
 ) -> SkillDocument:
     frontmatter, instructions_markdown = parse_skill_md_frontmatter(raw)
+    if any(not isinstance(key, str) for key in frontmatter):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md frontmatter keys must be strings",
+        )
     try:
         metadata = SkillMetadata.model_validate(frontmatter)
     except ValidationError as exc:

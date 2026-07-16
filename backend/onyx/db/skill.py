@@ -471,17 +471,13 @@ def replace_skill_bundle(
     skill: Skill,
     new_bundle_file_id: str,
     new_bundle_sha256: str,
-    new_name: str,
     new_description: str,
     db_session: Session,
 ) -> str:
-    """Swap a skill's bundle blob and refresh its display metadata.
+    """Swap a skill's bundle blob and refresh its description.
 
     Returns the old bundle file id so the caller can delete the old blob from
     FileStore after the transaction commits.
-
-    Name and description come from the new bundle's SKILL.md frontmatter so
-    the DB row stays in lockstep with what's actually pushed to sandboxes.
 
     Rejects built-in rows — they have no bundle.
     """
@@ -502,7 +498,6 @@ def replace_skill_bundle(
     old_bundle_file_id = skill.bundle_file_id
     skill.bundle_file_id = new_bundle_file_id
     skill.bundle_sha256 = new_bundle_sha256
-    skill.name = new_name
     skill.description = new_description
     db_session.flush()
     return old_bundle_file_id

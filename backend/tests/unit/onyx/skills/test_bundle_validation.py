@@ -12,13 +12,11 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
 from onyx.skills.bundle import compute_bundle_sha256
-from onyx.skills.bundle import parse_skill_md_metadata
+from onyx.skills.bundle import normalize_custom_bundle
 from onyx.skills.bundle import read_custom_bundle_instructions
 from onyx.skills.bundle import rewrite_custom_bundle_skill_md
-from onyx.skills.bundle import slug_from_filename
-from onyx.skills.bundle import slug_from_skill_name
 from onyx.skills.bundle import strip_skill_md_frontmatter
-from onyx.skills.bundle import validate_and_normalize_custom_bundle
+from onyx.skills.metadata import parse_skill_document
 
 
 def _build_zip(
@@ -41,25 +39,6 @@ def _build_zip(
     return buf.getvalue()
 
 
-@pytest.mark.parametrize(
-    ("name", "expected"),
-    [
-        ("Customer Research", "customer-research"),
-        ("  Résumé helper  ", "resume-helper"),
-        ("123 Reports", "skill-123-reports"),
-        ("Research / Analysis", "research-analysis"),
-        ("研究", "yan-jiu"),
-    ],
-)
-def test_slug_from_skill_name_normalizes_display_name(name: str, expected: str) -> None:
-    assert slug_from_skill_name(name) == expected
-
-
-def test_slug_from_skill_name_rejects_name_without_alphanumerics() -> None:
-    with pytest.raises(OnyxError, match="at least one letter or number"):
-        slug_from_skill_name("💡")
-
-
 VALID_SKILL_MD = b"# Hello\n\nBody content.\n"
 
 
@@ -75,13 +54,13 @@ def _valid_bundle() -> bytes:
 
 def test_validate_and_normalize_rejects_non_zip() -> None:
     with pytest.raises(OnyxError, match="not a valid zip"):
-        validate_and_normalize_custom_bundle(b"not a zip", slug="hello")
+        normalize_custom_bundle(b"not a zip")
 
 
 def test_validate_and_normalize_rejects_missing_skill_md() -> None:
     zip_bytes = _build_zip([("scripts/run.sh", b"#!/bin/sh\n")])
     with pytest.raises(OnyxError, match="SKILL.md missing at bundle root"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 def test_normalizer_flattens_single_wrapper_directory() -> None:
@@ -92,22 +71,22 @@ def test_normalizer_flattens_single_wrapper_directory() -> None:
         ]
     )
 
-    normalized = validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+    normalized = normalize_custom_bundle(zip_bytes)
 
-    with zipfile.ZipFile(io.BytesIO(normalized)) as zf:
+    with zipfile.ZipFile(io.BytesIO(normalized.content)) as zf:
         assert set(zf.namelist()) == {"SKILL.md", "scripts/run.sh"}
         assert zf.read("SKILL.md") == VALID_SKILL_MD
 
 
 def test_normalizer_leaves_canonical_bundle_bytes_unchanged() -> None:
     zip_bytes = _valid_bundle()
-    assert validate_and_normalize_custom_bundle(zip_bytes, slug="hello") is zip_bytes
+    assert normalize_custom_bundle(zip_bytes).content is zip_bytes
 
 
 def test_normalizer_rejects_skill_md_nested_more_than_one_directory() -> None:
     zip_bytes = _build_zip([("outer/inner/SKILL.md", VALID_SKILL_MD)])
     with pytest.raises(OnyxError, match="SKILL.md missing at bundle root"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 def test_normalizer_rejects_files_outside_wrapper_directory() -> None:
@@ -118,7 +97,7 @@ def test_normalizer_rejects_files_outside_wrapper_directory() -> None:
         ]
     )
     with pytest.raises(OnyxError, match="outside the directory"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 def test_normalizer_rejects_multiple_wrapped_skills() -> None:
@@ -129,7 +108,7 @@ def test_normalizer_rejects_multiple_wrapped_skills() -> None:
         ]
     )
     with pytest.raises(OnyxError, match="SKILL.md missing at bundle root"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 def test_normalizer_rejects_duplicate_output_paths() -> None:
@@ -142,7 +121,7 @@ def test_normalizer_rejects_duplicate_output_paths() -> None:
             ]
         )
     with pytest.raises(OnyxError, match="duplicate path 'scripts/run.sh'"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 @pytest.mark.parametrize(
@@ -158,7 +137,7 @@ def test_normalizer_rejects_file_descendant_path_collisions(
     zip_bytes = _build_zip([("hello/SKILL.md", VALID_SKILL_MD), *supporting_entries])
 
     with pytest.raises(OnyxError, match="conflicting path"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 @pytest.mark.parametrize(
@@ -176,7 +155,7 @@ def test_normalizer_rejects_explicit_directory_file_collisions(
     zip_bytes = _build_zip([("hello/SKILL.md", VALID_SKILL_MD), *supporting_entries])
 
     with pytest.raises(OnyxError, match="conflicting path"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 def test_normalizer_accepts_file_beneath_explicit_directory() -> None:
@@ -188,9 +167,9 @@ def test_normalizer_accepts_file_beneath_explicit_directory() -> None:
         ]
     )
 
-    normalized = validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+    normalized = normalize_custom_bundle(zip_bytes)
 
-    with zipfile.ZipFile(io.BytesIO(normalized)) as zf:
+    with zipfile.ZipFile(io.BytesIO(normalized.content)) as zf:
         assert set(zf.namelist()) == {"SKILL.md", "scripts/run.sh"}
 
 
@@ -203,9 +182,9 @@ def test_normalizer_ignores_operating_system_metadata() -> None:
         ]
     )
 
-    normalized = validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+    normalized = normalize_custom_bundle(zip_bytes)
 
-    with zipfile.ZipFile(io.BytesIO(normalized)) as zf:
+    with zipfile.ZipFile(io.BytesIO(normalized.content)) as zf:
         assert zf.namelist() == ["SKILL.md"]
 
 
@@ -217,7 +196,7 @@ def test_validator_rejects_template_file() -> None:
         ]
     )
     with pytest.raises(OnyxError, match="cannot ship templates"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 def test_validator_rejects_oversized_single_file() -> None:
@@ -228,9 +207,7 @@ def test_validator_rejects_oversized_single_file() -> None:
         ]
     )
     with pytest.raises(OnyxError, match="exceeds"):
-        validate_and_normalize_custom_bundle(
-            zip_bytes, slug="hello", per_file_max_bytes=32
-        )
+        normalize_custom_bundle(zip_bytes, per_file_max_bytes=32)
 
 
 def test_normalizer_preserves_size_error_when_entry_close_fails(
@@ -252,9 +229,7 @@ def test_normalizer_preserves_size_error_when_entry_close_fails(
     )
 
     with pytest.raises(OnyxError) as exc_info:
-        validate_and_normalize_custom_bundle(
-            zip_bytes, slug="hello", per_file_max_bytes=32
-        )
+        normalize_custom_bundle(zip_bytes, per_file_max_bytes=32)
 
     assert exc_info.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
 
@@ -268,35 +243,11 @@ def test_validator_rejects_oversized_total() -> None:
         ]
     )
     with pytest.raises(OnyxError, match="uncompressed"):
-        validate_and_normalize_custom_bundle(
+        normalize_custom_bundle(
             zip_bytes,
-            slug="hello",
             per_file_max_bytes=1024,
             total_max_bytes=128,
         )
-
-
-@pytest.mark.parametrize(
-    "bad_slug",
-    [
-        "",
-        "Hello",
-        "1starts-with-digit",
-        "has_underscore",
-        "a" * 65,
-        "..",
-    ],
-)
-def test_validator_rejects_invalid_slug(bad_slug: str) -> None:
-    with pytest.raises(OnyxError, match="invalid slug"):
-        validate_and_normalize_custom_bundle(_valid_bundle(), slug=bad_slug)
-
-
-def test_validator_rejects_reserved_slug() -> None:
-    """``pptx`` is a codified built-in — bundle uploads using that slug
-    are rejected so custom uploads can't shadow a built-in row."""
-    with pytest.raises(OnyxError, match="reserved"):
-        validate_and_normalize_custom_bundle(_valid_bundle(), slug="pptx")
 
 
 def test_compute_bundle_sha256_is_deterministic_for_same_bytes() -> None:
@@ -372,15 +323,15 @@ def test_rewrite_custom_bundle_skill_md_preserves_supporting_files() -> None:
 
     rewritten = rewrite_custom_bundle_skill_md(
         original,
-        slug="hello",
-        name="New",
+        canonical_name="hello",
         description="New desc",
         instructions_markdown="# New instructions\n\nDo it.",
     )
 
     assert read_custom_bundle_instructions(rewritten) == "# New instructions\n\nDo it."
     with zipfile.ZipFile(io.BytesIO(rewritten)) as zf:
-        assert parse_skill_md_metadata(zf.read("SKILL.md")) == ("New", "New desc")
+        metadata = parse_skill_document(zf.read("SKILL.md")).metadata
+        assert (metadata.name, metadata.description) == ("hello", "New desc")
         assert zf.read("scripts/run.py") == b"print('hi')\n"
         assert zf.read("docs/notes.md") == b"# Notes\n"
 
@@ -406,8 +357,7 @@ def test_rewrite_custom_bundle_skill_md_preserves_other_frontmatter() -> None:
 
     rewritten = rewrite_custom_bundle_skill_md(
         original,
-        slug="hello",
-        name="New",
+        canonical_name="hello",
         description="New desc",
         instructions_markdown="New instructions.",
     )
@@ -429,8 +379,7 @@ def test_rewrite_custom_bundle_skill_md_rejects_oversized_skill_md_before_zip_re
     with pytest.raises(OnyxError) as exc_info:
         rewrite_custom_bundle_skill_md(
             b"not a zip",
-            slug="hello",
-            name="New",
+            canonical_name="hello",
             description="New desc",
             instructions_markdown="x" * 256,
         )
@@ -444,8 +393,7 @@ def test_rewrite_custom_bundle_skill_md_rejects_missing_skill_md() -> None:
     with pytest.raises(OnyxError) as exc_info:
         rewrite_custom_bundle_skill_md(
             original,
-            slug="hello",
-            name="New",
+            canonical_name="hello",
             description="New desc",
             instructions_markdown="# New instructions\n\nDo it.",
         )
@@ -481,7 +429,7 @@ def test_validator_rejects_unsupported_compression() -> None:
     from zf.open() — we must translate that to OnyxError, not a 500."""
     zip_bytes = _zip_with_patched_compression_method(VALID_SKILL_MD, method=99)
     with pytest.raises(OnyxError, match="cannot read"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 def test_validator_size_violation_returns_413() -> None:
@@ -493,79 +441,12 @@ def test_validator_size_violation_returns_413() -> None:
         ]
     )
     with pytest.raises(OnyxError) as exc_info:
-        validate_and_normalize_custom_bundle(
-            zip_bytes, slug="hello", per_file_max_bytes=32
-        )
+        normalize_custom_bundle(zip_bytes, per_file_max_bytes=32)
     assert exc_info.value.status_code == 413
 
 
 def test_validator_non_size_violation_returns_400() -> None:
     """Non-size violations still return 400."""
     with pytest.raises(OnyxError) as exc_info:
-        validate_and_normalize_custom_bundle(b"not a zip", slug="hello")
+        normalize_custom_bundle(b"not a zip")
     assert exc_info.value.status_code == 400
-
-
-# ---------------------------------------------------------------------------
-# slug_from_filename
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "filename,expected",
-    [
-        ("deal-summary.zip", "deal-summary"),
-        ("hello.ZIP", "hello"),
-        ("plain", "plain"),
-    ],
-)
-def test_slug_from_filename_strips_zip_extension(filename: str, expected: str) -> None:
-    assert slug_from_filename(filename) == expected
-
-
-@pytest.mark.parametrize("bad", [None, "", "Bad-Caps.zip", "with space.zip"])
-def test_slug_from_filename_rejects_invalid(bad: str | None) -> None:
-    with pytest.raises(OnyxError):
-        slug_from_filename(bad)
-
-
-# ---------------------------------------------------------------------------
-# parse_skill_md_metadata
-# ---------------------------------------------------------------------------
-
-
-def test_parse_skill_md_metadata_happy_path() -> None:
-    body = b"---\nname: My Skill\ndescription: Helpful description\n---\n\nbody\n"
-    name, description = parse_skill_md_metadata(body)
-    assert name == "My Skill"
-    assert description == "Helpful description"
-
-
-def test_parse_skill_md_metadata_strips_whitespace() -> None:
-    body = b"---\nname: '  spaced  '\ndescription: ' desc '\n---\n\nbody\n"
-    name, description = parse_skill_md_metadata(body)
-    assert name == "spaced"
-    assert description == "desc"
-
-
-def test_parse_skill_md_metadata_rejects_missing_frontmatter() -> None:
-    with pytest.raises(OnyxError, match="frontmatter"):
-        parse_skill_md_metadata(b"no frontmatter here\n")
-
-
-def test_parse_skill_md_metadata_rejects_missing_name() -> None:
-    body = b"---\ndescription: only a description\n---\n\nbody\n"
-    with pytest.raises(OnyxError, match="name"):
-        parse_skill_md_metadata(body)
-
-
-def test_parse_skill_md_metadata_rejects_missing_description() -> None:
-    body = b"---\nname: only a name\n---\n\nbody\n"
-    with pytest.raises(OnyxError, match="description"):
-        parse_skill_md_metadata(body)
-
-
-def test_parse_skill_md_metadata_rejects_empty_name() -> None:
-    body = b"---\nname: ''\ndescription: desc\n---\n\nbody\n"
-    with pytest.raises(OnyxError, match="name"):
-        parse_skill_md_metadata(body)

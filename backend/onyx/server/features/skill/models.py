@@ -205,7 +205,6 @@ class SkillCreateRequest(BaseModel):
 class SkillPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: str | None = None
     description: str | None = None
     instructions_markdown: str | None = None
     public_permission: SkillSharePermission | None = None
@@ -218,7 +217,6 @@ class SkillPatchRequest(BaseModel):
         fields; null ``public_permission`` is valid and revokes org access."""
         if isinstance(data, dict):
             for field in (
-                "name",
                 "description",
                 "instructions_markdown",
                 "enabled",
@@ -229,7 +227,7 @@ class SkillPatchRequest(BaseModel):
 
     @model_validator(mode="after")
     def _strip_values(self) -> "SkillPatchRequest":
-        for field in ("name", "description", "instructions_markdown"):
+        for field in ("description", "instructions_markdown"):
             value = getattr(self, field)
             if value is None:
                 continue
@@ -241,9 +239,7 @@ class SkillPatchRequest(BaseModel):
 
     @property
     def has_details_update(self) -> bool:
-        return bool(
-            self.model_fields_set & {"name", "description", "instructions_markdown"}
-        )
+        return bool(self.model_fields_set & {"description", "instructions_markdown"})
 
     @property
     def has_db_field_update(self) -> bool:

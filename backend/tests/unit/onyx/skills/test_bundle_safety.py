@@ -10,7 +10,7 @@ import pytest
 
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
-from onyx.skills.bundle import validate_and_normalize_custom_bundle
+from onyx.skills.bundle import normalize_custom_bundle
 
 
 def _build_zip(
@@ -53,7 +53,7 @@ def test_validator_rejects_path_traversal(bad_path: str) -> None:
         ]
     )
     with pytest.raises(OnyxError, match="escapes root"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 def test_validator_rejects_symlink() -> None:
@@ -62,4 +62,4 @@ def test_validator_rejects_symlink() -> None:
         symlinks=[("link", b"/etc/passwd")],
     )
     with pytest.raises(OnyxError, match="symlink"):
-        validate_and_normalize_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)

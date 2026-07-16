@@ -97,15 +97,12 @@ def test_replace_bundle_updates_metadata(admin_user: DATestUser) -> None:
     skill = SkillManager.create_custom(
         admin_user,
         slug=slug,
-        name="Original Name",
         description="Original desc",
     )
-    new_bundle = build_minimal_bundle(
-        slug, name="Renamed via bundle", description="Updated desc"
-    )
+    new_bundle = build_minimal_bundle(slug, description="Updated desc")
     updated = SkillManager.replace_bundle(skill, new_bundle, admin_user)
     assert updated.slug == slug
-    assert updated.name == "Renamed via bundle"
+    assert updated.name == slug
     assert updated.description == "Updated desc"
 
 
@@ -157,13 +154,11 @@ def test_group_shares_replace(admin_user: DATestUser) -> None:
 
 
 def test_metadata_from_bundle_frontmatter(admin_user: DATestUser) -> None:
-    bundle = build_minimal_bundle(
-        "from-frontmatter", name="From Bundle", description="From bundle desc"
-    )
+    bundle = build_minimal_bundle("from-frontmatter", description="From bundle desc")
     skill = SkillManager.create_custom(
         admin_user, slug="from-frontmatter", bundle_bytes=bundle
     )
-    assert skill.name == "From Bundle"
+    assert skill.name == "from-frontmatter"
     assert skill.description == "From bundle desc"
 
 
@@ -178,16 +173,15 @@ def test_missing_frontmatter_rejected(admin_user: DATestUser) -> None:
     assert exc_info.value.response.status_code == 400
 
 
-def test_bad_filename_rejected(admin_user: DATestUser) -> None:
+def test_upload_filename_does_not_define_identity(admin_user: DATestUser) -> None:
     bundle = build_minimal_bundle("placeholder")
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_custom(
-            admin_user,
-            slug="placeholder",
-            bundle_bytes=bundle,
-            filename="Invalid Name.zip",
-        )
-    assert exc_info.value.response.status_code == 400
+    skill = SkillManager.create_custom(
+        admin_user,
+        slug="placeholder",
+        bundle_bytes=bundle,
+        filename="Invalid Name.zip",
+    )
+    assert skill.slug == "placeholder"
 
 
 # ---------------------------------------------------------------------------

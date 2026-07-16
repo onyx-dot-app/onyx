@@ -288,8 +288,8 @@ def create_external_app(
             db_session=db_session,
         )
     else:
-        # CUSTOM: use the bundle's filename-derived slug, falling back to a
-        # generated one when no bundle is supplied (e.g. the JSON upsert path).
+        # CUSTOM: use the bundle's canonical name supplied by ingestion, falling
+        # back to a generated slug when no bundle is supplied.
         custom_slug = slug or f"{app_type.value.lower()}-{uuid4().hex[:8]}"
         skill = create_skill__no_commit(
             slug=custom_slug,

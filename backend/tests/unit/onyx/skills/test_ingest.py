@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.ingest import ingested_skill_bundle
@@ -17,7 +18,7 @@ def test_ingest_normalizes_wrapped_bundle_before_hashing_and_storage() -> None:
     with zipfile.ZipFile(source, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
             "example/SKILL.md",
-            "---\nname: Example\ndescription: Wrapped skill\n---\n\nInstructions.",
+            "---\nname: example\ndescription: Wrapped skill\n---\n\nInstructions.",
         )
         zf.writestr("example/scripts/helper.py", "print('hello')\n")
 
@@ -36,7 +37,7 @@ def test_ingest_normalizes_wrapped_bundle_before_hashing_and_storage() -> None:
         assert set(zf.namelist()) == {"SKILL.md", "scripts/helper.py"}
         assert zf.read("scripts/helper.py") == b"print('hello')\n"
 
-    assert ingested.name == "Example"
+    assert ingested.name == "example"
     assert ingested.description == "Wrapped skill"
     assert ingested.bundle_file_id == "stored-bundle"
     assert ingested.bundle_sha256 == hashlib.sha256(saved_bytes).hexdigest()
@@ -53,7 +54,7 @@ def test_ingest_standalone_skill_md_uses_frontmatter_name_and_stores_zip() -> No
 
     ingested = ingest_skill_bundle(skill_md, "SKILL.md", file_store)
 
-    assert ingested.slug == "daily-summary"
+    assert ingested.canonical_name == "daily-summary"
     assert ingested.name == "daily-summary"
     assert ingested.description == "Summarizes the day"
     saved_stream = file_store.save_file.call_args.kwargs["content"]
@@ -67,30 +68,64 @@ def test_ingest_standalone_skill_md_uses_frontmatter_name_and_stores_zip() -> No
     assert ingested.bundle_sha256 == hashlib.sha256(saved_bytes).hexdigest()
 
 
-def test_ingest_standalone_skill_md_derives_slug_from_display_name() -> None:
+def test_ingest_rejects_noncanonical_frontmatter_name() -> None:
     skill_md = b"---\nname: Daily Summary\ndescription: Desc\n---\n\nBody\n"
     file_store = MagicMock(spec=FileStore)
     file_store.save_file.return_value = "stored-bundle"
 
-    ingested = ingest_skill_bundle(skill_md, "skill.MD", file_store)
+    with pytest.raises(OnyxError, match="field 'name'"):
+        ingest_skill_bundle(skill_md, "skill.MD", file_store)
 
-    assert ingested.slug == "daily-summary"
+
+def test_ingest_rejects_built_in_name() -> None:
+    skill_md = b"---\nname: pptx\ndescription: Desc\n---\n\nBody\n"
+    file_store = MagicMock(spec=FileStore)
+
+    with pytest.raises(OnyxError, match="skill name 'pptx' is reserved"):
+        ingest_skill_bundle(skill_md, "SKILL.md", file_store)
 
 
-def test_ingest_standalone_skill_md_replacement_keeps_existing_slug() -> None:
-    skill_md = b"---\nname: New Name\ndescription: Desc\n---\n\nBody\n"
+def test_ingest_replacement_rejects_changed_name() -> None:
+    skill_md = b"---\nname: new-name\ndescription: Desc\n---\n\nBody\n"
     file_store = MagicMock(spec=FileStore)
     file_store.save_file.return_value = "stored-bundle"
 
-    ingested = ingest_skill_bundle(
-        skill_md,
-        "SKILL.md",
-        file_store,
-        slug="existing-skill",
-    )
+    with pytest.raises(OnyxError, match="must remain 'existing-skill'"):
+        ingest_skill_bundle(
+            skill_md,
+            "SKILL.md",
+            file_store,
+            expected_name="existing-skill",
+        )
 
-    assert ingested.slug == "existing-skill"
-    assert ingested.name == "New Name"
+
+def test_ingest_zip_uses_frontmatter_name_instead_of_filename() -> None:
+    source = io.BytesIO()
+    with zipfile.ZipFile(source, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "SKILL.md",
+            "---\nname: canonical-name\ndescription: Desc\n---\n\nBody.",
+        )
+    file_store = MagicMock(spec=FileStore)
+    file_store.save_file.return_value = "stored-bundle"
+
+    ingested = ingest_skill_bundle(source.getvalue(), "unrelated.zip", file_store)
+
+    assert ingested.canonical_name == "canonical-name"
+    assert ingested.name == "canonical-name"
+
+
+def test_ingest_rejects_wrapped_directory_name_mismatch() -> None:
+    source = io.BytesIO()
+    with zipfile.ZipFile(source, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "wrapper/SKILL.md",
+            "---\nname: canonical-name\ndescription: Desc\n---\n\nBody.",
+        )
+    file_store = MagicMock(spec=FileStore)
+
+    with pytest.raises(OnyxError, match="must match its parent directory"):
+        ingest_skill_bundle(source.getvalue(), "anything.zip", file_store)
 
 
 def test_ingested_skill_bundle_deletes_new_blob_on_failure(
@@ -101,7 +136,7 @@ def test_ingested_skill_bundle_deletes_new_blob_on_failure(
     monkeypatch.setattr(
         "onyx.skills.ingest.ingest_skill_bundle",
         lambda *_args, **_kwargs: IngestedBundle(
-            slug="helper-skill",
+            canonical_name="helper-skill",
             bundle_file_id="new-bundle",
             bundle_sha256="0" * 64,
             name="Helper Skill",

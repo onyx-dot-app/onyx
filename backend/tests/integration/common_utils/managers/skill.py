@@ -45,7 +45,7 @@ def build_minimal_bundle(
     now the canonical source for those fields on the backend, so tests that
     care about them should pass them here instead of as separate API args.
     """
-    fm_name = name or f"Test Skill {slug}"
+    fm_name = name or slug
     fm_desc = description or f"Description for {slug}"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:

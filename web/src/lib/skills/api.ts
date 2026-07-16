@@ -74,7 +74,6 @@ export async function createCustomSkillFromEditor(
 }
 
 export interface PatchCustomSkillInput {
-  name?: string;
   description?: string;
   instructions_markdown?: string;
   public_permission?: SkillSharePermission | null;
