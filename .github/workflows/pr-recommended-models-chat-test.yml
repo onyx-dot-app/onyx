@@ -20,13 +20,15 @@ on:
       - ".github/workflows/reusable-nightly-llm-provider-chat.yml"
       - ".github/actions/run-nightly-provider-chat-test/**"
       - "backend/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   derive-models:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Skip fork PRs (no OIDC secrets); workflow_dispatch is write-access only, so allow it.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-slim
     timeout-minutes: 5
     outputs:
