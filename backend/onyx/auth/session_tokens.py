@@ -3,8 +3,10 @@
 Token values embed their logical expiry; the physical TTL adds a grace window
 and logout writes a tombstone instead of deleting, so a rejected token can be
 classified: EXPIRED (embedded expiry passed), TERMINATED (tombstone), NOT_FOUND
-(no entry: cookie outlived the grace window, or Redis dropped the key), LEGACY
-(pre-format value; one-time sign-out on upgrade).
+(no entry: cookie outlived the grace window, or Redis dropped the key),
+MALFORMED (unparseable or sub-less value). Pre-upgrade values (sub present, no
+issued_at) stay valid on bare key existence; their physical TTL is their
+pre-upgrade logical expiry, so deploying this format signs nobody out.
 
 ``read_token`` must return None rather than raise (API keys/PATs/JWTs share the
 bearer transport and legitimately miss in Redis), so the classification is
@@ -55,21 +57,21 @@ class SessionRejectionReason(Enum):
     EXPIRED = "expired"
     TERMINATED = "terminated"
     NOT_FOUND = "not_found"
-    LEGACY = "legacy"
+    MALFORMED = "malformed"
 
 
 _REASON_TO_ERROR_CODE = {
     SessionRejectionReason.EXPIRED: OnyxErrorCode.SESSION_EXPIRED,
     SessionRejectionReason.TERMINATED: OnyxErrorCode.SESSION_TERMINATED,
     SessionRejectionReason.NOT_FOUND: OnyxErrorCode.SESSION_UNRECOGNIZED,
-    SessionRejectionReason.LEGACY: OnyxErrorCode.SESSION_TERMINATED,
+    SessionRejectionReason.MALFORMED: OnyxErrorCode.SESSION_UNRECOGNIZED,
 }
 
 _REASON_TO_DETAIL = {
     SessionRejectionReason.EXPIRED: "Session expired. Please log in again.",
     SessionRejectionReason.TERMINATED: "Session was signed out. Please log in again.",
     SessionRejectionReason.NOT_FOUND: "Session not recognized. Please log in again.",
-    SessionRejectionReason.LEGACY: "Session is no longer valid. Please log in again.",
+    SessionRejectionReason.MALFORMED: "Session not recognized. Please log in again.",
 }
 
 
@@ -156,14 +158,20 @@ def classify_session_token_value(
     try:
         value = SessionTokenValue.model_validate_json(raw_value)
     except ValidationError:
-        return SessionRejection(reason=SessionRejectionReason.LEGACY, token_value=None)
+        return SessionRejection(
+            reason=SessionRejectionReason.MALFORMED, token_value=None
+        )
 
     if value.logged_out_at is not None:
         return SessionRejection(
             reason=SessionRejectionReason.TERMINATED, token_value=value
         )
-    if value.sub is None or value.issued_at is None:
-        return SessionRejection(reason=SessionRejectionReason.LEGACY, token_value=value)
+    if value.sub is None:
+        return SessionRejection(
+            reason=SessionRejectionReason.MALFORMED, token_value=value
+        )
+    # Pre-upgrade values (no issued_at / expires_at) fall through as valid:
+    # their physical TTL is their pre-upgrade logical expiry.
     if value.expires_at is not None and value.expires_at <= datetime.now(timezone.utc):
         return SessionRejection(
             reason=SessionRejectionReason.EXPIRED, token_value=value

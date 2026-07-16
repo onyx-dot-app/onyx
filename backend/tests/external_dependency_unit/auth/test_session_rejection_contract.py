@@ -45,6 +45,7 @@ def _client(app: FastAPI, token: str) -> AsyncClient:
 async def test_expired_session_yields_403_with_expired_code(
     app: FastAPI, db_session: Session
 ) -> None:
+    # Precondition.
     user = create_test_user(db_session, "session_contract_expired")
     strategy = TenantAwareRedisStrategy()
     token = await strategy.write_token(user)
@@ -60,9 +61,11 @@ async def test_expired_session_yields_403_with_expired_code(
         ).isoformat()
         redis.set(redis_key, json.dumps(data), keepttl=True)
 
+        # Under test.
         async with _client(app, token) as client:
             response = await client.get("/me")
 
+        # Postcondition.
         assert response.status_code == 403
         assert response.json()["error_code"] == "SESSION_EXPIRED"
     finally:

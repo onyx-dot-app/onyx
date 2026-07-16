@@ -919,6 +919,13 @@ def get_current_auth_token_expiry_redis(
             )
             return None
 
+        if result.issued_at is None:
+            # Pre-upgrade value: its physical TTL is its logical expiry.
+            ttl = cast(int, redis.ttl(REDIS_AUTH_KEY_PREFIX + token))
+            if ttl <= 0:
+                return None
+            return datetime.now(timezone.utc) + timedelta(seconds=ttl)
+
         return result.expires_at
 
     except Exception as e:
