@@ -109,6 +109,9 @@ GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
 # Number of files emitted per checkpoint batch in the FILES stage.
 FILE_BATCH_SIZE = 100
 
+_GITHUB_EMPTY_REPOSITORY_TREE_STATUS = 409
+_GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE = "Git Repository is empty."
+
 
 def _is_indexable_path(path: str, size: int | None) -> bool:
     """Pure predicate: should this repo file be indexed?
@@ -765,6 +768,21 @@ class GithubConnector(
         except RateLimitExceededException:
             sleep_after_rate_limit_exception(self.github_client)
             return self._list_indexable_files(repo, attempt_num + 1)
+        except GithubException as e:
+            error_message = (
+                e.data.get("message") if isinstance(e.data, dict) else e.message
+            )
+            if not (
+                e.status == _GITHUB_EMPTY_REPOSITORY_TREE_STATUS
+                and error_message == _GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE
+            ):
+                raise
+
+            logger.info(
+                "Skipping files for empty repo: %s",
+                repo.full_name,
+            )
+            return [], False
 
     def _fetch_file_content(
         self, repo: Repository.Repository, path: str, attempt_num: int = 0

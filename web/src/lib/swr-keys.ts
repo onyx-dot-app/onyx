@@ -120,6 +120,8 @@ export const SWR_KEYS = {
   // ── MCP Servers ───────────────────────────────────────────────────────────
   adminMcpServers: "/api/admin/mcp/servers",
   mcpServers: "/api/mcp/servers",
+  personaMcpServers: (personaId: number) =>
+    `/api/mcp/servers/persona/${personaId}`,
 
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",

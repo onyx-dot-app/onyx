@@ -47,7 +47,6 @@ from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.schema import GLOBAL_BOOST_FIELD_NAME
 from onyx.document_index.opensearch.schema import HIDDEN_FIELD_NAME
 from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
-from onyx.document_index.opensearch.schema import set_or_convert_timezone_to_utc
 from onyx.document_index.opensearch.schema import USER_PROJECTS_FIELD_NAME
 from onyx.document_index.opensearch.search import DocumentQuery
 from onyx.document_index.opensearch.search import (
@@ -62,6 +61,7 @@ from onyx.document_index.opensearch.search import (
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import Document
 from onyx.redis.lock_context import redis_shared_lock
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
@@ -605,9 +605,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             if update_request.created_at is not None:
                 # Stored as epoch seconds
                 properties_to_update[CREATED_AT_FIELD_NAME] = int(
-                    set_or_convert_timezone_to_utc(
-                        update_request.created_at
-                    ).timestamp()
+                    datetime_to_utc(update_request.created_at).timestamp()
                 )
 
             if not properties_to_update:
