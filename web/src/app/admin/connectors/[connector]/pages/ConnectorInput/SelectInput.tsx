@@ -1,4 +1,4 @@
-import CredentialSubText from "@/components/credentials/CredentialFields";
+import CredentialSubText from "@/lib/credentials/components/CredentialFields";
 import { StringWithDescription } from "@/lib/connectors/connectors";
 import { Field } from "formik";
 

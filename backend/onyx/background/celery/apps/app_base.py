@@ -252,6 +252,30 @@ def on_task_postrun(
         return
 
 
+def on_task_revoked(
+    request: Any | None = None,
+    **kwds: Any,  # noqa: ARG001
+) -> None:
+    """Drain the doc-sync taskset when a task is revoked/expired.
+
+    Expired tasks are discarded before running, so task_postrun (which normally
+    srem's the taskset) never fires. Without this, the stranded id keeps the
+    taskset non-empty and wedges the sync fence until its 7-day TTL.
+    """
+    task_id = getattr(request, "id", None)
+    if not task_id:
+        return
+
+    if not task_id.startswith(DOCUMENT_SYNC_PREFIX):
+        return
+
+    request_kwargs = getattr(request, "kwargs", None) or {}
+    tenant_id = cast(str, request_kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
+
+    r = get_redis_client(tenant_id=tenant_id)
+    r.srem(DOCUMENT_SYNC_TASKSET_KEY, task_id)
+
+
 def on_celeryd_init(
     sender: str,  # noqa: ARG001
     conf: Any = None,  # noqa: ARG001

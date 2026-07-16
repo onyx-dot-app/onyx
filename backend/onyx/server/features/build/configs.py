@@ -38,6 +38,7 @@ SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS = int(
 SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS = int(
     os.environ.get("SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS", "60")
 )
+SANDBOX_HEARTBEAT_REFRESH_INTERVAL_SECONDS = 60
 
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
 SANDBOX_NEXTJS_PORT_END = int(os.environ.get("SANDBOX_NEXTJS_PORT_END", "3100"))
@@ -68,6 +69,11 @@ SANDBOX_IMAGE_PULL_POLICY = os.environ.get("SANDBOX_IMAGE_PULL_POLICY", "IfNotPr
 SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get("SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox")
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
+
+# Gates the built-in `browser` skill. Defaults on to match the sandbox image's
+# build-time ENABLE_BROWSER ARG (also on); a browserless sandbox build must set
+# this false too, else the skill is advertised without its runtime.
+ENABLE_BROWSER = os.environ.get("ENABLE_BROWSER", "true").lower() == "true"
 
 SANDBOX_PUSH_PRIVATE_KEY = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY", "")
 
@@ -157,10 +163,18 @@ SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0
 
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
-# Wall-clock budget for one user-message turn against opencode-serve.
-SANDBOX_TURN_TIMEOUT_SECONDS = float(
-    os.environ.get("SANDBOX_TURN_TIMEOUT_SECONDS", "900.0")
+# Maximum time opencode-serve may go without emitting a turn event.
+OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS = float(
+    os.environ.get("OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS", "60.0")
 )
+
+# Hard ceiling for background prompt-slot renewal, so a leaked holder cannot
+# retain mutual exclusion indefinitely.
+PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS = 30 * 60.0
+
+# Prompt-slot lock lease; renewed on every sandbox event/keepalive, so a dead
+# holder strands the slot for at most this long.
+PROMPT_SLOT_LEASE_SECONDS = float(os.environ.get("PROMPT_SLOT_LEASE_SECONDS", "120.0"))
 
 # Match against the EXPOSE directive in the sandbox Dockerfile.
 OPENCODE_SERVE_PORT = int(os.environ.get("OPENCODE_SERVE_PORT", "4096"))

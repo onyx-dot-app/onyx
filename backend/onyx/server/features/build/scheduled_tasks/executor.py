@@ -76,6 +76,16 @@ SUMMARY_MAX_CHARS = 120
 PROVISIONING_WAIT_SECONDS = 120
 
 
+def _clip_summary(text: str) -> str:
+    if len(text) <= SUMMARY_MAX_CHARS:
+        return text
+    clipped = text[:SUMMARY_MAX_CHARS]
+    last_space = clipped.rfind(" ")
+    if last_space > SUMMARY_MAX_CHARS // 2:
+        clipped = clipped[:last_space]
+    return clipped.rstrip() + "…"
+
+
 def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
     """Build a ~120-char summary from accumulated agent message text.
 
@@ -85,8 +95,8 @@ def _summary_from_state(state: BuildStreamingState, fallback: str = "") -> str:
     if state.message_chunks:
         full = "".join(state.message_chunks).strip()
         if full:
-            return full[:SUMMARY_MAX_CHARS]
-    return fallback[:SUMMARY_MAX_CHARS] if fallback else ""
+            return _clip_summary(full)
+    return _clip_summary(fallback) if fallback else ""
 
 
 def _summary_from_session_messages(session_id: UUID, db_session: Any) -> str:
@@ -108,7 +118,7 @@ def _summary_from_session_messages(session_id: UUID, db_session: Any) -> str:
         if isinstance(content, dict):
             text = content.get("text") or ""
             if isinstance(text, str) and text.strip():
-                return text.strip()[:SUMMARY_MAX_CHARS]
+                return _clip_summary(text.strip())
     return ""
 
 
@@ -387,7 +397,8 @@ def _drive_agent(
         # agent loop. __enter__/__exit__ used directly (rather than a
         # `with`) to avoid reindenting the existing try/except block.
         prompt_slot_cm = session_manager.prompt_slot(sandbox_id, session_id)
-        if not prompt_slot_cm.__enter__():
+        slot = prompt_slot_cm.__enter__()
+        if not slot.acquired:
             prompt_slot_cm.__exit__(None, None, None)
             mark_run_status(
                 db_session=db_session,
@@ -408,8 +419,31 @@ def _drive_agent(
             return False
         try:
             for sandbox_event in session_manager.yield_sandbox_events(
-                sandbox_id, session_id, task_prompt
+                sandbox_id,
+                session_id,
+                task_prompt,
+                turn_timeout_seconds=float(budget_seconds),
             ):
+                slot.extend()
+                if slot.lost:
+                    session_manager.finalize_persist(session_id, state)
+                    mark_run_status(
+                        db_session=db_session,
+                        run_id=run_id,
+                        status=ScheduledTaskRunStatus.FAILED,
+                        error_class=ScheduledTaskErrorClass.AGENT_EXCEPTION,
+                        error_detail="Prompt slot lease lost mid-turn.",
+                    )
+                    _notify(
+                        db_session=db_session,
+                        user_id=task_user_id,
+                        task_name=task_name,
+                        task_id=task_id,
+                        run_id=run_id,
+                        notif_type=NotificationType.SCHEDULED_TASK_FAILED,
+                    )
+                    db_session.commit()
+                    return False
                 # Approval gate: mark awaiting_approval, return. Resume
                 # mechanics are owned by the approvals project; this is
                 # "terminal for display" until it ships.

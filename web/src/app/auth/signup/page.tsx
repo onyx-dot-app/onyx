@@ -1,19 +1,14 @@
 import { User } from "@/lib/types";
-import {
-  getCurrentUserSS,
-  getAuthTypeMetadataSS,
-  AuthTypeMetadata,
-  getAuthUrlSS,
-} from "@/lib/userSS";
+import { getCurrentUserSS } from "@/lib/users/svcSS";
+import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
+import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
 import { redirect } from "next/navigation";
-import EmailPasswordForm from "../login/EmailPasswordForm";
-import SignInButton from "@/app/auth/login/SignInButton";
+import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
-import { AuthType } from "@/lib/constants";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -102,7 +97,7 @@ const Page = async (props: {
           )}
 
           <EmailPasswordForm
-            isSignup
+            label="create"
             shouldVerify={authTypeMetadata?.requiresVerification}
             nextUrl={nextUrl}
             defaultEmail={defaultEmail}

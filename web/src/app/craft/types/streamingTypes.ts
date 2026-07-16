@@ -4,7 +4,7 @@
 
 export type SharingScope = "private" | "public_org";
 
-export type SessionOrigin = "INTERACTIVE" | "SCHEDULED";
+export type SessionOrigin = "INTERACTIVE" | "SCHEDULED" | "SLACK";
 
 // =============================================================================
 // Session Error Constants
@@ -161,6 +161,10 @@ export interface ApiSandboxResponse {
   created_at: string;
   last_heartbeat: string | null;
   nextjs_port: number | null;
+}
+
+export interface ApiSandboxStatusResponse {
+  status: Exclude<ApiSandboxResponse["status"], "restoring"> | null;
 }
 
 export interface ApiSessionResponse {

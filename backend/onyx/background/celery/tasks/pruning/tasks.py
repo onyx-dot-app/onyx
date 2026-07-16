@@ -44,6 +44,7 @@ from onyx.db.connector import mark_ccpair_as_pruned
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.document import backfill_docs_created_at__no_commit
 from onyx.db.document import get_documents_for_connector_credential_pair
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
@@ -60,7 +61,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
-from onyx.db.tag import delete_orphan_tags__no_commit
+from onyx.db.tag import delete_orphan_tags_batched
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
@@ -668,6 +669,13 @@ def connector_pruning_generator_task(
                 raw_id_to_parent=all_connector_doc_ids,
             )
 
+            # Backfill source creation time collected during enumeration.
+            backfill_docs_created_at__no_commit(
+                ids_to_created_at=extraction_result.id_to_created_at,
+                db_session=db_session,
+            )
+            db_session.commit()
+
             diff_start = time.monotonic()
             try:
                 # a list of docs in our local index
@@ -834,11 +842,16 @@ def monitor_ccpair_pruning_taskset(
         num_docs_synced=initial,
     )
 
-    delete_orphan_tags__no_commit(db_session)
-
     redis_connector.prune.taskset_clear()
     redis_connector.prune.generator_clear()
     redis_connector.prune.set_fence(None)
+
+    # Orphan tags can only appear when the prune actually removed documents.
+    # All prior DB writes in this session are already committed
+    # (mark_ccpair_as_pruned / update_sync_record_status commit internally),
+    # so the per-batch commits of the drain are safe here.
+    if initial > 0:
+        delete_orphan_tags_batched(db_session)
 
 
 def validate_pruning_fences(

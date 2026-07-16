@@ -9,7 +9,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";

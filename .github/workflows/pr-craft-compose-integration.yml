@@ -70,10 +70,10 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
@@ -105,7 +105,7 @@ jobs:
       test-files: ${{ steps.set-matrix.outputs.test-files }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -148,7 +148,9 @@ jobs:
             context: ./backend/onyx/server/features/build/sandbox/image
             file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
             # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
-            # so skip LibreOffice et al. to keep the CI image lean.
+            # so skip LibreOffice et al. to keep the CI image lean. Browser stays
+            # on (ENABLE_BROWSER defaults true) — chromium is lighter than the
+            # skill bundle and keeps the CI image consistent with prod.
             extra_build_args: "ENABLE_SKILLS=false"
           - image: backend
             context: ./backend
@@ -165,10 +167,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -218,10 +220,10 @@ jobs:
       DISABLE_TELEMETRY: "true"
 
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
 

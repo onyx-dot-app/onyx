@@ -1,23 +1,27 @@
-// Send → stream → ~50ms batched flush → stop, plus hydration. runChatStream is module-scope so the stream
-// keeps writing by sessionId after the landing screen unmounts navigating into /chat/[id].
-import { useCallback, useEffect, useMemo, useState } from "react";
+// runChatStream is module-scope so the stream keeps writing by sessionId after the landing screen
+// unmounts navigating into /chat/[id].
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { QUERY_KEYS } from "@/api/query-keys";
 import {
   createChatSession,
   getChatSession,
+  renameChatSession,
   stopChatSession,
 } from "@/api/chat/sessions";
 import {
   isMessageIdInfo,
   isPacket,
+  isStreamError,
   SendMessageBody,
   streamChatMessage,
 } from "@/api/chat/stream";
+import { DEFAULT_AGENT_ID } from "@/chat/agents";
+import { FLUSH_INTERVAL_MS } from "@/chat/constants";
 import { processRawChatHistory } from "@/chat/chatHistory";
-import { ChatState } from "@/chat/interfaces";
+import { ChatState, FileDescriptor } from "@/chat/interfaces";
 import {
   buildImmediateMessages,
   getLastSuccessfulMessageId,
@@ -30,7 +34,29 @@ import { Packet } from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 
-const FLUSH_INTERVAL_MS = 50;
+// the run can finish before the ChatSession row is committed; let it settle before naming (web too)
+const AUTO_NAME_DELAY_MS = 200;
+
+interface AutoNameContext {
+  serverUrl: string | null;
+  queryClient: QueryClient;
+}
+
+async function nameNewSession(
+  sessionId: string,
+  ctx: AutoNameContext,
+): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, AUTO_NAME_DELAY_MS));
+  try {
+    await renameChatSession(sessionId);
+  } catch {
+    // best-effort; the refresh below still surfaces the chat (as "New Chat")
+  } finally {
+    void ctx.queryClient.invalidateQueries({
+      queryKey: QUERY_KEYS.chatSessions(ctx.serverUrl),
+    });
+  }
+}
 
 async function runChatStream(
   sessionId: string,
@@ -38,11 +64,13 @@ async function runChatStream(
   agentNodeId: number,
   body: SendMessageBody,
   signal: AbortSignal,
+  autoName: AutoNameContext | null,
 ): Promise<void> {
   const store = useChatSessionStore;
   let pending: Packet[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let sawStreaming = false;
+  let hadError = false;
 
   function flush() {
     if (pending.length === 0) return;
@@ -84,6 +112,26 @@ async function runChatStream(
         });
         continue;
       }
+      if (isStreamError(event)) {
+        // Backend errored mid-stream: convert the assistant turn to an error node instead of leaving the "…" placeholder stuck.
+        hadError = true;
+        console.warn("chat stream returned a backend error", {
+          sessionId,
+          errorCode: event.error_code ?? null,
+          error: event.error,
+        });
+        pending = [];
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        store.getState().patchNode(sessionId, agentNodeId, {
+          type: "error",
+          message: event.error,
+          errorCode: event.error_code ?? null,
+        });
+        break;
+      }
       if (isPacket(event)) {
         if (!sawStreaming) {
           sawStreaming = true;
@@ -96,6 +144,7 @@ async function runChatStream(
   } catch (error) {
     // Abort is the normal stop path; any other failure marks the assistant node errored.
     if (!signal.aborted) {
+      hadError = true;
       const message =
         error instanceof Error ? error.message : "Something went wrong.";
       store.getState().patchNode(sessionId, agentNodeId, {
@@ -108,22 +157,40 @@ async function runChatStream(
     flush();
     store.getState().updateChatState(sessionId, "input");
     store.getState().setAbortController(sessionId, null);
+    // name a new session once it streamed output; skip stop/abort and thrown transport failures
+    if (autoName && !signal.aborted && sawStreaming && !hadError) {
+      void nameNewSession(sessionId, autoName);
+    }
   }
 }
 
 export interface ChatController {
   messages: ReturnType<typeof getLatestMessageChain>;
   chatState: ChatState;
-  input: string;
-  setInput: (value: string) => void;
-  submit: () => void;
+  // `onAccepted` fires once, past every early return and before the session-create await, so the
+  // caller can clear the draft optimistically yet only on a committed send.
+  submit: (
+    text: string,
+    files?: FileDescriptor[],
+    onAccepted?: () => void,
+  ) => void;
   stop: () => void;
   isHydrating: boolean;
 }
 
-export function useChatController(sessionId: string | null): ChatController {
-  const [input, setInput] = useState("");
+// `personaId` binds the agent only when this send creates a new session (ignored for an existing
+// session). `projectId` scopes a new chat to a project.
+export function useChatController(
+  sessionId: string | null,
+  personaId: number = DEFAULT_AGENT_ID,
+  projectId: number | null = null,
+  // report a new session here instead of navigating, so a host can transition in place
+  onSessionCreated?: (sessionId: string) => void,
+): ChatController {
+  // Re-entry guard: without this, two rapid taps race through createChatSession (two sessions).
+  const submittingRef = useRef(false);
   const serverUrl = useSession((state) => state.serverUrl);
+  const queryClient = useQueryClient();
   const sessionData = useChatSessionStore((state) =>
     sessionId ? state.sessions.get(sessionId) : undefined,
   );
@@ -158,72 +225,107 @@ export function useChatController(sessionId: string | null): ChatController {
   );
   const chatState: ChatState = sessionData?.chatState ?? "input";
 
-  const submit = useCallback(async () => {
-    const text = input.trim();
-    if (!text) return;
-    // Clear synchronously so a second tap during the create-session await can't double-submit
-    // (the input is empty → canSend is false).
-    setInput("");
+  const submit = useCallback(
+    async (
+      overrideText: string,
+      files?: FileDescriptor[],
+      onAccepted?: () => void,
+    ) => {
+      const text = overrideText.trim();
+      if (!text) return;
+      const fileDescriptors = files ?? [];
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+      try {
+        const isNewSession = sessionId == null;
+        let activeId = sessionId;
+        if (activeId != null) {
+          const current = useChatSessionStore.getState().sessions.get(activeId);
+          if (current && current.chatState !== "input") return; // a run is already active
+        }
+        if (activeId == null) {
+          activeId = await createChatSession(personaId, projectId);
+          // refresh the project (we've navigated away) so the new chat shows on reopen
+          if (projectId != null) {
+            void queryClient.invalidateQueries({
+              queryKey: QUERY_KEYS.userProject(serverUrl, projectId),
+            });
+            void queryClient.invalidateQueries({
+              queryKey: QUERY_KEYS.userProjects(serverUrl),
+            });
+          }
+        }
+        // Committed: the session exists and the rest of this path is synchronous → clear the draft.
+        // A failed createChatSession above throws first, so the draft (text + file refs) survives.
+        onAccepted?.();
 
-    let activeId = sessionId;
-    if (activeId != null) {
-      const current = useChatSessionStore.getState().sessions.get(activeId);
-      if (current && current.chatState !== "input") return; // a run is already active
-    } else {
-      activeId = await createChatSession();
-    }
+        const store = useChatSessionStore.getState();
+        store.ensureSession(activeId);
+        // Re-read: the captured store.sessions snapshot predates ensureSession.
+        const tree =
+          useChatSessionStore.getState().sessions.get(activeId)?.messageTree ??
+          new Map();
+        const chain = getLatestMessageChain(tree);
+        const lastNode = chain[chain.length - 1];
+        const parentNodeId = lastNode ? lastNode.nodeId : SYSTEM_NODE_ID;
+        // -3 (synthetic root) → null; null = first message.
+        const lastSuccessful = getLastSuccessfulMessageId(tree);
+        const parentMessageId =
+          lastSuccessful === SYSTEM_MESSAGE_ID ? null : lastSuccessful;
 
-    const store = useChatSessionStore.getState();
-    store.ensureSession(activeId);
-    // Re-read: the captured store.sessions snapshot predates ensureSession.
-    const tree =
-      useChatSessionStore.getState().sessions.get(activeId)?.messageTree ??
-      new Map();
-    const chain = getLatestMessageChain(tree);
-    const lastNode = chain[chain.length - 1];
-    const parentNodeId = lastNode ? lastNode.nodeId : SYSTEM_NODE_ID;
-    // -3 (synthetic root) → null; null = first message.
-    const lastSuccessful = getLastSuccessfulMessageId(tree);
-    const parentMessageId =
-      lastSuccessful === SYSTEM_MESSAGE_ID ? null : lastSuccessful;
+        const { initialUserNode, initialAgentNode } = buildImmediateMessages(
+          parentNodeId,
+          text,
+          fileDescriptors,
+        );
+        store.updateSessionTree(
+          activeId,
+          upsertMessages(tree, [initialUserNode, initialAgentNode], true),
+        );
+        store.updateChatState(activeId, "loading");
+        store.setSubmittedMessage(activeId, text);
 
-    const { initialUserNode, initialAgentNode } = buildImmediateMessages(
-      parentNodeId,
-      text,
-      [],
-    );
-    store.updateSessionTree(
-      activeId,
-      upsertMessages(tree, [initialUserNode, initialAgentNode], true),
-    );
-    store.updateChatState(activeId, "loading");
-    store.setSubmittedMessage(activeId, text);
+        const controller = new AbortController();
+        store.setAbortController(activeId, controller);
 
-    const controller = new AbortController();
-    store.setAbortController(activeId, controller);
+        const body: SendMessageBody = {
+          message: text,
+          chat_session_id: activeId,
+          parent_message_id: parentMessageId,
+          file_descriptors: fileDescriptors,
+          deep_research: false,
+          origin: "mobile",
+        };
 
-    const body: SendMessageBody = {
-      message: text,
-      chat_session_id: activeId,
-      parent_message_id: parentMessageId,
-      file_descriptors: [],
-      deep_research: false,
-      origin: "mobile",
-    };
+        if (sessionId == null) {
+          if (onSessionCreated) {
+            onSessionCreated(activeId);
+          } else {
+            const dest = {
+              pathname: "/chat/[id]" as const,
+              params: { id: activeId },
+            };
+            // push from a project so Back returns to it; replace from the landing
+            // so Back skips the now-empty landing
+            if (projectId != null) router.navigate(dest);
+            else router.replace(dest);
+          }
+        }
 
-    // replace so Back doesn't return to the empty landing
-    if (sessionId == null) {
-      router.replace({ pathname: "/chat/[id]", params: { id: activeId } });
-    }
-
-    void runChatStream(
-      activeId,
-      initialUserNode.nodeId,
-      initialAgentNode.nodeId,
-      body,
-      controller.signal,
-    );
-  }, [input, sessionId]);
+        void runChatStream(
+          activeId,
+          initialUserNode.nodeId,
+          initialAgentNode.nodeId,
+          body,
+          controller.signal,
+          isNewSession ? { serverUrl, queryClient } : null,
+        );
+      } finally {
+        submittingRef.current = false;
+      }
+    },
+    [sessionId, personaId, projectId, onSessionCreated, serverUrl, queryClient],
+  );
 
   const stop = useCallback(() => {
     if (sessionId == null) return;
@@ -235,8 +337,6 @@ export function useChatController(sessionId: string | null): ChatController {
   return {
     messages,
     chatState,
-    input,
-    setInput,
     submit,
     stop,
     isHydrating: needsHydration && hydration.isLoading,

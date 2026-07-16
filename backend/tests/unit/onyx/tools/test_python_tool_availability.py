@@ -90,7 +90,7 @@ def test_python_tool_available_when_health_check_passes(
     )
 
     mock_client = MagicMock()
-    mock_client.health.return_value = HealthResponse(healthy=True, version="1.0.0")
+    mock_client.health.return_value = HealthResponse(connected=True, version="1.0.0")
     mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
     mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -117,7 +117,7 @@ def test_python_tool_unavailable_when_health_check_fails(
     )
 
     mock_client = MagicMock()
-    mock_client.health.return_value = HealthResponse(healthy=False)
+    mock_client.health.return_value = HealthResponse(connected=False)
     mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
     mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 

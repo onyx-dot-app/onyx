@@ -12,6 +12,9 @@
 @import "./css/line-item.css" layer(base);
 @import "./css/square-button.css" layer(base);
 @import "./css/z-index.css" layer(base);
+/* Imported unlayered (and gated on html.onyx-desktop) so it overrides the
+   frozen desktop-wrapper shim regardless of source order. */
+@import "./css/desktop-titlebar.css";
 @config '../../tailwind.config.js';
 
 /*
@@ -179,10 +182,14 @@
 
 /* TEXTAREA */
 
-textarea {
-  resize: vertical;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+/* In `base` so utility classes (e.g. `resize-none`) can override; an
+   unlayered rule would beat every layered Tailwind utility. */
+@layer base {
+  textarea {
+    resize: vertical;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
 }
 
 .nextjs-portal {

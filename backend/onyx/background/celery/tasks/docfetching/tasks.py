@@ -13,6 +13,9 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.memory_monitoring import start_memory_observer
 from onyx.background.celery.memory_monitoring import stop_memory_observer
+from onyx.background.celery.tasks.docfetching.worker_shutdown import (
+    is_worker_shutting_down,
+)
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
 from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
 from onyx.background.celery.tasks.docprocessing.tasks import ConnectorIndexingLogBuilder
@@ -35,6 +38,7 @@ from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
+from onyx.db.index_attempt import mark_attempt_interrupted
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
 from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
@@ -494,6 +498,46 @@ def docfetching_proxy_task(
 
             time.monotonic()
 
+            # Worker shutting down (SIGTERM). Mark the attempt INTERRUPTED before
+            # terminating so the subprocess can't write a competing status, then
+            # stop it. A fresh attempt resumes from checkpoint on the next beat.
+            if is_worker_shutting_down():
+                result.status = (
+                    IndexingWatchdogTerminalStatus.TERMINATED_BY_WORKER_SHUTDOWN
+                )
+                try:
+                    with get_session_with_current_tenant() as db_session:
+                        attempt = get_index_attempt(db_session, index_attempt_id)
+                        if attempt and not attempt.status.is_terminal():
+                            mark_attempt_interrupted(
+                                index_attempt_id,
+                                db_session,
+                                "Indexing worker shutting down (deploy or "
+                                "autoscaling). The attempt resumes automatically "
+                                "from the last checkpoint.",
+                            )
+                except Exception:
+                    task_logger.exception(
+                        log_builder.build(
+                            "Indexing watchdog - transient exception marking index "
+                            "attempt as interrupted on worker shutdown"
+                        )
+                    )
+                try:
+                    job.terminate_and_wait(
+                        CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS
+                    )
+                except Exception:
+                    task_logger.exception(
+                        log_builder.build(
+                            "Indexing watchdog - exception while terminating "
+                            "subprocess on worker shutdown"
+                        )
+                    )
+                if job.process is not None:
+                    result.exit_code = job.process.exitcode
+                break
+
             # if the job is done, clean up and break
             if job.done():
                 try:
@@ -741,6 +785,10 @@ def docfetching_proxy_task(
         # successful completion in the spawned process before we noticed). The
         # subprocess has been killed in the watchdog loop above; no further DB
         # writes are needed here.
+        pass
+    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_WORKER_SHUTDOWN:
+        # already marked INTERRUPTED in the loop (best-effort). The heartbeat
+        # watchdog is the fallback if that write failed, so nothing to do here.
         pass
     elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_MEMORY_LIMIT:
         # subprocess already terminated in the watchdog loop. Re-mark in case the

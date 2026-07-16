@@ -490,6 +490,8 @@ def process_jira_issue(
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=time_str_to_utc(issue.fields.created),
         primary_owners=list(people) or None,
         metadata=metadata_dict,
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
@@ -976,6 +978,8 @@ class JiraConnector(
                 issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
                 doc_id = build_jira_url(self.jira_base, issue_key)
 
+                created = best_effort_get_field_from_issue(issue, _FIELD_CREATED)
+
                 slim_doc_batch.append(
                     SlimDocument(
                         id=doc_id,
@@ -990,6 +994,8 @@ class JiraConnector(
                             if project_key
                             else None
                         ),
+                        # NOTE: doc_created_at population not yet verified against live data
+                        doc_created_at=time_str_to_utc(created) if created else None,
                     )
                 )
                 current_offset += 1

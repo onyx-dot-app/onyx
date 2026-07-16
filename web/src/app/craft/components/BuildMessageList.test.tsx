@@ -5,9 +5,8 @@ import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import type { BuildMessage } from "@/app/craft/types/streamingTypes";
 import type { StreamItem } from "@/app/craft/types/displayTypes";
 
-jest.mock("@/refresh-components/Logo", () => ({
-  __esModule: true,
-  default: () => <div data-testid="onyx-logo" />,
+jest.mock("@/lib/app/components", () => ({
+  Logo: () => <div data-testid="onyx-logo" />,
 }));
 
 jest.mock("@/components/chat/MinimalMarkdown", () => ({

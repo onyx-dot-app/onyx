@@ -241,6 +241,8 @@ def _article_to_document(
 
     updated_at = article.get("updated_at")
     update_time = time_str_to_utc(updated_at) if updated_at else None
+    created_at = article.get("created_at")
+    create_time = time_str_to_utc(created_at) if created_at else None
 
     # Build metadata
     metadata: dict[str, str | list[str]] = {
@@ -266,6 +268,7 @@ def _article_to_document(
         source=DocumentSource.ZENDESK,
         semantic_identifier=article["title"],
         doc_updated_at=update_time,
+        doc_created_at=create_time,
         primary_owners=[author] if author else None,
         metadata=metadata,
     )
@@ -316,6 +319,8 @@ def _ticket_to_document(
 
     updated_at = ticket.get("updated_at")
     update_time = time_str_to_utc(updated_at) if updated_at else None
+    created_at = ticket.get("created_at")
+    create_time = time_str_to_utc(created_at) if created_at else None
 
     metadata: dict[str, str | list[str]] = {}
     if status := ticket.get("status"):
@@ -362,6 +367,7 @@ def _ticket_to_document(
         source=DocumentSource.ZENDESK,
         semantic_identifier=f"Ticket #{ticket['id']}: {subject or 'No Subject'}",
         doc_updated_at=update_time,
+        doc_created_at=create_time,
         primary_owners=[submitter] if submitter else None,
         metadata=metadata,
     )
@@ -580,9 +586,13 @@ class ZendeskConnector(
                 self.client, start_time=int(start) if start else None
             )
             for article in articles:
+                created_at = article.get("created_at")
                 slim_doc_batch.append(
                     SlimDocument(
                         id=f"article:{article['id']}",
+                        doc_created_at=(
+                            time_str_to_utc(created_at) if created_at else None
+                        ),
                     )
                 )
                 if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
@@ -593,9 +603,13 @@ class ZendeskConnector(
                 self.client, start_time=int(start) if start else None
             )
             for ticket in tickets:
+                created_at = ticket.get("created_at")
                 slim_doc_batch.append(
                     SlimDocument(
                         id=f"zendesk_ticket_{ticket['id']}",
+                        doc_created_at=(
+                            time_str_to_utc(created_at) if created_at else None
+                        ),
                     )
                 )
                 if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:

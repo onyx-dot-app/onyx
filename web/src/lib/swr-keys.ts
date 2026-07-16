@@ -20,6 +20,7 @@ export const SWR_KEYS = {
   customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
   authType: "/api/auth/type",
   adminSecuritySettings: "/api/admin/security",
+  adminSsoProviders: "/api/admin/sso/provider",
 
   // ── Agents / Personas ─────────────────────────────────────────────────────
   personas: "/api/persona",
@@ -58,10 +59,6 @@ export const SWR_KEYS = {
   federatedConnectors: "/api/federated",
 
   // ── Google Connectors ─────────────────────────────────────────────────────
-  googleConnectorAppCredential: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/app-credential`,
-  googleConnectorServiceAccountKey: (service: "gmail" | "google-drive") =>
-    `/api/manage/admin/connector/${service}/service-account-key`,
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
     `/api/manage/admin/connector/${service}/credentials`,
   googleConnectorPublicCredential: (service: "gmail" | "google-drive") =>
@@ -123,18 +120,19 @@ export const SWR_KEYS = {
   // ── MCP Servers ───────────────────────────────────────────────────────────
   adminMcpServers: "/api/admin/mcp/servers",
   mcpServers: "/api/mcp/servers",
+  personaMcpServers: (personaId: number) =>
+    `/api/mcp/servers/persona/${personaId}`,
 
   // ── Skills ────────────────────────────────────────────────────────────────
-  adminSkills: "/api/admin/skills",
   userSkills: "/api/skills",
-  adminSkillPreview: (skillId: string) =>
-    `/api/admin/skills/${skillId}/preview`,
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
   openApiTools: "/api/tool/openapi",
   oauthTokenStatus: "/api/user-oauth-token/status",
+  adminOAuthTestClaims: "/api/admin/oauth-test/claims",
 
   // ── Voice ─────────────────────────────────────────────────────────────────
   voiceProviders: "/api/admin/voice/providers",
@@ -157,6 +155,7 @@ export const SWR_KEYS = {
   buildExternalApps: "/api/build/apps",
   buildExternalAppsAdmin: "/api/build/admin/apps",
   buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
+  buildBaseInstructions: "/api/build/admin/base-instructions",
   buildSessionLiveApprovals: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}/live`,
 
@@ -174,8 +173,14 @@ export const SWR_KEYS = {
   webSearchContentProviders: "/api/admin/web-search/content-providers",
   webSearchSearchProviders: "/api/admin/web-search/search-providers",
 
+  // ── Tracing ───────────────────────────────────────────────────────────────
+  tracingProviders: "/api/admin/tracing/providers",
+
   // ── Prompt shortcuts ──────────────────────────────────────────────────────
   promptShortcuts: "/api/input_prompt",
+
+  // ── Admin Banner ──────────────────────────────────────────────────────────
+  adminBanner: "/api/admin/banner",
 
   // ── License & Billing ─────────────────────────────────────────────────────
   license: "/api/license",

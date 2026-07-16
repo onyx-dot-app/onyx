@@ -3,7 +3,6 @@
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
@@ -20,11 +19,11 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/lib/agents/hooks";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import { useUser } from "@/providers/UserProvider";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCurrentUser } from "@/lib/users/hooks";
 import NoAgentModal from "@/sections/modals/NoAgentModal";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import Modal from "@/refresh-components/Modal";
-import { useSendMessageToParent } from "@/lib/extension/utils";
+import { useSendMessageToParent } from "@/lib/extension/hooks";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
@@ -64,7 +63,12 @@ import { OnboardingStep } from "@/interfaces/onboarding";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button, Spacer } from "@opal/components";
-import { IllustrationContent, RootLayout } from "@opal/layouts";
+import {
+  IllustrationContent,
+  RootLayout,
+  toast,
+  useToastFromQuery,
+} from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
 import useAppFocus from "@/hooks/useAppFocus";
 import useScreenSize from "@/hooks/useScreenSize";

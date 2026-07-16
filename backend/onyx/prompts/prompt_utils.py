@@ -1,8 +1,10 @@
+import re
 from datetime import datetime
 from typing import cast
 
 from langchain_core.messages import BaseMessage
 
+from onyx.auth.oauth_claims_capture import IDP_PLACEHOLDER_KEYS
 from onyx.configs.constants import DocumentSource
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_GUIDANCE_REPLACEMENT_PAT
@@ -136,6 +138,45 @@ def handle_onyx_date_awareness(
         )
 
     return prompt_str
+
+
+# Basic identity placeholder keys, sourced from the user record rather than the
+# IdP directory profile. Combined with the IdP-derived keys to form the full
+# catalog of author-usable `{{user.<key>}}` placeholders.
+_IDENTITY_PLACEHOLDER_KEYS: frozenset[str] = frozenset({"email", "name", "role"})
+
+# Full allow-list of recognized `{{user.<key>}}` placeholder keys. A key in this
+# set always resolves (to its value, or "" when unavailable) so a non-Entra user
+# never leaks a raw placeholder to the LLM; an unknown key (e.g. a typo) is left
+# literal so the agent author notices it.
+USER_PLACEHOLDER_KEYS: frozenset[str] = (
+    IDP_PLACEHOLDER_KEYS | _IDENTITY_PLACEHOLDER_KEYS
+)
+
+# Matches `{{user.<key>}}` with optional inner whitespace, e.g. `{{ user.city }}`.
+# Deliberately a literal-tag regex (not str.format) so user prompts full of
+# `{...}` (JSON, code, LaTeX) are never touched and can never raise.
+_USER_PLACEHOLDER_RE = re.compile(r"\{\{\s*user\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
+
+
+def substitute_user_placeholders(
+    prompt_str: str, placeholder_values: dict[str, str]
+) -> str:
+    """Replace `{{user.<key>}}` placeholders in ``prompt_str`` with the current
+    user's attribute values (Entra directory profile + basic identity).
+
+    - Recognized key (in ``USER_PLACEHOLDER_KEYS``) -> its value, or "" when the
+      user has no captured value for it (avoids leaking the raw token).
+    - Unrecognized key -> left untouched so the author can spot the mistake.
+    """
+
+    def _replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key in USER_PLACEHOLDER_KEYS:
+            return placeholder_values.get(key, "")
+        return match.group(0)
+
+    return _USER_PLACEHOLDER_RE.sub(_replace, prompt_str)
 
 
 def get_company_context() -> str | None:

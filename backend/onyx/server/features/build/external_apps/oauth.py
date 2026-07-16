@@ -121,6 +121,9 @@ def start_external_app_oauth(
         "state": state,
         **oauth.extra_authorize_params,
     }
+    # Set after extra_authorize_params so a provider can't clobber it.
+    if oauth.optional_scope:
+        params[oauth.optional_scope_param] = oauth.optional_scope
     # urlencode so URI-shaped scopes (Google) get `:` and `/`
     # percent-encoded.
     authorize_url = f"{oauth.authorize_url}?{urlencode(params)}"
@@ -171,20 +174,15 @@ def handle_external_app_oauth_callback(
     # Re-read in case the admin rotated creds between /start and /callback.
     client_id, client_secret = _oauth_client_credentials(app)
 
+    token_request = provider.build_token_exchange_request(
+        request.code, client_id, client_secret, _frontend_callback_url()
+    )
     try:
         response = requests.post(
             oauth.token_url,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-            },
-            data={
-                "grant_type": "authorization_code",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": request.code,
-                "redirect_uri": _frontend_callback_url(),
-            },
+            headers=token_request.headers,
+            data=None if token_request.json_encoded else token_request.body,
+            json=token_request.body if token_request.json_encoded else None,
             timeout=30,
         )
     except requests.RequestException as exc:
@@ -233,11 +231,16 @@ def handle_external_app_oauth_callback(
         provider.extract_credentials(response_data), datetime.now(timezone.utc)
     )
 
+    # The grant is authoritative and captured only here (a refresh can't change
+    # it); None when the provider gives no signal.
+    granted_scopes = provider.extract_granted_scopes(response_data)
+
     upsert_external_app_user_credential(
         db_session,
         external_app_id=app.id,
         user_id=user.id,
         user_credentials=stored_credentials,
+        granted_scopes=granted_scopes,
     )
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes so

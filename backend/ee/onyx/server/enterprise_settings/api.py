@@ -238,6 +238,16 @@ def upload_custom_analytics_script(
 
 @basic_router.get("/custom-analytics-script")
 def fetch_custom_analytics_script() -> str | None:
+    if MULTI_TENANT:
+        tenant_id = get_current_tenant_id()
+        if not tenant_id or tenant_id == POSTGRES_DEFAULT_SCHEMA:
+            # Pre-auth / anonymous page loads reach this route with no tenant
+            # context resolved (the contextvar defaults to the public schema,
+            # which has no per-tenant key_value_store). Such a visitor has no
+            # custom analytics script by definition — return None rather than
+            # letting the KV lookup 500 against public.key_value_store.
+            return None
+
     return load_analytics_script()
 
 

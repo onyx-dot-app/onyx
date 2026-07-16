@@ -10,6 +10,7 @@ from secrets import token_urlsafe
 from typing import Any
 from typing import Literal
 from urllib.parse import urlparse
+from uuid import UUID
 
 import requests
 from fastapi import APIRouter
@@ -54,12 +55,14 @@ from onyx.db.mcp import extract_connection_data
 from onyx.db.mcp import get_all_mcp_servers
 from onyx.db.mcp import get_connection_config_by_id
 from onyx.db.mcp import get_mcp_server_by_id
+from onyx.db.mcp import get_mcp_servers_accessible_to_user
 from onyx.db.mcp import get_mcp_servers_for_persona
 from onyx.db.mcp import get_server_auth_template
 from onyx.db.mcp import get_user_connection_config
 from onyx.db.mcp import update_connection_config
 from onyx.db.mcp import update_mcp_server__no_commit
 from onyx.db.mcp import upsert_user_connection_config
+from onyx.db.mcp import user_can_access_mcp_server
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.db.models import Tool
@@ -98,6 +101,9 @@ from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import BLOCKED_HOSTNAMES
 from onyx.utils.url import SSRFException
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from onyx.utils.variable_functionality import fetch_versioned_implementation
+from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -616,6 +622,7 @@ def make_oauth_provider(
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
             scope=REQUESTED_SCOPE,  # TODO: do we need to pass this in? maybe make configurable
+            token_endpoint_auth_method="none",
         ),
         storage=storage,
         redirect_handler=redirect_handler,
@@ -1545,6 +1552,9 @@ def _db_mcp_server_to_api_mcp_server(
         is_authenticated=is_authenticated,
         user_authenticated=user_authenticated,
         status=db_server.status,
+        is_public=db_server.is_public,
+        groups=[group.id for group in db_server.user_groups],
+        users=[user.id for user in db_server.users],
         last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
         auth_template=auth_template,
@@ -1587,13 +1597,11 @@ def get_mcp_servers_for_user(
     db: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPServersResponse:
-    """List all MCP servers for use in agent configuration and chat UI.
+    """Attach catalog: servers this user may put on a persona (public / direct / group).
 
-    This endpoint is intentionally available to all authenticated users so they
-    can attach MCP actions to assistants. Sensitive admin credentials are never
-    returned.
+    Chat uses ``/servers/persona/{id}`` for servers already on a persona.
     """
-    db_mcp_servers = get_all_mcp_servers(db)
+    db_mcp_servers = get_mcp_servers_accessible_to_user(user, db)
     mcp_servers = [
         _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
         for db_server in db_mcp_servers
@@ -1785,6 +1793,12 @@ def _list_mcp_tools_by_id(
 
     if is_admin:
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
+    elif not user_can_access_mcp_server(user, server_id, db):
+        # Attach-catalog only: don't IDOR private servers / outbound-connect.
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "You do not have access to this MCP server.",
+        )
 
     # Get connection config based on auth type
     # TODO: for now, only the admin that set up a per-user api key server can
@@ -1895,6 +1909,45 @@ def _list_mcp_tools_by_id(
         server_name=mcp_server.name,
         server_url=mcp_server.server_url,
         tools=discovered_tools,
+    )
+
+
+def _apply_mcp_server_access(
+    *,
+    mcp_server: DbMCPServer,
+    acting_user: User,
+    is_public: bool | None,
+    user_ids: list[UUID] | None,
+    group_ids: list[int] | None,
+    is_new: bool,
+    db_session: Session,
+) -> None:
+    """Validate the acting user may assign these groups (EE; no-op in MIT), set
+    the public flag, and reconcile the user/group access rows (EE write). Public
+    servers clear any existing grants."""
+    is_public = mcp_server.is_public if is_public is None else is_public
+    if not is_public and not global_version.is_ee_version():
+        raise OnyxError(
+            OnyxErrorCode.EE_REQUIRED,
+            "Restricting MCP servers to specific users or groups requires "
+            "Enterprise Edition.",
+        )
+
+    fetch_ee_implementation_or_noop(
+        "onyx.db.user_group", "validate_object_creation_for_user", None
+    )(
+        db_session=db_session,
+        user=acting_user,
+        target_group_ids=group_ids or [],
+        object_is_public=is_public,
+        object_is_new=is_new,
+    )
+    mcp_server.is_public = is_public
+    fetch_versioned_implementation("onyx.db.mcp", "make_mcp_server_private")(
+        server_id=mcp_server.id,
+        user_ids=[] if is_public else user_ids,
+        group_ids=[] if is_public else group_ids,
+        db_session=db_session,
     )
 
 
@@ -2116,6 +2169,20 @@ def _upsert_mcp_server(
 
         logger.info(
             "Created new MCP server '%s' with ID %s", request.name, mcp_server.id
+        )
+
+    if any(
+        value is not None
+        for value in (request.is_public, request.users, request.groups)
+    ):
+        _apply_mcp_server_access(
+            mcp_server=mcp_server,
+            acting_user=user,
+            is_public=request.is_public,
+            user_ids=request.users,
+            group_ids=request.groups,
+            is_new=request.existing_server_id is None,
+            db_session=db_session,
         )
 
     # PT_OAUTH doesn't need stored connection config (uses user's login token)
@@ -2458,6 +2525,10 @@ def upsert_mcp_server(
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise
+    except OnyxError:
+        # Preserve structured errors (e.g. EE_REQUIRED 403) instead of masking
+        # them as a 500, matching the other _apply_mcp_server_access call sites.
+        raise
     except Exception as e:
         logger.exception("Failed to create/update MCP tool")
         raise HTTPException(
@@ -2538,6 +2609,16 @@ def create_mcp_server_simple(
         db_session=db_session,
     )
 
+    _apply_mcp_server_access(
+        mcp_server=mcp_server,
+        acting_user=user,
+        is_public=request.is_public,
+        user_ids=request.users,
+        group_ids=request.groups,
+        is_new=True,
+        db_session=db_session,
+    )
+
     db_session.commit()
 
     return MCPServer(
@@ -2556,6 +2637,9 @@ def create_mcp_server_simple(
         oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
         is_authenticated=False,  # Not authenticated yet
         status=mcp_server.status,
+        is_public=mcp_server.is_public,
+        groups=[group.id for group in mcp_server.user_groups],
+        users=[user.id for user in mcp_server.users],
         tool_count=0,  # New server, no tools yet
         auth_template=None,
         user_credentials=None,
@@ -2588,6 +2672,20 @@ def update_mcp_server_simple(
         description=request.description,
         server_url=request.server_url,
     )
+
+    if any(
+        value is not None
+        for value in (request.is_public, request.users, request.groups)
+    ):
+        _apply_mcp_server_access(
+            mcp_server=updated_server,
+            acting_user=user,
+            is_public=request.is_public,
+            user_ids=request.users,
+            group_ids=request.groups,
+            is_new=False,
+            db_session=db_session,
+        )
 
     db_session.commit()
 

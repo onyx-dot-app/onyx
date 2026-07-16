@@ -7,7 +7,7 @@ import { redirect, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { TextFormField } from "@/components/Field";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";

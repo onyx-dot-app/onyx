@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from typing import Any
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from onyx.access.models import DocExternalAccess
@@ -14,6 +15,14 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def credential_json(cc_pair: ConnectorCredentialPair) -> dict[str, Any]:
+    return (
+        cc_pair.credential.credential_json.get_value(apply_mask=False)
+        if cc_pair.credential.credential_json
+        else {}
+    )
 
 
 def generic_doc_sync(

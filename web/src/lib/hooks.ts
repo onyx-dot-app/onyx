@@ -30,16 +30,11 @@ import {
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
-import {
-  AuthType,
-  DEFAULT_AGENT_ID,
-  NEXT_PUBLIC_CLOUD_ENABLED,
-} from "./constants";
+import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
-import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const usePublicCredentials = () => {
@@ -854,23 +849,6 @@ export function useLlmManager(
       (personaId !== undefined && isLoadingPersonaProviders),
     hasAnyProvider,
   };
-}
-
-export function useAuthType(): AuthType | null {
-  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
-  // camelCase-mapped shape — a raw fetcher here would poison the cache for
-  // every other consumer of the key.
-  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
-
-  if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return AuthType.CLOUD;
-  }
-
-  if (error || isLoading) {
-    return null;
-  }
-
-  return authTypeMetadata.authType;
 }
 
 /*

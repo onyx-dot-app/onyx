@@ -2,7 +2,7 @@ import type {
   ExternalAppType,
   ExternalAppUserResponse,
 } from "@/app/craft/v1/apps/registry";
-import type { SkillsList } from "@/views/admin/SkillsPage/interfaces";
+import type { SkillsList } from "@/lib/skills/types";
 
 export interface PickerSkill {
   kind: "skill";
@@ -120,7 +120,7 @@ export function filterPickerSections(
   };
 }
 
-// Skills first, then apps — must match the popover's visual render order so
+// Skills first, then apps; must match the popover's visual render order so
 // keyboard nav indices line up.
 export function flattenSections(sections: PickerSections): PickerEntry[] {
   return [...sections.skills, ...sections.apps];

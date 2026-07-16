@@ -178,6 +178,8 @@ def _create_doc_from_ticket(ticket: dict, domain: str) -> Document:
         semantic_identifier=ticket["subject"],
         metadata=metadata,
         doc_updated_at=_parse_freshdesk_datetime(ticket.get("updated_at")),
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=_parse_freshdesk_datetime(ticket.get("created_at")),
     )
 
 

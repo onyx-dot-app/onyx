@@ -16,6 +16,7 @@ import {
   SvgAxero,
   SvgBitbucket,
   SvgBookstack,
+  SvgCanvas,
   SvgClickup,
   SvgCoda,
   SvgConfluence,
@@ -40,6 +41,7 @@ import {
   SvgJira,
   SvgLinear,
   SvgLoopio,
+  SvgLumapps,
   SvgMediawiki,
   SvgNotion,
   SvgOracle,
@@ -103,6 +105,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/confluence`,
     oauthSupported: true,
     isPopular: true,
+  },
+  lumapps: {
+    icon: SvgLumapps,
+    displayName: "LumApps",
+    category: SourceCategory.Wiki,
   },
   sharepoint: {
     icon: SvgSharepoint,
@@ -188,6 +195,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Wikipedia",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/wikipedia`,
+  },
+  canvas: {
+    icon: SvgCanvas,
+    displayName: "Canvas",
+    category: SourceCategory.Wiki,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/canvas`,
   },
 
   // Cloud Storage

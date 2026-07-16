@@ -8,6 +8,7 @@ import {
   ContentAction,
   InputHorizontal,
   InputVertical,
+  toast,
 } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
@@ -32,11 +33,11 @@ import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
-import { toast } from "@/hooks/useToast";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
-import { useAuthType, useLlmManager } from "@/lib/hooks";
+import { useLlmManager } from "@/lib/hooks";
+import { useAuthType } from "@/lib/auth/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -1306,12 +1307,15 @@ function AccountsAccessSettings() {
   const authType = useAuthType();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
+  // TODO(auth-refresh): only passwordMinLength is enforced here; the remaining
+  // constraints (max length, uppercase, lowercase, digit, special char) will be
+  // wired up when this form is refreshed as part of auth-refresh.
   const passwordValidationSchema = Yup.object().shape({
     currentPassword: Yup.string().required("Current password is required"),
     newPassword: Yup.string()
       .min(
-        authTypeMetadata.passwordMinLength,
-        `Password must be at least ${authTypeMetadata.passwordMinLength} characters`
+        authTypeMetadata?.passwordMinLength ?? 0,
+        `Password must be at least ${authTypeMetadata?.passwordMinLength ?? 0} characters`
       )
       .required("New password is required"),
     confirmPassword: Yup.string()
@@ -1693,7 +1697,11 @@ function AccountsAccessSettings() {
                 <Section gap={0}>
                   <Section flexDirection="row" padding={0.25} gap={0.5}>
                     {pats.length === 0 ? (
-                      <Section padding={0.5} alignItems="start">
+                      <Section
+                        padding={0.5}
+                        alignItems="start"
+                        data-testid="access-token-list-status"
+                      >
                         <Text font="secondary-body" color="text-03">
                           {isLoading
                             ? "Loading tokens..."

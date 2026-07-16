@@ -13,10 +13,12 @@ from onyx.db.external_app import get_external_app_by_skill_id
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.skill import list_skills_for_sandbox_injection
+from onyx.db.skill import list_skills
+from onyx.db.skill import SkillAccessPolicy
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
+from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import PushResult
@@ -150,7 +152,11 @@ def _assemble_fileset(
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     """Return a flat ``{path: bytes}`` map of every skill the user can see."""
-    skills = list_skills_for_sandbox_injection(user=user, db_session=db_session)
+    skills = list_skills(
+        policy=SkillAccessPolicy.USE,
+        user=user,
+        db_session=db_session,
+    )
     return _assemble_fileset(skills, user, db_session)
 
 
@@ -161,7 +167,11 @@ def build_user_skills_payload(
     of DB reads. ``connectable_apps_section`` lists org apps the user hasn't
     connected yet, so the agent knows they exist and can offer to set one up via
     the connect tool."""
-    skills = list_skills_for_sandbox_injection(user=user, db_session=db_session)
+    skills = list_skills(
+        policy=SkillAccessPolicy.USE,
+        user=user,
+        db_session=db_session,
+    )
     skills_section = build_skills_section_from_data(skills)
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
@@ -174,12 +184,14 @@ def hydrate_sandbox_skills(
     sandbox_id: UUID,
     user: User,
     db_session: Session,
+    *,
+    sandbox_manager: SandboxManager,
     files: FileSet | None = None,
 ) -> PushResult:
     """Push all visible skills to a single sandbox (cold-start hydration)."""
     if files is None:
         files = build_skills_fileset_for_user(user, db_session)
-    return get_sandbox_manager().push_to_sandbox(
+    return sandbox_manager.push_to_sandbox(
         sandbox_id=sandbox_id,
         mount_path=SKILLS_MOUNT_PATH,
         files=files,

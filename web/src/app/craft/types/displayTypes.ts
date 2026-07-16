@@ -103,7 +103,12 @@ export type StreamItem =
       appSlug: string;
       reason: string | null;
     }
+  | { type: "compaction"; id: string; summary: string | null }
   | { type: "error"; id: string; content: string };
+
+export interface ContextUsage {
+  usedTokens: number;
+}
 
 /**
  * Discriminated union of transient tabs that the side panel can render.

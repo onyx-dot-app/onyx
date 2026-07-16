@@ -19,6 +19,7 @@ class AsanaTask:
         text: str,
         link: str,
         last_modified: datetime,
+        created_at: datetime,
         project_gid: str,
         project_name: str,
     ) -> None:
@@ -27,6 +28,7 @@ class AsanaTask:
         self.text = text
         self.link = link
         self.last_modified = last_modified
+        self.created_at = created_at
         self.project_gid = project_gid
         self.project_name = project_name
 
@@ -187,6 +189,7 @@ class AsanaAPI:
                     text=text,
                     link=data["permalink_url"],
                     last_modified=datetime.fromisoformat(data["modified_at"]),
+                    created_at=datetime.fromisoformat(data["created_at"]),
                     project_gid=project_gid,
                     project_name=project_name,
                 )

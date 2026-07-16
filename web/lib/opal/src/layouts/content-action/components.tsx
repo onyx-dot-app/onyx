@@ -42,6 +42,16 @@ type ContentActionProps = ContentProps & {
    * @default false
    */
   responsive?: boolean;
+
+  /**
+   * When true, the `rightChildren` column grows to fill the row (capped at
+   * `--block-width-form-input-column-max`) instead of hugging its content.
+   * Intended for full-width form inputs; leave off for compact controls like
+   * toggles/buttons. Ignored in the `responsive` branch.
+   *
+   * @default false
+   */
+  fillRight?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -91,6 +101,7 @@ function ContentAction({
   padding = "lg",
   center = false,
   responsive = false,
+  fillRight = false,
   ...contentProps
 }: ContentActionProps) {
   const { padding: paddingClass } = containerSizeVariants[padding];
@@ -114,7 +125,12 @@ function ContentAction({
         <Content {...contentProps} />
       </div>
       {rightChildren && (
-        <div className="opal-content-action-right">{rightChildren}</div>
+        <div
+          className="opal-content-action-right"
+          data-fill={fillRight || undefined}
+        >
+          {rightChildren}
+        </div>
       )}
     </div>
   );

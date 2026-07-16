@@ -287,6 +287,11 @@ def test_make_oauth_provider_auto_discovery_leaves_metadata_unset() -> None:
     assert provider.context.token_expiry_time is None
 
 
+def test_make_oauth_provider_auto_discovery_requests_public_pkce_client() -> None:
+    provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
+    assert provider.context.client_metadata.token_endpoint_auth_method == "none"
+
+
 def test_get_tokens_hydrates_expiry_and_invalidates_expired_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

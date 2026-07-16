@@ -34,10 +34,10 @@ import {
 } from "@/lib/tools/interfaces";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { SvgArrowExchange } from "@opal/icons";
-import { useAuthType } from "@/lib/hooks";
-import { AuthType } from "@/lib/constants";
+import { useAuthType } from "@/lib/auth/hooks";
+import { AuthType } from "@/lib/auth/types";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServer | null;

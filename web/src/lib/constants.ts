@@ -1,12 +1,6 @@
-export const IS_DEV = process.env.NODE_ENV === "development";
+import { AuthType } from "@/lib/auth/types";
 
-export enum AuthType {
-  BASIC = "basic",
-  GOOGLE_OAUTH = "google_oauth",
-  OIDC = "oidc",
-  SAML = "saml",
-  CLOUD = "cloud",
-}
+export const IS_DEV = process.env.NODE_ENV === "development";
 
 export const HOST_URL = process.env.WEB_DOMAIN || "http://localhost:3000";
 

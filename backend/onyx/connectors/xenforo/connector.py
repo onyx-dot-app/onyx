@@ -23,13 +23,13 @@ from bs4 import BeautifulSoup
 from bs4 import Tag
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import datetime_to_utc
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -116,6 +116,8 @@ def scrape_page_posts(
                     "time": formatted_time,
                 },
                 doc_updated_at=post_date,
+                # NOTE: doc_created_at population not yet verified against live data
+                doc_created_at=post_date,
             )
 
             documents.append(document)

@@ -26,8 +26,10 @@ from websockets.exceptions import ConnectionClosed
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.users import auth_backend
 from onyx.auth.users import get_user_manager
+from onyx.auth.users import is_same_origin
 from onyx.auth.users import optional_user
 from onyx.cache.factory import get_cache_backend
+from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import Permission
@@ -107,6 +109,10 @@ EXCLUDED_REQUEST_HEADERS = {
     # CSRF.
     "x-csrf-token",
     "x-xsrf-token",
+    # Browser context. cors-mode fetches send the product Origin even
+    # same-origin; Next dev blocks /_next/* requests from unlisted origins.
+    # The proxy is the trust boundary (sec-fetch-* is stripped by prefix).
+    "origin",
     # Client identity (RFC 7239 + common ingress/IDP conventions).
     "forwarded",
     "x-forwarded-for",
@@ -185,6 +191,7 @@ async def _proxy_request(
         if not (
             (lowered := key.lower()) in EXCLUDED_REQUEST_HEADERS
             or lowered.startswith("x-onyx-")
+            or lowered.startswith("sec-fetch-")
         )
     }
 
@@ -263,6 +270,12 @@ async def _current_webapp_websocket_user(
     user_manager: BaseUserManager[User, UUID] = Depends(get_user_manager),
     strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
 ) -> User:
+    # CSWSH guard: WebSockets are exempt from the same-origin policy and
+    # cookie auth is attached automatically. Browsers always send Origin on
+    # WebSocket upgrades, so a missing header is rejected too.
+    origin = websocket.headers.get("origin")
+    if origin is None or not is_same_origin(origin, WEB_DOMAIN):
+        raise WebSocketException(code=1008)
     token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
     user = await strategy.read_token(token, user_manager)
     if user is None or not user.is_active:

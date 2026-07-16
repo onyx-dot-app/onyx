@@ -306,6 +306,17 @@ If you want to make changes to Onyx and run those changes in Docker, you can als
 docker compose up -d --build
 ```
 
+> **Note:** Building the web image (`web/Dockerfile`) and the model-server image
+> (`backend/Dockerfile.model_server`) pulls their bases from Docker Hardened Images (`dhi.io`),
+> so you must authenticate first with a Docker account that has access to the DHI catalog:
+>
+> ```bash
+> docker login dhi.io
+> ```
+>
+> Pulling the pre-built `onyxdotapp/onyx-web-server` / `onyxdotapp/onyx-model-server` images
+> (the default `docker compose up -d` without `--build`) does not require this.
+
 ---
 
 ## macOS-Specific Notes

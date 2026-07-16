@@ -55,7 +55,7 @@ from onyx.server.features.build.external_apps.models import UpsertUserCredential
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.skills.bundle import read_bundle_file
 from onyx.skills.ingest import delete_bundle_blob
-from onyx.skills.ingest import ingest_skill_bundle
+from onyx.skills.ingest import ingested_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.encryption import mask_string
@@ -64,6 +64,8 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
+
+admin_router = APIRouter()
 
 # Adapters for the structured custom-app form fields, which arrive as JSON
 # strings (multipart can't carry native lists/objects).
@@ -142,7 +144,7 @@ def _to_user_response(
 # =============================================================================
 
 
-@router.post("/admin/apps/built-in")
+@admin_router.post("/apps/built-in")
 def create_built_in_external_app(
     request: CreateBuiltInExternalAppRequest,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -191,7 +193,7 @@ def create_built_in_external_app(
     return _to_admin_response(app)
 
 
-@router.patch("/admin/apps/{external_app_id}")
+@admin_router.patch("/apps/{external_app_id}")
 def update_external_app_admin(
     external_app_id: int,
     request: UpdateExternalAppRequest,
@@ -244,7 +246,7 @@ def update_external_app_admin(
     return _to_admin_response(app)
 
 
-@router.post("/admin/apps/custom")
+@admin_router.post("/apps/custom")
 def create_custom_external_app(
     name: str = Form(...),
     description: str = Form(""),
@@ -296,10 +298,11 @@ def create_custom_external_app(
         )
 
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store
-    )
-    try:
+    with ingested_skill_bundle(
+        read_bundle_file(bundle.file),
+        bundle.filename,
+        file_store,
+    ) as ingested:
         app = create_external_app(
             db_session=db_session,
             name=name.strip(),
@@ -317,14 +320,11 @@ def create_custom_external_app(
         # Push before commit so a failure rolls back the create + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     return _to_admin_response(app)
 
 
-@router.put("/admin/apps/{external_app_id}/bundle")
+@admin_router.put("/apps/{external_app_id}/bundle")
 def replace_custom_app_bundle(
     external_app_id: int,
     bundle: UploadFile = File(...),
@@ -343,10 +343,12 @@ def replace_custom_app_bundle(
         )
 
     file_store = get_default_file_store()
-    ingested = ingest_skill_bundle(
-        read_bundle_file(bundle.file), bundle.filename, file_store, slug=app.skill.slug
-    )
-    try:
+    with ingested_skill_bundle(
+        read_bundle_file(bundle.file),
+        bundle.filename,
+        file_store,
+        slug=app.skill.slug,
+    ) as ingested:
         app, old_bundle_file_id = update_external_app(
             db_session=db_session,
             external_app_id=external_app_id,
@@ -357,9 +359,6 @@ def replace_custom_app_bundle(
         # Push before commit so a failure rolls back the swap + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
-    except Exception:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
-        raise
 
     # Drop the superseded blob only after the swap committed.
     if old_bundle_file_id:
@@ -368,7 +367,7 @@ def replace_custom_app_bundle(
     return _to_admin_response(app)
 
 
-@router.get("/admin/apps")
+@admin_router.get("/apps")
 def list_external_apps_admin(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -378,7 +377,7 @@ def list_external_apps_admin(
     return [_to_admin_response(app) for app in apps]
 
 
-@router.get("/admin/apps/built-in/options")
+@admin_router.get("/apps/built-in/options")
 def list_built_in_external_apps(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[BuiltInExternalAppDescriptor]:
@@ -386,7 +385,7 @@ def list_built_in_external_apps(
     return fetch_available_built_in_apps()
 
 
-@router.delete("/admin/apps/{external_app_id}")
+@admin_router.delete("/apps/{external_app_id}")
 def delete_external_app_admin(
     external_app_id: int,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),

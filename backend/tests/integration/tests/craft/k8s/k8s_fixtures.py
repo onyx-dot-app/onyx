@@ -832,15 +832,21 @@ def k8s_manager() -> Generator[KubernetesSandboxManager, None, None]:
 
 @pytest.fixture(scope="function")
 def pool_session(
+    request: pytest.FixtureRequest,
     _pool_pod: _PoolPod,
 ) -> PoolSession:
     """Fresh API-created session on the module pool pod; returns ``(sandbox_id, session_id, pod_name)``.
 
     Same shape as ``live_pod`` but reuses the pool pod. Use this unless the test
     mutates pod-level state (lifecycle/terminate/restart); those must use ``live_pod``.
+    Sessions are headless (no dev server) by default; parametrize indirectly
+    with ``{"headless": False}`` for webapp/preview tests.
     """
+    headless = getattr(request, "param", {}).get("headless", True)
     _cleanup_pool_workspace(_pool_pod.k8s_client, _pool_pod.pod_name)
-    session_id, sandbox_id = BuildSessionManager.create_with_sandbox(_pool_pod.api_user)
+    session_id, sandbox_id = BuildSessionManager.create_with_sandbox(
+        _pool_pod.api_user, headless=headless
+    )
     _SUITE_SANDBOX_IDS.add(sandbox_id)
     if sandbox_id != _pool_pod.sandbox_id:
         # Pool invariant broke (pool pod terminated externally). Reap the stray and fail loudly.
