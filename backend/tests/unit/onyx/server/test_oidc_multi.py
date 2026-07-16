@@ -49,7 +49,7 @@ def test_resolve_oidc_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     resolved, config = oidc_multi._resolve_oidc_provider(_DB, "okta")
     assert resolved is provider
-    assert config == dict(_OIDC_CONFIG)
+    assert config == {**_OIDC_CONFIG, "legacy_callback": False}
 
 
 def test_resolve_google_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -62,7 +62,7 @@ def test_resolve_google_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
         oidc_multi, "fetch_sso_provider_by_name", lambda **_kw: provider
     )
     _resolved, config = oidc_multi._resolve_oidc_provider(_DB, "google")
-    assert config == dict(_GOOGLE_CONFIG)
+    assert config == {**_GOOGLE_CONFIG, "legacy_callback": False}
 
 
 def test_resolve_fail_closed_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -206,4 +206,116 @@ def test_decode_state_rejects_bad_jwt() -> None:
             state_value="not-a-jwt",
             state_secret=_TEST_SECRET,
             expected_provider_name="okta",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Legacy callback routing: migrated rows keep the redirect URI their IdP
+# client already allowlists, so upgrading never requires an IdP console edit.
+# ---------------------------------------------------------------------------
+
+
+def test_callback_uri_parametric_by_default() -> None:
+    provider = _provider()
+    assert oidc_multi._callback_uri(provider, dict(_OIDC_CONFIG)).endswith(
+        "/api/auth/oidc/okta/callback"
+    )
+
+
+def test_callback_uri_legacy_oidc() -> None:
+    provider = _provider()
+    config: dict[str, object] = {**_OIDC_CONFIG, "legacy_callback": True}
+    uri = oidc_multi._callback_uri(provider, config)
+    assert uri.endswith("/auth/oidc/callback")
+    assert "/api/" not in uri
+
+
+def test_callback_uri_legacy_google() -> None:
+    provider = _provider(name="google", provider_type=SSOProviderType.GOOGLE_OAUTH)
+    config: dict[str, object] = {**_GOOGLE_CONFIG, "legacy_callback": True}
+    uri = oidc_multi._callback_uri(provider, config)
+    assert uri.endswith("/auth/oauth/callback")
+    assert "/api/" not in uri
+
+
+def test_validate_config_accepts_legacy_callback_for_oauth_types() -> None:
+    from onyx.db.sso_provider import validate_sso_config
+
+    oidc = validate_sso_config(
+        SSOProviderType.OIDC, {**_OIDC_CONFIG, "legacy_callback": True}
+    )
+    assert oidc["legacy_callback"] is True
+    google = validate_sso_config(
+        SSOProviderType.GOOGLE_OAUTH, {**_GOOGLE_CONFIG, "legacy_callback": True}
+    )
+    assert google["legacy_callback"] is True
+    # Omitting the flag stays valid and defaults off.
+    assert (
+        validate_sso_config(SSOProviderType.OIDC, dict(_OIDC_CONFIG))["legacy_callback"]
+        is False
+    )
+
+
+def test_validate_config_rejects_legacy_callback_for_saml() -> None:
+    from onyx.db.sso_provider import validate_sso_config
+
+    with pytest.raises(ValueError):
+        validate_sso_config(
+            SSOProviderType.SAML,
+            {
+                "idp_entity_id": "e",
+                "idp_sso_url": "https://idp/sso",
+                "idp_x509_cert": "cert",
+                "sp_entity_id": "sp",
+                "legacy_callback": True,
+            },
+        )
+
+
+def test_login_callback_uri_saml_is_fixed_acs() -> None:
+    from onyx.db.sso_provider import sso_login_callback_uri
+
+    provider = _provider(name="corp-saml", provider_type=SSOProviderType.SAML)
+    uri = sso_login_callback_uri(provider, {}, "https://onyx.example.com")
+    assert uri == "https://onyx.example.com/api/auth/saml/callback"
+
+
+def test_fixed_callback_rejects_missing_state() -> None:
+    import asyncio
+
+    request = cast(Any, SimpleNamespace(cookies={}))
+    with pytest.raises(OnyxError):
+        asyncio.run(
+            oidc_multi.oidc_login_callback(
+                request=request,
+                code="code",
+                state=None,
+                error=None,
+                db_session=_DB,
+                strategy=cast(Any, None),
+                user_manager=cast(Any, None),
+            )
+        )
+
+
+def test_fixed_callback_rejects_state_without_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    monkeypatch.setattr(oidc_multi, "USER_AUTH_SECRET", _TEST_SECRET)
+    csrf = generate_csrf_token()
+    state = generate_state_token({"next_url": "/", CSRF_TOKEN_KEY: csrf}, _TEST_SECRET)
+    request = cast(Any, SimpleNamespace(cookies={CSRF_TOKEN_COOKIE_NAME: csrf}))
+    with pytest.raises(OnyxError):
+        asyncio.run(
+            oidc_multi.oidc_login_callback(
+                request=request,
+                code="code",
+                state=state,
+                error=None,
+                db_session=_DB,
+                strategy=cast(Any, None),
+                user_manager=cast(Any, None),
+            )
         )
