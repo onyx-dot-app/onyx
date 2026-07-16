@@ -163,9 +163,13 @@ SANDBOX_DOCKER_CPU_LIMIT = float(os.environ.get("SANDBOX_DOCKER_CPU_LIMIT", "1.0
 
 SSE_KEEPALIVE_INTERVAL = float(os.environ.get("SSE_KEEPALIVE_INTERVAL", "15.0"))
 
-# Maximum time opencode-serve may go without emitting a turn event.
+# Maximum time opencode-serve may go without emitting a turn event. Coarse
+# liveness backstop only: it must stay above opencode's own per-tool timeouts
+# (bash defaults to 300s here, webfetch 120s) so it never pre-empts a healthy
+# long-running tool — it exists to catch stalls opencode does not bound itself
+# (LLM-stream hangs, non-bash/MCP tool hangs). The turn budget is the hard ceiling.
 OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS = float(
-    os.environ.get("OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS", "60.0")
+    os.environ.get("OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS", "300.0")
 )
 
 # Hard ceiling for background prompt-slot renewal, so a leaked holder cannot
