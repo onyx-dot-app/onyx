@@ -9,15 +9,20 @@ Regression coverage for:
   `_load_from_checkpoint` and abort indexing for the rest of the mailbox.
 - An unrecognized header charset label (e.g. the RFC 1428 `unknown-8bit`
   placeholder) used to raise `LookupError` out of header decoding.
+- `doc_updated_at` was never populated on the resulting `Document`, and the
+  parsed `Date` header was never normalized to UTC.
 """
 
 import email
+from datetime import datetime
+from datetime import timezone
 from email.message import Message
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
 
+from onyx.connectors.imap.connector import _convert_email_headers_and_body_into_document
 from onyx.connectors.imap.connector import _parse_addrs
 from onyx.connectors.imap.connector import _parse_singular_addr
 from onyx.connectors.imap.connector import ImapConnector
@@ -160,3 +165,58 @@ def test_from_email_msg_unknown_8bit_charset_does_not_crash():
     msg = _make_email_msg({"Subject": "=?unknown-8bit?B?SGVsbG8=?="})
     headers = EmailHeaders.from_email_msg(email_msg=msg)
     assert headers.subject == "Hello"
+
+
+# EmailHeaders.from_email_msg: date parsing + UTC normalization
+
+
+def test_from_email_msg_date_with_positive_offset_normalized_to_utc():
+    msg = _make_email_msg({"Date": "Mon, 01 Jan 2024 10:00:00 +0100"})
+    headers = EmailHeaders.from_email_msg(email_msg=msg)
+    assert headers.date == datetime(2024, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+    assert headers.date is not None
+    assert headers.date.tzinfo == timezone.utc
+
+
+def test_from_email_msg_date_with_naive_offset_treated_as_utc():
+    # A `-0000` offset means "no timezone information" per RFC 5322 and
+    # `parsedate_to_datetime` returns a naive `datetime` for it; it must still
+    # be normalized to UTC rather than staying naive.
+    msg = _make_email_msg({"Date": "Mon, 01 Jan 2024 10:00:00 -0000"})
+    headers = EmailHeaders.from_email_msg(email_msg=msg)
+    assert headers.date == datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+    assert headers.date is not None
+    assert headers.date.tzinfo == timezone.utc
+
+
+def test_from_email_msg_missing_date_header_is_none():
+    msg = _make_email_msg(omit={"Date"})
+    headers = EmailHeaders.from_email_msg(email_msg=msg)
+    assert headers.date is None
+
+
+# _convert_email_headers_and_body_into_document: doc_updated_at wiring
+
+
+def test_convert_email_headers_and_body_into_document_sets_doc_updated_at_utc():
+    msg = _make_email_msg({"Date": "Mon, 01 Jan 2024 10:00:00 +0100"})
+    headers = EmailHeaders.from_email_msg(email_msg=msg)
+
+    document = _convert_email_headers_and_body_into_document(
+        email_msg=msg, email_headers=headers, include_perm_sync=False
+    )
+
+    assert document.doc_updated_at == datetime(2024, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+    assert document.doc_updated_at is not None
+    assert document.doc_updated_at.tzinfo == timezone.utc
+
+
+def test_convert_email_headers_and_body_into_document_missing_date_is_none():
+    msg = _make_email_msg(omit={"Date"})
+    headers = EmailHeaders.from_email_msg(email_msg=msg)
+
+    document = _convert_email_headers_and_body_into_document(
+        email_msg=msg, email_headers=headers, include_perm_sync=False
+    )
+
+    assert document.doc_updated_at is None

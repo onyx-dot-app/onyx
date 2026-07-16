@@ -388,6 +388,7 @@ def _convert_email_headers_and_body_into_document(
         sections=[TextSection(text=email_body)],
         primary_owners=primary_owners,
         external_access=external_access,
+        doc_updated_at=email_headers.date,
     )
 
 
