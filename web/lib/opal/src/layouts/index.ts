@@ -95,3 +95,9 @@ export {
   type ToastLevel,
   type ToastOptions,
 } from "@opal/layouts/toast/store";
+
+/* ConfirmationModalLayout */
+export {
+  ConfirmationModalLayout,
+  type ConfirmationModalProps,
+} from "@opal/layouts/modal/components";
