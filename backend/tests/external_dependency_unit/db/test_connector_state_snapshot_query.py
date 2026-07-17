@@ -3,6 +3,7 @@ from datetime import timezone
 
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import DEFAULT_CC_PAIR_ID
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import ConnectorStateSnapshot
 from onyx.db.connector_credential_pair import get_connector_state_snapshots
@@ -17,7 +18,10 @@ def test_connector_state_snapshot_query(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    pair = make_cc_pair(db_session)
+    pairs = [make_cc_pair(db_session)]
+    if pairs[0].id == DEFAULT_CC_PAIR_ID:
+        pairs.append(make_cc_pair(db_session))
+    pair = pairs[-1]
     timestamp = datetime(2026, 7, 16, 12, tzinfo=timezone.utc)
     pair.last_successful_index_time = timestamp
     pair.last_pruned = timestamp
@@ -54,4 +58,5 @@ def test_connector_state_snapshot_query(
         )
     finally:
         db_session.rollback()
-        cleanup_cc_pair(db_session, pair)
+        for created_pair in reversed(pairs):
+            cleanup_cc_pair(db_session, created_pair)
