@@ -15,12 +15,14 @@ from onyx.server.manage.image_generation.models import (
 
 _API_KEY = "sk-image-generation-secret"
 _CUSTOM_SECRET = "custom-config-secret"
+_API_BASE = "https://api-base-user:api-base-password@example.com?token=secret"
 
 
 def test_image_generation_error_is_actionable_and_redacts_credentials() -> None:
     upstream_error = BadRequestError(
         message=(
-            f"Unsupported image size. api_key={_API_KEY} custom_token={_CUSTOM_SECRET}"
+            f"Unsupported image size. api_key={_API_KEY} "
+            f"custom_token={_CUSTOM_SECRET} request_url={_API_BASE}/images"
         ),
         model="gpt-image-1",
         llm_provider="openai",
@@ -31,6 +33,7 @@ def test_image_generation_error_is_actionable_and_redacts_credentials() -> None:
         model_name="gpt-image-1",
         provider="openai",
         api_key=_API_KEY,
+        api_base=_API_BASE,
         custom_config={"custom_token": _CUSTOM_SECRET},
     )
 
@@ -45,6 +48,7 @@ def test_image_generation_error_is_actionable_and_redacts_credentials() -> None:
 
     assert exc_info.value.error_code is OnyxErrorCode.VALIDATION_ERROR
     assert "Unsupported image size" in exc_info.value.detail
-    assert exc_info.value.detail.count("[REDACTED]") == 2
+    assert exc_info.value.detail.count("[REDACTED]") == 3
     assert _API_KEY not in exc_info.value.detail
     assert _CUSTOM_SECRET not in exc_info.value.detail
+    assert _API_BASE not in exc_info.value.detail
