@@ -18,10 +18,6 @@ def cache_shared_lock(
     """Acquire a system-wide (cross-tenant) distributed lock via the configured
     cache backend.
 
-    Unlike ``redis_shared_lock``, this works on every deployment: full ones back
-    the lock with Redis, Lite (``CACHE_BACKEND=postgres``) with a PostgreSQL
-    advisory lock — same single-flight guarantee without assuming Redis.
-
     ``max_time_lock_held_s`` is a lease enforced only on Redis, where the lock
     auto-releases after it even if the holder wedges. A Postgres advisory lock
     has no TTL — it is held until the guarded block exits or the holding
