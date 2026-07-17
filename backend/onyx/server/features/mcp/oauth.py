@@ -12,7 +12,6 @@ import time
 from typing import Any
 from urllib.parse import urlparse
 
-from fastapi import HTTPException
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth import TokenStorage
 from mcp.client.auth.oauth2 import OAuthContext
@@ -32,6 +31,8 @@ from onyx.db.mcp import get_connection_config_by_id
 from onyx.db.mcp import update_connection_config
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer as DbMCPServer
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
@@ -215,7 +216,7 @@ class OnyxTokenStorage(TokenStorage):
     def _ensure_connection_config(self, db_session: Session) -> MCPConnectionConfig:
         config = get_connection_config_by_id(self.connection_config_id, db_session)
         if config is None:
-            raise HTTPException(status_code=404, detail="Connection config not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connection config not found")
         return config
 
     async def get_tokens(self) -> OAuthToken | None:
