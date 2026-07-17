@@ -7,32 +7,71 @@ lockdown, not this heuristic.
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any, Protocol
 from urllib.parse import parse_qs
 from uuid import UUID
 
 from mitmproxy import http
+from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, GatedAppKind
 from onyx.db.external_app import get_external_apps
-from onyx.db.models import ExternalApp
+from onyx.db.mcp import (
+    effective_mcp_tool_policy,
+    get_craft_enabled_mcp_servers,
+    get_mcp_tool_policies,
+)
+from onyx.db.models import ExternalApp, MCPServer
 from onyx.external_apps.credentials import app_is_available
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
+    GatedTarget,
+    MatchedAction,
     apply_credential_gate,
     recognize_actions,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
+from onyx.sandbox_proxy.mcp_jsonrpc import (
+    McpRpcClassification,
+    McpRpcKind,
+    classify_mcp_request,
+)
+from onyx.sandbox_proxy.resolvers.mcp_matching import match_request, parse_target
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# action_type for an unclassifiable request to a matched MCP host (fail closed).
+MCP_UNCLASSIFIABLE_ACTION_TYPE = "mcp.unclassifiable"
 
 
 class RequestEvaluator(Protocol):
     def evaluate(
         self, request: http.Request, tenant_id: str, user_id: UUID
     ) -> AllMatchedActions | None: ...
+
+
+class CompositeRequestEvaluator(RequestEvaluator):
+    """Runs sub-evaluators in order; first non-``None`` verdict wins.
+
+    External apps are tried before MCP: on a host that is both a connected
+    external app and a craft MCP server, the external-app attribution governs,
+    mirroring the credential resolvers' claim order.
+    """
+
+    def __init__(self, evaluators: Sequence[RequestEvaluator]) -> None:
+        self._evaluators = list(evaluators)
+
+    def evaluate(
+        self, request: http.Request, tenant_id: str, user_id: UUID
+    ) -> AllMatchedActions | None:
+        for evaluator in self._evaluators:
+            matched = evaluator.evaluate(request, tenant_id, user_id)
+            if matched is not None:
+                return matched
+        return None
 
 
 def resolve_app_for_url(
@@ -100,6 +139,105 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
             (request.headers.get("content-type") or "").lower(),
         )
         return matched_actions.model_copy(update={"payload": payload or {}})
+
+
+class McpRequestEvaluator(RequestEvaluator):
+    """Gates craft-enabled MCP servers: proxy-authoritative per-tool approvals.
+
+    Attributes a request to a craft MCP server by the same host + path-prefix
+    rule the credential resolver uses, then parses the JSON-RPC body:
+
+    * protocol plumbing (handshake, discovery, resources) → ``None`` (off-catalog;
+      the resolver injects credentials and the request forwards ungated);
+    * ``tools/call`` → an ``AllMatchedActions`` over the invoked tool(s), each
+      carrying its effective per-tool policy (admin override else default ASK);
+    * unclassifiable body on a matched host → a single ``DENY`` action so the
+      gate fails closed instead of forwarding with injected credentials.
+
+    A request outside every server's ``server_url`` prefix isn't attributed here
+    (returns ``None``); the resolver still fails it closed at injection time.
+    """
+
+    def evaluate(
+        self,
+        request: http.Request,
+        tenant_id: str,
+        user_id: UUID,  # noqa: ARG002 — org-level gating; per-user creds resolve later
+    ) -> AllMatchedActions | None:
+        with get_session_with_tenant(tenant_id=tenant_id) as db:
+            # Attribution only — per-user access is enforced by the credential
+            # resolver, so gate classification sees every craft-enabled server.
+            servers_by_id = {s.id: s for s in get_craft_enabled_mcp_servers(db, None)}
+            targets = tuple(
+                t
+                for t in (
+                    parse_target(s.id, s.server_url) for s in servers_by_id.values()
+                )
+                if t is not None
+            )
+            target = match_request(targets, request)
+            if target is None:
+                return None
+            server = servers_by_id[target.server_id]
+
+            classification = classify_mcp_request(
+                request.method or "", request.raw_content
+            )
+            if classification.kind is McpRpcKind.PLUMBING:
+                return None
+
+            actions = _mcp_tool_actions(classification, server, request, db)
+            gated_target = GatedTarget(
+                kind=GatedAppKind.MCP_SERVER, id=server.id, app_name=server.name
+            )
+
+        sorted_actions = tuple(
+            sorted(actions, key=lambda a: POLICY_SEVERITY[a.policy], reverse=True)
+        )
+        payload = _decode_body(
+            request.raw_content or b"",
+            (request.headers.get("content-type") or "").lower(),
+        )
+        return AllMatchedActions(
+            actions=sorted_actions, target=gated_target, payload=payload or {}
+        )
+
+
+def _mcp_tool_actions(
+    classification: McpRpcClassification,
+    server: MCPServer,
+    request: http.Request,
+    db: Session,
+) -> tuple[MatchedAction, ...]:
+    """MatchedActions for a gated MCP request: a single DENY for an
+    unclassifiable body (fail closed), else one per invoked tool carrying its
+    effective per-tool policy (admin override else default ASK)."""
+    if classification.kind is McpRpcKind.UNCLASSIFIABLE:
+        return (
+            MatchedAction(
+                action_type=MCP_UNCLASSIFIABLE_ACTION_TYPE,
+                display_name="Unrecognized MCP request",
+                description=(
+                    f"{request.method} {request.path} could not be parsed "
+                    "as an MCP tool call or protocol message; blocked."
+                ),
+                policy=EndpointPolicy.DENY,
+            ),
+        )
+    stored = get_mcp_tool_policies(server.id, db)
+    return tuple(
+        MatchedAction(
+            action_type=tool_name,
+            display_name=tool_name,
+            description=f"Call the “{tool_name}” tool on {server.name}.",
+            policy=effective_mcp_tool_policy(tool_name, stored),
+        )
+        for tool_name in _dedupe_preserving_order(classification.tool_names)
+    )
+
+
+def _dedupe_preserving_order(names: tuple[str, ...]) -> list[str]:
+    return list(dict.fromkeys(names))
 
 
 def _decode_body(body: bytes, content_type: str) -> dict[str, Any] | None:

@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.db.enums import (
+    EndpointPolicy,
+    GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -35,6 +37,11 @@ from onyx.db.mcp import (
     update_mcp_server__no_commit,
 )
 from onyx.db.models import MCPServer, OAuthAccount, User
+from onyx.external_apps.matching.engine import (
+    AllMatchedActions,
+    GatedTarget,
+    MatchedAction,
+)
 from onyx.sandbox_proxy.credential_injection import (
     CredentialUnavailableError,
     InjectionContext,
@@ -129,6 +136,20 @@ def _attach_user_config(
     )
     db_session.commit()
     return config.id
+
+
+def _matched(kind: GatedAppKind, target_id: int) -> AllMatchedActions:
+    return AllMatchedActions(
+        actions=(
+            MatchedAction(
+                action_type="x",
+                display_name="X",
+                description="d",
+                policy=EndpointPolicy.ASK,
+            ),
+        ),
+        target=GatedTarget(kind=kind, id=target_id, app_name="srv"),
+    )
 
 
 def _ctx(user: User) -> InjectionContext:
@@ -373,11 +394,12 @@ def test_flag_flipped_since_cache_is_blocked(
         resolver.resolve(_request(host), _ctx(user))
 
 
-def test_matched_request_is_not_claimed(
+def test_matched_request_claim_depends_on_target_kind(
     db_session: Session, craft_server: CraftServerFactory
 ) -> None:
-    """A request the external-app matcher already attributed belongs to that
-    resolver, even on a shared host — MCP defers."""
+    """A request the external-app matcher attributed belongs to that resolver,
+    even on a shared host — MCP defers. But an MCP `tools/call` the evaluator
+    gated is still MCP's to inject onto."""
     user = create_test_user(db_session, "mcp_resolver_matched")
     server = craft_server(
         auth_type=MCPAuthenticationType.API_TOKEN,
@@ -388,8 +410,17 @@ def test_matched_request_is_not_claimed(
     resolver = MCPServerResolver()
     ctx = _ctx(user)
     assert resolver.claims(_request(host), ctx) is True
-    matched_ctx = InjectionContext(sandbox=ctx.sandbox, matched_actions=MagicMock())
-    assert resolver.claims(_request(host), matched_ctx) is False
+
+    external_ctx = InjectionContext(
+        sandbox=ctx.sandbox, matched_actions=_matched(GatedAppKind.EXTERNAL_APP, 99)
+    )
+    assert resolver.claims(_request(host), external_ctx) is False
+
+    mcp_ctx = InjectionContext(
+        sandbox=ctx.sandbox,
+        matched_actions=_matched(GatedAppKind.MCP_SERVER, server.id),
+    )
+    assert resolver.claims(_request(host), mcp_ctx) is True
 
 
 def test_admin_managed_server_detail_points_to_admin(

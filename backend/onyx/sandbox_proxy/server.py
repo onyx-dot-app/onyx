@@ -23,7 +23,11 @@ from onyx.sandbox_proxy.credential_injection import (
     CredentialResolver,
 )
 from onyx.sandbox_proxy.identity import IdentityResolver, SandboxIPLookup
-from onyx.sandbox_proxy.request_evaluator import ExternalAppRequestEvaluator
+from onyx.sandbox_proxy.request_evaluator import (
+    CompositeRequestEvaluator,
+    ExternalAppRequestEvaluator,
+    McpRequestEvaluator,
+)
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
 from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
@@ -254,7 +258,9 @@ def main() -> int:
         )
         gate = GateAddon(
             identity=identity,
-            request_evaluator=ExternalAppRequestEvaluator(),
+            request_evaluator=CompositeRequestEvaluator(
+                [ExternalAppRequestEvaluator(), McpRequestEvaluator()]
+            ),
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),
