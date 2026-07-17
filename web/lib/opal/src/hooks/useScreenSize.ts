@@ -2,13 +2,18 @@
 
 import { useState, useCallback } from "react";
 import useOnMount from "@opal/hooks/useOnMount";
-import { SMALL_BREAKPOINT_PX, MEDIUM_BREAKPOINT_PX } from "@opal/constants";
+import {
+  SMALL_BREAKPOINT_PX,
+  MEDIUM_BREAKPOINT_PX,
+  LARGE_BREAKPOINT_PX,
+} from "@opal/constants";
 
 export interface ScreenSize {
   width: number;
   height: number;
   isMobile: boolean;
   isSmallScreen: boolean;
+  isMediumScreen: boolean;
 }
 
 export default function useScreenSize(): ScreenSize {
@@ -31,5 +36,6 @@ export default function useScreenSize(): ScreenSize {
     height: sizes.height,
     isMobile: isMounted && sizes.width < SMALL_BREAKPOINT_PX,
     isSmallScreen: isMounted && sizes.width < MEDIUM_BREAKPOINT_PX,
+    isMediumScreen: isMounted && sizes.width < LARGE_BREAKPOINT_PX,
   };
 }
