@@ -100,9 +100,12 @@ def _seed_from_env(table: sa.Table) -> None:
         return
 
     # Store the config the way the ORM does: JSON-encode, then encrypt.
-    config: dict[str, str] = {
+    # legacy_callback keeps the redirect URI the deployment's IdP client
+    # already allowlists, so upgrading never requires an IdP console change.
+    config: dict[str, str | bool] = {
         "client_id": OAUTH_CLIENT_ID,
         "client_secret": OAUTH_CLIENT_SECRET,
+        "legacy_callback": True,
     }
     if config_url is not None:
         config["openid_config_url"] = config_url
