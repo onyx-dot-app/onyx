@@ -383,7 +383,7 @@ def make_oauth_provider(
         pop = await loop.run_in_executor(
             None, lambda: r.blpop([key], timeout=OAUTH_WAIT_SECONDS)
         )
-        # TODO: gracefully handle "user says no"
+        # TODO(evan): gracefully handle "user says no"
         if not pop:
             raise RuntimeError("Timed out waiting for OAuth callback")
 
@@ -406,7 +406,7 @@ def make_oauth_provider(
             redirect_uris=[AnyUrl(f"{WEB_DOMAIN}/mcp/oauth/callback")],
             grant_types=["authorization_code", "refresh_token"],
             response_types=["code"],
-            scope=REQUESTED_SCOPE,  # TODO: do we need to pass this in? maybe make configurable
+            scope=REQUESTED_SCOPE,  # TODO(evan): do we need to pass this in? maybe make configurable
             token_endpoint_auth_method="none",
         ),
         storage=storage,

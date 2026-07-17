@@ -371,6 +371,13 @@ class ResolvedMCPCredentials(BaseModel):
         headers = {
             k: v for k, v in stored.items() if k.lower() not in DENYLISTED_MCP_HEADERS
         }
+        if len(headers) != len(stored):
+            # Names only — header values are credentials.
+            logger.warning(
+                "Stored MCP credential headers contained denylisted headers "
+                "that were stripped: %s",
+                sorted(k for k in stored if k.lower() in DENYLISTED_MCP_HEADERS),
+            )
         if self.user_oauth_token:
             headers["Authorization"] = f"Bearer {self.user_oauth_token}"
         return headers
