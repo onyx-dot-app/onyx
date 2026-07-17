@@ -38,12 +38,17 @@ When using an existing presentation as a template:
    - Reorder slides in `<p:sldIdLst>`
    - **Complete all structural changes before step 5**
 
-5. **Edit content**: Update text in each `slide{N}.xml`.
+5. **First pack (do this EARLY)**: as soon as the structure is set and first-pass content is in, clean + pack so a viewable deck exists:
+   ```bash
+   python .opencode/skills/pptx/scripts/clean.py outputs/unpacked/
+   python .opencode/skills/pptx/scripts/office/pack.py outputs/unpacked/ outputs/output.pptx --original template.pptx
+   ```
+   A turn that ends with edits stranded in `outputs/unpacked/` delivers **nothing** — the packed `.pptx` is the deliverable (SKILL.md → Build Order). Never do fine-grained restyling before the first pack exists.
+
+6. **Refine content**: update text in each `slide{N}.xml`.
    **Use subagents here if available** — slides are separate XML files, so subagents can edit in parallel.
 
-6. **Clean**: `python .opencode/skills/pptx/scripts/clean.py outputs/unpacked/`
-
-7. **Pack**: `python .opencode/skills/pptx/scripts/office/pack.py outputs/unpacked/ outputs/output.pptx --original template.pptx`
+7. **Re-clean + re-pack after each batch of edits** (same commands as step 5) — the packed deck in `outputs/` should always reflect your latest good state.
 
 ---
 
