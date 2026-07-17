@@ -1,11 +1,13 @@
 "use client";
 
+import "@opal/components/modal/styles.css";
+
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { cn } from "@opal/utils";
 import type {
   IconFunctionComponent,
   RichStr,
+  SizeVariants,
   WithoutStyles,
 } from "@opal/types";
 import { Button } from "@opal/components";
@@ -20,21 +22,21 @@ import useContainerCenter from "@opal/hooks/useContainerCenter";
 
 const ModalRoot = DialogPrimitive.Root;
 
-const ModalOverlay = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Overlay>,
-  WithoutStyles<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>>
->(({ ...props }, ref) => (
-  <DialogPrimitive.Overlay
-    ref={ref}
-    className={cn(
-      "fixed inset-0 z-modal-overlay bg-mask-03 backdrop-blur-03 pointer-events-none",
-      "data-[state=open]:animate-in data-[state=closed]:animate-out",
-      "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0"
-    )}
-    {...props}
-  />
-));
-ModalOverlay.displayName = DialogPrimitive.Overlay.displayName;
+interface ModalOverlayProps extends WithoutStyles<
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
+> {
+  ref?: React.Ref<React.ComponentRef<typeof DialogPrimitive.Overlay>>;
+}
+
+function ModalOverlay({ ref, ...props }: ModalOverlayProps) {
+  return (
+    <DialogPrimitive.Overlay
+      ref={ref}
+      className="opal-modal-overlay"
+      {...props}
+    />
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Context
@@ -57,20 +59,8 @@ const useModalContext = () => {
   return context;
 };
 
-const widthClasses = {
-  full: "w-[80dvw]",
-  xl: "w-240",
-  lg: "w-200",
-  md: "w-160",
-  sm: "w-120",
-};
-
-const heightClasses = {
-  fit: "h-fit",
-  sm: "max-h-120 overflow-y-auto",
-  lg: "max-h-[calc(100dvh-4rem)] overflow-y-auto",
-  full: "h-[80dvh] overflow-y-auto",
-};
+type ModalWidth = Extract<SizeVariants, "sm" | "md" | "lg" | "xl" | "full">;
+type ModalHeight = Extract<SizeVariants, "fit" | "sm" | "lg" | "full">;
 
 // ---------------------------------------------------------------------------
 // Content
@@ -79,8 +69,10 @@ const heightClasses = {
 interface ModalContentProps extends WithoutStyles<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 > {
-  width?: keyof typeof widthClasses;
-  height?: keyof typeof heightClasses;
+  ref?: React.Ref<React.ComponentRef<typeof DialogPrimitive.Content>>;
+
+  width?: ModalWidth;
+  height?: ModalHeight;
 
   /**
    * Vertical placement. `"center"` (default) centers in the viewport.
@@ -106,256 +98,219 @@ interface ModalContentProps extends WithoutStyles<
   bottomSlot?: React.ReactNode;
 }
 
-const ModalContent = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Content>,
-  ModalContentProps
->(
-  (
-    {
-      children,
-      width = "xl",
-      height = "fit",
-      position = "center",
-      preventAccidentalClose = true,
-      skipOverlay = false,
-      background = "default",
-      bottomSlot,
-      ...props
+function ModalContent({
+  ref,
+  children,
+  width = "xl",
+  height = "fit",
+  position = "center",
+  preventAccidentalClose = true,
+  skipOverlay = false,
+  background = "default",
+  bottomSlot,
+  ...props
+}: ModalContentProps) {
+  const closeButtonRef = React.useRef<HTMLDivElement>(null);
+  const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
+  const [hasDescription, setHasDescription] = React.useState(false);
+  const hasUserTypedRef = React.useRef(false);
+
+  const resetState = React.useCallback(() => {
+    setHasAttemptedClose(false);
+    hasUserTypedRef.current = false;
+  }, []);
+
+  // Trusted input events on text fields mark the modal dirty for the
+  // accidental-close guard.
+  const handleInput = React.useCallback((e: Event) => {
+    if (hasUserTypedRef.current) return;
+    if (!e.isTrusted) return;
+
+    const target = e.target as HTMLElement;
+    if (
+      !(
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
+      )
+    ) {
+      return;
+    }
+    if (
+      target.type === "hidden" ||
+      target.type === "submit" ||
+      target.type === "button" ||
+      target.type === "checkbox" ||
+      target.type === "radio"
+    ) {
+      return;
+    }
+    hasUserTypedRef.current = true;
+  }, []);
+
+  const containerNodeRef = React.useRef<HTMLDivElement | null>(null);
+
+  const contentRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      if (containerNodeRef.current) {
+        containerNodeRef.current.removeEventListener(
+          "input",
+          handleInput,
+          true
+        );
+      }
+      if (node) {
+        node.addEventListener("input", handleInput, true);
+        containerNodeRef.current = node;
+      } else {
+        containerNodeRef.current = null;
+      }
     },
-    ref
-  ) => {
-    const closeButtonRef = React.useRef<HTMLDivElement>(null);
-    const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
-    const [hasDescription, setHasDescription] = React.useState(false);
-    const hasUserTypedRef = React.useRef(false);
+    [handleInput]
+  );
 
-    const resetState = React.useCallback(() => {
-      setHasAttemptedClose(false);
-      hasUserTypedRef.current = false;
-    }, []);
-
-    // Trusted input events on text fields mark the modal dirty for the
-    // accidental-close guard.
-    const handleInput = React.useCallback((e: Event) => {
-      if (hasUserTypedRef.current) return;
-      if (!e.isTrusted) return;
-
-      const target = e.target as HTMLElement;
-      if (
-        !(
-          target instanceof HTMLInputElement ||
-          target instanceof HTMLTextAreaElement
-        )
-      ) {
+  const handleInteractOutside = React.useCallback(
+    (e: Event) => {
+      if (!preventAccidentalClose) {
+        setHasAttemptedClose(false);
         return;
       }
-      if (
-        target.type === "hidden" ||
-        target.type === "submit" ||
-        target.type === "button" ||
-        target.type === "checkbox" ||
-        target.type === "radio"
-      ) {
-        return;
-      }
-      hasUserTypedRef.current = true;
-    }, []);
-
-    const containerNodeRef = React.useRef<HTMLDivElement | null>(null);
-
-    const contentRef = React.useCallback(
-      (node: HTMLDivElement | null) => {
-        if (containerNodeRef.current) {
-          containerNodeRef.current.removeEventListener(
-            "input",
-            handleInput,
-            true
-          );
-        }
-        if (node) {
-          node.addEventListener("input", handleInput, true);
-          containerNodeRef.current = node;
-        } else {
-          containerNodeRef.current = null;
-        }
-      },
-      [handleInput]
-    );
-
-    const handleInteractOutside = React.useCallback(
-      (e: Event) => {
-        if (!preventAccidentalClose) {
-          setHasAttemptedClose(false);
-          return;
-        }
-        if (hasUserTypedRef.current) {
-          if (!hasAttemptedClose) {
-            e.preventDefault();
-            setHasAttemptedClose(true);
-            setTimeout(() => {
-              closeButtonRef.current?.focus();
-            }, 0);
-          } else {
-            setHasAttemptedClose(false);
-          }
+      if (hasUserTypedRef.current) {
+        if (!hasAttemptedClose) {
+          e.preventDefault();
+          setHasAttemptedClose(true);
+          setTimeout(() => {
+            closeButtonRef.current?.focus();
+          }, 0);
         } else {
           setHasAttemptedClose(false);
         }
-      },
-      [preventAccidentalClose, hasAttemptedClose]
-    );
+      } else {
+        setHasAttemptedClose(false);
+      }
+    },
+    [preventAccidentalClose, hasAttemptedClose]
+  );
 
-    const handleRef = React.useCallback(
-      (node: HTMLDivElement | null) => {
-        if (typeof ref === "function") {
-          ref(node);
-        } else if (ref) {
-          ref.current = node;
-        }
-        contentRef(node);
-      },
-      [ref, contentRef]
-    );
+  const handleRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      if (typeof ref === "function") {
+        ref(node);
+      } else if (ref) {
+        ref.current = node;
+      }
+      contentRef(node);
+    },
+    [ref, contentRef]
+  );
 
-    // Center on [data-main-container] when present (the content area beside
-    // the sidebar) instead of the viewport.
-    const { centerX, centerY, hasContainerCenter } = useContainerCenter();
+  // Center on [data-main-container] when present (the content area beside
+  // the sidebar) instead of the viewport.
+  const { centerX, centerY, hasContainerCenter } = useContainerCenter();
 
-    const isTop = position === "top";
+  const isTop = position === "top";
 
-    const animationClasses = cn(
-      "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-      "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
-      !isTop &&
-        "data-[state=open]:slide-in-from-top-1/2 data-[state=closed]:slide-out-to-top-1/2",
-      "duration-200"
-    );
-
-    const containerStyle: React.CSSProperties | undefined =
-      hasContainerCenter && !isTop
+  const containerStyle: React.CSSProperties | undefined =
+    hasContainerCenter && !isTop
+      ? ({
+          left: centerX,
+          top: centerY,
+          "--tw-enter-translate-x": "-50%",
+          "--tw-exit-translate-x": "-50%",
+          "--tw-enter-translate-y": "-50%",
+          "--tw-exit-translate-y": "-50%",
+        } as React.CSSProperties)
+      : hasContainerCenter && isTop
         ? ({
             left: centerX,
-            top: centerY,
             "--tw-enter-translate-x": "-50%",
             "--tw-exit-translate-x": "-50%",
-            "--tw-enter-translate-y": "-50%",
-            "--tw-exit-translate-y": "-50%",
           } as React.CSSProperties)
-        : hasContainerCenter && isTop
-          ? ({
-              left: centerX,
-              "--tw-enter-translate-x": "-50%",
-              "--tw-exit-translate-x": "-50%",
-            } as React.CSSProperties)
-          : undefined;
+        : undefined;
 
-    const positionClasses = cn(
-      "fixed -translate-x-1/2",
-      isTop
-        ? cn("top-[72px]", !hasContainerCenter && "left-1/2")
-        : cn("-translate-y-1/2", !hasContainerCenter && "left-1/2 top-1/2")
-    );
+  const positionerData = {
+    "data-position": position,
+    "data-width": width,
+    ...(!hasContainerCenter && { "data-viewport-centered": "" }),
+  };
 
-    // Internal handlers are defined after the props spread so callers cannot
-    // replace them. Each forwards to the caller's handler.
-    const dialogEventHandlers = {
-      ...(!hasDescription && { "aria-describedby": undefined }),
-      ...props,
-      onOpenAutoFocus: (e: Event) => {
-        resetState();
-        props.onOpenAutoFocus?.(e);
-      },
-      onCloseAutoFocus: (e: Event) => {
-        resetState();
-        props.onCloseAutoFocus?.(e);
-      },
-      onEscapeKeyDown: (e: KeyboardEvent) => {
-        handleInteractOutside(e);
-        props.onEscapeKeyDown?.(e);
-      },
-      onPointerDownOutside: (
-        e: Parameters<
-          NonNullable<
-            React.ComponentPropsWithoutRef<
-              typeof DialogPrimitive.Content
-            >["onPointerDownOutside"]
+  // Internal handlers are defined after the props spread so callers cannot
+  // replace them. Each forwards to the caller's handler.
+  const dialogEventHandlers = {
+    ...(!hasDescription && { "aria-describedby": undefined }),
+    ...props,
+    onOpenAutoFocus: (e: Event) => {
+      resetState();
+      props.onOpenAutoFocus?.(e);
+    },
+    onCloseAutoFocus: (e: Event) => {
+      resetState();
+      props.onCloseAutoFocus?.(e);
+    },
+    onEscapeKeyDown: (e: KeyboardEvent) => {
+      handleInteractOutside(e);
+      props.onEscapeKeyDown?.(e);
+    },
+    onPointerDownOutside: (
+      e: Parameters<
+        NonNullable<
+          React.ComponentPropsWithoutRef<
+            typeof DialogPrimitive.Content
+          >["onPointerDownOutside"]
+        >
+      >[0]
+    ) => {
+      handleInteractOutside(e);
+      props.onPointerDownOutside?.(e);
+    },
+  };
+
+  return (
+    <ModalContext.Provider
+      value={{
+        closeButtonRef,
+        setHasDescription,
+      }}
+    >
+      <DialogPrimitive.Portal>
+        {!skipOverlay && <ModalOverlay />}
+        {bottomSlot ? (
+          <DialogPrimitive.Content
+            asChild
+            ref={handleRef}
+            {...dialogEventHandlers}
           >
-        >[0]
-      ) => {
-        handleInteractOutside(e);
-        props.onPointerDownOutside?.(e);
-      },
-    };
-
-    const cardClasses = cn(
-      "overflow-hidden",
-      background === "gray" ? "bg-background-tint-01" : "bg-background-tint-00",
-      "border rounded-16 shadow-2xl",
-      "flex flex-col",
-      heightClasses[height]
-    );
-
-    return (
-      <ModalContext.Provider
-        value={{
-          closeButtonRef,
-          setHasDescription,
-        }}
-      >
-        <DialogPrimitive.Portal>
-          {!skipOverlay && <ModalOverlay />}
-          {bottomSlot ? (
-            <DialogPrimitive.Content
-              asChild
-              ref={handleRef}
-              {...dialogEventHandlers}
+            <div
+              style={containerStyle}
+              className="opal-modal-positioner opal-modal-stack"
+              {...positionerData}
             >
               <div
-                style={containerStyle}
-                className={cn(
-                  positionClasses,
-                  "z-modal",
-                  "flex flex-col gap-4 items-center",
-                  "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
-                  animationClasses,
-                  widthClasses[width]
-                )}
+                className="opal-modal-card"
+                data-height={height}
+                data-background={background}
               >
-                <div className={cn(cardClasses, "w-full min-h-0")}>
-                  {children}
-                </div>
-                <div className="w-full shrink-0">{bottomSlot}</div>
+                {children}
               </div>
-            </DialogPrimitive.Content>
-          ) : (
-            <DialogPrimitive.Content
-              ref={handleRef}
-              style={containerStyle}
-              className={cn(
-                positionClasses,
-                "overflow-hidden",
-                "z-modal",
-                background === "gray"
-                  ? "bg-background-tint-01"
-                  : "bg-background-tint-00",
-                "border rounded-16 shadow-2xl",
-                "flex flex-col",
-                "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)]",
-                animationClasses,
-                widthClasses[width],
-                heightClasses[height]
-              )}
-              {...dialogEventHandlers}
-            >
-              {children}
-            </DialogPrimitive.Content>
-          )}
-        </DialogPrimitive.Portal>
-      </ModalContext.Provider>
-    );
-  }
-);
-ModalContent.displayName = DialogPrimitive.Content.displayName;
+              <div className="opal-modal-bottom-slot">{bottomSlot}</div>
+            </div>
+          </DialogPrimitive.Content>
+        ) : (
+          <DialogPrimitive.Content
+            ref={handleRef}
+            style={containerStyle}
+            className="opal-modal-positioner opal-modal-card"
+            data-height={height}
+            data-background={background}
+            {...positionerData}
+            {...dialogEventHandlers}
+          >
+            {children}
+          </DialogPrimitive.Content>
+        )}
+      </DialogPrimitive.Portal>
+    </ModalContext.Provider>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Header
@@ -367,6 +322,7 @@ ModalContent.displayName = DialogPrimitive.Content.displayName;
  * `children` render below the title stack (e.g. a search input).
  */
 interface ModalHeaderProps extends Omit<WithoutStyles<SectionProps>, "title"> {
+  ref?: React.Ref<HTMLDivElement>;
   icon?: IconFunctionComponent;
   moreIcon1?: IconFunctionComponent;
   moreIcon2?: IconFunctionComponent;
@@ -375,128 +331,105 @@ interface ModalHeaderProps extends Omit<WithoutStyles<SectionProps>, "title"> {
   onClose?: () => void;
 }
 
-const ModalHeader = React.forwardRef<HTMLDivElement, ModalHeaderProps>(
-  (
-    {
-      icon,
-      moreIcon1,
-      moreIcon2,
-      title,
-      description,
-      onClose,
-      children,
-      ...props
-    },
-    ref
-  ) => {
-    const { closeButtonRef, setHasDescription } = useModalContext();
+function ModalHeader({
+  ref,
+  icon,
+  moreIcon1,
+  moreIcon2,
+  title,
+  description,
+  onClose,
+  children,
+  ...props
+}: ModalHeaderProps) {
+  const { closeButtonRef, setHasDescription } = useModalContext();
 
-    React.useLayoutEffect(() => {
-      setHasDescription(!!description);
-    }, [description, setHasDescription]);
+  React.useLayoutEffect(() => {
+    setHasDescription(!!description);
+  }, [description, setHasDescription]);
 
-    const closeButton = onClose && (
-      <div
-        tabIndex={-1}
-        ref={closeButtonRef as React.RefObject<HTMLDivElement>}
-        className="outline-hidden"
-      >
-        <DialogPrimitive.Close asChild>
-          <Button
-            icon={SvgX}
-            prominence="tertiary"
-            size="sm"
-            onClick={onClose}
-          />
-        </DialogPrimitive.Close>
-      </div>
-    );
+  const closeButton = onClose && (
+    <div
+      tabIndex={-1}
+      ref={closeButtonRef as React.RefObject<HTMLDivElement>}
+      className="opal-modal-close-focus"
+    >
+      <DialogPrimitive.Close asChild>
+        <Button icon={SvgX} prominence="tertiary" size="sm" onClick={onClose} />
+      </DialogPrimitive.Close>
+    </div>
+  );
 
-    return (
+  return (
+    <Section ref={ref} padding={0.5} alignItems="start" height="fit" {...props}>
       <Section
-        ref={ref}
-        padding={0.5}
+        flexDirection="row"
+        justifyContent="between"
         alignItems="start"
-        height="fit"
-        {...props}
+        gap={0}
+        padding={0.5}
       >
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="start"
-          gap={0}
-          padding={0.5}
-        >
-          <div className="relative w-full">
-            {/* Absolutely positioned per the Figma mocks: the close button
-               overlaps the content's top-right so the description keeps the
-               full width. */}
-            <div className="absolute top-0 right-0">{closeButton}</div>
-            <DialogPrimitive.Title asChild>
-              <div>
-                <Content
-                  icon={icon}
-                  moreIcon1={moreIcon1}
-                  moreIcon2={moreIcon2}
-                  title={title}
-                  description={description}
-                  sizePreset="section"
-                  variant="heading"
-                />
-                {description && (
-                  <DialogPrimitive.Description className="hidden">
-                    {toPlainString(description)}
-                  </DialogPrimitive.Description>
-                )}
-              </div>
-            </DialogPrimitive.Title>
-          </div>
-        </Section>
-        {children}
+        <div className="opal-modal-header-content">
+          <div className="opal-modal-header-close">{closeButton}</div>
+          <DialogPrimitive.Title asChild>
+            <div>
+              <Content
+                icon={icon}
+                moreIcon1={moreIcon1}
+                moreIcon2={moreIcon2}
+                title={title}
+                description={description}
+                sizePreset="section"
+                variant="heading"
+              />
+              {description && (
+                <DialogPrimitive.Description className="opal-modal-a11y-description">
+                  {toPlainString(description)}
+                </DialogPrimitive.Description>
+              )}
+            </div>
+          </DialogPrimitive.Title>
+        </div>
       </Section>
-    );
-  }
-);
-ModalHeader.displayName = "ModalHeader";
+      {children}
+    </Section>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Body + Footer
 // ---------------------------------------------------------------------------
 
 interface ModalBodyProps extends WithoutStyles<SectionProps> {
+  ref?: React.Ref<HTMLDivElement>;
   /** Gray body background separating it from the header/footer. */
   twoTone?: boolean;
 }
 
-const ModalBody = React.forwardRef<HTMLDivElement, ModalBodyProps>(
-  ({ twoTone = true, children, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        className={cn(
-          twoTone && "bg-background-tint-01",
-          "flex-auto min-h-0 overflow-y-auto w-full"
-        )}
-      >
-        <Section
-          height="auto"
-          padding={1}
-          gap={1}
-          alignItems="start"
-          {...props}
-        >
-          {children}
-        </Section>
-      </div>
-    );
-  }
-);
-ModalBody.displayName = "ModalBody";
+function ModalBody({
+  ref,
+  twoTone = true,
+  children,
+  ...props
+}: ModalBodyProps) {
+  return (
+    <div
+      ref={ref}
+      className="opal-modal-body"
+      {...(twoTone && { "data-two-tone": "" })}
+    >
+      <Section height="auto" padding={1} gap={1} alignItems="start" {...props}>
+        {children}
+      </Section>
+    </div>
+  );
+}
 
-const ModalFooter = React.forwardRef<
-  HTMLDivElement,
-  WithoutStyles<SectionProps>
->(({ ...props }, ref) => {
+interface ModalFooterProps extends WithoutStyles<SectionProps> {
+  ref?: React.Ref<HTMLDivElement>;
+}
+
+function ModalFooter({ ref, ...props }: ModalFooterProps) {
   return (
     <Section
       ref={ref}
@@ -508,8 +441,7 @@ const ModalFooter = React.forwardRef<
       {...props}
     />
   );
-});
-ModalFooter.displayName = "ModalFooter";
+}
 
 /**
  * Modal (Figma Modal): Radix Dialog compound. `Modal` is the Radix root
