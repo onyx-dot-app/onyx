@@ -7,16 +7,19 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.connectors.web.connector import _parse_url_rewrites
 from onyx.connectors.web.connector import _rewrite_url
+from onyx.connectors.web.connector import _URL_REWRITES_ADAPTER
 from onyx.connectors.web.connector import ScrapeResult
+from onyx.connectors.web.connector import UrlRewriteRule
 from onyx.connectors.web.connector import WebConnector
 
 
-def test_parse_url_rewrites_pairs() -> None:
-    """The admin form submits [source, target] pairs."""
+def test_parse_url_rewrites_rules() -> None:
     parsed = _parse_url_rewrites(
         [
-            ["https://mirror.internal", "https://docs.example.com"],
-            ["http://a", "http://b"],
+            UrlRewriteRule(
+                source="https://mirror.internal", target="https://docs.example.com"
+            ),
+            UrlRewriteRule(source="http://a", target="http://b"),
         ]
     )
     assert parsed == {
@@ -25,32 +28,28 @@ def test_parse_url_rewrites_pairs() -> None:
     }
 
 
-def test_parse_url_rewrites_arrow_strings() -> None:
-    """Hand-written API configs may use "source -> target" strings."""
+def test_parse_url_rewrites_skips_empty_sides() -> None:
+    """Blank rows (empty source or target) are dropped; an empty source would
+    otherwise match every URL."""
     parsed = _parse_url_rewrites(
         [
-            "https://mirror.internal -> https://docs.example.com",
-            "http://a -> http://b",
-        ]
-    )
-    assert parsed == {
-        "https://mirror.internal": "https://docs.example.com",
-        "http://a": "http://b",
-    }
-
-
-def test_parse_url_rewrites_skips_invalid_entries() -> None:
-    parsed = _parse_url_rewrites(
-        [
-            "no-arrow-here",  # no separator
-            " -> https://target.only",  # empty source
-            "https://source.only -> ",  # empty target
-            ["https://one.element"],  # not a pair
-            ["", "https://empty.source"],  # empty pair source
-            ["https://ok", "https://fine"],
+            UrlRewriteRule(source="", target="https://target.only"),
+            UrlRewriteRule(source="https://source.only", target=""),
+            UrlRewriteRule(source="  ", target="https://blank.source"),
+            UrlRewriteRule(source="https://ok", target="https://fine"),
         ]
     )
     assert parsed == {"https://ok": "https://fine"}
+
+
+def test_url_rewrites_adapter_coerces_config_dicts() -> None:
+    """Connector config arrives as raw JSON dicts; the adapter coerces them."""
+    rules = _URL_REWRITES_ADAPTER.validate_python(
+        [{"source": "https://mirror.internal", "target": "https://docs.example.com"}]
+    )
+    assert _parse_url_rewrites(rules) == {
+        "https://mirror.internal": "https://docs.example.com"
+    }
 
 
 def test_rewrite_url_first_matching_prefix_wins() -> None:
@@ -87,7 +86,11 @@ def test_web_connector_parses_url_rewrites() -> None:
     connector = WebConnector(
         base_url="https://mirror.internal/docs",
         web_connector_type="single",
-        url_rewrites=[["https://mirror.internal", "https://docs.example.com"]],
+        url_rewrites=[
+            UrlRewriteRule(
+                source="https://mirror.internal", target="https://docs.example.com"
+            )
+        ],
     )
     assert connector.url_rewrites == {
         "https://mirror.internal": "https://docs.example.com"
@@ -109,7 +112,11 @@ def test_colliding_rewritten_ids_emit_only_first_document() -> None:
     connector = WebConnector(
         base_url="https://mirror.internal/page",
         web_connector_type="single",
-        url_rewrites=[["https://mirror.internal", "https://docs.example.com"]],
+        url_rewrites=[
+            UrlRewriteRule(
+                source="https://mirror.internal", target="https://docs.example.com"
+            )
+        ],
     )
     connector.to_visit_list = [
         "https://mirror.internal/page",

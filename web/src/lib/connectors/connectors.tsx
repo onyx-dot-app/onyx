@@ -66,7 +66,10 @@ export interface ListOption extends Option {
 
 export interface StringPairListOption extends Option {
   type: "string_pair_list";
-  default?: [string, string][];
+  // Object keys each row serializes to, e.g. { leftKey: "source", rightKey: "target" }.
+  leftKey: string;
+  rightKey: string;
+  default?: Record<string, string>[];
   leftLabel: string;
   rightLabel: string;
   leftPlaceholder?: string;
@@ -211,6 +214,8 @@ export const connectorConfigs: Record<
         query: "Enter URL rewrite rules:",
         label: "URL Rewrites",
         name: "url_rewrites",
+        leftKey: "source",
+        rightKey: "target",
         optional: true,
         description:
           "Rewrite document URLs before storing. Useful when crawling through an internal " +
@@ -2033,11 +2038,13 @@ export function createConnectorValidationSchema(
               ? Yup.array().of(Yup.string())
               : field.type === "multiselect"
                 ? Yup.array().of(Yup.string())
-                : field.type === "checkbox"
-                  ? Yup.boolean()
-                  : field.type === "file"
-                    ? Yup.mixed()
-                    : Yup.string();
+                : field.type === "string_pair_list"
+                  ? Yup.array().of(Yup.object())
+                  : field.type === "checkbox"
+                    ? Yup.boolean()
+                    : field.type === "file"
+                      ? Yup.mixed()
+                      : Yup.string();
 
         if (!field.optional) {
           schema = schema.required(`${field.label} is required`);
@@ -2100,10 +2107,15 @@ export interface ConnectorSnapshot {
   from_beginning?: boolean;
 }
 
+export interface UrlRewriteRule {
+  source: string;
+  target: string;
+}
+
 export interface WebConfig {
   base_url: string;
   web_connector_type?: "recursive" | "single" | "sitemap";
-  url_rewrites?: [string, string][];
+  url_rewrites?: UrlRewriteRule[];
 }
 
 export interface GithubConfig {

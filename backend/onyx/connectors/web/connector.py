@@ -9,6 +9,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import BrowserContext, Playwright, TimeoutError
+from pydantic import BaseModel, TypeAdapter
 from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
 
@@ -48,37 +49,30 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
-def _parse_url_rewrites(
-    raw_rewrites: list[list[str] | str],
-) -> dict[str, str]:
-    """Parse URL rewrite rules into a {source_prefix: target_prefix} dict.
+class UrlRewriteRule(BaseModel):
+    """A single URL prefix rewrite: any fetched URL starting with ``source``
+    has that prefix replaced by ``target`` before the document is stored."""
 
-    The admin form submits [source, target] pairs; "source -> target" strings
-    are also accepted for configs written by hand against the API.
+    source: str
+    target: str
+
+
+_URL_REWRITES_ADAPTER = TypeAdapter(list[UrlRewriteRule])
+
+
+def _parse_url_rewrites(
+    raw_rewrites: list[UrlRewriteRule],
+) -> dict[str, str]:
+    """Collapse rewrite rules into a {source_prefix: target_prefix} dict.
+
+    Rules with an empty source or target (e.g. blank rows from the admin form)
+    are dropped; an empty source would otherwise match every URL.
     """
     rewrites: dict[str, str] = {}
-    for entry in raw_rewrites:
-        if isinstance(entry, str):
-            if "->" not in entry:
-                logger.warning(
-                    "Skipping invalid url_rewrite entry (no '->'): %s", entry
-                )
-                continue
-            src, dst = entry.split("->", 1)
-        elif (
-            isinstance(entry, list)
-            and len(entry) == 2
-            and all(isinstance(part, str) for part in entry)
-        ):
-            src, dst = entry
-        else:
-            logger.warning("Skipping malformed url_rewrite entry: %s", entry)
-            continue
-        src, dst = src.strip(), dst.strip()
-        if src and dst:
-            rewrites[src] = dst
-        else:
-            logger.warning("Skipping empty url_rewrite entry: %s", entry)
+    for rule in raw_rewrites:
+        source, target = rule.source.strip(), rule.target.strip()
+        if source and target:
+            rewrites[source] = target
     return rewrites
 
 
@@ -402,7 +396,7 @@ class WebConnector(LoadConnector, SlimConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
-        url_rewrites: list[list[str] | str] | None = None,
+        url_rewrites: list[UrlRewriteRule] | None = None,
         **kwargs: Any,  # noqa: ARG002
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
@@ -410,7 +404,9 @@ class WebConnector(LoadConnector, SlimConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
-        self.url_rewrites = _parse_url_rewrites(url_rewrites or [])
+        # Config arrives as raw JSON (list[dict]); validate into rule models.
+        rules = _URL_REWRITES_ADAPTER.validate_python(url_rewrites or [])
+        self.url_rewrites = _parse_url_rewrites(rules)
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]

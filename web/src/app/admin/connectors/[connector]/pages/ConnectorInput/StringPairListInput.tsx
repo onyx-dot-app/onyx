@@ -10,6 +10,8 @@ interface StringPairListInputProps {
   name: string;
   label: string;
   description?: string;
+  leftKey: string;
+  rightKey: string;
   leftLabel: string;
   rightLabel: string;
   leftPlaceholder?: string;
@@ -27,19 +29,22 @@ const FIELD_CLASSES = `
   disabled:cursor-not-allowed
 `;
 
-/** A list of [left, right] string pairs rendered as two side-by-side inputs
- * per row (e.g. URL rewrite rules: source prefix -> replacement prefix). */
+/** A list of labeled string pairs rendered as two side-by-side inputs per row,
+ * each serialized to an object keyed by leftKey/rightKey (e.g. URL rewrite
+ * rules: { source: prefix, target: replacement }). */
 const StringPairListInput: React.FC<StringPairListInputProps> = ({
   name,
   label,
   description,
+  leftKey,
+  rightKey,
   leftLabel,
   rightLabel,
   leftPlaceholder,
   rightPlaceholder,
 }) => {
   const { values } = useFormikContext<Record<string, any>>();
-  const pairs: [string, string][] = values[name] || [];
+  const pairs: Record<string, string>[] = values[name] || [];
 
   return (
     <div className="mb-4">
@@ -61,13 +66,13 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
               <div key={index} className="mt-2">
                 <div className="flex items-center">
                   <Field
-                    name={`${name}.${index}.0`}
+                    name={`${name}.${index}.${leftKey}`}
                     className={`${FIELD_CLASSES} mr-2`}
                     autoComplete="off"
                     placeholder={leftPlaceholder}
                   />
                   <Field
-                    name={`${name}.${index}.1`}
+                    name={`${name}.${index}.${rightKey}`}
                     className={FIELD_CLASSES}
                     autoComplete="off"
                     placeholder={rightPlaceholder}
@@ -89,7 +94,9 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
               <Button
                 icon={SvgPlusCircle}
                 prominence="secondary"
-                onClick={() => arrayHelpers.push(["", ""])}
+                onClick={() =>
+                  arrayHelpers.push({ [leftKey]: "", [rightKey]: "" })
+                }
                 type="button"
               >
                 Add New
