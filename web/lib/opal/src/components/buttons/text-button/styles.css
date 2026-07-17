@@ -1,0 +1,20 @@
+@reference "#reference.css";
+
+/* ============================================================================
+   TextButton — the `Interactive.Stateless` color system without
+   `Interactive.Container`.
+
+   `Interactive.Stateless` still applies a variant/prominence
+   `background-color` directly onto whichever element it merges onto (see
+   `stateless/styles.css`) — that's normally consumed by `Interactive.Container`.
+   Since `TextButton` skips `Container` on purpose, that background is force-
+   cleared here so only the `--interactive-foreground` text-color transition
+   survives, matching a plain `Text` node with hover/active animation.
+============================================================================ */
+
+.opal-text-button {
+  @apply inline-flex flex-row items-center gap-1;
+  background-color: transparent !important;
+  border: 0;
+  padding: 0;
+}
