@@ -3,6 +3,7 @@
 import json
 import time
 from collections.abc import Generator
+from contextlib import nullcontext
 from datetime import datetime
 from datetime import timezone
 from uuid import UUID
@@ -42,6 +43,7 @@ from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
+from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import ArtifactResponse
@@ -54,6 +56,7 @@ from onyx.server.features.build.session.models import SessionCreateRequest
 from onyx.server.features.build.session.models import SessionListResponse
 from onyx.server.features.build.session.models import SessionNameGenerateResponse
 from onyx.server.features.build.session.models import SessionResponse
+from onyx.server.features.build.session.models import SessionSkillsStateResponse
 from onyx.server.features.build.session.models import SessionUpdateRequest
 from onyx.server.features.build.session.models import SetSessionSharingRequest
 from onyx.server.features.build.session.models import SetSessionSharingResponse
@@ -216,6 +219,76 @@ def get_session_details(
     return DetailedSessionResponse.from_session_response(
         base_response, session_loaded_in_sandbox=session_loaded
     )
+
+
+@router.post("/{session_id}/skills/reload")
+def reload_session_skills(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SessionSkillsStateResponse:
+    session = get_build_session(session_id, user.id, db_session)
+    if session is None:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    if sandbox is not None and sandbox.status == SandboxStatus.PROVISIONING:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Wait for the sandbox to finish starting before reloading skills.",
+        )
+
+    sandbox_manager = get_sandbox_manager()
+    prompt_slot = (
+        sandbox_manager.prompt_slot(
+            sandbox.id,
+            session_id,
+            acquire_timeout=0.1,
+            fail_open=False,
+        )
+        if sandbox is not None and sandbox.status == SandboxStatus.RUNNING
+        else nullcontext(PromptSlot(acquired=True))
+    )
+    with prompt_slot as slot:
+        if not slot.acquired:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "Wait for the current turn to finish before reloading skills.",
+            )
+
+        session = get_build_session(
+            session_id,
+            user.id,
+            db_session,
+            lock_for_update=True,
+        )
+        if session is None:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+        if not session.skills_stale:
+            return SessionSkillsStateResponse(skills_stale=False)
+
+        if (
+            sandbox is not None
+            and sandbox.status == SandboxStatus.RUNNING
+            and session.opencode_session_id is not None
+        ):
+            try:
+                sandbox_manager.dispose_opencode_instance(sandbox.id, session_id)
+            except Exception as exc:
+                db_session.rollback()
+                logger.warning(
+                    "Failed to dispose OpenCode instance for session %s",
+                    session_id,
+                    exc_info=True,
+                )
+                raise OnyxError(
+                    OnyxErrorCode.BAD_GATEWAY,
+                    "Failed to reload session skills.",
+                ) from exc
+
+        session.skills_stale = False
+        db_session.commit()
+        return SessionSkillsStateResponse(skills_stale=False)
 
 
 @router.get("/{session_id}/sandbox-status")

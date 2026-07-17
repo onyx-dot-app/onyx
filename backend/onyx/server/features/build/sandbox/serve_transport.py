@@ -219,6 +219,8 @@ class _ServeMixin:
         sandbox_id: UUID,
         build_session_id: UUID,
         acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+        *,
+        fail_open: bool = True,
     ) -> Generator[PromptSlot, None, None]:
         """Serialize turns for a build session across replicas via the cache.
 
@@ -238,13 +240,14 @@ class _ServeMixin:
             acquired = lock.acquire(blocking=True, blocking_timeout=acquire_timeout)
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
-                "[SANDBOX-SERVE] prompt_slot: cache unreachable (%s) — failing open "
+                "[SANDBOX-SERVE] prompt_slot: cache unreachable (%s) — failing %s "
                 "on sandbox=%s build_session=%s",
                 e,
+                "open" if fail_open else "closed",
                 sandbox_id,
                 build_session_id,
             )
-            yield PromptSlot(acquired=True)
+            yield PromptSlot(acquired=fail_open)
             return
 
         try:
@@ -303,6 +306,19 @@ class _ServeMixin:
                 directory=session_path,
                 title=f"build-session-{str(session_id)[:8]}",
             )
+
+    def dispose_opencode_instance(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> None:
+        session_path = self._session_directory(session_id)
+        with self._build_serve_client(
+            sandbox_id,
+            session_path,
+            with_event_bus=False,
+        ) as client:
+            client.dispose_instance(directory=session_path)
 
     def list_subagents(
         self,

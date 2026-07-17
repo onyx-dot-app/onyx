@@ -18,6 +18,9 @@ from onyx.db.users import fetch_user_by_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
+from onyx.server.features.build.db.build_session import (
+    clear_build_sessions_skills_stale__no_commit,
+)
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
@@ -139,7 +142,7 @@ def hydrate_managed_content(
     user: User,
     db_session: DBSession,
     skills_files: FileSet | None = None,
-) -> None:
+) -> bool:
     """Push managed skills + user library into a sandbox.
 
     Must complete before the sandbox is reported RUNNING: turns dispatch as
@@ -147,14 +150,16 @@ def hydrate_managed_content(
     per instance, so a turn started mid-push permanently misses managed
     skills. Each push is best-effort — failures are logged, never raised.
     """
+    skills_hydrated = False
     try:
-        hydrate_sandbox_skills(
+        result = hydrate_sandbox_skills(
             sandbox_id,
             user,
             db_session,
             sandbox_manager=sandbox_manager,
             files=skills_files,
         )
+        skills_hydrated = result.succeeded == result.targets
     except Exception:
         logger.warning("Failed to push skills to sandbox %s", sandbox_id, exc_info=True)
     try:
@@ -168,6 +173,7 @@ def hydrate_managed_content(
         logger.warning(
             "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
         )
+    return skills_hydrated
 
 
 class ProvisioningPolicy(str, Enum):
@@ -214,7 +220,8 @@ def provision_sandbox(
         all_llm_configs=all_llm_configs,
     )
     if sandbox_info.status == SandboxStatus.RUNNING:
-        hydrate_managed_content(sandbox_manager, sandbox.id, user, db_session)
+        if hydrate_managed_content(sandbox_manager, sandbox.id, user, db_session):
+            clear_build_sessions_skills_stale__no_commit(user.id, db_session)
     update_sandbox_status__no_commit(db_session, sandbox.id, sandbox_info.status)
 
 

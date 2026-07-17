@@ -14,6 +14,7 @@ import {
   UsageLimits,
   DirectoryListing,
   SharingScope,
+  ApiSessionSkillsState,
 } from "@/app/craft/types/streamingTypes";
 import {
   ApprovalListResponse,
@@ -134,6 +135,21 @@ export async function fetchSession(
 
   if (!res.ok) {
     throw new Error(`Failed to load session: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function reloadSessionSkills(
+  sessionId: string
+): Promise<ApiSessionSkillsState> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/skills/reload`,
+    { method: "POST" }
+  );
+
+  if (!res.ok) {
+    throw new Error(await errorDetail(res, "Failed to reload session skills"));
   }
 
   return res.json();

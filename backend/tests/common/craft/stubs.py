@@ -158,6 +158,7 @@ class StubSandboxManager(SandboxManager):
         self.delete_file_returns: bool | None = None
         self.delete_opencode_session_returns: bool | Exception = True
         self.prompt_slot_returns: bool = True
+        self.dispose_opencode_instance_raises: Exception | None = None
         self.get_upload_stats_returns: tuple[int, int] | None = None
         self.get_webapp_url_returns: str | None = None
         self.generate_pptx_preview_returns: tuple[list[str], bool] | None = None
@@ -207,6 +208,7 @@ class StubSandboxManager(SandboxManager):
         self.delete_file_count: int = 0
         self.delete_opencode_session_count: int = 0
         self.prompt_slot_count: int = 0
+        self.dispose_opencode_instance_count: int = 0
         self.write_sandbox_file_count: int = 0
         self.get_upload_stats_count: int = 0
         self.write_files_to_sandbox_count: int = 0
@@ -232,6 +234,7 @@ class StubSandboxManager(SandboxManager):
         self.last_delete_file_payload: dict[str, Any] | None = None
         self.last_delete_opencode_session_payload: dict[str, Any] | None = None
         self.last_prompt_slot_payload: dict[str, Any] | None = None
+        self.last_dispose_opencode_instance_payload: dict[str, Any] | None = None
         self.last_write_sandbox_file_payload: dict[str, Any] | None = None
         self.last_get_upload_stats_payload: dict[str, Any] | None = None
         self.last_write_files_to_sandbox_payload: dict[str, Any] | None = None
@@ -436,16 +439,32 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         build_session_id: UUID,
         acquire_timeout: float = 10.0,
+        *,
+        fail_open: bool = True,
     ) -> Generator[PromptSlot, None, None]:
         self.prompt_slot_count += 1
         self.last_prompt_slot_payload = {
             "sandbox_id": sandbox_id,
             "build_session_id": build_session_id,
             "acquire_timeout": acquire_timeout,
+            "fail_open": fail_open,
         }
         slot = RecordingPromptSlot(acquired=self.prompt_slot_returns)
         self.last_prompt_slot = slot
         yield slot
+
+    def dispose_opencode_instance(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> None:
+        self.dispose_opencode_instance_count += 1
+        self.last_dispose_opencode_instance_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+        }
+        if self.dispose_opencode_instance_raises is not None:
+            raise self.dispose_opencode_instance_raises
 
     def ensure_opencode_session(
         self,

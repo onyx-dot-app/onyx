@@ -9,7 +9,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import BuildSession
 from onyx.db.models import Skill
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.skills.push import push_skills_for_users
@@ -32,6 +34,15 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     make_sandbox(db_session, user_a, status=SandboxStatus.RUNNING)
     sandbox_b = make_sandbox(db_session, user_b, status=SandboxStatus.RUNNING)
     make_sandbox(db_session, user_c, status=SandboxStatus.RUNNING)
+    sessions = {
+        user.id: BuildSession(
+            user_id=user.id,
+            status=BuildSessionStatus.ACTIVE,
+            opencode_session_id=f"opencode-{user.id}",
+        )
+        for user in (user_a, user_b, user_c)
+    }
+    db_session.add_all(sessions.values())
     db_session.commit()
 
     stub = failing_sandbox_manager(
@@ -53,6 +64,11 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         push_skills_for_users({user_a.id, user_b.id, user_c.id}, db_session)
 
     assert stub.write_files_to_sandbox_count == 3
+    for session in sessions.values():
+        db_session.refresh(session)
+    assert sessions[user_a.id].skills_stale is True
+    assert sessions[user_b.id].skills_stale is False
+    assert sessions[user_c.id].skills_stale is True
 
     warning_messages = [
         r.getMessage() for r in caplog.records if r.levelno == logging.WARNING

@@ -18,6 +18,7 @@ from onyx.db.skill import persist_skill_validity
 from onyx.db.skill import SkillAccessPolicy
 from onyx.db.skill import SkillValidityUpdate
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.db.build_session import mark_build_sessions_skills_stale
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
@@ -269,6 +270,7 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
             mount_path=SKILLS_MOUNT_PATH,
             sandbox_files=sandbox_files,
         )
+        failed_sandbox_ids = {failure.sandbox_id for failure in result.failures}
         for failure in result.failures:
             logger.warning(
                 "Skill push failed for sandbox %s: %s: %s",
@@ -276,5 +278,14 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
                 failure.reason,
                 failure.detail,
             )
+        pushed_user_ids = {
+            user.id
+            for sandbox_id, user in sandbox_map.items()
+            if sandbox_id not in failed_sandbox_ids
+        }
+        try:
+            mark_build_sessions_skills_stale(pushed_user_ids)
+        except Exception:
+            logger.exception("Failed to mark build sessions with stale skills")
     except Exception:
         logger.exception("Failed to push skills to sandboxes")

@@ -37,6 +37,7 @@ from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
+from onyx.server.features.build.session.api import reload_session_skills
 from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -259,7 +260,7 @@ class TestEmptySessionReuse:
 # =============================================================================
 
 
-class TestDeleteSession:
+class TestDeleteSessionCascade:
     def test_delete_session_cascades_messages_and_artifacts(
         self,
         db_session: Session,
@@ -326,6 +327,79 @@ class TestDeleteSession:
             is None
         )
 
+
+class TestReloadSessionSkills:
+    def test_disposes_runtime_and_clears_stale_state(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        stub_sandbox_manager: StubSandboxManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        session_row = BuildSession(
+            user_id=test_user.id,
+            status=BuildSessionStatus.ACTIVE,
+            opencode_session_id="stale-opencode",
+            skills_stale=True,
+        )
+        db_session.add(session_row)
+        db_session.commit()
+        monkeypatch.setattr(
+            "onyx.server.features.build.session.api.get_sandbox_manager",
+            lambda: stub_sandbox_manager,
+        )
+
+        response = reload_session_skills(session_row.id, test_user, db_session)
+
+        assert response.skills_stale is False
+        db_session.refresh(session_row)
+        assert session_row.skills_stale is False
+        assert stub_sandbox_manager.last_dispose_opencode_instance_payload == {
+            "sandbox_id": sandbox_row.id,
+            "session_id": session_row.id,
+        }
+        assert stub_sandbox_manager.last_prompt_slot_payload == {
+            "sandbox_id": sandbox_row.id,
+            "build_session_id": session_row.id,
+            "acquire_timeout": 0.1,
+            "fail_open": False,
+        }
+
+    def test_active_turn_leaves_stale_state_unchanged(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        stub_sandbox_manager: StubSandboxManager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        session_row = BuildSession(
+            user_id=test_user.id,
+            status=BuildSessionStatus.ACTIVE,
+            opencode_session_id="busy-opencode",
+            skills_stale=True,
+        )
+        db_session.add(session_row)
+        db_session.commit()
+        stub_sandbox_manager.prompt_slot_returns = False
+        monkeypatch.setattr(
+            "onyx.server.features.build.session.api.get_sandbox_manager",
+            lambda: stub_sandbox_manager,
+        )
+
+        with pytest.raises(OnyxError) as exc_info:
+            reload_session_skills(session_row.id, test_user, db_session)
+
+        assert exc_info.value.error_code == OnyxErrorCode.CONFLICT
+        db_session.refresh(session_row)
+        assert session_row.skills_stale is True
+        assert stub_sandbox_manager.dispose_opencode_instance_count == 0
+
+
+class TestDeleteSession:
     def test_delete_session_deletes_live_opencode_session_best_effort(
         self,
         db_session: Session,

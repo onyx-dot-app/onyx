@@ -1242,6 +1242,16 @@ class OpencodeServeClient:
         )
         return False
 
+    def dispose_instance(self, *, directory: str) -> None:
+        """Dispose the directory-scoped runtime so OpenCode reloads managed files."""
+        r = self._request(
+            "POST",
+            "/instance/dispose",
+            params={"directory": directory},
+            idempotent=True,
+        )
+        _raise_for_status(r, "instance dispose")
+
     def list_messages(
         self, opencode_session_id: str, *, directory: str
     ) -> list[dict[str, Any]]:

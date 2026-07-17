@@ -115,6 +115,7 @@ class SessionResponse(BaseModel):
     origin: SessionOrigin
     agent_provider: str | None
     agent_model: str | None
+    skills_stale: bool
 
     @classmethod
     def from_model(
@@ -141,7 +142,12 @@ class SessionResponse(BaseModel):
             origin=session.origin,
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
+            skills_stale=session.skills_stale,
         )
+
+
+class SessionSkillsStateResponse(BaseModel):
+    skills_stale: bool
 
 
 class DetailedSessionResponse(SessionResponse):

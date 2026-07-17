@@ -8,12 +8,14 @@ from uuid import UUID
 from sqlalchemy import desc
 from sqlalchemy import exists
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
@@ -74,16 +76,17 @@ def get_build_session(
     session_id: UUID,
     user_id: UUID,
     db_session: Session,
+    *,
+    lock_for_update: bool = False,
 ) -> BuildSession | None:
     """Get a build session by ID, ensuring it belongs to the user."""
-    return (
-        db_session.query(BuildSession)
-        .filter(
-            BuildSession.id == session_id,
-            BuildSession.user_id == user_id,
-        )
-        .one_or_none()
+    stmt = select(BuildSession).where(
+        BuildSession.id == session_id,
+        BuildSession.user_id == user_id,
     )
+    if lock_for_update:
+        stmt = stmt.with_for_update()
+    return db_session.scalar(stmt)
 
 
 async def get_webapp_access_async(
@@ -143,6 +146,38 @@ def get_user_build_sessions(
         .order_by(desc(BuildSession.created_at))
         .limit(limit)
         .all()
+    )
+
+
+def mark_build_sessions_skills_stale(user_ids: set[UUID]) -> None:
+    """Mark reusable interactive OpenCode sessions stale after a skill push."""
+    if not user_ids:
+        return
+    with get_session_with_current_tenant() as db_session:
+        db_session.execute(
+            update(BuildSession)
+            .where(
+                BuildSession.user_id.in_(user_ids),
+                BuildSession.origin == SessionOrigin.INTERACTIVE,
+                BuildSession.opencode_session_id.isnot(None),
+            )
+            .values(skills_stale=True)
+        )
+        db_session.commit()
+
+
+def clear_build_sessions_skills_stale__no_commit(
+    user_id: UUID,
+    db_session: Session,
+) -> None:
+    """A fresh sandbox has no directory instances retaining old skills."""
+    db_session.execute(
+        update(BuildSession)
+        .where(
+            BuildSession.user_id == user_id,
+            BuildSession.skills_stale.is_(True),
+        )
+        .values(skills_stale=False)
     )
 
 
