@@ -86,13 +86,7 @@ function TextButton({
           {label}
         </Link>
       ) : (
-        <button
-          type="button"
-          disabled={disabled}
-          className="opal-text-button interactive-foreground"
-        >
-          {label}
-        </button>
+        <div className="opal-text-button interactive-foreground">{label}</div>
       )}
     </Interactive.Stateless>
   );
