@@ -382,6 +382,17 @@ def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
     return scrubbed
 
 
+def collect_credential_values(
+    api_key: str | None, custom_config: dict[str, str] | None
+) -> list[str]:
+    """Collect credential-bearing values from a provider configuration."""
+    credential_values = [api_key] if api_key else []
+    for key, value in (custom_config or {}).items():
+        if value and is_sensitive_custom_config_key(key):
+            credential_values.append(value)
+    return credential_values
+
+
 def collect_llm_credential_values(llm: LLM | None) -> list[str]:
     """Pull every credential-looking value out of an LLM's config.
 
@@ -389,14 +400,19 @@ def collect_llm_credential_values(llm: LLM | None) -> list[str]:
     """
     if llm is None:
         return []
-    config_secrets: list[str] = []
-    if llm.config.api_key:
-        config_secrets.append(llm.config.api_key)
-    custom_config = llm.config.custom_config or {}
-    for key, value in custom_config.items():
-        if isinstance(value, str) and value and is_sensitive_custom_config_key(key):
-            config_secrets.append(value)
-    return config_secrets
+    return collect_credential_values(llm.config.api_key, llm.config.custom_config)
+
+
+def litellm_exception_to_safe_error_msg(
+    e: Exception,
+    llm: LLM | None = None,
+    secrets: Iterable[str | None] = (),
+) -> str:
+    """Map a LiteLLM exception to a user-facing message and redact secrets."""
+    safe_msg, _, _ = litellm_exception_to_error_msg(e, llm, fallback_to_error_msg=False)
+    return scrub_sensitive_values(
+        safe_msg, [*collect_llm_credential_values(llm), *secrets]
+    )
 
 
 def test_llm(llm: LLM) -> str | None:
@@ -411,7 +427,6 @@ def test_llm(llm: LLM) -> str | None:
 
     The full raw error is still logged at WARNING for ops debugging.
     """
-    secrets = collect_llm_credential_values(llm)
     error_msg: str | None = None
     # try for up to 2 timeouts (e.g. 10 seconds in total)
     for _ in range(2):
@@ -420,10 +435,7 @@ def test_llm(llm: LLM) -> str | None:
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)
-            safe_msg, _, _ = litellm_exception_to_error_msg(
-                e, llm, fallback_to_error_msg=False
-            )
-            error_msg = scrub_sensitive_values(safe_msg, secrets)
+            error_msg = litellm_exception_to_safe_error_msg(e, llm)
 
     return error_msg
 
