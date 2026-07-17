@@ -127,8 +127,25 @@ class MCPServerResolver(CredentialResolver):
                     "reachable on this host."
                 ),
             )
-        # Longest prefix wins when servers share a host.
-        target = max(candidates, key=lambda t: len(t.path_prefix))
+        # Longest prefix wins when servers share a host. A tie at the longest
+        # prefix means two configs claim the same endpoint with no way to tell
+        # which owns the request — fail closed rather than inject an arbitrary
+        # config's credentials.
+        longest = max(len(t.path_prefix) for t in candidates)
+        winners = [t for t in candidates if len(t.path_prefix) == longest]
+        if len(winners) > 1:
+            raise CredentialUnavailableError(
+                f"request path {path!r} on MCP host {request.host} matches "
+                f"{len(winners)} MCP servers ({sorted(w.server_id for w in winners)}) "
+                "at the same endpoint; credential attribution is ambiguous",
+                sandbox_detail=(
+                    "Multiple MCP servers in Onyx are configured with the same "
+                    "URL, so Craft cannot tell which one's credentials to use. "
+                    "Ask a workspace admin to remove the duplicate MCP server "
+                    "configuration."
+                ),
+            )
+        target = winners[0]
 
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             server = get_mcp_server_by_id(target.server_id, db)

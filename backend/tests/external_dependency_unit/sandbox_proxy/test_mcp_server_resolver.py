@@ -311,6 +311,40 @@ def test_longest_prefix_wins_when_servers_share_a_host(
     }
 
 
+def test_duplicate_endpoint_attribution_fails_closed(
+    db_session: Session, craft_server: CraftServerFactory
+) -> None:
+    """Two craft servers with the same URL claim the same endpoint with no way
+    to tell which owns the request — resolve must fail closed rather than inject
+    an arbitrary config's credentials."""
+    user = create_test_user(db_session, "mcp_resolver_dup")
+    host = _unique_host()
+    first = craft_server(
+        host=host,
+        path="/mcp",
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session, first, MCPConnectionData(headers={"Authorization": "Bearer first"})
+    )
+    second = craft_server(
+        host=host,
+        path="/mcp",
+        auth_type=MCPAuthenticationType.API_TOKEN,
+        auth_performer=MCPAuthenticationPerformer.ADMIN,
+    )
+    _attach_admin_config(
+        db_session,
+        second,
+        MCPConnectionData(headers={"Authorization": "Bearer second"}),
+    )
+
+    with pytest.raises(CredentialUnavailableError) as exc_info:
+        MCPServerResolver().resolve(_request(host, path="/mcp/call"), _ctx(user))
+    assert "ambiguous" in str(exc_info.value)
+
+
 def test_flag_flipped_since_cache_is_blocked(
     db_session: Session, craft_server: CraftServerFactory
 ) -> None:
