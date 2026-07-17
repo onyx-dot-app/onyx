@@ -44,14 +44,10 @@ export default function useMultiModelChat(
 ): UseMultiModelChatReturn {
   const [selectedModels, setSelectedModels] = useState<SelectedModel[]>([]);
 
-  // Initialize with the default model from llmManager once providers load.
-  // Pass the resolved current model name through so it stays in the option
-  // list even if its `is_visible` flag is off (e.g. a stale admin/personal
-  // default pointing at a since-hidden model) — mirrors the pattern used by
-  // `ModelSelector` (`currentModelName`). Without this, `currentLlmModel`
-  // below can never find a match, so the chip never derives from the
-  // resolved default and only starts showing anything once the popover's
-  // onSelect/onReplace populates `selectedModels` directly.
+  // Keep the current model in the option list even if `is_visible` is off
+  // (e.g. a stale admin/personal default pointing at a hidden model), so
+  // `currentLlmModel` below can still match it — mirrors ModelSelector's
+  // `currentModelName` param.
   const llmOptions = useMemo(
     () =>
       llmManager.llmProviders
