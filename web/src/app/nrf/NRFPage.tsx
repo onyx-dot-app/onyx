@@ -109,15 +109,25 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Sync single-model selection to llmManager so the submission path
   // uses the correct provider/version (mirrors AppPage behaviour).
+  // Skip when unchanged — otherwise the initial [] -> [currentLlmModel]
+  // sync would flag a manual override before the agent's default loads.
   useEffect(() => {
     if (multiModel.selectedModels.length === 1) {
       const model = multiModel.selectedModels[0]!;
-      llmManager.updateCurrentLlm({
-        name: model.name,
-        provider: model.provider,
-        modelName: model.modelName,
-      });
+      const current = llmManager.currentLlm;
+      if (
+        model.provider !== current.provider ||
+        model.modelName !== current.modelName ||
+        model.name !== current.name
+      ) {
+        llmManager.updateCurrentLlm({
+          name: model.name,
+          provider: model.provider,
+          modelName: model.modelName,
+        });
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.selectedModels]);
 
   // Deep research toggle
