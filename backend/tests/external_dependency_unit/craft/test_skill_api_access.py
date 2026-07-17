@@ -15,6 +15,7 @@ from onyx.db.enums import SkillAccessLevel
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import User
 from onyx.db.models import UserRole
+from onyx.db.models import UserSkillPreference
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import create_custom_skill
@@ -23,7 +24,9 @@ from onyx.server.features.skill.api import fetch_skill_for_current_user
 from onyx.server.features.skill.api import patch_current_user_skill
 from onyx.server.features.skill.api import remove_current_user_skill_file
 from onyx.server.features.skill.api import replace_current_user_skill_bundle
+from onyx.server.features.skill.api import set_skill_enabled_for_current_user
 from onyx.server.features.skill.api import upload_current_user_skill_files
+from onyx.server.features.skill.models import SkillEnableRequest
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.skills.bundle import build_single_file_bundle
 from onyx.skills.bundle import build_skill_md
@@ -110,6 +113,38 @@ def test_viewer_share_cannot_patch_skill(
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
+
+
+def test_preference_commit_succeeds_when_sandbox_push_fails(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = make_user(db_session, role=UserRole.BASIC)
+    skill = make_skill(db_session, is_public=True)
+
+    def fail_sandbox_lookup(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("sandbox unavailable")
+
+    monkeypatch.setattr(
+        "onyx.skills.push.get_sandbox_user_map",
+        fail_sandbox_lookup,
+    )
+
+    response = set_skill_enabled_for_current_user(
+        skill.id,
+        SkillEnableRequest(enabled=True),
+        user=user,
+        db_session=db_session,
+    )
+
+    preference = db_session.get(
+        UserSkillPreference,
+        {"user_id": user.id, "skill_id": skill.id},
+    )
+    assert response.enabled is True
+    assert preference is not None
+    assert preference.enabled is True
 
 
 def test_create_reserved_name_rejects_from_bundle_metadata(

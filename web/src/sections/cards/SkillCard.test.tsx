@@ -94,6 +94,26 @@ describe("SkillCard", () => {
     expect(onEnabledChange).toHaveBeenCalledWith(item, false);
   });
 
+  it("disables a pending preference switch and ignores duplicate clicks", async () => {
+    const user = setupUser();
+    const onEnabledChange = jest.fn();
+    render(
+      <SkillCard
+        item={custom()}
+        onEnabledChange={onEnabledChange}
+        enablementPending
+      />
+    );
+
+    const preferenceSwitch = screen.getByRole("switch", {
+      name: "Disable Report Writer",
+    });
+    expect(preferenceSwitch).toBeDisabled();
+
+    await user.click(preferenceSwitch);
+    expect(onEnabledChange).not.toHaveBeenCalled();
+  });
+
   it("directs users to recreate invalid skills without showing a switch", () => {
     render(<SkillCard item={invalidCustom()} />);
 

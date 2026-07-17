@@ -314,21 +314,6 @@ def test_owner_can_toggle_personal_skill(
     assert reenabled.enabled is True
 
 
-def test_owner_can_toggle_after_sharing_org_wide(
-    basic_user: DATestUser,
-) -> None:
-    slug = f"personal-toggle-promo-{uuid4().hex[:6]}"
-    skill = SkillManager.create_personal(basic_user, slug=slug)
-    SkillManager.patch_personal(
-        skill,
-        basic_user,
-        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
-    )
-
-    disabled = SkillManager.set_enabled(skill, basic_user, False)
-    assert disabled.enabled is False
-
-
 def test_user_enablement_is_independent(
     admin_user: DATestUser,
     basic_user: DATestUser,

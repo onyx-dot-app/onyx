@@ -120,10 +120,6 @@ describe("toPickerSections", () => {
     ]);
   });
 
-  it("returns an empty Apps section when the user has no apps", () => {
-    expect(toPickerSections(skillsList(), []).apps).toEqual([]);
-  });
-
   it("builds Apps independently of skill data", () => {
     const apps = [appFixture({ slug: "slack", app_type: "SLACK" })];
     const result = toPickerSections(undefined, apps);

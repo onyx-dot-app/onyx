@@ -8,6 +8,7 @@ from onyx.server.features.build.external_apps.models import ExternalAppAdminResp
 from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
 from onyx.utils.encryption import mask_credential_dict
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
+from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -137,6 +138,23 @@ def test_admin_creates_app_user_configures_credentials(
     assert admin_apps_after[0].organization_credentials == mask_credential_dict(
         _ORG_CREDENTIALS
     )
+
+
+def test_external_app_is_excluded_from_skill_management_apis(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    basic_user: DATestUser,
+) -> None:
+    created = _create_test_app(admin_user)
+    user_app = ExternalAppManager.get_for_user(basic_user, created.id)
+
+    assert user_app.id == created.id
+    for skills in (
+        SkillManager.list_for_user(basic_user),
+        SkillManager.list_all(admin_user),
+    ):
+        listed_slugs = {skill.slug for skill in [*skills.builtins, *skills.customs]}
+        assert user_app.slug not in listed_slugs
 
 
 # =============================================================================

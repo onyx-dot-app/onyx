@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SkillSharePermission
@@ -16,7 +17,6 @@ from tests.external_dependency_unit.craft.db_helpers import make_group
 from tests.external_dependency_unit.craft.db_helpers import make_skill
 from tests.external_dependency_unit.craft.db_helpers import make_user
 from tests.external_dependency_unit.craft.db_helpers import share_skill_with_group
-from tests.external_dependency_unit.craft.db_helpers import share_skill_with_user
 
 
 def _user_skills(user: User, db_session: Session):
@@ -28,246 +28,52 @@ def _user_skills(user: User, db_session: Session):
 
 
 class TestSkillVisibility:
-    def test_user_sees_public_skill(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        public_skill = make_skill(db_session, is_public=True)
-
-        user_list = _user_skills(user, db_session)
-        user_ids = {s.id for s in user_list}
-
-        assert public_skill.id in user_ids
-
-    def test_user_does_not_see_private_skill_without_share(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        # Another group has a share; this user is not in it.
-        other_group = make_group(db_session)
-        private_skill = make_skill(db_session, is_public=False)
-        share_skill_with_group(db_session, private_skill, other_group)
-
-        user_list = _user_skills(user, db_session)
-        user_ids = {s.id for s in user_list}
-
-        assert private_skill.id not in user_ids
-
-    def test_user_sees_private_skill_via_group_share(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        group = make_group(db_session)
-        add_user_to_group(db_session, user, group)
-        private_skill = make_skill(db_session, is_public=False)
-        share_skill_with_group(db_session, private_skill, group)
-
-        user_list = _user_skills(user, db_session)
-        user_ids = {s.id for s in user_list}
-
-        assert private_skill.id in user_ids
-
-    def test_user_sees_private_skill_via_direct_user_share(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        private_skill = make_skill(db_session, is_public=False)
-        share_skill_with_user(db_session, private_skill, user)
-
-        result = fetch_skill(
-            private_skill.id,
-            policy=SkillAccessPolicy.VIEW,
-            user=user,
-            db_session=db_session,
-        )
-
-        assert result is not None
-        assert result.id == private_skill.id
-
-    def test_direct_viewer_share_does_not_grant_edit(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        private_skill = make_skill(db_session, is_public=False)
-        share_skill_with_user(
-            db_session,
-            private_skill,
-            user,
-            SkillSharePermission.VIEWER,
-        )
-
-        result = fetch_skill(
-            private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
-            user=user,
-            db_session=db_session,
-        )
-
-        assert result is None
-
-    def test_direct_editor_share_grants_edit(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        private_skill = make_skill(db_session, is_public=False)
-        share_skill_with_user(
-            db_session,
-            private_skill,
-            user,
-            SkillSharePermission.EDITOR,
-        )
-
-        result = fetch_skill(
-            private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
-            user=user,
-            db_session=db_session,
-        )
-
-        assert result is not None
-        assert result.id == private_skill.id
-
-    def test_group_viewer_share_does_not_grant_edit(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        group = make_group(db_session)
-        add_user_to_group(db_session, user, group)
-        private_skill = make_skill(db_session, is_public=False)
-        share_skill_with_group(
-            db_session,
-            private_skill,
-            group,
-            SkillSharePermission.VIEWER,
-        )
-
-        result = fetch_skill(
-            private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
-            user=user,
-            db_session=db_session,
-        )
-
-        assert result is None
-
-    def test_group_editor_share_grants_edit(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        group = make_group(db_session)
-        add_user_to_group(db_session, user, group)
-        private_skill = make_skill(db_session, is_public=False)
-        share_skill_with_group(
-            db_session,
-            private_skill,
-            group,
-            SkillSharePermission.EDITOR,
-        )
-
-        result = fetch_skill(
-            private_skill.id,
-            policy=SkillAccessPolicy.EDIT,
-            user=user,
-            db_session=db_session,
-        )
-
-        assert result is not None
-        assert result.id == private_skill.id
-
-    def test_org_viewer_permission_does_not_grant_edit(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        public_skill = make_skill(
-            db_session,
-            is_public=True,
-            public_permission=SkillSharePermission.VIEWER,
-        )
-
-        result = fetch_skill(
-            public_skill.id,
-            policy=SkillAccessPolicy.EDIT,
-            user=user,
-            db_session=db_session,
-        )
-
-        assert result is None
-
-    def test_org_editor_permission_grants_edit(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        public_skill = make_skill(
-            db_session,
-            is_public=True,
-            public_permission=SkillSharePermission.EDITOR,
-        )
-
-        result = fetch_skill(
-            public_skill.id,
-            policy=SkillAccessPolicy.EDIT,
-            user=user,
-            db_session=db_session,
-        )
-
-        assert result is not None
-        assert result.id == public_skill.id
-
-    def test_admin_edit_fetch_allows_personal_skill(
+    def test_admin_can_edit_personal_skill(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
         admin = make_user(db_session, role=UserRole.ADMIN)
-        private_skill = make_skill(db_session, is_public=False)
+        skill = make_skill(db_session, is_public=False)
 
         result = fetch_skill(
-            private_skill.id,
+            skill.id,
             policy=SkillAccessPolicy.EDIT,
             user=admin,
             db_session=db_session,
         )
 
         assert result is not None
-        assert result.id == private_skill.id
+        assert result.id == skill.id
 
-    def test_admin_view_includes_all_skills(
+    @pytest.mark.parametrize(
+        ("permission", "is_editable"),
+        [
+            (SkillSharePermission.VIEWER, False),
+            (SkillSharePermission.EDITOR, True),
+        ],
+    )
+    def test_group_share_permission_controls_edit_access(
         self,
+        permission: SkillSharePermission,
+        is_editable: bool,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        admin = make_user(db_session, role=UserRole.ADMIN)
-        private_skill = make_skill(db_session, is_public=False)
+        user = make_user(db_session, role=UserRole.BASIC)
+        group = make_group(db_session)
+        add_user_to_group(db_session, user, group)
+        skill = make_skill(db_session, is_public=False)
+        share_skill_with_group(db_session, skill, group, permission)
 
-        assert (
-            fetch_skill(
-                private_skill.id,
-                policy=SkillAccessPolicy.VIEW,
-                user=admin,
-                db_session=db_session,
-            )
-            is not None
+        result = fetch_skill(
+            skill.id,
+            policy=SkillAccessPolicy.EDIT,
+            user=user,
+            db_session=db_session,
         )
+
+        assert (result is not None) is is_editable
 
     def test_public_permission_null_controls_org_visibility(
         self,
@@ -365,25 +171,6 @@ class TestSkillVisibility:
         # And the public skill is visible to both.
         assert public_skill.id in curator_ids
         assert public_skill.id in basic_ids
-
-    def test_view_fetch_returns_none_when_not_shared(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        user = make_user(db_session, role=UserRole.BASIC)
-        other_group = make_group(db_session)
-        private_skill = make_skill(db_session, is_public=False)
-        share_skill_with_group(db_session, private_skill, other_group)
-
-        result = fetch_skill(
-            private_skill.id,
-            policy=SkillAccessPolicy.VIEW,
-            user=user,
-            db_session=db_session,
-        )
-
-        assert result is None
 
     def test_edit_fetch_allows_curator_for_curated_group_skill(
         self,

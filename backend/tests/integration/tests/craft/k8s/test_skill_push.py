@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Connector
@@ -36,6 +37,7 @@ from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
 from onyx.skills.push import push_skill_to_affected_sandboxes
+from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -333,6 +335,38 @@ def _rendered_company_search_lines(db_session: Session, user: User) -> list[str]
 
 
 class TestSkillPush:
+    def test_external_app_skill_lands_after_user_authenticates(
+        self,
+        k8s_admin_user: DATestUser,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        handle = running_sandbox()
+        user = handle.api_user
+        workspace = handle.workspace_path
+        app = ExternalAppManager.create(
+            user_performing_action=k8s_admin_user,
+            name=f"Credential-gated app {uuid4().hex[:8]}",
+            description="External app hydration integration test",
+            upstream_url_patterns=["https://api.example.com/*"],
+            auth_template={"Authorization": "Bearer {access_token}"},
+            organization_credentials={},
+            app_type=ExternalAppType.CUSTOM,
+        )
+        try:
+            user_app = ExternalAppManager.get_for_user(user, app.id)
+            skill_file = _skill_file_path(workspace, user_app.slug)
+            skill_file.wait_for_absent()
+
+            ExternalAppManager.upsert_user_credentials(
+                user_performing_action=user,
+                app_id=app.id,
+                credentials={"access_token": "integration-test-token"},
+            )
+
+            skill_file.wait_for_file()
+        finally:
+            ExternalAppManager.delete(k8s_admin_user, app.id)
+
     def test_public_skill_lands_only_after_each_user_enables_it(
         self,
         k8s_admin_user: DATestUser,
