@@ -25,7 +25,7 @@ Output protocol (stdout):
 Exit code: 1 if any ERROR finding, 0 otherwise (2 on usage error).
 
 Usage:
-    python lint.py /path/to/file.pptx
+    python lint.py /path/to/file.pptx [--profile {standard,dense}]
 """
 
 import shutil
