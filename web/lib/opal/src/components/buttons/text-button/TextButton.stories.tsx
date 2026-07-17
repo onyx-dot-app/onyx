@@ -43,9 +43,9 @@ export const AsLink: Story = {
 
 export const InlineInProse: Story = {
   render: () => (
-    <p style={{ maxWidth: "36rem", lineHeight: 1.7 }}>
+    <div style={{ maxWidth: "36rem", lineHeight: 1.7 }}>
       You can undo this action within the next 30 seconds.{" "}
       <TextButton onClick={() => alert("undone")}>Undo</TextButton>.
-    </p>
+    </div>
   ),
 };

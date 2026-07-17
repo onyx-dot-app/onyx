@@ -16,7 +16,7 @@ slots).
 ```
 Interactive.Stateless              <- always variant="default" / prominence="tertiary"; disabled, href, onClick
   └─ <Link> / <button>             <- .opal-text-button.interactive-foreground, no height/rounding/padding/border
-       └─ <Text font={font} color="inherit">
+       └─ <Text font={font} color="inherit" as="p">
 ```
 
 - **No separate surface component.** `Button` needs `Interactive.Container` because it
