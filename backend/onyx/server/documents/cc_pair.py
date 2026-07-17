@@ -25,8 +25,6 @@ from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
 from onyx.db.connector import delete_connector
-from onyx.db.connector import mark_ccpair_with_indexing_trigger
-from onyx.db.connector import update_connector_specific_config_fields
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
 from onyx.db.connector_credential_pair import (
@@ -40,7 +38,6 @@ from onyx.db.document import get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
@@ -80,7 +77,6 @@ from onyx.server.documents.models import ConnectorCredentialPairMetadata
 from onyx.server.documents.models import DocPermissionSyncAttemptSnapshot
 from onyx.server.documents.models import DocumentSyncStatus
 from onyx.server.documents.models import ExternalGroupSyncAttemptSnapshot
-from onyx.server.documents.models import GitlabFilterConfigUpdateRequest
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricsResponse
@@ -607,58 +603,6 @@ def update_cc_pair_property(
     return StatusResponse(success=True, message=msg, data=cc_pair_id)
 
 
-@router.put("/admin/cc-pair/{cc_pair_id}/connector-config")
-def update_cc_pair_connector_config(
-    cc_pair_id: int,
-    update_request: GitlabFilterConfigUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
-    db_session: Session = Depends(get_session),
-) -> StatusResponse[int]:
-    cc_pair = get_connector_credential_pair_from_id_for_user(
-        cc_pair_id=cc_pair_id,
-        db_session=db_session,
-        user=user,
-        get_editable=True,
-    )
-    if not cc_pair:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            "CC Pair not found for current user's permissions",
-        )
-
-    # The request schema carries GitLab-only filtering keys; writing them onto
-    # another connector type would break its next indexing run (the factory
-    # expands connector_specific_config into the connector constructor).
-    if cc_pair.connector.source != DocumentSource.GITLAB:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Connector config editing is only supported for GitLab connectors",
-        )
-
-    config_updates = update_request.model_dump(exclude_none=True)
-    if not config_updates:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "No config fields provided")
-
-    updated_connector = update_connector_specific_config_fields(
-        connector_id=cc_pair.connector.id,
-        config_updates=config_updates,
-        db_session=db_session,
-    )
-    if updated_connector is None:
-        raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, "Connector not found")
-
-    # The new filter only applies repo-wide after a fresh re-index; an incremental
-    # sync would otherwise only pick up files that change after this edit. The
-    # config update above is only flushed, so this commit lands both atomically.
-    mark_ccpair_with_indexing_trigger(cc_pair_id, IndexingMode.REINDEX, db_session)
-
-    return StatusResponse(
-        success=True,
-        message="Connector configuration updated successfully",
-        data=cc_pair_id,
-    )
-
-
 @router.get("/admin/cc-pair/{cc_pair_id}/last_pruned")
 def get_cc_pair_last_pruned(
     cc_pair_id: int,
@@ -696,18 +640,23 @@ def prune_cc_pair(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="Connection not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Connection not found for current user's permissions",
+        )
+    if cc_pair.reindex_required_since is not None:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Pruning is blocked until the required reindex completes",
         )
 
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.prune.fenced:
-        raise HTTPException(
-            status_code=HTTPStatus.CONFLICT,
-            detail="Pruning task already in progress.",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Pruning task already in progress",
         )
 
     logger.info(
@@ -721,10 +670,13 @@ def prune_cc_pair(
         client_app, cc_pair, db_session, r, tenant_id
     )
     if not payload_id:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail="Pruning task creation failed.",
-        )
+        db_session.refresh(cc_pair)
+        if cc_pair.reindex_required_since is not None:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "Pruning is blocked until the required reindex completes",
+            )
+        raise RuntimeError("Pruning task creation failed")
 
     logger.info("Pruning queued: cc_pair=%s id=%s", cc_pair.id, payload_id)
 

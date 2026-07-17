@@ -6,6 +6,7 @@ import httpx
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
+from sqlalchemy.orm import Session
 from tenacity import RetryError
 
 from onyx.access.access import get_access_for_document
@@ -13,6 +14,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.configs.constants import ONYX_CELERY_BEAT_HEARTBEAT_KEY
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import delete_document_by_connector_credential_pair__no_commit
 from onyx.db.document import delete_documents_complete
 from onyx.db.document import fetch_chunk_count_for_document
@@ -22,6 +24,7 @@ from onyx.db.document import mark_document_as_modified
 from onyx.db.document import mark_document_as_synced
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_all_document_indices
@@ -63,6 +66,23 @@ class DocumentCleanupAction(str, Enum):
     SKIP = "skip"
     DELETE = "delete"
     UPDATE = "update"
+
+
+def _reindex_blocks_cleanup(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+) -> bool:
+    cc_pair = get_connector_credential_pair(
+        db_session,
+        connector_id,
+        credential_id,
+    )
+    return bool(
+        cc_pair
+        and cc_pair.status != ConnectorCredentialPairStatus.DELETING
+        and cc_pair.reindex_required_since is not None
+    )
 
 
 @shared_task(
@@ -146,6 +166,16 @@ def document_by_cc_pair_cleanup_task(
                     boost=doc.boost,
                     hidden=doc.hidden,
                 )
+
+        with get_session_with_current_tenant() as db_session:
+            if _reindex_blocks_cleanup(db_session, connector_id, credential_id):
+                task_logger.info(
+                    "Skipping document cleanup while reindex is required: "
+                    "connector=%s credential=%s",
+                    connector_id,
+                    credential_id,
+                )
+                return False
 
         # Build document-index clients outside the DB session — construction
         # can take a few seconds to connect to the document index server,

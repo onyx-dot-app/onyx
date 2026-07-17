@@ -882,6 +882,10 @@ class ConnectorCredentialPair(Base):
     indexing_trigger: Mapped[IndexingMode | None] = mapped_column(
         Enum(IndexingMode, native_enum=False), nullable=True
     )
+    reindex_required_since: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     # Determines how documents are processed after fetching:
     # REGULAR: Full pipeline (chunk → embed → Vespa)
@@ -2378,6 +2382,10 @@ class IndexAttempt(Base):
     # This is only for attempts that are explicitly marked as from the start via
     # the run once API
     from_beginning: Mapped[bool] = mapped_column(Boolean)
+    reindex_requirement_started_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     # NULL on full-run attempts. Set on synthetic attempts spawned by a
     # targeted reindex; links back to the `targeted_reindex_job` row.
     # Consumer query sites that only care about full runs filter

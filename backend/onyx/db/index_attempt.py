@@ -23,12 +23,14 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
 from onyx.db.models import SearchSettings
+from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -143,11 +145,13 @@ def create_index_attempt(
     db_session: Session,
     from_beginning: bool = False,
     celery_task_id: str | None = None,
+    reindex_requirement_started_at: datetime | None = None,
 ) -> int:
     new_attempt = IndexAttempt(
         connector_credential_pair_id=connector_credential_pair_id,
         search_settings_id=search_settings_id,
         from_beginning=from_beginning,
+        reindex_requirement_started_at=reindex_requirement_started_at,
         status=IndexingStatus.NOT_STARTED,
         celery_task_id=celery_task_id,
     )
@@ -311,6 +315,43 @@ def mark_attempt_in_progress(
         raise
 
 
+def _clear_completed_reindex_requirement(
+    attempt: IndexAttempt,
+    db_session: Session,
+) -> None:
+    if not attempt.from_beginning or attempt.reindex_requirement_started_at is None:
+        return
+    search_settings_status = db_session.scalar(
+        select(SearchSettings.status).where(
+            SearchSettings.id == attempt.search_settings_id
+        )
+    )
+    if search_settings_status != IndexModelStatus.PRESENT:
+        return
+    try:
+        prune_in_progress = RedisConnector(
+            get_current_tenant_id(),
+            attempt.connector_credential_pair_id,
+        ).prune.fenced
+    except Exception:
+        logger.exception(
+            "Unable to verify pruning state for cc_pair %s",
+            attempt.connector_credential_pair_id,
+        )
+        return
+    if prune_in_progress:
+        return
+    db_session.execute(
+        update(ConnectorCredentialPair)
+        .where(
+            ConnectorCredentialPair.id == attempt.connector_credential_pair_id,
+            ConnectorCredentialPair.reindex_required_since
+            == attempt.reindex_requirement_started_at,
+        )
+        .values(reindex_required_since=None)
+    )
+
+
 def mark_attempt_succeeded(
     index_attempt_id: int,
     db_session: Session,
@@ -324,6 +365,7 @@ def mark_attempt_succeeded(
 
         attempt.status = IndexingStatus.SUCCESS
         attempt.celery_task_id = None
+        _clear_completed_reindex_requirement(attempt, db_session)
         db_session.commit()
 
         # Add telemetry for index attempt status change

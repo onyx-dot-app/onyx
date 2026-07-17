@@ -795,7 +795,10 @@ def _kickoff_indexing_tasks(
             f"secondary_index_building={secondary_index_building}"
         )
 
-        reindex = False
+        reindex = (
+            search_settings.status.is_current()
+            and cc_pair.reindex_required_since is not None
+        )
         # the indexing trigger is only checked and cleared with the current search settings
         if search_settings.status.is_current() and cc_pair.indexing_trigger is not None:
             if cc_pair.indexing_trigger == IndexingMode.REINDEX:

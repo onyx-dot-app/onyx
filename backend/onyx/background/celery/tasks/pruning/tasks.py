@@ -173,6 +173,9 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
     if pruning fails (which is what it does now). A backoff could be reasonable.
     """
 
+    if cc_pair.reindex_required_since is not None:
+        return False
+
     # skip pruning if no prune frequency is set
     # pruning can still be forced via the API which will run a pruning task directly
     if not cc_pair.connector.prune_freq:
@@ -393,6 +396,12 @@ def try_creating_prune_generator_task(
             return None
 
         db_session.refresh(cc_pair)
+        if cc_pair.reindex_required_since is not None:
+            logger.info(
+                "try_creating_prune_generator_task: cc_pair=%s requires reindex",
+                cc_pair.id,
+            )
+            return None
         if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
             logger.info(
                 "try_creating_prune_generator_task: cc_pair=%s deleting", cc_pair.id
@@ -572,6 +581,10 @@ def connector_pruning_generator_task(
                     f"cc_pair not found for {connector_id} {credential_id}"
                 )
                 return
+            if cc_pair.reindex_required_since is not None:
+                raise RuntimeError(
+                    f"Pruning blocked until reindex completes: cc_pair={cc_pair_id}"
+                )
 
             payload = redis_connector.prune.payload
             if not payload:
@@ -618,6 +631,19 @@ def connector_pruning_generator_task(
 
         # Session 2: post-enumeration — hierarchy upserts, diff computation, task dispatch.
         with get_session_with_current_tenant() as db_session:
+            current_cc_pair = get_connector_credential_pair(
+                db_session=db_session,
+                connector_id=connector_id,
+                credential_id=credential_id,
+            )
+            if (
+                current_cc_pair is None
+                or current_cc_pair.reindex_required_since is not None
+            ):
+                raise RuntimeError(
+                    f"Pruning blocked until reindex completes: cc_pair={cc_pair_id}"
+                )
+
             source = connector_source
             redis_client = get_redis_client(tenant_id=tenant_id)
 
