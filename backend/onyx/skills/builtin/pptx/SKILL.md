@@ -15,7 +15,45 @@ license: Proprietary. LICENSE.txt has complete terms
 | Read/analyze content | `python -m markitdown presentation.pptx` |
 | Edit or create from template | Read [editing.md](editing.md) |
 | Create from scratch | Read [components.md](components.md) — tested layout library (default); [pptxgenjs.md](pptxgenjs.md) for raw layouts it doesn't cover |
+| Charts from real data | Read [charts.md](charts.md) — deck-styled matplotlib PNGs via `scripts/chart.py` |
+| Icons | `node .opencode/skills/pptx/scripts/icon.js <name> --color <hex>` — see [pptxgenjs.md](pptxgenjs.md#icons) |
 | Lint layout (QA step 0) | `python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx` |
+
+---
+
+## Build Order (required)
+
+**A complete, text-viable deck must exist in `outputs/` before any asset
+enhancement.** The worst outcome is a turn that ends with no deck at all.
+
+1. **Draft**: full deck — all slides, titles, text content, layout structure —
+   written and saved to `outputs/<name>.pptx`. On the template-editing path
+   this means an EARLY first clean+pack (see [editing.md](editing.md)): edits
+   stranded in `outputs/unpacked/` deliver nothing.
+2. **Enhance in passes** (charts, icons), re-saving the deck after each pass.
+3. **Lint + QA** last (see QA below).
+
+If time or context is running short at any point, stop enhancing and ship the
+current saved deck. Never spend the start of a turn generating or inspecting
+assets for a deck that doesn't exist yet.
+
+## Reading Source Materials (context discipline)
+
+Read attached/source documents as **text** (`python -m markitdown file.pdf`).
+**Never `view_image` source pages or figure crops** — image reads exhaust the
+model context in a handful of pages and the turn dies before the deck is
+built. To reuse figures from a source PDF, extract the embedded images
+directly — no rendering, no cropping, no visual inspection:
+
+```bash
+mkdir -p outputs/figs/
+pdfimages -png -p source.pdf outputs/figs/fig   # fig-<page>-<n>.png per image
+python -c "from PIL import Image; import glob; [print(p, Image.open(p).size) for p in sorted(glob.glob('outputs/figs/*.png'))]"
+```
+
+Pick figures by page number and pixel size (real figures are large; icons and
+logos are small), place them directly, and verify them in the rendered-slide
+QA pass at the end — never by viewing each extraction.
 
 ---
 
@@ -101,7 +139,7 @@ Choose colors that match your topic — don't default to generic blue. Use these
 
 ### For Each Slide
 
-**Every slide needs a visual element** — image, chart, icon, or shape. Text-only slides are forgettable.
+**Every slide needs a visual element** — image, chart, icon, or shape. Text-only slides are forgettable. Render deck-styled charts from real data with [charts.md](charts.md); render icons zero-setup with `scripts/icon.js` (see [pptxgenjs.md](pptxgenjs.md#icons)).
 
 **Layout options:**
 - Two-column (text left, illustration on right)

@@ -95,10 +95,12 @@ from onyx.server.features.tool.models import ToolSnapshot
 from onyx.tools.tool_implementations.mcp.mcp_client import discover_mcp_tools
 from onyx.tools.tool_implementations.mcp.mcp_client import initialize_mcp_client
 from onyx.tools.tool_implementations.mcp.mcp_client import log_exception_group
+from onyx.tools.tool_implementations.mcp.mcp_ssrf import mcp_ssrf_httpx_client_factory
 from onyx.tools.tool_implementations.mcp.mcp_ssrf import validate_mcp_outbound_url
 from onyx.utils.encryption import mask_string
 from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 from onyx.utils.url import BLOCKED_HOSTNAMES
 from onyx.utils.url import SSRFException
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -392,6 +394,81 @@ def _absolute_token_expiry(tokens: OAuthToken) -> float | None:
     if tokens.expires_in is None:
         return None
     return time.time() + tokens.expires_in - TOKEN_EXPIRY_BUFFER_SECONDS
+
+
+async def _refresh_mcp_oauth_token_if_expired(
+    mcp_server: DbMCPServer,
+    connection_config_id: int,
+    user_id: str,
+) -> str | None:
+    """Refresh an SSE-transport MCP server's OAuth token via the same
+    `OAuthClientProvider`/`OnyxTokenStorage` every other MCP OAuth path uses
+    (see `make_oauth_provider`) — the SDK's own httpx.Auth refresh can't run
+    over an open SSE stream, so this drives the provider's refresh step
+    directly instead of the full httpx.Auth flow. That gets client-auth-method
+    handling (`client_secret_basic` vs. `client_secret_post`) and token
+    persistence for free, instead of a second implementation to keep in sync.
+
+    Uses private SDK methods (`_initialize`/`_refresh_token`/
+    `_handle_refresh_response`) since there's no public "refresh if needed"
+    API — may need adjusting on MCP SDK upgrades.
+
+    Returns the `Authorization` header to use now, or `None` with no opinion
+    (no refresh token / client info) — caller falls back to its own header.
+    Raises on failure; caller treats that as non-fatal.
+    """
+    # user_id only matters to redirect/callback handlers, never invoked here
+    # since UNUSED_RETURN_PATH short-circuits them.
+    provider = make_oauth_provider(
+        mcp_server,
+        user_id,
+        UNUSED_RETURN_PATH,
+        connection_config_id,
+        None,
+    )
+    context = provider.context
+    await provider._initialize()
+
+    if not context.can_refresh_token():
+        return None
+
+    if context.is_token_valid():
+        # Valid (no persisted expiry also reads as valid), or a racing call
+        # already refreshed it — hand back the current header either way.
+        current_tokens = context.current_tokens
+        assert current_tokens is not None  # implied by can_refresh_token()
+        return f"{current_tokens.token_type} {current_tokens.access_token}"
+
+    refresh_request = await provider._refresh_token()
+    async with mcp_ssrf_httpx_client_factory() as client:
+        response = await client.send(refresh_request)
+
+    if not await provider._handle_refresh_response(response):
+        raise RuntimeError(
+            f"MCP OAuth refresh failed for server '{mcp_server.name}' "
+            f"(config {connection_config_id}): {response.status_code}"
+        )
+
+    logger.info(
+        "Refreshed SSE MCP OAuth token for server '%s' (config %s)",
+        mcp_server.name,
+        connection_config_id,
+    )
+    new_tokens = context.current_tokens
+    assert new_tokens is not None  # set by _handle_refresh_response on success
+    return f"{new_tokens.token_type} {new_tokens.access_token}"
+
+
+def refresh_mcp_oauth_token_if_expired(
+    mcp_server: DbMCPServer,
+    connection_config_id: int,
+    user_id: str,
+) -> str | None:
+    """Sync wrapper for `_refresh_mcp_oauth_token_if_expired` (see there for
+    behavior), for the sync `MCPTool.run` call site."""
+    return run_async_sync_no_cancel(
+        _refresh_mcp_oauth_token_if_expired(mcp_server, connection_config_id, user_id)
+    )
 
 
 def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | None:

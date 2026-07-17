@@ -227,10 +227,25 @@ class MCPTool(Tool[None]):
                 and self._user_id
             ):
                 if self.mcp_server.transport == MCPTransport.SSE:
-                    logger.warning(
-                        "MCP tool '%s': OAuth token refresh is not supported for SSE transport — auth provider will be ignored. Re-authentication may be required after token expiry.",
-                        self._name,
-                    )
+                    # httpx.Auth refresh can't run over an open SSE stream;
+                    # refresh proactively here instead. Non-fatal on failure.
+                    try:
+                        from onyx.server.features.mcp.api import (
+                            refresh_mcp_oauth_token_if_expired,
+                        )
+
+                        refreshed_header = refresh_mcp_oauth_token_if_expired(
+                            self.mcp_server,
+                            self.connection_config.id,
+                            self._user_id,
+                        )
+                        if refreshed_header:
+                            headers["Authorization"] = refreshed_header
+                    except Exception:
+                        logger.exception(
+                            "MCP tool '%s': proactive SSE OAuth token refresh failed; using existing token",
+                            self._name,
+                        )
                 else:
                     from onyx.server.features.mcp.api import make_oauth_provider
                     from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
