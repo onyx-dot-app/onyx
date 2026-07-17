@@ -3,6 +3,67 @@ entries:
   onyx:
   - annotations:
       artifacthub.io/changes: |
+        - kind: added
+          description: Add authenticated Prometheus scraping for the MCP server.
+        - kind: fixed
+          description: Scope metrics credentials and ServiceMonitor selectors to the intended workloads.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-07-17T21:45:26.181498418Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.3
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 7bbc599ab3d0afe490771ea475510a52f2b37cb6e482bf63ad32ada8af388a2b
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://onyx-dot-app.github.io/onyx/onyx-0.6.14.tgz
+    version: 0.6.14
+  - annotations:
+      artifacthub.io/changes: |
         - kind: changed
           description: Increase the default sandbox proxy memory request from 256Mi to 512Mi and its
             memory limit from 1Gi to 2Gi, providing more headroom for transient proxy workloads and
@@ -5252,7 +5313,7 @@ entries:
     version: 0.3.1
   onyx-cnpg-crds:
   - apiVersion: v2
-    created: "2026-07-17T21:38:09.835108529Z"
+    created: "2026-07-17T21:45:26.185070568Z"
     description: 'CloudNativePG CRDs for the Onyx chart, isolated in a CRDs-only subchart
       so they can be toggled via the parent''s postgresql.installCRDs value. Helm
       still gives crds/ its special pre-install treatment (applied before the main
@@ -5260,7 +5321,7 @@ entries:
       validation on a fresh install. Keep crds/cnpg-crds.yaml in byte-for-byte sync
       with the cloudnative-pg subchart pinned in the parent Chart.yaml (verified by
       onyx/scripts/check-cnpg-crds.sh). '
-    digest: 4a5e8a7c969d9c08d81a29d6c5467ff7936ecc6c05caf26ce7d568cf744d6f93
+    digest: 8a4ed9d5861e65a1ee9b28ef402ccedaa4deb574e0bfd667cdc50785fb80dd43
     name: onyx-cnpg-crds
     type: application
     urls:
@@ -5754,4 +5815,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-07-17T21:38:09.803283158Z"
+generated: "2026-07-17T21:45:26.151886923Z"
