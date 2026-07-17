@@ -12,6 +12,7 @@ import time
 from typing import Any
 from urllib.parse import urlparse
 
+import httpx
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth import TokenStorage
 from mcp.client.auth.oauth2 import OAuthContext
@@ -23,6 +24,8 @@ from pydantic import AnyUrl
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.cache.interface import CacheLockAcquisitionError
+from onyx.cache.locks import cache_shared_lock
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPOAuthProviderMode
@@ -34,16 +37,32 @@ from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 # Refresh slightly before the real expiry to absorb network latency and clock
 # skew between us and the provider, avoiding edge-of-expiry 401s.
 TOKEN_EXPIRY_BUFFER_SECONDS = 30.0
+
+# The refresh POST is a small JSON exchange, so bound it well under the SDK's
+# SSE-sized default timeout.
+_REFRESH_POST_TIMEOUT_S = 30.0
+# How long a contention loser waits for the lock. It must outlast the winner's
+# whole refresh (POST + a couple of quick DB writes) so the loser wakes to the
+# freshly persisted token instead of timing out mid-refresh and falling back to
+# a stale/None header (which 401s). No cost in the common case: acquire returns
+# the instant the winner releases — this is only the cap for a slow winner.
+_REFRESH_LOCK_WAIT_S = _REFRESH_POST_TIMEOUT_S + 5.0
+# Lease bounds how long the holder may keep the lock; exceeds the worst-case
+# refresh so it can't expire mid-refresh and let a second caller reuse the
+# rotating refresh token. Redis-enforced only (see cache_shared_lock).
+_REFRESH_LOCK_LEASE_S = 60.0
 
 
 STATE_TTL_SECONDS = 60 * 5  # 5 minutes
@@ -149,7 +168,9 @@ async def _refresh_mcp_oauth_token_if_expired(
         return f"{current_tokens.token_type} {current_tokens.access_token}"
 
     refresh_request = await provider._refresh_token()
-    async with mcp_ssrf_httpx_client_factory() as client:
+    async with mcp_ssrf_httpx_client_factory(
+        timeout=httpx.Timeout(_REFRESH_POST_TIMEOUT_S)
+    ) as client:
         response = await client.send(refresh_request)
 
     if not await provider._handle_refresh_response(response):
@@ -173,11 +194,53 @@ def refresh_mcp_oauth_token_if_expired(
     connection_config_id: int,
     user_id: str,
 ) -> str | None:
-    """Sync wrapper for `_refresh_mcp_oauth_token_if_expired` (see there for
-    behavior), for the sync `MCPTool.run` call site."""
-    return run_async_sync_no_cancel(
-        _refresh_mcp_oauth_token_if_expired(mcp_server, connection_config_id, user_id)
-    )
+    """Sync entry point for `_refresh_mcp_oauth_token_if_expired`, single-flighted
+    per connection-config row (via `cache_shared_lock`) so two racing refreshes
+    can't redeem — and burn — the same rotating refresh token.
+
+    On contention the loser waits out the in-flight refresh (the wait outlasts a
+    refresh POST) and returns the winner's freshly persisted header. Only if the
+    lock still can't be acquired *and* the stored token is expired does it return
+    None; the caller then falls back to its existing header.
+    """
+    lock_name = f"mcp_token_refresh:{get_current_tenant_id()}:{connection_config_id}"
+    try:
+        with cache_shared_lock(
+            lock_name,
+            max_time_lock_held_s=_REFRESH_LOCK_LEASE_S,
+            wait_for_lock_s=_REFRESH_LOCK_WAIT_S,
+            logger=logger,
+        ):
+            return run_async_sync_no_cancel(
+                _refresh_mcp_oauth_token_if_expired(
+                    mcp_server, connection_config_id, user_id
+                )
+            )
+    except CacheLockAcquisitionError:
+        # Couldn't acquire within the wait; return whatever the winner persisted
+        # (None if it hasn't finished and the stored token is still expired).
+        logger.info(
+            "mcp_token_refresh.lock_contended config_id=%s", connection_config_id
+        )
+        return _persisted_auth_header(connection_config_id)
+
+
+def mcp_token_expired(config_data: MCPConnectionData) -> bool:
+    """True iff the stored access token is past its persisted expiry."""
+    expires_at = config_data.get(MCPOAuthKeys.TOKEN_EXPIRES_AT.value)
+    return expires_at is not None and float(expires_at) <= time.time()
+
+
+def _persisted_auth_header(connection_config_id: int) -> str | None:
+    """The stored ``Authorization`` header when the persisted token is still
+    fresh, else None — used as the fallback when a concurrent refresh wins."""
+    with get_session_with_current_tenant() as db:
+        config_data = extract_connection_data(
+            get_connection_config_by_id(connection_config_id, db)
+        )
+    if mcp_token_expired(config_data):
+        return None
+    return (config_data.get("headers") or {}).get("Authorization")
 
 
 def _known_provider_oauth_metadata(mcp_server: DbMCPServer) -> OAuthMetadata | None:
