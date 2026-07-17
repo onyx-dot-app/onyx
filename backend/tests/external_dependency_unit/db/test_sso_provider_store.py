@@ -174,7 +174,10 @@ def test_partial_update_preserves_config(
     updated = update_sso_provider(db_session, created.id, display_name="Renamed")
     assert updated.display_name == "Renamed"
     assert updated.config is not None
-    assert updated.config.get_value(apply_mask=False) == _GOOGLE_CONFIG
+    assert updated.config.get_value(apply_mask=False) == {
+        **_GOOGLE_CONFIG,
+        "legacy_callback": False,
+    }
 
 
 def test_disable_keeps_row_and_filters(db_session: Session, provider_name: str) -> None:
