@@ -15,6 +15,8 @@ license: Proprietary. LICENSE.txt has complete terms
 | Read/analyze content | `python -m markitdown presentation.pptx` |
 | Edit or create from template | Read [editing.md](editing.md) |
 | Create from scratch | Read [components.md](components.md) — tested layout library (default); [pptxgenjs.md](pptxgenjs.md) for raw layouts it doesn't cover |
+| Charts from real data | Read [charts.md](charts.md) — deck-styled matplotlib PNGs via `scripts/chart.py` |
+| Icons | `node .opencode/skills/pptx/scripts/icon.js <name> --color <hex>` — see [pptxgenjs.md](pptxgenjs.md#icons) |
 | Lint layout (QA step 0) | `python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx` |
 
 ---
@@ -137,7 +139,7 @@ Choose colors that match your topic — don't default to generic blue. Use these
 
 ### For Each Slide
 
-**Every slide needs a visual element** — image, chart, icon, or shape. Text-only slides are forgettable.
+**Every slide needs a visual element** — image, chart, icon, or shape. Text-only slides are forgettable. Render deck-styled charts from real data with [charts.md](charts.md); render icons zero-setup with `scripts/icon.js` (see [pptxgenjs.md](pptxgenjs.md#icons)).
 
 **Layout options:**
 - Two-column (text left, illustration on right)
