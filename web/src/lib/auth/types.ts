@@ -1,3 +1,11 @@
+// Wire values of the backend session-rejection codes carried in the `/api/me`
+// 403 body (`backend/onyx/error_handling/error_codes.py`).
+export enum SessionEndReason {
+  EXPIRED = "SESSION_EXPIRED",
+  TERMINATED = "SESSION_TERMINATED",
+  UNRECOGNIZED = "SESSION_UNRECOGNIZED",
+}
+
 export type SSOProviderType = "GOOGLE_OAUTH" | "OIDC" | "SAML";
 
 export interface SSOProviderOption {

@@ -2,7 +2,9 @@ import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
 import { AuthTypeMetadata } from "@/lib/auth/types";
+import { validateInternalRedirect } from "@/lib/auth/utils";
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import LoginPage from "./LoginPage";
 
@@ -57,9 +59,11 @@ export default async function Page(props: PageProps) {
       return redirect("/auth/waiting-on-verification");
     }
 
-    // Add a query parameter to indicate this is a redirect from login
-    // This will help prevent redirect loops
-    return redirect("/app?from=login");
+    // Honor a validated return-to (e.g. the session re-established in another
+    // tab); otherwise land on the main app page. The `from=login` query
+    // parameter helps prevent redirect loops.
+    const validatedNextUrl = validateInternalRedirect(nextUrl);
+    return redirect((validatedNextUrl ?? "/app?from=login") as Route);
   }
 
   // get where to send the user to authenticate
