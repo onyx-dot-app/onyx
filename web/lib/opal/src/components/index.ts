@@ -48,6 +48,12 @@ export {
   type LinkButtonProps,
 } from "@opal/components/buttons/link-button/components";
 
+/* TextButton */
+export {
+  TextButton,
+  type TextButtonProps,
+} from "@opal/components/buttons/text-button/components";
+
 /* Text */
 export {
   Text,
