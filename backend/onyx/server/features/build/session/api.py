@@ -194,6 +194,7 @@ def get_session_details(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    check_workspace: bool = True,
 ) -> DetailedSessionResponse:
     """
     Get details of a specific build session.
@@ -213,7 +214,7 @@ def get_session_details(
 
     # Check if session workspace exists in the sandbox
     session_loaded = False
-    if sandbox and sandbox.status == SandboxStatus.RUNNING:
+    if check_workspace and sandbox and sandbox.status == SandboxStatus.RUNNING:
         sandbox_manager = get_sandbox_manager()
         session_loaded = sandbox_manager.session_workspace_exists(
             sandbox.id, session_id

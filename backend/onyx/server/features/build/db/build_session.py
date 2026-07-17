@@ -148,7 +148,7 @@ def get_user_build_sessions(
     )
 
 
-def mark_build_sessions_skills_stale(
+def mark_build_sessions_skills_stale__no_commit(
     user_ids: set[UUID],
     db_session: Session,
 ) -> None:
@@ -163,7 +163,6 @@ def mark_build_sessions_skills_stale(
         )
         .values(skills_stale=True)
     )
-    db_session.commit()
 
 
 def clear_build_sessions_skills_stale__no_commit(

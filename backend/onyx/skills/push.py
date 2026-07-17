@@ -18,7 +18,9 @@ from onyx.db.skill import persist_skill_validity
 from onyx.db.skill import SkillAccessPolicy
 from onyx.db.skill import SkillValidityUpdate
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.db.build_session import mark_build_sessions_skills_stale
+from onyx.server.features.build.db.build_session import (
+    mark_build_sessions_skills_stale__no_commit,
+)
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
@@ -273,7 +275,7 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
             if sandbox_id not in failed_sandbox_ids
         }
         try:
-            mark_build_sessions_skills_stale(pushed_user_ids, db_session)
+            mark_build_sessions_skills_stale__no_commit(pushed_user_ids, db_session)
         except Exception:
             logger.exception("Failed to mark build sessions with stale skills")
     except Exception:

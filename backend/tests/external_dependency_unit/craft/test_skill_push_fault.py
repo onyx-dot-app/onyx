@@ -78,3 +78,8 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     assert any("1/3 targets failed" in m for m in warning_messages), (
         f"Expected a '1/3 targets failed' partial-failure warning; got: {warning_messages!r}"
     )
+
+    db_session.rollback()
+    for session in sessions.values():
+        db_session.refresh(session)
+        assert session.skills_stale is False

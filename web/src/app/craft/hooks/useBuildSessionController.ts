@@ -105,7 +105,9 @@ export function useBuildSessionController({
       const skillsStaleBeforeRefresh = cachedSession.skillsStale;
 
       try {
-        const session = await fetchSession(sessionId);
+        const session = await fetchSession(sessionId, {
+          checkWorkspace: false,
+        });
         const currentSession = useBuildSessionStore
           .getState()
           .sessions.get(sessionId);

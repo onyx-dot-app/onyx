@@ -51,6 +51,9 @@ describe("useBuildSessionController", () => {
     );
 
     await waitFor(() => {
+      expect(api.fetchSession).toHaveBeenCalledWith(SESSION_ID, {
+        checkWorkspace: false,
+      });
       expect(
         useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
       ).toBe(true);

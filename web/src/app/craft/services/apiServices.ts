@@ -129,9 +129,15 @@ export async function createSession(
 }
 
 export async function fetchSession(
-  sessionId: string
+  sessionId: string,
+  options?: { checkWorkspace?: boolean }
 ): Promise<ApiDetailedSessionResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}`);
+  const params = new URLSearchParams();
+  if (options?.checkWorkspace === false) {
+    params.set("check_workspace", "false");
+  }
+  const query = params.size > 0 ? `?${params}` : "";
+  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}${query}`);
 
   if (!res.ok) {
     throw new Error(`Failed to load session: ${res.status}`);
