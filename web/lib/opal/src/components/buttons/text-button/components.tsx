@@ -1,62 +1,41 @@
 import "@opal/components/buttons/text-button/styles.css";
+import type { HTMLAttributes } from "react";
 import type { Route } from "next";
 import Link from "next/link";
-import { Interactive, type InteractiveStatelessProps } from "@opal/core";
-import type {
-  ButtonType,
-  ContainerSizeVariants,
-  IconFunctionComponent,
-  RichStr,
-  WithoutStyles,
-} from "@opal/types";
-import { Text, Tooltip, type TooltipSide } from "@opal/components";
-import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
+import { Interactive } from "@opal/core";
+import type { RichStr, WithoutStyles } from "@opal/types";
+import { Text, type TextFont } from "@opal/components";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type TextButtonContentProps =
-  | {
-      icon?: IconFunctionComponent;
-      children: string | RichStr;
-      rightIcon?: IconFunctionComponent;
-    }
-  | {
-      icon: IconFunctionComponent;
-      children?: string | RichStr;
-      rightIcon?: IconFunctionComponent;
-    };
+interface TextButtonProps extends WithoutStyles<
+  Omit<HTMLAttributes<HTMLElement>, "color" | "children">
+> {
+  /** Font preset. Default: `"main-ui-body"`. */
+  font?: TextFont;
 
-type TextButtonProps = Omit<InteractiveStatelessProps, "prominence"> & {
-  /**
-   * Color prominence within the variant.
-   * @default "tertiary"
-   *
-   * Defaults to `"tertiary"` (not `"primary"`, unlike `Button`) because
-   * `TextButton` never paints a background — `"primary"`'s white-on-color
-   * foreground assumes a colored surface that `TextButton` doesn't provide.
-   */
-  prominence?: InteractiveStatelessProps["prominence"];
-} & TextButtonContentProps & {
-    /** Size preset — controls label text size and icon size. */
-    size?: ContainerSizeVariants;
+  /** Prevent text wrapping. Default: `true` (unlike `Text`, which defaults to `false`). */
+  nowrap?: boolean;
 
-    /** Tooltip text shown on hover. */
-    tooltip?: string;
+  /** Destination URL. When provided, the component renders as a link. */
+  href?: string;
 
-    /** Which side the tooltip appears on. */
-    tooltipSide?: TooltipSide;
+  /** Anchor `target` attribute (e.g. `"_blank"`). Only meaningful with `href`. */
+  target?: string;
 
-    /** Applies disabled styling and suppresses clicks. */
-    disabled?: boolean;
-  };
+  /** Applies disabled styling and suppresses clicks/navigation. */
+  disabled?: boolean;
+
+  /** Plain string or `markdown()` for inline markdown. */
+  children: string | RichStr;
+}
 
 interface TextButtonSurfaceProps extends WithoutStyles<
-  React.HTMLAttributes<HTMLElement>
+  HTMLAttributes<HTMLElement>
 > {
-  type?: ButtonType;
   href?: string;
   target?: string;
   rel?: string;
@@ -67,11 +46,11 @@ interface TextButtonSurfaceProps extends WithoutStyles<
 // ---------------------------------------------------------------------------
 
 /**
- * Element selection for `TextButton` — mirrors `Interactive.Container`'s
- * `<Link> / <button> / <span>` branching, minus the height/rounding/padding/
- * border/background that `Container` applies. `TextButton` is deliberately
- * built without `Interactive.Container` so it never gets those "traditional
- * button" surroundings.
+ * Element selection for `TextButton` — a trimmed-down copy of
+ * `Interactive.Container`'s `<Link> / <button>` branching, minus the
+ * height/rounding/padding/border/background that `Container` applies.
+ * `TextButton` is deliberately built without `Interactive.Container` so it
+ * never gets those "traditional button" surroundings.
  */
 function TextButtonSurface(props: TextButtonSurfaceProps) {
   const {
@@ -79,7 +58,6 @@ function TextButtonSurface(props: TextButtonSurfaceProps) {
     href,
     target,
     rel,
-    type,
     ...rest
   } = props as TextButtonSurfaceProps & { className?: string };
 
@@ -94,25 +72,22 @@ function TextButtonSurface(props: TextButtonSurfaceProps) {
         href={href as Route}
         target={target}
         rel={rel}
-        {...(sharedProps as React.HTMLAttributes<HTMLAnchorElement>)}
+        {...(sharedProps as HTMLAttributes<HTMLAnchorElement>)}
       />
     );
   }
 
-  if (type) {
-    const ariaDisabled = (rest as Record<string, unknown>)["aria-disabled"];
-    const nativeDisabled =
-      ariaDisabled === true || ariaDisabled === "true" || undefined;
-    return (
-      <button
-        type={type}
-        disabled={nativeDisabled}
-        {...(sharedProps as React.HTMLAttributes<HTMLButtonElement>)}
-      />
-    );
-  }
+  const ariaDisabled = (rest as Record<string, unknown>)["aria-disabled"];
+  const nativeDisabled =
+    ariaDisabled === true || ariaDisabled === "true" || undefined;
 
-  return <span {...sharedProps} />;
+  return (
+    <button
+      type="button"
+      disabled={nativeDisabled}
+      {...(sharedProps as HTMLAttributes<HTMLButtonElement>)}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -120,55 +95,35 @@ function TextButtonSurface(props: TextButtonSurfaceProps) {
 // ---------------------------------------------------------------------------
 
 /**
- * A clickable `Text` — same variant/prominence hover-and-active color
- * animation as `Button`, driven by `Interactive.Stateless`, but with no
- * `Interactive.Container` underneath. That means no background, no border,
- * no padding, no rounding: just the label (and optional icons) shifting
- * color on hover/active, exactly like the rest of the Opal buttons.
+ * A clickable `Text` — same hover/active color animation as `Button` (driven
+ * by `Interactive.Stateless`, always at `variant="default"` /
+ * `prominence="tertiary"`), but with no `Interactive.Container` underneath:
+ * no background, no border, no padding, no rounding. Props are intentionally
+ * shaped like `Text` (`font`, `nowrap`, required `children`) rather than
+ * `Button` (no `icon`/`rightIcon`, `variant`, `prominence`, `tooltip`, or
+ * `size`).
  */
 function TextButton({
-  icon: Icon,
-  children,
-  rightIcon: RightIcon,
-  size = "lg",
-  type = "button",
-  prominence = "tertiary",
-  tooltip,
-  tooltipSide = "top",
+  font = "main-ui-body",
+  nowrap = true,
   disabled,
-  ...interactiveProps
+  children,
+  ...rest
 }: TextButtonProps) {
-  const isLarge = size === "lg";
-
-  const labelEl = children ? (
-    <Text
-      font={isLarge ? "main-ui-body" : "secondary-body"}
-      color="inherit"
-      nowrap
-    >
-      {children}
-    </Text>
-  ) : null;
-
-  const button = (
+  return (
     <Interactive.Stateless
-      type={type}
-      prominence={prominence}
+      type="button"
+      variant="default"
+      prominence="tertiary"
       disabled={disabled}
-      {...interactiveProps}
+      {...rest}
     >
       <TextButtonSurface>
-        {iconWrapper(Icon, size, !!children)}
-        {labelEl}
-        {iconWrapper(RightIcon, size, !!children)}
+        <Text font={font} color="inherit" nowrap={nowrap}>
+          {children}
+        </Text>
       </TextButtonSurface>
     </Interactive.Stateless>
-  );
-
-  return (
-    <Tooltip tooltip={tooltip} side={tooltipSide}>
-      {button}
-    </Tooltip>
   );
 }
 
