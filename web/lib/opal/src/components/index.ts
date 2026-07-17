@@ -157,6 +157,16 @@ export {
   type BasicModalFooterProps,
 } from "@opal/components/modal/components";
 
+/* ModalContext */
+export {
+  useCreateModal,
+  useModal,
+  useModalClose,
+  type ModalInterface,
+  type ModalCreationInterface,
+  type ModalProviderProps,
+} from "@opal/components/modal/context";
+
 /* InputTypeIn */
 export {
   default as InputTypeIn,
