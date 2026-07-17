@@ -221,7 +221,7 @@ def assert_within_scope(
     permission: Permission,                 # the manage:* token this write needs
     current_group_ids: Collection[int],     # re-read from DB, in this txn
     requested_group_ids: Collection[int],   # client-supplied target groups
-    is_private: bool,                        # access_type==PRIVATE / not is_public
+    is_private: bool,                        # non-PUBLIC: access_type!=PUBLIC (cc_pair) / not is_public (doc set)
 ) -> None:
     authority = has_permission(user, permission)
     if authority is PermissionAuthority.GLOBAL:
@@ -242,7 +242,7 @@ def assert_global(user: User, *, permission: Permission) -> None:   # delete / a
 ```
 
 `assert_within_scope` invariants: `final ⊆ managed` (closes capture-by-reassign), `final` non-empty (stays in
-≥1 group — covers detach), `is_private` (PRIVATE-only), **fail-closed** (empty `managed` ⇒ reject).
+≥1 group — covers detach), `is_private` (non-PUBLIC: PRIVATE or SYNC), **fail-closed** (empty `managed` ⇒ reject).
 `assert_global` (D6, **rule A**) keeps delete/admin-only ops admin-only even though they share a bundle token
 with scoped create/update: the route admits the manager (SCOPED ≠ NONE), the handler's `assert_global` rejects
 them.
@@ -456,7 +456,8 @@ web/
 1. **GATE 2 is the authorization of record.** Route gate (`allow_scope`) only widens *reachability*; never let
    it authorize. Every scoped write path must call `assert_within_scope` (or `assert_global` for admin-only ops).
 2. **Re-read current groups in-txn.** Never trust the client's group list alone (capture-by-reassign).
-3. **PRIVATE-only.** Reject any manager create/edit that sets/keeps PUBLIC or SYNC.
+3. **Non-PUBLIC only.** Reject any manager create/edit that sets/keeps PUBLIC; PRIVATE and SYNC are in scope
+   (a manager manages their group's private *and* auto-sync connectors). Doc sets have no SYNC → PRIVATE only.
 4. **Fail closed.** Empty managed set ⇒ no access; guard every filter against an unfiltered fallback.
 5. **`set_group_permissions` stays admin-only.** Managers manage membership + resource sharing, never the
    group's token grants.
@@ -551,8 +552,8 @@ corrections (verified 2026-06-29):
   and admin-list together, then narrows the deps.)
 
 ### 11.3 Manager power = everything EXCEPT delete (D6)
-Managers may create / edit / attach / detach / pause / rename / share within managed groups (PRIVATE-only,
-GATE 2). **DELETE is admin-only for every resource.** These stay on the plain global dep (no `allow_scope`):
+Managers may create / edit / attach / detach / pause / rename / share within managed groups (non-PUBLIC only —
+PRIVATE or SYNC; GATE 2). **DELETE is admin-only for every resource.** These stay on the plain global dep (no `allow_scope`):
 connector/cc_pair delete (`administrative.py:141`), document-set delete (`document_set/api.py:93`), persona
 delete, skill delete; plus group create (D2) + group delete + `set_group_permissions` (admin-only).
 
@@ -563,7 +564,7 @@ All `allow_scope=True` + GATE 2 EXCEPT where marked admin-only (D6/D2):
 |---|---|---|
 | cc_pair status `cc_pair.py:427` · name `:512` · property `:542` · prune `:604` | re-keyed editable read-filter authorizes (no group/access change) | allow_scope=True |
 | associate-credential `cc_pair.py:716` · connector create mock-cred `connector.py:1568` · bare create `:1538` | `add_credential_to_connector` (`:496`) | allow_scope=True on **all**; the `connector.py:1603` anchor was imprecise (it's the mock-cred path) |
-| ee `sync_cc_pair_groups` `cc_pair.py:130` | group-attach | allow_scope=True; GATE 2 per cc_pair |
+| ee `sync_cc_pair_groups` (sync-groups) · `sync_cc_pair` (sync-permissions) | re-keyed editable read-filter authorizes — NOTE: these only *enqueue* an external sync task (they do NOT rewrite the group junction; that's PR5's `update_user_group`) | allow_scope=True; load `get_editable=True` (they target SYNC connectors, which a manager manages) |
 | connector/cc_pair **DELETE** `administrative.py:141` | — | **admin-only (D6)** |
 | doc-set create `document_set/api.py:36` · patch `:62` | `insert/update_document_set` (`:220/:296`) | allow_scope=True |
 | doc-set **DELETE** `:93` | — | **admin-only (D6)** |

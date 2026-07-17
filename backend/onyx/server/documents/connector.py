@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.email_utils import send_email
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.auth.users import current_chat_accessible_user
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
@@ -1538,9 +1539,13 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
 @router.post("/admin/connector", tags=PUBLIC_API_TAGS)
 def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
+    # No GATE 2: creates only the Connector row (no cc_pair, no group/access
+    # binding yet). Scope is enforced at credential association.
     tenant_id = get_current_tenant_id()
 
     try:
@@ -1567,10 +1572,22 @@ def create_connector_from_model(
 @router.post("/admin/connector-with-mock-credential")
 def create_connector_with_mock_credential(
     connector_data: ConnectorUpdateRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     tenant_id = get_current_tenant_id()
+
+    # GATE 2 write authorization (see assert_within_scope).
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_CONNECTORS,
+        current_group_ids=[],
+        requested_group_ids=connector_data.groups or [],
+        is_private=connector_data.access_type != AccessType.PUBLIC,
+    )
 
     try:
         _validate_connector_allowed(connector_data.source)

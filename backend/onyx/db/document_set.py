@@ -4,7 +4,6 @@ from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import delete
-from sqlalchemy import false as sa_false
 from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import Select
@@ -30,6 +29,8 @@ from onyx.db.models import DocumentSet__UserGroup
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.scoped_permissions import scoped_group_ids_subquery
+from onyx.db.scoped_permissions import within_managed_scope_clause
 from onyx.server.features.document_set.models import DocumentSetCreationRequest
 from onyx.server.features.document_set.models import DocumentSetUpdateRequest
 from onyx.utils.logger import setup_logger
@@ -42,9 +43,19 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
     # MANAGE → always return all
     if has_global_permission(user, Permission.MANAGE_DOCUMENT_SETS):
         return stmt
-    # Editing requires MANAGE; readers and group-members cannot edit.
+    # Read mirror of GATE 2 for a scoped manager: PRIVATE doc sets whose every
+    # group is managed. Non-managers get an empty subquery, so it fails closed
+    # like the prior sa_false().
     if get_editable:
-        return stmt.where(sa_false())
+        return stmt.where(
+            within_managed_scope_clause(
+                resource_id_col=DocumentSetDBModel.id,
+                junction_resource_col=DocumentSet__UserGroup.document_set_id,
+                junction_group_col=DocumentSet__UserGroup.user_group_id,
+                non_public_clause=DocumentSetDBModel.is_public.is_(False),
+                managed_subq=scoped_group_ids_subquery(user),
+            )
+        )
     # READ → return all when reading, nothing when editing
     if has_global_permission(user, Permission.READ_DOCUMENT_SETS):
         return stmt
@@ -105,6 +116,19 @@ def get_document_set_by_id_for_user(
     stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
     return db_session.scalar(stmt)
+
+
+def get_group_ids_for_document_set(
+    db_session: Session, document_set_id: int
+) -> set[int]:
+    """Current groups on a document set — the ``current_group_ids`` for GATE 2."""
+    return set(
+        db_session.scalars(
+            select(DocumentSet__UserGroup.user_group_id).where(
+                DocumentSet__UserGroup.document_set_id == document_set_id
+            )
+        ).all()
+    )
 
 
 def get_document_set_by_id(
