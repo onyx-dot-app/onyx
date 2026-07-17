@@ -120,10 +120,7 @@ export const ART_ASSISTANT_ID = -3;
 export const MAX_FILES_TO_SHOW = 3;
 
 // SIZES — sidebar breakpoints are canonical in Opal; imported here for app consumers
-export {
-  MOBILE_SIDEBAR_BREAKPOINT_PX,
-  DESKTOP_SMALL_BREAKPOINT_PX,
-} from "@opal/constants";
+export { SMALL_BREAKPOINT_PX, MEDIUM_BREAKPOINT_PX } from "@opal/constants";
 export const DEFAULT_AVATAR_SIZE_PX = 18;
 export const HORIZON_DISTANCE_PX = 800;
 export const DEFAULT_LOGO_SIZE_PX = 24;
