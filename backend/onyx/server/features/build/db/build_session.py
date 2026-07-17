@@ -152,17 +152,16 @@ def mark_build_sessions_skills_stale__no_commit(
     user_ids: set[UUID],
     db_session: Session,
 ) -> None:
-    """Mark interactive sessions stale after their sandbox skills change."""
+    """Mark active interactive sessions with an OpenCode runtime as stale."""
     if not user_ids:
         return
-    db_session.execute(
-        update(BuildSession)
-        .where(
-            BuildSession.user_id.in_(user_ids),
-            BuildSession.origin == SessionOrigin.INTERACTIVE,
-        )
-        .values(skills_stale=True)
+    statement = update(BuildSession).where(
+        BuildSession.user_id.in_(user_ids),
+        BuildSession.origin == SessionOrigin.INTERACTIVE,
+        BuildSession.status == BuildSessionStatus.ACTIVE,
+        BuildSession.opencode_session_id.is_not(None),
     )
+    db_session.execute(statement.values(skills_stale=True))
 
 
 def clear_build_sessions_skills_stale__no_commit(
@@ -584,7 +583,12 @@ def mark_user_sessions_idle__no_commit(db_session: Session, user_id: UUID) -> in
             BuildSession.user_id == user_id,
             BuildSession.status == BuildSessionStatus.ACTIVE,
         )
-        .update({BuildSession.status: BuildSessionStatus.IDLE})
+        .update(
+            {
+                BuildSession.status: BuildSessionStatus.IDLE,
+                BuildSession.skills_stale: False,
+            }
+        )
     )
     db_session.flush()
     logger.info("Marked %s sessions as IDLE for user %s", result, user_id)

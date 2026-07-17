@@ -23,6 +23,9 @@ from onyx.server.features.build.db.build_session import (
 )
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
+    mark_build_sessions_skills_stale__no_commit,
+)
+from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
@@ -30,8 +33,10 @@ from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
 from onyx.server.features.build.db.sandbox import delete_snapshot__no_commit
 from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count
+from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
+from onyx.server.features.build.db.sandbox import set_sandbox_skills_hashes__no_commit
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import FileSet
@@ -40,6 +45,8 @@ from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.errors import SandboxProvisioningError
+from onyx.skills.push import build_skills_fileset_for_user
+from onyx.skills.push import compute_skills_hash
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -152,6 +159,11 @@ def hydrate_managed_content(
     """
     skills_hydrated = False
     try:
+        if skills_files is None:
+            skills_files = build_skills_fileset_for_user(user, db_session)
+        skills_hash = compute_skills_hash(skills_files)
+        sandbox = get_sandbox_by_id(db_session, sandbox_id)
+        previous_skills_hash = sandbox.skills_hash if sandbox is not None else None
         result = hydrate_sandbox_skills(
             sandbox_id,
             user,
@@ -159,7 +171,17 @@ def hydrate_managed_content(
             sandbox_manager=sandbox_manager,
             files=skills_files,
         )
-        skills_hydrated = result.succeeded == result.targets
+        if result.succeeded == result.targets:
+            set_sandbox_skills_hashes__no_commit(
+                db_session,
+                {sandbox_id: skills_hash},
+            )
+            if previous_skills_hash is not None and previous_skills_hash != skills_hash:
+                mark_build_sessions_skills_stale__no_commit(
+                    {user.id},
+                    db_session,
+                )
+            skills_hydrated = True
     except Exception:
         logger.warning("Failed to push skills to sandbox %s", sandbox_id, exc_info=True)
     try:

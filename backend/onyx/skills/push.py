@@ -1,5 +1,6 @@
 """Push skill bundles to running sandboxes."""
 
+import hashlib
 import io
 import zipfile
 from collections.abc import Iterable
@@ -22,6 +23,7 @@ from onyx.server.features.build.db.build_session import (
     mark_build_sessions_skills_stale__no_commit,
 )
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
+from onyx.server.features.build.db.sandbox import set_sandbox_skills_hashes__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
@@ -44,6 +46,19 @@ logger = setup_logger()
 SKILLS_MOUNT_PATH = "/workspace/managed/skills"
 
 _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__"})
+
+
+def compute_skills_hash(files: FileSet) -> str:
+    """Return a deterministic digest of the hydrated paths and contents."""
+    digest = hashlib.sha256()
+    for path in sorted(files):
+        path_bytes = path.encode()
+        content = files[path]
+        digest.update(len(path_bytes).to_bytes(8))
+        digest.update(path_bytes)
+        digest.update(len(content).to_bytes(8))
+        digest.update(content)
+    return digest.hexdigest()
 
 
 def _is_excluded(path: Path, source_dir: Path) -> bool:
@@ -275,8 +290,16 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
             if sandbox_id not in failed_sandbox_ids
         }
         try:
+            set_sandbox_skills_hashes__no_commit(
+                db_session,
+                {
+                    sandbox_id: compute_skills_hash(sandbox_files[sandbox_id])
+                    for sandbox_id in sandbox_map
+                    if sandbox_id not in failed_sandbox_ids
+                },
+            )
             mark_build_sessions_skills_stale__no_commit(pushed_user_ids, db_session)
         except Exception:
-            logger.exception("Failed to mark build sessions with stale skills")
+            logger.exception("Failed to persist successful skill push state")
     except Exception:
         logger.exception("Failed to push skills to sandboxes")

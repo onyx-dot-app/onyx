@@ -31,9 +31,9 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     user_a = make_user(db_session)
     user_b = make_user(db_session)
     user_c = make_user(db_session)
-    make_sandbox(db_session, user_a, status=SandboxStatus.RUNNING)
+    sandbox_a = make_sandbox(db_session, user_a, status=SandboxStatus.RUNNING)
     sandbox_b = make_sandbox(db_session, user_b, status=SandboxStatus.RUNNING)
-    make_sandbox(db_session, user_c, status=SandboxStatus.RUNNING)
+    sandbox_c = make_sandbox(db_session, user_c, status=SandboxStatus.RUNNING)
     sessions = {
         user.id: BuildSession(
             user_id=user.id,
@@ -44,7 +44,13 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         )
         for user in (user_a, user_b, user_c)
     }
+    idle_session = BuildSession(
+        user_id=user_a.id,
+        status=BuildSessionStatus.IDLE,
+        opencode_session_id="stopped-opencode",
+    )
     db_session.add_all(sessions.values())
+    db_session.add(idle_session)
     db_session.commit()
 
     stub = failing_sandbox_manager(
@@ -70,7 +76,11 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         db_session.refresh(session)
     assert sessions[user_a.id].skills_stale is True
     assert sessions[user_b.id].skills_stale is False
-    assert sessions[user_c.id].skills_stale is True
+    assert sessions[user_c.id].skills_stale is False
+    assert idle_session.skills_stale is False
+    assert sandbox_a.skills_hash is not None
+    assert sandbox_b.skills_hash is None
+    assert sandbox_c.skills_hash is not None
 
     warning_messages = [
         r.getMessage() for r in caplog.records if r.levelno == logging.WARNING
@@ -83,3 +93,6 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     for session in sessions.values():
         db_session.refresh(session)
         assert session.skills_stale is False
+    for sandbox in (sandbox_a, sandbox_b, sandbox_c):
+        db_session.refresh(sandbox)
+        assert sandbox.skills_hash is None

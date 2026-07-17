@@ -49,6 +49,17 @@ def _skill(
     )
 
 
+def test_compute_skills_hash_is_order_independent_and_content_sensitive() -> None:
+    files = {"b/SKILL.md": b"second", "a/SKILL.md": b"first"}
+
+    assert push.compute_skills_hash(files) == push.compute_skills_hash(
+        dict(reversed(files.items()))
+    )
+    assert push.compute_skills_hash(files) != push.compute_skills_hash(
+        {**files, "a/SKILL.md": b"changed"}
+    )
+
+
 def test_assemble_classifies_and_hydrates_valid_unclassified_skill(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

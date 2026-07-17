@@ -462,6 +462,7 @@ def test_sessions_marked_idle_and_nextjs_ports_cleared(
         name="session-a",
         status=BuildSessionStatus.ACTIVE,
         nextjs_port=3010,
+        skills_stale=True,
     )
     session_b = BuildSession(
         user_id=user.id,
@@ -488,6 +489,8 @@ def test_sessions_marked_idle_and_nextjs_ports_cleared(
     assert refreshed_b.status == BuildSessionStatus.IDLE
     assert refreshed_a.nextjs_port is None
     assert refreshed_b.nextjs_port is None
+    assert refreshed_a.skills_stale is False
+    assert refreshed_b.skills_stale is False
 
 
 def test_idle_reaped_before_non_idle_background_snapshot(

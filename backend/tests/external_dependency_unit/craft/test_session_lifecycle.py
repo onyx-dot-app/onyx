@@ -40,6 +40,7 @@ from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_P
 from onyx.server.features.build.session.api import reload_session_skills
 from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.sandbox_lifecycle import hydrate_managed_content
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.redis_helpers import (
@@ -55,6 +56,54 @@ from tests.external_dependency_unit.craft.redis_helpers import (
 # =============================================================================
 # Create
 # =============================================================================
+
+
+def test_warm_skill_hydration_marks_only_preexisting_sessions_after_change(
+    db_session: Session,
+    test_user: User,
+    sandbox: Callable[..., Sandbox],
+    stub_sandbox_manager: StubSandboxManager,
+) -> None:
+    sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    existing_session = BuildSession(
+        user_id=test_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        opencode_session_id="existing-opencode",
+    )
+    new_session = BuildSession(
+        user_id=test_user.id,
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add_all([existing_session, new_session])
+    db_session.commit()
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+
+    assert hydrate_managed_content(
+        stub_sandbox_manager,
+        sandbox_row.id,
+        test_user,
+        db_session,
+        skills_files={"first/SKILL.md": b"first"},
+    )
+    db_session.commit()
+    db_session.refresh(sandbox_row)
+    db_session.refresh(existing_session)
+    assert sandbox_row.skills_hash is not None
+    assert existing_session.skills_stale is False
+
+    assert hydrate_managed_content(
+        stub_sandbox_manager,
+        sandbox_row.id,
+        test_user,
+        db_session,
+        skills_files={"second/SKILL.md": b"second"},
+    )
+    db_session.commit()
+    db_session.refresh(sandbox_row)
+    db_session.refresh(existing_session)
+    db_session.refresh(new_session)
+    assert existing_session.skills_stale is True
+    assert new_session.skills_stale is False
 
 
 class TestCreateSession:

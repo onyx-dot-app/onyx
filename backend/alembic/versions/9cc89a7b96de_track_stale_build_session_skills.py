@@ -25,7 +25,12 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
+    op.add_column(
+        "sandbox",
+        sa.Column("skills_hash", sa.String(length=64), nullable=True),
+    )
 
 
 def downgrade() -> None:
+    op.drop_column("sandbox", "skills_hash")
     op.drop_column("build_session", "skills_stale")

@@ -105,6 +105,21 @@ def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     return db_session.execute(stmt).scalar_one_or_none()
 
 
+def set_sandbox_skills_hashes__no_commit(
+    db_session: Session,
+    skills_hashes: dict[UUID, str],
+) -> None:
+    """Record the contents successfully hydrated into each sandbox."""
+    if not skills_hashes:
+        return
+    sandboxes = db_session.scalars(
+        select(Sandbox).where(Sandbox.id.in_(skills_hashes))
+    ).all()
+    for sandbox in sandboxes:
+        sandbox.skills_hash = skills_hashes[sandbox.id]
+    db_session.flush()
+
+
 def update_sandbox_status__no_commit(
     db_session: Session,
     sandbox_id: UUID,
