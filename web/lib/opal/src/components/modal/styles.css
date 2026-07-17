@@ -4,11 +4,12 @@
    Modal
 
    Three layers share the chrome:
-   - .opal-modal-overlay: the scrim behind the card.
+   - .opal-modal-overlay: the scrim behind the card; the only animated layer
+     (fade in/out on open/close).
    - .opal-modal-positioner: the fixed, centered (or top-pinned) frame that
-     carries width, the viewport clamp, and the open/close animations. When a
-     [data-main-container] center is in effect, the owner supplies left/top
-     inline and omits [data-viewport-centered].
+     carries width and the viewport clamp. The card appears in place, no
+     entrance animation. When a [data-main-container] center is in effect, the
+     owner supplies left/top inline and omits [data-viewport-centered].
    - .opal-modal-card: the bordered card that carries background and height.
 
    Without a bottom slot, one element wears positioner + card. With one, the
@@ -27,24 +28,12 @@
 }
 
 .opal-modal-positioner {
-  @apply fixed -translate-x-1/2 duration-200;
+  @apply fixed -translate-x-1/2;
   @apply max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)];
   z-index: var(--z-modal);
 }
-.opal-modal-positioner[data-state="open"] {
-  @apply animate-in fade-in-0 zoom-in-95;
-}
-.opal-modal-positioner[data-state="closed"] {
-  @apply animate-out fade-out-0 zoom-out-95;
-}
 .opal-modal-positioner[data-position="center"] {
   @apply -translate-y-1/2;
-}
-.opal-modal-positioner[data-position="center"][data-state="open"] {
-  @apply slide-in-from-top-1/2;
-}
-.opal-modal-positioner[data-position="center"][data-state="closed"] {
-  @apply slide-out-to-top-1/2;
 }
 .opal-modal-positioner[data-position="center"][data-viewport-centered] {
   @apply left-1/2 top-1/2;

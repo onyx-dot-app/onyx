@@ -39,7 +39,7 @@ import {
   SvgPlug,
   SvgSimpleLoader,
 } from "@opal/icons";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import { Button } from "@opal/components";
 import TypewriterText from "@/app/craft/components/TypewriterText";
 import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";

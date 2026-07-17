@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { Button } from "@opal/components";
 import { SvgUsers, SvgAlertTriangle, SvgLoader } from "@opal/icons";
-import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import { BasicModalFooter, Modal } from "@opal/components";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
 import Text from "@/refresh-components/texts/Text";

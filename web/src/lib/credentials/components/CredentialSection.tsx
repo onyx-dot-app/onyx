@@ -17,7 +17,7 @@ import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
 } from "@/app/admin/connector/[ccPairId]/lib";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { getSourceDisplayName } from "@/lib/sources";
 import {
   ConfluenceCredentialJson,

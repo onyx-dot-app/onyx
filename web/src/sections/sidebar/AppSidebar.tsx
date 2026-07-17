@@ -58,7 +58,7 @@ import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
   SvgDevKit,

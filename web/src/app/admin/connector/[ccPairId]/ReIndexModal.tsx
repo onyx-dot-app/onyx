@@ -4,7 +4,7 @@ import { Button, Divider } from "@opal/components";
 import { useState } from "react";
 import { toast } from "@opal/layouts";
 import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgRefreshCw } from "@opal/icons";
 // Hook to handle re-indexing functionality

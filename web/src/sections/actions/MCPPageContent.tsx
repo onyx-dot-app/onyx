@@ -13,7 +13,7 @@ import {
   ToolSnapshot,
 } from "@/lib/tools/interfaces";
 import { toast } from "@opal/layouts";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";
 import AddMCPServerModal from "@/sections/actions/modals/AddMCPServerModal";
 import DisconnectEntityModal from "./modals/DisconnectEntityModal";

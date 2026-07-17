@@ -17,7 +17,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { Popover, PopoverMenu } from "@opal/components";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@opal/layouts";
 import { useRouter } from "next/navigation";
@@ -29,7 +29,7 @@ import {
 import type { Agent } from "@/lib/agents/types";
 import type { Route } from "next";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 

@@ -7,7 +7,7 @@ import { Section } from "@/layouts/general-layouts";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
 import Card from "@/refresh-components/cards/Card";
 import { SvgKey, SvgPlusCircle } from "@opal/icons";

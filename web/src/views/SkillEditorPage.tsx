@@ -55,7 +55,7 @@ import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import SkillFileTree from "@/sections/skills/SkillFileTree";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 
 interface SkillEditorPageProps {
   skillId?: string;
