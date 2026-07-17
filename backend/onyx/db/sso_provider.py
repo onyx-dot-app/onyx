@@ -90,8 +90,11 @@ def sso_login_callback_uri(
     operator must allowlist at the IdP. Rows migrated from single-provider env
     config keep the legacy URI their IdP client already allowlists."""
     if provider.provider_type is SSOProviderType.SAML:
-        # Single issuer-resolved ACS for every SAML row.
-        return f"{web_domain}/api/auth/saml/callback"
+        # Single issuer-resolved ACS for every SAML row. No /api prefix: the
+        # AuthnRequest advertises this exact URL, nginx routes /auth/saml to
+        # the backend directly, and strict Destination validation compares
+        # against the stripped path.
+        return f"{web_domain}/auth/saml/callback"
     if config.get("legacy_callback"):
         if provider.provider_type is SSOProviderType.GOOGLE_OAUTH:
             return f"{web_domain}/auth/oauth/callback"
