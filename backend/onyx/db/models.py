@@ -5788,9 +5788,7 @@ class BuildSession(Base):
     opencode_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
-    skills_stale: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default="false"
-    )
+    skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])

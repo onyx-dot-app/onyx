@@ -11,6 +11,7 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
+from onyx.server.features.build.db.build_session import skills_are_stale
 
 if TYPE_CHECKING:
     from onyx.db.models import BuildSession
@@ -142,7 +143,7 @@ class SessionResponse(BaseModel):
             origin=session.origin,
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
-            skills_stale=session.skills_stale,
+            skills_stale=skills_are_stale(session, sandbox),
         )
 
 

@@ -1,4 +1,4 @@
-"""track stale build session skills
+"""track build session skill generations
 
 Revision ID: 9cc89a7b96de
 Revises: b1d060254b02
@@ -18,12 +18,7 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "build_session",
-        sa.Column(
-            "skills_stale",
-            sa.Boolean(),
-            server_default=sa.false(),
-            nullable=False,
-        ),
+        sa.Column("skills_hash", sa.String(length=64), nullable=True),
     )
     op.add_column(
         "sandbox",
@@ -33,4 +28,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("sandbox", "skills_hash")
-    op.drop_column("build_session", "skills_stale")
+    op.drop_column("build_session", "skills_hash")

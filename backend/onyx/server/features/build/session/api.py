@@ -226,8 +226,9 @@ def reload_session_skills(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SessionSkillsStateResponse:
-    SessionManager(db_session).reload_session_skills(session_id, user)
-    return SessionSkillsStateResponse(skills_stale=False)
+    skills_stale = SessionManager(db_session).reload_session_skills(session_id, user)
+    db_session.commit()
+    return SessionSkillsStateResponse(skills_stale=skills_stale)
 
 
 @router.get("/{session_id}/sandbox-status")
@@ -419,6 +420,7 @@ def restore_session(
                 sandbox.id, session_id
             ):
                 session.status = BuildSessionStatus.ACTIVE
+                session.skills_hash = sandbox.skills_hash
                 update_sandbox_heartbeat(db_session, sandbox.id)
                 base_response = SessionResponse.from_model(session, sandbox)
                 return DetailedSessionResponse.from_session_response(
@@ -487,6 +489,7 @@ def restore_session(
                             connectable_apps_section=connectable_apps_section,
                         )
                         session.status = BuildSessionStatus.ACTIVE
+                        session.skills_hash = sandbox.skills_hash
                         db_session.commit()
                     except Exception as e:
                         logger.error(
@@ -504,6 +507,7 @@ def restore_session(
                         connectable_apps_section=connectable_apps_section,
                     )
                     session.status = BuildSessionStatus.ACTIVE
+                    session.skills_hash = sandbox.skills_hash
                     db_session.commit()
 
         else:

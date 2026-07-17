@@ -49,14 +49,20 @@ def _create_message_noop(**_: object) -> None:
     return None
 
 
+def _patch_skill_state(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    stale: bool = False,
+) -> None:
+    monkeypatch.setattr(messages_api, "get_sandbox_by_user_id", lambda *_: object())
+    monkeypatch.setattr(messages_api, "skills_are_stale", lambda *_: stale)
+
+
 def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) -> None:
     cache = FakeCache()
     session_id = uuid4()
     user_id = uuid4()
-    session = SimpleNamespace(
-        id=session_id,
-        skills_stale=False,
-    )
+    session = SimpleNamespace(id=session_id)
     db_session = _FakeDbSession(user_message_count=2)
     persisted: list[tuple[int, str]] = []
     start_runner = MagicMock()
@@ -74,6 +80,7 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
         persisted.append((turn_index, content["text"]))
 
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(
@@ -116,12 +123,13 @@ def test_send_message_rejects_second_active_turn(
     cache = FakeCache()
     session_id = uuid4()
     user_id = uuid4()
-    session = SimpleNamespace(id=session_id, skills_stale=False)
+    session = SimpleNamespace(id=session_id)
 
     def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
         return session
 
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
@@ -150,10 +158,11 @@ def test_send_message_reloads_stale_skills(
     cache = FakeCache()
     session_id = uuid4()
     user_id = uuid4()
-    session = SimpleNamespace(id=session_id, skills_stale=True)
+    session = SimpleNamespace(id=session_id)
     session_manager = MagicMock()
 
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch, stale=True)
     monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
     monkeypatch.setattr(messages_api, "SessionManager", lambda _: session_manager)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
@@ -177,7 +186,7 @@ def test_send_message_is_idempotent_for_same_client_request(
     cache = FakeCache()
     session_id = uuid4()
     user_id = uuid4()
-    session = SimpleNamespace(id=session_id, skills_stale=False)
+    session = SimpleNamespace(id=session_id)
     persisted: list[tuple[int, str]] = []
     start_runner = MagicMock()
     rate_limit_check = MagicMock()
@@ -195,6 +204,7 @@ def test_send_message_is_idempotent_for_same_client_request(
         persisted.append((turn_index, content["text"]))
 
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", rate_limit_check)
     monkeypatch.setattr(
@@ -233,7 +243,7 @@ def test_send_message_leaves_turn_active_if_runner_cannot_start(
     cache = FakeCache()
     session_id = uuid4()
     user_id = uuid4()
-    session = SimpleNamespace(id=session_id, skills_stale=False)
+    session = SimpleNamespace(id=session_id)
 
     def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
         return session
@@ -242,6 +252,7 @@ def test_send_message_leaves_turn_active_if_runner_cannot_start(
         raise RuntimeError("capacity exhausted")
 
     monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    _patch_skill_state(monkeypatch)
     monkeypatch.setattr(messages_api, "get_build_session", get_session_stub)
     monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
     monkeypatch.setattr(messages_api, "create_message", _create_message_noop)

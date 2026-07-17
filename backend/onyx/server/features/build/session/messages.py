@@ -23,6 +23,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.db.build_session import count_user_messages
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.build_session import skills_are_stale
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.interactive_turns.executor import (
@@ -131,7 +132,8 @@ def send_message(
                 "This session is busy with a previous turn.",
             )
 
-        if session.skills_stale:
+        sandbox = get_sandbox_by_user_id(db_session, user.id)
+        if skills_are_stale(session, sandbox):
             SessionManager(db_session).reload_session_skills(session_id, user)
 
         check_build_rate_limits(user=user, db_session=db_session)

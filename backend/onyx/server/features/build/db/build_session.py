@@ -8,7 +8,6 @@ from uuid import UUID
 from sqlalchemy import desc
 from sqlalchemy import exists
 from sqlalchemy import select
-from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
@@ -75,17 +74,25 @@ def get_build_session(
     session_id: UUID,
     user_id: UUID,
     db_session: Session,
-    *,
-    lock_for_update: bool = False,
 ) -> BuildSession | None:
     """Get a build session by ID, ensuring it belongs to the user."""
     stmt = select(BuildSession).where(
         BuildSession.id == session_id,
         BuildSession.user_id == user_id,
     )
-    if lock_for_update:
-        stmt = stmt.with_for_update()
     return db_session.scalar(stmt)
+
+
+def skills_are_stale(session: BuildSession, sandbox: Sandbox | None) -> bool:
+    """Whether a live runtime predates the sandbox's managed content."""
+    return bool(
+        session.status == BuildSessionStatus.ACTIVE
+        and session.origin == SessionOrigin.INTERACTIVE
+        and session.opencode_session_id is not None
+        and sandbox is not None
+        and sandbox.skills_hash is not None
+        and session.skills_hash != sandbox.skills_hash
+    )
 
 
 async def get_webapp_access_async(
@@ -145,37 +152,6 @@ def get_user_build_sessions(
         .order_by(desc(BuildSession.created_at))
         .limit(limit)
         .all()
-    )
-
-
-def mark_build_sessions_skills_stale__no_commit(
-    user_ids: set[UUID],
-    db_session: Session,
-) -> None:
-    """Mark active interactive sessions with an OpenCode runtime as stale."""
-    if not user_ids:
-        return
-    statement = update(BuildSession).where(
-        BuildSession.user_id.in_(user_ids),
-        BuildSession.origin == SessionOrigin.INTERACTIVE,
-        BuildSession.status == BuildSessionStatus.ACTIVE,
-        BuildSession.opencode_session_id.is_not(None),
-    )
-    db_session.execute(statement.values(skills_stale=True))
-
-
-def clear_build_sessions_skills_stale__no_commit(
-    user_id: UUID,
-    db_session: Session,
-) -> None:
-    """Clear stale markers after fresh skills hydrate into a new sandbox."""
-    db_session.execute(
-        update(BuildSession)
-        .where(
-            BuildSession.user_id == user_id,
-            BuildSession.skills_stale.is_(True),
-        )
-        .values(skills_stale=False)
     )
 
 
@@ -586,7 +562,6 @@ def mark_user_sessions_idle__no_commit(db_session: Session, user_id: UUID) -> in
         .update(
             {
                 BuildSession.status: BuildSessionStatus.IDLE,
-                BuildSession.skills_stale: False,
             }
         )
     )

@@ -50,6 +50,7 @@ from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import get_empty_session_for_user
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
+from onyx.server.features.build.db.build_session import skills_are_stale
 from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
@@ -213,16 +214,15 @@ class SessionManager:
         return get_user_build_sessions(user_id, self._db_session)
 
     def _prewarm_opencode_session(
-        self, sandbox_id: UUID, session: BuildSession
+        self, sandbox: Sandbox, session: BuildSession
     ) -> None:
-        """Mint and persist the opencode-serve session before the first prompt.
+        """Mint and persist the OpenCode session before the first prompt.
 
         The caller owns the surrounding transaction. This keeps the empty Craft
-        session's frontend-ready state aligned with the agent runtime being
-        ready to accept the first user message.
+        session's runtime ID and acknowledged skills generation aligned.
         """
         opencode_session_id = self._sandbox_manager.ensure_opencode_session(
-            sandbox_id=sandbox_id,
+            sandbox_id=sandbox.id,
             session_id=session.id,
             opencode_session_id=session.opencode_session_id,
         )
@@ -237,17 +237,21 @@ class SessionManager:
                 session.id,
             )
             session.opencode_session_id = opencode_session_id
+            session.skills_hash = sandbox.skills_hash
             self._db_session.flush()
 
-    def reload_session_skills(self, session_id: UUID, user: User) -> None:
+    def reload_session_skills(self, session_id: UUID, user: User) -> bool:
+        """Reload one runtime and report whether its skills remain stale."""
         session = get_build_session(session_id, user.id, self._db_session)
         if session is None:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
-        if not session.skills_stale:
-            return
 
         sandbox = get_sandbox_by_user_id(self._db_session, user.id)
-        if sandbox is not None and sandbox.status == SandboxStatus.PROVISIONING:
+        if sandbox is None or not skills_are_stale(session, sandbox):
+            return False
+
+        skills_hash = sandbox.skills_hash
+        if sandbox.status == SandboxStatus.PROVISIONING:
             raise OnyxError(
                 OnyxErrorCode.CONFLICT,
                 "Wait for the sandbox to finish starting before reloading skills.",
@@ -260,7 +264,7 @@ class SessionManager:
                 acquire_timeout=0.1,
                 fail_open=False,
             )
-            if sandbox is not None and sandbox.status == SandboxStatus.RUNNING
+            if sandbox.status == SandboxStatus.RUNNING
             else nullcontext(PromptSlot(acquired=True))
         )
         with prompt_slot as slot:
@@ -270,18 +274,7 @@ class SessionManager:
                     "Wait for the current turn to finish before reloading skills.",
                 )
 
-            session = get_build_session(
-                session_id,
-                user.id,
-                self._db_session,
-                lock_for_update=True,
-            )
-            if session is None:
-                raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
-            if not session.skills_stale:
-                return
-
-            if sandbox is not None and sandbox.status == SandboxStatus.RUNNING:
+            if sandbox.status == SandboxStatus.RUNNING:
                 try:
                     self._sandbox_manager.regenerate_session_config(
                         sandbox_id=sandbox.id,
@@ -299,7 +292,6 @@ class SessionManager:
                             sandbox.id, session_id
                         )
                 except Exception as exc:
-                    self._db_session.rollback()
                     logger.warning(
                         "Failed to refresh skills for session %s",
                         session_id,
@@ -310,8 +302,10 @@ class SessionManager:
                         "Failed to reload session skills.",
                     ) from exc
 
-            session.skills_stale = False
-            self._db_session.commit()
+            session.skills_hash = skills_hash
+            self._db_session.flush()
+            self._db_session.refresh(sandbox)
+            return skills_are_stale(session, sandbox)
 
     def ensure_sandbox_running(
         self,
@@ -466,7 +460,6 @@ class SessionManager:
             self._db_session,
             skills_files=skills_files,
         )
-
         self._sandbox_manager.setup_session_workspace(
             sandbox_id=sandbox.id,
             session_id=build_session.id,
@@ -475,7 +468,7 @@ class SessionManager:
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
-        self._prewarm_opencode_session(sandbox.id, build_session)
+        self._prewarm_opencode_session(sandbox, build_session)
 
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",
@@ -539,7 +532,7 @@ class SessionManager:
                         hydrate_managed_content(
                             self._sandbox_manager, sandbox.id, user, self._db_session
                         )
-                    self._prewarm_opencode_session(sandbox.id, existing)
+                    self._prewarm_opencode_session(sandbox, existing)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,

@@ -34,6 +34,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_user_build_sessions
+from onyx.server.features.build.db.build_session import skills_are_stale
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
@@ -58,24 +59,13 @@ from tests.external_dependency_unit.craft.redis_helpers import (
 # =============================================================================
 
 
-def test_warm_skill_hydration_marks_only_preexisting_sessions_after_change(
+def test_warm_skill_hydration_changes_only_live_session_staleness(
     db_session: Session,
     test_user: User,
     sandbox: Callable[..., Sandbox],
     stub_sandbox_manager: StubSandboxManager,
 ) -> None:
     sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
-    existing_session = BuildSession(
-        user_id=test_user.id,
-        status=BuildSessionStatus.ACTIVE,
-        opencode_session_id="existing-opencode",
-    )
-    new_session = BuildSession(
-        user_id=test_user.id,
-        status=BuildSessionStatus.ACTIVE,
-    )
-    db_session.add_all([existing_session, new_session])
-    db_session.commit()
     stub_sandbox_manager.write_files_to_sandbox_silent = True
 
     assert hydrate_managed_content(
@@ -87,9 +77,21 @@ def test_warm_skill_hydration_marks_only_preexisting_sessions_after_change(
     )
     db_session.commit()
     db_session.refresh(sandbox_row)
-    db_session.refresh(existing_session)
     assert sandbox_row.skills_hash is not None
-    assert existing_session.skills_stale is False
+
+    existing_session = BuildSession(
+        user_id=test_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        opencode_session_id="existing-opencode",
+        skills_hash=sandbox_row.skills_hash,
+    )
+    new_session = BuildSession(
+        user_id=test_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        skills_hash=sandbox_row.skills_hash,
+    )
+    db_session.add_all([existing_session, new_session])
+    db_session.commit()
 
     assert hydrate_managed_content(
         stub_sandbox_manager,
@@ -100,10 +102,8 @@ def test_warm_skill_hydration_marks_only_preexisting_sessions_after_change(
     )
     db_session.commit()
     db_session.refresh(sandbox_row)
-    db_session.refresh(existing_session)
-    db_session.refresh(new_session)
-    assert existing_session.skills_stale is True
-    assert new_session.skills_stale is False
+    assert skills_are_stale(existing_session, sandbox_row)
+    assert not skills_are_stale(new_session, sandbox_row)
 
 
 class TestCreateSession:
@@ -143,6 +143,8 @@ class TestCreateSession:
         assert stub_sandbox_manager.provision_count == 1
         assert build_session.user_id == test_user.id
         assert build_session.opencode_session_id == "stub-opencode-session"
+        assert build_session.skills_hash == sandbox_row.skills_hash
+        assert build_session.skills_hash is not None
         assert stub_sandbox_manager.ensure_opencode_session_count == 1
         assert stub_sandbox_manager.last_ensure_opencode_session_payload == {
             "sandbox_id": sandbox_row.id,
@@ -185,6 +187,8 @@ class TestCreateSession:
         assert stub_sandbox_manager.provision_count == 0
         assert stub_sandbox_manager.health_check_count >= 1
         assert new_session.opencode_session_id == "stub-opencode-session"
+        assert new_session.skills_hash == rows[0].skills_hash
+        assert new_session.skills_hash is not None
         assert stub_sandbox_manager.ensure_opencode_session_count == 1
         assert stub_sandbox_manager.last_ensure_opencode_session_payload == {
             "sandbox_id": existing_id,
@@ -392,11 +396,12 @@ class TestReloadSessionSkills:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        sandbox_row.skills_hash = "current"
         session_row = BuildSession(
             user_id=test_user.id,
             status=BuildSessionStatus.ACTIVE,
             opencode_session_id="stale-opencode",
-            skills_stale=True,
+            skills_hash="old",
         )
         db_session.add(session_row)
         db_session.commit()
@@ -410,7 +415,7 @@ class TestReloadSessionSkills:
 
         assert response.skills_stale is False
         db_session.refresh(session_row)
-        assert session_row.skills_stale is False
+        assert session_row.skills_hash == sandbox_row.skills_hash
         assert stub_sandbox_manager.regenerate_session_config_count == 1
         assert stub_sandbox_manager.last_dispose_opencode_instance_payload == {
             "sandbox_id": sandbox_row.id,
@@ -431,12 +436,13 @@ class TestReloadSessionSkills:
         stub_sandbox_manager: StubSandboxManager,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        sandbox_row.skills_hash = "current"
         session_row = BuildSession(
             user_id=test_user.id,
             status=BuildSessionStatus.ACTIVE,
             opencode_session_id="busy-opencode",
-            skills_stale=True,
+            skills_hash="old",
         )
         db_session.add(session_row)
         db_session.commit()
@@ -451,7 +457,7 @@ class TestReloadSessionSkills:
 
         assert exc_info.value.error_code == OnyxErrorCode.CONFLICT
         db_session.refresh(session_row)
-        assert session_row.skills_stale is True
+        assert skills_are_stale(session_row, sandbox_row)
         assert stub_sandbox_manager.dispose_opencode_instance_count == 0
 
 
@@ -973,7 +979,8 @@ class TestRestoreSession:
         # restore endpoint flips the row's status. Drive the real
         # ``restore_session`` handler from sessions_api so the assertion
         # exercises production code, not a hand-rolled stand-in.
-        sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        sandbox_row.skills_hash = "current"
         idle_session = BuildSession(
             id=uuid4(),
             user_id=test_user.id,
@@ -1014,6 +1021,7 @@ class TestRestoreSession:
 
         db_session.refresh(idle_session)
         assert idle_session.status == BuildSessionStatus.ACTIVE
+        assert idle_session.skills_hash == sandbox_row.skills_hash
 
     def test_sleeping_sandbox_restore_provisions_and_restores_latest_snapshot(
         self,
@@ -1070,6 +1078,8 @@ class TestRestoreSession:
         assert refreshed_sandbox.status == SandboxStatus.RUNNING
         assert refreshed_session is not None
         assert refreshed_session.status == BuildSessionStatus.ACTIVE
+        assert refreshed_session.skills_hash == refreshed_sandbox.skills_hash
+        assert refreshed_session.skills_hash is not None
         assert refreshed_session.nextjs_port is not None
         assert stub_sandbox_manager.last_restore_snapshot_payload is not None
         assert stub_sandbox_manager.last_restore_snapshot_payload["sandbox_id"] == (

@@ -19,9 +19,6 @@ from onyx.db.skill import persist_skill_validity
 from onyx.db.skill import SkillAccessPolicy
 from onyx.db.skill import SkillValidityUpdate
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.db.build_session import (
-    mark_build_sessions_skills_stale__no_commit,
-)
 from onyx.server.features.build.db.sandbox import get_sandbox_skills_hashes
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.db.sandbox import set_sandbox_skills_hashes__no_commit
@@ -300,9 +297,6 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
         successful_sandbox_ids = set(changed_files) - failed_sandbox_ids
         if not successful_sandbox_ids:
             return
-        pushed_user_ids = {
-            sandbox_map[sandbox_id].id for sandbox_id in successful_sandbox_ids
-        }
         try:
             with db_session.begin_nested():
                 set_sandbox_skills_hashes__no_commit(
@@ -312,7 +306,6 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
                         for sandbox_id in successful_sandbox_ids
                     },
                 )
-                mark_build_sessions_skills_stale__no_commit(pushed_user_ids, db_session)
         except Exception:
             logger.exception("Failed to persist successful skill push state")
     except Exception:
