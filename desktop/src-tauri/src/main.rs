@@ -1204,9 +1204,7 @@ struct VersionResponse {
 
 /// Whether the process was launched with `--version` / `-v`.
 fn wants_version() -> bool {
-    std::env::args()
-        .skip(1)
-        .any(|arg| arg == "--version" || arg == "-v")
+    std::env::args().any(|arg| arg == "--version" || arg == "-v")
 }
 
 /// Fetch the backend version from the configured server's public `/api/version`
@@ -1219,7 +1217,13 @@ fn fetch_server_version(server_url: &str) -> Result<Option<String>, String> {
             .timeout(std::time::Duration::from_secs(5))
             .build()
             .map_err(|e| e.to_string())?;
-        let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
         let text = resp.text().await.map_err(|e| e.to_string())?;
         let body: VersionResponse =
             serde_json::from_str(&text).map_err(|e| e.to_string())?;
@@ -1242,7 +1246,7 @@ fn print_version_info() {
     match fetch_server_version(&server_url) {
         Ok(Some(version)) => println!("Server version: {}", version),
         Ok(None) => println!("Server version: unknown (empty response from {})", server_url),
-        Err(_) => println!("Server version: unknown (could not reach {})", server_url),
+        Err(_) => println!("Server version: unknown (could not fetch from {})", server_url),
     }
 }
 
