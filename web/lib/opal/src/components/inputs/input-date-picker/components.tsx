@@ -1,11 +1,16 @@
 "use client";
 
 import "@opal/components/inputs/shared.css";
-import "@opal/components/inputs/input-date-picker/styles.css";
 import React from "react";
 import type { InputVariants } from "@opal/types";
-import { Button, Calendar, Popover, Text } from "@opal/components";
+import { Button, Calendar, Popover } from "@opal/components";
 import { SvgCalendar, SvgX } from "@opal/icons";
+import {
+  SEGMENT_INPUT_PROPS,
+  SegmentSeparator,
+  makeSegmentChangeHandler,
+  makeSegmentKeyDownHandler,
+} from "@opal/components/inputs/segmented";
 
 // ---------------------------------------------------------------------------
 // Segment helpers
@@ -148,33 +153,8 @@ function InputDatePicker({
     }
   }
 
-  function handleSegmentChange(
-    part: keyof Segments,
-    maxLen: number,
-    nextRef: React.RefObject<HTMLInputElement | null> | null
-  ) {
-    return (e: React.ChangeEvent<HTMLInputElement>) => {
-      const digits = e.target.value.replace(/\D/g, "").slice(0, maxLen);
-      setSegments((prev) => ({ ...prev, [part]: digits }));
-      if (digits.length === maxLen) nextRef?.current?.focus();
-    };
-  }
-
-  function handleSegmentKeyDown(
-    part: keyof Segments,
-    prevRef: React.RefObject<HTMLInputElement | null> | null
-  ) {
-    return (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") {
-        commit(segments);
-        return;
-      }
-      if (e.key === "Backspace" && segments[part] === "") {
-        prevRef?.current?.focus();
-        e.preventDefault();
-      }
-    };
-  }
+  const handleSegmentChange = makeSegmentChangeHandler(setSegments);
+  const handleSegmentKeyDown = makeSegmentKeyDownHandler(segments, commit);
 
   // Commit when focus leaves the whole field. The calendar content is
   // portaled, so containment is checked against it too or opening the
@@ -192,43 +172,32 @@ function InputDatePicker({
     setOpen(false);
   }
 
-  const segmentProps = {
-    className: "opal-input-date-picker-segment",
-    type: "text" as const,
-    inputMode: "numeric" as const,
-    autoComplete: "off",
-    disabled,
-  };
-
-  const separator = (
-    <Text font="main-ui-mono" color="text-02" aria-hidden>
-      /
-    </Text>
-  );
+  const separator = <SegmentSeparator>/</SegmentSeparator>;
 
   return (
-    <div className="opal-input-date-picker-root">
+    <div className="opal-input-segmented-root">
       <Popover open={open} onOpenChange={setOpen}>
         <div
-          className="opal-input opal-input-date-picker"
+          className="opal-input opal-input-segmented"
           data-variant={variant}
           role="group"
           aria-label="Date"
           onBlur={handleRootBlur}
         >
-          <div className="opal-input-date-picker-content">
+          <div className="opal-input-segmented-content">
             {SEGMENT_FIELDS.map((field, i) => (
               <React.Fragment key={field.part}>
                 {i > 0 && separator}
-                {/* raw-ok: segmented numeric fields have no Opal input primitive; the field chrome is the surrounding .opal-input */}
+                {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
                 <input
-                  {...segmentProps}
+                  {...SEGMENT_INPUT_PROPS}
+                  disabled={disabled}
                   ref={segmentRefs[field.part]}
                   id={field.part === "month" ? id : undefined}
                   aria-label={field.label}
                   placeholder={field.placeholder}
                   maxLength={field.maxLen}
-                  data-year={field.part === "year" ? true : undefined}
+                  data-wide={field.part === "year" ? true : undefined}
                   value={segments[field.part]}
                   onChange={handleSegmentChange(
                     field.part,
@@ -246,7 +215,7 @@ function InputDatePicker({
             ))}
           </div>
 
-          <div className="opal-input-date-picker-actions">
+          <div className="opal-input-segmented-actions">
             {clearable && value && !disabled && (
               <Button
                 icon={SvgX}
