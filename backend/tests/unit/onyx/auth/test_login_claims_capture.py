@@ -29,6 +29,16 @@ class _FakeOAuthClient:
             self.openid_configuration["userinfo_endpoint"] = userinfo_endpoint
 
 
+def _redis_with_pipeline() -> tuple[AsyncMock, MagicMock]:
+    """Async redis mock whose pipeline() returns a sync pipeline mock, matching
+    how the capture writes (queue commands synchronously, await execute())."""
+    redis = AsyncMock()
+    pipe = MagicMock()
+    pipe.execute = AsyncMock()
+    redis.pipeline = MagicMock(return_value=pipe)
+    return redis, pipe
+
+
 def _make_token(claims: dict[str, Any]) -> dict[str, Any]:
     return {
         "access_token": "at-123",
@@ -47,7 +57,7 @@ async def test_capture_stores_id_token_claims_and_token_meta() -> None:
         "name": "User Example",
         "groups": ["g1", "g2"],
     }
-    redis = AsyncMock()
+    redis, pipe = _redis_with_pipeline()
 
     with patch(
         "onyx.auth.login_claims_capture.get_async_redis_connection",
@@ -57,8 +67,8 @@ async def test_capture_stores_id_token_claims_and_token_meta() -> None:
             _FakeOAuthClient(), "user@example.com", _make_token(claims)
         )
 
-    redis.set.assert_awaited_once()
-    key, payload = redis.set.await_args.args
+    pipe.hset.assert_called_once()
+    key, _provider, payload = pipe.hset.call_args.args
     assert "user@example.com" in key
     snapshot = json.loads(payload)
     assert snapshot["id_token_claims"] == claims
@@ -77,7 +87,7 @@ async def test_capture_stores_id_token_claims_and_token_meta() -> None:
 @pytest.mark.asyncio
 async def test_capture_fetches_userinfo_when_endpoint_available() -> None:
     userinfo = {"sub": "abc", "department": "R&D", "preferred_username": "user"}
-    redis = AsyncMock()
+    redis, pipe = _redis_with_pipeline()
 
     with (
         patch(
@@ -96,7 +106,7 @@ async def test_capture_fetches_userinfo_when_endpoint_available() -> None:
         )
 
     fetch_mock.assert_awaited_once_with("https://idp.example.com/userinfo", "at-123")
-    snapshot = json.loads(redis.set.await_args.args[1])
+    snapshot = json.loads(pipe.hset.call_args.args[2])
     assert snapshot["userinfo"] == userinfo
     # Non-Microsoft IdP -> no Graph profile fetch
     assert snapshot["directory_profile"] is None
@@ -107,7 +117,7 @@ async def test_capture_fetches_directory_profile_for_entra() -> None:
     """When the userinfo endpoint is Microsoft Graph (Entra ID), the capture
     also pulls the directory profile with country/usageLocation."""
     directory_profile = {"country": "Netherlands", "usageLocation": "NL", "city": "Ams"}
-    redis = AsyncMock()
+    redis, pipe = _redis_with_pipeline()
 
     with (
         patch(
@@ -130,15 +140,15 @@ async def test_capture_fetches_directory_profile_for_entra() -> None:
         )
 
     graph_mock.assert_awaited_once_with("at-123")
-    snapshot = json.loads(redis.set.await_args.args[1])
+    snapshot = json.loads(pipe.hset.call_args.args[2])
     assert snapshot["directory_profile"] == directory_profile
     assert snapshot["directory_source"] == "ms_graph"
 
 
 @pytest.mark.asyncio
 async def test_capture_never_raises_when_redis_is_down() -> None:
-    redis = AsyncMock()
-    redis.set.side_effect = ConnectionError("redis down")
+    redis, pipe = _redis_with_pipeline()
+    pipe.execute.side_effect = ConnectionError("redis down")
 
     with patch(
         "onyx.auth.login_claims_capture.get_async_redis_connection",
@@ -154,7 +164,7 @@ async def test_capture_never_raises_when_redis_is_down() -> None:
 async def test_get_captured_oauth_claims_roundtrip() -> None:
     stored = {"captured_at": "2026-07-02T00:00:00+00:00", "id_token_claims": {}}
     redis = AsyncMock()
-    redis.get.return_value = json.dumps(stored)
+    redis.hgetall.return_value = {"openid": json.dumps(stored)}
 
     with patch(
         "onyx.auth.login_claims_capture.get_async_redis_connection",
@@ -162,7 +172,7 @@ async def test_get_captured_oauth_claims_roundtrip() -> None:
     ):
         assert await get_captured_oauth_claims("user@example.com") == stored
 
-    redis.get.return_value = None
+    redis.hgetall.return_value = {}
     with patch(
         "onyx.auth.login_claims_capture.get_async_redis_connection",
         return_value=redis,
@@ -183,7 +193,7 @@ def test_get_idp_profile_fields_maps_directory_profile() -> None:
         }
     }
     redis = MagicMock()
-    redis.get.return_value = json.dumps(snapshot)
+    redis.hgetall.return_value = {"openid": json.dumps(snapshot)}
 
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         fields = get_idp_profile_fields("user@example.com")
@@ -201,15 +211,17 @@ def test_get_idp_profile_fields_maps_directory_profile() -> None:
 def test_get_idp_profile_fields_empty_on_missing_or_error() -> None:
     redis = MagicMock()
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
-        redis.get.return_value = None
+        redis.hgetall.return_value = {}
         assert get_idp_profile_fields("user@example.com") == {}
 
-        redis.get.return_value = json.dumps(
-            {"directory_profile": {"error": "Graph /me returned HTTP 403."}}
-        )
+        redis.hgetall.return_value = {
+            "openid": json.dumps(
+                {"directory_profile": {"error": "Graph /me returned HTTP 403."}}
+            )
+        }
         assert get_idp_profile_fields("user@example.com") == {}
 
-        redis.get.side_effect = ConnectionError("redis down")
+        redis.hgetall.side_effect = ConnectionError("redis down")
         assert get_idp_profile_fields("user@example.com") == {}
 
 
@@ -226,7 +238,7 @@ def test_get_idp_profile_placeholder_values_maps_directory_profile() -> None:
         }
     }
     redis = MagicMock()
-    redis.get.return_value = json.dumps(snapshot)
+    redis.hgetall.return_value = {"openid": json.dumps(snapshot)}
 
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         values = get_idp_profile_placeholder_values("user@example.com")
@@ -245,15 +257,17 @@ def test_get_idp_profile_placeholder_values_maps_directory_profile() -> None:
 def test_get_idp_profile_placeholder_values_empty_on_missing_or_error() -> None:
     redis = MagicMock()
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
-        redis.get.return_value = None
+        redis.hgetall.return_value = {}
         assert get_idp_profile_placeholder_values("user@example.com") == {}
 
-        redis.get.return_value = json.dumps(
-            {"directory_profile": {"error": "Graph /me returned HTTP 403."}}
-        )
+        redis.hgetall.return_value = {
+            "openid": json.dumps(
+                {"directory_profile": {"error": "Graph /me returned HTTP 403."}}
+            )
+        }
         assert get_idp_profile_placeholder_values("user@example.com") == {}
 
-        redis.get.side_effect = ConnectionError("redis down")
+        redis.hgetall.side_effect = ConnectionError("redis down")
         assert get_idp_profile_placeholder_values("user@example.com") == {}
 
 
@@ -270,7 +284,7 @@ async def test_capture_noop_when_enrichment_disabled(
         await capture_oauth_login_claims(
             _FakeOAuthClient(), "user@example.com", _make_token({"sub": "abc"})
         )
-    redis.set.assert_not_awaited()
+    redis.pipeline.assert_not_called()
 
 
 def test_getters_empty_when_enrichment_disabled(
@@ -278,7 +292,9 @@ def test_getters_empty_when_enrichment_disabled(
 ) -> None:
     monkeypatch.setattr(claims_capture, "IDP_PROFILE_ENRICHMENT_ENABLED", False)
     redis = MagicMock()
-    redis.get.return_value = json.dumps({"directory_profile": {"country": "Germany"}})
+    redis.hgetall.return_value = {
+        "openid": json.dumps({"directory_profile": {"country": "Germany"}})
+    }
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         assert get_idp_profile_fields("user@example.com") == {}
         assert get_idp_profile_placeholder_values("user@example.com") == {}
@@ -299,7 +315,7 @@ def test_profile_resolves_from_userinfo_for_generic_oidc() -> None:
         "id_token_claims": {"sub": "abc"},
     }
     redis = MagicMock()
-    redis.get.return_value = json.dumps(snapshot)
+    redis.hgetall.return_value = {"openid": json.dumps(snapshot)}
 
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         values = get_idp_profile_placeholder_values("user@example.com")
@@ -320,7 +336,7 @@ def test_profile_falls_back_to_id_token_claims() -> None:
         "id_token_claims": {"ctry": "NL", "department": "Legal"},
     }
     redis = MagicMock()
-    redis.get.return_value = json.dumps(snapshot)
+    redis.hgetall.return_value = {"openid": json.dumps(snapshot)}
 
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         fields = get_idp_profile_fields("user@example.com")
@@ -335,7 +351,7 @@ def test_directory_profile_takes_precedence_over_userinfo() -> None:
         "id_token_claims": {"department": "Token Dept"},
     }
     redis = MagicMock()
-    redis.get.return_value = json.dumps(snapshot)
+    redis.hgetall.return_value = {"openid": json.dumps(snapshot)}
 
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         values = get_idp_profile_placeholder_values("user@example.com")
@@ -356,7 +372,7 @@ def test_claim_map_override_takes_precedence(
         "id_token_claims": {},
     }
     redis = MagicMock()
-    redis.get.return_value = json.dumps(snapshot)
+    redis.hgetall.return_value = {"openid": json.dumps(snapshot)}
 
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         values = get_idp_profile_placeholder_values("user@example.com")
@@ -374,7 +390,7 @@ def test_source_precedence_holds_across_aliases() -> None:
         "id_token_claims": {},
     }
     redis = MagicMock()
-    redis.get.return_value = json.dumps(snapshot)
+    redis.hgetall.return_value = {"openid": json.dumps(snapshot)}
 
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         values = get_idp_profile_placeholder_values("user@example.com")
@@ -386,7 +402,7 @@ def test_source_precedence_holds_across_aliases() -> None:
 async def test_capture_saml_stores_flattened_attributes() -> None:
     """SAML attributes arrive as {name: [values]}. Capture keeps the first value
     so the shared claim-map resolver can treat them like any other source."""
-    redis = AsyncMock()
+    redis, pipe = _redis_with_pipeline()
     with patch(
         "onyx.auth.login_claims_capture.get_async_redis_connection",
         return_value=redis,
@@ -397,8 +413,8 @@ async def test_capture_saml_stores_flattened_attributes() -> None:
             "okta-saml",
         )
 
-    redis.set.assert_awaited_once()
-    snapshot = json.loads(redis.set.await_args.args[1])
+    pipe.hset.assert_called_once()
+    snapshot = json.loads(pipe.hset.call_args.args[2])
     assert snapshot["saml_attributes"] == {"department": "Legal", "jobTitle": "Counsel"}
     assert snapshot["oauth_name"] == "okta-saml"
 
@@ -411,7 +427,7 @@ def test_profile_resolves_from_saml_attributes() -> None:
         "id_token_claims": {},
     }
     redis = MagicMock()
-    redis.get.return_value = json.dumps(snapshot)
+    redis.hgetall.return_value = {"openid": json.dumps(snapshot)}
 
     with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
         values = get_idp_profile_placeholder_values("user@example.com")
@@ -432,7 +448,7 @@ async def test_capture_saml_noop_when_enrichment_disabled(
         await capture_saml_login_claims(
             "user@example.com", {"department": ["Legal"]}, "okta-saml"
         )
-    redis.set.assert_not_awaited()
+    redis.pipeline.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -442,7 +458,7 @@ async def test_multi_tenant_capture_keys_by_mapped_tenant(
     """On multi-tenant the capture callbacks run unauthenticated, so the key
     tenant must come from the email mapping, not the request contextvar."""
     monkeypatch.setattr(claims_capture, "MULTI_TENANT", True)
-    redis = AsyncMock()
+    redis, pipe = _redis_with_pipeline()
 
     with (
         patch(
@@ -458,7 +474,7 @@ async def test_multi_tenant_capture_keys_by_mapped_tenant(
             _FakeOAuthClient(), "user@example.com", _make_token({"sub": "abc"})
         )
 
-    key = redis.set.await_args.args[0]
+    key = pipe.hset.call_args.args[0]
     assert "tenant_abc123" in key
 
 
@@ -486,4 +502,34 @@ async def test_multi_tenant_capture_skips_unmapped_email(
             _FakeOAuthClient(), "new-user@example.com", _make_token({"sub": "abc"})
         )
 
-    redis.set.assert_not_awaited()
+    redis.pipeline.assert_not_called()
+
+
+def test_multiple_providers_are_retained_and_most_recent_wins() -> None:
+    """A second IdP login must not clobber the first provider's data. The most
+    recent login's values win per field, older providers fill remaining gaps."""
+    entra = {
+        "captured_at": "2026-07-01T00:00:00+00:00",
+        "oauth_name": "entra",
+        "directory_profile": {"department": "Entra Dept", "country": "NL"},
+        "userinfo": {},
+        "id_token_claims": {},
+    }
+    okta = {
+        "captured_at": "2026-07-10T00:00:00+00:00",
+        "oauth_name": "okta",
+        "directory_profile": None,
+        "userinfo": {"department": "Okta Dept"},
+        "id_token_claims": {},
+    }
+    redis = MagicMock()
+    redis.hgetall.return_value = {
+        "entra": json.dumps(entra),
+        "okta": json.dumps(okta),
+    }
+
+    with patch("onyx.redis.redis_pool.get_raw_redis_client", return_value=redis):
+        values = get_idp_profile_placeholder_values("user@example.com")
+
+    # Okta login is newer, so its department wins. Entra still supplies country.
+    assert values == {"department": "Okta Dept", "country": "NL"}
