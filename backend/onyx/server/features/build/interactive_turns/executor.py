@@ -249,6 +249,7 @@ def _drive_interactive_turn(
                 ownership_lost = False
                 final_event_seen = False
                 cancelled_event_seen = False
+                timed_out = False
 
                 event_stream = session_manager.yield_sandbox_events(
                     sandbox.id,
@@ -288,10 +289,12 @@ def _drive_interactive_turn(
                     if isinstance(sandbox_event, SSEKeepalive):
                         continue
 
-                    # The transport already aborted the timed-out step; the caller
-                    # re-prompts so the agent can adapt.
+                    # The transport already aborted the timed-out step and ends the
+                    # stream after this event; drain it (don't return early, which
+                    # would GeneratorExit and re-abort) and let the caller re-prompt.
                     if isinstance(sandbox_event, ActivityTimeoutError) and can_continue:
-                        return _PromptResult(_PromptOutcome.TIMED_OUT)
+                        timed_out = True
+                        continue
 
                     session_manager.persist_sandbox_event(
                         session_id, state, sandbox_event
@@ -316,6 +319,8 @@ def _drive_interactive_turn(
                             getattr(sandbox_event, "stop_reason", None) == "cancelled"
                         )
 
+                if timed_out:
+                    return _PromptResult(_PromptOutcome.TIMED_OUT)
                 return _PromptResult(
                     _PromptOutcome.COMPLETED,
                     final_event_seen=final_event_seen,
