@@ -141,7 +141,7 @@ def test_assert_within_scope_admin_and_global_bypass(
         permission=Permission.MANAGE_DOCUMENT_SETS,
         current_group_ids=[999_999],
         requested_group_ids=[],
-        is_private=False,
+        is_non_public=False,
     )
 
     holder = create_test_user(db_session, "gate2-holder")
@@ -152,7 +152,7 @@ def test_assert_within_scope_admin_and_global_bypass(
         permission=Permission.MANAGE_DOCUMENT_SETS,
         current_group_ids=[999_999],
         requested_group_ids=[],
-        is_private=False,
+        is_non_public=False,
     )
 
 
@@ -174,7 +174,7 @@ def test_assert_within_scope_manager_invariants(
         permission=perm,
         current_group_ids=[managed.id],
         requested_group_ids=[],
-        is_private=True,
+        is_non_public=True,
     )
 
     # out-of-scope group (capture-by-reassign) → reject
@@ -185,7 +185,7 @@ def test_assert_within_scope_manager_invariants(
             permission=perm,
             current_group_ids=[managed.id],
             requested_group_ids=[unmanaged.id],
-            is_private=True,
+            is_non_public=True,
         )
 
     # detach to zero groups → reject
@@ -196,7 +196,7 @@ def test_assert_within_scope_manager_invariants(
             permission=perm,
             current_group_ids=[],
             requested_group_ids=[],
-            is_private=True,
+            is_non_public=True,
         )
 
     # non-private resource → reject
@@ -207,7 +207,7 @@ def test_assert_within_scope_manager_invariants(
             permission=perm,
             current_group_ids=[managed.id],
             requested_group_ids=[],
-            is_private=False,
+            is_non_public=False,
         )
 
 
@@ -225,7 +225,7 @@ def test_assert_within_scope_fails_closed_on_empty_scope(
             permission=Permission.MANAGE_DOCUMENT_SETS,
             current_group_ids=[1],
             requested_group_ids=[],
-            is_private=True,
+            is_non_public=True,
         )
 
 
@@ -247,7 +247,7 @@ def test_assert_within_scope_classifies_each_permission(
         permission=Permission.MANAGE_AGENTS,
         current_group_ids=[unmanaged.id],
         requested_group_ids=[],
-        is_private=True,
+        is_non_public=True,
     )
 
     # manage:connectors only via scope → out-of-scope group rejected
@@ -258,7 +258,7 @@ def test_assert_within_scope_classifies_each_permission(
             permission=Permission.MANAGE_CONNECTORS,
             current_group_ids=[unmanaged.id],
             requested_group_ids=[],
-            is_private=True,
+            is_non_public=True,
         )
 
     # manage:connectors within managed scope → allowed
@@ -268,7 +268,7 @@ def test_assert_within_scope_classifies_each_permission(
         permission=Permission.MANAGE_CONNECTORS,
         current_group_ids=[managed.id],
         requested_group_ids=[],
-        is_private=True,
+        is_non_public=True,
     )
 
 

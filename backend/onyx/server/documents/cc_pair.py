@@ -741,7 +741,7 @@ def associate_credential_to_connector(
         permission=Permission.MANAGE_CONNECTORS,
         current_group_ids=[],
         requested_group_ids=metadata.groups or [],
-        is_private=metadata.access_type != AccessType.PUBLIC,
+        is_non_public=metadata.access_type != AccessType.PUBLIC,
     )
 
     try:

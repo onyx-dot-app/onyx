@@ -1586,7 +1586,7 @@ def create_connector_with_mock_credential(
         permission=Permission.MANAGE_CONNECTORS,
         current_group_ids=[],
         requested_group_ids=connector_data.groups or [],
-        is_private=connector_data.access_type != AccessType.PUBLIC,
+        is_non_public=connector_data.access_type != AccessType.PUBLIC,
     )
 
     try:

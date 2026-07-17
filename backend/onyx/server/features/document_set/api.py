@@ -48,7 +48,7 @@ def create_document_set(
         permission=Permission.MANAGE_DOCUMENT_SETS,
         current_group_ids=[],
         requested_group_ids=document_set_creation_request.groups or [],
-        is_private=not document_set_creation_request.is_public,
+        is_non_public=not document_set_creation_request.is_public,
     )
     try:
         document_set_db_model, _ = insert_document_set(
@@ -85,8 +85,9 @@ def patch_document_set(
             f"Document set {document_set_update_request.id} does not exist",
         )
 
-    # GATE 2 write authorization (see assert_within_scope). current groups are
-    # re-read from the DB, not the client, to block capture-by-reassignment.
+    # GATE 2 write authorization (see assert_within_scope). Current groups AND
+    # current privacy are re-read from the DB, not the client, so a manager can
+    # neither capture-by-reassignment nor convert a currently-PUBLIC set to PRIVATE.
     assert_within_scope(
         user,
         db_session,
@@ -95,7 +96,8 @@ def patch_document_set(
             db_session, document_set_update_request.id
         ),
         requested_group_ids=document_set_update_request.groups,
-        is_private=not document_set_update_request.is_public,
+        is_non_public=not document_set.is_public
+        and not document_set_update_request.is_public,
     )
 
     try:
