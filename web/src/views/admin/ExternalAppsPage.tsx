@@ -209,7 +209,7 @@ function ConfiguredAppCard({
         <div className="flex-1 flex flex-col gap-0.5">
           <Text font="main-ui-action">{app.name}</Text>
           <Text font="secondary-body" color="text-03">
-            Users enable this skill individually
+            Users connect this app on the Apps page to make its skill available
           </Text>
         </div>
         <div className="flex items-center gap-2">

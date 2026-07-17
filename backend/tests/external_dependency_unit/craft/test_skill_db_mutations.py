@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill__User
 from onyx.db.models import Skill__UserGroup
@@ -16,6 +17,7 @@ from onyx.db.skill import skill_user_states
 from onyx.db.skill import transfer_skill_ownership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.skill.response_helpers import skill_response_for_user
 from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
 from tests.external_dependency_unit.craft.db_helpers import make_group
 from tests.external_dependency_unit.craft.db_helpers import make_skill
@@ -71,6 +73,29 @@ def test_skill_user_states_resolve_defaults_and_visibility(
     assert states[invalid_custom.id].can_toggle is False
     assert states[built_in.id].enabled is True
     assert states[built_in.id].can_toggle is False
+
+
+def test_orphaned_private_skill_has_boolean_admin_state(
+    db_session: Session,
+) -> None:
+    admin = make_user(db_session, role=UserRole.ADMIN)
+    orphaned_skill = make_skill(
+        db_session,
+        is_public=False,
+        author_user_id=None,
+    )
+
+    state = skill_user_states(admin, [orphaned_skill.id], db_session)[orphaned_skill.id]
+
+    assert state.can_toggle is False
+    response = skill_response_for_user(
+        orphaned_skill,
+        admin,
+        db_session,
+        state=state,
+        user_group_ids=set(),
+    )
+    assert response.can_toggle is False
 
 
 def test_replace_skill_shares_replaces_requested_share_types(

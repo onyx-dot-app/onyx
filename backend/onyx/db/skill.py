@@ -29,6 +29,7 @@ from sqlalchemy import and_
 from sqlalchemy import ColumnElement
 from sqlalchemy import delete
 from sqlalchemy import exists
+from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
@@ -479,7 +480,7 @@ def skill_user_states(
         select(
             Skill.id,
             _is_enabled_for_user(user).label("enabled"),
-            skill_visible_to_user(user).label("visible"),
+            func.coalesce(skill_visible_to_user(user), False).label("visible"),
             and_(
                 Skill.built_in_skill_id.is_(None),
                 Skill.is_valid.is_not(False),

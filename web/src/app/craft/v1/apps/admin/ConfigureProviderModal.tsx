@@ -207,8 +207,8 @@ export default function ConfigureProviderModal({
             {managed ? (
               <Text font="secondary-body" color="text-03">
                 This app is provided by Onyx — credentials are managed for you.
-                Choose what the agent may do below. Users control whether this
-                skill is enabled in their Skills setup.
+                Choose what the agent may do below. Users connect this app on
+                the Apps page to make its skill available.
               </Text>
             ) : (
               <>
