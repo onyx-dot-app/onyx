@@ -15,11 +15,17 @@ slots).
 
 ```
 Interactive.Stateless              <- always variant="default" / prominence="tertiary"; disabled, href, onClick
-  └─ TextButtonSurface             <- <Link> / <button>, no height/rounding/padding/border
-       └─ .opal-text-button.interactive-foreground
-            └─ <Text font={font} color="inherit">
+  └─ <Link> / <button>             <- .opal-text-button.interactive-foreground, no height/rounding/padding/border
+       └─ <Text font={font} color="inherit">
 ```
 
+- **No separate surface component.** `Button` needs `Interactive.Container` because it
+  has to *discover* `href`/`disabled`/etc. from Radix `Slot`-injected props (it's a
+  generic primitive reused by many callers). `TextButton` already has `href`/`target`/
+  `disabled` in scope as its own props, so it renders `<Link>`/`<button>` directly as
+  `Interactive.Stateless`'s single child. Radix `Slot` auto-merges `className` (joins
+  both), `style` (merges objects), and event handlers (chains them) onto that element —
+  everything else falls through untouched — so no manual prop-merging is needed.
 - **Colors are not in `TextButton`.** Same as `Button`: `Interactive.Stateless` sets
   `--interactive-foreground` per state. `TextButton` opts into it via
   `.interactive-foreground`, and the label reads it via `Text`'s `color="inherit"`.
@@ -32,9 +38,6 @@ Interactive.Stateless              <- always variant="default" / prominence="ter
   on hover/active (that's normally shown by `Interactive.Container`). `TextButton`
   force-clears it in `styles.css` (`background-color: transparent !important`) since it
   never renders a `Container` — only the foreground color transition survives.
-- **`TextButtonSurface`** is a trimmed-down copy of `Interactive.Container`'s `<Link>` /
-  `<button>` element selection, without the height/rounding/padding/border logic that
-  `Container` adds for traditional buttons.
 
 ## Props
 

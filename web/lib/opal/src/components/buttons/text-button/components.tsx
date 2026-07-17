@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Interactive } from "@opal/core";
 import type { RichStr, WithoutStyles } from "@opal/types";
 import { Text, type TextFont } from "@opal/components";
-import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,63 +32,6 @@ interface TextButtonProps extends WithoutStyles<
   children: string | RichStr;
 }
 
-interface TextButtonSurfaceProps extends WithoutStyles<
-  HTMLAttributes<HTMLElement>
-> {
-  href?: string;
-  target?: string;
-  rel?: string;
-}
-
-// ---------------------------------------------------------------------------
-// TextButtonSurface
-// ---------------------------------------------------------------------------
-
-/**
- * Element selection for `TextButton` — a trimmed-down copy of
- * `Interactive.Container`'s `<Link> / <button>` branching, minus the
- * height/rounding/padding/border/background that `Container` applies.
- * `TextButton` is deliberately built without `Interactive.Container` so it
- * never gets those "traditional button" surroundings.
- */
-function TextButtonSurface(props: TextButtonSurfaceProps) {
-  const {
-    className: slotClassName,
-    href,
-    target,
-    rel,
-    ...rest
-  } = props as TextButtonSurfaceProps & { className?: string };
-
-  const sharedProps = {
-    ...rest,
-    className: cn("opal-text-button interactive-foreground", slotClassName),
-  };
-
-  if (href) {
-    return (
-      <Link
-        href={href as Route}
-        target={target}
-        rel={rel}
-        {...(sharedProps as HTMLAttributes<HTMLAnchorElement>)}
-      />
-    );
-  }
-
-  const ariaDisabled = (rest as Record<string, unknown>)["aria-disabled"];
-  const nativeDisabled =
-    ariaDisabled === true || ariaDisabled === "true" || undefined;
-
-  return (
-    <button
-      type="button"
-      disabled={nativeDisabled}
-      {...(sharedProps as HTMLAttributes<HTMLButtonElement>)}
-    />
-  );
-}
-
 // ---------------------------------------------------------------------------
 // TextButton
 // ---------------------------------------------------------------------------
@@ -102,27 +44,56 @@ function TextButtonSurface(props: TextButtonSurfaceProps) {
  * shaped like `Text` (`font`, `nowrap`, required `children`) rather than
  * `Button` (no `icon`/`rightIcon`, `variant`, `prominence`, `tooltip`, or
  * `size`).
+ *
+ * Renders its `<Link>`/`<button>` directly as `Interactive.Stateless`'s
+ * single child — Radix `Slot` auto-merges `className`, data-attributes, and
+ * `onClick` onto it (`className`/`style` are joined, handlers are chained,
+ * everything else falls through), so no separate surface component is
+ * needed the way `Button` needs `Interactive.Container`.
  */
 function TextButton({
   font = "main-ui-body",
   nowrap = true,
   disabled,
+  href,
+  target,
   children,
   ...rest
 }: TextButtonProps) {
+  const label = (
+    <Text font={font} color="inherit" nowrap={nowrap}>
+      {children}
+    </Text>
+  );
+
   return (
     <Interactive.Stateless
       type="button"
       variant="default"
       prominence="tertiary"
       disabled={disabled}
+      href={href}
+      target={target}
       {...rest}
     >
-      <TextButtonSurface>
-        <Text font={font} color="inherit" nowrap={nowrap}>
-          {children}
-        </Text>
-      </TextButtonSurface>
+      {href ? (
+        <Link
+          href={(disabled ? undefined : href) as Route}
+          target={target}
+          rel={target === "_blank" ? "noopener noreferrer" : undefined}
+          className="opal-text-button interactive-foreground"
+        >
+          {label}
+        </Link>
+      ) : (
+        <button
+          type="button"
+          disabled={disabled}
+          className="opal-text-button interactive-foreground"
+        >
+          {label}
+        </button>
+      )}
     </Interactive.Stateless>
   );
 }
