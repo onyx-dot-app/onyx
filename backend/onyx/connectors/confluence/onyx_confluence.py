@@ -569,7 +569,7 @@ class OnyxConfluence:
                     # connection mid-response on long crawls. Transient, so retry
                     # instead of failing the whole index attempt.
                     if attempt == MAX_RETRIES - 1:
-                        raise e
+                        raise
 
                     delay = min(5 * 2**attempt, 60)
                     # log the exception type only: the message can embed the
@@ -581,11 +581,11 @@ class OnyxConfluence:
                         type(e).__name__,
                     )
                     time.sleep(delay)
-                except AttributeError as e:
+                except AttributeError:
                     # Some error within the Confluence library, unclear why it fails.
                     # Users reported it to be intermittent, so just retry
                     if attempt == MAX_RETRIES - 1:
-                        raise e
+                        raise
 
                     logger.exception(
                         "Confluence Client raised an AttributeError. Retrying..."
