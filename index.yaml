@@ -16,7 +16,7 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: latest
-    created: "2026-07-17T23:19:04.302897464Z"
+    created: "2026-07-17T23:20:59.958335125Z"
     dependencies:
     - alias: postgresql
       condition: postgresqlOperator.enabled,postgresql.enabled
@@ -53,7 +53,7 @@ entries:
       repository: https://onyx-dot-app.github.io/python-sandbox/
       version: 0.4.3
     description: Onyx application and Craft sandbox deployment chart
-    digest: a3dfc657714834fdffa6a1ec77ce00a321bd1c886a79bcaf7a00482ef8f29c23
+    digest: a53fe3ae86dbb17957dda3242c5e1ea3a14d62071c89d9d1580a30d42ed560ea
     home: https://www.onyx.app/
     name: onyx
     sources:
@@ -5313,7 +5313,7 @@ entries:
     version: 0.3.1
   onyx-cnpg-crds:
   - apiVersion: v2
-    created: "2026-07-17T23:19:04.305695186Z"
+    created: "2026-07-17T23:20:59.961808862Z"
     description: 'CloudNativePG CRDs for the Onyx chart, isolated in a CRDs-only subchart
       so they can be toggled via the parent''s postgresql.installCRDs value. Helm
       still gives crds/ its special pre-install treatment (applied before the main
@@ -5321,7 +5321,7 @@ entries:
       validation on a fresh install. Keep crds/cnpg-crds.yaml in byte-for-byte sync
       with the cloudnative-pg subchart pinned in the parent Chart.yaml (verified by
       onyx/scripts/check-cnpg-crds.sh). '
-    digest: f90aae4f8fc219c39982b98f33de96ec7a42541b5b6e46e426acbf68e6a4ebe6
+    digest: 6025e11b7076579bcbfaa7da2771e771d9e7c087a2fae49774c666abd51a1f5e
     name: onyx-cnpg-crds
     type: application
     urls:
@@ -5815,4 +5815,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-07-17T23:19:04.280489733Z"
+generated: "2026-07-17T23:20:59.93009263Z"
