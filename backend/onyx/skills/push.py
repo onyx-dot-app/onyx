@@ -22,6 +22,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.build_session import (
     mark_build_sessions_skills_stale__no_commit,
 )
+from onyx.server.features.build.db.sandbox import get_sandbox_skills_hashes
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.db.sandbox import set_sandbox_skills_hashes__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -272,9 +273,21 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
             sid: build_skills_fileset_for_user(user, db_session)
             for sid, user in sandbox_map.items()
         }
+        desired_hashes = {
+            sandbox_id: compute_skills_hash(files)
+            for sandbox_id, files in sandbox_files.items()
+        }
+        current_hashes = get_sandbox_skills_hashes(db_session, set(sandbox_map))
+        changed_files = {
+            sandbox_id: files
+            for sandbox_id, files in sandbox_files.items()
+            if current_hashes.get(sandbox_id) != desired_hashes[sandbox_id]
+        }
+        if not changed_files:
+            return
         result = get_sandbox_manager().push_to_sandboxes(
             mount_path=SKILLS_MOUNT_PATH,
-            sandbox_files=sandbox_files,
+            sandbox_files=changed_files,
         )
         failed_sandbox_ids = {failure.sandbox_id for failure in result.failures}
         for failure in result.failures:
@@ -287,14 +300,14 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
         pushed_user_ids = {
             user.id
             for sandbox_id, user in sandbox_map.items()
-            if sandbox_id not in failed_sandbox_ids
+            if sandbox_id in changed_files and sandbox_id not in failed_sandbox_ids
         }
         try:
             set_sandbox_skills_hashes__no_commit(
                 db_session,
                 {
-                    sandbox_id: compute_skills_hash(sandbox_files[sandbox_id])
-                    for sandbox_id in sandbox_map
+                    sandbox_id: desired_hashes[sandbox_id]
+                    for sandbox_id in changed_files
                     if sandbox_id not in failed_sandbox_ids
                 },
             )

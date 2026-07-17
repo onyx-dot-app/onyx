@@ -120,6 +120,18 @@ def set_sandbox_skills_hashes__no_commit(
     db_session.flush()
 
 
+def get_sandbox_skills_hashes(
+    db_session: Session,
+    sandbox_ids: set[UUID],
+) -> dict[UUID, str | None]:
+    if not sandbox_ids:
+        return {}
+    rows = db_session.execute(
+        select(Sandbox.id, Sandbox.skills_hash).where(Sandbox.id.in_(sandbox_ids))
+    )
+    return {sandbox_id: skills_hash for sandbox_id, skills_hash in rows}
+
+
 def update_sandbox_status__no_commit(
     db_session: Session,
     sandbox_id: UUID,

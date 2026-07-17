@@ -13,7 +13,9 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.db.models import Skill
+from onyx.db.models import User
 from onyx.server.features.build.sandbox.models import FatalWriteError
+from onyx.skills.push import compute_skills_hash
 from onyx.skills.push import push_skills_for_users
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox
@@ -96,3 +98,52 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     for sandbox in (sandbox_a, sandbox_b, sandbox_c):
         db_session.refresh(sandbox)
         assert sandbox.skills_hash is None
+
+
+def test_unchanged_skill_files_are_not_pushed_or_marked_stale(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unchanged_user = make_user(db_session)
+    changed_user = make_user(db_session)
+    unchanged_sandbox = make_sandbox(
+        db_session, unchanged_user, status=SandboxStatus.RUNNING
+    )
+    changed_sandbox = make_sandbox(
+        db_session, changed_user, status=SandboxStatus.RUNNING
+    )
+    unchanged_session = BuildSession(
+        user_id=unchanged_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        opencode_session_id="unchanged-runtime",
+    )
+    changed_session = BuildSession(
+        user_id=changed_user.id,
+        status=BuildSessionStatus.ACTIVE,
+        opencode_session_id="changed-runtime",
+    )
+
+    def files_for(user: User, _db_session: Session) -> dict[str, bytes]:
+        return {f"{user.id}/SKILL.md": b"content"}
+
+    unchanged_sandbox.skills_hash = compute_skills_hash(
+        files_for(unchanged_user, db_session)
+    )
+    changed_sandbox.skills_hash = "outdated"
+    db_session.add_all([unchanged_session, changed_session])
+    db_session.commit()
+
+    stub = StubSandboxManager()
+    stub.write_files_to_sandbox_silent = True
+    monkeypatch.setattr("onyx.skills.push.get_sandbox_manager", lambda: stub)
+    monkeypatch.setattr("onyx.skills.push.build_skills_fileset_for_user", files_for)
+
+    push_skills_for_users({unchanged_user.id, changed_user.id}, db_session)
+
+    db_session.refresh(unchanged_session)
+    db_session.refresh(changed_session)
+    assert stub.write_files_to_sandbox_count == 1
+    assert stub.last_write_files_to_sandbox_payload is not None
+    assert stub.last_write_files_to_sandbox_payload["sandbox_id"] == changed_sandbox.id
+    assert unchanged_session.skills_stale is False
+    assert changed_session.skills_stale is True
