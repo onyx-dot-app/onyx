@@ -2,7 +2,6 @@
 
 import {
   DESKTOP_SMALL_BREAKPOINT_PX,
-  DESKTOP_MEDIUM_BREAKPOINT_PX,
   MOBILE_SIDEBAR_BREAKPOINT_PX,
 } from "@/lib/constants";
 import { useState, useCallback } from "react";
@@ -13,7 +12,6 @@ export interface ScreenSize {
   width: number;
   isMobile: boolean;
   isSmallScreen: boolean;
-  isMediumScreen: boolean;
 }
 
 export default function useScreenSize(): ScreenSize {
@@ -36,13 +34,11 @@ export default function useScreenSize(): ScreenSize {
 
   const isMobile = sizes.width <= MOBILE_SIDEBAR_BREAKPOINT_PX;
   const isSmall = sizes.width <= DESKTOP_SMALL_BREAKPOINT_PX;
-  const isMedium = sizes.width <= DESKTOP_MEDIUM_BREAKPOINT_PX;
 
   return {
     height: sizes.height,
     width: sizes.width,
     isMobile: isMounted && isMobile,
     isSmallScreen: isMounted && isSmall,
-    isMediumScreen: isMounted && isMedium,
   };
 }

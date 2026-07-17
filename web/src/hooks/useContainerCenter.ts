@@ -36,7 +36,7 @@ function measure(
  * content-anchored surfaces like the bottom-left banner queue.
  *
  * When the container is absent (pages without `AppLayouts.Root`) or the
- * sidebar overlays the content on medium screens, every value is `null` and
+ * sidebar overlays the content on small screens, every value is `null` and
  * `hasContainerCenter` is `false`, so callers fall back to viewport-relative
  * positioning.
  *
@@ -47,7 +47,7 @@ function measure(
  */
 export default function useContainerCenter(): ContainerCenter {
   const pathname = usePathname();
-  const { isMediumScreen } = useScreenSize();
+  const { isSmallScreen } = useScreenSize();
   const [rect, setRect] = useState<{
     x: number | null;
     y: number | null;
@@ -98,10 +98,10 @@ export default function useContainerCenter(): ContainerCenter {
   }, [pathname]);
 
   return {
-    centerX: isMediumScreen ? null : rect.x,
-    centerY: isMediumScreen ? null : rect.y,
-    left: isMediumScreen ? null : rect.left,
-    hasContainerCenter: isMediumScreen
+    centerX: isSmallScreen ? null : rect.x,
+    centerY: isSmallScreen ? null : rect.y,
+    left: isSmallScreen ? null : rect.left,
+    hasContainerCenter: isSmallScreen
       ? false
       : rect.x !== null && rect.y !== null,
   };

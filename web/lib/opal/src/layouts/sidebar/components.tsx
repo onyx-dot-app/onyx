@@ -43,16 +43,16 @@ interface SidebarRootProps {
 }
 
 function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
-  const { isMobile, isMediumScreen } = useScreenSize();
+  const { isMobile, isSmallScreen } = useScreenSize();
   const { folded, setFolded } = useSidebarState();
 
   const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
 
   useEffect(() => {
-    if (!isMobile && !isMediumScreen && !foldable) {
+    if (!isMobile && !isSmallScreen && !foldable) {
       setFolded(false);
     }
-  }, [isMobile, isMediumScreen, foldable, setFolded]);
+  }, [isMobile, isSmallScreen, foldable, setFolded]);
 
   const foldedAttr = String(folded);
   const inner = <div className="opal-sidebar-root__inner">{children}</div>;
@@ -77,20 +77,20 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
     );
   }
 
-  if (isMediumScreen) {
+  if (isSmallScreen) {
     return (
       <SidebarFoldableContext.Provider value={true}>
         <div className="opal-sidebar-root__spacer" />
         <div
           className="opal-sidebar-root__overlay"
-          data-variant="medium"
+          data-variant="small"
           data-folded={foldedAttr}
         >
           {inner}
         </div>
         <div
           className="opal-sidebar-root__backdrop"
-          data-variant="medium"
+          data-variant="small"
           data-folded={foldedAttr}
           onClick={closeSidebar}
         />
