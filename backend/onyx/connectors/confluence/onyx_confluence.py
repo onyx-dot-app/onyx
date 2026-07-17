@@ -572,11 +572,13 @@ class OnyxConfluence:
                         raise e
 
                     delay = min(5 * 2**attempt, 60)
+                    # log the exception type only: the message can embed the
+                    # request URL, which may carry auth material
                     logger.warning(
                         "Transient network error in confluence call. "
                         "Retrying in %s seconds... (%s)",
                         delay,
-                        e,
+                        type(e).__name__,
                     )
                     time.sleep(delay)
                 except AttributeError as e:
