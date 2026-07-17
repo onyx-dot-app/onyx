@@ -383,14 +383,10 @@ def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
 
 
 def collect_credential_values(
-    api_key: str | None,
-    custom_config: dict[str, str] | None,
-    api_base: str | None = None,
+    api_key: str | None, custom_config: dict[str, str] | None
 ) -> list[str]:
     """Collect credential-bearing values from a provider configuration."""
     credential_values = [api_key] if api_key else []
-    if api_base:
-        credential_values.append(api_base)
     for key, value in (custom_config or {}).items():
         if value and is_sensitive_custom_config_key(key):
             credential_values.append(value)
@@ -404,11 +400,7 @@ def collect_llm_credential_values(llm: LLM | None) -> list[str]:
     """
     if llm is None:
         return []
-    return collect_credential_values(
-        llm.config.api_key,
-        llm.config.custom_config,
-        llm.config.api_base,
-    )
+    return collect_credential_values(llm.config.api_key, llm.config.custom_config)
 
 
 def litellm_exception_to_safe_error_msg(

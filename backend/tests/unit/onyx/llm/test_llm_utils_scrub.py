@@ -17,7 +17,6 @@ from onyx.llm.utils import (
 )  # aliased to avoid pytest collection
 
 _SECRET_KEY = "sk-anthropic-supersecret-DO-NOT-LEAK-1234567890"
-_API_BASE = "https://api-base-user:api-base-password@example.com?token=secret"
 _SECRET_VERTEX_BLOB = (
     '{"private_key":"-----BEGIN PRIVATE KEY-----abc-----END PRIVATE KEY-----"}'
 )
@@ -51,7 +50,6 @@ class _StubLLM(LLM):
 def _make_config(
     *,
     api_key: str | None = _SECRET_KEY,
-    api_base: str | None = None,
     custom_config: dict[str, str] | None = None,
 ) -> LLMConfig:
     return LLMConfig(
@@ -59,7 +57,7 @@ def _make_config(
         model_name="claude-3-5-sonnet",
         temperature=0.0,
         api_key=api_key,
-        api_base=api_base,
+        api_base=None,
         api_version=None,
         deployment_name=None,
         custom_config=custom_config,
@@ -146,9 +144,8 @@ def test_scrub_accepts_iterable_secrets() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_collect_llm_credential_values_includes_api_base_and_secrets() -> None:
+def test_collect_llm_credential_values_includes_api_key_and_sensitive_config() -> None:
     config = _make_config(
-        api_base=_API_BASE,
         custom_config={
             "api_base": "https://api.example.com",
             "vertex_credentials": _SECRET_VERTEX_BLOB,
@@ -160,7 +157,6 @@ def test_collect_llm_credential_values_includes_api_base_and_secrets() -> None:
     values = collect_llm_credential_values(llm)
 
     assert _SECRET_KEY in values
-    assert _API_BASE in values
     assert _SECRET_VERTEX_BLOB in values
     assert "AWSSECRET123456" in values
     assert "https://api.example.com" not in values

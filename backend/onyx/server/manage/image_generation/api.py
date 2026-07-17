@@ -299,11 +299,7 @@ def test_image_generation(
         logger.warning("Image generation test failed: %s", type(e).__name__)
         safe_error_msg = litellm_exception_to_safe_error_msg(
             e,
-            secrets=collect_credential_values(
-                api_key,
-                custom_config,
-                test_request.api_base,
-            ),
+            secrets=collect_credential_values(api_key, custom_config),
         )
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, safe_error_msg)
 
