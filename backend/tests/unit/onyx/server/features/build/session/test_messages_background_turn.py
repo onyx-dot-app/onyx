@@ -55,6 +55,7 @@ def test_send_message_starts_background_turn(monkeypatch: pytest.MonkeyPatch) ->
     user_id = uuid4()
     session = SimpleNamespace(
         id=session_id,
+        skills_stale=False,
     )
     db_session = _FakeDbSession(user_message_count=2)
     persisted: list[tuple[int, str]] = []
@@ -115,7 +116,7 @@ def test_send_message_rejects_second_active_turn(
     cache = FakeCache()
     session_id = uuid4()
     user_id = uuid4()
-    session = SimpleNamespace(id=session_id)
+    session = SimpleNamespace(id=session_id, skills_stale=False)
 
     def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
         return session
@@ -143,13 +144,40 @@ def test_send_message_rejects_second_active_turn(
         )
 
 
+def test_send_message_reloads_stale_skills(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    user_id = uuid4()
+    session = SimpleNamespace(id=session_id, skills_stale=True)
+    session_manager = MagicMock()
+
+    monkeypatch.setattr(messages_api, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(messages_api, "get_build_session", lambda *_: session)
+    monkeypatch.setattr(messages_api, "SessionManager", lambda _: session_manager)
+    monkeypatch.setattr(messages_api, "check_build_rate_limits", lambda **_: None)
+    monkeypatch.setattr(messages_api, "create_message", _create_message_noop)
+    monkeypatch.setattr(messages_api, "start_interactive_turn_runner", MagicMock())
+    user = cast(User, SimpleNamespace(id=user_id))
+
+    messages_api.send_message(
+        session_id=session_id,
+        request=MessageRequest(content="hello", client_request_id="req-1"),
+        user=user,
+        db_session=cast(Session, _FakeDbSession(user_message_count=0)),
+    )
+
+    session_manager.reload_session_skills.assert_called_once_with(session_id, user)
+
+
 def test_send_message_is_idempotent_for_same_client_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cache = FakeCache()
     session_id = uuid4()
     user_id = uuid4()
-    session = SimpleNamespace(id=session_id)
+    session = SimpleNamespace(id=session_id, skills_stale=False)
     persisted: list[tuple[int, str]] = []
     start_runner = MagicMock()
     rate_limit_check = MagicMock()
@@ -205,7 +233,7 @@ def test_send_message_leaves_turn_active_if_runner_cannot_start(
     cache = FakeCache()
     session_id = uuid4()
     user_id = uuid4()
-    session = SimpleNamespace(id=session_id)
+    session = SimpleNamespace(id=session_id, skills_stale=False)
 
     def get_session_stub(*_: object, **__: object) -> SimpleNamespace:
         return session

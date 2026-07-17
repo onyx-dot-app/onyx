@@ -297,21 +297,22 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
                 failure.reason,
                 failure.detail,
             )
+        successful_sandbox_ids = set(changed_files) - failed_sandbox_ids
+        if not successful_sandbox_ids:
+            return
         pushed_user_ids = {
-            user.id
-            for sandbox_id, user in sandbox_map.items()
-            if sandbox_id in changed_files and sandbox_id not in failed_sandbox_ids
+            sandbox_map[sandbox_id].id for sandbox_id in successful_sandbox_ids
         }
         try:
-            set_sandbox_skills_hashes__no_commit(
-                db_session,
-                {
-                    sandbox_id: desired_hashes[sandbox_id]
-                    for sandbox_id in changed_files
-                    if sandbox_id not in failed_sandbox_ids
-                },
-            )
-            mark_build_sessions_skills_stale__no_commit(pushed_user_ids, db_session)
+            with db_session.begin_nested():
+                set_sandbox_skills_hashes__no_commit(
+                    db_session,
+                    {
+                        sandbox_id: desired_hashes[sandbox_id]
+                        for sandbox_id in successful_sandbox_ids
+                    },
+                )
+                mark_build_sessions_skills_stale__no_commit(pushed_user_ids, db_session)
         except Exception:
             logger.exception("Failed to persist successful skill push state")
     except Exception:

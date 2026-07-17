@@ -172,15 +172,19 @@ def hydrate_managed_content(
             files=skills_files,
         )
         if result.succeeded == result.targets:
-            set_sandbox_skills_hashes__no_commit(
-                db_session,
-                {sandbox_id: skills_hash},
-            )
-            if previous_skills_hash is not None and previous_skills_hash != skills_hash:
-                mark_build_sessions_skills_stale__no_commit(
-                    {user.id},
+            with db_session.begin_nested():
+                set_sandbox_skills_hashes__no_commit(
                     db_session,
+                    {sandbox_id: skills_hash},
                 )
+                if (
+                    previous_skills_hash is not None
+                    and previous_skills_hash != skills_hash
+                ):
+                    mark_build_sessions_skills_stale__no_commit(
+                        {user.id},
+                        db_session,
+                    )
             skills_hydrated = True
     except Exception:
         logger.warning("Failed to push skills to sandbox %s", sandbox_id, exc_info=True)

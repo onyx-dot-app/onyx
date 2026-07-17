@@ -28,6 +28,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
+from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
@@ -63,6 +64,9 @@ from onyx.server.features.build.sandbox.serve_transport import (
 )
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
+from onyx.server.features.build.sandbox.util.agent_instructions import (
+    build_connectable_apps_list,
+)
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.errors import UploadLimitExceededError
@@ -234,6 +238,80 @@ class SessionManager:
             )
             session.opencode_session_id = opencode_session_id
             self._db_session.flush()
+
+    def reload_session_skills(self, session_id: UUID, user: User) -> None:
+        session = get_build_session(session_id, user.id, self._db_session)
+        if session is None:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+        if not session.skills_stale:
+            return
+
+        sandbox = get_sandbox_by_user_id(self._db_session, user.id)
+        if sandbox is not None and sandbox.status == SandboxStatus.PROVISIONING:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "Wait for the sandbox to finish starting before reloading skills.",
+            )
+
+        prompt_slot = (
+            self._sandbox_manager.prompt_slot(
+                sandbox.id,
+                session_id,
+                acquire_timeout=0.1,
+                fail_open=False,
+            )
+            if sandbox is not None and sandbox.status == SandboxStatus.RUNNING
+            else nullcontext(PromptSlot(acquired=True))
+        )
+        with prompt_slot as slot:
+            if not slot.acquired:
+                raise OnyxError(
+                    OnyxErrorCode.CONFLICT,
+                    "Wait for the current turn to finish before reloading skills.",
+                )
+
+            session = get_build_session(
+                session_id,
+                user.id,
+                self._db_session,
+                lock_for_update=True,
+            )
+            if session is None:
+                raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+            if not session.skills_stale:
+                return
+
+            if sandbox is not None and sandbox.status == SandboxStatus.RUNNING:
+                try:
+                    self._sandbox_manager.regenerate_session_config(
+                        sandbox_id=sandbox.id,
+                        session_id=session_id,
+                        agent_provider=session.agent_provider,
+                        agent_model=session.agent_model,
+                        nextjs_port=session.nextjs_port,
+                        connectable_apps_section=build_connectable_apps_list(
+                            get_connectable_apps_for_user(self._db_session, user)
+                        ),
+                        user_name=user.personal_name,
+                    )
+                    if session.opencode_session_id is not None:
+                        self._sandbox_manager.dispose_opencode_instance(
+                            sandbox.id, session_id
+                        )
+                except Exception as exc:
+                    self._db_session.rollback()
+                    logger.warning(
+                        "Failed to refresh skills for session %s",
+                        session_id,
+                        exc_info=True,
+                    )
+                    raise OnyxError(
+                        OnyxErrorCode.BAD_GATEWAY,
+                        "Failed to reload session skills.",
+                    ) from exc
+
+            session.skills_stale = False
+            self._db_session.commit()
 
     def ensure_sandbox_running(
         self,

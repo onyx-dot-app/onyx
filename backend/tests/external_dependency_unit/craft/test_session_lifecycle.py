@@ -401,7 +401,7 @@ class TestReloadSessionSkills:
         db_session.add(session_row)
         db_session.commit()
         monkeypatch.setattr(
-            "onyx.server.features.build.session.api.get_sandbox_manager",
+            "onyx.server.features.build.session.manager.get_sandbox_manager",
             lambda: stub_sandbox_manager,
         )
         stub_sandbox_manager.regenerate_session_config_silent = True
@@ -442,7 +442,7 @@ class TestReloadSessionSkills:
         db_session.commit()
         stub_sandbox_manager.prompt_slot_returns = False
         monkeypatch.setattr(
-            "onyx.server.features.build.session.api.get_sandbox_manager",
+            "onyx.server.features.build.session.manager.get_sandbox_manager",
             lambda: stub_sandbox_manager,
         )
 

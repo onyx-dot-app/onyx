@@ -783,7 +783,7 @@ export default function BuildChatPanel({
                     <div className="pb-2">
                       <SkillsStaleNotice
                         sessionId={sessionId}
-                        turnActive={session.activeTurnId !== null}
+                        turnActive={isRunning}
                       />
                     </div>
                   )}

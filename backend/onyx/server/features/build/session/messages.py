@@ -131,6 +131,9 @@ def send_message(
                 "This session is busy with a previous turn.",
             )
 
+        if session.skills_stale:
+            SessionManager(db_session).reload_session_skills(session_id, user)
+
         check_build_rate_limits(user=user, db_session=db_session)
 
         turn_index = count_user_messages(session_id, db_session)

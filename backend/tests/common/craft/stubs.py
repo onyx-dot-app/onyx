@@ -338,6 +338,7 @@ class StubSandboxManager(SandboxManager):
 
     def regenerate_session_config(
         self,
+        *,
         sandbox_id: UUID,
         session_id: UUID,
         agent_provider: str | None,
