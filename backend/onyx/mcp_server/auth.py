@@ -6,6 +6,8 @@ from fastmcp.server.auth.auth import AccessToken
 from fastmcp.server.auth.auth import TokenVerifier
 
 from onyx.mcp_server.utils import get_http_client
+from onyx.server.metrics.mcp_server import MCPAuthResult
+from onyx.server.metrics.mcp_server import record_mcp_auth_result
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import build_api_server_url_for_http_requests
 
@@ -23,6 +25,7 @@ class OnyxTokenVerifier(TokenVerifier):
                 headers={"Authorization": f"Bearer {token}"},
             )
         except Exception as exc:
+            record_mcp_auth_result(MCPAuthResult.ERROR)
             logger.error(
                 "MCP server failed to reach API /me for authentication: %s",
                 exc,
@@ -31,12 +34,14 @@ class OnyxTokenVerifier(TokenVerifier):
             return None
 
         if response.status_code != 200:
+            record_mcp_auth_result(MCPAuthResult.REJECTED)
             logger.warning(
                 "API server rejected MCP auth token with status %s",
                 response.status_code,
             )
             return None
 
+        record_mcp_auth_result(MCPAuthResult.SUCCESS)
         return AccessToken(
             token=token,
             client_id="mcp",
