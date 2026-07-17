@@ -36,6 +36,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
+from onyx.server.features.build.db.build_session import skills_are_stale
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
@@ -420,8 +421,10 @@ def restore_session(
                 sandbox.id, session_id
             ):
                 session.status = BuildSessionStatus.ACTIVE
-                session.skills_hash = sandbox.skills_hash
-                update_sandbox_heartbeat(db_session, sandbox.id)
+                if skills_are_stale(session, sandbox):
+                    SessionManager(db_session).reload_session_skills(session_id, user)
+                else:
+                    update_sandbox_heartbeat(db_session, sandbox.id)
                 base_response = SessionResponse.from_model(session, sandbox)
                 return DetailedSessionResponse.from_session_response(
                     base_response, session_loaded_in_sandbox=True

@@ -19,8 +19,8 @@ from onyx.db.skill import persist_skill_validity
 from onyx.db.skill import SkillAccessPolicy
 from onyx.db.skill import SkillValidityUpdate
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.db.sandbox import get_sandbox_skills_hashes
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
+from onyx.server.features.build.db.sandbox import lock_sandbox_skills_hashes
 from onyx.server.features.build.db.sandbox import set_sandbox_skills_hashes__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
@@ -266,6 +266,7 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
         return
     try:
         sandbox_map = get_sandbox_user_map(list(user_ids), db_session)
+        current_hashes = lock_sandbox_skills_hashes(db_session, set(sandbox_map))
         sandbox_files = {
             sid: build_skills_fileset_for_user(user, db_session)
             for sid, user in sandbox_map.items()
@@ -274,7 +275,6 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
             sandbox_id: compute_skills_hash(files)
             for sandbox_id, files in sandbox_files.items()
         }
-        current_hashes = get_sandbox_skills_hashes(db_session, set(sandbox_map))
         changed_files = {
             sandbox_id: files
             for sandbox_id, files in sandbox_files.items()

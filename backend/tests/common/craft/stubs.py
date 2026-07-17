@@ -123,6 +123,7 @@ class StubSandboxManager(SandboxManager):
     - ``terminate_silent``
     - ``setup_session_workspace_silent``
     - ``cleanup_session_workspace_silent``
+    - ``dispose_opencode_instance_silent``
     - ``restore_snapshot_silent``
     - ``write_sandbox_file_silent``
     - ``write_files_to_sandbox_silent``
@@ -171,6 +172,7 @@ class StubSandboxManager(SandboxManager):
         self.terminate_silent: bool = False
         self.setup_session_workspace_silent: bool = False
         self.cleanup_session_workspace_silent: bool = False
+        self.dispose_opencode_instance_silent: bool = False
         self.regenerate_session_config_silent: bool = False
         self.restore_snapshot_silent: bool = False
         self.write_sandbox_file_silent: bool = False
@@ -488,6 +490,8 @@ class StubSandboxManager(SandboxManager):
         }
         if self.dispose_opencode_instance_raises is not None:
             raise self.dispose_opencode_instance_raises
+        if not self.dispose_opencode_instance_silent:
+            raise _not_configured("dispose_opencode_instance")
 
     def ensure_opencode_session(
         self,

@@ -410,6 +410,7 @@ class TestReloadSessionSkills:
             lambda: stub_sandbox_manager,
         )
         stub_sandbox_manager.regenerate_session_config_silent = True
+        stub_sandbox_manager.dispose_opencode_instance_silent = True
 
         response = reload_session_skills(session_row.id, test_user, db_session)
 
@@ -986,6 +987,8 @@ class TestRestoreSession:
             user_id=test_user.id,
             name="needs-restore",
             status=BuildSessionStatus.IDLE,
+            opencode_session_id="stale-opencode",
+            skills_hash="old",
         )
         db_session.add(idle_session)
         db_session.commit()
@@ -1006,6 +1009,8 @@ class TestRestoreSession:
         stub_sandbox_manager.session_workspace_exists_returns = True
         stub_sandbox_manager.setup_session_workspace_silent = True
         stub_sandbox_manager.write_files_to_sandbox_silent = True
+        stub_sandbox_manager.regenerate_session_config_silent = True
+        stub_sandbox_manager.dispose_opencode_instance_silent = True
 
         # Patch the import site used by ``restore_session``.
         monkeypatch.setattr(
@@ -1022,6 +1027,10 @@ class TestRestoreSession:
         db_session.refresh(idle_session)
         assert idle_session.status == BuildSessionStatus.ACTIVE
         assert idle_session.skills_hash == sandbox_row.skills_hash
+        assert stub_sandbox_manager.last_dispose_opencode_instance_payload == {
+            "sandbox_id": sandbox_row.id,
+            "session_id": idle_session.id,
+        }
 
     def test_sleeping_sandbox_restore_provisions_and_restores_latest_snapshot(
         self,

@@ -257,6 +257,8 @@ class SessionManager:
                 "Wait for the sandbox to finish starting before reloading skills.",
             )
 
+        update_sandbox_heartbeat(self._db_session, sandbox.id)
+
         prompt_slot = (
             self._sandbox_manager.prompt_slot(
                 sandbox.id,

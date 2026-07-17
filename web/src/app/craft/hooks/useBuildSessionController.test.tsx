@@ -71,10 +71,7 @@ describe("useBuildSessionController", () => {
     });
   });
 
-  it("does not overwrite a newer local stale-state change", async () => {
-    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
-      skillsStale: true,
-    });
+  it("does not restore stale state after an intervening reload", async () => {
     let resolveRefresh:
       | ((value: { skills_stale: boolean }) => void)
       | undefined;
@@ -90,6 +87,9 @@ describe("useBuildSessionController", () => {
     await waitFor(() => expect(api.fetchSession).toHaveBeenCalled());
 
     await act(async () => {
+      useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+        skillsStale: true,
+      });
       useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
         skillsStale: false,
       });

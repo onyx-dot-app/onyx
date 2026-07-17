@@ -120,14 +120,18 @@ def set_sandbox_skills_hashes__no_commit(
     db_session.flush()
 
 
-def get_sandbox_skills_hashes(
+def lock_sandbox_skills_hashes(
     db_session: Session,
     sandbox_ids: set[UUID],
 ) -> dict[UUID, str | None]:
+    """Lock sandboxes while their managed skill files and hashes are updated."""
     if not sandbox_ids:
         return {}
     rows = db_session.execute(
-        select(Sandbox.id, Sandbox.skills_hash).where(Sandbox.id.in_(sandbox_ids))
+        select(Sandbox.id, Sandbox.skills_hash)
+        .where(Sandbox.id.in_(sandbox_ids))
+        .order_by(Sandbox.id)
+        .with_for_update()
     )
     return {sandbox_id: skills_hash for sandbox_id, skills_hash in rows}
 
