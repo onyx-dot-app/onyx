@@ -20,8 +20,10 @@ from onyx.server.features.build.interactive_turns.state import TURN_STATUS_CANCE
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_RUNNING
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCEEDED
+from onyx.server.features.build.sandbox.event_schema import ActivityTimeoutError
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
 from onyx.server.features.build.sandbox.serve_transport import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
 )
@@ -672,6 +674,187 @@ def test_start_interactive_turn_runner_preserves_tenant_context(
     assert observed_turn_id == turn.turn_id
     assert observed_tenant == "tenant-a"
     assert observed_runner_id is not None
+
+
+def _run_turn_with_batches(
+    monkeypatch: pytest.MonkeyPatch,
+    batches: list[list[object]],
+) -> SimpleNamespace:
+    cache = FakeCache()
+    db_session = _FakeDbSession()
+    session_id = uuid4()
+    user_id = uuid4()
+    sandbox_id = uuid4()
+    prompt_slot = _FakePromptSlot()
+    persisted: list[object] = []
+    finalized: list[UUID] = []
+    prompts_seen: list[str] = []
+
+    turn = create_interactive_turn(
+        cache=cache,
+        session_id=session_id,
+        user_id=user_id,
+        client_request_id="req-1",
+        prompt="hello",
+        turn_index=0,
+    )
+
+    class FakeSessionManager:
+        def __init__(self, db_session_arg: _FakeDbSession) -> None:
+            assert db_session_arg is db_session
+
+        def ensure_sandbox_running(self, user_id_arg: UUID) -> SimpleNamespace:
+            assert user_id_arg == user_id
+            return SimpleNamespace(id=sandbox_id)
+
+        def prompt_slot(
+            self,
+            sandbox_id_arg: UUID,
+            session_id_arg: UUID,
+            acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
+        ) -> _FakePromptSlot:
+            assert sandbox_id_arg == sandbox_id
+            assert session_id_arg == session_id
+            prompt_slot.acquire_timeouts.append(acquire_timeout)
+            return prompt_slot
+
+        def yield_sandbox_events(
+            self,
+            sandbox_id_arg: UUID,
+            session_id_arg: UUID,
+            prompt: str,
+            *,
+            should_interrupt: object,
+            should_abort_on_teardown: Callable[[], bool],
+        ) -> Iterator[object]:
+            assert sandbox_id_arg == sandbox_id
+            assert session_id_arg == session_id
+            assert should_interrupt is not None
+            assert should_abort_on_teardown() is True
+            idx = len(prompts_seen)
+            prompts_seen.append(prompt)
+            yield from (batches[idx] if idx < len(batches) else [])
+
+        def persist_sandbox_event(
+            self, session_id_arg: UUID, state: object, sandbox_event: object
+        ) -> None:
+            assert session_id_arg == session_id
+            assert state is not None
+            persisted.append(sandbox_event)
+
+        def finalize_persist(self, session_id_arg: UUID, state: object) -> None:
+            assert state is not None
+            finalized.append(session_id_arg)
+
+    monkeypatch.setattr(executor, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(
+        executor,
+        "get_session_with_current_tenant",
+        lambda: _fake_db_scope(db_session),
+    )
+    monkeypatch.setattr(executor, "SessionManager", FakeSessionManager)
+    monkeypatch.setattr(executor, "update_session_activity", lambda *_: None)
+    monkeypatch.setattr(executor, "is_interrupt_requested", lambda *_: False)
+    monkeypatch.setattr(executor, "clear_interrupt", lambda *_: None)
+
+    claimed = claim_turn_for_runner(cache=cache, turn_id=turn.turn_id)
+    assert claimed is not None
+    executor.run_claimed_interactive_build_turn(claimed, budget_seconds=30)
+
+    return SimpleNamespace(
+        cache=cache,
+        turn=turn,
+        session_id=session_id,
+        user_id=user_id,
+        persisted=persisted,
+        finalized=finalized,
+        prompts_seen=prompts_seen,
+        prompt_slot=prompt_slot,
+    )
+
+
+def test_runner_continues_after_tool_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    timeout = ActivityTimeoutError(message="Timeout waiting for activity")
+    done = PromptResponse.model_validate({"stopReason": "end_turn"})
+
+    result = _run_turn_with_batches(monkeypatch, [[timeout], [done]])
+
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None
+    assert finished.status == TURN_STATUS_SUCCEEDED
+    assert result.persisted == [done]
+    assert result.prompts_seen == [
+        "hello",
+        executor._TOOL_TIMEOUT_CONTINUATION_PROMPT,
+    ]
+    # The aborted step is flushed before the re-prompt, then the turn is
+    # finalized once more at the end.
+    assert result.finalized == [result.session_id, result.session_id]
+    assert result.prompt_slot.exited
+
+
+def test_runner_fails_after_max_timeout_continuations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    timeout = ActivityTimeoutError(message="Timeout waiting for activity")
+    batches: list[list[object]] = [
+        [timeout] for _ in range(executor.MAX_TIMEOUT_CONTINUATIONS + 1)
+    ]
+
+    result = _run_turn_with_batches(monkeypatch, batches)
+
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None
+    assert finished.status == TURN_STATUS_FAILED
+    assert finished.error_detail == "Timeout waiting for activity"
+    assert len(result.prompts_seen) == executor.MAX_TIMEOUT_CONTINUATIONS + 1
+    assert result.persisted == [timeout]
+    assert result.prompt_slot.exited
+
+
+def test_runner_does_not_continue_on_absolute_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A hard absolute/budget timeout is a plain Error with the same code -2 as the
+    # recoverable inactivity timeout; only the TYPE differs. It must fail the turn
+    # immediately, never re-prompt.
+    absolute = SandboxError(
+        code=TURN_ERROR_CODE_TIMEOUT, message="Turn exceeded maximum duration"
+    )
+
+    result = _run_turn_with_batches(monkeypatch, [[absolute]])
+
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None
+    assert finished.status == TURN_STATUS_FAILED
+    assert finished.error_detail == "Turn exceeded maximum duration"
+    assert result.prompts_seen == ["hello"]
+    assert result.persisted == [absolute]
+    assert result.prompt_slot.exited
+
+
+def test_runner_preserves_output_before_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = object()
+    after = object()
+    timeout = ActivityTimeoutError(message="Timeout waiting for activity")
+    done = PromptResponse.model_validate({"stopReason": "end_turn"})
+
+    result = _run_turn_with_batches(monkeypatch, [[before, timeout], [after, done]])
+
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None
+    assert finished.status == TURN_STATUS_SUCCEEDED
+    # Output emitted before the timeout is persisted; the timeout event itself is
+    # not, and the continuation's output follows it.
+    assert result.persisted == [before, after, done]
+    assert result.prompts_seen == [
+        "hello",
+        executor._TOOL_TIMEOUT_CONTINUATION_PROMPT,
+    ]
 
 
 def test_start_interactive_turn_runner_skips_fresh_running_turn(

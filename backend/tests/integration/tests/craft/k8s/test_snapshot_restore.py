@@ -246,6 +246,8 @@ def test_restore_re_pushes_skills(
         is_public=True,
     )
     try:
+        SkillManager.set_enabled(skill, handle.api_user, True)
+
         # managed/ is RO in the sandbox container; wipe via the sidecar.
         pod_exec(
             k8s_client,

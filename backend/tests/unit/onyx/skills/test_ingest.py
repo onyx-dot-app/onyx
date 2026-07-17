@@ -76,6 +76,16 @@ def test_ingest_rejects_noncanonical_frontmatter_name() -> None:
         ingest_skill_bundle(skill_md, "skill.MD", file_store)
 
 
+def test_ingest_rejects_missing_frontmatter() -> None:
+    file_store = MagicMock(spec=FileStore)
+
+    with pytest.raises(OnyxError, match="must start with YAML frontmatter") as exc_info:
+        ingest_skill_bundle(b"No frontmatter.\n", "SKILL.md", file_store)
+
+    assert exc_info.value.status_code == 400
+    file_store.save_file.assert_not_called()
+
+
 def test_ingest_rejects_built_in_name() -> None:
     skill_md = b"---\nname: pptx\ndescription: Desc\n---\n\nBody\n"
     file_store = MagicMock(spec=FileStore)

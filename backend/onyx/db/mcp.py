@@ -28,6 +28,7 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserRole
+from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
@@ -357,6 +358,29 @@ class ResolvedMCPCredentials(BaseModel):
 
     connection_config: MCPConnectionConfig | None
     user_oauth_token: str | None
+
+    def build_headers(self) -> dict[str, str]:
+        """Auth headers for a request to the server: the stored
+        connection-config headers, with PT_OAUTH's login token taking
+        precedence. Empty when no credentials are stored.
+
+        Denylisted headers (see DENYLISTED_MCP_HEADERS) are stripped so every
+        consumer gets the security filter automatically — stored credentials
+        must never source e.g. a Host header."""
+        stored = extract_connection_data(self.connection_config).get("headers", {})
+        headers = {
+            k: v for k, v in stored.items() if k.lower() not in DENYLISTED_MCP_HEADERS
+        }
+        if len(headers) != len(stored):
+            # Names only — header values are credentials.
+            logger.warning(
+                "Stored MCP credential headers contained denylisted headers "
+                "that were stripped: %s",
+                sorted(k for k in stored if k.lower() in DENYLISTED_MCP_HEADERS),
+            )
+        if self.user_oauth_token:
+            headers["Authorization"] = f"Bearer {self.user_oauth_token}"
+        return headers
 
 
 def resolve_mcp_credentials(

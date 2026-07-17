@@ -41,7 +41,8 @@ class SkillResponse(BaseModel):
     unavailable_reason: str | None = None
     is_valid: bool | None = None
 
-    enabled: bool | None = None
+    enabled: bool
+    can_toggle: bool
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
@@ -60,6 +61,8 @@ class SkillResponse(BaseModel):
         skill: Skill,
         definition: BuiltInSkillDefinition,
         db_session: Session,
+        enabled: bool,
+        can_toggle: bool,
     ) -> "SkillResponse":
         return cls(
             source="builtin",
@@ -69,6 +72,8 @@ class SkillResponse(BaseModel):
             description=skill.description,
             is_available=definition.is_available(db_session),
             unavailable_reason=definition.unavailable_reason,
+            enabled=enabled,
+            can_toggle=can_toggle,
             user_permission=SkillAccessLevel.VIEWER,
         )
 
@@ -77,6 +82,8 @@ class SkillResponse(BaseModel):
         cls,
         skill: Skill,
         *,
+        enabled: bool,
+        can_toggle: bool = True,
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
     ) -> "SkillResponse":
@@ -106,7 +113,8 @@ class SkillResponse(BaseModel):
             name=skill.name,
             description=skill.description,
             is_valid=skill.is_valid,
-            enabled=skill.enabled,
+            enabled=enabled,
+            can_toggle=can_toggle,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
             owner=(
@@ -187,6 +195,10 @@ class SkillBundleInspectResponse(BaseModel):
     files: list[SkillBundleFile]
 
 
+class SkillEnableRequest(BaseModel):
+    enabled: bool
+
+
 class SkillCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -210,7 +222,6 @@ class SkillPatchRequest(BaseModel):
     description: str | None = None
     instructions_markdown: str | None = None
     public_permission: SkillSharePermission | None = None
-    enabled: bool | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -221,7 +232,6 @@ class SkillPatchRequest(BaseModel):
             for field in (
                 "description",
                 "instructions_markdown",
-                "enabled",
             ):
                 if field in data and data[field] is None:
                     raise ValueError(f"{field} cannot be null")
@@ -245,7 +255,7 @@ class SkillPatchRequest(BaseModel):
 
     @property
     def has_db_field_update(self) -> bool:
-        return bool(self.model_fields_set & {"public_permission", "enabled"})
+        return "public_permission" in self.model_fields_set
 
 
 class SkillUserShareRequest(BaseModel):

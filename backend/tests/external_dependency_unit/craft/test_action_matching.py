@@ -261,14 +261,6 @@ def test_not_available_required_credential_missing(
     assert app_is_available(db_session, app, test_user.id) is False
 
 
-def test_not_available_when_disabled(db_session: Session, test_user: User) -> None:
-    skill = make_skill(db_session, enabled=False)
-    app = make_external_app(
-        db_session, skill=skill, auth_template={}, app_type=ExternalAppType.CUSTOM
-    )
-    assert app_is_available(db_session, app, test_user.id) is False
-
-
 # ── ExternalAppRequestEvaluator: full proxy-request → verdict bridge ───
 
 

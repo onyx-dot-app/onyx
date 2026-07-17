@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
+from onyx.db.sso_provider import sso_login_callback_uri
 
 
 class SSOProviderCreateRequest(BaseModel):
@@ -39,14 +40,9 @@ class SSOProviderResponse(BaseModel):
     @classmethod
     def from_model(cls, provider: SSOProvider, web_domain: str) -> SSOProviderResponse:
         config = provider.config.get_value(apply_mask=True) if provider.config else {}
-
-        if provider.provider_type in (
-            SSOProviderType.GOOGLE_OAUTH,
-            SSOProviderType.OIDC,
-        ):
-            redirect_uri = f"{web_domain}/api/auth/oidc/{provider.name}/callback"
-        else:
-            redirect_uri = f"{web_domain}/api/auth/saml/{provider.name}/callback"
+        # Masking leaves booleans untouched, so legacy_callback is readable and
+        # the displayed URI always matches what the flow sends.
+        redirect_uri = sso_login_callback_uri(provider, config, web_domain)
 
         return cls(
             id=provider.id,

@@ -4,10 +4,9 @@
 External-app providers are *built-in skills* created on demand: their ``Skill``
 row carries a ``built_in_skill_id`` (e.g. ``slack``) so it renders through the
 exact same disk-backed path as a seeded built-in — there is no external-app
-special case in the push pipeline. These tests verify that an authenticated,
-    enabled provider delivers its on-disk content under its stable directory, and
-    that the USE access policy (enabled + per-user credential completeness) keeps
-    content out otherwise.
+special case in the push pipeline. These tests verify that an authenticated
+provider delivers its on-disk content under its stable directory, and the USE
+access policy keeps content out when credentials are incomplete.
 
 Uses the real Slack provider directory on disk so the wiring
 (``built_in_skill_id -> source dir``) is exercised end to end. The DB-layer
@@ -36,7 +35,7 @@ _FULL_CREDS = {"token": "xoxp-test"}
 _SLACK_ID = SLACK.built_in_skill_id  # == slug == on-disk dir ("slack")
 
 
-def _slack_skill(db_session: Session, *, enabled: bool = True) -> Skill:
+def _slack_skill(db_session: Session) -> Skill:
     """A built-in Slack skill row (slug == built_in_skill_id), mirroring what
     ``create_external_app`` makes for a connected Slack app. ``reset_*`` keeps
     it independent of the migration-seeded built-in rows."""
@@ -44,7 +43,6 @@ def _slack_skill(db_session: Session, *, enabled: bool = True) -> Skill:
         db_session,
         built_in_skill_id=_SLACK_ID,
         is_public=True,
-        enabled=enabled,
     )
 
 
@@ -146,23 +144,3 @@ def test_no_disabled_actions_omits_section(
     rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
     # No DENY policies -> the unavailable-actions warning is omitted entirely.
     assert "unavailable and should not be attempted" not in rendered
-
-
-def test_disabled_provider_delivers_nothing_even_when_authenticated(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-) -> None:
-    user = make_user(db_session)
-    skill = _slack_skill(db_session, enabled=False)
-    app = make_external_app(
-        db_session,
-        skill=skill,
-        app_type=ExternalAppType.SLACK,
-        auth_template=_AUTH_TEMPLATE,
-    )
-    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
-    db_session.commit()
-
-    files = build_skills_fileset_for_user(user, db_session)
-
-    assert not _has_slack_content(files)

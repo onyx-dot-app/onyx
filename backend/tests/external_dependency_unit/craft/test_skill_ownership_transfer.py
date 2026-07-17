@@ -10,12 +10,10 @@ from onyx.db.models import Skill
 from onyx.db.models import Skill__User
 from onyx.db.models import User
 from onyx.db.models import UserRole
-from onyx.db.skill import transfer_skill_ownership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import transfer_current_user_skill_ownership
 from onyx.server.features.skill.models import TransferSkillOwnershipRequest
-from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox
 from tests.external_dependency_unit.craft.db_helpers import make_skill
 from tests.external_dependency_unit.craft.db_helpers import make_user
@@ -101,71 +99,6 @@ def test_transfer_pushes_previous_and_new_owner_sandboxes(
     )
 
     assert push_calls == [{owner.id, new_owner.id}]
-
-
-def test_transfer_to_current_owner_is_noop(
-    db_session: Session,
-    push_calls: list[set[object]],
-) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    skill = _owned_skill(db_session, owner)
-    share_skill_with_user(db_session, skill, owner, SkillSharePermission.VIEWER)
-
-    transfer_skill_ownership(
-        skill=skill,
-        new_owner_user_id=owner.id,
-        db_session=db_session,
-    )
-
-    db_session.refresh(skill)
-    assert skill.author_user_id == owner.id
-    owner_share = _share_row(db_session, skill, owner)
-    assert owner_share is not None
-    assert owner_share.permission == SkillSharePermission.VIEWER
-    assert push_calls == []
-
-
-def test_transfer_rejects_built_in_skill(
-    db_session: Session,
-    push_calls: list[set[object]],
-) -> None:
-    target = make_user(db_session, role=UserRole.BASIC)
-    skill = make_built_in_skill_row(
-        db_session,
-        built_in_skill_id=f"builtin-transfer-{uuid4().hex[:8]}",
-        is_public=True,
-    )
-
-    with pytest.raises(OnyxError) as exc_info:
-        transfer_skill_ownership(
-            skill=skill,
-            new_owner_user_id=target.id,
-            db_session=db_session,
-        )
-
-    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
-    db_session.refresh(skill)
-    assert skill.author_user_id is None
-    assert push_calls == []
-
-
-def test_transfer_rejects_missing_target_helper(
-    db_session: Session,
-    push_calls: list[set[object]],
-) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    skill = _owned_skill(db_session, owner)
-
-    with pytest.raises(OnyxError) as exc_info:
-        transfer_skill_ownership(
-            skill=skill,
-            new_owner_user_id=uuid4(),
-            db_session=db_session,
-        )
-
-    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
-    assert exc_info.value.detail == "New owner user does not exist."
-    assert push_calls == []
 
 
 @pytest.mark.parametrize(

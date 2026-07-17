@@ -13,6 +13,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.models import UserGroup
+from onyx.db.skill import set_skill_enabled_for_user
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
@@ -199,16 +200,16 @@ class TestCustomSkillFileset:
         test_user: User,
         seeded_skill: Callable[..., Skill],
     ) -> None:
-        # Custom skills require a group grant to be visible to a non-admin
-        # user. Set up: user is in group ``team``; skill is granted to
-        # ``team``; the bundle holds two files. A uniquified slug avoids
-        # collisions with leftover rows from prior partial runs.
+        # Custom skills require both visibility and per-user enablement. Set up:
+        # user is in group ``team``; skill is granted to ``team`` and explicitly
+        # enabled for the user; the bundle holds two files. A uniquified slug
+        # avoids collisions with leftover rows from prior partial runs.
         slug = f"my-custom-{uuid4().hex[:8]}"
         team_group: UserGroup = make_group(db_session)
         add_user_to_group(db_session, test_user, team_group)
         db_session.commit()
 
-        seeded_skill(
+        skill = seeded_skill(
             slug=slug,
             public=False,
             groups=[team_group],
@@ -217,6 +218,13 @@ class TestCustomSkillFileset:
                 "nested/file.txt": "nested body",
             },
         )
+        set_skill_enabled_for_user(
+            skill_id=skill.id,
+            enabled=True,
+            user=test_user,
+            db_session=db_session,
+        )
+        db_session.commit()
 
         files = build_skills_fileset_for_user(test_user, db_session)
 

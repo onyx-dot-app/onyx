@@ -136,7 +136,6 @@ export default function CreateCustomAppModal({
           setFile(null);
           bundleSaved = true;
         }
-        // enabled is toggled separately on the card.
         await updateExternalApp(existingApp.id, {
           name: name.trim(),
           description: description.trim(),
@@ -152,7 +151,6 @@ export default function CreateCustomAppModal({
           upstream_url_patterns: upstreamPatterns,
           auth_template: toRecord(headers),
           organization_credentials: toRecord(orgCredentials),
-          enabled: true,
           bundle: file!,
         });
       }

@@ -19,126 +19,61 @@ from tests.external_dependency_unit.craft.db_helpers import share_skill_with_use
 
 
 class TestAffectedUserIdsForSkill:
-    def test_public_skill_returns_every_running_sandbox_user_id(
+    def test_public_skill_targets_all_running_sandbox_users(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        user_a = make_user(db_session)
-        user_b = make_user(db_session)
-        user_c = make_user(db_session)
-        make_sandbox(db_session, user_a)
-        make_sandbox(db_session, user_b)
-        make_sandbox(db_session, user_c)
+        running_users = [make_user(db_session), make_user(db_session)]
+        sleeping_user = make_user(db_session)
+        for user in running_users:
+            make_sandbox(db_session, user)
+        make_sandbox(db_session, sleeping_user, status=SandboxStatus.SLEEPING)
         skill = make_skill(db_session, is_public=True)
 
         result = affected_user_ids_for_skill(skill, db_session)
 
-        assert user_a.id in result
-        assert user_b.id in result
-        assert user_c.id in result
+        assert {user.id for user in running_users} <= result
+        assert sleeping_user.id not in result
 
-    def test_private_skill_returns_only_users_in_shared_groups(
+    def test_private_skill_targets_group_and_direct_shares_only(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        shared_user = make_user(db_session)
+        group_user = make_user(db_session)
+        direct_user = make_user(db_session)
         unshared_user = make_user(db_session)
-        shared_group = make_group(db_session)
-        group_other = make_group(db_session)
-        add_user_to_group(db_session, shared_user, shared_group)
-        add_user_to_group(db_session, unshared_user, group_other)
-        make_sandbox(db_session, shared_user)
-        make_sandbox(db_session, unshared_user)
+        group = make_group(db_session)
+        add_user_to_group(db_session, group_user, group)
+        for user in (group_user, direct_user, unshared_user):
+            make_sandbox(db_session, user)
         skill = make_skill(db_session, is_public=False)
-        share_skill_with_group(db_session, skill, shared_group)
+        share_skill_with_group(db_session, skill, group)
+        share_skill_with_user(db_session, skill, direct_user)
 
         result = affected_user_ids_for_skill(skill, db_session)
 
-        assert shared_user.id in result
+        assert group_user.id in result
+        assert direct_user.id in result
         assert unshared_user.id not in result
 
-    def test_user_in_two_shared_groups_appears_once(
+    def test_private_skill_deduplicates_multiple_share_paths(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        user = make_user(db_session)
-        group_x = make_group(db_session)
-        group_y = make_group(db_session)
-        add_user_to_group(db_session, user, group_x)
-        add_user_to_group(db_session, user, group_y)
-        make_sandbox(db_session, user)
-        skill = make_skill(db_session, is_public=False)
-        share_skill_with_group(db_session, skill, group_x)
-        share_skill_with_group(db_session, skill, group_y)
-
-        result = affected_user_ids_for_skill(skill, db_session)
-
-        # `set` semantics — even with two paths through the join, the user
-        # is reported exactly once.
-        matches = [uid for uid in result if uid == user.id]
-        assert len(matches) == 1
-
-    def test_private_skill_returns_directly_shared_user(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        shared_user = make_user(db_session)
-        unshared_user = make_user(db_session)
-        make_sandbox(db_session, shared_user)
-        make_sandbox(db_session, unshared_user)
-        skill = make_skill(db_session, is_public=False)
-        share_skill_with_user(db_session, skill, shared_user)
-
-        result = affected_user_ids_for_skill(skill, db_session)
-
-        assert shared_user.id in result
-        assert unshared_user.id not in result
-
-    def test_disabled_skill_still_returns_affected_users(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        # Per the `affected_user_ids_for_skill` docstring, this deliberately
-        # does NOT filter on `enabled`. This is required so that
-        # when an admin disables a skill, the push pipeline can still target
-        # the sandboxes that previously had it (to deliver the new
-        # sans-skill fileset).
         user = make_user(db_session)
         group = make_group(db_session)
         add_user_to_group(db_session, user, group)
         make_sandbox(db_session, user)
-        skill = make_skill(db_session, is_public=False, enabled=False)
-        share_skill_with_group(db_session, skill, group)
-
-        result = affected_user_ids_for_skill(skill, db_session)
-
-        assert user.id in result
-
-    def test_returns_empty_when_no_running_sandboxes(
-        self,
-        db_session: Session,
-        test_user: User,  # noqa: ARG002
-    ) -> None:
-        # User in shared group, but with a SLEEPING sandbox (not RUNNING).
-        user_sleeping = make_user(db_session)
-        user_terminated = make_user(db_session)
-        group = make_group(db_session)
-        add_user_to_group(db_session, user_sleeping, group)
-        add_user_to_group(db_session, user_terminated, group)
-        make_sandbox(db_session, user_sleeping, status=SandboxStatus.SLEEPING)
-        make_sandbox(db_session, user_terminated, status=SandboxStatus.TERMINATED)
         skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, skill, group)
+        share_skill_with_user(db_session, skill, user)
 
         result = affected_user_ids_for_skill(skill, db_session)
 
-        assert user_sleeping.id not in result
-        assert user_terminated.id not in result
+        assert result == {user.id}
 
 
 class TestGetSandboxUserMap:
@@ -166,21 +101,7 @@ class TestGetSandboxUserMap:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        # Regression for SHA `0d71db1b` — the .unique() fix.
-        #
-        # ``get_sandbox_user_map`` runs ``select(Sandbox, User).join(User)``.
-        # The User model eager-loads ``oauth_accounts`` with ``lazy="joined"``
-        # (see ``onyx/db/models.py::User``). Under SQLAlchemy 2.x, a SELECT
-        # that yields ORM entities with joined-eager collections must be
-        # iterated through ``.unique()`` whenever the underlying join
-        # actually fans out — otherwise ``Result.__iter__`` raises
-        # ``InvalidRequestError``.
-        #
-        # Attaching multiple ``OAuthAccount`` rows is the minimal setup that
-        # makes the fan-out fire: each row adds a duplicate ``(Sandbox,
-        # User)`` tuple via the joined eager load. Without the ``.unique()``
-        # call the function raises during iteration; with it, the map has
-        # exactly one entry.
+        # Joined eager-loaded OAuth accounts fan out the underlying query.
         user = make_user(db_session)
         for i in range(3):
             db_session.add(

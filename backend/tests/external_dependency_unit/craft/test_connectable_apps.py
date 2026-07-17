@@ -43,12 +43,6 @@ def test_lists_only_unconnected_apps_and_renders_them(
         auth_template=_USER_TOKEN_TEMPLATE,
         organization_credentials={"token": "shared"},
     )
-    # Disabled: never offered, regardless of credentials.
-    make_external_app(
-        db_session,
-        skill=make_skill(db_session, slug="disabled-app", enabled=False),
-        auth_template=_USER_TOKEN_TEMPLATE,
-    )
     # Not visible: non-public and not granted to this user — must be excluded, or
     # the user would connect a skill that never injects into their sandbox.
     make_external_app(
@@ -63,7 +57,6 @@ def test_lists_only_unconnected_apps_and_renders_them(
     assert "needs-setup" in slugs
     assert "already-connected" not in slugs
     assert "org-filled" not in slugs
-    assert "disabled-app" not in slugs
     assert "hidden-app" not in slugs
 
     apps_list = build_connectable_apps_list(

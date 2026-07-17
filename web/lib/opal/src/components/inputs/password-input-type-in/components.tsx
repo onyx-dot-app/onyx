@@ -39,23 +39,14 @@ interface PasswordInputTypeInProps extends Omit<
    */
   isNonRevealable?: boolean;
   /**
-   * When true, the placeholder is shrunk to the same font-size as the masked
-   * dots while the field is hidden. Only meaningful with `mask="native"` and
-   * a masked-style placeholder (all ● glyphs, e.g. the login form) so the
-   * empty and filled states line up. Leave false (the default) for custom
-   * text placeholders (e.g. "AKIA…", "Your long-term API key") so they stay
-   * legible.
-   */
-  shrinkPlaceholder?: boolean;
-  /**
    * Masked-state presentation (Figma Input/Type-In masked value).
    * - `"asterisk"` (default): full-size ✱ glyphs while the field is hidden
    *   and idle, drawn by an overlay (native masking can only render browser
    *   dots). Focus anywhere in the field shows full-size native dots so the
    *   caret tracks real glyph advances while typing.
    * - `"native"`: the browser's own dots (Chromium masks via
-   *   -webkit-text-security: disc), shrunk for tighter spacing. For the
-   *   login flow, where the field pairs with a masked-style ● placeholder.
+   *   -webkit-text-security: disc) at the field's normal text size, so the
+   *   caret and dots never change size on reveal. For the login flow.
    */
   mask?: "asterisk" | "native";
 }
@@ -70,7 +61,7 @@ interface PasswordInputTypeInProps extends Omit<
  * Using the native type (rather than a custom-masked `type="text"` field) is
  * what lets browsers and password managers recognize the field for autofill /
  * save-password. The masked presentation is gated by the `mask` prop (see its
- * docs): an idle ✱ overlay by default, or the browser's shrunken dots.
+ * docs): an idle ✱ overlay by default, or the browser's own dots.
  *
  * Features:
  * - Show/hide toggle button only visible when input has value or is focused
@@ -81,7 +72,6 @@ interface PasswordInputTypeInProps extends Omit<
 function PasswordInputTypeIn({
   ref,
   isNonRevealable = false,
-  shrinkPlaceholder = false,
   mask = "asterisk",
   value,
   onChange,
@@ -133,23 +123,15 @@ function PasswordInputTypeIn({
   return (
     <div
       ref={containerRef}
-      // Native mask: hidden dots shrink to 0.6rem on the input itself.
-      // !important beats Opal's `font: inherit`, and keeping the size off
-      // `.opal-input` (which carries `transition-all`) keeps reveal-toggling
-      // instant. rem (not em) avoids compounding. The placeholder shrinks
-      // only via the `shrinkPlaceholder` opt-in.
       // Asterisk mask: the wrapper takes a real box (not `contents`) so the
       // ✱ overlay can anchor over the input, whose text hides underneath.
+      // Native mask leaves the input's text size alone, so the caret and
+      // dots stay the same size whether hidden or revealed.
       // ph-no-capture is posthog-js's native replay blockClass, so revealed
       // secrets stay out of session replay without server-side config.
       className={cn(
         isNativeMask ? "contents" : "relative w-full",
         "ph-no-capture",
-        isNativeMask && isHidden && "[&_input]:!text-[0.6rem]",
-        isNativeMask &&
-          isHidden &&
-          shrinkPlaceholder &&
-          "[&_input::placeholder]:!text-[0.6rem]",
         showAsteriskOverlay && "[&_input]:opacity-0"
       )}
       onFocus={handleContainerFocus}

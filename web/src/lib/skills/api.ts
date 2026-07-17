@@ -8,6 +8,7 @@
 
 import type {
   CustomSkill,
+  Skill,
   SkillBundleContents,
   SkillEditableDetail,
   SkillSharePermission,
@@ -77,7 +78,18 @@ export interface PatchCustomSkillInput {
   description?: string;
   instructions_markdown?: string;
   public_permission?: SkillSharePermission | null;
-  enabled?: boolean;
+}
+
+export async function setSkillEnabled(
+  skillId: string,
+  enabled: boolean
+): Promise<Skill> {
+  const res = await fetch(`/api/skills/${skillId}/enabled`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  return handle<Skill>(res);
 }
 
 export interface SkillShareUpdatePayload {

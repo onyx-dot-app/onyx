@@ -106,7 +106,7 @@ def provision_sandbox() -> ProvisionSandbox:
 @pytest.fixture(scope="module")
 def slack_external_app() -> None:
     """
-    Seeds Slack directly with ``enabled=True`` and an ``ASK`` policy on
+    Seeds Slack directly with an ``ASK`` policy on
     ``slack.messages.write`` so the gate matcher claims ``chat.postMessage``.
 
     Unlike the cloud migration that seeds built-in apps per tenant (when
@@ -127,7 +127,6 @@ def slack_external_app() -> None:
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
                 organization_credentials={"access_token": "fake-test-token"},
-                enabled=True,
                 is_public=True,
                 action_policies={"slack.messages.write": EndpointPolicy.ASK},
             )
