@@ -1417,8 +1417,11 @@ async def get_user_manager(
     yield UserManager(user_db)
 
 
+# The cookie outlives the logical expiry by the grace window so a dead token is
+# still presented and can be classified (expired/terminated) instead of the
+# browser silently dropping it.
 cookie_transport = CookieTransport(
-    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS,
+    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS + SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     cookie_secure=WEB_DOMAIN.startswith("https"),
     cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
 )
@@ -1933,22 +1936,21 @@ async def _maybe_refresh_oauth_tokens(
 ) -> None:
     """Best-effort refresh of any near-expiry OAuth access tokens.
 
-    PT_OAUTH MCP tools and any custom HTTP tool with bearer pass-through
-    forward `user.oauth_accounts[0].access_token` directly to the upstream
-    service. The web client's /auth/refresh ticker is gated off for
-    OIDC/SAML (see `web/src/hooks/useTokenRefresh.ts`), so without this hook
-    the stored access_token would rot at the IdP's lifetime (~1 h on
-    Microsoft Entra default) and downstream calls would 401 until the user
-    signs out and back in.
+    PT_OAUTH MCP tools and any custom HTTP tool with bearer pass-through forward
+    `user.oauth_accounts[0].access_token` directly to the upstream service. The
+    web client's /auth/refresh ticker (``useTokenRefresh`` in
+    `web/src/lib/auth/hooks.ts`) only fires for visible tabs, so without this
+    hook the stored access_token could rot at the IdP's lifetime (~1 h on
+    Microsoft Entra default) and downstream calls would 401 until the user signs
+    out and back in.
 
     Refreshing here on every authenticated request is cheap — the underlying
-    `check_and_refresh_oauth_tokens` short-circuits when no account is
-    within the 5-minute renewal buffer. Failures log and return, so a
-    misconfigured IdP can never break authentication of an otherwise-valid
-    request.
+    `check_and_refresh_oauth_tokens` short-circuits when no account is within
+    the 5-minute renewal buffer. Failures log and return, so a misconfigured IdP
+    can never break authentication of an otherwise-valid request.
     """
-    # Local import mirrors the pattern at `get_refresh_router` to keep the
-    # auth module's load order resilient.
+    # Local import mirrors the pattern at `get_refresh_router` to keep the auth
+    # module's load order resilient.
     from onyx.auth.oauth_refresher import check_and_refresh_oauth_tokens
 
     try:

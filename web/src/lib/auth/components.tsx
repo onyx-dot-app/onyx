@@ -2,11 +2,13 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useSessionWatcher } from "@/lib/auth/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 import Modal from "@/refresh-components/Modal";
 import { Button, Text } from "@opal/components";
 import { SvgLogOut, SvgCheckCircle, SvgXCircle } from "@opal/icons";
+import { SessionEndReason } from "@/lib/auth/types";
 import { SvgGoogle } from "@opal/logos";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
 import { verifyCaptchaForOAuth } from "@/lib/auth/svc";
@@ -40,9 +42,21 @@ interface AuthenticationShellProps {
   children: React.ReactNode;
 }
 
+const SESSION_END_GENERIC_COPY =
+  "Your session has expired. Please log in again to continue.";
+
+const SESSION_END_COPY: Record<SessionEndReason, string> = {
+  [SessionEndReason.EXPIRED]: SESSION_END_GENERIC_COPY,
+  [SessionEndReason.TERMINATED]:
+    "This session was signed out. Please log in again to continue.",
+  [SessionEndReason.UNRECOGNIZED]:
+    "You were signed out unexpectedly. Please log in again to continue. " +
+    "If this keeps happening, contact your administrator.",
+};
+
 export function AuthenticationShell({ children }: AuthenticationShellProps) {
   const router = useRouter();
-  const sessionEnded = useSessionWatcher();
+  const { sessionEnded, sessionEndReason } = useSessionWatcher();
 
   function handleLogin() {
     const { isExtension } = getExtensionContext();
@@ -52,9 +66,18 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
         "_blank",
         "noopener,noreferrer"
       );
-    } else {
-      router.push("/auth/login");
+      return;
     }
+    // Round-trip the current location through login (OAuth `next` / SAML
+    // RelayState) so the post-login redirect lands back here.
+    const returnTo = validateInternalRedirect(
+      window.location.pathname + window.location.search + window.location.hash
+    );
+    router.push(
+      returnTo
+        ? (`/auth/login?next=${encodeURIComponent(returnTo)}` as Route)
+        : "/auth/login"
+    );
   }
 
   return (
@@ -70,7 +93,9 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
             <Modal.Header icon={SvgLogOut} title="You Have Been Logged Out" />
             <Modal.Body>
               <Text font="main-ui-body" color="text-03">
-                Your session has expired. Please log in again to continue.
+                {sessionEndReason
+                  ? SESSION_END_COPY[sessionEndReason]
+                  : SESSION_END_GENERIC_COPY}
               </Text>
             </Modal.Body>
             <Modal.Footer>
