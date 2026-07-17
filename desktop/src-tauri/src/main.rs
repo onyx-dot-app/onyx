@@ -1194,10 +1194,72 @@ fn setup_tray_icon(app: &AppHandle) -> tauri::Result<()> {
 }
 
 // ============================================================================
+// Version
+// ============================================================================
+
+#[derive(Deserialize)]
+struct VersionResponse {
+    backend_version: String,
+}
+
+/// Whether the process was launched with `--version` / `-v`.
+fn wants_version() -> bool {
+    std::env::args().any(|arg| arg == "--version" || arg == "-v")
+}
+
+/// Fetch the backend version from the configured server's public `/api/version`
+/// endpoint. `Ok(None)` means the server answered but reported no version.
+fn fetch_server_version(server_url: &str) -> Result<Option<String>, String> {
+    let url = format!("{}/api/version", server_url.trim_end_matches('/'));
+
+    tauri::async_runtime::block_on(async move {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .map_err(|e| e.to_string())?;
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        let text = resp.text().await.map_err(|e| e.to_string())?;
+        let body: VersionResponse =
+            serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        if body.backend_version.trim().is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(body.backend_version))
+        }
+    })
+}
+
+/// Print client and (if reachable) server version, mirroring the CLI's
+/// `--version` output.
+fn print_version_info() {
+    println!("Client version: {}", env!("CARGO_PKG_VERSION"));
+
+    let (config, _) = load_config();
+    let server_url = config.server_url;
+
+    match fetch_server_version(&server_url) {
+        Ok(Some(version)) => println!("Server version: {}", version),
+        Ok(None) => println!("Server version: unknown (empty response from {})", server_url),
+        Err(_) => println!("Server version: unknown (could not fetch from {})", server_url),
+    }
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
 fn main() {
+    if wants_version() {
+        print_version_info();
+        return;
+    }
+
     let (config, config_initialized) = load_config();
     let debug_mode = is_debug_mode();
 
