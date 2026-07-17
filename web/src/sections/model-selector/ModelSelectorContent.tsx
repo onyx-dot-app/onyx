@@ -17,6 +17,7 @@ import {
   LLMOption,
   buildLlmOptions,
   groupLlmOptions,
+  llmOptionKey,
 } from "@/lib/languageModels/options";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import {
@@ -131,10 +132,7 @@ export default function ModelSelectorContent({
       capabilities.length > 0 ? capabilities.join(", ") : undefined;
 
     return (
-      <Disabled
-        key={`${option.provider}:${option.modelName}`}
-        disabled={disabled}
-      >
+      <Disabled key={llmOptionKey(option)} disabled={disabled}>
         <LineItemButton
           selectVariant="select-heavy"
           state={selected ? "selected" : "empty"}
@@ -207,7 +205,11 @@ export default function ModelSelectorContent({
                 ]
               : groupedOptions.length === 1
                 ? [
-                    <Section key="single-provider" gap={0.25}>
+                    <Section
+                      key="single-provider"
+                      gap={0.25}
+                      alignItems="stretch"
+                    >
                       {groupedOptions[0]!.options.map(renderModelItem)}
                     </Section>,
                   ]
@@ -261,7 +263,7 @@ export default function ModelSelectorContent({
                         </CollapsibleTrigger>
 
                         <CollapsibleContent>
-                          <Section gap={0.25}>
+                          <Section gap={0.25} alignItems="stretch">
                             {group.options.map(renderModelItem)}
                           </Section>
                         </CollapsibleContent>

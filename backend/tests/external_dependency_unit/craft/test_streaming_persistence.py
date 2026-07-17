@@ -31,7 +31,7 @@ from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
-from tests.external_dependency_unit.craft.stubs import StubSandboxManager
+from tests.common.craft.stubs import StubSandboxManager
 
 
 def _text_chunk(text: str) -> AgentMessageChunk:
@@ -144,88 +144,41 @@ class TestStreamingPersistence:
     def test_agent_message_chunks_persist_as_single_assistant_row(
         self,
         db_session: Session,
+        test_user: User,
         build_session: BuildSession,
+        sandbox: Callable[..., Sandbox],
+        session_manager_with_stub: SessionManager,
+        stub_sandbox_manager: StubSandboxManager,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """3 chunks → 1 BuildMessage row, concatenated content.
+        """One assistant row per agent_message burst, not one per chunk.
 
-        Simulates:
-        1. Initial user message
-        2. Agent message chunks (3) → 1 assistant row
-        3. Tool call (completed) → 1 assistant row
-        4. Agent message chunks (2) → 1 assistant row
-
-        This verifies that chunk-accumulation finalize writes exactly one row
-        per stream-side burst rather than one row per chunk.
+        Two chunk bursts split by a completed tool call → three assistant rows
+        (first burst, tool row, second burst). Driven through the real
+        ``SessionManager`` stream path so the finalize-on-packet-type-change
+        behaviour is exercised rather than reimplemented in the test body.
         """
-        # 0. Initial user message
-        create_message(
-            session_id=build_session.id,
-            message_type=MessageType.USER,
-            turn_index=0,
-            message_metadata={
-                "type": "user_message",
-                "content": {"type": "text", "text": "Do something"},
-            },
+        sandbox(user=test_user)
+        stub_sandbox_manager.send_message_events = [
+            _text_chunk("Thinking"),
+            _text_chunk(" about it..."),
+            _tool_call_progress("call_1", "Bash", status="completed"),
+            _text_chunk("Done"),
+            _text_chunk(" with tool."),
+            _prompt_response(),
+        ]
+        _drive_persisted_turn(
             db_session=db_session,
+            mgr=session_manager_with_stub,
+            build_session=build_session,
+            user=test_user,
+            content="Do something",
         )
 
-        state = BuildStreamingState(turn_index=0)
-
-        # 1. Stream agent message chunks
-        state.add_message_chunk("Thinking")
-        state.add_message_chunk(" about it...")
-
-        # Simulate switch to tool call (e.g. ToolCallStart event) -> finalize message
-        # In SessionManager, this happens via state.should_finalize_chunks()
-        if state.should_finalize_chunks("tool_call_start"):
-            msg_packet = state.finalize_message_chunks()
-            if msg_packet:
-                create_message(
-                    session_id=build_session.id,
-                    message_type=MessageType.ASSISTANT,
-                    turn_index=0,
-                    message_metadata=msg_packet,
-                    db_session=db_session,
-                )
-        state.clear_last_chunk_type()
-
-        # 2. Handle completed tool call (immediate save)
-        tool_packet = {
-            "type": "tool_call_progress",
-            "toolCallId": "call_1",
-            "status": "completed",
-            "timestamp": "2025-01-01T00:00:00Z",
-        }
-        create_message(
-            session_id=build_session.id,
-            message_type=MessageType.ASSISTANT,
-            turn_index=0,
-            message_metadata=tool_packet,
-            db_session=db_session,
-        )
-
-        # 3. Stream more agent message chunks
-        state.add_message_chunk("Done")
-        state.add_message_chunk(" with tool.")
-
-        # End of stream -> finalize
-        msg_packet = state.finalize_message_chunks()
-        if msg_packet:
-            create_message(
-                session_id=build_session.id,
-                message_type=MessageType.ASSISTANT,
-                turn_index=0,
-                message_metadata=msg_packet,
-                db_session=db_session,
-            )
-
-        # Verify DB state
         messages = get_session_messages(build_session.id, db_session)
-        # 1 user + 3 assistant = 4 total
+        # 1 user + agent_message burst + tool row + agent_message burst.
         assert len(messages) == 4
 
-        # Verify types/order
         assert messages[0].type == MessageType.USER
 
         assert messages[1].type == MessageType.ASSISTANT
@@ -236,6 +189,26 @@ class TestStreamingPersistence:
 
         assert messages[3].type == MessageType.ASSISTANT
         assert messages[3].message_metadata["content"]["text"] == "Done with tool."
+
+    def test_tool_output_with_nul_byte_is_stripped_for_postgres_jsonb(
+        self,
+        db_session: Session,
+        build_session: BuildSession,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        create_message(
+            session_id=build_session.id,
+            message_type=MessageType.ASSISTANT,
+            turn_index=0,
+            message_metadata={
+                "type": "tool_call_progress",
+                "rawOutput": {"output": "prefix\x00suffix"},
+            },
+            db_session=db_session,
+        )
+
+        messages = get_session_messages(build_session.id, db_session)
+        assert messages[-1].message_metadata["rawOutput"]["output"] == "prefixsuffix"
 
     def test_agent_thought_chunks_persist_as_single_collapsed_row(
         self,

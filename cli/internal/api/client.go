@@ -152,6 +152,17 @@ func (c *Client) Search(ctx context.Context, req models.SearchRequest) (*models.
 	return &resp, nil
 }
 
+// GenerateImage calls POST /image-generation/generate, which generates
+// image(s) using the workspace's default image-gen provider. Uses the 5min
+// client since high-res generation can be slow.
+func (c *Client) GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error) {
+	var resp models.ImageGenerationResponse
+	if err := c.doJSONWith(ctx, c.streamingHTTPClient, "POST", "/image-generation/generate", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // TestConnection checks if the server is reachable and credentials are valid.
 // Returns nil on success, or an error with a descriptive message on failure.
 func (c *Client) TestConnection(ctx context.Context) error {
@@ -355,6 +366,7 @@ type ClientAPI interface {
 	StopChatSession(ctx context.Context, sessionID string)
 	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload) <-chan models.StreamEvent
 	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
+	GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error)
 }
 
 var _ ClientAPI = (*Client)(nil)

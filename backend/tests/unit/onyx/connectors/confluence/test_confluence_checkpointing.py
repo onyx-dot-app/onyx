@@ -80,13 +80,14 @@ def create_mock_page() -> Callable[..., dict[str, Any]]:
         updated: str = "2023-01-01T12:00:00.000+0000",
         content: str = "Test Content",
         labels: list[str] | None = None,
+        created: str = "2023-01-01T12:00:00.000+0000",
     ) -> dict[str, Any]:
         """Helper to create a mock Confluence page object"""
         return {
             "id": id,
             "title": title,
             "version": {"when": updated},
-            "history": {"lastUpdated": {"when": updated}},
+            "history": {"createdDate": created, "lastUpdated": {"when": updated}},
             "body": {"storage": {"value": content}},
             "metadata": {
                 "labels": {"results": [{"name": label} for label in (labels or [])]}

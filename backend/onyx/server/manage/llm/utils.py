@@ -4,7 +4,7 @@ LLM Provider Utilities
 Utilities for dynamic LLM providers (Bedrock, Ollama, OpenRouter):
 - Display name generation from model identifiers
 - Model validation and filtering
-- Vision/reasoning capability inference
+- Reasoning capability inference
 """
 
 import re
@@ -17,18 +17,6 @@ from onyx.llm.constants import OLLAMA_MODEL_NAME_MAPPINGS
 from onyx.llm.constants import OLLAMA_MODEL_TO_VENDOR
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 
-# Dynamic providers fetch models directly from source APIs (not LiteLLM)
-DYNAMIC_LLM_PROVIDERS = frozenset(
-    {
-        LlmProviderNames.OPENROUTER,
-        LlmProviderNames.BEDROCK,
-        LlmProviderNames.OLLAMA_CHAT,
-        LlmProviderNames.LM_STUDIO,
-        LlmProviderNames.BIFROST,
-        LlmProviderNames.OPENAI_COMPATIBLE,
-    }
-)
-
 
 class ModelMetadata(TypedDict):
     """Metadata about a model from the provider API."""
@@ -39,36 +27,6 @@ class ModelMetadata(TypedDict):
 
 # Non-LLM model patterns to filter out (image gen, embeddings, etc.)
 NON_LLM_PATTERNS = frozenset({"embed", "stable-", "titan-image", "titan-embed"})
-
-# Known Bedrock vision-capable models (for fallback when base model not in region)
-BEDROCK_VISION_MODELS = frozenset(
-    {
-        "anthropic.claude-3",
-        "anthropic.claude-4",
-        "amazon.nova-pro",
-        "amazon.nova-lite",
-        "amazon.nova-premier",
-    }
-)
-
-# Known Bifrost/OpenAI-compatible vision-capable model families where the
-# source API does not expose this metadata directly.
-BIFROST_VISION_MODEL_FAMILIES = frozenset(
-    {
-        "anthropic/claude-3",
-        "anthropic/claude-4",
-        "amazon/nova-pro",
-        "amazon/nova-lite",
-        "amazon/nova-premier",
-        "openai/gpt-4o",
-        "openai/gpt-4.1",
-        "google/gemini",
-        "meta-llama/llama-3.2",
-        "mistral/pixtral",
-        "qwen/qwen2.5-vl",
-        "qwen/qwen-vl",
-    }
-)
 
 
 def is_valid_bedrock_model(
@@ -91,23 +49,6 @@ def is_valid_bedrock_model(
     if not supports_streaming:
         return False
     return True
-
-
-def infer_vision_support(model_id: str) -> bool:
-    """Infer vision support from model ID when base model metadata unavailable.
-
-    Used for providers like Bedrock and Bifrost where vision support may
-    need to be inferred from vendor/model naming conventions.
-    """
-    model_id_lower = model_id.lower()
-    if any(vision_model in model_id_lower for vision_model in BEDROCK_VISION_MODELS):
-        return True
-
-    normalized_model_id = model_id_lower.replace(".", "/")
-    return any(
-        vision_model in normalized_model_id
-        for vision_model in BIFROST_VISION_MODEL_FAMILIES
-    )
 
 
 def generate_bedrock_display_name(model_id: str) -> str:
@@ -288,6 +229,11 @@ def is_reasoning_model(model_id: str, display_name: str) -> bool:
 
     Used for OpenRouter and other dynamic providers where we need to infer
     reasoning capability from model identifiers.
+
+    TODO: unify with model_is_reasoning_model (onyx/llm/model_capabilities.py)
+    behind a single infer_reasoning_support() helper so the dynamic-provider
+    fetch endpoints and ModelConfigurationView.from_model don't each have to
+    compose the cost-map lookup and this heuristic manually.
     """
     combined = f"{model_id} {display_name}".lower()
     return any(pattern in combined for pattern in REASONING_MODEL_PATTERNS)

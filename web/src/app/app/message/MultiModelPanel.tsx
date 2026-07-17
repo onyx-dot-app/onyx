@@ -26,6 +26,8 @@ export interface MultiModelPanelProps {
   isHidden: boolean;
   /** Whether this is a non-preferred panel in selection mode (pushed off-screen) */
   isNonPreferredInSelection: boolean;
+  /** Read-only (shared) view: no select/hide controls, header is a static label */
+  readOnly?: boolean;
   /** Callback when user clicks this panel to select as preferred */
   onSelect: () => void;
   /** Callback to deselect this panel as preferred */
@@ -66,6 +68,7 @@ export default function MultiModelPanel({
   isPreferred,
   isHidden,
   isNonPreferredInSelection,
+  readOnly = false,
   onSelect,
   onDeselect,
   onToggleVisibility,
@@ -79,7 +82,7 @@ export default function MultiModelPanel({
 }: MultiModelPanelProps) {
   const ModelIcon = getModelIcon(provider, modelName);
 
-  const canSelect = !isHidden && !isPreferred && !isGenerating;
+  const canSelect = !isHidden && !isPreferred && !isGenerating && !readOnly;
 
   const handlePanelClick = useCallback(() => {
     if (canSelect) onSelect();
@@ -101,41 +104,53 @@ export default function MultiModelPanel({
         icon={ModelIcon}
         title={isHidden ? markdown(`~~${displayName}~~`) : displayName}
         rightChildren={
-          <div className="flex items-center gap-1 px-2">
-            {isPreferred && (
-              <>
+          readOnly ? (
+            isPreferred ? (
+              <div className="flex items-center px-2">
                 <span className="text-action-link-05 shrink-0">
                   <Text font="secondary-body" color="inherit" nowrap>
                     Preferred Response
                   </Text>
                 </span>
-                {onDeselect && (
-                  <Button
-                    prominence="tertiary"
-                    icon={SvgX}
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeselect();
-                    }}
-                    tooltip="Deselect preferred response"
-                  />
-                )}
-              </>
-            )}
-            {!isPreferred && (
-              <Button
-                prominence="tertiary"
-                icon={isHidden ? SvgEyeOff : SvgX}
-                size="md"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleVisibility();
-                }}
-                tooltip={isHidden ? "Show response" : "Hide response"}
-              />
-            )}
-          </div>
+              </div>
+            ) : undefined
+          ) : (
+            <div className="flex items-center gap-1 px-2">
+              {isPreferred && (
+                <>
+                  <span className="text-action-link-05 shrink-0">
+                    <Text font="secondary-body" color="inherit" nowrap>
+                      Preferred Response
+                    </Text>
+                  </span>
+                  {onDeselect && (
+                    <Button
+                      prominence="tertiary"
+                      icon={SvgX}
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeselect();
+                      }}
+                      tooltip="Deselect preferred response"
+                    />
+                  )}
+                </>
+              )}
+              {!isPreferred && (
+                <Button
+                  prominence="tertiary"
+                  icon={isHidden ? SvgEyeOff : SvgX}
+                  size="md"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleVisibility();
+                  }}
+                  tooltip={isHidden ? "Show response" : "Hide response"}
+                />
+              )}
+            </div>
+          )
         }
       />
     </div>

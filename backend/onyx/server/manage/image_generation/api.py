@@ -20,12 +20,13 @@ from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.factory import get_image_generation_provider
 from onyx.image_gen.factory import validate_credentials
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.server.manage.image_generation.models import ImageGenerationConfigCreate
 from onyx.server.manage.image_generation.models import ImageGenerationConfigUpdate
 from onyx.server.manage.image_generation.models import ImageGenerationConfigView
 from onyx.server.manage.image_generation.models import ImageGenerationCredentials
 from onyx.server.manage.image_generation.models import TestImageGenerationRequest
+from onyx.server.manage.llm.api import _validate_and_normalize_vertex_auth
 from onyx.server.manage.llm.api import _validate_llm_provider_change
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
@@ -86,6 +87,10 @@ def _build_llm_provider_request(
             api_key_changed=False,  # Using stored key from source provider
         )
 
+        custom_config = _validate_and_normalize_vertex_auth(
+            source_provider.provider, custom_config
+        )
+
         return LLMProviderUpsertRequest(
             name=f"Image Gen - {image_provider_id}",
             provider=source_provider.provider,
@@ -113,6 +118,8 @@ def _build_llm_provider_request(
             status_code=400,
             detail="No provider or source llm provided",
         )
+
+    custom_config = _validate_and_normalize_vertex_auth(provider, custom_config)
 
     credentials = ImageGenerationProviderCredentials(
         api_key=api_key,
@@ -240,6 +247,10 @@ def test_image_generation(
             detail="No provider or source llm provided",
         )
 
+    custom_config = _validate_and_normalize_vertex_auth(
+        provider, test_request.custom_config
+    )
+
     try:
         # Build image provider from credentials
         # If incorrect credentials are provided, this will raise an exception
@@ -252,7 +263,7 @@ def test_image_generation(
                 deployment_name=(
                     test_request.deployment_name or test_request.model_name
                 ),
-                custom_config=test_request.custom_config,
+                custom_config=custom_config,
             ),
         )
     except ValueError:

@@ -4,16 +4,13 @@ import React, { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import {
-  UserFileStatus,
-  type ProjectFile,
-} from "@/app/app/projects/projectsService";
+import { UserFileStatus, type ProjectFile } from "@/lib/projects/types";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { Button, Divider, LineItemButton, Text } from "@opal/components";
 import { Content, ContentAction } from "@opal/layouts";
 import AddInstructionModal from "@/sections/modals/AddInstructionModal";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { FileCard } from "@/sections/cards/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
 import { cn } from "@opal/utils";

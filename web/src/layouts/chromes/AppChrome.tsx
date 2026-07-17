@@ -2,10 +2,10 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
-  useEffect,
   type ReactNode,
 } from "react";
 import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
@@ -24,9 +24,14 @@ import {
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { deleteChatSession } from "@/app/app/services/lib";
+import {
+  exportChatSession,
+  ChatExportFormat,
+} from "@/lib/chat/exportChatSession";
+import { UNNAMED_CHAT } from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
   Button,
@@ -42,20 +47,27 @@ import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
+  SvgChevronLeft,
+  SvgDownload,
+  SvgFileText,
+  SvgFitWidth,
   SvgFolderIn,
+  SvgFullWidth,
+  SvgHash,
   SvgMoreHorizontal,
   SvgSearchMenu,
   SvgShare,
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
-import { useCustomFooterContent } from "@/lib/app/hooks";
+import { Tier } from "@/lib/settings/types";
+import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
+import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 
 // ---------------------------------------------------------------------------
 // Header
@@ -65,9 +77,11 @@ function Header() {
   const appFocus = useAppFocus();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
-  const settings = useSettingsContext();
+  const isSearchModeAvailable = useIsSearchModeAvailable();
+  const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
+  const { fullWidthChat, toggleFullWidthChat } = useFullWidthChat();
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
@@ -76,6 +90,7 @@ function Header() {
     number | null
   >(null);
   const [showMoveOptions, setShowMoveOptions] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
@@ -90,8 +105,7 @@ function Header() {
     useChatSessions();
   const router = useRouter();
 
-  const customHeaderContent =
-    settings?.enterpriseSettings?.custom_header_content;
+  const customHeaderContent = settings.enterprise?.custom_header_content;
   const pageWithHeaderContent =
     appFocus.isChat() || appFocus.isNewSession() || appFocus.isAgent();
 
@@ -189,52 +203,112 @@ function Header() {
     }
   }, []);
 
+  const handleExport = useCallback(
+    async (format: ChatExportFormat) => {
+      if (!currentChatSession) return;
+      try {
+        await exportChatSession(
+          currentChatSession.id,
+          currentChatSession.name || UNNAMED_CHAT,
+          format
+        );
+      } catch (error) {
+        console.error("Failed to export chat:", error);
+        showErrorNotification("Failed to export chat. Please try again.");
+      }
+    },
+    [currentChatSession]
+  );
+
   useEffect(() => {
-    const items = showMoveOptions
-      ? [
-          <PopoverSearchInput
-            key="search"
-            setShowMoveOptions={setShowMoveOptions}
-            onSearch={setSearchTerm}
-          />,
-          ...filteredProjects.map((project) => (
-            <LineItemButton
-              key={project.id}
-              sizePreset="main-ui"
-              rounding="sm"
-              icon={SvgFolderIn}
-              title={project.name}
-              onClick={noProp(() => handleMoveClick(project.id))}
-            />
-          )),
-        ]
-      : [
+    let items: ReactNode[];
+    if (showMoveOptions) {
+      items = [
+        <PopoverSearchInput
+          key="search"
+          setShowMoveOptions={setShowMoveOptions}
+          onSearch={setSearchTerm}
+        />,
+        ...filteredProjects.map((project) => (
           <LineItemButton
-            key="move"
+            key={project.id}
             sizePreset="main-ui"
             rounding="sm"
             icon={SvgFolderIn}
-            title="Move to Project"
-            onClick={noProp(() => setShowMoveOptions(true))}
-          />,
+            title={project.name}
+            onClick={noProp(() => handleMoveClick(project.id))}
+          />
+        )),
+      ];
+    } else if (showExportOptions) {
+      items = [
+        <LineItemButton
+          key="export-back"
+          sizePreset="main-ui"
+          rounding="sm"
+          icon={SvgChevronLeft}
+          title="Export As…"
+          onClick={noProp(() => setShowExportOptions(false))}
+        />,
+        <Popover.Close asChild key="export-plaintext">
           <LineItemButton
-            key="delete"
             sizePreset="main-ui"
             rounding="sm"
-            color="danger"
-            icon={SvgTrash}
-            title="Delete"
-            onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-          />,
-        ];
+            icon={SvgFileText}
+            title="Plaintext"
+            onClick={noProp(() => handleExport("text"))}
+          />
+        </Popover.Close>,
+        <Popover.Close asChild key="export-markdown">
+          <LineItemButton
+            sizePreset="main-ui"
+            rounding="sm"
+            icon={SvgHash}
+            title="Markdown"
+            onClick={noProp(() => handleExport("markdown"))}
+          />
+        </Popover.Close>,
+      ];
+    } else {
+      items = [
+        <LineItemButton
+          key="move"
+          sizePreset="main-ui"
+          rounding="sm"
+          icon={SvgFolderIn}
+          title="Move to Project"
+          onClick={noProp(() => setShowMoveOptions(true))}
+        />,
+        <LineItemButton
+          key="export"
+          sizePreset="main-ui"
+          rounding="sm"
+          icon={SvgDownload}
+          title="Export As…"
+          onClick={noProp(() => setShowExportOptions(true))}
+        />,
+        null,
+        <LineItemButton
+          key="delete"
+          sizePreset="main-ui"
+          rounding="sm"
+          color="danger"
+          icon={SvgTrash}
+          title="Delete"
+          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
+        />,
+      ];
+    }
 
     setPopoverItems(items);
   }, [
     showMoveOptions,
+    showExportOptions,
     filteredProjects,
     currentChatSession,
     setDeleteConfirmationModalOpen,
     handleMoveClick,
+    handleExport,
   ]);
 
   return (
@@ -286,7 +360,7 @@ function Header() {
         isMobile) &&
         !appFocus.isSharedChat() && (
           <RootLayout.Header>
-            <div className="w-full h-full flex flex-row flex-wrap justify-center items-center px-4 py-2">
+            <div className="w-full h-full flex flex-row flex-wrap justify-center items-center p-2 sm:px-4">
               {/*
           Left:
           - (mobile) sidebar toggle
@@ -301,7 +375,7 @@ function Header() {
                   />
                 )}
                 {businessTier &&
-                  settings.isSearchModeAvailable &&
+                  isSearchModeAvailable &&
                   appFocus.isNewSession() &&
                   state.phase === "idle" && (
                     <Popover
@@ -394,6 +468,14 @@ function Header() {
                     >
                       Share
                     </Button>
+                    <Button
+                      icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
+                      prominence="tertiary"
+                      onClick={toggleFullWidthChat}
+                      tooltip={fullWidthChat ? "Fit width" : "Full width"}
+                      aria-label="Toggle full width chat"
+                      aria-pressed={fullWidthChat}
+                    />
                     <SimplePopover
                       trigger={
                         <Button
@@ -406,6 +488,7 @@ function Header() {
                         setPopoverOpen(state);
                         if (!state) {
                           setShowMoveOptions(false);
+                          setShowExportOptions(false);
                           setSearchTerm("");
                         }
                       }}
@@ -436,11 +519,11 @@ function Footer() {
     <RootLayout.Footer>
       <div
         className={cn(
-          "relative w-full flex flex-row justify-center items-center gap-2 px-4 mt-auto",
+          "relative w-full flex flex-row justify-center items-center gap-2 px-2 sm:px-4 mt-auto",
           // # Note (from @raunakab):
           //
           // The conditional rendering of vertical padding based on the current page is intentional.
-          // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
+          // The `AppInputBar` has `shadow-box-01` applied, which extends ~14px below it.
           // Because the content area in `AppChrome` uses `overflow-auto`, the shadow would be
           // clipped at the container boundary — causing a visible rendering artefact.
           //
@@ -474,6 +557,8 @@ export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
 
   const appFocus = useAppFocus();
+  useAppDocumentTitle();
+
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();
   const { isSafari } = useBrowserInfo();

@@ -30,13 +30,15 @@ from onyx.auth.invited_users import write_invited_users
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
+from onyx.auth.session_tokens import build_session_rejection_error
+from onyx.auth.session_tokens import classify_session_token_value
+from onyx.auth.session_tokens import SessionRejection
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import enforce_seat_limit_locked
 from onyx.auth.users import optional_user
 from onyx.auth.users import scope_exempt
 from onyx.configs.app_configs import AUTH_BACKEND
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import EMAIL_CONFIGURED
@@ -69,6 +71,7 @@ from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_chat_background
 from onyx.db.user_preferences import update_user_default_app_mode
 from onyx.db.user_preferences import update_user_default_model
+from onyx.db.user_preferences import update_user_language
 from onyx.db.user_preferences import update_user_paste_as_tile
 from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
@@ -76,6 +79,7 @@ from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
 from onyx.db.user_preferences import update_user_temperature_override_enabled
 from onyx.db.user_preferences import update_user_theme_preference
+from onyx.db.user_preferences import update_users_craft_enabled
 from onyx.db.users import batch_get_user_groups
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_accepted_users
@@ -100,12 +104,14 @@ from onyx.server.manage.models import BulkInviteResponse
 from onyx.server.manage.models import ChatBackgroundRequest
 from onyx.server.manage.models import DefaultAppModeRequest
 from onyx.server.manage.models import EmailInviteStatus
+from onyx.server.manage.models import LanguageRequest
 from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import TenantSnapshot
 from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
+from onyx.server.manage.models import UserCraftAccessUpdateRequest
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
 from onyx.server.manage.models import UserRoleResponse
@@ -119,6 +125,10 @@ from onyx.server.models import UserGroupInfo
 from onyx.server.security.store import get_security_settings
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.csv_utils import sanitize_csv_cell
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -174,6 +184,59 @@ def set_user_role(
         )(db_session, user_to_update)
 
     update_user_role(user_to_update, requested_role, db_session)
+
+    emit_audit_event(
+        AuditAction.USER_ROLE_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(user_to_update.id),
+        extra={
+            "target_email": user_to_update.email,
+            "old_role": current_role.value,
+            "new_role": requested_role.value,
+        },
+    )
+
+
+@router.patch("/manage/admin/users/craft-enabled")
+def set_user_craft_access(
+    craft_access_update_request: UserCraftAccessUpdateRequest,
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
+    db_session: Session = Depends(get_session),
+) -> None:
+    users_to_update: list[User] = []
+    missing_emails: list[str] = []
+    for email in craft_access_update_request.user_emails:
+        target = get_user_by_email(email=email, db_session=db_session)
+        if target:
+            users_to_update.append(target)
+        else:
+            missing_emails.append(email)
+    if missing_emails:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Users not found: {', '.join(missing_emails)}",
+        )
+
+    update_users_craft_enabled(
+        user_ids=[target.id for target in users_to_update],
+        craft_enabled=craft_access_update_request.craft_enabled,
+        db_session=db_session,
+    )
+
+    emit_audit_event(
+        AuditAction.USER_CRAFT_ACCESS_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        extra={
+            "target_emails": [target.email for target in users_to_update],
+            "craft_enabled": craft_access_update_request.craft_enabled,
+        },
+    )
 
 
 class TestUpsertRequest(BaseModel):
@@ -554,7 +617,7 @@ def bulk_invite_users(
     else:
         try:
             for email in emails_needing_seats:
-                send_user_email_invite(email, current_user, AUTH_TYPE)
+                send_user_email_invite(email, current_user)
             email_invite_status = EmailInviteStatus.SENT
         except Exception as e:
             logger.error("Error sending email invite to invited users: %s", e)
@@ -598,6 +661,17 @@ def bulk_invite_users(
                             comp_err,
                         )
             raise e
+
+    # Genuinely-new invites (not existing or already-invited) are the accounts
+    # an admin is provisioning access for; re-invites of known emails are no-ops.
+    if emails_needing_seats:
+        emit_audit_event(
+            AuditAction.USER_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(current_user),
+            resource_type="user",
+            extra={"invited_emails": emails_needing_seats},
+        )
 
     return BulkInviteResponse(
         invited_count=number_of_invited_users,
@@ -663,6 +737,15 @@ def deactivate_user_api(
 
     deactivate_user(user_to_deactivate, db_session)
 
+    emit_audit_event(
+        AuditAction.USER_DEACTIVATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(user_to_deactivate.id),
+        extra={"target_email": user_to_deactivate.email},
+    )
+
     # Invalidate license cache so used_seats reflects the new count
     # Only for self-hosted (non-multi-tenant) deployments
     if not MULTI_TENANT:
@@ -674,7 +757,9 @@ def deactivate_user_api(
 @router.delete("/manage/admin/delete-user", tags=PUBLIC_API_TAGS)
 async def delete_user(
     user_email: UserByEmail,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_delete = get_user_by_email(
@@ -689,6 +774,10 @@ async def delete_user(
             status_code=400, detail="User must be deactivated before deleting"
         )
 
+    # Capture identifiers before the row is detached/deleted below.
+    deleted_user_id = str(user_to_delete.id)
+    deleted_user_email = user_to_delete.email
+
     # Detach the user from the current session
     db_session.expunge(user_to_delete)
 
@@ -699,6 +788,15 @@ async def delete_user(
         )([user_email.user_email], tenant_id)
         delete_user_from_db(user_to_delete, db_session)
         logger.info("Deleted user %s", user_to_delete.email)
+
+        emit_audit_event(
+            AuditAction.USER_DELETE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(current_user),
+            resource_type="user",
+            resource_id=deleted_user_id,
+            extra={"target_email": deleted_user_email},
+        )
 
         # Invalidate license cache so used_seats reflects the new count
         # Only for self-hosted (non-multi-tenant) deployments
@@ -716,7 +814,9 @@ async def delete_user(
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
 def activate_user_api(
     user_email: UserByEmail,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_activate = get_user_by_email(
@@ -732,6 +832,15 @@ def activate_user_api(
     enforce_seat_limit_locked(db_session)
 
     activate_user(user_to_activate, db_session)
+
+    emit_audit_event(
+        AuditAction.USER_REACTIVATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(user_to_activate.id),
+        extra={"target_email": user_to_activate.email},
+    )
 
     # Invalidate license cache so used_seats reflects the new count
     # Only for self-hosted (non-multi-tenant) deployments
@@ -782,43 +891,44 @@ async def get_user_role(
     return UserRoleResponse(role=user.role)
 
 
-def get_current_auth_token_creation_redis(
+def get_current_auth_token_expiry_redis(
     user: User, request: Request
 ) -> datetime | None:
-    """Calculate the token creation time from Redis TTL information.
-
-    This function retrieves the authentication token from cookies,
-    checks its TTL in Redis, and calculates when the token was created.
-    Despite the function name, it returns the token creation time, not the expiration time.
     """
-    # Anonymous users don't have auth tokens
+    Reads the logical expiry embedded in the Redis token value; the physical TTL
+    outlives it by the grace window, so TTL back-calculation would overstate the
+    remaining session time. Pre-upgrade values are the exception: written
+    without the grace window, their TTL is the exact logical expiry, so it is
+    used directly.
+    """
+    # Anonymous users don't have auth tokens.
     if user.is_anonymous:
         return None
     try:
-        # Get the token from the request
         token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
         if not token:
             logger.debug("No auth token cookie found")
             return None
 
-        # Get the Redis client
         redis = get_raw_redis_client()
         redis_key = REDIS_AUTH_KEY_PREFIX + token
-
-        # Get the TTL of the token
-        ttl = cast(int, redis.ttl(redis_key))
-        if ttl <= 0:
-            logger.error("Token has expired or doesn't exist in Redis")
+        raw_value = redis.get(redis_key)
+        result = classify_session_token_value(cast(str | bytes | None, raw_value))
+        if isinstance(result, SessionRejection):
+            logger.error(
+                "Token of authenticated request is not live in Redis: %s",
+                result.reason.value,
+            )
             return None
 
-        # Calculate the creation time based on TTL and session expiry
-        # Current time minus (total session length minus remaining TTL)
-        current_time = datetime.now(timezone.utc)
-        token_creation_time = current_time - timedelta(
-            seconds=(SESSION_EXPIRE_TIME_SECONDS - ttl)
-        )
+        if result.issued_at is None:
+            # Pre-upgrade value: its physical TTL is its logical expiry.
+            ttl = cast(int, redis.ttl(redis_key))
+            if ttl <= 0:
+                return None
+            return datetime.now(timezone.utc) + timedelta(seconds=ttl)
 
-        return token_creation_time
+        return result.expires_at
 
     except Exception as e:
         logger.error("Error retrieving token expiration from Redis: %s", e)
@@ -865,14 +975,19 @@ def get_current_token_creation_jwt(user: User, request: Request) -> datetime | N
         return None
 
 
-def _get_token_created_at(
+def _get_token_expires_at(
     user: User, request: Request, db_session: Session
 ) -> datetime | None:
     if AUTH_BACKEND == AuthBackend.REDIS:
-        return get_current_auth_token_creation_redis(user, request)
+        return get_current_auth_token_expiry_redis(user, request)
+
     if AUTH_BACKEND == AuthBackend.JWT:
-        return get_current_token_creation_jwt(user, request)
-    return get_current_token_creation_postgres(user, db_session)
+        token_created_at = get_current_token_creation_jwt(user, request)
+    else:
+        token_created_at = get_current_token_creation_postgres(user, db_session)
+    if token_created_at is None:
+        return None
+    return token_created_at + timedelta(seconds=SESSION_EXPIRE_TIME_SECONDS)
 
 
 @router.get("/me/permissions", tags=PUBLIC_API_TAGS)
@@ -897,6 +1012,9 @@ def verify_user_logged_in(
         if anonymous_user_enabled(tenant_id=tenant_id):
             store = get_kv_store()
             return fetch_anonymous_user_info(store)
+        session_rejection_error = build_session_rejection_error()
+        if session_rejection_error is not None:
+            raise session_rejection_error
         raise BasicAuthenticationError(detail="Unauthorized")
 
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
@@ -904,25 +1022,44 @@ def verify_user_logged_in(
             detail="Access denied. User's OIDC token has expired.",
         )
 
-    token_created_at = _get_token_created_at(user, request, db_session)
+    token_expires_at = _get_token_expires_at(user, request, db_session)
+    track_oidc = get_security_settings().track_external_idp_expiry
+    # When OIDC tracking is enabled, cap expiry at the IdP token's lifetime.
+    # Guard against stale oidc_expiry from a previous OIDC session (same comment
+    # as the old track_external_idp_expiry guard in UserInfo.from_model).
+    oidc_expiry = user.oidc_expiry if track_oidc else None
+    if oidc_expiry is not None:
+        token_expires_at = (
+            min(token_expires_at, oidc_expiry)
+            if token_expires_at is not None
+            else oidc_expiry
+        )
 
-    team_name = fetch_ee_implementation_or_noop(
-        "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
-    )(user.email)
-
+    team_name: str | None
     new_tenant: TenantSnapshot | None = None
     tenant_invitation: TenantSnapshot | None = None
 
-    if MULTI_TENANT:
-        if team_name != get_current_tenant_id():
-            user_count = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping", "get_tenant_count", None
-            )(team_name)
-            new_tenant = TenantSnapshot(tenant_id=team_name, number_of_users=user_count)
-
-        tenant_invitation = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
+    # Service-account (API key) emails are synthetic with no UserTenantMapping row,
+    # so get_tenant_id_for_email raises. An API key belongs only to its own tenant.
+    if MULTI_TENANT and user.account_type == AccountType.SERVICE_ACCOUNT:
+        team_name = tenant_id
+    else:
+        team_name = fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
         )(user.email)
+
+        if MULTI_TENANT:
+            if team_name != tenant_id:
+                user_count = fetch_ee_implementation_or_noop(
+                    "onyx.server.tenants.user_mapping", "get_tenant_count", None
+                )(team_name)
+                new_tenant = TenantSnapshot(
+                    tenant_id=team_name, number_of_users=user_count
+                )
+
+            tenant_invitation = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
+            )(user.email)
 
     super_users_list = cast(
         list[str],
@@ -939,9 +1076,7 @@ def verify_user_logged_in(
 
     user_info = UserInfo.from_model(
         user,
-        track_external_idp_expiry=get_security_settings().track_external_idp_expiry,
-        current_token_created_at=token_created_at,
-        expiry_length=SESSION_EXPIRE_TIME_SECONDS,
+        token_expires_at=token_expires_at,
         is_cloud_superuser=user.email in super_users_list,
         team_name=team_name,
         tenant_info=TenantInfo(
@@ -1006,6 +1141,15 @@ def update_user_theme_preference_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_theme_preference(user.id, request.theme_preference, db_session)
+
+
+@router.patch("/user/language")
+def update_user_language_api(
+    request: LanguageRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_language(user.id, request.language.value, db_session)
 
 
 @router.patch("/user/chat-background")
@@ -1126,10 +1270,7 @@ def update_user_assistant_visibility_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_preferences = UserInfo.from_model(
-        user,
-        track_external_idp_expiry=get_security_settings().track_external_idp_expiry,
-    ).preferences
+    user_preferences = UserInfo.from_model(user).preferences
     updated_preferences = update_assistant_visibility(
         user_preferences, assistant_id, show
     )

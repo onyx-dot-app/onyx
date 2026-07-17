@@ -29,10 +29,11 @@ import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
 import { ModalProvider } from "@/components/context/ModalContext";
-import { SidebarStateProvider } from "@opal/layouts";
+import { SidebarStateProvider, ToastProvider } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
-import ToastProvider from "@/providers/ToastProvider";
+import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
+import { FullWidthChatProvider } from "@/providers/FullWidthChatProvider";
 
 interface SidebarPersistenceProviderProps {
   children: React.ReactNode;
@@ -78,7 +79,17 @@ export default function AppProvider({ children }: AppProviderProps) {
             <ModalProvider>
               <SidebarPersistenceProvider>
                 <QueryControllerProvider>
-                  <ToastProvider>{children}</ToastProvider>
+                  <FullWidthChatProvider>
+                    <ToastProvider
+                      errorAppendix={
+                        NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK
+                          ? "Need help? Join our community at https://discord.gg/4NA5SbzrWb for support!"
+                          : undefined
+                      }
+                    >
+                      {children}
+                    </ToastProvider>
+                  </FullWidthChatProvider>
                 </QueryControllerProvider>
               </SidebarPersistenceProvider>
             </ModalProvider>

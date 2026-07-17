@@ -224,6 +224,7 @@ def thread_to_document(
 
     sections = []
     semantic_identifier = ""
+    created_at = None
     updated_at = None
     from_emails: dict[str, str | None] = {}
     other_emails: dict[str, str | None] = {}
@@ -249,6 +250,22 @@ def thread_to_document(
 
         if message_metadata.get("updated_at"):
             updated_at = message_metadata.get("updated_at")
+            # Messages arrive oldest-first, so the first Date header is the
+            # thread's creation time.
+            if not created_at:
+                created_at = message_metadata.get("updated_at")
+
+    created_at_datetime = None
+    if created_at:
+        try:
+            created_at_datetime = time_str_to_utc(created_at)
+        except (ValueError, OverflowError) as e:
+            logger.warning(
+                "Skipping unparseable Gmail Date header on thread %s: %r (%s)",
+                full_thread.get("id"),
+                created_at,
+                e,
+            )
 
     updated_at_datetime = None
     if updated_at:
@@ -286,6 +303,7 @@ def thread_to_document(
         # This is used to perform permission sync
         primary_owners=primary_owners,
         secondary_owners=secondary_owners,
+        doc_created_at=created_at_datetime,
         doc_updated_at=updated_at_datetime,
         # Not adding emails to metadata because it's already in the sections
         metadata={},
@@ -334,6 +352,9 @@ def _slim_thread_from_id(
     user_email: str,
     gmail_service: GmailService,  # noqa: ARG001
 ) -> SlimDocument:
+    # doc_created_at is left None: the Gmail thread list returns only IDs, and
+    # fetching the Date header would cost an extra API call per thread. Going-
+    # forward creation time is set on the full indexing path (thread_to_document).
     return SlimDocument(
         id=thread_id,
         external_access=ExternalAccess(

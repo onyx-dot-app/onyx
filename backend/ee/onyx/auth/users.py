@@ -1,4 +1,4 @@
-import os
+import secrets
 from datetime import datetime
 from datetime import timezone
 
@@ -12,23 +12,12 @@ from ee.onyx.configs.app_configs import SUPER_CLOUD_API_KEY
 from ee.onyx.configs.app_configs import SUPER_USERS
 from ee.onyx.server.seeding import get_seed_config
 from onyx.auth.permissions import require_permission
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-def verify_auth_setting() -> None:
-    # All the Auth flows are valid for EE version, but warn about deprecated 'disabled'
-    raw_auth_type = (os.environ.get("AUTH_TYPE") or "").lower()
-    if raw_auth_type == "disabled":
-        logger.warning(
-            "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
-        )
-    logger.notice("Using Auth Type: %s", AUTH_TYPE.value)
 
 
 def get_default_admin_user_emails_() -> list[str]:
@@ -42,8 +31,12 @@ async def current_cloud_superuser(
     request: Request,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> User:
+    if not SUPER_CLOUD_API_KEY:
+        logger.warning("SUPER_CLOUD_API_KEY is not configured; rejecting request")
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
     api_key = request.headers.get("Authorization", "").replace("Bearer ", "")
-    if api_key != SUPER_CLOUD_API_KEY:
+    if not secrets.compare_digest(api_key, SUPER_CLOUD_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     if user and user.email not in SUPER_USERS:

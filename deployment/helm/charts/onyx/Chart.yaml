@@ -1,11 +1,11 @@
 apiVersion: v2
 name: onyx
-description: A Helm chart for Kubernetes
+description: Onyx application and Craft sandbox deployment chart
 home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.1
+version: 0.6.14
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,18 +16,30 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Add isolated writable /tmp scratch space for sandboxed
-        OpenCode agents.
-    - kind: changed
-      description: Preserve Craft opencode history across Kubernetes sandbox
-        restarts by restoring it before opencode starts.
+    - kind: added
+      description: Add authenticated Prometheus scraping for the MCP server.
+    - kind: fixed
+      description: Scope metrics credentials and ServiceMonitor selectors to the intended workloads.
 dependencies:
+  # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
+  # is unset by default, so this falls through to `postgresql.enabled`. Set it
+  # false to skip the bundled CNPG operator (and, via the fallback below, its
+  # CRDs) and reuse an existing cluster-managed one (see values.yaml). Mirrors
+  # the redis-operator toggle.
   - name: cloudnative-pg
     version: 0.26.0
     repository: https://cloudnative-pg.github.io/charts
-    condition: postgresql.enabled
+    condition: postgresqlOperator.enabled,postgresql.enabled
     alias: postgresql
+  # CRDs-only subchart: Helm pre-installs a subchart's crds/ before building the
+  # main manifest (so the CNPG Cluster CR validates on fresh installs), and prunes
+  # it entirely when the condition is false. Follows the operator toggle by
+  # default — an external operator owns its own CRDs — but
+  # `postgresql.installCRDs` can override independently.
+  - name: onyx-cnpg-crds
+    version: 0.1.0
+    repository: file://../onyx-cnpg-crds
+    condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
   - name: opensearch
     version: 3.6.0
     repository: https://opensearch-project.github.io/helm-charts

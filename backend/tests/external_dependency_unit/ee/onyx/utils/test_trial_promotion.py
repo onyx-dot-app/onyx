@@ -24,13 +24,13 @@ from ee.onyx.server.tenants.tier_management import update_tenant_tier
 from ee.onyx.utils import tier as tier_module
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.models import Tier
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 @pytest.fixture(autouse=True)
 def _clean_tier_cache() -> Generator[None, None, None]:
     """Wipe the tier cache before and after each test so runs are isolated."""
-    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     redis_client.delete(TENANT_TIER_KEY)
     yield
     redis_client.delete(TENANT_TIER_KEY)
@@ -73,9 +73,13 @@ def _billing_info(
 def test_trial_business_resolves_to_enterprise() -> None:
     """A BUSINESS tenant with a future trial_end is promoted to ENTERPRISE."""
     future = datetime.now(timezone.utc) + timedelta(days=1)
-    update_tenant_tier(TEST_TENANT_ID, CustomerTier.BUSINESS, future)
+    update_tenant_tier(
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.BUSINESS, future
+    )
 
-    assert tier_module.get_tier(TEST_TENANT_ID) == Tier.ENTERPRISE
+    assert (
+        tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.ENTERPRISE
+    )
 
 
 def test_expired_trial_business_drops_back_to_business() -> None:
@@ -83,32 +87,44 @@ def test_expired_trial_business_drops_back_to_business() -> None:
     without waiting on the next webhook — this is the core defense against
     a delayed CP push."""
     past = datetime.now(timezone.utc) - timedelta(days=1)
-    update_tenant_tier(TEST_TENANT_ID, CustomerTier.BUSINESS, past)
+    update_tenant_tier(
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.BUSINESS, past
+    )
 
-    assert tier_module.get_tier(TEST_TENANT_ID) == Tier.BUSINESS
+    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
 
 
 def test_non_trial_business_resolves_to_business() -> None:
     """BUSINESS with no trial_end is unaffected by the promotion rule."""
-    update_tenant_tier(TEST_TENANT_ID, CustomerTier.BUSINESS, None)
+    update_tenant_tier(
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.BUSINESS, None
+    )
 
-    assert tier_module.get_tier(TEST_TENANT_ID) == Tier.BUSINESS
+    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
 
 
 def test_enterprise_without_trial_resolves_to_enterprise() -> None:
     """A contractual ENTERPRISE tenant is unaffected by the rule (no-op)."""
-    update_tenant_tier(TEST_TENANT_ID, CustomerTier.ENTERPRISE, None)
+    update_tenant_tier(
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.ENTERPRISE, None
+    )
 
-    assert tier_module.get_tier(TEST_TENANT_ID) == Tier.ENTERPRISE
+    assert (
+        tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.ENTERPRISE
+    )
 
 
 def test_enterprise_with_future_trial_remains_enterprise() -> None:
     """ENTERPRISE + a (nonsense in practice) future trial_end is still
     ENTERPRISE — the promotion rule only fires on BUSINESS."""
     future = datetime.now(timezone.utc) + timedelta(days=1)
-    update_tenant_tier(TEST_TENANT_ID, CustomerTier.ENTERPRISE, future)
+    update_tenant_tier(
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, CustomerTier.ENTERPRISE, future
+    )
 
-    assert tier_module.get_tier(TEST_TENANT_ID) == Tier.ENTERPRISE
+    assert (
+        tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.ENTERPRISE
+    )
 
 
 def test_cache_miss_lazy_refresh_promotes_and_caches() -> None:
@@ -118,11 +134,11 @@ def test_cache_miss_lazy_refresh_promotes_and_caches() -> None:
     billing = _billing_info(CustomerTier.BUSINESS, future)
 
     with patch.object(tier_module, "fetch_billing_information", return_value=billing):
-        result = tier_module.get_tier(TEST_TENANT_ID)
+        result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     assert result == Tier.ENTERPRISE
 
-    cached = get_cached_tier(TEST_TENANT_ID)
+    cached = get_cached_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert cached is not None
     assert cached.customer_tier == CustomerTier.BUSINESS
     # Allow microsecond drift from ISO round-trip.
@@ -134,7 +150,7 @@ def test_cached_naive_trial_end_is_treated_as_none() -> None:
     """A cache entry with a naive `trial_end` ISO string must not crash the
     tz-aware comparison in `_effective_tier`. It should be parsed as `None`
     (logged) and the tenant should resolve to their unpromoted tier."""
-    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     payload = json.dumps(
         {
             "customer_tier": CustomerTier.BUSINESS.value,
@@ -144,13 +160,13 @@ def test_cached_naive_trial_end_is_treated_as_none() -> None:
     )
     redis_client.set(TENANT_TIER_KEY, payload)
 
-    cached = get_cached_tier(TEST_TENANT_ID)
+    cached = get_cached_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert cached is not None
     assert cached.customer_tier == CustomerTier.BUSINESS
     assert cached.trial_end is None
 
     # End-to-end: must not raise, must fall back to unpromoted BUSINESS.
-    assert tier_module.get_tier(TEST_TENANT_ID) == Tier.BUSINESS
+    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
 
 
 def test_cp_returns_naive_trial_end_falls_back_to_business() -> None:
@@ -174,7 +190,7 @@ def test_cp_returns_naive_trial_end_falls_back_to_business() -> None:
     )
 
     with patch.object(tier_module, "fetch_billing_information", return_value=billing):
-        result = tier_module.get_tier(TEST_TENANT_ID)
+        result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     assert result == Tier.BUSINESS
 
@@ -185,9 +201,9 @@ def test_cache_miss_subscription_status_response_falls_back_to_business() -> Non
     response = SubscriptionStatusResponse(subscribed=False, customer_tier=None)
 
     with patch.object(tier_module, "fetch_billing_information", return_value=response):
-        result = tier_module.get_tier(TEST_TENANT_ID)
+        result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     assert result == Tier.BUSINESS
     # No-op cache write expected on this path.
-    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert redis_client.get(TENANT_TIER_KEY) is None

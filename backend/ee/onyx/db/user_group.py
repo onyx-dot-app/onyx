@@ -30,8 +30,10 @@ from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__UserGroup
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import LLMProvider__UserGroup
+from onyx.db.models import MCPServer__UserGroup
 from onyx.db.models import PermissionGrant
 from onyx.db.models import Persona
+from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import TokenRateLimit__UserGroup
 from onyx.db.models import User
@@ -42,6 +44,12 @@ from onyx.db.models import UserRole
 from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import fetch_user_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -90,6 +98,41 @@ def _cleanup_persona__user_group_relationships__no_commit(
     db_session.query(Persona__UserGroup).filter(
         Persona__UserGroup.user_group_id == user_group_id
     ).delete(synchronize_session=False)
+
+
+def _cleanup_mcp_server__user_group_relationships__no_commit(
+    db_session: Session, user_group_id: int
+) -> None:
+    """NOTE: does not commit the transaction."""
+    db_session.query(MCPServer__UserGroup).filter(
+        MCPServer__UserGroup.user_group_id == user_group_id
+    ).delete(synchronize_session=False)
+
+
+def _handle_owned_personas_for_group_deletion__no_commit(
+    db_session: Session, user_group_id: int
+) -> None:
+    """Personas owned by the group: otherwise-private ones die with it;
+    shared/public ones are orphaned (ownerless ⇒ managed by admins).
+
+    NOTE: does not commit the transaction."""
+    owned_personas = (
+        db_session.query(Persona)
+        .options(
+            selectinload(Persona.user_shares),
+            selectinload(Persona.group_shares),
+        )
+        .filter(Persona.owner_group_id == user_group_id)
+        .all()
+    )
+    for persona in owned_personas:
+        if (
+            not persona.is_public
+            and not persona.user_shares
+            and not persona.group_shares
+        ):
+            persona.deleted = True
+        persona.owner_group_id = None
 
 
 def _cleanup_token_rate_limit__user_group_relationships__no_commit(
@@ -252,6 +295,11 @@ def _add_user_group_snapshot_eager_loads(
             selectinload(Persona.user_files),
             selectinload(Persona.users),
             selectinload(Persona.groups),
+            selectinload(Persona.owner_group),
+            selectinload(Persona.user_shares).selectinload(Persona__User.user),
+            selectinload(Persona.group_shares).selectinload(
+                Persona__UserGroup.user_group
+            ),
         ),
     )
 
@@ -567,36 +615,44 @@ def remove_curator_status__no_commit(db_session: Session, user: User) -> None:
     _validate_curator_status__no_commit(db_session, [user])
 
 
-def _validate_curator_relationship_update_requester(
+def _validate_curator_can_modify_group(
     db_session: Session,
+    user: User,
     user_group_id: int,
-    user_making_change: User,
 ) -> None:
-    """
-    This function validates that the user making the change has the necessary permissions
-    to update the curator relationship for the target user in the given user group.
-    """
+    """Validates that ``user`` is permitted to modify the given user group
+    (its membership, cc_pair assignments, or curator relationships).
 
-    # Admins can update curator relationships for any group
-    if user_making_change.role == UserRole.ADMIN:
+    - ADMIN may modify any group.
+    - GLOBAL_CURATOR may modify any group they are a member of.
+    - CURATOR may only modify groups they actually curate.
+
+    Raises ``OnyxError(UNAUTHORIZED)`` if a curator / global_curator attempts to
+    modify a group that is outside their scope. This is intentionally an
+    authorization (403) error rather than a "not found" (404) so callers can
+    distinguish "not allowed" from "does not exist".
+    """
+    # Admins can modify any group.
+    if user.role == UserRole.ADMIN:
         return
 
-    # check if the user making the change is a curator in the group they are changing the curator relationship for
-    user_making_change_curator_groups = fetch_user_groups_for_user(
+    accessible_groups = fetch_user_groups_for_user(
         db_session=db_session,
-        user_id=user_making_change.id,
-        # only check if the user making the change is a curator if they are a curator
-        # otherwise, they are a global_curator and can update the curator relationship
-        # for any group they are a member of
-        only_curator_groups=user_making_change.role == UserRole.CURATOR,
+        user_id=user.id,
+        # Curators are scoped to groups they actually curate; global curators
+        # may modify any group they are a member of.
+        only_curator_groups=user.role == UserRole.CURATOR,
     )
-    requestor_curator_group_ids = [
-        group.id for group in user_making_change_curator_groups
-    ]
-    if user_group_id not in requestor_curator_group_ids:
-        raise ValueError(
-            f"user making change {user_making_change.email} is not a curator,"
-            f" admin, or global_curator for group '{user_group_id}'"
+    accessible_group_ids = {group.id for group in accessible_groups}
+    if user_group_id not in accessible_group_ids:
+        logger.warning(
+            "User '%s' attempted to modify group '%s' which they do not curate",
+            user.email,
+            user_group_id,
+        )
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Curators cannot control groups they don't curate",
         )
 
 
@@ -659,10 +715,10 @@ def update_user_curator_relationship(
         target_user=target_user,
     )
 
-    _validate_curator_relationship_update_requester(
+    _validate_curator_can_modify_group(
         db_session=db_session,
+        user=user_making_change,
         user_group_id=user_group_id,
-        user_making_change=user_making_change,
     )
 
     logger.info(
@@ -702,6 +758,15 @@ def add_users_to_user_group(
     user_group_id: int,
     user_ids: list[UUID],
 ) -> UserGroup:
+    # Curators may only modify groups they curate. Validate before any read of
+    # the target group's data so a curator cannot inspect (or mutate) a group
+    # outside their scope, even on the early-return path below.
+    _validate_curator_can_modify_group(
+        db_session=db_session,
+        user=user,
+        user_group_id=user_group_id,
+    )
+
     db_user_group = fetch_user_group(db_session=db_session, user_group_id=user_group_id)
     if db_user_group is None:
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
@@ -740,7 +805,7 @@ def add_users_to_user_group(
 
 def update_user_group(
     db_session: Session,
-    user: User,  # noqa: ARG001
+    user: User,
     user_group_id: int,
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:
@@ -748,6 +813,15 @@ def update_user_group(
     That will be processed by check_for_vespa_user_groups_sync_task and trigger
     a long running background sync to Vespa.
     """
+    # Curators may only modify groups they curate. Validate before any mutation
+    # so a curator cannot rewrite the membership / cc_pair assignments of a
+    # group outside their scope.
+    _validate_curator_can_modify_group(
+        db_session=db_session,
+        user=user,
+        user_group_id=user_group_id,
+    )
+
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     db_user_group = db_session.scalar(stmt)
     if db_user_group is None:
@@ -832,6 +906,20 @@ def update_user_group(
     )
 
     db_session.commit()
+
+    if added_user_ids or removed_user_ids:
+        emit_audit_event(
+            AuditAction.USER_GROUP_CHANGE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="user_group",
+            resource_id=user_group_id,
+            extra={
+                "added_user_ids": [str(uid) for uid in added_user_ids],
+                "removed_user_ids": [str(uid) for uid in removed_user_ids],
+            },
+        )
+
     return db_user_group
 
 
@@ -900,6 +988,12 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
         db_session=db_session, user_group_id=user_group_id
     )
     _cleanup_persona__user_group_relationships__no_commit(
+        db_session=db_session, user_group_id=user_group_id
+    )
+    _cleanup_mcp_server__user_group_relationships__no_commit(
+        db_session=db_session, user_group_id=user_group_id
+    )
+    _handle_owned_personas_for_group_deletion__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
     _cleanup_user_group__cc_pair_relationships__no_commit(

@@ -2,7 +2,6 @@ import pytest
 
 from onyx.auth.email_utils import build_user_email_invite
 from onyx.auth.email_utils import send_email
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
@@ -23,7 +22,7 @@ def test_send_user_email_invite() -> None:
     FROM_EMAIL = "noreply@onyx.app"
     TO_EMAIL = "support@onyx.app"
     text_content, html_content = build_user_email_invite(
-        FROM_EMAIL, TO_EMAIL, ONYX_DEFAULT_APPLICATION_NAME, AuthType.CLOUD
+        FROM_EMAIL, TO_EMAIL, ONYX_DEFAULT_APPLICATION_NAME
     )
 
     send_email(

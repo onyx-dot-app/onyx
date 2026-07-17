@@ -1,9 +1,4 @@
-"""Unit tests for the custom skill bundle validator.
-
-Covers slug validation, missing SKILL.md, template rejection, size caps, and
-the SHA-256 helper. Security-boundary tests (path traversal, symlinks,
-_safe_unzip extraction safety) live in test_bundle_safety.py.
-"""
+"""Unit tests for custom skill bundle validation and normalization."""
 
 from __future__ import annotations
 
@@ -13,12 +8,15 @@ import zipfile
 
 import pytest
 
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
 from onyx.skills.bundle import compute_bundle_sha256
-from onyx.skills.bundle import parse_skill_md_metadata
-from onyx.skills.bundle import slug_from_filename
-from onyx.skills.bundle import validate_custom_bundle
+from onyx.skills.bundle import normalize_custom_bundle
+from onyx.skills.bundle import read_custom_bundle_instructions
+from onyx.skills.bundle import rewrite_custom_bundle_skill_md
+from onyx.skills.bundle import strip_skill_md_frontmatter
+from onyx.skills.metadata import parse_skill_document
 
 
 def _build_zip(
@@ -54,26 +52,140 @@ def _valid_bundle() -> bytes:
     )
 
 
-def test_validator_accepts_a_well_formed_bundle() -> None:
-    # No raise = pass; validator returns None.
-    assert validate_custom_bundle(_valid_bundle(), slug="hello") is None
-
-
-def test_validator_rejects_non_zip() -> None:
+def test_validate_and_normalize_rejects_non_zip() -> None:
     with pytest.raises(OnyxError, match="not a valid zip"):
-        validate_custom_bundle(b"not a zip", slug="hello")
+        normalize_custom_bundle(b"not a zip")
 
 
-def test_validator_rejects_missing_skill_md() -> None:
+def test_validate_and_normalize_rejects_missing_skill_md() -> None:
     zip_bytes = _build_zip([("scripts/run.sh", b"#!/bin/sh\n")])
     with pytest.raises(OnyxError, match="SKILL.md missing at bundle root"):
-        validate_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
-def test_validator_rejects_skill_md_not_at_root() -> None:
-    zip_bytes = _build_zip([("subdir/SKILL.md", VALID_SKILL_MD)])
+def test_normalizer_flattens_single_wrapper_directory() -> None:
+    zip_bytes = _build_zip(
+        [
+            ("hello/SKILL.md", VALID_SKILL_MD),
+            ("hello/scripts/run.sh", b"#!/bin/sh\n"),
+        ]
+    )
+
+    normalized = normalize_custom_bundle(zip_bytes)
+
+    with zipfile.ZipFile(io.BytesIO(normalized.content)) as zf:
+        assert set(zf.namelist()) == {"SKILL.md", "scripts/run.sh"}
+        assert zf.read("SKILL.md") == VALID_SKILL_MD
+
+
+def test_normalizer_leaves_canonical_bundle_bytes_unchanged() -> None:
+    zip_bytes = _valid_bundle()
+    assert normalize_custom_bundle(zip_bytes).content is zip_bytes
+
+
+def test_normalizer_rejects_skill_md_nested_more_than_one_directory() -> None:
+    zip_bytes = _build_zip([("outer/inner/SKILL.md", VALID_SKILL_MD)])
     with pytest.raises(OnyxError, match="SKILL.md missing at bundle root"):
-        validate_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
+
+
+def test_normalizer_rejects_files_outside_wrapper_directory() -> None:
+    zip_bytes = _build_zip(
+        [
+            ("hello/SKILL.md", VALID_SKILL_MD),
+            ("unrelated.txt", b"not part of the skill"),
+        ]
+    )
+    with pytest.raises(OnyxError, match="outside the directory"):
+        normalize_custom_bundle(zip_bytes)
+
+
+def test_normalizer_rejects_multiple_wrapped_skills() -> None:
+    zip_bytes = _build_zip(
+        [
+            ("first/SKILL.md", VALID_SKILL_MD),
+            ("second/SKILL.md", VALID_SKILL_MD),
+        ]
+    )
+    with pytest.raises(OnyxError, match="SKILL.md missing at bundle root"):
+        normalize_custom_bundle(zip_bytes)
+
+
+def test_normalizer_rejects_duplicate_output_paths() -> None:
+    with pytest.warns(UserWarning, match="Duplicate name"):
+        zip_bytes = _build_zip(
+            [
+                ("hello/SKILL.md", VALID_SKILL_MD),
+                ("hello/scripts/run.sh", b"first"),
+                ("hello/scripts/run.sh", b"second"),
+            ]
+        )
+    with pytest.raises(OnyxError, match="duplicate path 'scripts/run.sh'"):
+        normalize_custom_bundle(zip_bytes)
+
+
+@pytest.mark.parametrize(
+    "supporting_entries",
+    [
+        [("hello/scripts", b"file"), ("hello/scripts/run.sh", b"script")],
+        [("hello/scripts/run.sh", b"script"), ("hello/scripts", b"file")],
+    ],
+)
+def test_normalizer_rejects_file_descendant_path_collisions(
+    supporting_entries: list[tuple[str, bytes]],
+) -> None:
+    zip_bytes = _build_zip([("hello/SKILL.md", VALID_SKILL_MD), *supporting_entries])
+
+    with pytest.raises(OnyxError, match="conflicting path"):
+        normalize_custom_bundle(zip_bytes)
+
+
+@pytest.mark.parametrize(
+    "supporting_entries",
+    [
+        [("hello/scripts/", b""), ("hello/scripts", b"file")],
+        [("hello/scripts", b"file"), ("hello/scripts/", b"")],
+        [("hello/scripts/nested/", b""), ("hello/scripts", b"file")],
+        [("hello/scripts", b"file"), ("hello/scripts/nested/", b"")],
+    ],
+)
+def test_normalizer_rejects_explicit_directory_file_collisions(
+    supporting_entries: list[tuple[str, bytes]],
+) -> None:
+    zip_bytes = _build_zip([("hello/SKILL.md", VALID_SKILL_MD), *supporting_entries])
+
+    with pytest.raises(OnyxError, match="conflicting path"):
+        normalize_custom_bundle(zip_bytes)
+
+
+def test_normalizer_accepts_file_beneath_explicit_directory() -> None:
+    zip_bytes = _build_zip(
+        [
+            ("hello/SKILL.md", VALID_SKILL_MD),
+            ("hello/scripts/", b""),
+            ("hello/scripts/run.sh", b"script"),
+        ]
+    )
+
+    normalized = normalize_custom_bundle(zip_bytes)
+
+    with zipfile.ZipFile(io.BytesIO(normalized.content)) as zf:
+        assert set(zf.namelist()) == {"SKILL.md", "scripts/run.sh"}
+
+
+def test_normalizer_ignores_operating_system_metadata() -> None:
+    zip_bytes = _build_zip(
+        [
+            ("hello/SKILL.md", VALID_SKILL_MD),
+            ("hello/.DS_Store", b"metadata"),
+            ("__MACOSX/hello/._SKILL.md", b"resource fork"),
+        ]
+    )
+
+    normalized = normalize_custom_bundle(zip_bytes)
+
+    with zipfile.ZipFile(io.BytesIO(normalized.content)) as zf:
+        assert zf.namelist() == ["SKILL.md"]
 
 
 def test_validator_rejects_template_file() -> None:
@@ -84,7 +196,7 @@ def test_validator_rejects_template_file() -> None:
         ]
     )
     with pytest.raises(OnyxError, match="cannot ship templates"):
-        validate_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 def test_validator_rejects_oversized_single_file() -> None:
@@ -95,7 +207,31 @@ def test_validator_rejects_oversized_single_file() -> None:
         ]
     )
     with pytest.raises(OnyxError, match="exceeds"):
-        validate_custom_bundle(zip_bytes, slug="hello", per_file_max_bytes=32)
+        normalize_custom_bundle(zip_bytes, per_file_max_bytes=32)
+
+
+def test_normalizer_preserves_size_error_when_entry_close_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zip_bytes = _build_zip([("hello/SKILL.md", b"x" * 64)])
+    original_close = zipfile._ZipWriteFile.close  # ty: ignore[unresolved-attribute]
+
+    def failing_close(
+        writer: zipfile._ZipWriteFile,  # ty: ignore[unresolved-attribute]
+    ) -> None:
+        original_close(writer)
+        raise OSError("close failed")
+
+    monkeypatch.setattr(
+        zipfile._ZipWriteFile,  # ty: ignore[unresolved-attribute]
+        "close",
+        failing_close,
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        normalize_custom_bundle(zip_bytes, per_file_max_bytes=32)
+
+    assert exc_info.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
 
 
 def test_validator_rejects_oversized_total() -> None:
@@ -107,35 +243,11 @@ def test_validator_rejects_oversized_total() -> None:
         ]
     )
     with pytest.raises(OnyxError, match="uncompressed"):
-        validate_custom_bundle(
+        normalize_custom_bundle(
             zip_bytes,
-            slug="hello",
             per_file_max_bytes=1024,
             total_max_bytes=128,
         )
-
-
-@pytest.mark.parametrize(
-    "bad_slug",
-    [
-        "",
-        "Hello",
-        "1starts-with-digit",
-        "has_underscore",
-        "a" * 65,
-        "..",
-    ],
-)
-def test_validator_rejects_invalid_slug(bad_slug: str) -> None:
-    with pytest.raises(OnyxError, match="invalid slug"):
-        validate_custom_bundle(_valid_bundle(), slug=bad_slug)
-
-
-def test_validator_rejects_reserved_slug() -> None:
-    """``pptx`` is a codified built-in — bundle uploads using that slug
-    are rejected so custom uploads can't shadow a built-in row."""
-    with pytest.raises(OnyxError, match="reserved"):
-        validate_custom_bundle(_valid_bundle(), slug="pptx")
 
 
 def test_compute_bundle_sha256_is_deterministic_for_same_bytes() -> None:
@@ -171,6 +283,125 @@ def test_compute_bundle_sha256_differs_for_same_content_different_timestamps() -
     assert compute_bundle_sha256(a) != compute_bundle_sha256(b)
 
 
+def test_strip_skill_md_frontmatter_returns_instruction_body() -> None:
+    content = (
+        "---\nname: Demo\ndescription: Demo skill\n---\n\n# Instructions\n\nDo it."
+    )
+    assert strip_skill_md_frontmatter(content) == "# Instructions\n\nDo it."
+
+
+def test_read_custom_bundle_instructions_returns_instruction_body() -> None:
+    zip_bytes = _build_zip(
+        [
+            (
+                "SKILL.md",
+                b"---\nname: Demo\ndescription: Demo skill\n---\n\n# Instructions\n\nDo it.",
+            ),
+            ("scripts/run.py", b"print('hi')\n"),
+            ("docs/notes.md", b"# Notes\n"),
+        ]
+    )
+    assert read_custom_bundle_instructions(zip_bytes) == "# Instructions\n\nDo it."
+
+
+def test_read_custom_bundle_instructions_does_not_require_frontmatter() -> None:
+    zip_bytes = _build_zip([("SKILL.md", b"# Instructions\n\nDo it.")])
+    assert read_custom_bundle_instructions(zip_bytes) == "# Instructions\n\nDo it."
+
+
+def test_rewrite_custom_bundle_skill_md_preserves_supporting_files() -> None:
+    original = _build_zip(
+        [
+            (
+                "SKILL.md",
+                b"---\nname: Old\ndescription: Old desc\n---\n\nOld instructions.",
+            ),
+            ("scripts/run.py", b"print('hi')\n"),
+            ("docs/notes.md", b"# Notes\n"),
+        ]
+    )
+
+    rewritten = rewrite_custom_bundle_skill_md(
+        original,
+        canonical_name="hello",
+        description="New desc",
+        instructions_markdown="# New instructions\n\nDo it.",
+    )
+
+    assert read_custom_bundle_instructions(rewritten) == "# New instructions\n\nDo it."
+    with zipfile.ZipFile(io.BytesIO(rewritten)) as zf:
+        metadata = parse_skill_document(zf.read("SKILL.md")).metadata
+        assert (metadata.name, metadata.description) == ("hello", "New desc")
+        assert zf.read("scripts/run.py") == b"print('hi')\n"
+        assert zf.read("docs/notes.md") == b"# Notes\n"
+
+
+def test_rewrite_custom_bundle_skill_md_preserves_other_frontmatter() -> None:
+    original = _build_zip(
+        [
+            (
+                "SKILL.md",
+                b"---\n"
+                b"name: Old\n"
+                b"description: Old desc\n"
+                b"license: Apache-2.0\n"
+                b"compatibility: Requires git\n"
+                b"metadata:\n"
+                b"  author: onyx\n"
+                b"allowed-tools: Read\n"
+                b"x-custom: preserved\n"
+                b"---\n\nOld instructions.\n",
+            )
+        ]
+    )
+
+    rewritten = rewrite_custom_bundle_skill_md(
+        original,
+        canonical_name="hello",
+        description="New desc",
+        instructions_markdown="New instructions.",
+    )
+
+    with zipfile.ZipFile(io.BytesIO(rewritten)) as zf:
+        skill_md = zf.read("SKILL.md").decode()
+    assert "license: Apache-2.0" in skill_md
+    assert "compatibility: Requires git" in skill_md
+    assert "author: onyx" in skill_md
+    assert "allowed-tools: Read" in skill_md
+    assert "x-custom: preserved" in skill_md
+
+
+def test_rewrite_custom_bundle_skill_md_rejects_oversized_skill_md_before_zip_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("onyx.skills.bundle.DEFAULT_PER_FILE_MAX_BYTES", 128)
+
+    with pytest.raises(OnyxError) as exc_info:
+        rewrite_custom_bundle_skill_md(
+            b"not a zip",
+            canonical_name="hello",
+            description="New desc",
+            instructions_markdown="x" * 256,
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+
+
+def test_rewrite_custom_bundle_skill_md_rejects_missing_skill_md() -> None:
+    original = _build_zip([("scripts/run.py", b"print('hi')\n")])
+
+    with pytest.raises(OnyxError) as exc_info:
+        rewrite_custom_bundle_skill_md(
+            original,
+            canonical_name="hello",
+            description="New desc",
+            instructions_markdown="# New instructions\n\nDo it.",
+        )
+
+    assert exc_info.value.error_code == OnyxErrorCode.INTERNAL_ERROR
+    assert exc_info.value.detail == "Stored skill bundle is missing SKILL.md."
+
+
 def _zip_with_patched_compression_method(payload: bytes, method: int) -> bytes:
     """Build a valid ZIP_STORED zip, then patch the compression-method field
     in both the local header and the central directory to ``method``.
@@ -198,7 +429,7 @@ def test_validator_rejects_unsupported_compression() -> None:
     from zf.open() — we must translate that to OnyxError, not a 500."""
     zip_bytes = _zip_with_patched_compression_method(VALID_SKILL_MD, method=99)
     with pytest.raises(OnyxError, match="cannot read"):
-        validate_custom_bundle(zip_bytes, slug="hello")
+        normalize_custom_bundle(zip_bytes)
 
 
 def test_validator_size_violation_returns_413() -> None:
@@ -210,92 +441,12 @@ def test_validator_size_violation_returns_413() -> None:
         ]
     )
     with pytest.raises(OnyxError) as exc_info:
-        validate_custom_bundle(zip_bytes, slug="hello", per_file_max_bytes=32)
+        normalize_custom_bundle(zip_bytes, per_file_max_bytes=32)
     assert exc_info.value.status_code == 413
 
 
 def test_validator_non_size_violation_returns_400() -> None:
     """Non-size violations still return 400."""
     with pytest.raises(OnyxError) as exc_info:
-        validate_custom_bundle(b"not a zip", slug="hello")
+        normalize_custom_bundle(b"not a zip")
     assert exc_info.value.status_code == 400
-
-
-# ---------------------------------------------------------------------------
-# slug_from_filename
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "filename,expected",
-    [
-        ("deal-summary.zip", "deal-summary"),
-        ("hello.ZIP", "hello"),
-        ("plain", "plain"),
-    ],
-)
-def test_slug_from_filename_strips_zip_extension(filename: str, expected: str) -> None:
-    assert slug_from_filename(filename) == expected
-
-
-@pytest.mark.parametrize("bad", [None, "", "Bad-Caps.zip", "with space.zip"])
-def test_slug_from_filename_rejects_invalid(bad: str | None) -> None:
-    with pytest.raises(OnyxError):
-        slug_from_filename(bad)
-
-
-# ---------------------------------------------------------------------------
-# parse_skill_md_metadata
-# ---------------------------------------------------------------------------
-
-
-def _bundle_with_skill_md(body: bytes) -> bytes:
-    return _build_zip([("SKILL.md", body)])
-
-
-def test_parse_skill_md_metadata_happy_path() -> None:
-    body = b"---\nname: My Skill\ndescription: Helpful description\n---\n\nbody\n"
-    name, description = parse_skill_md_metadata(_bundle_with_skill_md(body))
-    assert name == "My Skill"
-    assert description == "Helpful description"
-
-
-def test_parse_skill_md_metadata_strips_whitespace() -> None:
-    body = b"---\nname: '  spaced  '\ndescription: ' desc '\n---\n\nbody\n"
-    name, description = parse_skill_md_metadata(_bundle_with_skill_md(body))
-    assert name == "spaced"
-    assert description == "desc"
-
-
-def test_parse_skill_md_metadata_rejects_missing_frontmatter() -> None:
-    with pytest.raises(OnyxError, match="frontmatter"):
-        parse_skill_md_metadata(_bundle_with_skill_md(b"no frontmatter here\n"))
-
-
-def test_parse_skill_md_metadata_rejects_missing_name() -> None:
-    body = b"---\ndescription: only a description\n---\n\nbody\n"
-    with pytest.raises(OnyxError, match="name"):
-        parse_skill_md_metadata(_bundle_with_skill_md(body))
-
-
-def test_parse_skill_md_metadata_rejects_missing_description() -> None:
-    body = b"---\nname: only a name\n---\n\nbody\n"
-    with pytest.raises(OnyxError, match="description"):
-        parse_skill_md_metadata(_bundle_with_skill_md(body))
-
-
-def test_parse_skill_md_metadata_rejects_empty_name() -> None:
-    body = b"---\nname: ''\ndescription: desc\n---\n\nbody\n"
-    with pytest.raises(OnyxError, match="name"):
-        parse_skill_md_metadata(_bundle_with_skill_md(body))
-
-
-def test_parse_skill_md_metadata_rejects_missing_skill_md() -> None:
-    zip_bytes = _build_zip([("other.txt", b"hi")])
-    with pytest.raises(OnyxError, match="SKILL.md missing"):
-        parse_skill_md_metadata(zip_bytes)
-
-
-def test_parse_skill_md_metadata_rejects_bad_zip() -> None:
-    with pytest.raises(OnyxError, match="not a valid zip"):
-        parse_skill_md_metadata(b"not a zip")

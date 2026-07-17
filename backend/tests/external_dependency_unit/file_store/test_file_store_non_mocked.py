@@ -21,8 +21,8 @@ from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_store.file_store import S3BackedFileStore
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 logger = setup_logger()
 
@@ -212,8 +212,47 @@ class TestS3BackedFileStore:
             file_record.bucket_name == file_store._get_bucket_name()
         )  # Use actual bucket name
         # The object key should include the tenant ID
-        expected_object_key = f"{file_store._s3_prefix}/{TEST_TENANT_ID}/{file_id}"
+        expected_object_key = f"{file_store._s3_prefix}/{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/{file_id}"
         assert file_record.object_key == expected_object_key
+
+    def test_change_file_id_is_metadata_only(
+        self, file_store: S3BackedFileStore
+    ) -> None:
+        """Renaming a file repoints the DB record without moving the S3 object."""
+        old_id = f"{uuid.uuid4()}.txt"
+        new_id = f"{uuid.uuid4()}.txt"
+        content = b"rename me without copying"
+
+        file_store.save_file(
+            content=BytesIO(content),
+            display_name="rename.txt",
+            file_origin=FileOrigin.OTHER,
+            file_type="text/plain",
+            file_id=old_id,
+        )
+        original_object_key = file_store.read_file_record(old_id).object_key
+
+        file_store.change_file_id(old_id, new_id)
+
+        # Old id is gone; new id resolves to the same content.
+        assert not file_store.has_file(old_id, FileOrigin.OTHER, "text/plain")
+        assert file_store.has_file(new_id, FileOrigin.OTHER, "text/plain")
+        assert file_store.read_file(new_id).read() == content
+
+        # The S3 object never moved: the new record still points at the
+        # original object key (derived from the OLD file_id), not a new one.
+        new_record = file_store.read_file_record(new_id)
+        assert new_record.object_key == original_object_key
+        assert new_record.object_key.endswith(old_id)
+
+        # And nothing was copied to the key the new file_id would derive —
+        # guards against a "copy AND repoint" regression that leaks an object.
+        with pytest.raises(ClientError) as exc_info:
+            file_store._get_s3_client().head_object(
+                Bucket=file_store._get_bucket_name(),
+                Key=file_store._get_s3_key(new_id),
+            )
+        assert exc_info.value.response["Error"]["Code"] in ("404", "NoSuchKey")
 
     def test_save_and_read_binary_file(self, file_store: S3BackedFileStore) -> None:
         """Test saving and reading a binary file"""
@@ -827,7 +866,9 @@ class TestS3BackedFileStore:
             """Worker function to save a file with its own database session"""
             try:
                 # Set up tenant context for this worker
-                token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+                token = CURRENT_TENANT_ID_CONTEXTVAR.set(
+                    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                )
                 try:
                     # Create a new database session for each worker to avoid conflicts
                     with get_session_with_current_tenant() as worker_session:

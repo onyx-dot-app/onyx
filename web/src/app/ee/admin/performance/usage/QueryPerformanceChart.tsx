@@ -2,7 +2,7 @@
 
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { getDatesList, useQueryAnalytics, useUserAnalytics } from "../lib";
-import { ThreeDotsLoader } from "@/components/Loading";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
 import Title from "@/components/ui/title";
 import { Text } from "@opal/components";
@@ -27,8 +27,8 @@ export function QueryPerformanceChart({
   let chart;
   if (isQueryAnalyticsLoading || isUserAnalyticsLoading) {
     chart = (
-      <div className="h-80 flex flex-col">
-        <ThreeDotsLoader />
+      <div className="h-80 flex flex-col items-center justify-center">
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   } else if (

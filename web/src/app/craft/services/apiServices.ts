@@ -6,6 +6,7 @@ import {
   ApiArtifactResponse,
   ApiUsageLimitsResponse,
   ApiWebappInfoResponse,
+  ApiSandboxStatusResponse,
   SessionHistoryItem,
   Artifact,
   BuildMessage,
@@ -133,6 +134,20 @@ export async function fetchSession(
 
   if (!res.ok) {
     throw new Error(`Failed to load session: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function fetchSandboxStatus(
+  sessionId: string
+): Promise<ApiSandboxStatusResponse> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/sandbox-status`
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch sandbox status: ${res.status}`);
   }
 
   return res.json();
@@ -932,28 +947,6 @@ export async function createLibraryDirectory(
   }
 
   return res.json();
-}
-
-/**
- * Toggle sync status for a file/directory in the user library.
- */
-export async function toggleLibraryFileSync(
-  documentId: string,
-  enabled: boolean
-): Promise<void> {
-  const res = await fetch(
-    `${USER_LIBRARY_BASE}/files/${encodeURIComponent(
-      documentId
-    )}/toggle?enabled=${enabled}`,
-    {
-      method: "PATCH",
-    }
-  );
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to toggle sync: ${res.status}`);
-  }
 }
 
 /**

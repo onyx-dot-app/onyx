@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.db.llm import can_user_access_llm_provider
@@ -26,11 +25,14 @@ from onyx.db.models import BuildSession
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Sandbox
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_json_like
 
 logger = setup_logger()
 
@@ -123,8 +125,8 @@ def get_user_build_sessions(
     """Get a user's interactive build sessions that have at least one message.
 
     Sessions created by non-interactive callers (e.g. the scheduled-tasks
-    executor) are intentionally excluded from this listing so they don't
-    leak into the Craft sidebar. The covering composite index
+    executor or the Slack bot) are intentionally excluded from this listing
+    so they don't leak into the Craft sidebar. The covering composite index
     ``ix_build_session_user_origin_created`` is built for this exact query
     shape: ``(user_id, origin, created_at DESC)``.
     """
@@ -151,6 +153,8 @@ def get_empty_session_for_user(
     """Get an empty (pre-provisioned) session for the user if one exists.
 
     Returns a session with no messages, or None if all sessions have messages.
+    Only considers INTERACTIVE sessions — non-interactive origins (e.g. Slack)
+    skip port allocation and must not be handed to the Craft UI.
     """
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
 
@@ -158,6 +162,7 @@ def get_empty_session_for_user(
         db_session.query(BuildSession)
         .filter(
             BuildSession.user_id == user_id,
+            BuildSession.origin == SessionOrigin.INTERACTIVE,
             ~has_messages,
         )
         .first()
@@ -177,37 +182,6 @@ def update_session_activity(
     if session:
         session.last_activity_at = datetime.now(tz=timezone.utc)
         db_session.commit()
-
-
-def update_session_status(
-    session_id: UUID,
-    status: BuildSessionStatus,
-    db_session: Session,
-) -> None:
-    """Update the status of a build session."""
-    session = (
-        db_session.query(BuildSession)
-        .filter(BuildSession.id == session_id)
-        .one_or_none()
-    )
-    if session:
-        session.status = status
-        db_session.commit()
-        logger.info("Updated build session %s status to %s", session_id, status)
-
-
-def update_session_agent_selection(
-    session_id: UUID,
-    agent_provider: str,
-    agent_model: str,
-    db_session: Session,
-) -> None:
-    """Persist the agent provider/model on the session row so a composer
-    model override sticks across reloads."""
-    session = db_session.query(BuildSession).filter(BuildSession.id == session_id).one()
-    session.agent_provider = agent_provider
-    session.agent_model = agent_model
-    db_session.commit()
 
 
 def set_build_session_sharing_scope(
@@ -253,23 +227,6 @@ def delete_build_session__no_commit(
 # Sandbox operations
 # NOTE: Most sandbox operations have moved to sandbox.py
 # These remain here for convenience in session-related workflows
-
-
-def update_sandbox_status(
-    sandbox_id: UUID,
-    status: SandboxStatus,
-    db_session: Session,
-    container_id: str | None = None,
-) -> None:
-    """Update the status of a sandbox."""
-    sandbox = db_session.query(Sandbox).filter(Sandbox.id == sandbox_id).one_or_none()
-    if sandbox:
-        sandbox.status = status
-        if container_id is not None:
-            sandbox.container_id = container_id
-        sandbox.last_heartbeat = datetime.now(tz=timezone.utc)
-        db_session.commit()
-        logger.info("Updated sandbox %s status to %s", sandbox_id, status)
 
 
 def update_sandbox_heartbeat(
@@ -358,11 +315,12 @@ def create_message(
         message_metadata: Required structured data (the raw sandbox event packet JSON)
         db_session: Database session
     """
+    sanitized_metadata = sanitize_json_like(message_metadata)
     message = BuildMessage(
         session_id=session_id,
         turn_index=turn_index,
         type=message_type,
-        message_metadata=message_metadata,
+        message_metadata=sanitized_metadata,
     )
     db_session.add(message)
     db_session.commit()
@@ -374,7 +332,7 @@ def create_message(
         message.id,
         session_id,
         turn_index,
-        message_metadata.get("type"),
+        sanitized_metadata.get("type"),
     )
     return message
 
@@ -414,12 +372,15 @@ def update_message(
     if message is None:
         return None
 
-    message.message_metadata = message_metadata
+    sanitized_metadata = sanitize_json_like(message_metadata)
+    message.message_metadata = sanitized_metadata
     db_session.commit()
     db_session.refresh(message)
 
     logger.info(
-        "Updated message %s metadata type=%s", message_id, message_metadata.get("type")
+        "Updated message %s metadata type=%s",
+        message_id,
+        sanitized_metadata.get("type"),
     )
     return message
 
@@ -464,7 +425,8 @@ def upsert_agent_plan(
     )
 
     if existing_plan:
-        existing_plan.message_metadata = plan_metadata
+        sanitized_metadata = sanitize_json_like(plan_metadata)
+        existing_plan.message_metadata = sanitized_metadata
         db_session.commit()
         db_session.refresh(existing_plan)
         logger.info(
@@ -546,7 +508,7 @@ def allocate_nextjs_port(db_session: Session) -> int:
         An available port number
 
     Raises:
-        RuntimeError: If no ports are available in the configured range
+        OnyxError: If no ports are available in the configured range
     """
     from onyx.db.models import BuildSession
 
@@ -563,8 +525,9 @@ def allocate_nextjs_port(db_session: Session) -> int:
         if port not in allocated_ports and _is_port_available(port):
             return port
 
-    raise RuntimeError(
-        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})"
+    raise OnyxError(
+        OnyxErrorCode.SERVICE_UNAVAILABLE,
+        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})",
     )
 
 
@@ -624,10 +587,13 @@ def fetch_all_supported_build_llm_providers(
 ) -> list[LLMProviderView]:
     """Every provider of a Craft-supported type (anthropic, openai, openrouter)
     that the ``user`` can access. Respects is_public / group restrictions so a
-    user never gets a sandbox keyed with a provider they can't use."""
+    user never gets a sandbox keyed with a provider they can't use. Providers
+    are ordered by ID so provisioning and proxy credential selection agree on
+    the first provider of each type."""
     provider_models = db_session.scalars(
         select(LLMProviderModel)
         .where(LLMProviderModel.provider.in_(BUILD_MODE_ALLOWED_PROVIDER_TYPES))
+        .order_by(LLMProviderModel.id.asc())
         .options(
             selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),

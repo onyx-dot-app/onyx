@@ -150,6 +150,7 @@ class LoopioConnector(LoadConnector, PollConnector):
                 )
 
                 last_updated = time_str_to_utc(entry["lastUpdatedDate"])
+                created = time_str_to_utc(entry["createdDate"])
                 last_reviewed = (
                     time_str_to_utc(entry["lastReviewedDate"])
                     if entry.get("lastReviewedDate")
@@ -182,6 +183,8 @@ class LoopioConnector(LoadConnector, PollConnector):
                         source=DocumentSource.LOOPIO,
                         semantic_identifier=questions[0],
                         doc_updated_at=latest_time,
+                        # NOTE: doc_created_at population not yet verified against live data
+                        doc_created_at=created,
                         primary_owners=primary_owners,
                         secondary_owners=secondary_owners,
                         metadata={

@@ -13,14 +13,7 @@ import {
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import {
@@ -29,7 +22,7 @@ import {
 } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
   DefaultModel,
@@ -37,16 +30,11 @@ import {
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
-import {
-  AuthType,
-  DEFAULT_AGENT_ID,
-  NEXT_PUBLIC_CLOUD_ENABLED,
-} from "./constants";
+import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
-import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const usePublicCredentials = () => {
@@ -863,23 +851,6 @@ export function useLlmManager(
   };
 }
 
-export function useAuthType(): AuthType | null {
-  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
-  // camelCase-mapped shape — a raw fetcher here would poison the cache for
-  // every other consumer of the key.
-  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
-
-  if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return AuthType.CLOUD;
-  }
-
-  if (error || isLoading) {
-    return null;
-  }
-
-  return authTypeMetadata.authType;
-}
-
 /*
 EE Only APIs
 */
@@ -890,12 +861,10 @@ export const useUserGroups = (): {
   error: string;
   refreshUserGroups: () => void;
 } => {
-  const combinedSettings = useContext(SettingsContext);
-  const isLoading = combinedSettings?.settingsLoading ?? false;
+  const settings = useSettings();
+  const isLoading = settings.isLoading;
   const isPaidEnterpriseFeaturesEnabled =
-    !isLoading &&
-    combinedSettings &&
-    combinedSettings.enterpriseSettings !== null;
+    !isLoading && settings.enterprise !== null;
 
   const swrResponse = useSWR<UserGroup[]>(
     isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,

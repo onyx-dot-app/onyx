@@ -64,6 +64,46 @@ def normalize_url(url: str, source_type: DocumentSource | None = None) -> str | 
     return _default_url_normalizer(url)
 
 
+def normalize_url_candidates(
+    url: str, source_type: DocumentSource | None = None
+) -> list[str]:
+    """Return all candidate canonical Document.id values for a URL.
+
+    A single URL may map to more than one possible Document.id (e.g. a Google Drive
+    file id whose type isn't encoded in the pasted URL). Resolution matches whichever
+    candidate exists in the index. Falls back to the default normalizer's single value
+    when a connector doesn't provide candidates.
+    """
+    if source_type is None:
+        source_type = _detect_source_type(url)
+
+    if source_type:
+        try:
+            connector_class = identify_connector_class(source_type)
+            result = connector_class.normalize_url(url)
+
+            if result.use_default:
+                default = _default_url_normalizer(url)
+                return [default] if default else []
+
+            candidates: list[str] = []
+            if result.normalized_url:
+                candidates.append(result.normalized_url)
+            for candidate in result.candidate_document_ids:
+                if candidate not in candidates:
+                    candidates.append(candidate)
+            return candidates
+        except Exception as exc:
+            logger.debug(
+                "Failed to normalize URL candidates for source %s: %s. Using default normalizer.",
+                source_type,
+                exc,
+            )
+
+    default = _default_url_normalizer(url)
+    return [default] if default else []
+
+
 def _detect_source_type(url: str) -> DocumentSource | None:
     """Detect DocumentSource from URL patterns (simple heuristic)."""
     parsed = urlparse(url)

@@ -15,10 +15,10 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import User
 from onyx.utils.sensitive import SensitiveValue
-from tests.external_dependency_unit.craft._test_helpers import make_external_app
-from tests.external_dependency_unit.craft._test_helpers import make_skill
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft._test_helpers import make_user_credential
+from tests.external_dependency_unit.craft.db_helpers import make_external_app
+from tests.external_dependency_unit.craft.db_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_user_credential
 
 
 def _raw_column_bytes(db_session: Session, query: str, **params: object) -> bytes:

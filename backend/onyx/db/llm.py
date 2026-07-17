@@ -3,9 +3,11 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import load_only
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
@@ -20,6 +22,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.models import UserGroup
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
@@ -362,32 +365,35 @@ def upsert_llm_provider(
 
 def sync_model_configurations(
     db_session: Session,
-    provider_name: str,
+    provider_id: int,
     models: list[SyncModelEntry],
 ) -> int:
     """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama, etc.).
 
-    This inserts NEW models from the source API without overwriting existing ones.
-    User preferences (is_visible, max_input_tokens) are preserved for existing models.
+    Inserts NEW models and, for existing ones, adds any newly-reported capability
+    flag (VISION/REASONING). Flags are only added, never removed; is_visible and
+    max_input_tokens are preserved. Caveat: an admin-removed flow is re-added on
+    the next sync (ENG-4233).
 
     Args:
         db_session: Database session
-        provider_name: Name of the LLM provider
+        provider_id: Id of the LLM provider
         models: List of SyncModelEntry objects describing the fetched models
 
     Returns:
         Number of new models added
     """
-    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
+    provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
     if not provider:
-        raise ValueError(f"LLM Provider '{provider_name}' not found")
+        raise ValueError(f"LLM Provider with id={provider_id} not found")
 
-    # Get existing model names to count new additions
-    existing_names = {mc.name for mc in provider.model_configurations}
+    existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 
     new_count = 0
+    upgraded_flow_count = 0
     for model in models:
-        if model.name not in existing_names:
+        existing = existing_by_name.get(model.name)
+        if existing is None:
             # Insert new model with is_visible=False (user must explicitly enable)
             supported_flows = [LLMModelFlowType.CHAT]
             if model.supports_image_input:
@@ -405,8 +411,29 @@ def sync_model_configurations(
                 display_name=model.display_name,
             )
             new_count += 1
+            continue
 
-    if new_count > 0:
+        # Existing model: add newly-reported capability flags (additive only).
+        # TODO(ENG-4233): durable admin flow removals; avoid per-model lazy-load.
+        existing_flows = set(existing.llm_model_flow_types)
+        missing_flows: list[LLMModelFlowType] = []
+        if model.supports_image_input and LLMModelFlowType.VISION not in existing_flows:
+            missing_flows.append(LLMModelFlowType.VISION)
+        if (
+            model.supports_reasoning
+            and LLMModelFlowType.REASONING not in existing_flows
+        ):
+            missing_flows.append(LLMModelFlowType.REASONING)
+
+        for flow_type in missing_flows:
+            create_new_flow_mapping__no_commit(
+                db_session=db_session,
+                model_configuration_id=existing.id,
+                flow_type=flow_type,
+            )
+            upgraded_flow_count += 1
+
+    if new_count > 0 or upgraded_flow_count > 0:
         db_session.commit()
 
     return new_count
@@ -491,6 +518,49 @@ def fetch_existing_llm_providers(
     if only_public:
         return [provider for provider in providers if provider.is_public]
     return providers
+
+
+def fetch_first_accessible_llm_provider_by_type(
+    provider_type: str,
+    user: User,
+    db_session: Session,
+) -> LLMProviderModel | None:
+    """Fetch the lowest-ID provider usable without a persona context.
+
+    Load only the fields and relationships used by the existing access policy,
+    then load the API key for the selected provider.
+    """
+    providers = db_session.scalars(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.provider == provider_type)
+        .options(
+            load_only(
+                LLMProviderModel.id,
+                LLMProviderModel.is_public,
+            ),
+            selectinload(LLMProviderModel.groups).load_only(UserGroup.id),
+            selectinload(LLMProviderModel.personas).load_only(Persona.id),
+        )
+        .order_by(LLMProviderModel.id.asc())
+    )
+    user_group_ids = fetch_user_group_ids(db_session, user)
+    is_admin = user.role == UserRole.ADMIN
+    provider = next(
+        (
+            provider
+            for provider in providers
+            if can_user_access_llm_provider(
+                provider,
+                user_group_ids,
+                persona=None,
+                is_admin=is_admin,
+            )
+        ),
+        None,
+    )
+    if provider is not None:
+        db_session.refresh(provider, attribute_names=["api_key"])
+    return provider
 
 
 def fetch_existing_llm_provider(

@@ -1,6 +1,6 @@
 "use client";
 
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { PageSelector } from "@/components/PageSelector";
 import { SvgInfo, SvgPlusCircle } from "@opal/icons";
 import {
@@ -19,8 +19,7 @@ import { useState } from "react";
 import { useDocumentSets } from "./hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
-import { toast } from "@/hooks/useToast";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   FiAlertTriangle,
@@ -366,7 +365,7 @@ function Main() {
   if (isDocumentSetsLoading || isEditableDocumentSetsLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
-        <ThreeDotsLoader />
+        <PageLoader />
       </div>
     );
   }

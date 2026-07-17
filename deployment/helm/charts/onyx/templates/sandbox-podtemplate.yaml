@@ -7,8 +7,8 @@ opencode-auth + push-key env, proxy hostAliases IP).
 {{- $cm := .Values.configMap }}
 {{- $sandboxNs := $cm.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
 {{- $saName := (index $cm "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox" }}
-{{- $image := (index $cm "SANDBOX_CONTAINER_IMAGE") | default "onyxdotapp/sandbox:v0.1.52" }}
-{{- $pullPolicy := (index $cm "SANDBOX_IMAGE_PULL_POLICY") | default "IfNotPresent" }}
+{{- $image := (index $cm "SANDBOX_CONTAINER_IMAGE") | default (printf "onyxdotapp/sandbox:%s" (.Values.global.version | default .Chart.AppVersion)) }}
+{{- $pullPolicy := (index $cm "SANDBOX_IMAGE_PULL_POLICY") | default .Values.global.pullPolicy }}
 {{- $cpuReq := (index $cm "SANDBOX_POD_CPU_REQUEST") | default "1000m" }}
 {{- $memReq := (index $cm "SANDBOX_POD_MEMORY_REQUEST") | default "2Gi" }}
 {{- $cpuLim := (index $cm "SANDBOX_POD_CPU_LIMIT") | default "2000m" }}

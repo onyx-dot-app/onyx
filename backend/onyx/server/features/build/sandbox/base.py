@@ -166,6 +166,7 @@ class SandboxManager(_ServeMixin, ABC):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
@@ -183,6 +184,7 @@ class SandboxManager(_ServeMixin, ABC):
             llm_config: LLM provider configuration (passed to AGENTS.md rendering)
             nextjs_port: Port for the Next.js dev server, or None for headless.
             skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
+            connectable_apps_section: Pre-rendered ``{{CONNECTABLE_APPS_LIST}}`` (may be empty).
             user_name: User's name for personalization in AGENTS.md
 
         Raises:
@@ -195,7 +197,6 @@ class SandboxManager(_ServeMixin, ABC):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,
     ) -> None:
         """Clean up a session workspace on session delete: stop the
         Next.js dev server and remove ``sessions/$session_id/``. Does NOT
@@ -244,10 +245,10 @@ class SandboxManager(_ServeMixin, ABC):
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         """Restore a session workspace from a snapshot.
 
@@ -258,7 +259,6 @@ class SandboxManager(_ServeMixin, ABC):
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: Path to the snapshot in storage
-            tenant_id: Tenant identifier for storage access
             nextjs_port: Port number for the NextJS dev server, or None to
                 skip starting it (e.g. headless scheduled-task fires).
             llm_config: LLM provider configuration (used to regenerate AGENTS.md)
@@ -348,6 +348,8 @@ class SandboxManager(_ServeMixin, ABC):
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         """Stream typed sandbox events for one user message via
         opencode-serve.
@@ -369,6 +371,8 @@ class SandboxManager(_ServeMixin, ABC):
             agent_model,
             on_opencode_session_resolved=on_opencode_session_resolved,
             should_interrupt=should_interrupt,
+            should_abort_on_teardown=should_abort_on_teardown,
+            turn_timeout_seconds=turn_timeout_seconds,
         )
 
     def send_subagent_message(
@@ -688,22 +692,3 @@ class SandboxManager(_ServeMixin, ABC):
             ValueError: If file not found or conversion fails
         """
         ...
-
-    def ensure_nextjs_running(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        nextjs_port: int,
-    ) -> None:
-        """Ensure the Next.js server is running for a session.
-
-        Default is a no-op — only meaningful for backends that manage Next.js
-        process lifecycles directly from the api_server side. The kubernetes
-        backend starts Next.js inside the sandbox pod at workspace setup, so
-        nothing further is needed.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID
-            nextjs_port: The port the Next.js server should be listening on
-        """

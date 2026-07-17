@@ -376,6 +376,7 @@ def _extract_tool_call_kickoffs(
     turn_index: int,
     tab_index: int | None = None,
     sub_turn_index: int | None = None,
+    tab_index_start: int = 0,
 ) -> list[ToolCallKickoff]:
     """Extract ToolCallKickoff objects from the tool call map.
 
@@ -387,9 +388,10 @@ def _extract_tool_call_kickoffs(
         turn_index: The turn index for this set of tool calls
         tab_index: If provided, use this tab_index for all tool calls (otherwise auto-increment)
         sub_turn_index: The sub-turn index for nested tool calls
+        tab_index_start: First auto-assigned tab_index (default 0).
     """
     tool_calls: list[ToolCallKickoff] = []
-    tab_index_calculated = 0
+    tab_index_calculated = tab_index_start
     for tool_call_data in id_to_tool_call_map.values():
         if tool_call_data.get("id") and tool_call_data.get("name"):
             tool_args = _parse_tool_args_to_dict(tool_call_data.get("arguments"))
@@ -1013,7 +1015,7 @@ def translate_history_to_llm_format(
             suffix=messages[last_cacheable_msg_idx + 1 :],
             continuation=False,
         )
-        assert isinstance(processed_messages, list)  # for mypy
+        assert isinstance(processed_messages, list)  # for type-checking
         messages = processed_messages
 
     return messages
@@ -1153,6 +1155,9 @@ def run_llm_step_pkt_generator(
     ) as span_generation:
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history
+        )
+        span_generation.span_data.tools = cast(
+            Sequence[Mapping[str, Any]], tool_definitions
         )
         stream_start_time = time.monotonic()
         first_action_recorded = False
@@ -1381,11 +1386,16 @@ def run_llm_step_pkt_generator(
                 for tool_call_delta in flush_delta.tool_calls:
                     _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
 
+        # Narration emitted before these tool calls occupies the base tab; start
+        # tool calls at the next tab so they render as their own group instead of
+        # merging with the narration (which would hide them in the chat area).
+        tab_index_start = 1 if (answer_start and not use_existing_tab_index) else 0
         tool_calls = _extract_tool_call_kickoffs(
             id_to_tool_call_map=id_to_tool_call_map,
             turn_index=turn_index,
             tab_index=tab_index if use_existing_tab_index else None,
             sub_turn_index=sub_turn_index,
+            tab_index_start=tab_index_start,
         )
         # Run the flush + recovery below while the span is still open, so the
         # span output recorded afterward reflects the answer the user received.

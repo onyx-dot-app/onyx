@@ -108,7 +108,7 @@ The sandbox node group is an optional EKS managed node group dedicated to Craft
 sandbox pods. It is enabled with:
 
 ```hcl
-enable_craft_sandbox_node_group = true
+enable_craft = true
 ```
 
 Terraform creates a node group with:
@@ -213,10 +213,13 @@ sandboxProxy:
 - Craft: `ENABLE_CRAFT=true`, `SANDBOX_API_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080`, `auth.sandboxPushSecret.enabled=true`. (`SANDBOX_SERVICE_ACCOUNT_NAME`/`SANDBOX_CONTAINER_IMAGE` default correctly.)
 
 ### Images
-`global.version: edge` (backend/web/model-server — the moving build from `main`; or a release
-`vX.Y.Z`). Craft is enabled at runtime via `ENABLE_CRAFT=true` — there are no craft-specific app
-images (see [image architecture](../image-architecture.md)). `code-interpreter`: `latest`. Sandbox
-image default tracks the current `onyxdotapp/sandbox:vX.Y.Z`.
+Use an immutable release tag for Kubernetes customer Craft deployments, e.g.
+`global.version: vX.Y.Z`. Internal mainline clusters may use `edge` with
+`SANDBOX_IMAGE_PULL_POLICY=Always`. Craft is enabled at runtime via
+`ENABLE_CRAFT=true` — there are no craft-specific app images (see
+[image architecture](../infra/image-architecture.md)). `code-interpreter`:
+`latest`. Sandbox image default tracks the same app tag via
+`onyxdotapp/sandbox:${global.version}`.
 
 ---
 
@@ -269,7 +272,7 @@ If the existing node group already has:
 - the same security-group shape as regular managed node groups: the shared node
   SG, without also attaching another `kubernetes.io/cluster/<name>`-tagged SG;
 
-then leave `enable_craft_sandbox_node_group=false` and keep using those nodes.
+then leave `enable_craft=false` and keep using those nodes.
 If you want Terraform to own the node group, either import the existing node
 group into Terraform state or create a Terraform-managed node group with a
 non-conflicting name and drain/remove the manual one after sandboxes move.
@@ -377,7 +380,7 @@ aws iam get-role --role-name AmazonEKSTFWorkloadAccessRole-<cluster-name> \
 
 ## 5. Lead infra TODO coverage
 
-The lead infra TODO list in `docs/craft/infra/todos.md` is accounted for as:
+The original lead infra TODO list is accounted for as:
 
 | TODO | Status in this PR | Operational note |
 |---|---|---|

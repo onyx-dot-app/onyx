@@ -57,6 +57,12 @@ export interface GitlabCredentialJson {
   gitlab_access_token: string;
 }
 
+export interface LumAppsCredentialJson {
+  lumapps_application_id: string;
+  lumapps_api_key: string;
+  lumapps_service_user: string;
+}
+
 export interface BitbucketCredentialJson {
   bitbucket_email: string;
   bitbucket_api_token: string;
@@ -141,6 +147,7 @@ export interface GuruCredentialJson {
 export interface GongCredentialJson {
   gong_access_key: string;
   gong_access_key_secret: string;
+  gong_base_url: string | null;
 }
 
 export interface LoopioCredentialJson {
@@ -252,6 +259,10 @@ export interface BraintrustCredentialJson {
   braintrust_api_key: string;
 }
 
+export interface CanvasCredentialJson {
+  canvas_access_token: string;
+}
+
 export interface MediaWikiCredentialJson {}
 export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
 
@@ -291,6 +302,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
     gitlab_url: "",
     gitlab_access_token: "",
   } as GitlabCredentialJson,
+  lumapps: {
+    lumapps_application_id: "",
+    lumapps_api_key: "",
+    lumapps_service_user: "",
+  } as LumAppsCredentialJson,
   bitbucket: {
     bitbucket_email: "",
     bitbucket_api_token: "",
@@ -321,6 +337,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   gong: {
     gong_access_key: "",
     gong_access_key_secret: "",
+    gong_base_url: null,
   } as GongCredentialJson,
   zulip: { zuliprc_content: "" } as ZulipCredentialJson,
   linear: { linear_access_token: "" } as LinearCredentialJson,
@@ -452,6 +469,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
   braintrust: {
     braintrust_api_key: "",
   } as BraintrustCredentialJson,
+  canvas: {
+    canvas_access_token: "",
+  } as CanvasCredentialJson,
   egnyte: {
     domain: "",
     access_token: "",
@@ -500,6 +520,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
 export const credentialDisplayNames: Record<string, string> = {
   // Github
   github_access_token: "GitHub Access Token",
+
+  // LumApps
+  lumapps_application_id: "LumApps Application ID",
+  lumapps_api_key: "LumApps API Key",
+  lumapps_service_user: "Service User Email (to index on behalf of)",
 
   // Gitlab
   gitlab_url: "GitLab URL",
@@ -556,6 +581,8 @@ export const credentialDisplayNames: Record<string, string> = {
   // Gong
   gong_access_key: "Gong Access Key",
   gong_access_key_secret: "Gong Access Key Secret",
+  gong_base_url:
+    "Gong API Base URL (optional; set your region-specific host like https://<region>.api.gong.io for non-US data residency)",
 
   // Loopio
   loopio_subdomain: "Loopio Subdomain",
@@ -649,6 +676,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Braintrust
   braintrust_api_key: "Braintrust API Key",
+
+  // Canvas
+  canvas_access_token: "Canvas Access Token",
 
   // GitBook
   gitbook_space_id: "GitBook Space ID",

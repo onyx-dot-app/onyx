@@ -9,7 +9,7 @@ import {
   Tabs,
   Tag,
 } from "@opal/components";
-import { Preview } from "./Preview";
+import Preview from "@/app/ee/admin/theme/Preview";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";
@@ -26,7 +26,7 @@ import {
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { planTagProps } from "@/lib/tier-badge";
 
 interface AppearanceThemeSettingsProps {
@@ -41,6 +41,8 @@ interface AppearanceThemeSettingsProps {
     custom_popup_header: number;
     custom_popup_content: number;
     consent_screen_prompt: number;
+    system_announcement_header: number;
+    system_announcement_content: number;
   };
 }
 
@@ -66,11 +68,16 @@ export const AppearanceThemeSettings = forwardRef<
   const noticeContentInputRef = useRef<HTMLTextAreaElement>(null);
   const consentPromptTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const customHelpLinkUrlInputRef = useRef<HTMLInputElement>(null);
+  const systemAnnouncementHeaderInputRef = useRef<HTMLInputElement>(null);
+  const systemAnnouncementContentInputRef = useRef<HTMLTextAreaElement>(null);
   const prevShowFirstVisitNoticeRef = useRef<boolean>(
     Boolean(values.show_first_visit_notice)
   );
   const prevEnableConsentScreenRef = useRef<boolean>(
     Boolean(values.enable_consent_screen)
+  );
+  const prevSystemAnnouncementEnabledRef = useRef<boolean>(
+    Boolean(values.system_announcement_enabled)
   );
   const [focusedPreviewTarget, setFocusedPreviewTarget] =
     useState<PreviewHighlightTarget | null>(null);
@@ -107,6 +114,14 @@ export const AppearanceThemeSettings = forwardRef<
         { name: "custom_popup_content", ref: noticeContentInputRef },
         { name: "consent_screen_prompt", ref: consentPromptTextAreaRef },
         { name: "custom_help_link_url", ref: customHelpLinkUrlInputRef },
+        {
+          name: "system_announcement_header",
+          ref: systemAnnouncementHeaderInputRef,
+        },
+        {
+          name: "system_announcement_content",
+          ref: systemAnnouncementContentInputRef,
+        },
       ];
       for (const field of fieldRefs) {
         if (errors[field.name] && field.ref.current) {
@@ -149,6 +164,20 @@ export const AppearanceThemeSettings = forwardRef<
 
     prevEnableConsentScreenRef.current = next;
   }, [values.enable_consent_screen]);
+
+  useEffect(() => {
+    const prev = prevSystemAnnouncementEnabledRef.current;
+    const next = Boolean(values.system_announcement_enabled);
+
+    // When enabling the toggle, autofocus the "Notice Header" input.
+    if (!prev && next) {
+      requestAnimationFrame(() => {
+        systemAnnouncementHeaderInputRef.current?.focus();
+      });
+    }
+
+    prevSystemAnnouncementEnabledRef.current = next;
+  }, [values.system_announcement_enabled]);
 
   const handleLogoEdit = () => {
     fileInputRef.current?.click();
@@ -682,6 +711,126 @@ export const AppearanceThemeSettings = forwardRef<
                 />
               </FormField>
             )}
+          </>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-4 p-4 bg-background-tint-00 rounded-16">
+        <FormField state="idle" className="gap-0">
+          <div className="flex justify-between items-center">
+            <FormField.Label>System Announcement</FormField.Label>
+            <FormField.Control>
+              <Switch
+                aria-label="System Announcement"
+                data-label="system-announcement-toggle"
+                checked={values.system_announcement_enabled}
+                onCheckedChange={(checked) =>
+                  setFieldValue("system_announcement_enabled", checked)
+                }
+              />
+            </FormField.Control>
+          </div>
+          <FormField.Description>
+            Show a persistent system announcement that users can dismiss.
+          </FormField.Description>
+        </FormField>
+
+        {values.system_announcement_enabled && (
+          <>
+            <FormField
+              state={errors.system_announcement_header ? "error" : "idle"}
+            >
+              <FormField.Label
+                required
+                rightAction={
+                  <CharacterCount
+                    value={values.system_announcement_header}
+                    limit={charLimits.system_announcement_header}
+                  />
+                }
+              >
+                Notice Header
+              </FormField.Label>
+              <FormField.Control asChild>
+                <InputTypeIn
+                  ref={systemAnnouncementHeaderInputRef}
+                  data-label="system-announcement-header-input"
+                  clearButton
+                  placeholder="Add an announcement"
+                  variant={
+                    errors.system_announcement_header ? "error" : undefined
+                  }
+                  value={values.system_announcement_header}
+                  onChange={(e) =>
+                    setFieldValue("system_announcement_header", e.target.value)
+                  }
+                />
+              </FormField.Control>
+              <FormField.Message
+                messages={{
+                  error: errors.system_announcement_header as string,
+                }}
+              />
+            </FormField>
+
+            <FormField
+              state={errors.system_announcement_content ? "error" : "idle"}
+            >
+              <FormField.Label
+                required
+                rightAction={
+                  <CharacterCount
+                    value={values.system_announcement_content}
+                    limit={charLimits.system_announcement_content}
+                  />
+                }
+              >
+                Notice Content
+              </FormField.Label>
+              <FormField.Control asChild>
+                <InputTextArea
+                  ref={systemAnnouncementContentInputRef}
+                  data-label="system-announcement-content-textarea"
+                  rows={3}
+                  placeholder="Add markdown content"
+                  variant={
+                    errors.system_announcement_content ? "error" : undefined
+                  }
+                  value={values.system_announcement_content}
+                  onChange={(e) =>
+                    setFieldValue("system_announcement_content", e.target.value)
+                  }
+                />
+              </FormField.Control>
+              <FormField.Message
+                messages={{
+                  error: errors.system_announcement_content as string,
+                }}
+              />
+            </FormField>
+
+            <FormField state="idle" className="gap-0">
+              <div className="flex justify-between items-center">
+                <FormField.Label>Pop-up Notice at First Visit</FormField.Label>
+                <FormField.Control>
+                  <Switch
+                    aria-label="Pop-up Notice at First Visit"
+                    data-label="system-announcement-popup-toggle"
+                    checked={values.system_announcement_show_as_popup}
+                    onCheckedChange={(checked) =>
+                      setFieldValue(
+                        "system_announcement_show_as_popup",
+                        checked
+                      )
+                    }
+                  />
+                </FormField.Control>
+              </div>
+              <FormField.Description>
+                Also show this notice as a full-screen pop-up at first visit for
+                all users. Use with caution.
+              </FormField.Description>
+            </FormField>
           </>
         )}
       </div>

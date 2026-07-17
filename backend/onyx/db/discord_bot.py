@@ -15,7 +15,6 @@ from onyx.auth.api_key import hash_api_key
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DISCORD_SERVICE_API_KEY_NAME
 from onyx.db.api_key import insert_api_key
-from onyx.db.enums import Permission
 from onyx.db.models import ApiKey
 from onyx.db.models import DiscordBotConfig
 from onyx.db.models import DiscordChannelConfig
@@ -107,12 +106,6 @@ def get_or_create_discord_service_api_key(
         new_api_key = generate_api_key(tenant_id)
         existing.hashed_api_key = hash_api_key(new_api_key)
         existing.api_key_display = build_displayable_api_key(new_api_key)
-        # Backfill chat scope on keys provisioned before chat APIs were scoped.
-        service_user = db_session.scalar(
-            select(User).where(User.id == existing.user_id)  # ty: ignore[invalid-argument-type]
-        )
-        if service_user is not None:
-            service_user.effective_permissions = [Permission.WRITE_CHAT.value]
         db_session.flush()
         return new_api_key
 

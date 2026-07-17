@@ -26,6 +26,7 @@ from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
 from onyx.db.connector import delete_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
+from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
 )
@@ -42,6 +43,7 @@ from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import count_index_attempts_for_cc_pair
+from onyx.db.index_attempt import get_error_counts_for_index_attempts
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
@@ -79,8 +81,13 @@ from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricsResponse
 from onyx.server.documents.models import PaginatedReturn
+from onyx.server.documents.models import synthesize_unaccounted
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
@@ -116,9 +123,16 @@ def get_cc_pair_index_attempts(
         page=page_num,
         page_size=page_size,
     )
+    error_counts = get_error_counts_for_index_attempts(
+        db_session=db_session,
+        index_attempt_ids=[index_attempt.id for index_attempt in index_attempts],
+    )
     return PaginatedReturn(
         items=[
-            IndexAttemptSnapshot.from_index_attempt_db_model(index_attempt)
+            IndexAttemptSnapshot.from_index_attempt_db_model(
+                index_attempt,
+                error_count=error_counts.get(index_attempt.id, 0),
+            )
             for index_attempt in index_attempts
         ],
         total_items=total_count,
@@ -160,9 +174,14 @@ def get_index_attempt_stage_metrics(
         db_session=db_session,
         index_attempt_id=index_attempt_id,
     )
+    stages = [IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics]
+    # Append the BATCH_UNACCOUNTED residual (frontend re-sorts, so order is fine).
+    unaccounted = synthesize_unaccounted(stages)
+    if unaccounted is not None:
+        stages.append(unaccounted)
     return IndexAttemptStageMetricsResponse(
         index_attempt_id=index_attempt_id,
-        stages=[IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics],
+        stages=stages,
     )
 
 
@@ -494,6 +513,15 @@ def update_cc_pair_status(
 
     db_session.commit()
 
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={"status": status_update_request.status.value},
+    )
+
     # this speeds up the start of indexing by firing the check immediately
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
@@ -765,6 +793,17 @@ def associate_credential_to_connector(
             response.data,
         )
 
+        # response.data is the cc_pair id only when the association was actually
+        # created; a no-op (credential already linked) returns success=False.
+        if response.success:
+            emit_audit_event(
+                AuditAction.CC_PAIR_CREATE,
+                AuditOutcome.SUCCESS,
+                actor=actor_from_user(user),
+                resource_type="cc_pair",
+                resource_id=response.data,
+                extra={"connector_id": connector_id, "credential_id": credential_id},
+            )
         return response
     except ValidationError as e:
         # If validation fails, delete the connector and commit the changes
@@ -799,6 +838,30 @@ def dissociate_credential_from_connector(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    return remove_credential_from_connector(
+    # Capture the cc_pair id before removal — remove_credential_from_connector
+    # returns the connector_id (not the cc_pair id) in its StatusResponse.
+    cc_pair = get_connector_credential_pair_for_user(
+        db_session=db_session,
+        connector_id=connector_id,
+        credential_id=credential_id,
+        user=user,
+        get_editable=True,
+    )
+    cc_pair_id = cc_pair.id if cc_pair else None
+
+    result = remove_credential_from_connector(
         connector_id, credential_id, user, db_session
     )
+
+    # Only emit when something was actually dissociated (a no-op returns
+    # success=False without raising).
+    if result.success:
+        emit_audit_event(
+            AuditAction.CC_PAIR_DELETE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="cc_pair",
+            resource_id=cc_pair_id,
+            extra={"connector_id": connector_id, "credential_id": credential_id},
+        )
+    return result

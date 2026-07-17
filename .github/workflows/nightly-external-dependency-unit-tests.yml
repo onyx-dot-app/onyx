@@ -27,10 +27,10 @@ jobs:
       contents: read
       id-token: write # Required for OIDC-based AWS credential exchange
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
 
@@ -43,7 +43,7 @@ jobs:
             backend/requirements/ee.txt
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -65,7 +65,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
 

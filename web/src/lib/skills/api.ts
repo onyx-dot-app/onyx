@@ -8,8 +8,11 @@
 
 import type {
   CustomSkill,
-  SkillsList,
-} from "@/refresh-pages/admin/SkillsPage/interfaces";
+  Skill,
+  SkillBundleContents,
+  SkillEditableDetail,
+  SkillSharePermission,
+} from "@/lib/skills/types";
 
 async function readErrorDetail(res: Response): Promise<string> {
   try {
@@ -34,100 +37,10 @@ async function handle<T>(res: Response): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Reads — both list endpoints are served by useSWR; these are kept here for
-// places that need an imperative fetch (e.g. after a mutation that touches a
-// non-list cache).
-// ---------------------------------------------------------------------------
-
-export async function fetchAdminSkills(): Promise<SkillsList> {
-  const res = await fetch("/api/admin/skills");
-  return handle<SkillsList>(res);
-}
-
-export async function fetchUserSkills(): Promise<SkillsList> {
-  const res = await fetch("/api/skills");
-  return handle<SkillsList>(res);
-}
-
-// ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
 
-export interface CreateCustomSkillInput {
-  bundle: File;
-  is_public: boolean;
-  group_ids: number[];
-}
-
-export async function createCustomSkill(
-  input: CreateCustomSkillInput
-): Promise<CustomSkill> {
-  const form = new FormData();
-  form.append("is_public", String(input.is_public));
-  form.append("group_ids", JSON.stringify(input.group_ids));
-  form.append("bundle", input.bundle);
-
-  const res = await fetch("/api/admin/skills/custom", {
-    method: "POST",
-    body: form,
-  });
-  return handle<CustomSkill>(res);
-}
-
-export interface PatchCustomSkillInput {
-  is_public?: boolean;
-  enabled?: boolean;
-}
-
-export async function patchCustomSkill(
-  skillId: string,
-  patch: PatchCustomSkillInput
-): Promise<CustomSkill> {
-  const res = await fetch(`/api/admin/skills/custom/${skillId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
-  return handle<CustomSkill>(res);
-}
-
-export async function replaceCustomSkillBundle(
-  skillId: string,
-  bundle: File
-): Promise<CustomSkill> {
-  const form = new FormData();
-  form.append("bundle", bundle);
-  const res = await fetch(`/api/admin/skills/custom/${skillId}/bundle`, {
-    method: "PUT",
-    body: form,
-  });
-  return handle<CustomSkill>(res);
-}
-
-export async function replaceCustomSkillGrants(
-  skillId: string,
-  groupIds: number[]
-): Promise<CustomSkill> {
-  const res = await fetch(`/api/admin/skills/custom/${skillId}/grants`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ group_ids: groupIds }),
-  });
-  return handle<CustomSkill>(res);
-}
-
-export async function deleteCustomSkill(skillId: string): Promise<void> {
-  const res = await fetch(`/api/admin/skills/custom/${skillId}`, {
-    method: "DELETE",
-  });
-  await handle<void>(res);
-}
-
-// ---------------------------------------------------------------------------
-// Personal (user-level) skill mutations
-// ---------------------------------------------------------------------------
-
-export async function createUserSkill(bundle: File): Promise<CustomSkill> {
+export async function createCustomSkill(bundle: File): Promise<CustomSkill> {
   const form = new FormData();
   form.append("bundle", bundle);
 
@@ -138,27 +51,128 @@ export async function createUserSkill(bundle: File): Promise<CustomSkill> {
   return handle<CustomSkill>(res);
 }
 
-export async function replaceUserSkillBundle(
-  skillId: string,
-  bundle: File
-): Promise<CustomSkill> {
+export interface CreateCustomSkillInput {
+  name: string;
+  description: string;
+  instructions_markdown: string;
+}
+
+export async function createCustomSkillFromEditor(
+  input: CreateCustomSkillInput,
+  upload?: File
+): Promise<SkillEditableDetail> {
   const form = new FormData();
-  form.append("bundle", bundle);
-  const res = await fetch(`/api/skills/custom/${skillId}/bundle`, {
-    method: "PUT",
+  form.append("name", input.name);
+  form.append("description", input.description);
+  form.append("instructions_markdown", input.instructions_markdown);
+  if (upload) form.append("upload", upload);
+
+  const res = await fetch("/api/skills/custom/editor", {
+    method: "POST",
     body: form,
   });
-  return handle<CustomSkill>(res);
+  return handle<SkillEditableDetail>(res);
+}
+
+export interface PatchCustomSkillInput {
+  description?: string;
+  instructions_markdown?: string;
+  public_permission?: SkillSharePermission | null;
+}
+
+export async function setSkillEnabled(
+  skillId: string,
+  enabled: boolean
+): Promise<Skill> {
+  const res = await fetch(`/api/skills/${skillId}/enabled`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  return handle<Skill>(res);
+}
+
+export interface SkillShareUpdatePayload {
+  user_shares?: {
+    user_id: string;
+    permission: SkillSharePermission;
+  }[];
+  group_shares?: {
+    group_id: number;
+    permission: SkillSharePermission;
+  }[];
+  public_permission?: SkillSharePermission | null;
+}
+
+export async function uploadUserSkillFiles(
+  skillId: string,
+  upload: File
+): Promise<SkillEditableDetail> {
+  const form = new FormData();
+  form.append("upload", upload);
+  const res = await fetch(`/api/skills/custom/${skillId}/files`, {
+    method: "POST",
+    body: form,
+  });
+  return handle<SkillEditableDetail>(res);
+}
+
+export async function inspectSkillBundle(
+  upload: File
+): Promise<SkillBundleContents> {
+  const form = new FormData();
+  form.append("upload", upload);
+  const res = await fetch("/api/skills/custom/bundle/inspect", {
+    method: "POST",
+    body: form,
+  });
+  return handle<SkillBundleContents>(res);
+}
+
+export async function removeUserSkillFile(
+  skillId: string,
+  path: string
+): Promise<SkillEditableDetail> {
+  const params = new URLSearchParams({ path });
+  const res = await fetch(
+    `/api/skills/custom/${skillId}/files?${params.toString()}`,
+    { method: "DELETE" }
+  );
+  return handle<SkillEditableDetail>(res);
 }
 
 export async function patchUserSkill(
   skillId: string,
-  enabled: boolean
+  patch: PatchCustomSkillInput
 ): Promise<CustomSkill> {
   const res = await fetch(`/api/skills/custom/${skillId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify(patch),
+  });
+  return handle<CustomSkill>(res);
+}
+
+export async function updateSkillShares(
+  skillId: string,
+  payload: SkillShareUpdatePayload
+): Promise<CustomSkill> {
+  const res = await fetch(`/api/skills/custom/${skillId}/share`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle<CustomSkill>(res);
+}
+
+export async function transferSkillOwnership(
+  skillId: string,
+  payload: { new_owner_user_id: string }
+): Promise<CustomSkill> {
+  const res = await fetch(`/api/skills/custom/${skillId}/transfer-ownership`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
   return handle<CustomSkill>(res);
 }

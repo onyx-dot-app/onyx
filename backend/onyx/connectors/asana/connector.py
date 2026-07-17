@@ -93,6 +93,8 @@ class AsanaConnector(LoadConnector, PollConnector):
             id=task.id,
             sections=[TextSection(link=task.link, text=task.text)],
             doc_updated_at=task.last_modified,
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=task.created_at,
             source=DocumentSource.ASANA,
             semantic_identifier=task.title,
             metadata={

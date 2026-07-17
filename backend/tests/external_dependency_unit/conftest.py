@@ -11,8 +11,8 @@ from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.models import UserRole
 from onyx.file_store.file_store import get_default_file_store
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.full_setup import ensure_full_deployment_setup
 
 # Opt into the shared @pytest.mark.secrets / test_secrets infrastructure.
@@ -50,7 +50,7 @@ def full_deployment_setup() -> Generator[None, None, None]:
 def tenant_context() -> Generator[None, None, None]:
     """Set up tenant context for testing"""
     # Set the tenant context for the test
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         yield
     finally:

@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import useSWR, { KeyedMutator } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import { Section } from "@/layouts/general-layouts";
 import { FormField } from "@/refresh-components/form/FormField";
@@ -22,7 +22,7 @@ import { markdown } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { useModal } from "@/refresh-components/contexts/ModalContext";
+import { useModal } from "@opal/components";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
@@ -34,10 +34,9 @@ import {
 } from "@/lib/tools/interfaces";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { SvgArrowExchange } from "@opal/icons";
-import { useAuthType } from "@/lib/hooks";
-import { AuthType } from "@/lib/constants";
+import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
 
 interface MCPAuthenticationModalProps {
   mcpServer: MCPServer | null;
@@ -151,10 +150,7 @@ export default function MCPAuthenticationModal({
   // Open the Advanced (known-provider) section by default when configured.
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // Check if OAuth is enabled for the Onyx instance
-  const authType = useAuthType();
-  const isOAuthEnabled =
-    authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
+  const isOAuthEnabled = useOAuthPassThroughEnabled();
 
   const redirectUri = useMemo(() => {
     if (typeof window === "undefined") {

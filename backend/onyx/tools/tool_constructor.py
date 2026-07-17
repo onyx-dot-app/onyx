@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import cast
 from uuid import UUID
 
@@ -11,11 +12,10 @@ from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
 from onyx.db.mcp import get_all_mcp_tools_for_server
 from onyx.db.mcp import get_mcp_server_by_id
-from onyx.db.mcp import get_user_connection_config
+from onyx.db.mcp import MCPCredentialsError
+from onyx.db.mcp import resolve_mcp_credentials
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
@@ -52,6 +52,13 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+def _disambiguate_mcp_tool_names(tools: list[Tool]) -> None:
+    tool_name_counts = Counter(tool.name for tool in tools)
+    for tool in tools:
+        if isinstance(tool, MCPTool) and tool_name_counts[tool.name] > 1:
+            tool.use_disambiguated_name()
+
+
 class SearchToolConfig(BaseModel):
     user_selected_filters: BaseFilters | None = None
     # Vespa metadata filters for overflowing user files.  These are NOT the
@@ -64,6 +71,7 @@ class SearchToolConfig(BaseModel):
     additional_context: str | None = None
     slack_context: SlackContext | None = None
     enable_slack_search: bool = True
+    auto_detect_filters: bool = True
 
 
 class FileReaderToolConfig(BaseModel):
@@ -199,6 +207,7 @@ def _construct_tools_impl(
             bypass_acl=config.bypass_acl,
             slack_context=config.slack_context,
             enable_slack_search=config.enable_slack_search,
+            auto_detect_filters=config.auto_detect_filters,
         )
 
     added_search_tool = False
@@ -409,32 +418,11 @@ def _construct_tools_impl(
 
             mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
 
-            # Get user-specific connection config if needed
-            connection_config = None
-            user_email = user.email
-            mcp_user_oauth_token = None
-
-            if mcp_server.auth_type == MCPAuthenticationType.PT_OAUTH:
-                # Pass-through OAuth: use the user's login OAuth token
-                if user.is_anonymous:
-                    logger.warning(
-                        "Anonymous user cannot use PT_OAUTH MCP server %s",
-                        mcp_server.id,
-                    )
-                    continue
-                mcp_user_oauth_token = user_oauth_token
-            elif (
-                mcp_server.auth_type == MCPAuthenticationType.API_TOKEN
-                or mcp_server.auth_type == MCPAuthenticationType.OAUTH
-            ):
-                # If server has a per-user template, only use that user's config
-                if mcp_server.auth_performer == MCPAuthenticationPerformer.PER_USER:
-                    connection_config = get_user_connection_config(
-                        mcp_server.id, user_email, db_session
-                    )
-                else:
-                    # No per-user template: use admin config
-                    connection_config = mcp_server.admin_connection_config
+            try:
+                mcp_credentials = resolve_mcp_credentials(mcp_server, user, db_session)
+            except MCPCredentialsError as e:
+                logger.warning(str(e))
+                continue
 
             # Get all saved tools for this MCP server
             saved_tools = get_all_mcp_tools_for_server(mcp_server.id, db_session)
@@ -458,10 +446,10 @@ def _construct_tools_impl(
                     tool_name=saved_tool.name,
                     tool_description=saved_tool.description,
                     tool_definition=saved_tool.mcp_input_schema or {},
-                    connection_config=connection_config,
-                    user_email=user_email,
+                    connection_config=mcp_credentials.connection_config,
+                    user_email=user.email,
                     user_id=str(user.id),
-                    user_oauth_token=mcp_user_oauth_token,
+                    user_oauth_token=mcp_credentials.user_oauth_token,
                     additional_headers=additional_mcp_headers,
                 )
                 mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
@@ -509,5 +497,6 @@ def _construct_tools_impl(
     tools: list[Tool] = []
     for tool_list in tool_dict.values():
         tools.extend(tool_list)
+    _disambiguate_mcp_tool_names(tools)
 
     return tool_dict

@@ -4,7 +4,7 @@ import * as Yup from "yup";
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider, InputVertical } from "@opal/layouts";
+import { InputDivider, InputVertical, toast } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
@@ -29,10 +29,9 @@ import {
 } from "@/sections/modals/languageModels/shared";
 import { fetchOllamaModels } from "@/lib/languageModels/svc";
 import { Card, Tabs } from "@opal/components";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 const CLOUD_API_BASE = "https://ollama.com";
 
 enum Tab {
@@ -61,7 +60,7 @@ function OllamaModalInternals({
   setTab,
 }: OllamaModalInternalsProps) {
   const formikProps = useFormikContext<OllamaModalValues>();
-  const { settings } = useSettingsContext();
+  const settings = useSettings();
 
   const isFetchDisabled = useMemo(
     () =>
@@ -78,7 +77,7 @@ function OllamaModalInternals({
       : formikProps.values.api_base;
     const { models, error } = await fetchOllamaModels({
       api_base: apiBase,
-      provider_name: existingLlmProvider?.name ?? undefined,
+      provider_id: existingLlmProvider?.id ?? undefined,
       signal,
     });
     if (signal?.aborted) return;
@@ -169,10 +168,11 @@ export default function OllamaModal({
   shouldMarkAsDefault,
   onOpenChange,
   onSuccess,
+  analyticsSource,
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { settings } = useSettingsContext();
+  const settings = useSettings();
   const defaultApiBase = settings.is_containerized
     ? "http://host.docker.internal:11434"
     : "http://127.0.0.1:11434";
@@ -235,9 +235,11 @@ export default function OllamaModal({
         };
 
         await submitProvider({
-          analyticsSource: isOnboarding
-            ? LLMProviderConfiguredSource.CHAT_ONBOARDING
-            : LLMProviderConfiguredSource.ADMIN_PAGE,
+          analyticsSource:
+            analyticsSource ??
+            (isOnboarding
+              ? LLMProviderConfiguredSource.CHAT_ONBOARDING
+              : LLMProviderConfiguredSource.ADMIN_PAGE),
           providerName: LLMProviderName.OLLAMA_CHAT,
           values: submitValues,
           initialValues,

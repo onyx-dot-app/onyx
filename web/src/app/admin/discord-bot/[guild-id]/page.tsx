@@ -2,11 +2,11 @@
 
 import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@opal/utils";
-import { ThreeDotsLoader } from "@/components/Loading";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, toast } from "@opal/layouts";
 import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import Card from "@/refresh-components/cards/Card";
@@ -65,7 +65,7 @@ function GuildDetailContent({
     useDiscordChannels(guildId);
 
   if (guildLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (guildError || !guild) {
@@ -128,7 +128,9 @@ function GuildDetailContent({
             registered.
           </Text>
         ) : channelsLoading ? (
-          <ThreeDotsLoader />
+          <div className="flex justify-center py-12">
+            <SvgSimpleLoader className="h-6 w-6" />
+          </div>
         ) : channelsError ? (
           <ErrorCallout
             errorTitle="Failed to load channels"

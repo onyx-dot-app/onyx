@@ -64,6 +64,7 @@ from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 
 _UNSET = object()
@@ -74,6 +75,15 @@ def _not_configured(method_name: str) -> NotImplementedError:
         f"StubSandboxManager.{method_name} not configured for this test — "
         "set the corresponding attribute or override the method."
     )
+
+
+class RecordingPromptSlot(PromptSlot):
+    def __init__(self, *, acquired: bool) -> None:
+        super().__init__(acquired=acquired)
+        self.extend_calls = 0
+
+    def extend(self) -> None:
+        self.extend_calls += 1
 
 
 class StubSandboxManager(SandboxManager):
@@ -96,11 +106,14 @@ class StubSandboxManager(SandboxManager):
       by ``subscribe_to_opencode_session``.
     - ``create_snapshot_returns``: ``SnapshotResult | None`` returned by
       ``create_snapshot``.
-    - ``list_directory_returns``, ``read_file_returns``,
-      ``upload_file_returns``, ``delete_file_returns``,
+    - ``create_snapshot_results_by_session``: per-session ``SnapshotResult``,
+      ``None``, or exception for ``create_snapshot``.
+    - ``list_directory_returns`` or ``list_directory_returns_by_path``,
+      ``read_file_returns``, ``upload_file_returns``, ``delete_file_returns``,
       ``get_upload_stats_returns``, ``get_webapp_url_returns``,
       ``generate_pptx_preview_returns``: return values for the matching
-      filesystem / utility methods.
+      filesystem / utility methods. Use ``list_directory_returns_by_path`` for
+      recursive directory-walk tests.
 
     Silent no-op opt-ins
     --------------------
@@ -132,8 +145,14 @@ class StubSandboxManager(SandboxManager):
         self.health_check_returns: bool | None = None
         self.session_workspace_exists_returns: bool | None = None
         self.create_snapshot_returns: SnapshotResult | None | object = _UNSET
+        self.create_snapshot_results_by_session: dict[
+            UUID, SnapshotResult | None | Exception
+        ] = {}
         self.create_opencode_history_snapshot_returns: bool | object = _UNSET
         self.list_directory_returns: list[FilesystemEntry] | None = None
+        self.list_directory_returns_by_path: dict[str, list[FilesystemEntry]] | None = (
+            None
+        )
         self.read_file_returns: bytes | None = None
         self.upload_file_returns: str | None = None
         self.delete_file_returns: bool | None = None
@@ -207,6 +226,7 @@ class StubSandboxManager(SandboxManager):
         self.last_send_message_payload: dict[str, Any] | None = None
         self.last_subscribe_to_opencode_session_payload: dict[str, Any] | None = None
         self.last_list_directory_payload: dict[str, Any] | None = None
+        self.list_directory_payloads: list[dict[str, Any]] = []
         self.last_read_file_payload: dict[str, Any] | None = None
         self.last_upload_file_payload: dict[str, Any] | None = None
         self.last_delete_file_payload: dict[str, Any] | None = None
@@ -217,6 +237,8 @@ class StubSandboxManager(SandboxManager):
         self.last_write_files_to_sandbox_payload: dict[str, Any] | None = None
         self.last_get_webapp_url_payload: dict[str, Any] | None = None
         self.last_generate_pptx_preview_payload: dict[str, Any] | None = None
+        self.last_prompt_slot: RecordingPromptSlot | None = None
+        self.abort_calls: list[tuple[UUID, UUID, str]] = []
 
     # ------------------------------------------------------------------
     # send_message_events property: snapshot iterables on assignment so
@@ -281,6 +303,7 @@ class StubSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
+        connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         self.setup_session_workspace_count += 1
@@ -290,6 +313,7 @@ class StubSandboxManager(SandboxManager):
             "llm_config": llm_config,
             "nextjs_port": nextjs_port,
             "skills_section": skills_section,
+            "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
         }
         if not self.setup_session_workspace_silent:
@@ -299,13 +323,11 @@ class StubSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,
     ) -> None:
         self.cleanup_session_workspace_count += 1
         self.last_cleanup_session_workspace_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
-            "nextjs_port": nextjs_port,
         }
         if not self.cleanup_session_workspace_silent:
             raise _not_configured("cleanup_session_workspace")
@@ -322,6 +344,12 @@ class StubSandboxManager(SandboxManager):
             "session_id": session_id,
             "tenant_id": tenant_id,
         }
+        if session_id in self.create_snapshot_results_by_session:
+            outcome = self.create_snapshot_results_by_session[session_id]
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
         if self.create_snapshot_returns is _UNSET:
             raise _not_configured("create_snapshot")
         return cast("SnapshotResult | None", self.create_snapshot_returns)
@@ -350,20 +378,20 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
+        connectable_apps_section: str,
     ) -> None:
         self.restore_snapshot_count += 1
         self.last_restore_snapshot_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
             "snapshot_storage_path": snapshot_storage_path,
-            "tenant_id": tenant_id,
             "nextjs_port": nextjs_port,
             "llm_config": llm_config,
             "skills_section": skills_section,
+            "connectable_apps_section": connectable_apps_section,
         }
         if not self.restore_snapshot_silent:
             raise _not_configured("restore_snapshot")
@@ -407,13 +435,17 @@ class StubSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         build_session_id: UUID,
-    ) -> Generator[bool, None, None]:
+        acquire_timeout: float = 10.0,
+    ) -> Generator[PromptSlot, None, None]:
         self.prompt_slot_count += 1
         self.last_prompt_slot_payload = {
             "sandbox_id": sandbox_id,
             "build_session_id": build_session_id,
+            "acquire_timeout": acquire_timeout,
         }
-        yield self.prompt_slot_returns
+        slot = RecordingPromptSlot(acquired=self.prompt_slot_returns)
+        self.last_prompt_slot = slot
+        yield slot
 
     def ensure_opencode_session(
         self,
@@ -442,6 +474,8 @@ class StubSandboxManager(SandboxManager):
         agent_model: str | None = None,
         on_opencode_session_resolved: Callable[[str], None] | None = None,
         should_interrupt: Callable[[], bool] | None = None,
+        should_abort_on_teardown: Callable[[], bool] | None = None,
+        turn_timeout_seconds: float | None = None,
     ) -> Generator[SandboxEvent, None, None]:
         self.send_message_count += 1
         self.last_send_message_payload = {
@@ -453,11 +487,21 @@ class StubSandboxManager(SandboxManager):
             "agent_model": agent_model,
             "on_opencode_session_resolved": on_opencode_session_resolved,
             "should_interrupt": should_interrupt,
+            "should_abort_on_teardown": should_abort_on_teardown,
+            "turn_timeout_seconds": turn_timeout_seconds,
         }
         if self._send_message_events is None:
             raise _not_configured("send_message")
         # Iterate over the snapshot — re-driveable across calls.
         yield from self._send_message_events
+
+    def abort_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> None:
+        self.abort_calls.append((sandbox_id, session_id, opencode_session_id))
 
     def subscribe_to_opencode_session(
         self,
@@ -487,6 +531,12 @@ class StubSandboxManager(SandboxManager):
             "session_id": session_id,
             "path": path,
         }
+        self.list_directory_payloads.append(self.last_list_directory_payload)
+        if self.list_directory_returns_by_path is not None:
+            entries = self.list_directory_returns_by_path.get(path)
+            if entries is None:
+                raise ValueError(f"Directory not found: {path}")
+            return entries
         if self.list_directory_returns is None:
             raise _not_configured("list_directory")
         return self.list_directory_returns

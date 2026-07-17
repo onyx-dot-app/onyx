@@ -125,16 +125,30 @@ def build_vespa_filters(
 
     def _build_time_filter(
         cutoff: datetime | None,
+        cutoff_upper: datetime | None = None,
         untimed_doc_cutoff: timedelta = timedelta(days=92),
     ) -> str:
-        if not cutoff:
+        if not cutoff and not cutoff_upper:
             return ""
-        include_untimed = datetime.now(timezone.utc) - untimed_doc_cutoff > cutoff
-        cutoff_secs = int(cutoff.timestamp())
 
-        if include_untimed:
-            return f"!({DOC_UPDATED_AT} < {cutoff_secs})"
-        return f"({DOC_UPDATED_AT} >= {cutoff_secs})"
+        clauses: list[str] = []
+        if cutoff:
+            # Untimed docs (no doc_updated_at) are only included for an old, open-
+            # ended lower bound. A bounded range excludes them — an undated doc
+            # cannot be shown to fall within [cutoff, cutoff_upper].
+            include_untimed = (
+                cutoff_upper is None
+                and datetime.now(timezone.utc) - untimed_doc_cutoff > cutoff
+            )
+            cutoff_secs = int(cutoff.timestamp())
+            if include_untimed:
+                clauses.append(f"!({DOC_UPDATED_AT} < {cutoff_secs})")
+            else:
+                clauses.append(f"({DOC_UPDATED_AT} >= {cutoff_secs})")
+        if cutoff_upper:
+            clauses.append(f"({DOC_UPDATED_AT} <= {int(cutoff_upper.timestamp())})")
+
+        return " and ".join(clauses)
 
     def _build_user_project_filter(
         project_id: int | None,
@@ -228,8 +242,16 @@ def build_vespa_filters(
     elif len(knowledge_scope_parts) == 1:
         filter_parts.append(knowledge_scope_parts[0])
 
-    # Time filter
-    _append(filter_parts, _build_time_filter(filters.time_cutoff))
+    # Vespa only indexes doc_updated_at: created_at_range is dropped (widens
+    # rather than narrows).
+    updated_at_range = filters.updated_at_range
+    _append(
+        filter_parts,
+        _build_time_filter(
+            updated_at_range.start if updated_at_range else None,
+            updated_at_range.end if updated_at_range else None,
+        ),
+    )
 
     # # Knowledge Graph Filters
     # _append(filter_parts, _build_kg_filter(

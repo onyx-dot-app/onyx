@@ -13,14 +13,15 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.db.models import UserGroup
+from onyx.db.skill import set_skill_enabled_for_user
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
-from tests.external_dependency_unit.craft._test_helpers import add_user_to_group
-from tests.external_dependency_unit.craft._test_helpers import make_built_in_skill_row
-from tests.external_dependency_unit.craft._test_helpers import make_cc_pair
-from tests.external_dependency_unit.craft._test_helpers import make_group
-from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
+from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import make_group
+from tests.external_dependency_unit.craft.db_helpers import reset_built_in_skill_row
+from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
 _FRONTMATTER = "---\nname: {slug}\ndescription: {slug}\n---\n"
 
@@ -153,7 +154,7 @@ class TestBuiltInTemplate:
         _write_skill_dir(tmp_path, "company-search", template_body=template_body)
         reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
-        make_cc_pair(db_session, DocumentSource.SLACK)
+        make_cc_pair(db_session, DocumentSource.SLACK, commit=False)
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
@@ -181,7 +182,7 @@ class TestBuiltInTemplate:
         )
         reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
-        make_cc_pair(db_session, DocumentSource.GOOGLE_DRIVE)
+        make_cc_pair(db_session, DocumentSource.GOOGLE_DRIVE, commit=False)
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
@@ -199,16 +200,16 @@ class TestCustomSkillFileset:
         test_user: User,
         seeded_skill: Callable[..., Skill],
     ) -> None:
-        # Custom skills require a group grant to be visible to a non-admin
-        # user. Set up: user is in group ``team``; skill is granted to
-        # ``team``; the bundle holds two files. A uniquified slug avoids
-        # collisions with leftover rows from prior partial runs.
+        # Custom skills require both visibility and per-user enablement. Set up:
+        # user is in group ``team``; skill is granted to ``team`` and explicitly
+        # enabled for the user; the bundle holds two files. A uniquified slug
+        # avoids collisions with leftover rows from prior partial runs.
         slug = f"my-custom-{uuid4().hex[:8]}"
         team_group: UserGroup = make_group(db_session)
         add_user_to_group(db_session, test_user, team_group)
         db_session.commit()
 
-        seeded_skill(
+        skill = seeded_skill(
             slug=slug,
             public=False,
             groups=[team_group],
@@ -217,6 +218,13 @@ class TestCustomSkillFileset:
                 "nested/file.txt": "nested body",
             },
         )
+        set_skill_enabled_for_user(
+            skill_id=skill.id,
+            enabled=True,
+            user=test_user,
+            db_session=db_session,
+        )
+        db_session.commit()
 
         files = build_skills_fileset_for_user(test_user, db_session)
 

@@ -4,7 +4,7 @@ import { Form, Formik } from "formik";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import * as Yup from "yup";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import {
   createDocumentSet,
   updateDocumentSet,
@@ -20,7 +20,7 @@ import {
 import { TextFormField } from "@/components/Field";
 import Button from "@/refresh-components/buttons/Button";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import React, { useEffect, useState } from "react";
 import { useUser } from "@/providers/UserProvider";

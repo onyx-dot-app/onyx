@@ -16,14 +16,14 @@ import {
   ThemePreference,
 } from "@/lib/types";
 import { usePostHog } from "posthog-js/react";
-import { SettingsContext } from "@/providers/SettingsProvider";
-import { useTokenRefresh } from "@/hooks/useTokenRefresh";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useSettings } from "@/lib/settings/hooks";
+import { useCurrentUser } from "@/lib/users/hooks";
+import { useAuthTypeMetadata, useTokenRefresh } from "@/lib/auth/hooks";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import {
-  useAuthTypeMetadata,
-  AuthTypeMetadata,
-} from "@/hooks/useAuthTypeMetadata";
-import { updateUserPersonalization as persistPersonalization } from "@/lib/userSettings";
+  updateUserPersonalization as persistPersonalization,
+  setUserDefaultModel,
+} from "@/lib/users/svc";
 import { useTheme } from "next-themes";
 
 interface UserContextType {
@@ -32,7 +32,7 @@ interface UserContextType {
   isCurator: boolean;
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
-  authTypeMetadata: AuthTypeMetadata;
+  authTypeMetadata: AuthTypeMetadata | undefined;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
   updateUserPasteAsTile: (enabled: boolean) => Promise<void>;
@@ -64,12 +64,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser } = useCurrentUser();
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
-  const updatedSettings = useContext(SettingsContext);
+  const updatedSettingsData = useSettings();
   const posthog = usePostHog();
 
   // For auto_scroll and temperature_override_enabled:
   // - If user has a preference set, use that
   // - Otherwise, use the workspace setting if available
+  const wsAutoScroll = updatedSettingsData.auto_scroll;
+  const wsTemperatureOverride =
+    updatedSettingsData.temperature_override_enabled;
+
   const mergeUserPreferences = useCallback(
     (currentUser: User | null): User | null => {
       if (!currentUser) return null;
@@ -78,17 +82,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         preferences: {
           ...currentUser.preferences,
           auto_scroll:
-            currentUser.preferences?.auto_scroll ??
-            updatedSettings?.settings?.auto_scroll ??
-            false,
+            currentUser.preferences?.auto_scroll ?? wsAutoScroll ?? false,
           temperature_override_enabled:
             currentUser.preferences?.temperature_override_enabled ??
-            updatedSettings?.settings?.temperature_override_enabled ??
+            wsTemperatureOverride ??
             false,
         },
       };
     },
-    [updatedSettings]
+    [wsAutoScroll, wsTemperatureOverride]
   );
 
   const [upToDateUser, setUpToDateUser] = useState<User | null>(null);
@@ -118,12 +120,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const onRefreshFail = useCallback(async () => {
     await mutateUser();
   }, [mutateUser]);
-  useTokenRefresh(
-    upToDateUser,
-    authTypeMetadata,
-    authTypeMetadataLoading,
-    onRefreshFail
-  );
+  useTokenRefresh(upToDateUser, authTypeMetadataLoading, onRefreshFail);
 
   // Sync user's theme preference from DB to next-themes on load
   const { setTheme, theme } = useTheme();
@@ -445,13 +442,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         return prevUser;
       });
 
-      const response = await fetch(`/api/user/default-model`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ default_model: defaultModel }),
-      });
+      const response = await setUserDefaultModel(defaultModel);
 
       if (!response.ok) {
         await refreshUser();

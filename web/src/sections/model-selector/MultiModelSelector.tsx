@@ -11,8 +11,12 @@ import {
 } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { useSettingsContext } from "@/providers/SettingsProvider";
-import { LLMOption, buildLlmOptions } from "@/lib/languageModels/options";
+import { useSettings } from "@/lib/settings/hooks";
+import {
+  LLMOption,
+  buildLlmOptions,
+  llmOptionKey,
+} from "@/lib/languageModels/options";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 
@@ -22,6 +26,8 @@ export interface SelectedModel {
   name: string;
   provider: string;
   modelName: string;
+  /** Unique id of the model configuration; disambiguates same-named models across providers. */
+  modelConfigurationId: number | null;
   displayName: string;
 }
 
@@ -30,10 +36,6 @@ export interface MultiModelSelectorProps {
   onAdd: (model: SelectedModel) => void;
   onRemove: (index: number) => void;
   onReplace: (index: number, model: SelectedModel) => void;
-}
-
-function modelKey(provider: string, modelName: string): string {
-  return `${provider}:${modelName}`;
 }
 
 export default function MultiModelSelector({
@@ -46,9 +48,8 @@ export default function MultiModelSelector({
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
 
-  const settings = useSettingsContext();
-  const multiModelAllowed =
-    settings?.settings?.multi_model_chat_enabled ?? true;
+  const settings = useSettings();
+  const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
 
   // Mirror the data source used by `ModelSelectorContent` so the selector is
   // disabled precisely when the popover would render "No models found".
@@ -71,16 +72,14 @@ export default function MultiModelSelector({
       : "Add Model";
 
   const selectedKeys = useMemo(
-    () => new Set(selectedModels.map((m) => modelKey(m.provider, m.modelName))),
+    () => new Set(selectedModels.map(llmOptionKey)),
     [selectedModels]
   );
 
   const otherSelectedKeys = useMemo(() => {
     if (replacingIndex === null) return new Set<string>();
     return new Set(
-      selectedModels
-        .filter((_, i) => i !== replacingIndex)
-        .map((m) => modelKey(m.provider, m.modelName))
+      selectedModels.filter((_, i) => i !== replacingIndex).map(llmOptionKey)
     );
   }, [selectedModels, replacingIndex]);
 
@@ -88,18 +87,18 @@ export default function MultiModelSelector({
     replacingIndex !== null
       ? (() => {
           const m = selectedModels[replacingIndex];
-          return m ? modelKey(m.provider, m.modelName) : null;
+          return m ? llmOptionKey(m) : null;
         })()
       : null;
 
   const isSelected = (option: LLMOption) => {
-    const key = modelKey(option.provider, option.modelName);
+    const key = llmOptionKey(option);
     if (replacingIndex !== null) return key === replacingKey;
     return selectedKeys.has(key);
   };
 
   const isDisabled = (option: LLMOption) => {
-    const key = modelKey(option.provider, option.modelName);
+    const key = llmOptionKey(option);
     if (replacingIndex !== null) return otherSelectedKeys.has(key);
     return !selectedKeys.has(key) && atMax;
   };
@@ -109,6 +108,7 @@ export default function MultiModelSelector({
       name: option.name,
       provider: option.provider,
       modelName: option.modelName,
+      modelConfigurationId: option.modelConfigurationId ?? null,
       displayName: option.displayName,
     };
 
@@ -119,9 +119,9 @@ export default function MultiModelSelector({
       return;
     }
 
-    const key = modelKey(option.provider, option.modelName);
+    const key = llmOptionKey(option);
     const existingIndex = selectedModels.findIndex(
-      (m) => modelKey(m.provider, m.modelName) === key
+      (m) => llmOptionKey(m) === key
     );
     if (existingIndex >= 0) {
       onRemove(existingIndex);
@@ -200,9 +200,7 @@ export default function MultiModelSelector({
                   return (
                     <div
                       key={
-                        isMultiModel
-                          ? modelKey(model.provider, model.modelName)
-                          : "single-model-pill"
+                        isMultiModel ? llmOptionKey(model) : "single-model-pill"
                       }
                       className="flex items-center"
                     >

@@ -13,7 +13,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import CardSection from "@/components/admin/CardSection";
 
 function MessageDisplay({ message }: { message: MessageSnapshot }) {
@@ -77,7 +77,7 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
   );
 
   if (isLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (!chatSessionSnapshot || error) {

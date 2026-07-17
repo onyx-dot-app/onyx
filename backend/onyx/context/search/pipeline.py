@@ -10,6 +10,7 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import PersonaSearchInfo
+from onyx.context.search.models import TimeRange
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
@@ -81,7 +82,22 @@ def _build_index_filters(
         else persona_document_sets
     )
 
-    time_filter = base_filters.time_cutoff or persona_time_cutoff
+    # The persona's search_start_date floor must never be loosened.
+    updated_at_range = base_filters.updated_at_range
+    floor_starts = [
+        bound
+        for bound in (
+            updated_at_range.start if updated_at_range else None,
+            persona_time_cutoff,
+        )
+        if bound is not None
+    ]
+    if floor_starts:
+        updated_at_range = TimeRange(
+            start=max(floor_starts),
+            end=updated_at_range.end if updated_at_range else None,
+        )
+
     source_filter = base_filters.source_type
 
     if bypass_acl:
@@ -98,7 +114,8 @@ def _build_index_filters(
         persona_id_filter=persona_id_filter,
         source_type=source_filter,
         document_set=document_set_filter,
-        time_cutoff=time_filter,
+        created_at_range=base_filters.created_at_range,
+        updated_at_range=updated_at_range,
         tags=base_filters.tags,
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,

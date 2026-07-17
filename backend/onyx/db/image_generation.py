@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import ImageGenerationConfig
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
-from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

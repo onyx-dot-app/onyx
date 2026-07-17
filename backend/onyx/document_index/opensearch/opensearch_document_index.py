@@ -28,14 +28,17 @@ from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
+from onyx.document_index.opensearch.schema import CREATED_AT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
@@ -58,6 +61,7 @@ from onyx.document_index.opensearch.search import (
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import Document
 from onyx.redis.lock_context import redis_shared_lock
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
@@ -77,14 +81,6 @@ VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 # only needs to happen at most once per process lifetime, since any changes to
 # an index should always be correlated with a redeploy.
 _verified_index_names_for_current_process: set[str] = set()
-
-
-class ChunkCountNotFoundError(ValueError):
-    """Raised when a document has no chunk count."""
-
-
-class ChunkCountZeroError(ValueError):
-    """Raised when a document has a chunk count of 0."""
 
 
 def generate_opensearch_filtered_access_control_list(
@@ -124,7 +120,7 @@ def set_cluster_state(client: OpenSearchClient) -> None:
     )
 
 
-def _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+def convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
     chunk: DocumentChunkWithoutVectors,
     score: float | None,
     highlights: dict[str, list[str]],
@@ -225,6 +221,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         metadata_list=filtered_metadata_list,
         metadata_suffix=filtered_metadata_suffix,
         last_updated=chunk.source_document.doc_updated_at,
+        created_at=chunk.source_document.doc_created_at,
         public=chunk.access.is_public,
         access_control_list=generate_opensearch_filtered_access_control_list(
             chunk.access
@@ -542,6 +539,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
+        surface_document_missing: bool = False,
     ) -> None:
         """Updates some set of chunks.
 
@@ -549,8 +547,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         This may be due to a concurrent ongoing indexing operation. In that
         event callers are expected to retry after a bit once the state of the
         document index is updated.
-        NOTE: Requires document chunk count be known; will raise if it is not.
-        This may be caused by the same situation outlined above.
+        NOTE: Documents whose chunk count is unknown (not yet indexed) or 0
+        (e.g. concurrently deleted) are skipped with a warning rather than
+        raising. The indexing pipeline will write the latest metadata shortly.
         NOTE: Will no-op if an update request has no fields to update.
 
         TODO(andrei): Consider exploring a batch API for OpenSearch for this
@@ -570,6 +569,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
             len(update_requests),
             self._index_name,
         )
+        # When surfacing, keep going past a missing-doc request so later
+        # requests still update; attribute only the docs that were truly missing.
+        missing_chunk_ids: list[str] = []
+        missing_document_ids: set[str] = set()
         for update_request in update_requests:
             properties_to_update: dict[str, Any] = dict()
             # TODO(andrei): Nit but consider if we can use DocumentChunk here so
@@ -599,6 +602,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 properties_to_update[PERSONAS_FIELD_NAME] = list(
                     update_request.persona_ids
                 )
+            if update_request.created_at is not None:
+                # Stored as epoch seconds
+                properties_to_update[CREATED_AT_FIELD_NAME] = int(
+                    datetime_to_utc(update_request.created_at).timestamp()
+                )
 
             if not properties_to_update:
                 if len(update_request.document_ids) > 1:
@@ -612,29 +620,34 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 continue
 
             doc_chunk_ids_to_update: list[str] = []
+            chunk_id_to_doc_id: dict[str, str] = {}
             for doc_id in update_request.document_ids:
                 doc_chunk_count = update_request.doc_id_to_chunk_cnt.get(doc_id, -1)
                 if doc_chunk_count < 0:
-                    # This means the chunk count is not known. This is due to a
-                    # race condition between doc indexing and updating steps
-                    # which run concurrently when a doc is indexed. The indexing
-                    # step should update chunk count shortly. This could also
-                    # have been due to an older version of the indexing pipeline
-                    # which did not compute chunk count, but that codepath has
-                    # since been deprecated and should no longer be the case
-                    # here.
+                    # The chunk count is not known. This is a benign race between
+                    # doc indexing and this update step, which run concurrently
+                    # when a doc is indexed. The indexing step will set the chunk
+                    # count (and write the latest metadata/permissions) shortly,
+                    # so skip this doc rather than failing the whole update.
                     # TODO(andrei): Fix the aforementioned race condition.
-                    raise ChunkCountNotFoundError(
-                        f"Tried to update document {doc_id} but its chunk count is not known. "
-                        "Older versions of the application used to permit this but is not a "
-                        "supported state for a document when using OpenSearch. The document was "
-                        "likely just added to the indexing pipeline and the chunk count will be "
-                        "updated shortly."
+                    logger.warning(
+                        "[OpenSearchDocumentIndex] Skipping update for document %s: "
+                        "its chunk count is not yet known. The document was likely just "
+                        "added to the indexing pipeline and the chunk count will be "
+                        "updated shortly.",
+                        doc_id,
                     )
+                    continue
                 if doc_chunk_count == 0:
-                    raise ChunkCountZeroError(
-                        f"Tried to update document {doc_id} but its chunk count was 0."
+                    # A chunk count of 0 typically reflects a concurrent delete +
+                    # metadata sync. There are no chunks to update, so skip this
+                    # doc rather than failing the whole update.
+                    logger.warning(
+                        "[OpenSearchDocumentIndex] Skipping update for document %s: "
+                        "its chunk count is 0.",
+                        doc_id,
                     )
+                    continue
 
                 for chunk_index in range(doc_chunk_count):
                     document_chunk_id = get_opensearch_doc_chunk_id(
@@ -643,10 +656,30 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         chunk_index=chunk_index,
                     )
                     doc_chunk_ids_to_update.append(document_chunk_id)
+                    chunk_id_to_doc_id[document_chunk_id] = doc_id
 
-            self._client.bulk_update_documents(
-                document_chunk_ids=doc_chunk_ids_to_update,
-                properties_to_update=properties_to_update,
+            try:
+                self._client.bulk_update_documents(
+                    document_chunk_ids=doc_chunk_ids_to_update,
+                    properties_to_update=properties_to_update,
+                    # Normal metadata sync tolerates benign 404s (indexing race);
+                    # a port surfaces them instead so deferred-sync can retry.
+                    ignore_missing=not surface_document_missing,
+                    surface_document_missing=surface_document_missing,
+                )
+            except OpenSearchDocumentMissingError as e:
+                # Only raised when surfacing; record the missing docs and keep
+                # processing the remaining requests.
+                missing_chunk_ids.extend(e.missing_chunk_ids)
+                missing_document_ids.update(
+                    chunk_id_to_doc_id[cid]
+                    for cid in e.missing_chunk_ids
+                    if cid in chunk_id_to_doc_id
+                )
+
+        if missing_chunk_ids:
+            raise OpenSearchDocumentMissingError(
+                missing_chunk_ids, sorted(missing_document_ids)
             )
 
     def id_based_retrieval(
@@ -691,7 +724,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 search_type=OpenSearchSearchType.DOC_ID_RETRIEVAL,
             )
             inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-                _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+                convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                     search_hit.document_chunk, None, {}
                 )
                 for search_hit in search_hits
@@ -747,7 +780,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # Good place for a breakpoint to inspect the search hits if you have
         # "explain" enabled.
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -792,7 +825,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -836,7 +869,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -869,7 +902,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             search_type=OpenSearchSearchType.RANDOM,
         )
         inference_chunks_uncleaned: list[InferenceChunkUncleaned] = [
-            _convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
+            convert_retrieved_opensearch_chunk_to_inference_chunk_uncleaned(
                 search_hit.document_chunk, search_hit.score, search_hit.match_highlights
             )
             for search_hit in search_hits
@@ -880,22 +913,32 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return inference_chunks
 
-    def index_raw_chunks(self, chunks: list[DocumentChunk]) -> None:
+    def index_raw_chunks(
+        self, chunks: list[DocumentChunk], use_create_only: bool = False
+    ) -> None:
         """Indexes raw document chunks into OpenSearch.
 
-        Used in the Vespa migration task. Can be deleted after migrations are
-        complete.
+        Used by the Vespa migration task and the reindex port. The reindex port
+        passes use_create_only=True so its stale backlog snapshot can never
+        overwrite a chunk a live/forward writer already owns in FUTURE (an
+        existing chunk is a benign 409). The port is pure gap-fill backfill of
+        PRESENT, which is always >= the port in recency, so it never needs to
+        overwrite an existing chunk.
         """
         logger.debug(
             "[OpenSearchDocumentIndex] Indexing %s raw chunks for index %s.",
             len(chunks),
             self._index_name,
         )
-        # Do not raise if the document already exists, just update. This is
-        # because the document may already have been indexed during the
-        # OpenSearch transition period.
+        # Migration path (use_create_only=False): update_if_exists overwrites,
+        # since the doc may already have been indexed during the OpenSearch
+        # transition period. Port path (use_create_only=True): create-only, so
+        # it never overwrites.
         self._client.bulk_index_documents(
-            documents=chunks, tenant_state=self._tenant_state, update_if_exists=True
+            documents=chunks,
+            tenant_state=self._tenant_state,
+            update_if_exists=True,
+            use_create_only=use_create_only,
         )
 
 
@@ -920,6 +963,8 @@ class OpenSearchIndexPair(DocumentIndex):
         # TODO(andrei): This is dumb, fix this.
         secondary_embedding_dim: int | None = None,
         secondary_embedding_precision: EmbeddingPrecision | None = None,
+        # INSTANT reindex-port: primary is a promoted, still-backfilling index; see update().
+        primary_backfill_in_progress: bool = False,
     ) -> None:
         # All three secondary fields must be set together or all None — checked
         # independently so a partially-set state surfaces here rather than
@@ -938,6 +983,7 @@ class OpenSearchIndexPair(DocumentIndex):
         self._secondary = secondary
         self._secondary_embedding_dim = secondary_embedding_dim
         self._secondary_embedding_precision = secondary_embedding_precision
+        self._primary_backfill_in_progress = primary_backfill_in_progress
 
     def verify_and_create_index_if_necessary(
         self,
@@ -972,9 +1018,24 @@ class OpenSearchIndexPair(DocumentIndex):
         return total
 
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
-        self._primary.update(update_requests)
+        if self._primary_backfill_in_progress:
+            # A doc the port hasn't copied into this now-live primary yet is silently
+            # missing; surface it (typed signal, like secondary) so the caller defers
+            # instead of clearing needs_sync and letting the create-only port reinstall
+            # a stale, possibly-revoked ACL nothing would correct.
+            try:
+                self._primary.update(update_requests, surface_document_missing=True)
+            except OpenSearchDocumentMissingError as e:
+                raise SecondaryIndexDocumentMissingError(e.missing_document_ids)
+        else:
+            self._primary.update(update_requests)
         if self._secondary is not None:
-            self._secondary.update(update_requests)
+            # FUTURE may not have the doc yet (port); re-raise as a typed signal
+            # carrying only the docs that were actually missing.
+            try:
+                self._secondary.update(update_requests, surface_document_missing=True)
+            except OpenSearchDocumentMissingError as e:
+                raise SecondaryIndexDocumentMissingError(e.missing_document_ids)
 
     def id_based_retrieval(
         self,

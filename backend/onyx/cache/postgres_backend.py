@@ -110,6 +110,10 @@ class PostgresCacheLock(CacheLock):
             self._acquired = False
             self._close_session()
 
+    def extend(self, ttl_seconds: float) -> None:
+        # Advisory locks have no TTL; they live until release() or the connection dies.
+        pass
+
     def owned(self) -> bool:
         return self._acquired
 

@@ -1,5 +1,6 @@
 import ipaddress
 import socket
+import unicodedata
 from typing import Any
 from urllib.parse import parse_qs
 from urllib.parse import urlencode
@@ -542,3 +543,46 @@ def add_url_params(url: str, params: dict) -> str:
     )
 
     return new_url
+
+
+def sanitize_next_url(next_url: str | None) -> str:
+    """Validate a post-login redirect target, returning a safe value.
+
+    Only same-origin relative paths are permitted. Anything carrying a scheme
+    (e.g. ``javascript:``), a network location (``https://evil.com``), or a
+    protocol-relative form (``//evil.com``, ``/\\evil.com``) falls back to
+    ``"/"``. This prevents open-redirect / post-auth phishing through the OAuth
+    ``next`` parameter.
+    """
+    if not next_url:
+        return "/"
+
+    # Leading/trailing whitespace is ignored by browsers; strip so the checks
+    # below see what the browser will actually navigate to.
+    next_url = next_url.strip()
+    if not next_url:
+        return "/"
+
+    # Some browsers strip a leading control character and then reinterpret the
+    # remainder as scheme-relative (e.g. "\x01//evil.com" -> "//evil.com").
+    if unicodedata.category(next_url[0])[0] == "C":
+        return "/"
+
+    # Browsers treat backslashes as forward slashes, so normalize before the
+    # checks below — otherwise tricks like "/\\evil.com" slip past as a path.
+    normalized = next_url.replace("\\", "/")
+
+    # Reject protocol-relative ("//evil.com") and Chrome's absolute "///" form.
+    if not normalized.startswith("/") or normalized.startswith("//"):
+        return "/"
+
+    try:
+        parsed = urlparse(normalized)
+    except ValueError:
+        # Malformed input (e.g. invalid IPv6 literal) — fall back to safe default.
+        return "/"
+
+    if parsed.scheme or parsed.netloc:
+        return "/"
+
+    return next_url

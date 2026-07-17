@@ -137,6 +137,8 @@ class DiscourseConnector(PollConnector):
             source=DocumentSource.DISCOURSE,
             semantic_identifier=topic["title"],
             doc_updated_at=time_str_to_utc(topic["last_posted_at"]),
+            # NOTE: doc_created_at population not yet verified against live data
+            doc_created_at=time_str_to_utc(topic["created_at"]),
             primary_owners=[poster] if poster else None,
             secondary_owners=responders or None,
             metadata=metadata,

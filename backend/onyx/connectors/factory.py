@@ -9,6 +9,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CredentialsConnector
@@ -185,15 +186,15 @@ def validate_ccpair_for_user(
             connector_specific_config=connector.connector_specific_config,
             credential=credential,
         )
-    except ConnectorValidationError as e:
-        raise e
+        runnable_connector.validate_connector_settings()
+        if access_type == AccessType.SYNC:
+            runnable_connector.validate_perm_sync()
+    except ValidationError:
+        raise
     except Exception as e:
         if enforce_creation:
             raise ConnectorValidationError(str(e))
         else:
             return False
 
-    runnable_connector.validate_connector_settings()
-    if access_type == AccessType.SYNC:
-        runnable_connector.validate_perm_sync()
     return True

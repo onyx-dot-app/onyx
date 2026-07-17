@@ -892,7 +892,7 @@ fi
 if [[ "$LITE_MODE" = false ]]; then
     print_info "Which deployment mode would you like?"
     echo ""
-    echo "  1) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
+    echo "  1) Lite      - Minimal deployment (no OpenSearch, Redis, or model servers)"
     echo "                  LLM chat, tools, file uploads, and Projects still work"
     echo "  2) Standard  - Full deployment with search, connectors, and RAG"
     echo ""

@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { isAuthPath } from "@/lib/auth/paths";
 import { useCurrentAgent } from "@/lib/agents/hooks";
 import {
   LLMProviderDescriptor,
@@ -102,8 +104,11 @@ function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
  */
 export function useLLMProviders(agentId?: number) {
-  const url =
-    agentId !== undefined
+  // No chat on /auth/* routes, where an unauthenticated caller would 403.
+  const onAuthPath = isAuthPath(usePathname());
+  const url = onAuthPath
+    ? null
+    : agentId !== undefined
       ? SWR_KEYS.llmProvidersForPersona(agentId)
       : SWR_KEYS.llmProviders;
 

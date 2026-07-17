@@ -31,6 +31,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
 from onyx.connectors.github.utils import deserialize_repository
@@ -107,6 +108,9 @@ GITHUB_PATH_DENYLIST = {
 GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
 # Number of files emitted per checkpoint batch in the FILES stage.
 FILE_BATCH_SIZE = 100
+
+_GITHUB_EMPTY_REPOSITORY_TREE_STATUS = 409
+_GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE = "Git Repository is empty."
 
 
 def _is_indexable_path(path: str, size: int | None) -> bool:
@@ -367,6 +371,11 @@ def _convert_pr_to_document(
             if pull_request.updated_at
             else None
         ),
+        doc_created_at=(
+            pull_request.created_at.replace(tzinfo=timezone.utc)
+            if pull_request.created_at
+            else None
+        ),
         # this metadata is used in perm sync
         doc_metadata=doc_metadata,
         metadata={
@@ -448,6 +457,9 @@ def _convert_issue_to_document(
         semantic_identifier=f"{issue.number}: {issue.title}",
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
+        doc_created_at=(
+            issue.created_at.replace(tzinfo=timezone.utc) if issue.created_at else None
+        ),
         # this metadata is used in perm sync
         doc_metadata=doc_metadata,
         metadata={
@@ -698,7 +710,7 @@ class GithubConnector(
         Returns:
             list[Repository.Repository]: The configured repositories.
         """
-        assert self.github_client is not None  # mypy
+        assert self.github_client is not None  # for type-checking
         if self.repositories:
             if "," in self.repositories:
                 return self.get_github_repos(self.github_client)
@@ -735,7 +747,7 @@ class GithubConnector(
                 "Re-tried listing repo files too many times. "
                 "Something is going wrong with fetching objects from Github"
             )
-        assert self.github_client is not None  # mypy
+        assert self.github_client is not None  # for type-checking
         try:
             git_tree = repo.get_git_tree(repo.default_branch, recursive=True)
             truncated = bool(git_tree.raw_data.get("truncated"))
@@ -756,6 +768,21 @@ class GithubConnector(
         except RateLimitExceededException:
             sleep_after_rate_limit_exception(self.github_client)
             return self._list_indexable_files(repo, attempt_num + 1)
+        except GithubException as e:
+            error_message = (
+                e.data.get("message") if isinstance(e.data, dict) else e.message
+            )
+            if not (
+                e.status == _GITHUB_EMPTY_REPOSITORY_TREE_STATUS
+                and error_message == _GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE
+            ):
+                raise
+
+            logger.info(
+                "Skipping files for empty repo: %s",
+                repo.full_name,
+            )
+            return [], False
 
     def _fetch_file_content(
         self, repo: Repository.Repository, path: str, attempt_num: int = 0
@@ -765,7 +792,7 @@ class GithubConnector(
                 "Re-tried fetching file content too many times. "
                 "Something is going wrong with fetching objects from Github"
             )
-        assert self.github_client is not None  # mypy
+        assert self.github_client is not None  # for type-checking
         try:
             content = repo.get_contents(path, ref=repo.default_branch)
             if isinstance(content, list):
@@ -942,6 +969,11 @@ class GithubConnector(
                         source=DocumentSource.GITHUB,
                         semantic_identifier="",
                         metadata={},
+                        doc_created_at=(
+                            pr.created_at.replace(tzinfo=timezone.utc)
+                            if pr.created_at
+                            else None
+                        ),
                     )
                 else:
                     # we iterate backwards in time, so at this point we stop processing prs
@@ -1034,6 +1066,11 @@ class GithubConnector(
                         source=DocumentSource.GITHUB,
                         semantic_identifier="",
                         metadata={},
+                        doc_created_at=(
+                            issue.created_at.replace(tzinfo=timezone.utc)
+                            if issue.created_at
+                            else None
+                        ),
                     )
                 else:
                     # we iterate backwards in time, so at this point we stop processing issues
@@ -1192,7 +1229,9 @@ class GithubConnector(
                 if document is not None:
                     batch.append(
                         SlimDocument(
-                            id=document.id, external_access=document.external_access
+                            id=document.id,
+                            external_access=document.external_access,
+                            doc_created_at=document.doc_created_at,
                         )
                     )
                 if next_checkpoint is not None:
@@ -1349,8 +1388,13 @@ class GithubConnector(
                     f"Unexpected GitHub error (status={e.status}): {e.data}"
                 )
 
+        except ValidationError:
+            # Let typed validation errors propagate so the API can surface the
+            # real reason instead of collapsing them into a generic 500.
+            raise
+
         except Exception as exc:
-            raise Exception(
+            raise UnexpectedValidationError(
                 f"Unexpected error during GitHub settings validation: {exc}"
             )
 

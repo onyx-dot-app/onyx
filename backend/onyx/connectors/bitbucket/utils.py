@@ -4,7 +4,6 @@ import time
 from collections.abc import Callable
 from collections.abc import Iterator
 from datetime import datetime
-from datetime import timezone
 from typing import Any
 
 import httpx
@@ -16,6 +15,7 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder
@@ -57,15 +57,23 @@ PR_LIST_RESPONSE_FIELDS: str = ",".join(
     ]
 )
 
-# Minimal fields for slim retrieval (IDs only)
+# Minimal fields for slim retrieval (IDs + creation time for doc_created_at backfill)
 SLIM_PR_LIST_RESPONSE_FIELDS: str = ",".join(
     [
         "next",
         "page",
         "pagelen",
         "values.id",
+        "values.created_on",
     ]
 )
+
+
+def parse_bitbucket_datetime(value: str | None) -> datetime | None:
+    """Parse a Bitbucket ISO-8601 timestamp into a tz-aware UTC datetime."""
+    if not isinstance(value, str):
+        return None
+    return datetime_to_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
 
 
 # Minimal fields for repository list calls
@@ -206,10 +214,13 @@ def map_pr_to_document(pr: dict[str, Any], workspace: str, repo_slug: str) -> Do
     created_on = pr.get("created_on")
     updated_on = pr.get("updated_on")
     updated_dt = (
-        datetime.fromisoformat(updated_on.replace("Z", "+00:00")).astimezone(
-            timezone.utc
-        )
+        datetime_to_utc(datetime.fromisoformat(updated_on.replace("Z", "+00:00")))
         if isinstance(updated_on, str)
+        else None
+    )
+    created_dt = (
+        datetime_to_utc(datetime.fromisoformat(created_on.replace("Z", "+00:00")))
+        if isinstance(created_on, str)
         else None
     )
 
@@ -288,6 +299,8 @@ def map_pr_to_document(pr: dict[str, Any], workspace: str, repo_slug: str) -> Do
         semantic_identifier=f"#{pr_id}: {title}",
         title=title,
         doc_updated_at=updated_dt,
+        # NOTE: doc_created_at population not yet verified against live data
+        doc_created_at=created_dt,
         primary_owners=[primary_owner] if primary_owner else None,
         secondary_owners=secondary_owners,
         metadata=metadata,

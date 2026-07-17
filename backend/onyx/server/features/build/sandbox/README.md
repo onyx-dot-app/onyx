@@ -4,7 +4,7 @@ This directory contains the implementation of Onyx's sandbox system for running 
 
 ## Local Development
 
-Craft requires a local kind cluster — see [Local Kubernetes Development](/docs/dev/local-kubernetes.md). One-shot setup: `make craft-up`.
+Craft requires a local kind cluster — see [Local Kubernetes Development](/docs/craft/dev/local-kubernetes.md). One-shot setup: `make craft-up`.
 
 ## Overview
 
@@ -28,7 +28,7 @@ The sandbox system provides isolated execution environments where OpenCode agent
    - Production-ready with resource isolation, security context, and NetworkPolicies
    - Requires Kubernetes `>= 1.33` for native restartable init sidecar containers
    - Used by Onyx's Helm chart / cloud deployment
-   - For local-cluster development, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md).
+   - For local-cluster development, see [docs/craft/dev/local-kubernetes.md](/docs/craft/dev/local-kubernetes.md).
 
 2. **Docker Mode** (`SANDBOX_BACKEND=docker`)
    - Sandboxes run as Docker containers on the same host as the rest of the compose stack, one per user
@@ -80,25 +80,15 @@ On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which ca
 
 ## Setup
 
-### Running via Docker/Kubernetes (Zero Setup!) 🎉
+### Running via Docker/Kubernetes
 
-**No setup required!** Just build and deploy:
-
-```bash
-# Build backend image
-cd backend
-docker build -f Dockerfile -t onyxdotapp/backend:latest .
-
-# Build sandbox container (lightweight runner)
-cd onyx/server/features/build/sandbox/image
-docker build -t onyxdotapp/sandbox:latest .
-
-# Deploy with docker-compose or kubectl - sandboxes work immediately!
-```
+Deploy the normal Onyx application images with Craft enabled. The sandbox image
+is selected from the same application version by default, so app tag `vX.Y.Z`
+uses `onyxdotapp/sandbox:vX.Y.Z`.
 
 **How it works:**
 
-- **Sandbox image**: Bakes in the web template (`/workspace/templates/outputs`) and a pre-built Python venv (`/workspace/.venv`) from `initial-requirements.txt`
+- **Sandbox image**: Published under the same tag as the app image and bakes in the web template (`/workspace/templates/outputs`) plus a pre-built Python venv (`/workspace/.venv`) from `initial-requirements.txt`
 - **Native init sidecar daemon** (Kubernetes only): Starts before the sandbox app container, stays running for the pod lifetime, and packages/restores session snapshots on the pod-local filesystem
 - **Sandbox startup**: Runs `bun install --frozen-lockfile` (hardlinks from the image's pre-warmed Bun cache) + `bun run dev`
 
@@ -164,8 +154,8 @@ fail during render/install on older clusters.
 # Kubernetes namespace
 SANDBOX_NAMESPACE=onyx-sandboxes          # Default: onyx-sandboxes
 
-# Container image
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:latest
+# Helm defaults the sandbox image to onyxdotapp/sandbox:${global.version}.
+# SANDBOX_CONTAINER_IMAGE is an internal override.
 
 # Snapshots use the normal Onyx FileStore configuration
 FILE_STORE_BACKEND=s3|gcs|postgres
@@ -178,8 +168,6 @@ SANDBOX_SERVICE_ACCOUNT_NAME=sandbox      # No storage credentials required
 ### Docker Settings
 
 ```bash
-# Container image (defaults to a pinned tag in docker-compose.yml)
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.52
 
 # Public URL the sandbox agent uses to reach Onyx (HTTPS, externally resolvable —
 # compose hostnames like http://api_server:8080 will not resolve from inside the
@@ -220,7 +208,7 @@ SANDBOX_MAX_CONCURRENT_PER_ORG=10         # Default: 10
 
 ```bash
 # Test Kubernetes sandbox provisioning (requires kind cluster — see make craft-up)
-uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py
+uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.py
 ```
 
 ## Troubleshooting

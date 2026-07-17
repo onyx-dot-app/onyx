@@ -4,9 +4,9 @@ import litellm
 
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.utils import find_model_obj
-from onyx.llm.utils import get_model_map
-from onyx.llm.utils import model_is_reasoning_model
+from onyx.llm.model_capabilities import find_model_obj
+from onyx.llm.model_capabilities import get_model_map
+from onyx.llm.model_capabilities import model_is_reasoning_model
 
 
 def test_partial_match_in_model_map() -> None:

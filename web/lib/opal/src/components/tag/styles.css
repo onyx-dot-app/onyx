@@ -3,8 +3,16 @@
 /* ---------------------------------------------------------------------------
    AuxiliaryTag
 
-   Fixed height of 1rem (16px). Icon is 0.75rem (12px) with p-0.5 (2px)
-   padding to match the font-figure-small-value line-height (12px).
+   Passive (metadata) tag: fixed height of 1rem (sm) / 1.375rem (md). Icon box
+   is 12px (10px glyph + 1px padding) to match the font-figure-small-value
+   line-height (12px).
+
+   Editable tag ([data-type="editable"], Figma Tag Type=Editable): remove
+   button, gray hover, and a dark focus-within treatment used by chip fields
+   as the keyboard-selection state. Metrics per Figma: md = 4px/2px padding
+   with radius 8, sm = 2px padding with radius 4. A transparent border keeps
+   the focus border from shifting layout, so paddings are 1px smaller than
+   the spec values.
    --------------------------------------------------------------------------- */
 
 .opal-auxiliary-tag {
@@ -33,6 +41,125 @@
   height: 10px;
 }
 
-.opal-auxiliary-tag-title {
-  white-space: nowrap;
+/* Text group: no-op wrapper for the passive tag, flex row for editable. */
+.opal-auxiliary-tag-text {
+  display: contents;
+}
+
+.opal-auxiliary-tag-label {
+  display: contents;
+}
+
+/* line-height 0: the wrapper must not impose its inherited line box. The
+   inner Text's own line-height sizes it. */
+.opal-auxiliary-tag-capped {
+  @apply block min-w-0 truncate;
+  max-width: 160px;
+  line-height: 0;
+}
+
+.opal-auxiliary-tag[data-size="sm"] .opal-auxiliary-tag-capped {
+  max-width: 120px;
+}
+
+.opal-auxiliary-tag-value {
+  @apply block min-w-0 truncate text-text-03;
+  max-width: 160px;
+  line-height: 0;
+}
+
+.opal-auxiliary-tag-error-icon {
+  @apply shrink-0 text-status-warning-05;
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.opal-auxiliary-tag[data-size="sm"] .opal-auxiliary-tag-error-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Editable
+   --------------------------------------------------------------------------- */
+
+.opal-auxiliary-tag[data-type="editable"] {
+  height: auto;
+  max-width: 100%;
+  min-width: 0;
+  padding: 1px 3px;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+}
+
+.opal-auxiliary-tag[data-type="editable"][data-size="sm"] {
+  padding: 1px;
+  border-radius: 0.25rem;
+}
+
+.opal-auxiliary-tag[data-type="editable"] .opal-auxiliary-tag-text {
+  @apply flex min-w-0 items-baseline;
+  gap: 2px;
+  padding: 0 2px;
+}
+
+/* Editable sm keeps the metadata icon metrics (12px box, 10px glyph). */
+.opal-auxiliary-tag[data-type="editable"][data-size="md"]
+  .opal-auxiliary-tag-icon-container {
+  padding: 0;
+}
+
+.opal-auxiliary-tag[data-type="editable"][data-size="md"]
+  .opal-auxiliary-tag-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.opal-auxiliary-tag[data-type="editable"][data-color="gray"]:not(
+    [data-disabled]
+  ):hover {
+  @apply bg-background-tint-03;
+}
+
+.opal-auxiliary-tag[data-disabled] {
+  @apply text-text-01;
+}
+
+/* Keyboard-selection state: dark pill with an outer ring (Figma State=Focus). */
+.opal-auxiliary-tag[data-type="editable"]:focus-within {
+  @apply border-border-05 bg-background-tint-inverted-03 text-text-inverted-05 ring-2 ring-background-tint-04;
+}
+
+.opal-auxiliary-tag[data-type="editable"]:focus-within
+  .opal-auxiliary-tag-value {
+  color: inherit;
+}
+
+.opal-auxiliary-tag-remove {
+  @apply flex shrink-0 cursor-pointer items-center justify-center;
+  width: 1rem;
+  height: 1rem;
+  padding: 2px;
+  border-radius: 0.25rem;
+  color: inherit;
+}
+
+.opal-auxiliary-tag-remove:hover {
+  @apply bg-background-tint-00;
+}
+
+.opal-auxiliary-tag-remove:focus-visible {
+  @apply outline-none;
+}
+
+.opal-auxiliary-tag-remove svg {
+  width: 100%;
+  height: 100%;
+}
+
+.opal-auxiliary-tag[data-size="sm"] .opal-auxiliary-tag-remove {
+  width: 0.75rem;
+  height: 0.75rem;
+  padding: 1px;
+  border-radius: 2px;
 }

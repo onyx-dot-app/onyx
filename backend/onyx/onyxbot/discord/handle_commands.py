@@ -160,7 +160,7 @@ async def _register_guild(
 ) -> None:
     """Register a guild with a registration key."""
     if not message.guild:
-        # mypy, even though we already know that message.guild is not None
+        # for type-checking, even though we already know that message.guild is not None
         raise RegistrationError("This command can only be used in a server.")
 
     logger.info("Guild '%s' attempting to register Discord bot", message.guild.name)

@@ -72,6 +72,10 @@ LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "onyx"
 
 # Enable generating persistent log files for local dev environments
 DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true"
+# File logging is on by default. Set LOG_TO_FILE=false to disable it for a given
+# pod/process — it then logs to stdout only (e.g. read-only-root containers where
+# /var/log/onyx isn't writable).
+LOG_TO_FILE = os.environ.get("LOG_TO_FILE", "true").lower() != "false"
 # notset, debug, info, notice, warning, error, or critical
 LOG_LEVEL = os.environ.get("LOG_LEVEL") or "info"
 
@@ -86,6 +90,16 @@ JSON_LOGGING = LOG_FORMAT == "json"
 # NOTE: does not apply for Google VertexAI, since the python client doesn't
 # allow us to specify a custom timeout
 API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", "600"))
+
+# Timeouts for requests to the self-hosted model server (embedding / rerank /
+# intent). The connect timeout fails fast on an unreachable server; the read
+# timeout bounds silent hangs — without one, a model-server pod restarting
+# mid-request leaves the calling worker thread blocked forever inside
+# requests.post (observed wedging every docprocessing thread for hours during
+# an upgrade). Reads are generous because CPU embedding of large batches can
+# legitimately take minutes.
+MODEL_SERVER_CONNECT_TIMEOUT = int(os.environ.get("MODEL_SERVER_CONNECT_TIMEOUT", "30"))
+MODEL_SERVER_READ_TIMEOUT = int(os.environ.get("MODEL_SERVER_READ_TIMEOUT", "600"))
 
 # Local batch size for VertexAI embedding models currently calibrated for item size of 512 tokens
 # NOTE: increasing this value may lead to API errors due to token limit exhaustion per call.
@@ -129,6 +143,8 @@ PRESERVED_SEARCH_FIELDS = [
     "normalize",
     "passage_prefix",
     "query_prefix",
+    # Immutable per settings id; server-controlled, never set via update.
+    "use_port_flow",
 ]
 
 

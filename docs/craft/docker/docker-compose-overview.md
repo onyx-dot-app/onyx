@@ -72,9 +72,8 @@ These must end up in `~/onyx_data/deployment/.env` after install:
 | `SANDBOX_BACKEND=docker` | yes | `--include-craft` sets this alongside `ENABLE_CRAFT`. |
 | `SANDBOX_API_SERVER_URL=http://host.docker.internal:3001` | yes | Provision raises `ValueError("SANDBOX_API_SERVER_URL must be set")` without it. Must be a URL the sandbox container can reach **from the `onyx_craft_sandbox` bridge** — compose-internal hostnames (`api_server`, `nginx`) won't resolve there. Match the port to `HOST_PORT`. |
 | `HOST_PORT=3001` | only if 3000 conflicts | Default is 3000; nginx binds this on the host. Free up 3000 or change here. |
-| `IMAGE_TAG=edge` | recommended | Use a normal tag (`edge` from `main`, or a release `vX.Y.Z`). There are **no** craft-specific images — Craft is enabled at runtime via `ENABLE_CRAFT=true` (above). See [image architecture](../image-architecture.md). |
+| `IMAGE_TAG` | optional | Uses the normal compose default (`latest`) unless set. Craft uses this same tag for the sandbox image, so do not set a separate sandbox image for normal deployments. There are **no** Craft-specific app/backend images — Craft is enabled at runtime via `ENABLE_CRAFT=true` (above). See [image architecture](../infra/image-architecture.md). |
 | `ONYX_BACKEND_IMAGE` | only when running unreleased PRs | Lets you override just the backend image without forcing model-server / web-server to the same tag. |
-| `SANDBOX_CONTAINER_IMAGE` | only when running unreleased PRs | Same idea for the sandbox image itself. Default is a pinned tag like `onyxdotapp/sandbox:v0.1.44`. |
 | `AGENT_TRANSPORT=serve` | for serve transport | `docker-compose.craft.yml` defaults this to `serve` (post-#11402); override to `acp` for the rollback path. Reaches the sandbox container via env passthrough. |
 | `ENABLE_OPENCODE_DEBUGGING=true` | optional | Dev-only pod-log viewer button in Craft UI. Default `false`. |
 
@@ -130,7 +129,6 @@ does **not** set the host-specific values, so append those yourself:
 cat >> ~/onyx_data/deployment/.env <<'ENV'
 SANDBOX_API_SERVER_URL=http://host.docker.internal:3001
 HOST_PORT=3001
-IMAGE_TAG=edge
 ENV
 ```
 
@@ -191,14 +189,14 @@ Build the affected images locally.
 
 ```bash
 cd /path/to/onyx
-docker build --build-arg ENABLE_CRAFT=true \
+docker build \
     -t onyxdotapp/onyx-backend:craft-pr<N> \
     -f backend/Dockerfile \
     backend/
 ```
 
-~10–20 min. The `ENABLE_CRAFT=true` build arg adds Node.js + opencode CLI
-to the backend image.
+~10–20 min. Craft is enabled at runtime with `ENABLE_CRAFT=true`; there is
+no Craft-specific backend image flavor.
 
 Then in `.env`:
 
@@ -214,12 +212,10 @@ is a backend-only override.
 
 ### Sandbox image
 
-The sandbox container has its own image (`onyxdotapp/sandbox:vX.Y.Z`)
-pinned in compose. The published version lags `main` substantially —
-e.g. `v0.1.44` ships an old `entrypoint.sh` that does `sleep infinity` and
-has no `AGENT_TRANSPORT=serve` gate, so the serve transport will time
-out waiting for opencode-serve on :4096 even though your api_server side
-is correct.
+The sandbox container has its own image, but normal deployments use the
+app-aligned sandbox tag selected by `IMAGE_TAG`. If you're testing a PR with
+unreleased sandbox image changes, build a local override. This is for PR and
+internal testing only, not normal customer deployments.
 
 Build the sandbox image:
 
@@ -378,10 +374,10 @@ Symptom A: api_server crashes on boot with
 release image older than the Docker sandbox backend (PR #11222, May 20) —
 its `SandboxBackend` enum only has `LOCAL`/`KUBERNETES`.
 
-Fix: use `edge` (built from `main`) or a release new enough to include it:
+Fix: use an image tag new enough to include it:
 
 ```
-IMAGE_TAG=edge
+IMAGE_TAG=latest
 ```
 
 Symptom B: `edge` works for the Docker backend but is missing PR
@@ -394,13 +390,12 @@ Fix: build the backend image locally. See "Running an unreleased PR" above.
 
 Symptom C: `opencode-serve never became ready for sandbox … after 30s
 (last error: ConnectError: [Errno 111] Connection refused)`. Cause:
-the sandbox image (`onyxdotapp/sandbox:v0.1.44`) ships an old
-`entrypoint.sh` that just runs `sleep infinity` — no AGENT_TRANSPORT
-gate, no `opencode serve` invocation. Even though your api_server sets
-all the right env vars in the sandbox container, the entrypoint doesn't
-read them.
+your app image and sandbox image are from different source versions, or
+you're testing unreleased sandbox image changes without a matching local
+sandbox image.
 
-Fix: build the sandbox image locally too. See "Running an unreleased PR".
+Fix: deploy matching app/sandbox tags, or build the sandbox image locally too.
+See "Running an unreleased PR".
 
 ### `IMAGE_TAG` applies to every image
 

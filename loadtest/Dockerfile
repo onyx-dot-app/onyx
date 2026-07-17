@@ -6,8 +6,9 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 FROM ${BASE_IMAGE_REGISTRY}/locustio/locust:2.44.1
 
 # prometheus-client isn't in the base locust image. Pinned to match the
-# resolved version in uv.lock — bump both together when the lockfile updates.
-RUN pip install --no-cache-dir prometheus-client==0.25.0
+# version the root lockfile resolves for the `loadtest` group — bump both
+# together when the lockfile updates.
+RUN pip install --no-cache-dir prometheus-client==0.23.1
 
 COPY locustfile.py /loadtest/locustfile.py
 COPY shapes.py /loadtest/shapes.py

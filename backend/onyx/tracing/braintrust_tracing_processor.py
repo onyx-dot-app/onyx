@@ -182,6 +182,11 @@ class BraintrustTracingProcessor(TracingProcessor):
         if span.span_data.reasoning:
             metadata["reasoning"] = span.span_data.reasoning
 
+        # Include the full tool catalog (name, description, parameters) offered
+        # to the model on this call, if any.
+        if span.span_data.tools:
+            metadata["tools"] = span.span_data.tools
+
         return {
             "input": span.span_data.input,
             "output": span.span_data.output,

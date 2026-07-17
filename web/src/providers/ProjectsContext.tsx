@@ -14,12 +14,14 @@ import {
 } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
-import type {
-  CategorizedFiles,
-  Project,
-  ProjectFile,
-  UserFileDeleteResult,
-} from "@/app/app/projects/projectsService";
+import {
+  UserFileStatus,
+  type CategorizedFiles,
+  type Project,
+  type ProjectDetails,
+  type ProjectFile,
+  type UserFileDeleteResult,
+} from "@/lib/projects/types";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
@@ -30,24 +32,22 @@ import {
   getProjectInstructions as svcGetProjectInstructions,
   upsertProjectInstructions as svcUpsertProjectInstructions,
   getProjectDetails as svcGetProjectDetails,
-  ProjectDetails,
   renameProject as svcRenameProject,
   deleteProject as svcDeleteProject,
   deleteUserFile as svcDeleteUserFile,
   getUserFileStatuses as svcGetUserFileStatuses,
   unlinkFileFromProject as svcUnlinkFileFromProject,
   linkFileToProject as svcLinkFileToProject,
-  UserFileStatus,
-} from "@/app/app/projects/projectsService";
+} from "@/lib/projects/svc";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { ChatFileType } from "@/app/app/interfaces";
-import { toast } from "@/hooks/useToast";
-import { useProjects } from "@/lib/hooks/useProjects";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { toast } from "@opal/layouts";
+import { useProjects } from "@/lib/projects/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 
-export type { Project, ProjectFile } from "@/app/app/projects/projectsService";
+export type { Project, ProjectFile } from "@/lib/projects/types";
 
 // Helper to generate unique temp IDs
 const generateTempId = () => {
@@ -160,7 +160,8 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     new Map()
   );
   const route = useAppRouter();
-  const settingsContext = useContext(SettingsContext);
+  const settingsData = useSettings();
+  const userFileMaxUploadSizeMb = settingsData.user_file_max_upload_size_mb;
 
   // SWR-backed fetch for recent files. Deduplicates across all mounts and
   // handles React StrictMode double-invocation without firing duplicate requests.
@@ -350,7 +351,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       onSuccess?: (uploaded: CategorizedFiles) => void,
       onFailure?: (failedTempIds: string[]) => void
     ): Promise<ProjectFile[]> => {
-      const rawMax = settingsContext?.settings?.user_file_max_upload_size_mb;
+      const rawMax = userFileMaxUploadSizeMb;
 
       const oversizedFiles =
         rawMax && rawMax > 0
@@ -482,7 +483,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       refreshCurrentProjectDetails,
       refreshRecentFiles,
       removeOptimisticFilesByTempIds,
-      settingsContext,
+      userFileMaxUploadSizeMb,
     ]
   );
 

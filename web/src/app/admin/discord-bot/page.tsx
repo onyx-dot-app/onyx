@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
 import Card from "@/refresh-components/cards/Card";
 import { SvgKey, SvgPlusCircle } from "@opal/icons";
@@ -51,7 +50,7 @@ function DiscordBotContent() {
   };
 
   if (isLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
 
   if (error || !guilds) {

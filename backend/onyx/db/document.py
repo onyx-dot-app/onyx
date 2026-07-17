@@ -10,9 +10,12 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_
+from sqlalchemy import CompoundSelect
 from sqlalchemy import delete
+from sqlalchemy import distinct
 from sqlalchemy import exists
 from sqlalchemy import func
+from sqlalchemy import literal
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
@@ -35,6 +38,8 @@ from onyx.db.entities import delete_from_kg_entities_extraction_staging__no_comm
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
+from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
@@ -92,20 +97,120 @@ def count_documents_by_needs_sync(session: Session) -> int:
     )
 
 
-def construct_document_id_select_by_needs_sync() -> Select:
-    """Get all document IDs that need syncing across all connector credential pairs.
+def count_secondary_only_sync_pending_documents(db_session: Session) -> int:
+    """Global count of docs whose deferred FUTURE metadata sync hasn't drained (via
+    ix_document_secondary_only_sync_pending). The swap gate must use the
+    *_for_cc_pairs variant — an INVALID/DELETING-only doc's flag never clears."""
+    return db_session.execute(
+        select(func.count()).where(DbDocument.secondary_only_sync_pending.is_(True))
+    ).scalar_one()
 
-    Returns a Select statement for documents where:
-    1. last_modified is newer than last_synced
-    2. last_synced is null (meaning we've never synced)
-    AND the document has a relationship with a connector/credential pair
-    """
-    return select(DbDocument.id).where(
-        or_(
-            DbDocument.last_modified > DbDocument.last_synced,
-            DbDocument.last_synced.is_(None),
-        )
+
+def document_has_indexable_cc_pair(db_session: Session, document_id: str) -> bool:
+    """True if some owning cc_pair is indexable (the doc can still be ported to
+    FUTURE). The sync task uses this to skip deferring an un-portable doc's FUTURE
+    write — an INVALID/DELETING-only doc's deferred flag would never clear."""
+    return (
+        db_session.execute(
+            select(literal(1))
+            .select_from(DocumentByConnectorCredentialPair)
+            .join(
+                ConnectorCredentialPair,
+                and_(
+                    DocumentByConnectorCredentialPair.connector_id
+                    == ConnectorCredentialPair.connector_id,
+                    DocumentByConnectorCredentialPair.credential_id
+                    == ConnectorCredentialPair.credential_id,
+                ),
+            )
+            .where(
+                DocumentByConnectorCredentialPair.id == document_id,
+                ConnectorCredentialPair.status.in_(
+                    ConnectorCredentialPairStatus.indexable_statuses()
+                ),
+            )
+            .limit(1)
+        ).first()
+        is not None
     )
+
+
+def count_secondary_only_sync_pending_documents_for_cc_pairs(
+    db_session: Session, cc_pair_ids: list[int]
+) -> int:
+    """Deferred-FUTURE-sync count scoped to docs owned by one of the given cc_pairs
+    (DISTINCT; counts if ANY owner is in the set). The swap gate passes its required
+    (ported) set so INVALID/DELETING-only deferred flags can't block the swap."""
+    if not cc_pair_ids:
+        return 0
+    return db_session.execute(
+        select(func.count(distinct(DbDocument.id)))
+        .select_from(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DbDocument.secondary_only_sync_pending.is_(True),
+            ConnectorCredentialPair.id.in_(cc_pair_ids),
+        )
+    ).scalar_one()
+
+
+def count_documents_by_needs_sync_or_secondary_pending(session: Session) -> int:
+    """count_documents_by_needs_sync plus docs whose FUTURE sync was deferred.
+
+    The vespa sync producer gates on this so a deferred-only backlog still
+    generates drain tasks — a deferred doc has its needs_sync already cleared, so
+    count_documents_by_needs_sync alone would miss it.
+    """
+    return session.execute(
+        select(func.count())
+        .select_from(DbDocument)
+        .where(
+            or_(
+                DbDocument.last_modified > DbDocument.last_synced,
+                DbDocument.last_synced.is_(None),
+                DbDocument.secondary_only_sync_pending.is_(True),
+            )
+        )
+    ).scalar_one()
+
+
+def construct_document_id_select_by_needs_sync_or_secondary_pending() -> CompoundSelect:
+    """Document ids that need a metadata sync, each tagged whether it is a *purely
+    deferred* FUTURE sync (so the producer can drop it to LOW while a port runs).
+
+    Two SQL-disjoint legs, unioned:
+      - needs_sync rows -> tag False. These have real work and drain at normal
+        priority even if also flagged deferred.
+      - deferred-only rows (flagged and NOT needs_sync) -> tag True.
+    A doc that is both needs_sync and deferred falls in the first leg (tag False),
+    so it is never under-prioritized to LOW.
+    """
+    needs_sync_predicate = or_(
+        DbDocument.last_modified > DbDocument.last_synced,
+        DbDocument.last_synced.is_(None),
+    )
+    needs_sync = select(
+        DbDocument.id, literal(False).label("secondary_only_sync_pending")
+    ).where(needs_sync_predicate)
+    deferred_only = select(
+        DbDocument.id, literal(True).label("secondary_only_sync_pending")
+    ).where(
+        DbDocument.secondary_only_sync_pending.is_(True),
+        ~needs_sync_predicate,
+    )
+    return needs_sync.union_all(deferred_only)
 
 
 def construct_document_id_select_for_connector_credential_pair(
@@ -162,6 +267,83 @@ def get_document_ids_for_connector_credential_pair(
         )
     )
     return list(db_session.execute(doc_ids_stmt).scalars().all())
+
+
+def get_document_ids_for_cc_pair_batch(
+    db_session: Session,
+    cc_pair_id: int,
+    after_doc_id: str | None,
+    limit: int,
+    up_to_doc_id: str | None = None,
+) -> list[str]:
+    """An ordered page of a cc_pair's document ids, for a cursor scan.
+
+    Returns ids `> after_doc_id` ascending, capped at `limit`. Pass the last id
+    of a page back as `after_doc_id` to resume past it — the reindex port stores
+    that cursor on the PortAttempt so a fresh attempt continues deterministically
+    rather than restarting.
+    """
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=cc_pair_id
+    )
+    if not cc_pair:
+        raise ValueError(f"No CC pair found with ID: {cc_pair_id}")
+
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        )
+        .distinct()
+        .order_by(DocumentByConnectorCredentialPair.id)
+        .limit(limit)
+    )
+    if after_doc_id is not None:
+        stmt = stmt.where(DocumentByConnectorCredentialPair.id > after_doc_id)
+    if up_to_doc_id is not None:
+        stmt = stmt.where(DocumentByConnectorCredentialPair.id <= up_to_doc_id)
+    return list(db_session.execute(stmt).scalars().all())
+
+
+def get_max_document_id_for_cc_pair(db_session: Session, cc_pair_id: int) -> str | None:
+    """The lexicographically-max Document.id linked to this cc_pair, or None if it
+    has none. The reindex port snapshots this at start as its upper bound so it
+    covers the backlog as of start, not docs added during the run."""
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=cc_pair_id
+    )
+    if not cc_pair:
+        return None
+    return db_session.execute(
+        select(func.max(DocumentByConnectorCredentialPair.id)).where(
+            DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        )
+    ).scalar()
+
+
+def filter_existing_cc_pair_document_ids(
+    db_session: Session,
+    cc_pair_id: int,
+    document_ids: list[str],
+) -> set[str]:
+    """Of `document_ids`, the subset still linked to this cc_pair. The reindex port
+    calls this before writing a batch so a doc deleted mid-batch is dropped, not
+    resurrected into FUTURE."""
+    if not document_ids:
+        return set()
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=cc_pair_id
+    )
+    if not cc_pair:
+        return set()
+    stmt = select(DocumentByConnectorCredentialPair.id).where(
+        DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+        DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        DocumentByConnectorCredentialPair.id.in_(document_ids),
+    )
+    return set(db_session.execute(stmt).scalars().all())
 
 
 def get_documents_for_connector_credential_pair_limited_columns(
@@ -674,6 +856,9 @@ def upsert_documents(
                     from_ingestion_api=doc.from_ingestion_api,
                     boost=initial_boost,
                     hidden=False,
+                    # set explicitly: model_to_dict reads the unflushed object, so a
+                    # Python-side default isn't applied yet and would insert NULL.
+                    secondary_only_sync_pending=False,
                     semantic_id=doc.semantic_identifier,
                     link=doc.first_link,
                     doc_updated_at=None,  # this is intentional
@@ -805,6 +990,48 @@ def update_docs_updated_at__no_commit(
         document.doc_updated_at = ids_to_new_updated_at[document.id]
 
 
+def update_docs_created_at__no_commit(
+    ids_to_new_created_at: dict[str, datetime],
+    db_session: Session,
+) -> None:
+    doc_ids = list(ids_to_new_created_at.keys())
+    documents_to_update = (
+        db_session.query(DbDocument).filter(DbDocument.id.in_(doc_ids)).all()
+    )
+
+    for document in documents_to_update:
+        document.doc_created_at = ids_to_new_created_at[document.id]
+
+
+def backfill_docs_created_at__no_commit(
+    ids_to_created_at: dict[str, datetime],
+    db_session: Session,
+) -> None:
+    """Set ``doc_created_at`` for docs whose value is newly available or changed,
+    bumping ``last_modified`` so the metadata sync task propagates it to the index.
+
+    Only touches rows that actually change, so a repeated sweep doesn't needlessly
+    re-dirty every document.
+    """
+    if not ids_to_created_at:
+        return
+
+    documents_to_update = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.id.in_(list(ids_to_created_at.keys())))
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    for document in documents_to_update:
+        if document.chunk_count is None:
+            continue
+        new_created_at = ids_to_created_at[document.id]
+        if document.doc_created_at == new_created_at:
+            continue
+        document.doc_created_at = new_created_at
+        document.last_modified = now
+
+
 def update_docs_last_modified__no_commit(
     document_ids: list[str],
     db_session: Session,
@@ -865,6 +1092,24 @@ def mark_document_as_synced(document_id: str, db_session: Session) -> None:
 
     # update last_synced
     doc.last_synced = datetime.now(timezone.utc)
+    # reaching here means every index synced, so clear any deferred FUTURE write
+    doc.secondary_only_sync_pending = False
+    db_session.commit()
+
+
+def mark_document_synced_secondary_pending(
+    document_id: str, db_session: Session
+) -> None:
+    """Reindex-port: PRESENT synced but the doc wasn't in FUTURE yet. Clear
+    needs-sync and flag the deferred FUTURE write, in one commit. Cleared later by
+    mark_document_as_synced once a sync reaches FUTURE."""
+    stmt = select(DbDocument).where(DbDocument.id == document_id)
+    doc = db_session.scalar(stmt)
+    if doc is None:
+        raise ValueError(f"No document with ID: {document_id}")
+
+    doc.last_synced = datetime.now(timezone.utc)
+    doc.secondary_only_sync_pending = True
     db_session.commit()
 
 
@@ -1106,7 +1351,10 @@ _LOCK_RETRY_DELAY = 10
 
 @contextlib.contextmanager
 def prepare_to_modify_documents(
-    db_session: Session, document_ids: list[str], retry_delay: int = _LOCK_RETRY_DELAY
+    db_session: Session,
+    document_ids: list[str],
+    retry_delay: int = _LOCK_RETRY_DELAY,
+    index_attempt_id: int | None = None,
 ) -> Generator[TransactionalContext, None, None]:
     """Try and acquire locks for the documents to prevent other jobs from
     modifying them at the same time (e.g. avoid race conditions). This should be
@@ -1120,6 +1368,8 @@ def prepare_to_modify_documents(
 
     db_session.commit()  # ensure that we're not in a transaction
 
+    # Time only the lock acquisition (incl. retry sleeps), not the held body.
+    acquire_start = time.monotonic()
     lock_acquired = False
     for i in range(_NUM_LOCK_ATTEMPTS):
         yielded = False
@@ -1129,8 +1379,15 @@ def prepare_to_modify_documents(
                     db_session=db_session, document_ids=document_ids
                 )
                 if lock_acquired:
+                    # Capture now (excludes held body); record after release (below).
+                    acquire_ms = max(0, int((time.monotonic() - acquire_start) * 1000))
                     yielded = True
                     yield transaction
+                    safe_record_single_event_if_set(
+                        IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT,
+                        index_attempt_id,
+                        acquire_ms,
+                    )
                     return
         except Exception as e:
             if yielded:

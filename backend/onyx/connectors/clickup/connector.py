@@ -119,8 +119,14 @@ class ClickupConnector(LoadConnector, PollConnector):
                     semantic_identifier=task["name"],
                     doc_updated_at=(
                         datetime.fromtimestamp(
-                            round(float(task["date_updated"]) / 1000, 3)
-                        ).replace(tzinfo=timezone.utc)
+                            round(float(task["date_updated"]) / 1000, 3),
+                            tz=timezone.utc,
+                        )
+                    ),
+                    # NOTE: doc_created_at population not yet verified against live data
+                    doc_created_at=datetime.fromtimestamp(
+                        round(float(task["date_created"]) / 1000, 3),
+                        tz=timezone.utc,
                     ),
                     primary_owners=[
                         BasicExpertInfo(

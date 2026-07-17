@@ -86,6 +86,9 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     "skill": {"*": "allow", "customize-opencode": "deny"},
     "question": "allow",
     "webfetch": "allow",
+    # Connect-app tool: a no-op tool the agent calls to request connecting an
+    # external app it isn't set up for.
+    "connect_app": "ask",
 }
 
 _TMP_EXTERNAL_DIRECTORY_RULES: dict[str, str] = {
@@ -126,33 +129,6 @@ def _build_provider_block(
     if options:
         block["models"] = {provider_config.model_name: {"options": options}}
     return block
-
-
-def build_opencode_config(
-    provider: str,
-    model_name: str,
-    api_key: str | None = None,
-    api_base: str | None = None,
-    disabled_tools: list[str] | None = None,
-    dev_mode: bool = False,
-    plugins: list[str] | None = None,
-) -> dict[str, Any]:
-    """Single-provider wrapper around :func:`build_multi_provider_opencode_config`."""
-    return build_multi_provider_opencode_config(
-        providers=[
-            LLMProviderConfig(
-                provider=provider,
-                model_name=model_name,
-                api_key=api_key,
-                api_base=api_base,
-            )
-        ],
-        default_provider=provider,
-        default_model=model_name,
-        disabled_tools=disabled_tools,
-        dev_mode=dev_mode,
-        plugins=plugins,
-    )
 
 
 def build_multi_provider_opencode_config(

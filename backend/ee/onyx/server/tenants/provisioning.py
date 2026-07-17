@@ -22,7 +22,6 @@ from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from ee.onyx.server.tenants.user_mapping import user_owns_a_tenant
 from onyx.auth.users import exceptions
 from onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
-from onyx.configs.app_configs import AUTO_PROVISION_DEFAULT_EXTERNAL_APPS
 from onyx.configs.app_configs import AUTO_PROVISION_DEFAULT_LLM_PROVIDERS
 from onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
@@ -33,9 +32,6 @@ from onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
 from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.external_app import create_external_app
-from onyx.db.external_app import get_built_in_external_app
-from onyx.db.external_app import set_external_app_organization_credentials
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
 from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
 from onyx.db.llm import fetch_existing_llm_provider_by_type_nameless
@@ -46,8 +42,6 @@ from onyx.db.models import AvailableTenant
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
-from onyx.external_apps.providers.registry import fetch_onyx_managed_built_in_apps
-from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
@@ -106,7 +100,7 @@ async def get_or_provision_tenant(
         if tenant_id:
             # Run migrations to ensure the pre-provisioned tenant schema is current.
             # Pool tenants may have been created before a new migration was deployed.
-            # Capture as a non-optional local so mypy can type the lambda correctly.
+            # Capture as a non-optional local so type-checking can type the lambda correctly.
             _tenant_id: str = tenant_id
             loop = asyncio.get_running_loop()
             try:
@@ -545,68 +539,6 @@ def configure_default_api_keys(db_session: Session) -> None:
         )
 
 
-def provision_built_in_external_apps(db_session: Session) -> None:
-    """Seed the tenant's Onyx-managed built-in apps from operator config.
-
-    Idempotent: a missing app is created (disabled); an existing one only has its
-    credentials refreshed, leaving enabled state and policies alone. Credentials
-    are updated only for types the config still lists, so a re-run never wipes
-    them. Non-managed built-ins are skipped, as is everything when
-    ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS`` is off. Per-app failures are logged
-    and skipped.
-    """
-    if not AUTO_PROVISION_DEFAULT_EXTERNAL_APPS:
-        logger.info(
-            "Skipping built-in external app provisioning "
-            "(AUTO_PROVISION_DEFAULT_EXTERNAL_APPS=false)"
-        )
-        return
-
-    for descriptor in fetch_onyx_managed_built_in_apps():
-        app_type = descriptor.app_type
-        provider = get_onyx_managed_provider(app_type)
-        credentials = provider.configured_managed_credentials() if provider else None
-        try:
-            existing = get_built_in_external_app(db_session, app_type)
-            if existing:
-                if credentials is not None:
-                    set_external_app_organization_credentials(
-                        db_session, existing, credentials
-                    )
-                    db_session.commit()
-                    logger.info(
-                        "Refreshed Onyx-managed credentials for built-in app '%s'.",
-                        app_type.value,
-                    )
-                continue
-
-            create_external_app(
-                db_session=db_session,
-                name=descriptor.name,
-                description=descriptor.description,
-                bundle_file_id="",
-                bundle_sha256="",
-                app_type=app_type,
-                upstream_url_patterns=list(descriptor.upstream_url_patterns),
-                auth_template=dict(descriptor.auth_template),
-                organization_credentials=credentials or {},
-                enabled=False,
-                is_public=True,
-                action_policies=None,
-            )
-            # create_external_app flushes only; commit the seeded row.
-            db_session.commit()
-            logger.info(
-                "Provisioned built-in app '%s' (disabled%s).",
-                app_type.value,
-                "" if credentials else "; no credentials configured yet",
-            )
-        except Exception:
-            # Reset the aborted transaction so a failure stays a per-app skip.
-            db_session.rollback()
-            logger.exception("Failed to provision built-in app '%s'.", app_type.value)
-
-
 async def submit_to_hubspot(
     email: str, referral_source: str | None, request: Request
 ) -> None:
@@ -763,8 +695,6 @@ async def setup_tenant(tenant_id: str) -> None:
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             # Configure default API keys
             configure_default_api_keys(db_session)
-
-            provision_built_in_external_apps(db_session)
 
             # Set up Onyx with appropriate settings
             current_search_settings = (

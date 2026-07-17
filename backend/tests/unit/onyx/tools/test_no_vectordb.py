@@ -1,7 +1,7 @@
 """Tests for tool availability when DISABLE_VECTOR_DB is True.
 
-Verifies that SearchTool and OpenURLTool report themselves as unavailable
-when the vector DB is disabled, and that FileReaderTool remains available.
+Verifies that SearchTool is unavailable, OpenURLTool stays available
+(crawl-only), and FileReaderTool remains available.
 """
 
 from unittest.mock import MagicMock
@@ -38,16 +38,21 @@ def test_search_tool_available_when_vector_db_enabled(
 
 
 # ------------------------------------------------------------------
-# OpenURLTool
+# OpenURLTool — crawl-only when vector DB is disabled
 # ------------------------------------------------------------------
 
 
-@patch("onyx.configs.app_configs.DISABLE_VECTOR_DB", True)
-def test_open_url_tool_unavailable_when_vector_db_disabled() -> None:
-    from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+@pytest.mark.parametrize("vector_db_disabled", [True, False])
+def test_open_url_tool_available(vector_db_disabled: bool) -> None:
+    # Patch where it's used — module imports DISABLE_VECTOR_DB by value.
+    with patch(
+        "onyx.tools.tool_implementations.open_url.open_url_tool.DISABLE_VECTOR_DB",
+        vector_db_disabled,
+    ):
+        from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 
-    db_session = MagicMock(spec=Session)
-    assert OpenURLTool.is_available(db_session) is False
+        db_session = MagicMock(spec=Session)
+        assert OpenURLTool.is_available(db_session) is True
 
 
 # ------------------------------------------------------------------

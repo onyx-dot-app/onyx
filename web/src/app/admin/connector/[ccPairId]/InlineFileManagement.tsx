@@ -15,11 +15,11 @@ import {
   updateConnectorFiles,
   type ConnectorFileInfo,
 } from "@/lib/fileConnector";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ThreeDotsLoader } from "@/components/Loading";
-import Modal from "@/refresh-components/Modal";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
+import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import {
   SvgCheck,
@@ -147,7 +147,7 @@ export default function InlineFileManagement({
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <ThreeDotsLoader />
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   }

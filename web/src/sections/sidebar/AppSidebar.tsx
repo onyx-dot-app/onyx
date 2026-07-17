@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
@@ -30,7 +30,7 @@ import {
   restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
 import useChatSessions from "@/hooks/useChatSessions";
-import { useProjects } from "@/lib/hooks/useProjects";
+import { useProjects } from "@/lib/projects/hooks";
 import {
   useAgents,
   useCurrentAgent,
@@ -40,10 +40,10 @@ import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
-import type { Project } from "@/app/app/projects/projectsService";
+import { removeChatSessionFromProject } from "@/lib/projects/svc";
+import type { Project } from "@/lib/projects/types";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -58,7 +58,7 @@ import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
-import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
+import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
   SvgDevKit,
@@ -196,10 +196,10 @@ function RecentsSection({
   );
 }
 
-const AppSidebar = memo(function AppSidebarInner() {
+export default function AppSidebar() {
   const { folded } = useSidebarState();
   const router = useRouter();
-  const combinedSettings = useSettingsContext();
+  const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
   const { setAppMode, reset } = useQueryController();
 
@@ -247,8 +247,7 @@ const AppSidebar = memo(function AppSidebarInner() {
 
   // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled
-  const isOnyxCraftEnabled =
-    combinedSettings?.settings?.onyx_craft_enabled === true;
+  const isOnyxCraftEnabled = combinedSettingsData?.onyx_craft_enabled === true;
 
   // Fetch notifications for build mode intro
   const { notifications, refresh: mutateNotifications } = useNotifications({
@@ -478,7 +477,7 @@ const AppSidebar = memo(function AppSidebarInner() {
     "chat";
   const newSessionButton = useMemo(() => {
     const href =
-      combinedSettings?.settings?.disable_default_assistant && currentAgent
+      combinedSettingsData?.disable_default_assistant && currentAgent
         ? `/app?agentId=${currentAgent.id}`
         : "/app";
     return (
@@ -501,7 +500,7 @@ const AppSidebar = memo(function AppSidebarInner() {
   }, [
     folded,
     activeSidebarTab,
-    combinedSettings,
+    combinedSettingsData,
     currentAgent,
     defaultAppMode,
   ]);
@@ -664,15 +663,13 @@ const AppSidebar = memo(function AppSidebarInner() {
       <SidebarLayouts.Root foldable>
         <SidebarLayouts.Header
           showLogoWhenFolded={showLogoWhenFolded}
-          logo={renderAppLogo}
+          renderAppLogo={renderSidebarLogo}
         >
-          <div className="flex flex-col">
-            {newSessionButton}
-            {searchChatsButton}
-            {isOnyxCraftEnabled && buildButton}
-            {folded && moreAgentsButton}
-            {folded && newProjectButton}
-          </div>
+          {newSessionButton}
+          {searchChatsButton}
+          {isOnyxCraftEnabled && buildButton}
+          {folded && moreAgentsButton}
+          {folded && newProjectButton}
         </SidebarLayouts.Header>
 
         <SidebarLayouts.Body scrollKey="app-sidebar">
@@ -742,7 +739,4 @@ const AppSidebar = memo(function AppSidebarInner() {
       </SidebarLayouts.Root>
     </>
   );
-});
-AppSidebar.displayName = "AppSidebar";
-
-export default AppSidebar;
+}

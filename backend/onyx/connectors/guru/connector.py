@@ -82,6 +82,7 @@ class GuruConnector(LoadConnector, PollConnector):
                 link = GURU_CARDS_URL + card["slug"]
                 content_text = parse_html_page_basic(card["content"])
                 last_updated = time_str_to_utc(card["lastModified"])
+                date_created = time_str_to_utc(card["dateCreated"])
                 last_verified = (
                     time_str_to_utc(card.get("lastVerified"))
                     if card.get("lastVerified")
@@ -124,6 +125,8 @@ class GuruConnector(LoadConnector, PollConnector):
                         source=DocumentSource.GURU,
                         semantic_identifier=title,
                         doc_updated_at=latest_time,
+                        # NOTE: doc_created_at population not yet verified against live data
+                        doc_created_at=date_created,
                         primary_owners=[author] if author is not None else None,
                         # Can add verifies and commenters later
                         metadata=metadata_dict,
