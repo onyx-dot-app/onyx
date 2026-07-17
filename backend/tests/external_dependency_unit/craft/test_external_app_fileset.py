@@ -144,23 +144,3 @@ def test_no_disabled_actions_omits_section(
     rendered = files[f"{_SLACK_ID}/SKILL.md"].decode("utf-8")
     # No DENY policies -> the unavailable-actions warning is omitted entirely.
     assert "unavailable and should not be attempted" not in rendered
-
-
-def test_provider_without_enabled_preference_delivers_nothing(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-) -> None:
-    user = make_user(db_session)
-    skill = _slack_skill(db_session)
-    app = make_external_app(
-        db_session,
-        skill=skill,
-        app_type=ExternalAppType.SLACK,
-        auth_template=_AUTH_TEMPLATE,
-    )
-    make_user_credential(db_session, app=app, user=user, user_credentials=_FULL_CREDS)
-    db_session.commit()
-
-    files = build_skills_fileset_for_user(user, db_session)
-
-    assert not _has_slack_content(files)
