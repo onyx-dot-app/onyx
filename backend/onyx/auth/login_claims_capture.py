@@ -20,14 +20,16 @@ whatever claims they release, and the map can be extended per-deployment via
 ``IDP_PROFILE_CLAIM_MAP``.
 
 Capture is strictly best-effort: any failure is logged and swallowed so the
-login flow can never break because of it. No tokens are persisted — only
-claims and token metadata (key names, scope, expiry).
+login flow can never break because of it. Oversized snapshots are dropped, and
+a fresh capture retains a previous snapshot's sources when a fetch comes back
+empty. No tokens are persisted — only claims and token metadata (key names,
+scope, expiry).
 """
 
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Any, Awaitable, cast
+from typing import Any, Awaitable, NamedTuple, TypeGuard, cast
 
 import httpx
 import jwt
@@ -99,6 +101,42 @@ async def _resolve_capture_tenant_id(email: str) -> str | None:
     return tenant_id if isinstance(tenant_id, str) else None
 
 
+# The snapshot keys that hold claim sources, in resolution precedence order.
+_SOURCE_KEYS = ("directory_profile", "userinfo", "id_token_claims", "saml_attributes")
+
+# A pathological IdP (multi-thousand-entry groups claims) must not grow the
+# stored snapshot without bound.
+_MAX_SNAPSHOT_BYTES = 256 * 1024
+
+
+def _has_source_data(value: Any) -> TypeGuard[dict[str, Any]]:
+    return isinstance(value, dict) and bool(value) and "error" not in value
+
+
+def _retain_richer_sources(
+    old_snapshot: dict[str, Any], snapshot: dict[str, Any]
+) -> dict[str, Any]:
+    """Return a copy of ``snapshot`` with sources carried forward from the
+    previous same-provider snapshot where the fresh capture came back without
+    them (or with only an error marker), so a transient userinfo or Graph
+    outage at re-login cannot degrade a profile that was already captured.
+    The fresh snapshot itself is left untouched so the caller can fall back to
+    it when the merged form does not fit the size cap."""
+    merged = dict(snapshot)
+    for source_key in _SOURCE_KEYS:
+        if _has_source_data(old_snapshot.get(source_key)) and not _has_source_data(
+            snapshot.get(source_key)
+        ):
+            merged[source_key] = old_snapshot[source_key]
+            logger.warning(
+                "Claims capture for %s: %s missing from fresh capture, "
+                "retaining previous data",
+                snapshot.get("email", "<unknown>"),
+                source_key,
+            )
+    return merged
+
+
 async def _store_claims_snapshot(email: str, snapshot: dict[str, Any]) -> None:
     tenant_id = await _resolve_capture_tenant_id(email)
     if tenant_id is None:
@@ -111,10 +149,37 @@ async def _store_claims_snapshot(email: str, snapshot: dict[str, Any]) -> None:
     provider = str(snapshot.get("oauth_name") or "unknown")
     key = _idp_claims_key(tenant_id, email)
     redis = await get_async_redis_connection()
+
+    old_raw = await cast(Awaitable[Any], redis.hget(key, provider))
+    old_snapshots = _sorted_snapshots([old_raw]) if old_raw else []
+    to_store = (
+        _retain_richer_sources(old_snapshots[0], snapshot)
+        if old_snapshots
+        else snapshot
+    )
+
+    payload = json.dumps(to_store, default=str)
+    if len(payload.encode("utf-8")) > _MAX_SNAPSHOT_BYTES:
+        # Retained sources must not block fresh data from landing: fall back
+        # to the fresh capture alone before giving up.
+        payload = json.dumps(snapshot, default=str)
+        if len(payload.encode("utf-8")) > _MAX_SNAPSHOT_BYTES:
+            logger.warning(
+                "Claims capture for %s: snapshot exceeds %d bytes, not storing",
+                email,
+                _MAX_SNAPSHOT_BYTES,
+            )
+            return
+        logger.warning(
+            "Claims capture for %s: merged snapshot exceeds %d bytes, "
+            "storing the fresh capture without retained sources",
+            email,
+            _MAX_SNAPSHOT_BYTES,
+        )
     # TTL is per key, so any login through any provider keeps the whole hash
     # alive. Fields for abandoned providers persist until the hash expires.
     pipe = redis.pipeline()
-    pipe.hset(key, provider, json.dumps(snapshot, default=str))
+    pipe.hset(key, provider, payload)
     pipe.expire(key, _IDP_CLAIMS_TTL_SECONDS)
     await pipe.execute()
 
@@ -188,6 +253,9 @@ async def _fetch_ms_graph_profile(access_token: str) -> dict[str, Any]:
             headers={"Authorization": f"Bearer {access_token}"},
         )
         if response.status_code >= 400:
+            logger.warning(
+                "OAuth claims capture: Graph /me returned %s", response.status_code
+            )
             return {
                 "error": (
                     f"Graph /me returned HTTP {response.status_code}. "
@@ -392,25 +460,13 @@ def _claim_aliases(placeholder_key: str, defaults: tuple[str, ...]) -> tuple[str
 
 
 def _snapshot_sources(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
-    """Claim sources of one snapshot in precedence order (directory API,
-    userinfo, id_token, then SAML assertion attributes)."""
-    sources: list[dict[str, Any]] = []
-    directory_profile = snapshot.get("directory_profile")
-    if isinstance(directory_profile, dict) and "error" not in directory_profile:
-        sources.append(directory_profile)
-    userinfo = snapshot.get("userinfo")
-    if isinstance(userinfo, dict):
-        sources.append(userinfo)
-    id_token_claims = snapshot.get("id_token_claims")
-    if isinstance(id_token_claims, dict):
-        sources.append(id_token_claims)
-    # Lowest priority by convention. A snapshot is written whole per login, so
-    # today a SAML snapshot never carries the OIDC sources above and ordering
-    # only matters if a future path mixes them.
-    saml_attributes = snapshot.get("saml_attributes")
-    if isinstance(saml_attributes, dict):
-        sources.append(saml_attributes)
-    return sources
+    """Claim sources of one snapshot in _SOURCE_KEYS precedence order
+    (directory API, userinfo, id_token, then SAML assertion attributes). SAML
+    is lowest by convention. A snapshot is written whole per login, so today a
+    SAML snapshot never carries the OIDC sources and ordering only matters if
+    a future path mixes them."""
+    candidates = [snapshot.get(key) for key in _SOURCE_KEYS]
+    return [source for source in candidates if _has_source_data(source)]
 
 
 def _load_profile_sources(email: str) -> list[dict[str, Any]]:
@@ -435,9 +491,26 @@ def _load_profile_sources(email: str) -> list[dict[str, Any]]:
     return sources
 
 
+# Directory values are interpolated into LLM prompts unescaped. A field is a
+# short label (department, title, city), so anything longer is
+# misconfiguration or abuse.
+_MAX_PROFILE_VALUE_CHARS = 256
+
+
+def _sanitize_profile_value(value: str) -> str:
+    """Collapse non-printable characters (controls, zero-width and format
+    chars, exotic spaces) to spaces, squeeze whitespace runs, and cap length.
+    Directory values are interpolated into the system prompt, so a value must
+    not be able to inject new prompt lines or blow up the token budget."""
+    cleaned = "".join(ch if ch.isprintable() else " " for ch in value)
+    cleaned = " ".join(cleaned.split())
+    return cleaned[:_MAX_PROFILE_VALUE_CHARS]
+
+
 def _resolve_profile(email: str) -> dict[str, tuple[str, str]]:
     """Resolve the directory profile for ``email`` from the captured claim
-    sources. Returns ``{placeholder_key: (label, value)}`` in field order."""
+    sources. Returns ``{placeholder_key: (label, value)}`` in field order,
+    values sanitized for prompt interpolation."""
     sources = _load_profile_sources(email)
     if not sources:
         return {}
@@ -457,51 +530,55 @@ def _resolve_profile(email: str) -> dict[str, tuple[str, str]]:
             None,
         )
         if value is not None:
-            resolved[placeholder_key] = (label, value.strip())
+            sanitized = _sanitize_profile_value(value)
+            if sanitized:
+                resolved[placeholder_key] = (label, sanitized)
     return resolved
 
 
-def get_idp_profile_fields(email: str) -> dict[str, str]:
-    """Directory profile of the user (country, department, ...) from the
-    captured IdP login snapshots, as ordered ``{label: value}`` pairs for the auto
-    "Organization Profile" prompt block. Best-effort: returns ``{}`` when the
-    feature is disabled, nothing is captured, or Redis is unavailable —
-    callers must treat the profile as optional."""
+class IdpProfileViews(NamedTuple):
+    # {label: value} for the "Organization Profile" prompt block.
+    fields: dict[str, str]
+    # {placeholder_key: value} for `{{user.<key>}}` substitution.
+    placeholders: dict[str, str]
+
+
+def get_idp_profile(email: str) -> IdpProfileViews:
+    """Both derived views of the directory profile from one Redis read.
+    Resolving once serves callers that need both views without a second
+    round-trip. Best-effort: returns empty views when the feature is disabled,
+    nothing is captured, or Redis is unavailable. Callers must treat the
+    profile as optional."""
     if not IDP_PROFILE_ENRICHMENT_ENABLED:
-        return {}
+        return IdpProfileViews({}, {})
     try:
-        return {label: value for label, value in _resolve_profile(email).values()}
+        profile = _resolve_profile(email)
+        return IdpProfileViews(
+            fields={label: value for label, value in profile.values()},
+            placeholders={key: value for key, (_, value) in profile.items()},
+        )
     except Exception:
         logger.warning(
             "Failed to load IdP profile for %s (prompt continues without it)",
             email,
             exc_info=True,
         )
-        return {}
+        return IdpProfileViews({}, {})
+
+
+def get_idp_profile_fields(email: str) -> dict[str, str]:
+    """Directory profile of the user (country, department, ...) from the
+    captured IdP login snapshots, as ordered ``{label: value}`` pairs for the auto
+    "Organization Profile" prompt block. Best-effort like ``get_idp_profile``."""
+    return get_idp_profile(email).fields
 
 
 def get_idp_profile_placeholder_values(email: str) -> dict[str, str]:
     """Directory profile of the user keyed by ``{{user.<key>}}`` placeholder
     key (snake_case, e.g. ``department``/``job_title``/``city``) for
     author-controlled placeholder substitution in agent prompts. Only
-    populated fields are included. Best-effort: returns ``{}`` when the
-    feature is disabled, nothing is captured, or Redis is unavailable —
-    callers must treat it as optional."""
-    if not IDP_PROFILE_ENRICHMENT_ENABLED:
-        return {}
-    try:
-        return {
-            placeholder_key: value
-            for placeholder_key, (_, value) in _resolve_profile(email).items()
-        }
-    except Exception:
-        logger.warning(
-            "Failed to load IdP placeholder values for %s "
-            "(prompt continues without them)",
-            email,
-            exc_info=True,
-        )
-        return {}
+    populated fields are included. Best-effort like ``get_idp_profile``."""
+    return get_idp_profile(email).placeholders
 
 
 async def get_captured_oauth_claims(email: str) -> dict[str, Any] | None:
