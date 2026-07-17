@@ -3,7 +3,7 @@ import type { HTMLAttributes } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { Interactive } from "@opal/core";
-import type { RichStr, WithoutStyles } from "@opal/types";
+import type { RichStr, TextTagVariants, WithoutStyles } from "@opal/types";
 import { Text, type TextFont } from "@opal/components";
 
 // ---------------------------------------------------------------------------
@@ -17,7 +17,7 @@ interface TextButtonProps extends WithoutStyles<
   font?: TextFont;
 
   /** HTML tag for the inner label. Default: `"span"`. Same as `Text`'s `as` prop. */
-  as?: "p" | "span" | "li" | "h1" | "h2" | "h3";
+  as?: TextTagVariants;
 
   /** Prevent text wrapping. Default: `true` (unlike `Text`, which defaults to `false`). */
   nowrap?: boolean;
