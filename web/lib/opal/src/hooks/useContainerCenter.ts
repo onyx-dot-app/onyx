@@ -38,7 +38,7 @@ function measure(el: HTMLElement): { x: number; y: number } | null {
  */
 export default function useContainerCenter(): ContainerCenter {
   const pathname = usePathname();
-  const { isMediumScreen } = useScreenSize();
+  const { isSmallScreen } = useScreenSize();
   const [center, setCenter] = useState<{ x: number | null; y: number | null }>(
     () => {
       if (typeof document === "undefined") return NULL_CENTER;
@@ -68,9 +68,9 @@ export default function useContainerCenter(): ContainerCenter {
   }, [pathname]);
 
   return {
-    centerX: isMediumScreen ? null : center.x,
-    centerY: isMediumScreen ? null : center.y,
-    hasContainerCenter: isMediumScreen
+    centerX: isSmallScreen ? null : center.x,
+    centerY: isSmallScreen ? null : center.y,
+    hasContainerCenter: isSmallScreen
       ? false
       : center.x !== null && center.y !== null,
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import { MEDIUM_BREAKPOINT_PX, SMALL_BREAKPOINT_PX } from "@/lib/constants";
+import { SMALL_BREAKPOINT_PX, MEDIUM_BREAKPOINT_PX } from "@/lib/constants";
 import { useState, useCallback } from "react";
 import useOnMount from "@/hooks/useOnMount";
 
