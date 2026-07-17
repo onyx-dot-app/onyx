@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import Response
 from fastmcp import FastMCP
-from prometheus_fastapi_instrumentator import Instrumentator
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.types import Receive
@@ -17,8 +16,11 @@ from starlette.types import Scope
 from starlette.types import Send
 
 from onyx.configs.app_configs import MCP_SERVER_CORS_ORIGINS
+from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.mcp_server.auth import OnyxTokenVerifier
 from onyx.mcp_server.utils import shutdown_http_client
+from onyx.server.metrics.prometheus_setup import create_prometheus_instrumentator
+from onyx.server.metrics.prometheus_setup import expose_prometheus_metrics
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 from shared_configs.configs import cors_allow_credentials
@@ -86,6 +88,7 @@ def create_mcp_fastapi_app() -> FastAPI:
         version="1.0.0",
         lifespan=combined_lifespan,
     )
+    register_onyx_exception_handlers(app)
 
     # Public health check endpoint (bypasses MCP auth)
     @app.middleware("http")
@@ -108,7 +111,7 @@ def create_mcp_fastapi_app() -> FastAPI:
             allow_headers=["*"],
         )
 
-    Instrumentator().instrument(app).expose(app)
+    expose_prometheus_metrics(app, create_prometheus_instrumentator())
 
     app.mount("/", _ensure_streamable_accept_header)
 

@@ -6,8 +6,6 @@ from typing import Any
 
 import httpx
 from fastmcp.server.auth.auth import AccessToken
-from prometheus_client import Counter
-from prometheus_client import Histogram
 from pydantic import BaseModel
 from pydantic import TypeAdapter
 from pydantic import ValidationError
@@ -24,42 +22,16 @@ from onyx.server.features.web_search.models import OpenUrlsToolRequest
 from onyx.server.features.web_search.models import OpenUrlsToolResponse
 from onyx.server.features.web_search.models import WebSearchToolRequest
 from onyx.server.features.web_search.models import WebSearchToolResponse
+from onyx.server.metrics.mcp_common import MCPToolCallStatus
+from onyx.server.metrics.mcp_server import MCPServerToolName
+from onyx.server.metrics.mcp_server import record_mcp_search_results
+from onyx.server.metrics.mcp_server import record_mcp_search_source
+from onyx.server.metrics.mcp_server import record_mcp_server_tool_outcome
+from onyx.server.metrics.mcp_server import UNKNOWN_SOURCE_LABEL
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import build_api_server_url_for_http_requests
 
 logger = setup_logger()
-
-# Operational metrics
-MCP_SERVER_TOOL_LATENCY = Histogram(
-    "onyx_mcp_server_tool_latency_seconds",
-    "MCP server tool execution latency",
-    ["tool"],
-    buckets=(0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0),
-)
-MCP_SERVER_TOOL_TOTAL = Counter(
-    "onyx_mcp_server_tool_calls_total",
-    "MCP server tool calls",
-    ["tool", "status"],  # status: success, error
-)
-# Product metrics
-MCP_SERVER_SEARCH_RESULTS = Histogram(
-    "onyx_mcp_server_search_results_count",
-    "Number of results returned by MCP server search tools",
-    ["tool"],
-    buckets=(0, 1, 2, 5, 10, 20, 50),
-)
-MCP_SERVER_SEARCH_SOURCES = Counter(
-    "onyx_mcp_server_search_by_source_total",
-    "MCP server document searches broken down by requested source type",
-    ["source_type"],
-)
-
-
-def _record_tool_outcome(tool: str, start: float, status: str) -> None:
-    """Record latency + outcome for a tool call. Every return path of a tool
-    must go through this exactly once so failures aren't understated."""
-    MCP_SERVER_TOOL_LATENCY.labels(tool=tool).observe(time.monotonic() - start)
-    MCP_SERVER_TOOL_TOTAL.labels(tool=tool, status=status).inc()
 
 
 async def _post_model(
@@ -117,6 +89,17 @@ def _error_payload(error: str) -> dict[str, Any]:
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
 
 
+def _record_requested_sources(source_types: list[str] | None) -> None:
+    canonical_sources: set[str] = set()
+    for source in source_types or []:
+        try:
+            canonical_sources.add(DocumentSource(source.lower()).value)
+        except ValueError:
+            canonical_sources.add(UNKNOWN_SOURCE_LABEL)
+    for source in canonical_sources:
+        record_mcp_search_source(source)
+
+
 @mcp_server.tool()
 async def search_indexed_documents(
     query: str,
@@ -163,6 +146,7 @@ async def search_indexed_documents(
     ```
     """
     _start = time.monotonic()
+    tool = MCPServerToolName.SEARCH_INDEXED_DOCUMENTS
     logger.info(
         "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s",
         query,
@@ -170,16 +154,7 @@ async def search_indexed_documents(
         document_set_names,
     )
 
-    # Track requested source types for product metrics. Only canonical
-    # DocumentSource values become label values — arbitrary client strings
-    # would otherwise mint unbounded Prometheus series.
-    if source_types:
-        for src in source_types:
-            try:
-                canonical = DocumentSource(src.lower()).value
-            except ValueError:
-                canonical = "unknown"
-            MCP_SERVER_SEARCH_SOURCES.labels(source_type=canonical).inc()
+    _record_requested_sources(source_types)
 
     # Normalize empty list inputs to None so downstream filter construction is
     # consistent — BaseFilters treats [] as "match zero" which differs from
@@ -189,83 +164,78 @@ async def search_indexed_documents(
 
     # Get authenticated user from FastMCP's access token
     access_token = require_access_token()
+    outcome = MCPToolCallStatus.ERROR
+    result_count: int | None = None
 
     try:
-        sources = await get_indexed_sources(access_token)
-    except Exception as err:
-        logger.error(
-            "Onyx MCP Server: Error checking indexed sources: %s",
-            err,
-            exc_info=True,
+        try:
+            sources = await get_indexed_sources(access_token)
+        except Exception as err:
+            logger.error(
+                "Onyx MCP Server: Error checking indexed sources: %s",
+                err,
+                exc_info=True,
+            )
+            return _error_payload(f"Failed to check indexed sources: {str(err)}")
+
+        if not sources:
+            logger.info("Onyx MCP Server: No indexed sources available for tenant")
+            outcome = MCPToolCallStatus.SUCCESS
+            result_count = 0
+            return _error_payload(
+                "No document sources are indexed yet. Add connectors or upload data "
+                "through Onyx before calling search_indexed_documents."
+            )
+
+        source_type_enums: list[DocumentSource] | None = None
+        if source_types is not None:
+            source_type_enums = []
+            for source_str in source_types:
+                try:
+                    source_type_enums.append(DocumentSource(source_str.lower()))
+                except ValueError:
+                    logger.warning(
+                        "Onyx MCP Server: Invalid source type '%s' - skipping",
+                        source_str,
+                    )
+
+        try:
+            parsed_cutoff = _TIME_CUTOFF_ADAPTER.validate_python(time_cutoff)
+        except ValidationError as err:
+            logger.warning(
+                "Onyx MCP Server: invalid time_cutoff '%s' (%s); continuing without time filter",
+                time_cutoff,
+                err,
+            )
+            parsed_cutoff = None
+
+        request = SearchRequest(
+            query=query,
+            sources=source_type_enums,
+            document_sets=document_set_names,
+            time_cutoff=parsed_cutoff,
+            skip_query_expansion=skip_query_expansion,
         )
-        _record_tool_outcome("search_indexed_documents", _start, "error")
-        return _error_payload(f"Failed to check indexed sources: {str(err)}")
-
-    if not sources:
-        logger.info("Onyx MCP Server: No indexed sources available for tenant")
-        _record_tool_outcome("search_indexed_documents", _start, "error")
-        return _error_payload(
-            "No document sources are indexed yet. Add connectors or upload data "
-            "through Onyx before calling search_indexed_documents."
-        )
-
-    # Convert source_types strings to DocumentSource enums; skip unknown values.
-    source_type_enums: list[DocumentSource] | None = None
-    if source_types is not None:
-        source_type_enums = []
-        for source_str in source_types:
-            try:
-                source_type_enums.append(DocumentSource(source_str.lower()))
-            except ValueError:
-                logger.warning(
-                    "Onyx MCP Server: Invalid source type '%s' - skipping",
-                    source_str,
-                )
-
-    # Parse time_cutoff via Pydantic (accepts ISO 8601 with offset, "Z",
-    # naive, and date-only). Bad LLM-generated cutoffs fall back to no filter
-    # so they can't break the whole call.
-    try:
-        parsed_cutoff = _TIME_CUTOFF_ADAPTER.validate_python(time_cutoff)
-    except ValidationError as err:
-        logger.warning(
-            "Onyx MCP Server: invalid time_cutoff '%s' (%s); continuing without time filter",
-            time_cutoff,
-            err,
-        )
-        parsed_cutoff = None
-
-    request = SearchRequest(
-        query=query,
-        sources=source_type_enums,
-        document_sets=document_set_names,
-        time_cutoff=parsed_cutoff,
-        skip_query_expansion=skip_query_expansion,
-    )
-
-    endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
-    try:
+        endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
         response = await _post_model(endpoint, request, access_token)
         if not response.is_success:
-            _record_tool_outcome("search_indexed_documents", _start, "error")
             return _error_payload(_extract_error_detail(response))
 
         payload = SearchResponse.model_validate_json(response.content)
         results = [_to_mcp_dict(result) for result in payload.results]
-
-        _record_tool_outcome("search_indexed_documents", _start, "success")
-        MCP_SERVER_SEARCH_RESULTS.labels(tool="search_indexed_documents").observe(
-            len(results)
-        )
-
+        outcome = MCPToolCallStatus.SUCCESS
+        result_count = len(results)
         logger.info(
             "Onyx MCP Server: Internal search returned %s results", len(results)
         )
         return {"results": results}
     except Exception as err:
-        _record_tool_outcome("search_indexed_documents", _start, "error")
         logger.error("Onyx MCP Server: Document search error: %s", err, exc_info=True)
         return _error_payload(f"Document search failed: {str(err)}")
+    finally:
+        record_mcp_server_tool_outcome(tool, _start, outcome)
+        if result_count is not None:
+            record_mcp_search_results(tool, result_count)
 
 
 @mcp_server.tool()
@@ -289,9 +259,12 @@ async def search_web(
     ```
     """
     _start = time.monotonic()
+    tool = MCPServerToolName.SEARCH_WEB
     logger.info("Onyx MCP Server: Web search: query='%s', limit=%s", query, limit)
 
     access_token = require_access_token()
+    outcome = MCPToolCallStatus.ERROR
+    result_count: int | None = None
 
     try:
         response = await _post_model(
@@ -300,31 +273,29 @@ async def search_web(
             access_token,
         )
         if not response.is_success:
-            _record_tool_outcome("search_web", _start, "error")
             return {
                 "error": _extract_error_detail(response),
                 "results": [],
                 "query": query,
             }
         payload = WebSearchToolResponse.model_validate_json(response.content)
-
-        _record_tool_outcome("search_web", _start, "success")
-        MCP_SERVER_SEARCH_RESULTS.labels(tool="search_web").observe(
-            len(payload.results)
-        )
-
+        outcome = MCPToolCallStatus.SUCCESS
+        result_count = len(payload.results)
         return {
             "results": [result.model_dump(mode="json") for result in payload.results],
             "query": query,
         }
     except Exception as e:
-        _record_tool_outcome("search_web", _start, "error")
         logger.error("Onyx MCP Server: Web search error: %s", e, exc_info=True)
         return {
             "error": f"Web search failed: {str(e)}",
             "results": [],
             "query": query,
         }
+    finally:
+        record_mcp_server_tool_outcome(tool, _start, outcome)
+        if result_count is not None:
+            record_mcp_search_results(tool, result_count)
 
 
 @mcp_server.tool()
@@ -348,9 +319,11 @@ async def open_urls(
     ```
     """
     _start = time.monotonic()
+    tool = MCPServerToolName.OPEN_URLS
     logger.info("Onyx MCP Server: Open URL: fetching %s URLs", len(urls))
 
     access_token = require_access_token()
+    outcome = MCPToolCallStatus.ERROR
 
     try:
         response = await _post_model(
@@ -359,16 +332,14 @@ async def open_urls(
             access_token,
         )
         if not response.is_success:
-            _record_tool_outcome("open_urls", _start, "error")
             return _error_payload(_extract_error_detail(response))
         payload = OpenUrlsToolResponse.model_validate_json(response.content)
-
-        _record_tool_outcome("open_urls", _start, "success")
-
+        outcome = MCPToolCallStatus.SUCCESS
         return {
             "results": [result.model_dump(mode="json") for result in payload.results],
         }
     except Exception as err:
-        _record_tool_outcome("open_urls", _start, "error")
         logger.error("Onyx MCP Server: URL fetch error: %s", err, exc_info=True)
         return _error_payload(f"URL fetch failed: {str(err)}")
+    finally:
+        record_mcp_server_tool_outcome(tool, _start, outcome)

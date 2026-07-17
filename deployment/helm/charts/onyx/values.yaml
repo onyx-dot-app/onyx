@@ -1420,15 +1420,14 @@ auth:
     values:
       user_auth_secret: ""
   metricsAuth:
-    # -- Bearer token guarding the API server's /metrics endpoint. /metrics
+    # -- Bearer token guarding the API and MCP servers' /metrics endpoints. /metrics
     # returns 401 by default until you either enable this (provide a token) or
     # explicitly opt out via configMap.DISABLE_METRICS_AUTH="true". When enabled,
     # scrapers must send the token as `Authorization: Bearer <token>` (Prometheus
-    # scrape config: `authorization`), and the api ServiceMonitor below is wired
+    # scrape config: `authorization`), and the ServiceMonitors are wired
     # to send it automatically.
     enabled: false
-    # -- Only inject the token into pods that serve the protected /metrics (the
-    # API server), not every backend pod. Routes through onyx.envSecretsRestricted.
+    # -- Only inject the token into pods that serve protected /metrics.
     allPods: false
     # -- Overwrite the default secret name, ignored if existingSecret is defined
     secretName: 'onyx-metrics-auth'

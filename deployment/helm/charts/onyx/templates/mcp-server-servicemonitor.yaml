@@ -1,8 +1,8 @@
-{{- if .Values.monitoring.serviceMonitors.enabled }}
+{{- if and .Values.monitoring.serviceMonitors.enabled .Values.mcpServer.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "onyx.fullname" . }}-api
+  name: {{ include "onyx.fullname" . }}-mcp-server
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.monitoring.serviceMonitors.labels }}
@@ -15,19 +15,14 @@ spec:
   selector:
     matchLabels:
       {{- include "onyx.selectorLabels" . | nindent 6 }}
-      app: {{ .Values.api.deploymentLabels.app }}
+      app: {{ .Values.mcpServer.deploymentLabels.app }}
   endpoints:
-    - port: api-server-port
+    - port: mcp-server-port
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s
-      {{- /* `dig` keeps this nil-safe for `helm upgrade --reuse-values` where an
-             older stored values map may lack auth.metricsAuth entirely. */}}
       {{- $metricsAuth := .Values.auth.metricsAuth | default dict }}
       {{- if dig "enabled" false $metricsAuth }}
-      {{- /* When the /metrics bearer token is enabled, Prometheus must present
-             it. References the chart-managed (or existing) metrics-auth secret;
-             the Prometheus Operator needs RBAC to read it in this namespace. */}}
       authorization:
         credentials:
           name: {{ include "onyx.secretName" $metricsAuth }}
