@@ -363,9 +363,8 @@ def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
     already maps known LiteLLM exception types to friendly messages and
     swallows unknown ones, but a few branches (`RateLimitError`, `APIError`,
     `ServiceUnavailableError`) still embed `str(core_exception)`. This pass
-    strips any credential we already know about (typically the values pulled
-    off `llm.config` via `collect_llm_credential_values`) before the message
-    is surfaced to a client.
+    strips any credential we already know about before the message is surfaced
+    to a client.
 
     Short / empty secrets are ignored so we don't accidentally eat common
     substrings.
@@ -393,16 +392,6 @@ def collect_credential_values(
     return credential_values
 
 
-def collect_llm_credential_values(llm: LLM | None) -> list[str]:
-    """Pull every credential-looking value out of an LLM's config.
-
-    Used to build the `secrets` argument for `scrub_sensitive_values`.
-    """
-    if llm is None:
-        return []
-    return collect_credential_values(llm.config.api_key, llm.config.custom_config)
-
-
 def litellm_exception_to_safe_error(
     e: Exception,
     llm: LLM | None = None,
@@ -420,9 +409,12 @@ def litellm_exception_to_safe_error(
         fallback_to_error_msg=fallback_to_error_msg,
         custom_error_msg_mappings=custom_error_msg_mappings,
     )
-    safe_message = scrub_sensitive_values(
-        message, [*collect_llm_credential_values(llm), *secrets]
+    llm_secrets = (
+        collect_credential_values(llm.config.api_key, llm.config.custom_config)
+        if llm is not None
+        else []
     )
+    safe_message = scrub_sensitive_values(message, [*llm_secrets, *secrets])
     return safe_message, error_code, is_retryable
 
 

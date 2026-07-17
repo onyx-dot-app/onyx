@@ -8,7 +8,7 @@ from typing import Any
 
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.utils import (
-    collect_llm_credential_values,
+    collect_credential_values,
     is_sensitive_custom_config_key,
     litellm_exception_to_safe_error,
     scrub_sensitive_values,
@@ -145,21 +145,19 @@ def test_scrub_accepts_iterable_secrets() -> None:
 
 
 # ---------------------------------------------------------------------------
-# collect_llm_credential_values
+# collect_credential_values
 # ---------------------------------------------------------------------------
 
 
-def test_collect_llm_credential_values_includes_api_key_and_sensitive_config() -> None:
-    config = _make_config(
-        custom_config={
+def test_collect_credential_values_includes_api_key_and_sensitive_config() -> None:
+    values = collect_credential_values(
+        _SECRET_KEY,
+        {
             "api_base": "https://api.example.com",
             "vertex_credentials": _SECRET_VERTEX_BLOB,
             "aws_secret_access_key": "AWSSECRET123456",
         },
     )
-    llm = _StubLLM(config)
-
-    values = collect_llm_credential_values(llm)
 
     assert _SECRET_KEY in values
     assert _SECRET_VERTEX_BLOB in values
@@ -167,15 +165,8 @@ def test_collect_llm_credential_values_includes_api_key_and_sensitive_config() -
     assert "https://api.example.com" not in values
 
 
-def test_collect_llm_credential_values_returns_empty_for_none() -> None:
-    assert collect_llm_credential_values(None) == []
-
-
-def test_collect_llm_credential_values_skips_missing_api_key() -> None:
-    config = _make_config(api_key=None, custom_config={"region": "us-east-1"})
-    llm = _StubLLM(config)
-
-    assert collect_llm_credential_values(llm) == []
+def test_collect_credential_values_skips_missing_credentials() -> None:
+    assert collect_credential_values(None, {"region": "us-east-1"}) == []
 
 
 def test_safe_error_preserves_classification_and_redacts_fallback() -> None:
