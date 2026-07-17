@@ -141,7 +141,7 @@ def test_assert_within_scope_admin_and_global_bypass(
         permission=Permission.MANAGE_DOCUMENT_SETS,
         current_group_ids=[999_999],
         requested_group_ids=[],
-        is_private=False,
+        is_non_public=False,
     )
 
     holder = create_test_user(db_session, "gate2-holder")
@@ -152,7 +152,7 @@ def test_assert_within_scope_admin_and_global_bypass(
         permission=Permission.MANAGE_DOCUMENT_SETS,
         current_group_ids=[999_999],
         requested_group_ids=[],
-        is_private=False,
+        is_non_public=False,
     )
 
 
@@ -174,7 +174,7 @@ def test_assert_within_scope_manager_invariants(
         permission=perm,
         current_group_ids=[managed.id],
         requested_group_ids=[],
-        is_private=True,
+        is_non_public=True,
     )
 
     # out-of-scope group (capture-by-reassign) → reject
@@ -185,7 +185,7 @@ def test_assert_within_scope_manager_invariants(
             permission=perm,
             current_group_ids=[managed.id],
             requested_group_ids=[unmanaged.id],
-            is_private=True,
+            is_non_public=True,
         )
 
     # detach to zero groups → reject
@@ -196,7 +196,7 @@ def test_assert_within_scope_manager_invariants(
             permission=perm,
             current_group_ids=[],
             requested_group_ids=[],
-            is_private=True,
+            is_non_public=True,
         )
 
     # non-private resource → reject
@@ -207,7 +207,7 @@ def test_assert_within_scope_manager_invariants(
             permission=perm,
             current_group_ids=[managed.id],
             requested_group_ids=[],
-            is_private=False,
+            is_non_public=False,
         )
 
 
@@ -225,7 +225,7 @@ def test_assert_within_scope_fails_closed_on_empty_scope(
             permission=Permission.MANAGE_DOCUMENT_SETS,
             current_group_ids=[1],
             requested_group_ids=[],
-            is_private=True,
+            is_non_public=True,
         )
 
 
@@ -247,7 +247,7 @@ def test_assert_within_scope_classifies_each_permission(
         permission=Permission.MANAGE_AGENTS,
         current_group_ids=[unmanaged.id],
         requested_group_ids=[],
-        is_private=True,
+        is_non_public=True,
     )
 
     # manage:connectors only via scope → out-of-scope group rejected
@@ -258,7 +258,7 @@ def test_assert_within_scope_classifies_each_permission(
             permission=Permission.MANAGE_CONNECTORS,
             current_group_ids=[unmanaged.id],
             requested_group_ids=[],
-            is_private=True,
+            is_non_public=True,
         )
 
     # manage:connectors within managed scope → allowed
@@ -268,7 +268,7 @@ def test_assert_within_scope_classifies_each_permission(
         permission=Permission.MANAGE_CONNECTORS,
         current_group_ids=[managed.id],
         requested_group_ids=[],
-        is_private=True,
+        is_non_public=True,
     )
 
 
@@ -289,7 +289,7 @@ def test_within_managed_scope_clause_selects_right_rows(db_session: Session) -> 
         resource_id_col=DocumentSet.id,
         junction_resource_col=DocumentSet__UserGroup.document_set_id,
         junction_group_col=DocumentSet__UserGroup.user_group_id,
-        is_private=DocumentSet.is_public.is_(False),
+        non_public_clause=DocumentSet.is_public.is_(False),
         managed_subq=scoped_group_ids_subquery(manager),
     )
     editable = set(db_session.scalars(select(DocumentSet.id).where(clause)).all())
@@ -306,7 +306,7 @@ def test_within_managed_scope_clause_selects_right_rows(db_session: Session) -> 
         resource_id_col=DocumentSet.id,
         junction_resource_col=DocumentSet__UserGroup.document_set_id,
         junction_group_col=DocumentSet__UserGroup.user_group_id,
-        is_private=DocumentSet.is_public.is_(False),
+        non_public_clause=DocumentSet.is_public.is_(False),
         managed_subq=scoped_group_ids_subquery(plain),
     )
     plain_editable = set(
@@ -340,7 +340,7 @@ def test_within_managed_scope_clause_handles_enum_privateness(
         resource_id_col=ConnectorCredentialPair.id,
         junction_resource_col=UserGroup__ConnectorCredentialPair.cc_pair_id,
         junction_group_col=UserGroup__ConnectorCredentialPair.user_group_id,
-        is_private=ConnectorCredentialPair.access_type == AccessType.PRIVATE,
+        non_public_clause=ConnectorCredentialPair.access_type == AccessType.PRIVATE,
         managed_subq=scoped_group_ids_subquery(manager),
     )
     editable = set(
@@ -348,4 +348,43 @@ def test_within_managed_scope_clause_handles_enum_privateness(
     )
 
     assert private_pair.id in editable
+    assert public_pair.id not in editable
+
+
+def test_within_managed_scope_clause_includes_sync_cc_pairs(
+    db_session: Session,
+) -> None:
+    # A manager manages the PRIVATE *and* SYNC cc_pairs in their groups, never
+    # PUBLIC — so the cc_pair caller passes access_type != PUBLIC (not == PRIVATE).
+    manager = create_test_user(db_session, "clause-sync-mgr")
+    managed = _make_group(db_session)
+    _manage(db_session, manager, managed)
+
+    private_pair = make_cc_pair(db_session)
+    private_pair.access_type = AccessType.PRIVATE
+    sync_pair = make_cc_pair(db_session)
+    sync_pair.access_type = AccessType.SYNC
+    public_pair = make_cc_pair(db_session)
+    public_pair.access_type = AccessType.PUBLIC
+    for pair in (private_pair, sync_pair, public_pair):
+        db_session.add(
+            UserGroup__ConnectorCredentialPair(
+                user_group_id=managed.id, cc_pair_id=pair.id
+            )
+        )
+    db_session.commit()
+
+    clause = within_managed_scope_clause(
+        resource_id_col=ConnectorCredentialPair.id,
+        junction_resource_col=UserGroup__ConnectorCredentialPair.cc_pair_id,
+        junction_group_col=UserGroup__ConnectorCredentialPair.user_group_id,
+        non_public_clause=ConnectorCredentialPair.access_type != AccessType.PUBLIC,
+        managed_subq=scoped_group_ids_subquery(manager),
+    )
+    editable = set(
+        db_session.scalars(select(ConnectorCredentialPair.id).where(clause)).all()
+    )
+
+    assert private_pair.id in editable
+    assert sync_pair.id in editable
     assert public_pair.id not in editable

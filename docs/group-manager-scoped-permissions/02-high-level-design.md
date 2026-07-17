@@ -72,7 +72,7 @@ Every manager action passes **two** independent checks. The first lets them *rea
   │   only if the resource ends up:                                            │
   │     • in ≥1 managed group,                                                 │
   │     • with NO group outside the managed set (current ∪ new ⊆ managed),     │
-  │     • PRIVATE (never PUBLIC / SYNC).                                        │
+  │     • non-PUBLIC (PRIVATE or SYNC; never PUBLIC).                           │
   │   Admin override (admin token) skips this entirely.                        │
   └──────────────────────────────────────────────────────────────────────────┘
         │
@@ -162,7 +162,7 @@ The gate therefore loads the resource's **current** groups in the same transacti
 - Alice opens the Connectors page → sees only Engineering's connectors (filter re-keyed on managed groups).
 - She creates a connector into Engineering, PRIVATE → GATE 2: `{Engineering} ⊆ {Engineering}` ✓, PRIVATE ✓ →
   created.
-- She tries to set it PUBLIC → GATE 2 rejects (managers are PRIVATE-only).
+- She tries to set it PUBLIC → GATE 2 rejects (managers can't make anything PUBLIC; PRIVATE or SYNC only).
 - She tries `PUT /connector/<Finance id> {groups:[Engineering]}` → GATE 2 re-reads current `{Finance}`,
   `{Finance,Engineering} ⊄ {Engineering}` ✗ → 403.
 - She adds Bob to Engineering → allowed. She tries to add Bob to Marketing → 403.

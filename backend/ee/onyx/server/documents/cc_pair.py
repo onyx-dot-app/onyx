@@ -54,7 +54,9 @@ def get_cc_pair_latest_sync(
 @router.post("/admin/cc-pair/{cc_pair_id}/sync-permissions")
 def sync_cc_pair(
     cc_pair_id: int,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[None]:
     """Triggers permissions sync on a particular cc_pair immediately"""
@@ -64,7 +66,7 @@ def sync_cc_pair(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=False,
+        get_editable=True,
     )
     if not cc_pair:
         raise OnyxError(
@@ -129,7 +131,9 @@ def get_cc_pair_latest_group_sync(
 @router.post("/admin/cc-pair/{cc_pair_id}/sync-groups")
 def sync_cc_pair_groups(
     cc_pair_id: int,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[None]:
     """Triggers group sync on a particular cc_pair immediately"""
@@ -139,7 +143,7 @@ def sync_cc_pair_groups(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=False,
+        get_editable=True,
     )
     if not cc_pair:
         raise OnyxError(

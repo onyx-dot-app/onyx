@@ -35,13 +35,13 @@ def within_managed_scope_clause(
     resource_id_col: InstrumentedAttribute[int],
     junction_resource_col: InstrumentedAttribute[int],
     junction_group_col: InstrumentedAttribute[int],
-    is_private: ColumnElement[bool],
+    non_public_clause: ColumnElement[bool],
     managed_subq: Select,
 ) -> ColumnElement[bool]:
     """Read-side mirror of GATE 2: editable-by-manager iff every group is managed,
-    in ≥1 group, and private. ``is_private`` is the caller's privateness predicate —
-    resources encode it differently (``DocumentSet.is_public.is_(False)`` vs
-    ``ConnectorCredentialPair.access_type == AccessType.PRIVATE``). ``managed_subq``
+    in ≥1 group, and non-public. ``non_public_clause`` is the caller's non-public
+    predicate — resources encode it differently (``DocumentSet.is_public.is_(False)``
+    vs ``ConnectorCredentialPair.access_type != AccessType.PUBLIC``). ``managed_subq``
     yields no rows for a non-manager, so the clause fails closed."""
     belongs_to_managed = (
         select(junction_resource_col)
@@ -59,4 +59,4 @@ def within_managed_scope_clause(
         )
         .exists()
     )
-    return and_(is_private, belongs_to_managed, ~belongs_to_unmanaged)
+    return and_(non_public_clause, belongs_to_managed, ~belongs_to_unmanaged)

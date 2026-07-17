@@ -5,7 +5,6 @@ from typing import TypeVarTuple
 from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlalchemy import desc
-from sqlalchemy import exists
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
@@ -33,6 +32,8 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
+from onyx.db.scoped_permissions import scoped_group_ids_subquery
+from onyx.db.scoped_permissions import within_managed_scope_clause
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -70,14 +71,13 @@ def _add_user_filters(
     where_clause = User__UG.user_id == user.id
 
     if get_editable:
-        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        where_clause &= (
-            ~exists()
-            .where(UG__CCpair.cc_pair_id == ConnectorCredentialPair.id)
-            .where(~UG__CCpair.user_group_id.in_(user_groups))
-            .correlate(ConnectorCredentialPair)
+        where_clause = within_managed_scope_clause(
+            resource_id_col=ConnectorCredentialPair.id,
+            junction_resource_col=UserGroup__ConnectorCredentialPair.cc_pair_id,
+            junction_group_col=UserGroup__ConnectorCredentialPair.user_group_id,
+            non_public_clause=ConnectorCredentialPair.access_type != AccessType.PUBLIC,
+            managed_subq=scoped_group_ids_subquery(user),
         )
-        where_clause |= ConnectorCredentialPair.creator_id == user.id
     else:
         where_clause |= ConnectorCredentialPair.access_type == AccessType.PUBLIC
         where_clause |= ConnectorCredentialPair.access_type == AccessType.SYNC

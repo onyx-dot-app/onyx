@@ -105,7 +105,7 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.ADD_AGENTS,
         Permission.MANAGE_USER_GROUPS,
         Permission.MANAGE_ACTIONS,  # scoped via its agents at GATE 2
-        Permission.MANAGE_SKILLS,  # inert until PR4 adds registry + enforcement
+        Permission.MANAGE_SKILLS,  # not yet enforced (no registry)
     }
 )
 

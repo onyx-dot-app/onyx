@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
@@ -424,7 +425,9 @@ def _connector_supports_targeted_reindex(
 def update_cc_pair_status(
     cc_pair_id: int,
     status_update_request: CCStatusUpdateRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> JSONResponse:
     """This method returns nearly immediately. It simply sets some signals and
@@ -509,7 +512,9 @@ def update_cc_pair_status(
 def update_cc_pair_name(
     cc_pair_id: int,
     new_name: str,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     cc_pair = get_connector_credential_pair_from_id_for_user(
@@ -539,7 +544,9 @@ def update_cc_pair_name(
 def update_cc_pair_property(
     cc_pair_id: int,
     update_request: CCPropertyUpdateRequest,  # in seconds
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     cc_pair = get_connector_credential_pair_from_id_for_user(
@@ -601,7 +608,9 @@ def get_cc_pair_last_pruned(
 @router.post("/admin/cc-pair/{cc_pair_id}/prune", tags=PUBLIC_API_TAGS)
 def prune_cc_pair(
     cc_pair_id: int,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[list[int]]:
     """Triggers pruning on a particular cc_pair immediately"""
@@ -611,7 +620,7 @@ def prune_cc_pair(
         cc_pair_id=cc_pair_id,
         db_session=db_session,
         user=user,
-        get_editable=False,
+        get_editable=True,
     )
     if not cc_pair:
         raise OnyxError(
@@ -713,7 +722,9 @@ def associate_credential_to_connector(
     connector_id: int,
     credential_id: int,
     metadata: ConnectorCredentialPairMetadata,
-    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse[int]:
@@ -722,6 +733,16 @@ def associate_credential_to_connector(
 
     The intent of this endpoint is to handle connectors that actually need credentials.
     """
+
+    # GATE 2 write authorization (see assert_within_scope).
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_CONNECTORS,
+        current_group_ids=[],
+        requested_group_ids=metadata.groups or [],
+        is_non_public=metadata.access_type != AccessType.PUBLIC,
+    )
 
     try:
         validate_ccpair_for_user(
