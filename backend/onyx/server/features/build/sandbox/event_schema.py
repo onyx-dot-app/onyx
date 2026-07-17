@@ -23,7 +23,17 @@ TURN_ERROR_CODE_SESSION = -1  # opencode reported an error during the turn
 TURN_ERROR_CODE_TIMEOUT = -2
 TURN_ERROR_CODE_TRANSPORT = -3
 
+
+class ActivityTimeoutError(Error):
+    """A step produced no output within the inactivity window — recoverable by
+    re-prompting, unlike a hard absolute/budget timeout. The distinction is
+    carried by the type, not ``code`` (which it shares with the hard timeout)."""
+
+    code: int = TURN_ERROR_CODE_TIMEOUT
+
+
 __all__ = [
+    "ActivityTimeoutError",
     "AgentMessageChunk",
     "AgentPlanUpdate",
     "AgentThoughtChunk",

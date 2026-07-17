@@ -17,7 +17,6 @@ import {
   Divider,
   InputTypeIn,
   MessageCard,
-  Switch,
   Tag,
   Tooltip,
 } from "@opal/components";
@@ -47,7 +46,7 @@ import {
   removeUserSkillFile,
   uploadUserSkillFiles,
 } from "@/lib/skills/api";
-import type { CustomSkill, SkillEditableDetail } from "@/lib/skills/types";
+import type { SkillEditableDetail } from "@/lib/skills/types";
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
 import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
@@ -126,7 +125,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
   const [filesUploadToConfirm, setFilesUploadToConfirm] =
     useState<PreparedSkillFilesUpload | null>(null);
   const [removingFilePath, setRemovingFilePath] = useState<string | null>(null);
-  const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
@@ -188,13 +186,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
 
   async function refreshSkillList() {
     await mutate(SWR_KEYS.userSkills);
-  }
-
-  async function updateLocalSkill(updated: CustomSkill) {
-    if (!skill) return;
-    const nextSkill: SkillEditableDetail = { ...skill, ...updated };
-    await refreshSkill(nextSkill, { revalidate: false });
-    await refreshSkillList();
   }
 
   async function handleSave(event?: FormEvent<HTMLFormElement>) {
@@ -325,24 +316,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
       );
     } finally {
       setRemovingFilePath(null);
-    }
-  }
-
-  async function handleToggleEnabled(enabled: boolean) {
-    if (!skill || !canManageSkill) return;
-
-    setIsTogglingEnabled(true);
-    try {
-      const updated = await patchUserSkill(skill.id, { enabled });
-      await updateLocalSkill(updated);
-      toast.success(`${enabled ? "Enabled" : "Disabled"} "${updated.name}"`);
-    } catch (err) {
-      console.error("Failed to toggle skill", err);
-      toast.error(
-        err instanceof Error ? err.message : "Failed to update skill"
-      );
-    } finally {
-      setIsTogglingEnabled(false);
     }
   }
 
@@ -644,7 +617,7 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                   <Section gap={0.5} alignItems="stretch" height="auto">
                     <Content
                       title="Management"
-                      description="Control who can use this skill and whether Craft can currently select it."
+                      description="Control who can use this skill."
                       sizePreset="main-content"
                       variant="section"
                     />
@@ -672,24 +645,6 @@ export default function SkillEditorPage({ skillId }: SkillEditorPageProps) {
                                 </Button>
                               )}
                             </div>
-                          </InputHorizontal>
-                        )}
-
-                        {canManageSkill && (
-                          <InputHorizontal
-                            title={skill.enabled ? "Enabled" : "Disabled"}
-                            description={
-                              skill.enabled
-                                ? "Craft can use this skill when it is relevant."
-                                : "Craft will not use this skill until it is re-enabled."
-                            }
-                            center
-                          >
-                            <Switch
-                              checked={skill.enabled}
-                              disabled={isTogglingEnabled}
-                              onCheckedChange={handleToggleEnabled}
-                            />
                           </InputHorizontal>
                         )}
                       </Section>

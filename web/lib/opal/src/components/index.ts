@@ -48,6 +48,12 @@ export {
   type LinkButtonProps,
 } from "@opal/components/buttons/link-button/components";
 
+/* TextButton */
+export {
+  TextButton,
+  type TextButtonProps,
+} from "@opal/components/buttons/text-button/components";
+
 /* Text */
 export {
   Text,
@@ -153,6 +159,15 @@ export {
   type InputDatePickerProps,
 } from "@opal/components/inputs/input-date-picker/components";
 
+/* InputSelect */
+export {
+  InputSelect,
+  type InputSelectRootProps,
+  type InputSelectTriggerProps,
+  type InputSelectItemProps,
+  type InputSelectSearchProps,
+} from "@opal/components/inputs/input-select/components";
+
 /* InputTags */
 export {
   InputTags,
@@ -171,6 +186,13 @@ export {
   InputTextArea,
   type InputTextAreaProps,
 } from "@opal/components/inputs/input-text-area/components";
+
+/* InputTime */
+export {
+  InputTime,
+  type InputTimeProps,
+  type TimeValue,
+} from "@opal/components/inputs/input-time/components";
 
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";

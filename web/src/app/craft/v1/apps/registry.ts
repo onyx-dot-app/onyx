@@ -92,10 +92,9 @@ export interface ExternalAppAdminResponse {
   upstream_url_patterns: string[];
   auth_template: Record<string, string>;
   organization_credentials: Record<string, string>;
-  enabled: boolean;
   actions: ActionPolicyView[];
   // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
-  // admin may only enable/disable + set policies (the UI hides the rest).
+  // admin may only set policies (the UI hides the rest).
   is_onyx_managed: boolean;
 }
 

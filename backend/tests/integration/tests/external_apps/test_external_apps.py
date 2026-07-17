@@ -8,6 +8,7 @@ from onyx.server.features.build.external_apps.models import ExternalAppAdminResp
 from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
 from onyx.utils.encryption import mask_credential_dict
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
+from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -37,9 +38,8 @@ def _create_test_app(
 ) -> ExternalAppAdminResponse:
     """Create the canonical 4-param test app, with any field overridable.
 
-    Default shape: 2 org-supplied credentials, 2 user-supplied. Overrides
-    let individual tests vary one field (e.g. `enabled=False`) without
-    repeating the whole arg list.
+    Default shape: 2 org-supplied credentials, 2 user-supplied. Overrides let
+    individual tests vary one field without repeating the whole arg list.
     """
     defaults: dict[str, Any] = {
         "name": "Test App",
@@ -47,7 +47,6 @@ def _create_test_app(
         "upstream_url_patterns": ["https://api.example.com/*"],
         "auth_template": dict(_AUTH_TEMPLATE),
         "organization_credentials": dict(_ORG_CREDENTIALS),
-        "enabled": True,
     }
     defaults.update(overrides)
     return ExternalAppManager.create(
@@ -106,7 +105,6 @@ def test_admin_creates_app_user_configures_credentials(
     assert admin_app.id == app_id
     assert admin_app.name == "Test App"
     assert admin_app.description == "An app for testing"
-    assert admin_app.enabled is True
     assert admin_app.upstream_url_patterns == ["https://api.example.com/*"]
     assert admin_app.auth_template == _AUTH_TEMPLATE
     # Org credentials are masked in the admin response so secrets are never
@@ -140,6 +138,23 @@ def test_admin_creates_app_user_configures_credentials(
     assert admin_apps_after[0].organization_credentials == mask_credential_dict(
         _ORG_CREDENTIALS
     )
+
+
+def test_external_app_is_excluded_from_skill_management_apis(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    basic_user: DATestUser,
+) -> None:
+    created = _create_test_app(admin_user)
+    user_app = ExternalAppManager.get_for_user(basic_user, created.id)
+
+    assert user_app.id == created.id
+    for skills in (
+        SkillManager.list_for_user(basic_user),
+        SkillManager.list_all(admin_user),
+    ):
+        listed_slugs = {skill.slug for skill in [*skills.builtins, *skills.customs]}
+        assert user_app.slug not in listed_slugs
 
 
 # =============================================================================
@@ -298,74 +313,6 @@ def test_user_credentials_are_isolated_between_users(
 
 
 # =============================================================================
-# Enable / disable kill switch
-# =============================================================================
-
-
-def test_disabled_app_hidden_from_users_but_credentials_preserved_on_re_enable(
-    reset: None,  # noqa: ARG001
-    admin_user: DATestUser,
-    basic_user: DATestUser,
-) -> None:
-    """Disabling an app makes it disappear from the user list (kill
-    switch for the proxy), but the user's stored credentials must
-    survive the disable so re-enabling restores them automatically.
-    Otherwise admins would have to coordinate "redo your OAuth dance"
-    with every user every time they temporarily disable an integration.
-    """
-    created = _create_test_app(admin_user)
-    ExternalAppManager.upsert_user_credentials(
-        user_performing_action=basic_user,
-        app_id=created.id,
-        credentials=_USER_CREDENTIALS,
-    )
-    assert (
-        ExternalAppManager.get_for_user(
-            user_performing_action=basic_user, app_id=created.id
-        ).authenticated
-        is True
-    )
-
-    # Admin disables the app.
-    ExternalAppManager.update(
-        user_performing_action=admin_user,
-        app_id=created.id,
-        name=created.name,
-        description=created.description,
-        upstream_url_patterns=created.upstream_url_patterns,
-        auth_template=created.auth_template,
-        organization_credentials=created.organization_credentials,
-        enabled=False,
-    )
-
-    # User no longer sees the app at all.
-    assert ExternalAppManager.list_for_user(user_performing_action=basic_user) == []
-    # But admin still sees it, with enabled=False.
-    admin_view = ExternalAppManager.list_admin(user_performing_action=admin_user)
-    assert len(admin_view) == 1
-    assert admin_view[0].enabled is False
-
-    # Admin re-enables.
-    ExternalAppManager.update(
-        user_performing_action=admin_user,
-        app_id=created.id,
-        name=created.name,
-        description=created.description,
-        upstream_url_patterns=created.upstream_url_patterns,
-        auth_template=created.auth_template,
-        organization_credentials=created.organization_credentials,
-        enabled=True,
-    )
-
-    # The user's previously-stored credentials must still be there.
-    restored = ExternalAppManager.get_for_user(
-        user_performing_action=basic_user, app_id=created.id
-    )
-    assert restored.authenticated is True
-    assert restored.credential_values == _MASKED_USER_CREDENTIALS
-
-
-# =============================================================================
 # Auth template reshaping
 # =============================================================================
 
@@ -400,7 +347,6 @@ def test_update_app_reshapes_user_credential_keys(
         upstream_url_patterns=created.upstream_url_patterns,
         auth_template=created.auth_template,
         organization_credentials=new_org_creds,
-        enabled=True,
     )
 
     user_view = ExternalAppManager.get_for_user(
@@ -546,7 +492,6 @@ def test_app_type_defaults_to_custom_and_is_immutable_on_update(
         upstream_url_patterns=slack_app.upstream_url_patterns,
         auth_template=slack_app.auth_template,
         organization_credentials=slack_app.organization_credentials,
-        enabled=slack_app.enabled,
         app_type=ExternalAppType.SLACK,
     )
     assert unchanged.app_type == ExternalAppType.SLACK

@@ -53,6 +53,14 @@ def apply_auto_substitutions(value: str, *, user_email: str) -> str:
     return value
 
 
+# Headers that must never be sourced from stored MCP credentials or request
+# templates. Host is particularly critical — it can be used for Host Header
+# Injection attacks to route requests to unintended internal servers.
+DENYLISTED_MCP_HEADERS = {
+    "host",
+}
+
+
 # This should be updated along with MCPConnectionData
 class MCPOAuthKeys(str, Enum):
     """MCP OAuth keys types"""
