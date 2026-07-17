@@ -44,6 +44,7 @@ Interactive.Stateless              <- always variant="default" / prominence="ter
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `font` | `TextFont` | `"main-ui-body"` | Font preset, same as `Text`'s `font` prop |
+| `as` | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"` | `"span"` | HTML tag for the inner label, same as `Text`'s `as` prop |
 | `nowrap` | `boolean` | `true` | Prevent text wrapping (defaults `true`, unlike `Text`, since buttons don't usually wrap) |
 | `children` | `string \| RichStr` | — | Label text (required) |
 | `href` | `string` | — | URL; renders as a link |
@@ -69,6 +70,11 @@ import { TextButton } from "@opal/components";
 // Custom font preset
 <TextButton font="secondary-action" onClick={handleClick}>
   Undo
+</TextButton>
+
+// As a list item
+<TextButton as="li" onClick={handleClick}>
+  Remove filter
 </TextButton>
 ```
 

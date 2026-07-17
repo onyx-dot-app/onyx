@@ -16,6 +16,9 @@ interface TextButtonProps extends WithoutStyles<
   /** Font preset. Default: `"main-ui-body"`. */
   font?: TextFont;
 
+  /** HTML tag for the inner label. Default: `"span"`. Same as `Text`'s `as` prop. */
+  as?: "p" | "span" | "li" | "h1" | "h2" | "h3";
+
   /** Prevent text wrapping. Default: `true` (unlike `Text`, which defaults to `false`). */
   nowrap?: boolean;
 
@@ -53,6 +56,7 @@ interface TextButtonProps extends WithoutStyles<
  */
 function TextButton({
   font = "main-ui-body",
+  as,
   nowrap = true,
   disabled,
   href,
@@ -61,7 +65,7 @@ function TextButton({
   ...rest
 }: TextButtonProps) {
   const label = (
-    <Text font={font} color="inherit" nowrap={nowrap}>
+    <Text font={font} color="inherit" as={as} nowrap={nowrap}>
       {children}
     </Text>
   );
