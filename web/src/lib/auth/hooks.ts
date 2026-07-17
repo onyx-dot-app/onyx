@@ -2,12 +2,40 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
+import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
+import { AuthTypeMetadata } from "@/lib/auth/types";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
 import { useCurrentUser } from "@/lib/users/hooks";
+import { isAuthPath } from "@/lib/auth/paths";
+import { fetchAuthTypeMetadata } from "@/lib/auth/svc";
 
-const AUTH_FLOW_PREFIX = "/auth";
+const REFRESH_INTERVAL = 600000;
+const MIN_REFRESH_GAP_MS = REFRESH_INTERVAL - 60000;
+const VISIBILITY_REFRESH_GAP_MS = 60000;
+
+export function useAuthTypeMetadata(): {
+  authTypeMetadata: AuthTypeMetadata | undefined;
+  isLoading: boolean;
+  error: Error | undefined;
+} {
+  const { data, error, isLoading } = useSWR<AuthTypeMetadata>(
+    SWR_KEYS.authType,
+    fetchAuthTypeMetadata,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 30_000,
+    }
+  );
+
+  return { authTypeMetadata: data, isLoading, error };
+}
 
 function computeSecondsUntilExpiration(user: User): number | null {
   if (!user.token_expires_at) return null;
@@ -32,7 +60,7 @@ function computeSecondsUntilExpiration(user: User): number | null {
  */
 export function useSessionWatcher(): boolean {
   const pathname = usePathname();
-  const inAuthFlow = pathname?.startsWith(AUTH_FLOW_PREFIX) ?? false;
+  const inAuthFlow = isAuthPath(pathname);
 
   const { user, mutateUser, userError } = useCurrentUser();
   const expiryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,4 +100,105 @@ export function useSessionWatcher(): boolean {
     userError?.status === 403 &&
     hasSeenAuthenticatedUserRef.current
   );
+}
+
+export function useIsMultiTenant(): boolean | null {
+  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
+  // camelCase-mapped shape — a raw fetcher here would poison the cache for
+  // every other consumer of the key.
+  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
+
+  if (NEXT_PUBLIC_CLOUD_ENABLED) {
+    return true;
+  }
+
+  if (error || isLoading) {
+    return null;
+  }
+
+  return authTypeMetadata?.multiTenant ?? null;
+}
+
+// Pass-through forwards the logged-in user's OAuth access token, so offer it
+// only when users authenticate with an OAuth-capable method (Google/OIDC).
+// SAML grants no OAuth token, so a SAML-only deployment must not enable it.
+export function useOAuthPassThroughEnabled(): boolean {
+  const { authTypeMetadata } = useAuthTypeMetadata();
+  return (
+    authTypeMetadata?.oauthEnabled === true ||
+    (authTypeMetadata?.ssoProviders ?? []).some(
+      (p) => p.providerType === "OIDC" || p.providerType === "GOOGLE_OAUTH"
+    )
+  );
+}
+
+export function useTokenRefresh(
+  user: User | null,
+  authTypeMetadataLoading: boolean,
+  onRefreshFail: () => Promise<void>
+) {
+  const lastAttemptRef = useRef<number>(Date.now());
+  const isFirstLoadRef = useRef(true);
+
+  useEffect(() => {
+    // Wait only for the initial metadata load. On persistent error we still
+    // refresh so a transient /auth/type failure cannot silently kill sessions.
+    if (authTypeMetadataLoading) return;
+
+    if (!user || user.id === NO_AUTH_USER_ID || user.is_anonymous_user) {
+      return;
+    }
+
+    const refreshTokenPeriodically = async () => {
+      const isTimeToRefresh =
+        isFirstLoadRef.current ||
+        Date.now() - lastAttemptRef.current > MIN_REFRESH_GAP_MS;
+
+      if (!isTimeToRefresh) return;
+
+      isFirstLoadRef.current = false;
+      lastAttemptRef.current = Date.now();
+
+      try {
+        const response = await fetch("/api/auth/refresh", {
+          method: "POST",
+          credentials: "include",
+        });
+
+        if (response.ok) {
+          console.debug("Auth token refreshed successfully");
+        } else {
+          console.warn("Failed to refresh auth token:", response.status);
+          await onRefreshFail();
+        }
+      } catch (error) {
+        console.error("Error refreshing auth token:", error);
+      }
+    };
+
+    if (!document.hidden) {
+      refreshTokenPeriodically();
+    }
+
+    const intervalId = setInterval(() => {
+      if (document.hidden) return;
+      refreshTokenPeriodically();
+    }, REFRESH_INTERVAL);
+
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - lastAttemptRef.current > VISIBILITY_REFRESH_GAP_MS
+      ) {
+        refreshTokenPeriodically();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [user, authTypeMetadataLoading, onRefreshFail]);
 }

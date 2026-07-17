@@ -213,6 +213,7 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
     driveitem.id = "item-1"
     driveitem.web_url = SITE_URL + "/doc.docx"
     driveitem.parent_reference_path = None
+    driveitem.created_datetime = None
     mock_fetch_driveitems.return_value = [
         (driveitem, "Documents", None),
     ]

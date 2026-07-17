@@ -38,6 +38,7 @@ from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_S
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import ACCESS_CONTROL_LIST_FIELD_NAME
 from onyx.document_index.opensearch.schema import CONTENT_FIELD_NAME
+from onyx.document_index.opensearch.schema import CREATED_AT_FIELD_NAME
 from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
@@ -60,6 +61,7 @@ from onyx.document_index.opensearch.search import (
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import Document
 from onyx.redis.lock_context import redis_shared_lock
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 from shared_configs.configs import MULTI_TENANT
@@ -219,6 +221,7 @@ def _convert_onyx_chunk_to_opensearch_document(
         metadata_list=filtered_metadata_list,
         metadata_suffix=filtered_metadata_suffix,
         last_updated=chunk.source_document.doc_updated_at,
+        created_at=chunk.source_document.doc_created_at,
         public=chunk.access.is_public,
         access_control_list=generate_opensearch_filtered_access_control_list(
             chunk.access
@@ -598,6 +601,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
             if update_request.persona_ids is not None:
                 properties_to_update[PERSONAS_FIELD_NAME] = list(
                     update_request.persona_ids
+                )
+            if update_request.created_at is not None:
+                # Stored as epoch seconds
+                properties_to_update[CREATED_AT_FIELD_NAME] = int(
+                    datetime_to_utc(update_request.created_at).timestamp()
                 )
 
             if not properties_to_update:

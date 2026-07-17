@@ -7,7 +7,7 @@ import { Formik, Form } from "formik";
 import useSWR, { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
@@ -37,7 +37,6 @@ import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
-import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
   SEARCH_TOOL_ID,
@@ -873,6 +872,18 @@ export default function ChatPreferencesPage() {
                   />
                 </InputHorizontal>
               </Disabled>
+              <InputHorizontal
+                title="Auto-Detect Search Filters"
+                description="Automatically apply source and time filters inferred from the search query."
+                withLabel
+              >
+                <Switch
+                  checked={s.auto_detect_search_filters ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({ auto_detect_search_filters: checked });
+                  }}
+                />
+              </InputHorizontal>
               <InputHorizontal
                 title="Multi-Model Generation"
                 tag={{ title: "beta", color: "blue" }}

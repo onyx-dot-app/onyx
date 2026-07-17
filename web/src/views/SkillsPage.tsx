@@ -3,23 +3,35 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { Button, InputTypeIn, MessageCard, Text } from "@opal/components";
+import {
+  Button,
+  InputTypeIn,
+  MessageCard,
+  Popover,
+  Text,
+} from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { SvgBlocks, SvgPlus, SvgSimpleLoader } from "@opal/icons";
-import { SettingsLayouts } from "@opal/layouts";
+import {
+  SvgBlocks,
+  SvgEdit,
+  SvgPlus,
+  SvgSimpleLoader,
+  SvgUploadCloud,
+} from "@opal/icons";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
-import { useUser } from "@/providers/UserProvider";
 import SkillCard, {
   type CustomSkillCardItem,
   type SkillCardItem,
 } from "@/sections/cards/SkillCard";
-import CreatePersonalSkillModal from "@/views/SkillsPage/CreatePersonalSkillModal";
-import UploadSkillModal from "@/sections/modals/skills/UploadSkillModal";
+import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import { setSkillEnabled } from "@/lib/skills/api";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -28,31 +40,72 @@ import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 export default function SkillsPage() {
   const router = useRouter();
   const { data, error, isLoading, refresh } = useUserSkills();
-  const { isAdmin, isCurator } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
-  const [personalCreateOpen, setPersonalCreateOpen] = useState(false);
-  const [orgUploadOpen, setOrgUploadOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<SkillCardItem | null>(
     null
   );
+  const [pendingSkillIds, setPendingSkillIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [optimisticEnabledById, setOptimisticEnabledById] = useState<
+    Map<string, boolean>
+  >(new Map());
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useOnMount(() => {
     searchInputRef.current?.focus();
   });
 
-  const canManageOrgSkills = isAdmin || isCurator;
-
-  function handleCreateClick() {
-    if (canManageOrgSkills) {
-      setOrgUploadOpen(true);
-    } else {
-      setPersonalCreateOpen(true);
-    }
-  }
-
   function handleEdit(item: CustomSkillCardItem) {
     router.push(`/craft/v1/skills/edit/${item.id}` as Route);
+  }
+
+  async function handleEnabledChange(item: SkillCardItem, enabled: boolean) {
+    setPendingSkillIds((current) => new Set(current).add(item.id));
+    setOptimisticEnabledById((current) =>
+      new Map(current).set(item.id, enabled)
+    );
+    try {
+      const updatedSkill = await setSkillEnabled(item.id, enabled);
+      await refresh(
+        (current) => {
+          if (!current) return current;
+          const key =
+            updatedSkill.source === "builtin" ? "builtins" : "customs";
+          return {
+            ...current,
+            [key]: current[key].map((skill) =>
+              skill.id === updatedSkill.id ? updatedSkill : skill
+            ),
+          };
+        },
+        { revalidate: false }
+      );
+      void refresh().catch(() => {
+        toast.error(
+          `${item.name} was updated, but the skill list could not be refreshed.`
+        );
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `Failed to ${enabled ? "enable" : "disable"} ${item.name}`
+      );
+    } finally {
+      setOptimisticEnabledById((current) => {
+        const next = new Map(current);
+        next.delete(item.id);
+        return next;
+      });
+      setPendingSkillIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
+    }
   }
 
   const items = useMemo<SkillCardItem[]>(() => {
@@ -67,13 +120,13 @@ export default function SkillsPage() {
         name: b.name,
         description: b.description,
         source: "builtin",
+        enabled: optimisticEnabledById.get(b.id) ?? b.enabled,
+        can_toggle: b.can_toggle,
         is_available: b.is_available,
         unavailable_reason: b.unavailable_reason,
       }));
     const customItems: SkillCardItem[] = data.customs
-      .filter(
-        (c): c is CustomSkill => c.source === "custom" && c.enabled !== null
-      )
+      .filter((c): c is CustomSkill => c.source === "custom")
       .map((c) => ({
         id: c.id,
         name: c.name,
@@ -82,7 +135,8 @@ export default function SkillsPage() {
         skill: c,
         author_email: c.author_email,
         is_personal: c.is_personal && c.user_permission === "OWNER",
-        enabled: c.enabled,
+        enabled: optimisticEnabledById.get(c.id) ?? c.enabled,
+        can_toggle: c.can_toggle,
       }));
     // Group order: built-in, then custom (org-wide), then personal; alphabetical within each group.
     const groupRank = (item: SkillCardItem): number => {
@@ -98,7 +152,7 @@ export default function SkillsPage() {
         groupRank(a) - groupRank(b) ||
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
     );
-  }, [data]);
+  }, [data, optimisticEnabledById]);
 
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -122,11 +176,37 @@ export default function SkillsPage() {
         title="Skills"
         description="Capability bundles your Craft agent can reach for. This page shows built-in skills, skills shared with you, and your own personal skills."
         rightChildren={
-          <div className="flex items-center gap-2">
-            <Button icon={SvgPlus} onClick={handleCreateClick}>
-              Create skill
-            </Button>
-          </div>
+          <Popover open={createMenuOpen} onOpenChange={setCreateMenuOpen}>
+            <Popover.Trigger asChild>
+              <Button icon={SvgPlus}>Create skill</Button>
+            </Popover.Trigger>
+            <Popover.Content align="end" sideOffset={4} width="xl">
+              <Popover.Menu>
+                <LineItem
+                  icon={SvgEdit}
+                  description="Write the instructions and add supporting files in Onyx."
+                  wrapDescription
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    router.push("/craft/v1/skills/new" as Route);
+                  }}
+                >
+                  Start from scratch
+                </LineItem>
+                <LineItem
+                  icon={SvgUploadCloud}
+                  description="Import a SKILL.md file, ZIP file, or skill folder."
+                  wrapDescription
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    setCreateOpen(true);
+                  }}
+                >
+                  Upload a skill
+                </LineItem>
+              </Popover.Menu>
+            </Popover.Content>
+          </Popover>
         }
       >
         <InputTypeIn
@@ -178,6 +258,8 @@ export default function SkillsPage() {
                         item={item}
                         onEdit={handleEdit}
                         onClick={setPreviewTarget}
+                        onEnabledChange={handleEnabledChange}
+                        enablementPending={pendingSkillIds.has(item.id)}
                       />
                     ))}
                   </div>
@@ -188,29 +270,14 @@ export default function SkillsPage() {
                 />
               </>
             )}
-
-            {visibleItems.length > 0 && (
-              <div className="pt-2">
-                <Text as="p" font="secondary-body" color="text-03">
-                  Org-wide skills are managed by admins. Personal skills you
-                  create are visible only to you.
-                </Text>
-              </div>
-            )}
           </>
         )}
       </SettingsLayouts.Body>
 
-      <CreatePersonalSkillModal
-        open={personalCreateOpen}
-        onClose={() => setPersonalCreateOpen(false)}
-        onCreated={refresh}
-      />
-
-      <UploadSkillModal
-        open={orgUploadOpen}
-        onClose={() => setOrgUploadOpen(false)}
-        onUploaded={(created) => {
+      <CreateSkillModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(created) => {
           refresh();
           router.push(`/craft/v1/skills/edit/${created.id}` as Route);
         }}

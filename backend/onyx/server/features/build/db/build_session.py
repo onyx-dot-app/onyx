@@ -125,8 +125,8 @@ def get_user_build_sessions(
     """Get a user's interactive build sessions that have at least one message.
 
     Sessions created by non-interactive callers (e.g. the scheduled-tasks
-    executor) are intentionally excluded from this listing so they don't
-    leak into the Craft sidebar. The covering composite index
+    executor or the Slack bot) are intentionally excluded from this listing
+    so they don't leak into the Craft sidebar. The covering composite index
     ``ix_build_session_user_origin_created`` is built for this exact query
     shape: ``(user_id, origin, created_at DESC)``.
     """
@@ -153,6 +153,8 @@ def get_empty_session_for_user(
     """Get an empty (pre-provisioned) session for the user if one exists.
 
     Returns a session with no messages, or None if all sessions have messages.
+    Only considers INTERACTIVE sessions — non-interactive origins (e.g. Slack)
+    skip port allocation and must not be handed to the Craft UI.
     """
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
 
@@ -160,6 +162,7 @@ def get_empty_session_for_user(
         db_session.query(BuildSession)
         .filter(
             BuildSession.user_id == user_id,
+            BuildSession.origin == SessionOrigin.INTERACTIVE,
             ~has_messages,
         )
         .first()
@@ -584,10 +587,13 @@ def fetch_all_supported_build_llm_providers(
 ) -> list[LLMProviderView]:
     """Every provider of a Craft-supported type (anthropic, openai, openrouter)
     that the ``user`` can access. Respects is_public / group restrictions so a
-    user never gets a sandbox keyed with a provider they can't use."""
+    user never gets a sandbox keyed with a provider they can't use. Providers
+    are ordered by ID so provisioning and proxy credential selection agree on
+    the first provider of each type."""
     provider_models = db_session.scalars(
         select(LLMProviderModel)
         .where(LLMProviderModel.provider.in_(BUILD_MODE_ALLOWED_PROVIDER_TYPES))
+        .order_by(LLMProviderModel.id.asc())
         .options(
             selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),

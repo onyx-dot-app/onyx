@@ -29,7 +29,6 @@ from onyx.configs.app_configs import SMTP_SERVER
 from onyx.configs.app_configs import SMTP_STARTTLS
 from onyx.configs.app_configs import SMTP_USER
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.constants import ONYX_DISCORD_URL
 from onyx.db.models import User
@@ -364,25 +363,19 @@ def send_subscription_cancellation_email(user_email: str) -> None:
 
 
 def build_user_email_invite(
-    from_email: str, to_email: str, application_name: str, auth_type: AuthType
+    from_email: str, to_email: str, application_name: str
 ) -> tuple[str, str]:
     heading = "You've Been Invited!"
 
-    # the exact action taken by the user, and thus the message, depends on the auth type
     message = f"<p>You have been invited by {from_email} to join an organization on {application_name}.</p>"
-    if auth_type == AuthType.CLOUD:
+    # Cloud offers Google login alongside password signup.
+    if MULTI_TENANT:
         message += (
             "<p>To join the organization, please click the button below to set a password "
             "or login with Google and complete your registration.</p>"
         )
-    elif auth_type == AuthType.BASIC:
-        message += "<p>To join the organization, please click the button below to set a password and complete your registration.</p>"
-    elif auth_type == AuthType.GOOGLE_OAUTH:
-        message += "<p>To join the organization, please click the button below to login with Google and complete your registration.</p>"
-    elif auth_type == AuthType.OIDC or auth_type == AuthType.SAML:
-        message += "<p>To join the organization, please click the button below to complete your registration.</p>"
     else:
-        raise ValueError(f"Invalid auth type: {auth_type}")
+        message += "<p>To join the organization, please click the button below to set a password and complete your registration.</p>"
 
     cta_text = "Join Organization"
     cta_link = f"{WEB_DOMAIN}/auth/signup?email={to_email}"
@@ -395,22 +388,19 @@ def build_user_email_invite(
         cta_link,
     )
 
-    # text content is the fallback for clients that don't support HTML
-    # not as critical, so not having special cases for each auth type
+    # Plain-text fallback for clients that don't render HTML.
     text_content = (
         f"You have been invited by {from_email} to join an organization on {application_name}.\n"
         "To join the organization, please visit the following link:\n"
         f"{WEB_DOMAIN}/auth/signup?email={to_email}\n"
     )
-    if auth_type == AuthType.CLOUD:
+    if MULTI_TENANT:
         text_content += "You'll be asked to set a password or login with Google to complete your registration."
 
     return text_content, html_content
 
 
-def send_user_email_invite(
-    user_email: str, current_user: User, auth_type: AuthType
-) -> None:
+def send_user_email_invite(user_email: str, current_user: User) -> None:
     try:
         load_runtime_settings_fn = fetch_versioned_implementation(
             "onyx.server.enterprise_settings.store", "load_runtime_settings"
@@ -425,7 +415,7 @@ def send_user_email_invite(
     subject = f"Invitation to Join {application_name} Organization"
 
     text_content, html_content = build_user_email_invite(
-        current_user.email, user_email, application_name, auth_type
+        current_user.email, user_email, application_name
     )
 
     send_email(

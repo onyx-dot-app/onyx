@@ -169,6 +169,73 @@ class TestModelConfigurationViewVisionFallback:
         assert view.supports_image_input is False
 
 
+# ModelConfigurationView.from_model — reasoning fallback (dynamic providers)
+
+
+class TestModelConfigurationViewReasoningFallback:
+    """supports_reasoning resolution in the dynamic/custom-config branch:
+    stored flow → LiteLLM cost map → name-substring heuristic."""
+
+    # In DYNAMIC_LLM_PROVIDERS
+    DYNAMIC_PROVIDER = "bifrost"
+
+    def _view(self, mc: MagicMock, litellm_reasoning: bool) -> ModelConfigurationView:
+        with patch(
+            "onyx.server.manage.llm.models.model_is_reasoning_model",
+            return_value=litellm_reasoning,
+        ):
+            return ModelConfigurationView.from_model(mc, self.DYNAMIC_PROVIDER)
+
+    def test_stored_reasoning_flow_wins(self) -> None:
+        """Stored REASONING flow → True without consulting the cost map."""
+        mc = _make_model_config(
+            name="friendly-chat-bot",
+            display_name="Friendly Chat Bot",
+            flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.REASONING],
+        )
+
+        view = self._view(mc, litellm_reasoning=False)
+
+        assert view.supports_reasoning is True
+
+    def test_falls_back_to_cost_map(self) -> None:
+        """No REASONING flow but the cost map knows the model → True (the fix);
+        vendor-prefixed IDs like this don't match the substring heuristic."""
+        mc = _make_model_config(
+            name="anthropic/claude-sonnet-4-5",
+            display_name="Claude Sonnet 4.5",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, litellm_reasoning=True)
+
+        assert view.supports_reasoning is True
+
+    def test_falls_back_to_name_heuristic_when_cost_map_unaware(self) -> None:
+        """No REASONING flow, cost map miss, but reasoning-named model → True."""
+        mc = _make_model_config(
+            name="DeepSeek-R1-Distill-Qwen-7B",
+            display_name="DeepSeek R1 Distill Qwen 7B",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, litellm_reasoning=False)
+
+        assert view.supports_reasoning is True
+
+    def test_false_when_no_flow_and_both_fallbacks_miss(self) -> None:
+        """No REASONING flow, cost map unaware, generic name → False."""
+        mc = _make_model_config(
+            name="openai/gpt-4o",
+            display_name="GPT-4o",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, litellm_reasoning=False)
+
+        assert view.supports_reasoning is False
+
+
 # ModelConfigurationView.from_model — static provider branch
 
 

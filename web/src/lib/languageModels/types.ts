@@ -1,4 +1,5 @@
 import type { OnboardingActions } from "@/interfaces/onboarding";
+import type { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 
 export interface ModelConfiguration {
   id?: number;
@@ -141,6 +142,8 @@ export interface LLMProviderFormProps {
   onOpenChange?: (open: boolean) => void;
   /** Called after successful provider creation/update. */
   onSuccess?: () => void | Promise<void>;
+  /** Overrides the analytics source derived from the variant. */
+  analyticsSource?: LLMProviderConfiguredSource;
 
   // Onboarding-specific (only when variant === "onboarding")
   onboardingActions?: OnboardingActions;

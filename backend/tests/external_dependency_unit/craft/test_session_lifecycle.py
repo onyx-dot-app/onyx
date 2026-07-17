@@ -368,8 +368,25 @@ class TestDeleteSession:
             is None
         )
 
+    @pytest.mark.parametrize(
+        ("delete_result", "expected_log"),
+        [
+            pytest.param(
+                RuntimeError("opencode offline"),
+                "Best-effort opencode session delete failed",
+                id="raises",
+            ),
+            pytest.param(
+                False,
+                "Best-effort opencode session delete returned false",
+                id="returns-false",
+            ),
+        ],
+    )
     def test_delete_session_ignores_live_opencode_delete_failure(
         self,
+        delete_result: bool | Exception,
+        expected_log: str,
         db_session: Session,
         test_user: User,
         sandbox: Callable[..., Sandbox],
@@ -381,17 +398,15 @@ class TestDeleteSession:
         session_row = BuildSession(
             id=uuid4(),
             user_id=test_user.id,
-            name="opencode-delete-fails",
+            name="opencode-delete-failure",
             status=BuildSessionStatus.ACTIVE,
-            opencode_session_id="ses_delete_fails",
+            opencode_session_id="ses_delete_failure",
         )
         db_session.add(session_row)
         db_session.commit()
 
         stub_sandbox_manager.cleanup_session_workspace_silent = True
-        stub_sandbox_manager.delete_opencode_session_returns = RuntimeError(
-            "opencode offline"
-        )
+        stub_sandbox_manager.delete_opencode_session_returns = delete_result
 
         with caplog.at_level(logging.WARNING):
             deleted = session_manager_with_stub.delete_session(
@@ -407,52 +422,7 @@ class TestDeleteSession:
             .one_or_none()
             is None
         )
-        assert any(
-            "Best-effort opencode session delete failed" in r.getMessage()
-            for r in caplog.records
-        )
-
-    def test_delete_session_ignores_live_opencode_delete_false(
-        self,
-        db_session: Session,
-        test_user: User,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        sandbox(user=test_user, status=SandboxStatus.RUNNING)
-        session_row = BuildSession(
-            id=uuid4(),
-            user_id=test_user.id,
-            name="opencode-delete-false",
-            status=BuildSessionStatus.ACTIVE,
-            opencode_session_id="ses_delete_false",
-        )
-        db_session.add(session_row)
-        db_session.commit()
-
-        stub_sandbox_manager.cleanup_session_workspace_silent = True
-        stub_sandbox_manager.delete_opencode_session_returns = False
-
-        with caplog.at_level(logging.WARNING):
-            deleted = session_manager_with_stub.delete_session(
-                session_id=session_row.id, user_id=test_user.id
-            )
-
-        assert deleted is True
-        assert stub_sandbox_manager.delete_opencode_session_count == 1
-        assert stub_sandbox_manager.cleanup_session_workspace_count == 1
-        assert (
-            db_session.query(BuildSession)
-            .filter(BuildSession.id == session_row.id)
-            .one_or_none()
-            is None
-        )
-        assert any(
-            "Best-effort opencode session delete returned false" in r.getMessage()
-            for r in caplog.records
-        )
+        assert any(expected_log in record.getMessage() for record in caplog.records)
 
     def test_delete_session_refuses_active_prompt_slot(
         self,
@@ -492,8 +462,10 @@ class TestDeleteSession:
             is not None
         )
 
-    def test_delete_session_allows_sleeping_sandbox_with_durable_opencode_history(
+    @pytest.mark.parametrize("has_history", [False, True])
+    def test_delete_session_allows_sleeping_sandbox(
         self,
+        has_history: bool,
         db_session: Session,
         test_user: User,
         sandbox: Callable[..., Sandbox],
@@ -504,59 +476,24 @@ class TestDeleteSession:
         session_row = BuildSession(
             id=uuid4(),
             user_id=test_user.id,
-            name="sleeping-opencode-owner",
+            name="sleeping-session",
             status=BuildSessionStatus.ACTIVE,
             opencode_session_id="ses_sleeping",
         )
         db_session.add(session_row)
         db_session.flush()
-        db_session.add(
-            BuildMessage(
-                session_id=session_row.id,
-                turn_index=0,
-                type=MessageType.ASSISTANT,
-                message_metadata={
-                    "type": "agent_message",
-                    "content": {"type": "text", "text": "built"},
-                },
+        if has_history:
+            db_session.add(
+                BuildMessage(
+                    session_id=session_row.id,
+                    turn_index=0,
+                    type=MessageType.ASSISTANT,
+                    message_metadata={
+                        "type": "agent_message",
+                        "content": {"type": "text", "text": "built"},
+                    },
+                )
             )
-        )
-        db_session.commit()
-
-        stub_sandbox_manager.supports_opencode_history_persistence = True
-
-        deleted = session_manager_with_stub.delete_session(
-            session_id=session_row.id, user_id=test_user.id
-        )
-        db_session.commit()
-
-        assert deleted is True
-        assert stub_sandbox_manager.delete_opencode_session_count == 0
-        assert stub_sandbox_manager.create_opencode_history_snapshot_count == 0
-        assert (
-            db_session.query(BuildSession)
-            .filter(BuildSession.id == session_row.id)
-            .one_or_none()
-            is None
-        )
-
-    def test_delete_session_allows_empty_session_in_sleeping_sandbox(
-        self,
-        db_session: Session,
-        test_user: User,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-    ) -> None:
-        sandbox(user=test_user, status=SandboxStatus.SLEEPING)
-        session_row = BuildSession(
-            id=uuid4(),
-            user_id=test_user.id,
-            name="sleeping-empty-session",
-            status=BuildSessionStatus.ACTIVE,
-            opencode_session_id="prewarmed-empty-opencode",
-        )
-        db_session.add(session_row)
         db_session.commit()
 
         stub_sandbox_manager.supports_opencode_history_persistence = True
@@ -1081,7 +1018,7 @@ class TestSidebarOriginFilter:
         db_session: Session,
         test_user: User,
     ) -> None:
-        """``get_user_build_sessions`` filters out ``origin=SCHEDULED`` rows.
+        """``get_user_build_sessions`` filters out non-INTERACTIVE rows.
 
         Relocated from ``backend/tests/integration/tests/craft/
         test_scheduled_tasks_api.py`` — the original test inserted
@@ -1095,12 +1032,12 @@ class TestSidebarOriginFilter:
         The covering composite index
         ``ix_build_session_user_origin_created`` is built for this exact
         ``(user_id, origin, created_at DESC)`` shape — a regression here
-        would silently leak scheduled-task fire sessions into the Craft
-        sidebar.
+        would silently leak scheduled-task fire or Slack sessions into the
+        Craft sidebar.
         """
-        # Both sessions need a BuildMessage row because
+        # Every session needs a BuildMessage row because
         # ``get_user_build_sessions`` requires ``EXISTS messages`` —
-        # without one, BOTH origin types would be filtered and we'd have
+        # without one, ALL origin types would be filtered and we'd have
         # nothing to compare against.
         interactive = BuildSession(
             id=uuid4(),
@@ -1116,7 +1053,14 @@ class TestSidebarOriginFilter:
             status=BuildSessionStatus.ACTIVE,
             origin=SessionOrigin.SCHEDULED,
         )
-        db_session.add_all([interactive, scheduled])
+        slack_session = BuildSession(
+            id=uuid4(),
+            user_id=test_user.id,
+            name="slack-thread",
+            status=BuildSessionStatus.ACTIVE,
+            origin=SessionOrigin.SLACK,
+        )
+        db_session.add_all([interactive, scheduled, slack_session])
         db_session.flush()
         db_session.add_all(
             [
@@ -1138,6 +1082,15 @@ class TestSidebarOriginFilter:
                         "content": {"text": "fire"},
                     },
                 ),
+                BuildMessage(
+                    session_id=slack_session.id,
+                    turn_index=0,
+                    type=MessageType.USER,
+                    message_metadata={
+                        "type": "user_message",
+                        "content": {"text": "@bot hi"},
+                    },
+                ),
             ]
         )
         db_session.commit()
@@ -1145,7 +1098,8 @@ class TestSidebarOriginFilter:
         listed = get_user_build_sessions(test_user.id, db_session)
         listed_ids = {s.id for s in listed}
 
-        # Observable outcome: the SCHEDULED row is invisible to the
+        # Observable outcome: SCHEDULED and SLACK rows are invisible to the
         # sidebar query while the INTERACTIVE row is visible.
         assert interactive.id in listed_ids
         assert scheduled.id not in listed_ids
+        assert slack_session.id not in listed_ids

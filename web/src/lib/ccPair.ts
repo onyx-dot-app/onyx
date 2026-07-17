@@ -1,5 +1,5 @@
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 
 export async function setCCPairStatus(
   ccPairId: number,

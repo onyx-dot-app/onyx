@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import {
   Button,
@@ -14,7 +14,6 @@ import {
 } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { toast } from "@/hooks/useToast";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import {
   SvgClock,

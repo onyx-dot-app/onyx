@@ -40,6 +40,9 @@ class IndexingStatus(str, PyEnum):
     IN_PROGRESS = "in_progress"
     SUCCESS = "success"
     CANCELED = "canceled"
+    # Worker stopped mid-run by infrastructure (deploy / autoscaling), not a real
+    # error or a user. Terminal but resumable, and not counted as a failure.
+    INTERRUPTED = "interrupted"
     FAILED = "failed"
     COMPLETED_WITH_ERRORS = "completed_with_errors"
 
@@ -48,9 +51,20 @@ class IndexingStatus(str, PyEnum):
             IndexingStatus.SUCCESS,
             IndexingStatus.COMPLETED_WITH_ERRORS,
             IndexingStatus.CANCELED,
+            IndexingStatus.INTERRUPTED,
             IndexingStatus.FAILED,
         }
         return self in terminal_states
+
+    def should_reuse_checkpoint(self) -> bool:
+        # Terminal states where the crawl stopped before finishing, so the next
+        # attempt continues from the saved checkpoint and poll window instead of
+        # restarting. SUCCESS / COMPLETED_WITH_ERRORS finished, so they start fresh.
+        return self in {
+            IndexingStatus.FAILED,
+            IndexingStatus.CANCELED,
+            IndexingStatus.INTERRUPTED,
+        }
 
     def is_successful(self) -> bool:
         return (
@@ -303,13 +317,16 @@ class SessionOrigin(str, PyEnum):
     """How a BuildSession was created.
 
     INTERACTIVE: session started by a user in the Craft UI.
-    SCHEDULED:   session started by the scheduled-tasks executor (or any
-                 future non-interactive caller). Sessions with this origin
-                 are excluded from the Craft sidebar list.
+    SCHEDULED:   session started by the scheduled-tasks executor. Sessions
+                 with this origin are excluded from the Craft sidebar list.
+    SLACK:       session started by a Slack thread mention. Surfaces in
+                 Slack (and a future admin list), not the user sidebar.
+                 Excluded from the Craft sidebar list.
     """
 
     INTERACTIVE = "INTERACTIVE"
     SCHEDULED = "SCHEDULED"
+    SLACK = "SLACK"
 
 
 class SharingScope(str, PyEnum):

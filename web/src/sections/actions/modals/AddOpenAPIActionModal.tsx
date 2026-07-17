@@ -4,7 +4,7 @@ import { markdown } from "@opal/utils";
 import Link from "next/link";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import { InputVertical } from "@opal/layouts";
+import { InputVertical, toast } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CopyButton } from "@opal/components";
@@ -22,7 +22,6 @@ import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
-import { toast } from "@/hooks/useToast";
 import {
   SvgActions,
   SvgBracketCurly,

@@ -22,7 +22,7 @@ in the user's connected apps. Use all available resources to best accomplish the
 - Be autonomous when building. Act within the turn rather than stopping to ask.
 
 {{DISABLED_TOOLS_SECTION}}
-
+{{ORGANIZATION_INSTRUCTIONS_SECTION}}
 ## Environment
 
 Ephemeral VM with Python 3.11 and Node v22. A Python virtual environment is already on your

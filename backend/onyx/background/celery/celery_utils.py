@@ -49,6 +49,7 @@ class SlimConnectorExtractionResult(BaseModel):
 
     raw_id_to_parent: dict[str, str | None]
     hierarchy_nodes: list[HierarchyNode]
+    id_to_created_at: dict[str, datetime]
 
 
 def _checkpointed_batched_items(
@@ -102,6 +103,7 @@ def _get_failure_id(failure: ConnectorFailure) -> str | None:
 class BatchResult(BaseModel):
     raw_id_to_parent: dict[str, str | None]
     hierarchy_nodes: list[HierarchyNode]
+    id_to_created_at: dict[str, datetime]
 
 
 def _extract_from_batch(
@@ -113,6 +115,7 @@ def _extract_from_batch(
     ID dict so that failed-to-retrieve documents are not accidentally pruned.
     """
     ids: dict[str, str | None] = {}
+    id_to_created_at: dict[str, datetime] = {}
     hierarchy_nodes: list[HierarchyNode] = []
     for item in doc_list:
         if isinstance(item, HierarchyNode):
@@ -126,7 +129,13 @@ def _extract_from_batch(
             )
         else:
             ids[item.id] = item.parent_hierarchy_raw_node_id
-    return BatchResult(raw_id_to_parent=ids, hierarchy_nodes=hierarchy_nodes)
+            if item.doc_created_at is not None:
+                id_to_created_at[item.id] = item.doc_created_at
+    return BatchResult(
+        raw_id_to_parent=ids,
+        hierarchy_nodes=hierarchy_nodes,
+        id_to_created_at=id_to_created_at,
+    )
 
 
 def extract_ids_from_runnable_connector(
@@ -145,6 +154,7 @@ def extract_ids_from_runnable_connector(
     """
     all_raw_id_to_parent: dict[str, str | None] = {}
     all_hierarchy_nodes: list[HierarchyNode] = []
+    all_id_to_created_at: dict[str, datetime] = {}
 
     # Pruning only needs doc ids, but non-slim tabular connectors won't yield a
     # doc without staging its CSV. Stage to a tracked list and reap in the finally
@@ -207,6 +217,7 @@ def extract_ids_from_runnable_connector(
             doc_batch_processing_func(batch_ids)
             all_raw_id_to_parent.update(batch_ids)
             all_hierarchy_nodes.extend(batch_nodes)
+            all_id_to_created_at.update(batch_result.id_to_created_at)
 
             if callback:
                 callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
@@ -233,6 +244,7 @@ def extract_ids_from_runnable_connector(
     return SlimConnectorExtractionResult(
         raw_id_to_parent=all_raw_id_to_parent,
         hierarchy_nodes=all_hierarchy_nodes,
+        id_to_created_at=all_id_to_created_at,
     )
 
 

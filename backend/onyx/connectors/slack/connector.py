@@ -336,6 +336,7 @@ def thread_to_doc(
         source=DocumentSource.SLACK,
         semantic_identifier=doc_sem_id,
         doc_updated_at=get_latest_message_time(thread),
+        doc_created_at=datetime.fromtimestamp(float(thread[0]["ts"]), tz=timezone.utc),
         primary_owners=valid_experts,
         doc_metadata={
             "hierarchy": {
@@ -709,6 +710,10 @@ def _get_all_doc_ids(
                         ),
                         external_access=external_access,
                         parent_hierarchy_raw_node_id=channel_id,
+                        # Slack ts is the thread root's creation time (epoch seconds)
+                        doc_created_at=datetime.fromtimestamp(
+                            float(message["ts"]), tz=timezone.utc
+                        ),
                     )
                 )
 

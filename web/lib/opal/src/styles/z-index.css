@@ -10,13 +10,18 @@
      over pinned columns without being obscured. */
   --z-settings-header: 11;
 
-  /* Interactive overlays */
+  /* Interactive overlays. Toasts sit below popovers so an open menu is
+     never obscured by a passive notification. */
+  --z-toast: 1100;
   --z-popover: 1200;
   --z-tooltip: 1300;
 }
 
 .z-settings-header {
   z-index: var(--z-settings-header);
+}
+.z-toast {
+  z-index: var(--z-toast);
 }
 .z-popover {
   z-index: var(--z-popover);

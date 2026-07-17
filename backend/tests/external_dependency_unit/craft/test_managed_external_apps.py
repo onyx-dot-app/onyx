@@ -1,8 +1,8 @@
 """Onyx-managed (cloud) built-in external apps: registry invariants + cloud guards.
 
-Covers the cloud lockdown in ``external_apps_api`` (admins may only
-enable/disable + set policies on built-in apps; never create, edit
-credentials/config, or delete them). See
+Covers the cloud lockdown in ``external_apps_api`` (admins may only set
+policies on built-in apps; never create, edit credentials/config, or delete
+them). See
 ``docs/craft/features/external-apps/cloud-managed-app-credentials.md``.
 
 Built-in apps are seeded into existing tenants by an Alembic migration rather
@@ -64,7 +64,7 @@ def _seed_built_in(
     app_type: ExternalAppType,
     credentials: dict[str, str],
 ) -> None:
-    """Directly seed a built-in external app (disabled), standing in for the
+    """Directly seed a built-in external app, standing in for the
     migration that seeds these per tenant, so the cloud-guard tests have a
     managed app to act on."""
     create_external_app(
@@ -77,7 +77,6 @@ def _seed_built_in(
         upstream_url_patterns=list(_GMAIL_PATTERNS),
         auth_template={"Authorization": "Bearer {access_token}"},
         organization_credentials=credentials,
-        enabled=False,
         is_public=True,
         action_policies=None,
     )
@@ -88,7 +87,6 @@ def _create_request(
     *,
     name: str = "Gmail",
     description: str = "",
-    enabled: bool = True,
     upstream_url_patterns: list[str] | None = None,
     auth_template: dict[str, Any] | None = None,
     organization_credentials: dict[str, str] | None = None,
@@ -97,7 +95,6 @@ def _create_request(
     return CreateBuiltInExternalAppRequest(
         name=name,
         description=description,
-        enabled=enabled,
         app_type=ExternalAppType.GMAIL,
         upstream_url_patterns=upstream_url_patterns or [],
         auth_template=auth_template or {},
@@ -143,14 +140,12 @@ def test_cloud_blocks_built_in_create(
     assert get_built_in_external_app(db_session, ExternalAppType.GMAIL) is None
 
 
-def test_cloud_patch_toggles_enablement_and_protects_creds_and_config(
+def test_cloud_patch_updates_policies_and_protects_creds_and_config(
     db_session: Session,
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The PATCH path flips enablement for a managed built-in; credentials +
-    gateway config are Onyx-owned and ignored even when the request carries them,
-    and the response blanks them."""
+    """Managed app configuration is Onyx-owned and omitted from the response."""
     _seed_built_in(db_session, ExternalAppType.GMAIL, _GMAIL_CREDS)
     gmail = get_built_in_external_app(db_session, ExternalAppType.GMAIL)
     assert gmail is not None
@@ -160,12 +155,10 @@ def test_cloud_patch_toggles_enablement_and_protects_creds_and_config(
     monkeypatch.setattr(api, "MULTI_TENANT", True)
     monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
 
-    # The request supplies config fields too; for a managed app they must be
-    # silently ignored (Onyx-owned), with only enablement applied.
+    # The request supplies config fields; managed apps ignore them.
     resp = api.update_external_app_admin(
         external_app_id=app_id,
         request=UpdateExternalAppRequest(
-            enabled=True,
             upstream_url_patterns=["https://evil.example.com/.*"],
             auth_template={"client_id": "attacker"},
             organization_credentials={"client_secret": "attacker"},
@@ -177,12 +170,10 @@ def test_cloud_patch_toggles_enablement_and_protects_creds_and_config(
     assert resp.organization_credentials == {}
     assert resp.auth_template == {}
     assert resp.upstream_url_patterns == []
-    assert resp.enabled is True
 
     db_session.expire_all()
     gmail = get_built_in_external_app(db_session, ExternalAppType.GMAIL)
     assert gmail is not None
-    assert gmail.skill.enabled is True
     assert gmail.organization_credentials.get_value(apply_mask=False) == _GMAIL_CREDS
     assert list(gmail.upstream_url_patterns) == seeded_patterns
 

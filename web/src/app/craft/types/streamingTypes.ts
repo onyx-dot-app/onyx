@@ -4,7 +4,7 @@
 
 export type SharingScope = "private" | "public_org";
 
-export type SessionOrigin = "INTERACTIVE" | "SCHEDULED";
+export type SessionOrigin = "INTERACTIVE" | "SCHEDULED" | "SLACK";
 
 // =============================================================================
 // Session Error Constants

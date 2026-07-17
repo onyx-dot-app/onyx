@@ -18,7 +18,7 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/banners/HealthBanner";
-import LicenseExpiryBanner from "@/sections/banners/LicenseExpiryBanner";
+import BannerQueue from "@/sections/banners/BannerQueue";
 import { AuthenticationShell } from "@/lib/auth/components";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
@@ -124,7 +124,7 @@ export default function Layout({ children }: LayoutProps) {
               <PHProvider>
                 <SWRConfigProvider>
                   <AppHealthBanner />
-                  <LicenseExpiryBanner />
+                  <BannerQueue />
                   <AuthenticationShell>
                     <AppProvider>
                       <PostHogRuntimeInitializer />

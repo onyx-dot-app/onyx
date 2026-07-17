@@ -7,7 +7,7 @@ import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
 import Text from "@/refresh-components/texts/Text";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { inviteUsers } from "./svc";

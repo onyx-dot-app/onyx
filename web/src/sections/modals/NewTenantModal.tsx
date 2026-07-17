@@ -3,14 +3,13 @@
 import { useState } from "react";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
-import { toast } from "@/hooks/useToast";
 import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
 import { logout } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
-import { InputErrorText } from "@opal/layouts";
+import { InputErrorText, toast } from "@opal/layouts";
 
 // App domain should not be hardcoded
 const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "onyx.app";

@@ -9,27 +9,36 @@ const SELECTOR = "[data-main-container]";
 interface ContainerCenter {
   centerX: number | null;
   centerY: number | null;
+  /** Viewport x of the container's left edge (the sidebar/content boundary). */
+  left: number | null;
   hasContainerCenter: boolean;
 }
 
-const NULL_CENTER = { x: null, y: null } as const;
+const NULL_MEASURE = { x: null, y: null, left: null } as const;
 
-function measure(el: HTMLElement): { x: number; y: number } | null {
+function measure(
+  el: HTMLElement
+): { x: number; y: number; left: number } | null {
   if (!el.isConnected) return null;
   const rect = el.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return null;
-  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+    left: rect.left,
+  };
 }
 
 /**
- * Tracks the center point of the `[data-main-container]` element so that
- * portaled overlays (modals, command menus) can center relative to the main
- * content area rather than the full viewport.
+ * Tracks the geometry of the `[data-main-container]` element so overlays can
+ * position relative to the main content area rather than the full viewport:
+ * `centerX`/`centerY` for portaled modals and command menus, `left` for
+ * content-anchored surfaces like the bottom-left banner queue.
  *
- * Returns `{ centerX, centerY, hasContainerCenter }`.
- * When the container is not present (e.g. pages without `AppLayouts.Root`),
- * both center values are `null` and `hasContainerCenter` is `false`, allowing
- * callers to fall back to standard viewport centering.
+ * When the container is absent (pages without `AppLayouts.Root`) or the
+ * sidebar overlays the content on medium screens, every value is `null` and
+ * `hasContainerCenter` is `false`, so callers fall back to viewport-relative
+ * positioning.
  *
  * Uses a lazy `useState` initializer so the first render already has the
  * correct values (no flash), and a `ResizeObserver` to stay reactive when
@@ -39,39 +48,61 @@ function measure(el: HTMLElement): { x: number; y: number } | null {
 export default function useContainerCenter(): ContainerCenter {
   const pathname = usePathname();
   const { isMediumScreen } = useScreenSize();
-  const [center, setCenter] = useState<{ x: number | null; y: number | null }>(
-    () => {
-      if (typeof document === "undefined") return NULL_CENTER;
-      const el = document.querySelector<HTMLElement>(SELECTOR);
-      if (!el) return NULL_CENTER;
-      const m = measure(el);
-      return m ?? NULL_CENTER;
-    }
-  );
+  const [rect, setRect] = useState<{
+    x: number | null;
+    y: number | null;
+    left: number | null;
+  }>(() => {
+    if (typeof document === "undefined") return NULL_MEASURE;
+    const el = document.querySelector<HTMLElement>(SELECTOR);
+    if (!el) return NULL_MEASURE;
+    const m = measure(el);
+    return m ?? NULL_MEASURE;
+  });
 
   useEffect(() => {
-    const container = document.querySelector<HTMLElement>(SELECTOR);
-    if (!container) {
-      setCenter(NULL_CENTER);
-      return;
-    }
+    let resizeObserver: ResizeObserver | null = null;
+    let mutationObserver: MutationObserver | null = null;
 
-    const update = () => {
-      const m = measure(container);
-      setCenter(m ?? NULL_CENTER);
+    const attach = (container: HTMLElement) => {
+      const update = () => setRect(measure(container) ?? NULL_MEASURE);
+      update();
+      resizeObserver = new ResizeObserver(update);
+      resizeObserver.observe(container);
     };
 
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(container);
-    return () => observer.disconnect();
+    const existing = document.querySelector<HTMLElement>(SELECTOR);
+    if (existing) {
+      attach(existing);
+    } else {
+      // The container can mount after this hook (e.g. a root-level consumer
+      // renders before the auth shell reveals the chrome). Watch for it.
+      setRect(NULL_MEASURE);
+      mutationObserver = new MutationObserver(() => {
+        const el = document.querySelector<HTMLElement>(SELECTOR);
+        if (!el) return;
+        mutationObserver?.disconnect();
+        mutationObserver = null;
+        attach(el);
+      });
+      mutationObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    }
+
+    return () => {
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+    };
   }, [pathname]);
 
   return {
-    centerX: isMediumScreen ? null : center.x,
-    centerY: isMediumScreen ? null : center.y,
+    centerX: isMediumScreen ? null : rect.x,
+    centerY: isMediumScreen ? null : rect.y,
+    left: isMediumScreen ? null : rect.left,
     hasContainerCenter: isMediumScreen
       ? false
-      : center.x !== null && center.y !== null,
+      : rect.x !== null && rect.y !== null,
   };
 }

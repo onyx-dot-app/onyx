@@ -222,6 +222,8 @@ class DocumentBase(BaseModel):
 
     # UTC time
     doc_updated_at: datetime | None = None
+    # UTC source creation time.
+    doc_created_at: datetime | None = None
     chunk_count: int | None = None
 
     # Owner, creator, etc.
@@ -420,6 +422,7 @@ class Document(DocumentBase):
             semantic_identifier=base.semantic_identifier,
             metadata=base.metadata,
             doc_updated_at=base.doc_updated_at,
+            doc_created_at=base.doc_created_at,
             primary_owners=base.primary_owners,
             secondary_owners=base.secondary_owners,
             title=base.title,
@@ -463,6 +466,8 @@ class SlimDocument(BaseModel):
     id: str
     external_access: ExternalAccess | None = None
     parent_hierarchy_raw_node_id: str | None = None
+    # UTC source creation time.
+    doc_created_at: datetime | None = None
 
 
 class HierarchyNode(BaseModel):

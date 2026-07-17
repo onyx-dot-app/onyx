@@ -6,6 +6,7 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
+from ee.onyx.external_permissions.utils import credential_json
 from onyx.configs.app_configs import SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
 from onyx.connectors.sharepoint.connector import acquire_token_for_rest
 from onyx.connectors.sharepoint.connector import SharepointConnector
@@ -26,12 +27,7 @@ def sharepoint_group_sync(
 
     # Create SharePoint connector instance and load credentials
     connector = SharepointConnector(**connector_config)
-    credential_json = (
-        cc_pair.credential.credential_json.get_value(apply_mask=False)
-        if cc_pair.credential.credential_json
-        else {}
-    )
-    connector.load_credentials(credential_json)
+    connector.load_credentials(credential_json(cc_pair))
 
     if not connector.msal_app:
         raise RuntimeError("MSAL app not initialized in connector")

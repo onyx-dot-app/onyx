@@ -2,10 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { useSWRConfig } from "swr";
-import { toast } from "@/hooks/useToast";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import { PageLoader } from "@/refresh-components/PageLoader";
-import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
+import { Content, ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import {
   Button,
   Divider,
@@ -40,25 +39,53 @@ function providerDisplayName(provider: LLMProviderView): string {
 }
 
 // ============================================================================
-// Provider form mapping (keyed by provider name from the API)
+// Provider grouping (keyed by provider name from the API)
 // ============================================================================
 
-// Static list of well-known providers rendered in the "Add Provider" grid.
-// Must match the backend's WELL_KNOWN_PROVIDER_NAMES (minus any that lack a
-// dedicated modal). Order here controls display order.
-const PROVIDER_DISPLAY_ORDER: string[] = [
-  LLMProviderName.OPENAI,
-  LLMProviderName.ANTHROPIC,
-  LLMProviderName.VERTEX_AI,
-  LLMProviderName.BEDROCK,
-  LLMProviderName.AZURE,
-  LLMProviderName.LITELLM_PROXY,
-  LLMProviderName.OLLAMA_CHAT,
-  LLMProviderName.OPENROUTER,
-  LLMProviderName.LM_STUDIO,
-  LLMProviderName.BIFROST,
-  LLMProviderName.OPENAI_COMPATIBLE,
-  LLMProviderName.NEBIUS_TOKENFACTORY,
+// The "Add Provider" area is split into labeled groups. Provider names must
+// match the backend's WELL_KNOWN_PROVIDER_NAMES (minus any that lack a
+// dedicated modal); order within each group controls display order.
+interface ProviderGroup {
+  title: string;
+  description?: string;
+  // Emphasized (main-content) header vs. a lighter secondary sub-header.
+  emphasis?: boolean;
+  providerNames: string[];
+  // Append the custom-provider card to this group.
+  includeCustom?: boolean;
+}
+
+const PROVIDER_GROUPS: ProviderGroup[] = [
+  {
+    title: "Add Provider",
+    description: "Onyx supports both popular providers and self-hosted models.",
+    emphasis: true,
+    providerNames: [
+      LLMProviderName.OPENAI,
+      LLMProviderName.ANTHROPIC,
+      LLMProviderName.VERTEX_AI,
+      LLMProviderName.BEDROCK,
+      LLMProviderName.AZURE,
+    ],
+  },
+  {
+    title: "Gateways & Routers",
+    providerNames: [
+      LLMProviderName.OPENROUTER,
+      LLMProviderName.LITELLM_PROXY,
+      LLMProviderName.NEBIUS_TOKENFACTORY,
+      LLMProviderName.BIFROST,
+    ],
+  },
+  {
+    title: "Self-hosted & Custom",
+    providerNames: [
+      LLMProviderName.OLLAMA_CHAT,
+      LLMProviderName.LM_STUDIO,
+      LLMProviderName.OPENAI_COMPATIBLE,
+    ],
+    includeCustom: true,
+  },
 ];
 
 // ============================================================================
@@ -441,32 +468,45 @@ export default function LanguageModelsPage() {
           />
         )}
 
-        {/* ── Add Provider (always visible) ── */}
+        {/* ── Add Provider groups (always visible) ── */}
         <Disabled disabled={isConfigurationDisabled}>
-          <GeneralLayouts.Section
-            gap={0.75}
-            height="fit"
-            alignItems="stretch"
-            justifyContent="start"
-          >
-            <Content
-              title="Add Provider"
-              description="Onyx supports both popular providers and self-hosted models."
-              sizePreset="main-content"
-              variant="section"
-            />
+          <div className="flex flex-col gap-8">
+            {PROVIDER_GROUPS.map((group) => (
+              <GeneralLayouts.Section
+                key={group.title}
+                gap={0.75}
+                height="fit"
+                alignItems="stretch"
+                justifyContent="start"
+              >
+                {group.emphasis ? (
+                  <Content
+                    title={group.title}
+                    description={group.description}
+                    sizePreset="main-content"
+                    variant="section"
+                  />
+                ) : (
+                  <Text font="main-ui-action" color="text-03">
+                    {group.title}
+                  </Text>
+                )}
 
-            <div className="grid grid-cols-2 gap-2">
-              {PROVIDER_DISPLAY_ORDER.map((name) => (
-                <NewProviderCard
-                  key={name}
-                  providerName={name}
-                  isFirstProvider={isFirstProvider}
-                />
-              ))}
-              <NewCustomProviderCard isFirstProvider={isFirstProvider} />
-            </div>
-          </GeneralLayouts.Section>
+                <div className="grid grid-cols-2 gap-2">
+                  {group.providerNames.map((name) => (
+                    <NewProviderCard
+                      key={name}
+                      providerName={name}
+                      isFirstProvider={isFirstProvider}
+                    />
+                  ))}
+                  {group.includeCustom && (
+                    <NewCustomProviderCard isFirstProvider={isFirstProvider} />
+                  )}
+                </div>
+              </GeneralLayouts.Section>
+            ))}
+          </div>
         </Disabled>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

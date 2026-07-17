@@ -1,29 +1,16 @@
 import contextlib
 import secrets
 import string
-import uuid
 from typing import Any
 from urllib.parse import urlparse
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Request
-from fastapi import Response
-from fastapi import status
 from fastapi_users import exceptions
-from fastapi_users.authentication import Strategy
-from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from pydantic import BaseModel
 
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
-from onyx.auth.users import auth_backend
-from onyx.auth.users import fastapi_users
 from onyx.auth.users import get_user_manager
-from onyx.auth.users import UserManager
-from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
-from onyx.configs.app_configs import SAML_CONF_DIR
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
@@ -32,7 +19,6 @@ from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-router = APIRouter(prefix="/auth/saml")
 
 # Azure AD / Entra ID often returns the email attribute under different keys.
 # Keep a list of common variations so we can fall back gracefully if the IdP
@@ -113,7 +99,8 @@ async def upsert_saml_user(email: str) -> User:
                         password=secure_random_password,  # Pass raw password, not hash
                         role=role,
                         is_verified=True,  # SAML users are pre-verified by their IdP
-                    )
+                    ),
+                    sso_managed=True,
                 )
 
                 return user
@@ -187,111 +174,3 @@ def _sanitize_relay_state(candidate: str | None) -> str | None:
         return None
 
     return relay_state
-
-
-@router.get("/authorize")
-async def saml_login(request: Request) -> SAMLAuthorizeResponse:
-    req = await prepare_from_fastapi_request(request)
-    auth = OneLogin_Saml2_Auth(req, custom_base_path=SAML_CONF_DIR)
-    return_to = _sanitize_relay_state(request.query_params.get("next"))
-    callback_url = auth.login(return_to=return_to)
-    return SAMLAuthorizeResponse(authorization_url=callback_url)
-
-
-@router.get("/callback")
-async def saml_login_callback_get(
-    request: Request,
-    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
-    user_manager: UserManager = Depends(get_user_manager),
-) -> Response:
-    """Handle SAML callback via HTTP-Redirect binding (GET request)"""
-    return await _process_saml_callback(request, strategy, user_manager)
-
-
-@router.post("/callback")
-async def saml_login_callback(
-    request: Request,
-    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
-    user_manager: UserManager = Depends(get_user_manager),
-) -> Response:
-    """Handle SAML callback via HTTP-POST binding (POST request)"""
-    return await _process_saml_callback(request, strategy, user_manager)
-
-
-async def _process_saml_callback(
-    request: Request,
-    strategy: Strategy[User, uuid.UUID],
-    user_manager: UserManager,
-) -> Response:
-    req = await prepare_from_fastapi_request(request)
-    auth = OneLogin_Saml2_Auth(req, custom_base_path=SAML_CONF_DIR)
-    auth.process_response()
-    errors = auth.get_errors()
-    if len(errors) != 0:
-        logger.error(
-            "Error when processing SAML Response: %s %s"
-            % (", ".join(errors), auth.get_last_error_reason())
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. Failed to parse SAML Response.",
-        )
-
-    if not auth.is_authenticated():
-        detail = "Access denied. User was not authenticated"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=detail,
-        )
-
-    user_email: str | None = None
-
-    # The OneLogin toolkit normalizes attribute keys, but still performs a
-    # case-sensitive lookup. Try the common keys first and then fall back to a
-    # case-insensitive scan of all returned attributes.
-    for attribute_key in EMAIL_ATTRIBUTE_KEYS:
-        attribute_values = auth.get_attribute(attribute_key)
-        if attribute_values:
-            user_email = attribute_values[0]
-            break
-
-    if not user_email:
-        # Fallback: perform a case-insensitive lookup across all attributes in
-        # case the IdP sent the email claim with a different capitalization.
-        attributes = auth.get_attributes()
-        for key, values in attributes.items():
-            if key.lower() in EMAIL_ATTRIBUTE_KEYS_LOWER:
-                if values:
-                    user_email = values[0]
-                    break
-        if not user_email:
-            detail = "SAML is not set up correctly, email attribute must be provided."
-            logger.error(detail)
-            logger.debug(
-                "Received SAML attributes without email: %s",
-                list(attributes.keys()),
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=detail,
-            )
-
-    user = await upsert_saml_user(email=user_email)
-
-    response = await auth_backend.login(strategy, user)
-    await user_manager.on_after_login(user, request, response)
-    return response
-
-
-@router.post("/logout")
-async def saml_logout(
-    user_token: tuple[User, str] = Depends(
-        fastapi_users.authenticator.current_user_token(
-            active=True, verified=REQUIRE_EMAIL_VERIFICATION
-        )
-    ),
-    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
-) -> Response:
-    user, token = user_token
-    return await auth_backend.logout(strategy, user, token)

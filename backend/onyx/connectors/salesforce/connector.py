@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -31,6 +32,7 @@ from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
+from onyx.connectors.salesforce.utils import CREATED_FIELD
 from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.connectors.salesforce.utils import MODIFIED_FIELD
 from onyx.connectors.salesforce.utils import NAME_FIELD
@@ -967,6 +969,10 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
                 # field_set.add(NAME_FIELD) # does not always exist
                 field_set.add(ID_FIELD)
                 field_set.add(MODIFIED_FIELD)
+                # Like NAME_FIELD, CreatedDate isn't on every sobject; only
+                # request it when present so it can't break the whole SOQL query.
+                if CREATED_FIELD in sf_client.get_queryable_fields_by_type(parent_type):
+                    field_set.add(CREATED_FIELD)
 
                 # Use only the specified fields
                 type_to_queryable_fields[parent_type] = field_set
@@ -1160,12 +1166,24 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
             # parent_object_type comes from connector config; SOQL has no
             # parameter binding for table identifiers, so validate it.
             validate_sf_identifier(parent_object_type)
-            query = f"SELECT Id FROM {parent_object_type}"  # noqa: S608
+            # CreatedDate isn't on every sobject; only request it when present so
+            # it can't break the whole SOQL query. Checked once per parent type.
+            has_created_field = (
+                CREATED_FIELD
+                in self.sf_client.get_queryable_fields_by_type(parent_object_type)
+            )
+            select_fields = "Id, CreatedDate" if has_created_field else "Id"
+            query = f"SELECT {select_fields} FROM {parent_object_type}"  # noqa: S608
             query_result = self.sf_client.safe_query_all(query)
             doc_metadata_list.extend(
                 SlimDocument(
                     id=f"{ID_PREFIX}{instance_dict.get('Id', '')}",
                     external_access=None,
+                    doc_created_at=(
+                        time_str_to_utc(instance_dict.get(CREATED_FIELD))
+                        if instance_dict.get(CREATED_FIELD)
+                        else None
+                    ),
                 )
                 for instance_dict in query_result["records"]
             )

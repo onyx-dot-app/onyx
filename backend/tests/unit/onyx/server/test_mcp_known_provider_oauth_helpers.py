@@ -16,18 +16,18 @@ from mcp.shared.auth import OAuthToken
 from pydantic import AnyHttpUrl
 from pydantic import AnyUrl
 
-import onyx.server.features.mcp.api as mcp_api
+import onyx.server.features.mcp.oauth as mcp_oauth
 from onyx.auth.oauth_token_manager import build_oauth_authorization_url
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
 from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.mcp.api import _absolute_token_expiry
-from onyx.server.features.mcp.api import _known_provider_oauth_metadata
 from onyx.server.features.mcp.api import _mcp_known_provider_flow_params
-from onyx.server.features.mcp.api import _token_dict_with_preserved_refresh
-from onyx.server.features.mcp.api import make_oauth_provider
 from onyx.server.features.mcp.models import MCPOAuthKeys
+from onyx.server.features.mcp.oauth import _absolute_token_expiry
+from onyx.server.features.mcp.oauth import _known_provider_oauth_metadata
+from onyx.server.features.mcp.oauth import _token_dict_with_preserved_refresh
+from onyx.server.features.mcp.oauth import make_oauth_provider
 
 
 def _make_mcp_server_stub(
@@ -229,7 +229,7 @@ def test_absolute_token_expiry_from_expires_in() -> None:
     assert expiry is not None
     # The expiry is `now + expires_in` pulled back by the refresh buffer so we
     # refresh slightly early; bound the assertion the same way.
-    buffer = mcp_api.TOKEN_EXPIRY_BUFFER_SECONDS
+    buffer = mcp_oauth.TOKEN_EXPIRY_BUFFER_SECONDS
     assert before + 3600 - buffer <= expiry <= time.time() + 3600 - buffer
 
 
@@ -259,13 +259,15 @@ def _patch_config_read(
     def _fake_session() -> Iterator[object]:
         yield object()
 
-    monkeypatch.setattr(mcp_api, "get_session_with_current_tenant", _fake_session)
+    monkeypatch.setattr(mcp_oauth, "get_session_with_current_tenant", _fake_session)
     monkeypatch.setattr(
-        mcp_api.OnyxTokenStorage,
+        mcp_oauth.OnyxTokenStorage,
         "_ensure_connection_config",
         lambda _self, _db: SimpleNamespace(id=1),
     )
-    monkeypatch.setattr(mcp_api, "extract_connection_data", lambda _config: config_data)
+    monkeypatch.setattr(
+        mcp_oauth, "extract_connection_data", lambda _config: config_data
+    )
 
 
 def test_make_oauth_provider_sets_known_provider_metadata_and_binds_storage() -> None:
@@ -277,7 +279,7 @@ def test_make_oauth_provider_sets_known_provider_metadata_and_binds_storage() ->
         == "https://accounts.example.com/oauth/token"
     )
     # Storage is wired to hydrate expiry from the config read it already does.
-    storage = cast(mcp_api.OnyxTokenStorage, provider.context.storage)
+    storage = cast(mcp_oauth.OnyxTokenStorage, provider.context.storage)
     assert storage._oauth_context is provider.context
 
 
@@ -285,6 +287,11 @@ def test_make_oauth_provider_auto_discovery_leaves_metadata_unset() -> None:
     provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
     assert provider.context.oauth_metadata is None
     assert provider.context.token_expiry_time is None
+
+
+def test_make_oauth_provider_auto_discovery_requests_public_pkce_client() -> None:
+    provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
+    assert provider.context.client_metadata.token_endpoint_auth_method == "none"
 
 
 def test_get_tokens_hydrates_expiry_and_invalidates_expired_token(
@@ -338,7 +345,7 @@ def _patch_config_store(
     returns it, so mutations land in place; the update is a no-op)."""
     _patch_config_read(monkeypatch, config_data)
     monkeypatch.setattr(
-        mcp_api, "update_connection_config", lambda *_args, **_kwargs: None
+        mcp_oauth, "update_connection_config", lambda *_args, **_kwargs: None
     )
 
 

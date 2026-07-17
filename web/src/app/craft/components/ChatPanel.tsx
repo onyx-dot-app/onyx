@@ -31,14 +31,17 @@ import {
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { isScheduledRunContextInFlight } from "@/app/craft/v1/tasks/utils";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import Dropzone from "react-dropzone";
 import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
-import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
+import {
+  BuildLlmSelection,
+  hasSupportedCraftProvider,
+} from "@/app/craft/onboarding/constants";
 import ScheduledRunBanner, {
   useScheduledRunContext,
 } from "@/app/craft/components/ScheduledRunBanner";
@@ -99,6 +102,9 @@ export default function BuildChatPanel({
   const onWakeIntent = useWakeOnIntent();
 
   const { llmProviders } = useLLMProviders();
+  // Sessions can outlive the org's supported providers — gate sends until one
+  // exists (the model picker stays enabled so admins can connect from it).
+  const hasProvider = hasSupportedCraftProvider(llmProviders);
   // Picker shows the session's stored model unless the user picks another.
   // The pick is keyed by session so it can't leak across sessions.
   const sessionModel = useMemo<BuildLlmSelection | null>(() => {
@@ -798,7 +804,9 @@ export default function BuildChatPanel({
                     onInterrupt={
                       scheduledRunInFlight ? undefined : handleInterrupt
                     }
-                    disabled={isViewingSubagent || scheduledRunInFlight}
+                    disabled={
+                      isViewingSubagent || scheduledRunInFlight || !hasProvider
+                    }
                     placeholder={
                       isViewingSubagent
                         ? "Switch to the main agent to send a message"

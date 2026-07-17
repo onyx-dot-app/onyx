@@ -274,11 +274,13 @@ def get_federated_retrieval_functions(
             ent: dict[str, Any],
             token: str,
         ) -> Callable[[ChunkIndexRequest], list[InferenceChunk]]:
-            return lambda query: conn.search(
-                query,
-                ent,
-                access_token=token,
-                limit=None,  # Let connector use its own max_messages_per_query config
+            return (
+                lambda query: conn.search(
+                    query,
+                    ent,
+                    access_token=token,
+                    limit=None,  # Let connector use its own max_messages_per_query config
+                )
             )
 
         federated_retrieval_infos.append(

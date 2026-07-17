@@ -20,14 +20,15 @@ from tests.integration.common_utils.test_models import DATestUser
 _BUILD_PREFIX = f"{API_SERVER_URL}/build"
 
 
-def _minimal_bundle_zip() -> bytes:
+def _minimal_bundle_zip(skill_name: str) -> bytes:
     """A valid skill bundle (SKILL.md + helper file) for creating bundle-backed
     custom apps through the admin endpoint."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr(
             "SKILL.md",
-            "---\nname: Bundle Name\ndescription: Bundle description\n---\n\nDo things.\n",
+            f"---\nname: {skill_name}\ndescription: Bundle description\n"
+            "---\n\nDo things.\n",
         )
         zf.writestr("helper.py", "print('hello')\n")
     return buf.getvalue()
@@ -48,7 +49,6 @@ class ExternalAppManager:
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool = True,
         app_type: ExternalAppType = ExternalAppType.CUSTOM,
         action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
@@ -61,7 +61,6 @@ class ExternalAppManager:
             upstream_url_patterns,
             auth_template,
             organization_credentials,
-            enabled,
             action_policies,
         )
 
@@ -74,7 +73,6 @@ class ExternalAppManager:
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool = True,
         app_type: ExternalAppType = ExternalAppType.CUSTOM,
         action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
@@ -87,7 +85,6 @@ class ExternalAppManager:
             upstream_url_patterns,
             auth_template,
             organization_credentials,
-            enabled,
             action_policies,
         )
 
@@ -101,7 +98,6 @@ class ExternalAppManager:
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool,
         action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         # Update (``app_id`` set) is type-agnostic — the JSON PATCH edits fields
@@ -114,7 +110,6 @@ class ExternalAppManager:
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template=auth_template,
                 organization_credentials=organization_credentials,
-                enabled=enabled,
                 action_policies=action_policies,
             )
             response = client.patch(
@@ -131,7 +126,6 @@ class ExternalAppManager:
                 upstream_url_patterns,
                 auth_template,
                 organization_credentials,
-                enabled,
             )
         else:
             create_body = CreateBuiltInExternalAppRequest(
@@ -141,7 +135,6 @@ class ExternalAppManager:
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template=auth_template,
                 organization_credentials=organization_credentials,
-                enabled=enabled,
                 action_policies=action_policies,
             )
             response = client.post(
@@ -161,7 +154,6 @@ class ExternalAppManager:
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool,
     ) -> Any:
         """POST the multipart custom-app create endpoint (bundle required)."""
         data: dict[str, str] = {
@@ -170,14 +162,14 @@ class ExternalAppManager:
             "upstream_url_patterns": json.dumps(upstream_url_patterns),
             "auth_template": json.dumps(auth_template),
             "organization_credentials": json.dumps(organization_credentials),
-            "enabled": str(enabled).lower(),
         }
-        # Unique filename → unique slug, so repeated creates within one test
-        # don't collide on the bundle-derived skill slug.
+        # Each bundle needs a unique canonical name while slug uniqueness is
+        # still enforced by the current persistence model.
+        skill_name = f"custom-{uuid4().hex[:8]}"
         files: dict[str, tuple[str, bytes, str]] = {
             "bundle": (
-                f"custom-{uuid4().hex[:8]}.zip",
-                _minimal_bundle_zip(),
+                f"{skill_name}.zip",
+                _minimal_bundle_zip(skill_name),
                 "application/zip",
             )
         }
@@ -193,27 +185,6 @@ class ExternalAppManager:
             headers=headers,
             cookies=user_performing_action.cookies,
         )
-
-    @staticmethod
-    def set_enablement(
-        user_performing_action: DATestUser,
-        app_id: int,
-        enabled: bool,
-        action_policies: dict[str, EndpointPolicy] | None = None,
-    ) -> ExternalAppAdminResponse:
-        """PATCH the update endpoint with just enablement + policies, keyed by id."""
-        body = UpdateExternalAppRequest(
-            enabled=enabled,
-            action_policies=action_policies,
-        )
-        response = client.patch(
-            f"{_BUILD_PREFIX}/admin/apps/{app_id}",
-            json=body.model_dump(mode="json"),
-            headers=user_performing_action.headers,
-            cookies=user_performing_action.cookies,
-        )
-        response.raise_for_status()
-        return ExternalAppAdminResponse.model_validate(response.json())
 
     @staticmethod
     def list_admin(

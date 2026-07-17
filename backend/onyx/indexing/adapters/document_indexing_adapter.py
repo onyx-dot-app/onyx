@@ -14,6 +14,7 @@ from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
 from onyx.db.document import prepare_to_modify_documents
 from onyx.db.document import update_docs_chunk_count__no_commit
+from onyx.db.document import update_docs_created_at__no_commit
 from onyx.db.document import update_docs_last_modified__no_commit
 from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document_set import fetch_document_sets_for_documents
@@ -210,16 +211,25 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         updatable_ids = [doc.id for doc in context.updatable_docs]
         last_modified_ids = []
         ids_to_new_updated_at = {}
+        ids_to_new_created_at = {}
         for doc in context.updatable_docs:
             last_modified_ids.append(doc.id)
             # doc_updated_at is the source's idea (on the other end of the connector)
             # of when the doc was last modified
-            if doc.doc_updated_at is None:
-                continue
-            ids_to_new_updated_at[doc.id] = doc.doc_updated_at
+            if doc.doc_updated_at is not None:
+                ids_to_new_updated_at[doc.id] = doc.doc_updated_at
+            # doc_created_at is written to the index on this path; persist it so the
+            # DB reflects that this doc's creation time is collected (the backfill
+            # sweep keys off doc_created_at IS NULL).
+            if doc.doc_created_at is not None:
+                ids_to_new_created_at[doc.id] = doc.doc_created_at
 
         update_docs_updated_at__no_commit(
             ids_to_new_updated_at=ids_to_new_updated_at, db_session=db_session
+        )
+
+        update_docs_created_at__no_commit(
+            ids_to_new_created_at=ids_to_new_created_at, db_session=db_session
         )
 
         update_docs_last_modified__no_commit(

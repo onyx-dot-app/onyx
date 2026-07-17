@@ -3,20 +3,20 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
-import { toast } from "@/hooks/useToast";
-import { AuthType } from "@/lib/constants";
+import { toast } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
-import { useSendMessageToParent, getPanelOrigin } from "@/lib/extension/utils";
+import { getPanelOrigin } from "@/lib/extension/utils";
+import { sendSetDefaultNewTabMessage } from "@/lib/extension/svc";
+import { useSendMessageToParent } from "@/lib/extension/hooks";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import SidePanelHeader from "@/app/nrf/side-panel/SidePanelHeader";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
-import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
@@ -633,10 +633,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <Modal.Content width="sm" height="sm">
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
-              {authTypeMetadata.authType === AuthType.BASIC ? (
+              {authTypeMetadata?.multiTenant === false ? (
                 <LoginPage
                   authUrl={null}
-                  authTypeMetadata={authTypeMetadata}
+                  authTypeMetadata={authTypeMetadata ?? null}
                   nextUrl="/nrf"
                 />
               ) : (

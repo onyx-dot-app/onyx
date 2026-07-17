@@ -990,6 +990,48 @@ def update_docs_updated_at__no_commit(
         document.doc_updated_at = ids_to_new_updated_at[document.id]
 
 
+def update_docs_created_at__no_commit(
+    ids_to_new_created_at: dict[str, datetime],
+    db_session: Session,
+) -> None:
+    doc_ids = list(ids_to_new_created_at.keys())
+    documents_to_update = (
+        db_session.query(DbDocument).filter(DbDocument.id.in_(doc_ids)).all()
+    )
+
+    for document in documents_to_update:
+        document.doc_created_at = ids_to_new_created_at[document.id]
+
+
+def backfill_docs_created_at__no_commit(
+    ids_to_created_at: dict[str, datetime],
+    db_session: Session,
+) -> None:
+    """Set ``doc_created_at`` for docs whose value is newly available or changed,
+    bumping ``last_modified`` so the metadata sync task propagates it to the index.
+
+    Only touches rows that actually change, so a repeated sweep doesn't needlessly
+    re-dirty every document.
+    """
+    if not ids_to_created_at:
+        return
+
+    documents_to_update = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.id.in_(list(ids_to_created_at.keys())))
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    for document in documents_to_update:
+        if document.chunk_count is None:
+            continue
+        new_created_at = ids_to_created_at[document.id]
+        if document.doc_created_at == new_created_at:
+            continue
+        document.doc_created_at = new_created_at
+        document.last_modified = now
+
+
 def update_docs_last_modified__no_commit(
     document_ids: list[str],
     db_session: Session,

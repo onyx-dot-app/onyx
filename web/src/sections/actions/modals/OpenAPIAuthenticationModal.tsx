@@ -17,8 +17,7 @@ import KeyValueInput, {
 import { OAuthConfig } from "@/lib/tools/interfaces";
 import { getOAuthConfig } from "@/lib/oauth/api";
 import { SvgArrowExchange } from "@opal/icons";
-import { useAuthType } from "@/lib/hooks";
-import { AuthType } from "@/lib/constants";
+import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
 
 export type AuthMethod = "oauth" | "custom-header" | "pt-oauth";
 
@@ -78,9 +77,7 @@ export default function OpenAPIAuthenticationModal({
   onSkip,
   entityName = null,
 }: OpenAPIAuthenticationModalProps) {
-  const authType = useAuthType();
-  const isOAuthEnabled =
-    authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
+  const isOAuthEnabled = useOAuthPassThroughEnabled();
   const [existingOAuthConfig, setExistingOAuthConfig] =
     useState<OAuthConfig | null>(null);
   const [isLoadingOAuthConfig, setIsLoadingOAuthConfig] = useState(false);
@@ -564,8 +561,8 @@ export default function OpenAPIAuthenticationModal({
 
                         <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
                           <Text as="p" text03 secondaryBody>
-                            OAuth passthrough is only available if you enable
-                            OIDC or OAuth authentication.
+                            OAuth pass-through requires an OAuth-capable login
+                            method (Google or OIDC).
                           </Text>
                           <div className="flex flex-col gap-2 w-full">
                             <Text

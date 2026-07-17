@@ -142,6 +142,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
 )
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -153,7 +154,7 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 POD_READY_TIMEOUT_SECONDS = 30
 
 # Shared deadline for IP assignment (scheduling + image pull) and the restore.
-OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 60.0
+OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 90.0
 POD_IP_POLL_INTERVAL_SECONDS = 0.5
 
 # Resource deletion timeout and polling interval
@@ -490,6 +491,7 @@ class KubernetesSandboxManager(SandboxManager):
             nextjs_port=nextjs_port,
             disabled_tools=disabled_tools,
             user_name=user_name,
+            organization_instructions=load_settings().craft_instructions,
         )
 
     def _create_sandbox_pod(

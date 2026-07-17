@@ -65,7 +65,10 @@ class TestRetrieveAllSlimDocs:
     def test_does_not_call_extract_when_checkpoint_is_done(self) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
 
         with patch.object(
@@ -85,7 +88,10 @@ class TestRetrieveAllSlimDocs:
     ) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         # Checkpoint starts at START, _extract advances it to DONE
         with patch.object(connector, "build_dummy_checkpoint") as mock_build:
@@ -116,7 +122,10 @@ class TestRetrieveAllSlimDocs:
     def test_yields_slim_documents(self) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         start_checkpoint = GoogleDriveCheckpoint(
             retrieved_folder_and_drive_ids=set(),
@@ -149,7 +158,10 @@ class TestRetrieveAllSlimDocsPermSync:
     def test_calls_extract_with_include_permissions_true(self) -> None:
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         start_checkpoint = GoogleDriveCheckpoint(
             retrieved_folder_and_drive_ids=set(),
@@ -188,7 +200,10 @@ class TestCeleryUtilsRouting:
         not retrieve_all_slim_docs_perm_sync, for GoogleDriveConnector."""
         connector = _make_connector()
         slim_doc = MagicMock(
-            spec=SlimDocument, id="doc1", parent_hierarchy_raw_node_id=None
+            spec=SlimDocument,
+            id="doc1",
+            parent_hierarchy_raw_node_id=None,
+            doc_created_at=None,
         )
         with (
             patch.object(

@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -10,10 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import SAML_CONF_DIR
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
-from onyx.configs.constants import AuthType
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.utils.logger import setup_logger
@@ -35,12 +34,16 @@ class _ProviderConfig(BaseModel):
 class GoogleProviderConfig(_ProviderConfig):
     client_id: str
     client_secret: str
+    # Rows migrated from single-provider env config keep the redirect URI the
+    # customer's IdP client already allowlists.
+    legacy_callback: bool = False
 
 
 class OIDCProviderConfig(_ProviderConfig):
     client_id: str
     client_secret: str
     openid_config_url: str
+    legacy_callback: bool = False
 
 
 class SAMLProviderConfig(_ProviderConfig):
@@ -78,6 +81,23 @@ def validate_sso_config(
         return _CONFIG_MODEL_BY_TYPE[provider_type].model_validate(config).model_dump()
     except ValidationError as e:
         raise ValueError(f"invalid {provider_type.value} provider config: {e}") from e
+
+
+def sso_login_callback_uri(
+    provider: SSOProvider, config: dict[str, Any], web_domain: str
+) -> str:
+    """The redirect URI this row's login flow sends, which is also the URL an
+    operator must allowlist at the IdP. Rows migrated from single-provider env
+    config keep the legacy URI their IdP client already allowlists."""
+    if provider.provider_type is SSOProviderType.SAML:
+        # Single issuer-resolved ACS for every SAML row.
+        return f"{web_domain}/api/auth/saml/callback"
+    if config.get("legacy_callback"):
+        if provider.provider_type is SSOProviderType.GOOGLE_OAUTH:
+            return f"{web_domain}/auth/oauth/callback"
+        return f"{web_domain}/auth/oidc/callback"
+    # The IdP redirects the browser, so route through /api to reach FastAPI.
+    return f"{web_domain}/api/auth/oidc/{provider.name}/callback"
 
 
 def validate_sso_provider_name(name: str) -> None:
@@ -182,8 +202,10 @@ def seed_saml_provider_from_conf_dir(db_session: Session) -> None:
         logger.debug("Skipping legacy SAML seed because multi-tenant mode is enabled")
         return
 
-    if AUTH_TYPE != AuthType.SAML:
-        logger.debug("Skipping legacy SAML seed because auth type is %s", AUTH_TYPE)
+    # This env read exists only to migrate legacy AUTH_TYPE=saml deployments
+    # to a provider row.
+    if (os.environ.get("AUTH_TYPE") or "").lower() != "saml":
+        logger.debug("Skipping legacy SAML seed because auth type is not saml")
         return
 
     for provider in fetch_sso_providers(db_session):

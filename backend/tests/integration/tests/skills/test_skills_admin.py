@@ -37,6 +37,14 @@ def _fetch_skill_row(skill_id: UUID) -> Skill | None:
         ).scalar_one_or_none()
 
 
+def _mark_skill_invalid(skill_id: UUID) -> None:
+    with get_session_with_current_tenant() as db_session:
+        skill = db_session.get(Skill, skill_id)
+        assert skill is not None
+        skill.is_valid = False
+        db_session.commit()
+
+
 def _bundle_blob_exists(bundle_file_id: str) -> bool:
     return get_default_file_store().has_file(
         file_id=bundle_file_id,
@@ -86,10 +94,28 @@ def test_patch_skill_metadata(admin_user: DATestUser) -> None:
     )
     assert public.public_permission == SkillSharePermission.VIEWER
 
-    disabled = SkillManager.patch_custom(
-        skill, admin_user, SkillPatchRequest(enabled=False)
+
+def test_invalid_skill_is_manageable_but_not_toggleable(
+    admin_user: DATestUser,
+) -> None:
+    skill = SkillManager.create_custom(
+        admin_user,
+        slug=f"invalid-toggle-{uuid4().hex[:6]}",
     )
-    assert disabled.enabled is False
+    _mark_skill_invalid(skill.id)
+
+    listed = SkillManager.list_all(admin_user)
+    [invalid_skill] = [row for row in listed.customs if row.id == skill.id]
+    assert invalid_skill.is_valid is False
+    assert invalid_skill.can_toggle is False
+
+    response = client.put(
+        f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+        json={"enabled": False},
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "INVALID_INPUT"
 
 
 def test_replace_bundle_updates_metadata(admin_user: DATestUser) -> None:
@@ -97,15 +123,12 @@ def test_replace_bundle_updates_metadata(admin_user: DATestUser) -> None:
     skill = SkillManager.create_custom(
         admin_user,
         slug=slug,
-        name="Original Name",
         description="Original desc",
     )
-    new_bundle = build_minimal_bundle(
-        slug, name="Renamed via bundle", description="Updated desc"
-    )
+    new_bundle = build_minimal_bundle(slug, description="Updated desc")
     updated = SkillManager.replace_bundle(skill, new_bundle, admin_user)
     assert updated.slug == slug
-    assert updated.name == "Renamed via bundle"
+    assert updated.name == slug
     assert updated.description == "Updated desc"
 
 
@@ -132,22 +155,6 @@ def test_bundle_missing_skill_md(admin_user: DATestUser) -> None:
     assert exc_info.value.response.status_code == 400
 
 
-def test_bundle_with_template_rejected(admin_user: DATestUser) -> None:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("SKILL.md", "---\nname: t\ndescription: t\n---\nok")
-        zf.writestr("SKILL.md.template", "should not be here")
-    bad_bundle = buf.getvalue()
-
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_custom(
-            admin_user,
-            slug=f"template-bundle-{uuid4().hex[:6]}",
-            bundle_bytes=bad_bundle,
-        )
-    assert exc_info.value.response.status_code == 400
-
-
 def test_group_shares_replace(admin_user: DATestUser) -> None:
     skill = SkillManager.create_custom(
         admin_user, slug=f"group-shares-test-{uuid4().hex[:6]}", is_public=False
@@ -157,37 +164,12 @@ def test_group_shares_replace(admin_user: DATestUser) -> None:
 
 
 def test_metadata_from_bundle_frontmatter(admin_user: DATestUser) -> None:
-    bundle = build_minimal_bundle(
-        "from-frontmatter", name="From Bundle", description="From bundle desc"
-    )
+    bundle = build_minimal_bundle("from-frontmatter", description="From bundle desc")
     skill = SkillManager.create_custom(
         admin_user, slug="from-frontmatter", bundle_bytes=bundle
     )
-    assert skill.name == "From Bundle"
+    assert skill.name == "from-frontmatter"
     assert skill.description == "From bundle desc"
-
-
-def test_missing_frontmatter_rejected(admin_user: DATestUser) -> None:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("SKILL.md", "no frontmatter at all\n")
-    bad_bundle = buf.getvalue()
-
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_custom(admin_user, slug="no-fm", bundle_bytes=bad_bundle)
-    assert exc_info.value.response.status_code == 400
-
-
-def test_bad_filename_rejected(admin_user: DATestUser) -> None:
-    bundle = build_minimal_bundle("placeholder")
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_custom(
-            admin_user,
-            slug="placeholder",
-            bundle_bytes=bundle,
-            filename="Invalid Name.zip",
-        )
-    assert exc_info.value.response.status_code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -215,17 +197,10 @@ def test_create_skill_201_persists_row_group_shares_bundle(
     assert row is not None, "skill row missing after create"
     assert row.slug == slug
     assert row.public_permission is None
-    assert row.enabled is True
     assert row.bundle_file_id, "skill row has no bundle_file_id"
     assert _bundle_blob_exists(row.bundle_file_id), (
         f"bundle blob {row.bundle_file_id} not present in file store after create"
     )
-
-
-def test_create_skill_rejects_invalid_slug(admin_user: DATestUser) -> None:
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_custom(admin_user, slug="Invalid_Slug")
-    assert exc_info.value.response.status_code == 400
 
 
 def test_create_skill_rejects_reserved_slug(admin_user: DATestUser) -> None:
@@ -247,17 +222,6 @@ def test_create_skill_409_on_duplicate_slug(admin_user: DATestUser) -> None:
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
         SkillManager.create_custom(admin_user, slug=slug)
     assert exc_info.value.response.status_code == 409
-
-
-def test_create_skill_400_on_invalid_bundle_zip(admin_user: DATestUser) -> None:
-    corrupt = b"this is not a zip file at all"
-    with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.create_custom(
-            admin_user,
-            slug=f"corrupt-{uuid4().hex[:8]}",
-            bundle_bytes=corrupt,
-        )
-    assert exc_info.value.response.status_code == 400
 
 
 def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:

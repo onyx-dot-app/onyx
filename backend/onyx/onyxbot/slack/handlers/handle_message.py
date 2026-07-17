@@ -452,6 +452,7 @@ def handle_message(
             client=client,
             channel=channel,
             logger=logger,
+            db_session=db_session,
             feedback_reminder_id=feedback_reminder_id,
         )
         return issue_with_regular_answer

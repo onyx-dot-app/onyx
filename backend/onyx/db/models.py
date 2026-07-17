@@ -669,6 +669,22 @@ class Skill__User(Base):
     __table_args__ = (Index("ix_skill__user_user_id", "user_id"),)
 
 
+class UserSkillPreference(Base):
+    __tablename__ = "user_skill_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    __table_args__ = (Index("ix_user_skill_preference_skill_id", "skill_id"),)
+
+
 class DocumentSet__User(Base):
     __tablename__ = "document_set__user"
 
@@ -1035,6 +1051,11 @@ class Document(Base):
     # with the local last modified time of the doc and any associated metadata
     # it should just be the server timestamp of the source doc
     doc_updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Source creation time. Null for docs indexed before this column.
+    doc_created_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
@@ -4488,6 +4509,8 @@ class Skill(Base):
     # files live on disk under BUILTIN_SKILLS_PATH).
     bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Existing custom rows are classified lazily before sandbox hydration.
+    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -4498,8 +4521,6 @@ class Skill(Base):
         Enum(SkillSharePermission, native_enum=False),
         nullable=True,
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -5282,6 +5303,12 @@ class MCPServer(Base):
         nullable=True,
     )
 
+    # When True, any user may add this server's tools to their agents.
+    # When False, access is limited to the linked users / user_groups.
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -5746,8 +5773,8 @@ class BuildSession(Base):
         default=SharingScope.PRIVATE,
         server_default="private",
     )
-    # Distinguishes user-initiated sessions from sessions created by the
-    # scheduled-tasks executor (or any future non-interactive caller). The
+    # Distinguishes user-initiated sessions from sessions created by
+    # non-interactive callers (scheduled-tasks executor, Slack bot). The
     # Craft sidebar filters on origin == INTERACTIVE.
     origin: Mapped[SessionOrigin] = mapped_column(
         Enum(SessionOrigin, native_enum=False, name="sessionorigin"),
@@ -6406,9 +6433,8 @@ class ExternalApp(Base):
     __tablename__ = "external_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Display name, description, and lifecycle (including enabled state
-    # via skill presence) live on the linked Skill row. ON DELETE
-    # CASCADE: removing the skill removes the external_app gateway.
+    # Display and bundle metadata currently live on the linked Skill row.
+    # App availability is independent of user skill preferences.
     skill_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("skill.id", ondelete="CASCADE"),

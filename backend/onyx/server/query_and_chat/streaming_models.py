@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 from typing import Annotated
 from typing import Any
@@ -179,14 +180,16 @@ class SearchToolQueriesDelta(BaseObj):
     queries: list[str]
 
 
-# The connector/source filter applied to this internal search (which sources are
-# being searched). Absent == no filter applied (searched everything).
+# Filters applied to this internal search. Empty `sources` == scope not narrowed
+# (searched everything); either time bound may be absent (open-ended).
 class SearchToolFilterDelta(BaseObj):
     type: Literal["search_tool_filter_delta"] = (
         StreamingType.SEARCH_TOOL_FILTER_DELTA.value
     )
 
-    sources: list[str]
+    sources: list[str] = []
+    time_filter_start: datetime | None = None
+    time_filter_end: datetime | None = None
 
 
 # Documents coming through as the system knows what to add to the context

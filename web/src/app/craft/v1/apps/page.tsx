@@ -8,7 +8,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import useOnMount from "@/hooks/useOnMount";
 import { cn } from "@opal/utils";
 import { Button, Card, InputTypeIn, Text } from "@opal/components";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, toast } from "@opal/layouts";
 import { SvgCheckCircle, SvgPlug, SvgSettings } from "@opal/icons";
 import {
   ExternalAppUserResponse,
@@ -19,11 +19,10 @@ import {
   startExternalAppOAuth,
 } from "@/app/craft/services/externalAppsService";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
-import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 
-// The user's own app connections. Org-wide configuration lives at
-// /craft/v1/apps/manage (admin-only); admins get a shortcut button to it here.
+// The user's own app connections. Org-wide configuration lives in the admin
+// panel's Craft section; admins get a shortcut button to it here.
 export default function ExternalAppsPage() {
   const { isAdmin } = useUser();
   const [query, setQuery] = useState("");
@@ -44,15 +43,13 @@ export default function ExternalAppsPage() {
         description="Connect the tools Onyx Craft can use as context while it works."
         rightChildren={
           isAdmin ? (
-            <div className="flex items-center gap-2">
-              <Button
-                href="/craft/v1/apps/manage"
-                prominence="secondary"
-                icon={SvgSettings}
-              >
-                Manage apps
-              </Button>
-            </div>
+            <Button
+              href="/admin/craft/apps"
+              prominence="secondary"
+              icon={SvgSettings}
+            >
+              Manage apps
+            </Button>
           ) : undefined
         }
       >
@@ -106,8 +103,7 @@ function AppConnections({ query }: AppConnectionsProps) {
     return (
       <Card background="none" border="dashed" rounding="lg">
         <Text font="main-content-body" color="text-03">
-          No external apps are enabled for your org yet. Ask an admin to enable
-          one.
+          No external apps are configured for your organization yet.
         </Text>
       </Card>
     );

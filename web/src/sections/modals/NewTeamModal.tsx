@@ -4,9 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Button, Text } from "@opal/components";
-import { InputErrorText } from "@opal/layouts";
+import { InputErrorText, toast } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
-import { toast } from "@/hooks/useToast";
 import { useUser } from "@/providers/UserProvider";
 import { useModalContext } from "@/components/context/ModalContext";
 import {

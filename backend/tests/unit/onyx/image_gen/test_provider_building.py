@@ -157,6 +157,85 @@ def test_vertex_malformed_json_does_not_escape_validate_credentials() -> None:
         get_image_generation_provider("vertex_ai", credentials)
 
 
+def test_build_vertex_provider_with_workload_identity() -> None:
+    credentials = _get_default_image_gen_creds()
+    credentials.custom_config = {
+        "vertex_auth_method": "workload_identity",
+        "vertex_location": "us-central1",
+        "vertex_project": "demo_project_wi",
+    }
+
+    image_gen_provider = get_image_generation_provider(VERTEX_PROVIDER, credentials)
+
+    assert isinstance(image_gen_provider, VertexImageGenerationProvider)
+    assert image_gen_provider._vertex_credentials is None
+    assert image_gen_provider._use_workload_identity is True
+    assert image_gen_provider._vertex_location == "us-central1"
+    assert image_gen_provider._vertex_project == "demo_project_wi"
+
+
+def test_build_vertex_workload_identity_requires_project() -> None:
+    credentials = _get_default_image_gen_creds()
+    credentials.custom_config = {
+        "vertex_auth_method": "workload_identity",
+        "vertex_location": "global",
+    }
+
+    assert VertexImageGenerationProvider.validate_credentials(credentials) is False
+    with pytest.raises(ImageProviderCredentialsError):
+        get_image_generation_provider(VERTEX_PROVIDER, credentials)
+
+
+def test_vertex_workload_identity_omits_credentials_in_litellm_call() -> None:
+    credentials = _get_default_image_gen_creds()
+    credentials.custom_config = {
+        "vertex_auth_method": "workload_identity",
+        "vertex_location": "us-central1",
+        "vertex_project": "demo_project_wi",
+    }
+    provider = get_image_generation_provider(VERTEX_PROVIDER, credentials)
+    expected_response = object()
+
+    with patch("litellm.image_generation", return_value=expected_response) as mock_gen:
+        response = provider.generate_image(
+            prompt="draw a mountain",
+            model="vertex_ai/imagen-3.0",
+            size="1024x1024",
+            n=1,
+        )
+
+    assert response is expected_response
+    mock_gen.assert_called_once()
+    call_kwargs = mock_gen.call_args.kwargs
+    # Ambient credentials: LiteLLM must fall back to google.auth.default().
+    assert "vertex_credentials" not in call_kwargs
+    assert call_kwargs["vertex_project"] == "demo_project_wi"
+    assert call_kwargs["vertex_location"] == "us-central1"
+
+
+def test_vertex_service_account_passes_credentials_in_litellm_call() -> None:
+    credentials = _get_default_image_gen_creds()
+    vertex_json = json.dumps({"project_id": "demo_project_1", "private_key_id": "x"})
+    credentials.custom_config = {
+        "vertex_credentials": vertex_json,
+        "vertex_location": "global",
+    }
+    provider = get_image_generation_provider(VERTEX_PROVIDER, credentials)
+    expected_response = object()
+
+    with patch("litellm.image_generation", return_value=expected_response) as mock_gen:
+        provider.generate_image(
+            prompt="draw a mountain",
+            model="vertex_ai/imagen-3.0",
+            size="1024x1024",
+            n=1,
+        )
+
+    call_kwargs = mock_gen.call_args.kwargs
+    assert call_kwargs["vertex_credentials"] == vertex_json
+    assert call_kwargs["vertex_project"] == "demo_project_1"
+
+
 def test_openai_provider_uses_image_generation_without_reference_images() -> None:
     provider = OpenAIImageGenerationProvider(
         api_key="test-key",
