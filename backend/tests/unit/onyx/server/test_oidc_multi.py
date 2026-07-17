@@ -277,7 +277,7 @@ def test_login_callback_uri_saml_is_fixed_acs() -> None:
 
     provider = _provider(name="corp-saml", provider_type=SSOProviderType.SAML)
     uri = sso_login_callback_uri(provider, {}, "https://onyx.example.com")
-    assert uri == "https://onyx.example.com/api/auth/saml/callback"
+    assert uri == "https://onyx.example.com/auth/saml/callback"
 
 
 def test_fixed_callback_rejects_missing_state() -> None:
