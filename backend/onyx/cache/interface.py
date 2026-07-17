@@ -28,6 +28,12 @@ class CacheLockLostError(Exception):
     it — mutual exclusion is already gone, unlike CACHE_TRANSIENT_ERRORS."""
 
 
+class CacheLockAcquisitionError(Exception):
+    """A shared cache lock could not be acquired within the allotted wait — a
+    concurrent holder still owns it. Distinct from CacheLockLostError, which is
+    about losing a lock already held."""
+
+
 class CacheLock(abc.ABC):
     """Abstract distributed lock returned by CacheBackend.lock()."""
 
