@@ -30,6 +30,7 @@ function configuredApp(
     upstream_url_patterns: [],
     auth_template: {},
     organization_credentials: {},
+    enabled: true,
     actions: [],
     is_onyx_managed: false,
     ...overrides,

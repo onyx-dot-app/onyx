@@ -83,8 +83,9 @@ def test_authorize_url_carries_optional_scope(monkeypatch: pytest.MonkeyPatch) -
     oauth = _provider().spec.oauth
     app = SimpleNamespace(
         id=1,
+        enabled=True,
         app_type=ExternalAppType.HUBSPOT,
-        skill=SimpleNamespace(name="HubSpot", enabled=True),
+        skill=SimpleNamespace(name="HubSpot"),
         organization_credentials=SimpleNamespace(
             get_value=lambda **_: {
                 "client_id": "client-id",

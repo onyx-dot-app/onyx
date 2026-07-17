@@ -93,6 +93,11 @@ def start_external_app_oauth(
             OnyxErrorCode.NOT_FOUND,
             f"External app with id {external_app_id} not found.",
         )
+    if not app.enabled:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This app is currently disabled by an admin.",
+        )
     provider = _oauth_provider_or_raise(app)
     client_id, _client_secret = _oauth_client_credentials(app)
 
@@ -163,6 +168,11 @@ def handle_external_app_oauth_callback(
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"External app with id {record.external_app_id} no longer exists.",
+        )
+    if not app.enabled:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This app is currently disabled by an admin.",
         )
 
     provider = _oauth_provider_or_raise(app)

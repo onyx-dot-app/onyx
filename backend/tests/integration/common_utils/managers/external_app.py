@@ -198,6 +198,21 @@ class ExternalAppManager:
         return [ExternalAppAdminResponse.model_validate(row) for row in response.json()]
 
     @staticmethod
+    def set_enabled(
+        user_performing_action: DATestUser,
+        app_id: int,
+        enabled: bool,
+    ) -> ExternalAppAdminResponse:
+        response = client.patch(
+            f"{_BUILD_PREFIX}/admin/apps/{app_id}",
+            json={"enabled": enabled},
+            headers=user_performing_action.headers,
+            cookies=user_performing_action.cookies,
+        )
+        response.raise_for_status()
+        return ExternalAppAdminResponse.model_validate(response.json())
+
+    @staticmethod
     def delete(user_performing_action: DATestUser, app_id: int) -> None:
         response = client.delete(
             f"{_BUILD_PREFIX}/admin/apps/{app_id}",

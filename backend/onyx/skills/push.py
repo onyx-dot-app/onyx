@@ -53,9 +53,15 @@ SKILLS_MOUNT_PATH = "/workspace/managed/skills"
 _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__"})
 
 
-def compute_skills_hash(files: FileSet) -> str:
-    """Return a deterministic digest of the hydrated paths and contents."""
+def compute_skill_runtime_hash(
+    files: FileSet,
+    connectable_apps_section: str,
+) -> str:
+    """Digest skill files and the app guidance rendered into ``AGENTS.md``."""
     digest = hashlib.sha256()
+    connectable_apps_bytes = connectable_apps_section.encode()
+    digest.update(len(connectable_apps_bytes).to_bytes(8))
+    digest.update(connectable_apps_bytes)
     for path in sorted(files):
         path_bytes = path.encode()
         content = files[path]
@@ -268,23 +274,29 @@ def push_skill_to_affected_sandboxes(skill: Skill, db_session: Session) -> None:
 
 
 def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
-    """Rebuild and push the full skills fileset for each user's sandbox."""
+    """Push skill state changes and mark affected sessions for reload."""
     if not user_ids:
         return
     try:
         sandbox_map = get_sandbox_user_map(list(user_ids), db_session)
         current_hashes = lock_sandbox_skills_hashes(db_session, set(sandbox_map))
-        sandbox_files = {
-            sid: build_skills_fileset_for_user(user, db_session)
-            for sid, user in sandbox_map.items()
+        sandbox_payloads = {
+            sandbox_id: build_user_skills_payload(user, db_session)
+            for sandbox_id, user in sandbox_map.items()
         }
         desired_hashes = {
-            sandbox_id: compute_skills_hash(files)
-            for sandbox_id, files in sandbox_files.items()
+            sandbox_id: compute_skill_runtime_hash(files, connectable_apps_section)
+            for sandbox_id, (
+                connectable_apps_section,
+                files,
+            ) in sandbox_payloads.items()
         }
         changed_files = {
             sandbox_id: files
-            for sandbox_id, files in sandbox_files.items()
+            for sandbox_id, (
+                _connectable_apps_section,
+                files,
+            ) in sandbox_payloads.items()
             if current_hashes.get(sandbox_id) != desired_hashes[sandbox_id]
         }
         if not changed_files:

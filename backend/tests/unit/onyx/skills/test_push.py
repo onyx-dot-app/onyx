@@ -48,15 +48,18 @@ def _skill(
     )
 
 
-def test_compute_skills_hash_is_order_independent_and_content_sensitive() -> None:
+def test_skill_runtime_hash_covers_files_and_connectable_apps() -> None:
     files = {"b/SKILL.md": b"second", "a/SKILL.md": b"first"}
 
-    assert push.compute_skills_hash(files) == push.compute_skills_hash(
-        dict(reversed(files.items()))
-    )
-    assert push.compute_skills_hash(files) != push.compute_skills_hash(
-        {**files, "a/SKILL.md": b"changed"}
-    )
+    assert push.compute_skill_runtime_hash(
+        files, "apps"
+    ) == push.compute_skill_runtime_hash(dict(reversed(files.items())), "apps")
+    assert push.compute_skill_runtime_hash(
+        files, "apps"
+    ) != push.compute_skill_runtime_hash({**files, "a/SKILL.md": b"changed"}, "apps")
+    assert push.compute_skill_runtime_hash(
+        files, "apps"
+    ) != push.compute_skill_runtime_hash(files, "different apps")
 
 
 def test_assemble_classifies_and_hydrates_valid_unclassified_skill(

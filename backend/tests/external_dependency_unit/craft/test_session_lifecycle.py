@@ -68,6 +68,7 @@ def test_warm_skill_hydration_changes_only_live_session_staleness(
         sandbox_row.id,
         test_user,
         db_session,
+        connectable_apps_section="first apps",
         skills_files={"first/SKILL.md": b"first"},
     )
     db_session.commit()
@@ -93,7 +94,8 @@ def test_warm_skill_hydration_changes_only_live_session_staleness(
         sandbox_row.id,
         test_user,
         db_session,
-        skills_files={"second/SKILL.md": b"second"},
+        connectable_apps_section="second apps",
+        skills_files={"first/SKILL.md": b"first"},
     )
     db_session.commit()
     db_session.refresh(sandbox_row)
