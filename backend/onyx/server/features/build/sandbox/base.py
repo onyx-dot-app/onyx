@@ -165,7 +165,6 @@ class SandboxManager(_ServeMixin, ABC):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
@@ -183,7 +182,6 @@ class SandboxManager(_ServeMixin, ABC):
             session_id: The session ID for this workspace
             llm_config: LLM provider configuration (passed to AGENTS.md rendering)
             nextjs_port: Port for the Next.js dev server, or None for headless.
-            skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
             connectable_apps_section: Pre-rendered ``{{CONNECTABLE_APPS_LIST}}`` (may be empty).
             user_name: User's name for personalization in AGENTS.md
 
@@ -206,6 +204,20 @@ class SandboxManager(_ServeMixin, ABC):
         session_id)`` — otherwise the per-session ``PodEventBus`` (reader
         thread + httpx connection) leaks until api_server restarts.
         """
+        ...
+
+    @abstractmethod
+    def regenerate_session_config(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        agent_provider: str | None,
+        agent_model: str | None,
+        nextjs_port: int | None,
+        connectable_apps_section: str,
+        user_name: str | None = None,
+    ) -> None:
+        """Rewrite generated session configuration without replacing outputs."""
         ...
 
     @abstractmethod
@@ -247,7 +259,6 @@ class SandboxManager(_ServeMixin, ABC):
         snapshot_storage_path: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        skills_section: str,
         connectable_apps_section: str,
     ) -> None:
         """Restore a session workspace from a snapshot.

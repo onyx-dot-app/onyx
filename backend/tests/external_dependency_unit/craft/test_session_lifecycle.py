@@ -100,6 +100,11 @@ class TestCreateSession:
             "session_id": build_session.id,
             "opencode_session_id": None,
         }
+        assert stub_sandbox_manager.last_setup_session_workspace_payload is not None
+        assert (
+            "skills_section"
+            not in stub_sandbox_manager.last_setup_session_workspace_payload
+        )
 
     def test_create_session_reuses_existing_sandbox(
         self,
@@ -350,12 +355,14 @@ class TestReloadSessionSkills:
             "onyx.server.features.build.session.api.get_sandbox_manager",
             lambda: stub_sandbox_manager,
         )
+        stub_sandbox_manager.regenerate_session_config_silent = True
 
         response = reload_session_skills(session_row.id, test_user, db_session)
 
         assert response.skills_stale is False
         db_session.refresh(session_row)
         assert session_row.skills_stale is False
+        assert stub_sandbox_manager.regenerate_session_config_count == 1
         assert stub_sandbox_manager.last_dispose_opencode_instance_payload == {
             "sandbox_id": sandbox_row.id,
             "session_id": session_row.id,
@@ -1025,6 +1032,9 @@ class TestRestoreSession:
         assert (
             stub_sandbox_manager.last_restore_snapshot_payload["snapshot_storage_path"]
             == snapshot.storage_path
+        )
+        assert (
+            "skills_section" not in stub_sandbox_manager.last_restore_snapshot_payload
         )
         assert stub_sandbox_manager.last_write_files_to_sandbox_payload is not None
         assert (

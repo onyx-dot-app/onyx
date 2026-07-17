@@ -38,7 +38,9 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         user.id: BuildSession(
             user_id=user.id,
             status=BuildSessionStatus.ACTIVE,
-            opencode_session_id=f"opencode-{user.id}",
+            opencode_session_id=(
+                None if user.id == user_c.id else f"opencode-{user.id}"
+            ),
         )
         for user in (user_a, user_b, user_c)
     }

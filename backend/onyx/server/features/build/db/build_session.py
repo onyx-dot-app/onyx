@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
@@ -149,28 +148,29 @@ def get_user_build_sessions(
     )
 
 
-def mark_build_sessions_skills_stale(user_ids: set[UUID]) -> None:
-    """Mark reusable interactive OpenCode sessions stale after a skill push."""
+def mark_build_sessions_skills_stale(
+    user_ids: set[UUID],
+    db_session: Session,
+) -> None:
+    """Mark interactive sessions stale after their sandbox skills change."""
     if not user_ids:
         return
-    with get_session_with_current_tenant() as db_session:
-        db_session.execute(
-            update(BuildSession)
-            .where(
-                BuildSession.user_id.in_(user_ids),
-                BuildSession.origin == SessionOrigin.INTERACTIVE,
-                BuildSession.opencode_session_id.isnot(None),
-            )
-            .values(skills_stale=True)
+    db_session.execute(
+        update(BuildSession)
+        .where(
+            BuildSession.user_id.in_(user_ids),
+            BuildSession.origin == SessionOrigin.INTERACTIVE,
         )
-        db_session.commit()
+        .values(skills_stale=True)
+    )
+    db_session.commit()
 
 
 def clear_build_sessions_skills_stale__no_commit(
     user_id: UUID,
     db_session: Session,
 ) -> None:
-    """A fresh sandbox has no directory instances retaining old skills."""
+    """Clear stale markers after fresh skills hydrate into a new sandbox."""
     db_session.execute(
         update(BuildSession)
         .where(

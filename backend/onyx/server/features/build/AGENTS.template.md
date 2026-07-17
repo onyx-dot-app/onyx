@@ -41,14 +41,8 @@ Your working directory is the session root. Everything you produce goes under `o
 ├── user_library/      # the user's persistent library, shared across sessions (symlink)
 ├── outputs/           # ALL deliverables go here
 │   └── web/           # Next.js app, pre-scaffolded and running
-└── .opencode/skills/  # installed skills (see Skills)
+└── .opencode/skills/  # installed skills
 ```
-
-## Skills
-
-Read a skill's `SKILL.md` (in `.opencode/skills/<name>/`) before doing work it covers.
-
-{{AVAILABLE_SKILLS_SECTION}}
 
 ## Connectable apps
 

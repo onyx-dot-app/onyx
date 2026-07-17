@@ -102,9 +102,14 @@ export function useBuildSessionController({
         .getState()
         .sessions.get(sessionId);
       if (!cachedSession?.isLoaded) return;
+      const skillsStaleBeforeRefresh = cachedSession.skillsStale;
 
       try {
         const session = await fetchSession(sessionId);
+        const currentSession = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId);
+        if (currentSession?.skillsStale !== skillsStaleBeforeRefresh) return;
         updateSessionData(sessionId, {
           skillsStale: session.skills_stale,
         });

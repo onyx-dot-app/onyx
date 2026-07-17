@@ -171,6 +171,7 @@ class StubSandboxManager(SandboxManager):
         self.terminate_silent: bool = False
         self.setup_session_workspace_silent: bool = False
         self.cleanup_session_workspace_silent: bool = False
+        self.regenerate_session_config_silent: bool = False
         self.restore_snapshot_silent: bool = False
         self.write_sandbox_file_silent: bool = False
         self.write_files_to_sandbox_silent: bool = False
@@ -189,6 +190,7 @@ class StubSandboxManager(SandboxManager):
         self.terminated_sandbox_ids: list[UUID] = []
         self.setup_session_workspace_count: int = 0
         self.cleanup_session_workspace_count: int = 0
+        self.regenerate_session_config_count: int = 0
         self.create_snapshot_count: int = 0
         self.create_opencode_history_snapshot_count: int = 0
         self.restore_snapshot_count: int = 0
@@ -219,6 +221,7 @@ class StubSandboxManager(SandboxManager):
         self.last_terminate_sandbox_id: UUID | None = None
         self.last_setup_session_workspace_payload: dict[str, Any] | None = None
         self.last_cleanup_session_workspace_payload: dict[str, Any] | None = None
+        self.last_regenerate_session_config_payload: dict[str, Any] | None = None
         self.last_create_snapshot_payload: dict[str, Any] | None = None
         self.last_create_opencode_history_snapshot_payload: dict[str, Any] | None = None
         self.create_opencode_history_snapshot_payloads: list[dict[str, Any]] = []
@@ -305,7 +308,6 @@ class StubSandboxManager(SandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
@@ -315,7 +317,6 @@ class StubSandboxManager(SandboxManager):
             "session_id": session_id,
             "llm_config": llm_config,
             "nextjs_port": nextjs_port,
-            "skills_section": skills_section,
             "connectable_apps_section": connectable_apps_section,
             "user_name": user_name,
         }
@@ -334,6 +335,29 @@ class StubSandboxManager(SandboxManager):
         }
         if not self.cleanup_session_workspace_silent:
             raise _not_configured("cleanup_session_workspace")
+
+    def regenerate_session_config(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        agent_provider: str | None,
+        agent_model: str | None,
+        nextjs_port: int | None,
+        connectable_apps_section: str,
+        user_name: str | None = None,
+    ) -> None:
+        self.regenerate_session_config_count += 1
+        self.last_regenerate_session_config_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+            "agent_provider": agent_provider,
+            "agent_model": agent_model,
+            "nextjs_port": nextjs_port,
+            "connectable_apps_section": connectable_apps_section,
+            "user_name": user_name,
+        }
+        if not self.regenerate_session_config_silent:
+            raise _not_configured("regenerate_session_config")
 
     def create_snapshot(
         self,
@@ -383,7 +407,6 @@ class StubSandboxManager(SandboxManager):
         snapshot_storage_path: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        skills_section: str,
         connectable_apps_section: str,
     ) -> None:
         self.restore_snapshot_count += 1
@@ -393,7 +416,6 @@ class StubSandboxManager(SandboxManager):
             "snapshot_storage_path": snapshot_storage_path,
             "nextjs_port": nextjs_port,
             "llm_config": llm_config,
-            "skills_section": skills_section,
             "connectable_apps_section": connectable_apps_section,
         }
         if not self.restore_snapshot_silent:

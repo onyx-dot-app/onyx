@@ -100,8 +100,8 @@ def test_fails_open_when_cache_unavailable(
         assert acquired.acquired is True
 
 
+@pytest.mark.usefixtures("slot_env")
 def test_can_fail_closed_when_cache_unavailable(
-    slot_env: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def _boom() -> None:

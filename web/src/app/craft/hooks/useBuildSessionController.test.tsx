@@ -67,4 +67,35 @@ describe("useBuildSessionController", () => {
       ).toBe(false);
     });
   });
+
+  it("does not overwrite a newer local stale-state change", async () => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      skillsStale: true,
+    });
+    let resolveRefresh:
+      | ((value: { skills_stale: boolean }) => void)
+      | undefined;
+    jest.mocked(api.fetchSession).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }) as never
+    );
+
+    renderHook(() =>
+      useBuildSessionController({ existingSessionId: SESSION_ID })
+    );
+    await waitFor(() => expect(api.fetchSession).toHaveBeenCalled());
+
+    await act(async () => {
+      useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+        skillsStale: false,
+      });
+      resolveRefresh?.({ skills_stale: true });
+      await Promise.resolve();
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
+    ).toBe(false);
+  });
 });

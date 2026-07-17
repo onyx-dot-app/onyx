@@ -27,6 +27,7 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import ScheduledTaskRunStatus
+from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import BuildMessage
 from onyx.db.models import Sandbox
 from onyx.db.models import User
@@ -44,6 +45,9 @@ from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
+from onyx.server.features.build.sandbox.util.agent_instructions import (
+    build_connectable_apps_list,
+)
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import ArtifactResponse
@@ -267,17 +271,25 @@ def reload_session_skills(
         if not session.skills_stale:
             return SessionSkillsStateResponse(skills_stale=False)
 
-        if (
-            sandbox is not None
-            and sandbox.status == SandboxStatus.RUNNING
-            and session.opencode_session_id is not None
-        ):
+        if sandbox is not None and sandbox.status == SandboxStatus.RUNNING:
             try:
-                sandbox_manager.dispose_opencode_instance(sandbox.id, session_id)
+                sandbox_manager.regenerate_session_config(
+                    sandbox.id,
+                    session_id,
+                    session.agent_provider,
+                    session.agent_model,
+                    session.nextjs_port,
+                    build_connectable_apps_list(
+                        get_connectable_apps_for_user(db_session, user)
+                    ),
+                    user.personal_name,
+                )
+                if session.opencode_session_id is not None:
+                    sandbox_manager.dispose_opencode_instance(sandbox.id, session_id)
             except Exception as exc:
                 db_session.rollback()
                 logger.warning(
-                    "Failed to dispose OpenCode instance for session %s",
+                    "Failed to refresh skills for session %s",
                     session_id,
                     exc_info=True,
                 )
@@ -527,12 +539,9 @@ def restore_session(
 
                 snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
-                skills_section, connectable_apps_section, skills_files = (
-                    build_user_skills_payload(user, db_session)
+                connectable_apps_section, skills_files = build_user_skills_payload(
+                    user, db_session
                 )
-                # Push the exact fileset AGENTS.md is rendered from, before
-                # rendering it — a skill can never be advertised while
-                # missing from disk.
                 hydrate_managed_content(
                     sandbox_manager,
                     sandbox.id,
@@ -548,7 +557,6 @@ def restore_session(
                             snapshot_storage_path=snapshot.storage_path,
                             nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
-                            skills_section=skills_section,
                             connectable_apps_section=connectable_apps_section,
                         )
                         session.status = BuildSessionStatus.ACTIVE
@@ -566,7 +574,6 @@ def restore_session(
                         session_id=session_id,
                         llm_config=llm_config,
                         nextjs_port=session.nextjs_port,
-                        skills_section=skills_section,
                         connectable_apps_section=connectable_apps_section,
                     )
                     session.status = BuildSessionStatus.ACTIVE

@@ -378,11 +378,9 @@ class SessionManager:
         )
         user_name = user.personal_name
 
-        skills_section, connectable_apps_section, skills_files = (
-            build_user_skills_payload(user, self._db_session)
+        connectable_apps_section, skills_files = build_user_skills_payload(
+            user, self._db_session
         )
-        # Push the exact fileset AGENTS.md is rendered from, before rendering
-        # it — a skill can never be advertised while missing from disk.
         hydrate_managed_content(
             self._sandbox_manager,
             sandbox.id,
@@ -396,7 +394,6 @@ class SessionManager:
             session_id=build_session.id,
             llm_config=llm_config,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
