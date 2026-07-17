@@ -473,7 +473,6 @@ class KubernetesSandboxManager(SandboxManager):
 
     def _load_agent_instructions(
         self,
-        skills_section: str,
         connectable_apps_section: str,
         provider: str | None = None,
         model_name: str | None = None,
@@ -484,7 +483,6 @@ class KubernetesSandboxManager(SandboxManager):
         """Load and populate agent instructions from template file."""
         return generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
             provider=provider,
             model_name=model_name,
@@ -1390,7 +1388,6 @@ class KubernetesSandboxManager(SandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
@@ -1421,7 +1418,6 @@ class KubernetesSandboxManager(SandboxManager):
         #
         # Attachments section is injected dynamically when first file is uploaded.
         agent_instructions = self._load_agent_instructions(
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
@@ -1848,7 +1844,6 @@ echo "Session cleanup complete"
         snapshot_storage_path: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        skills_section: str,
         connectable_apps_section: str,
     ) -> None:
         """Restore a FileStore-backed snapshot through the sidecar filesystem API.
@@ -1895,12 +1890,12 @@ echo "Session cleanup complete"
                 )
 
             # Regenerate configuration files that aren't in the snapshot.
-            self._regenerate_session_config(
-                pod_name=pod_name,
-                session_path=safe_session_path,
-                llm_config=llm_config,
+            self.regenerate_session_config(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                agent_provider=llm_config.provider,
+                agent_model=llm_config.model_name,
                 nextjs_port=nextjs_port,
-                skills_section=skills_section,
                 connectable_apps_section=connectable_apps_section,
             )
 
@@ -1922,46 +1917,43 @@ echo "Session cleanup complete"
         except ApiException as e:
             raise RuntimeError(f"Failed to restore snapshot: {e}") from e
 
-    def _regenerate_session_config(
+    def regenerate_session_config(
         self,
-        pod_name: str,
-        session_path: str,
-        llm_config: LLMProviderConfig,
+        *,
+        sandbox_id: UUID,
+        session_id: UUID,
+        agent_provider: str | None,
+        agent_model: str | None,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
+        user_name: str | None = None,
     ) -> None:
-        """Regenerate session configuration files after snapshot restore.
-
-        Creates:
-        - AGENTS.md (agent instructions)
-        - opencode.json (LLM configuration)
-
-        Args:
-            pod_name: The pod name to exec into
-            session_path: Path to the session directory (already shlex.quoted)
-            llm_config: LLM provider configuration
-            nextjs_port: Port for NextJS (used in AGENTS.md). None when the
-                dev server is intentionally skipped — the template renders
-                "Unknown" in that case.
-        """
+        """Rewrite generated session configuration and managed symlinks."""
+        pod_name = self._get_pod_name(str(sandbox_id))
+        session_path = shlex.quote(f"/workspace/sessions/{session_id}")
         agent_instructions = self._load_agent_instructions(
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
+            provider=agent_provider,
+            model_name=agent_model,
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
-            user_name=None,
+            user_name=user_name,
         )
 
         agent_instructions_escaped = agent_instructions.replace("'", "'\\''")
+        attachments_content_b64 = base64.b64encode(
+            ATTACHMENTS_SECTION_CONTENT.encode()
+        ).decode()
         config_script = f"""
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn /workspace/managed/skills {session_path}/.opencode/skills
 ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
+if [ -n "$(find {session_path}/attachments -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+    printf '\n\n' >> {session_path}/AGENTS.md
+    echo '{attachments_content_b64}' | base64 -d >> {session_path}/AGENTS.md
+fi
 """
 
         logger.info("Regenerating session configuration files")
@@ -2212,7 +2204,7 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         """Ensure AGENTS.md has the attachments section.
 
         Called after uploading a file. Only adds the section if it doesn't exist.
-        Inserts the section above ## Skills for better document flow.
+        Inserts the section above ## Connectable apps for better document flow.
         This is a fire-and-forget operation - failures are logged but not raised.
         """
         pod_name = self._get_pod_name(str(sandbox_id))
@@ -2224,19 +2216,19 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
             ATTACHMENTS_SECTION_CONTENT.encode()
         ).decode()
 
-        # Script: add section before ## Skills if not present
+        # Script: add section before ## Connectable apps if not present
         # Uses a temp file approach for safe insertion
         script = f"""
 if [ -f "{agents_md_path}" ]; then
     if ! grep -q "## Attachments (PRIORITY)" "{agents_md_path}" 2>/dev/null; then
-        # Check if ## Skills exists
-        if grep -q "## Skills" "{agents_md_path}" 2>/dev/null; then
-            # Insert before ## Skills using awk
+        # Check if ## Connectable apps exists
+        if grep -q "## Connectable apps" "{agents_md_path}" 2>/dev/null; then
+            # Insert before ## Connectable apps using awk
             awk -v content="$(echo "{attachments_content_b64}" | base64 -d)" '
-                /^## Skills/ {{ print content; print ""; }}
+                /^## Connectable apps/ {{ print content; print ""; }}
                 {{ print }}
             ' "{agents_md_path}" > "{agents_md_path}.tmp" && mv "{agents_md_path}.tmp" "{agents_md_path}"
-            echo "ADDED_BEFORE_SKILLS"
+            echo "ADDED_BEFORE_CONNECTABLE_APPS"
         else
             # Fallback: append to end
             echo "" >> "{agents_md_path}"

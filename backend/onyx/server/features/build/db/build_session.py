@@ -76,13 +76,22 @@ def get_build_session(
     db_session: Session,
 ) -> BuildSession | None:
     """Get a build session by ID, ensuring it belongs to the user."""
-    return (
-        db_session.query(BuildSession)
-        .filter(
-            BuildSession.id == session_id,
-            BuildSession.user_id == user_id,
-        )
-        .one_or_none()
+    stmt = select(BuildSession).where(
+        BuildSession.id == session_id,
+        BuildSession.user_id == user_id,
+    )
+    return db_session.scalar(stmt)
+
+
+def skills_are_stale(session: BuildSession, sandbox: Sandbox | None) -> bool:
+    """Whether a live runtime predates the sandbox's managed content."""
+    return bool(
+        session.status == BuildSessionStatus.ACTIVE
+        and session.origin == SessionOrigin.INTERACTIVE
+        and session.opencode_session_id is not None
+        and sandbox is not None
+        and sandbox.skills_hash is not None
+        and session.skills_hash != sandbox.skills_hash
     )
 
 
@@ -550,7 +559,11 @@ def mark_user_sessions_idle__no_commit(db_session: Session, user_id: UUID) -> in
             BuildSession.user_id == user_id,
             BuildSession.status == BuildSessionStatus.ACTIVE,
         )
-        .update({BuildSession.status: BuildSessionStatus.IDLE})
+        .update(
+            {
+                BuildSession.status: BuildSessionStatus.IDLE,
+            }
+        )
     )
     db_session.flush()
     logger.info("Marked %s sessions as IDLE for user %s", result, user_id)

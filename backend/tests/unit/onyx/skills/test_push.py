@@ -49,6 +49,17 @@ def _skill(
     )
 
 
+def test_compute_skills_hash_is_order_independent_and_content_sensitive() -> None:
+    files = {"b/SKILL.md": b"second", "a/SKILL.md": b"first"}
+
+    assert push.compute_skills_hash(files) == push.compute_skills_hash(
+        dict(reversed(files.items()))
+    )
+    assert push.compute_skills_hash(files) != push.compute_skills_hash(
+        {**files, "a/SKILL.md": b"changed"}
+    )
+
+
 def test_assemble_classifies_and_hydrates_valid_unclassified_skill(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -61,11 +72,8 @@ def test_assemble_classifies_and_hydrates_valid_unclassified_skill(
     monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
     monkeypatch.setattr(push, "persist_skill_validity", persist)
 
-    hydrated_skills, files = push._assemble_fileset(
-        [skill], user, MagicMock(spec=Session)
-    )
+    files = push._assemble_fileset([skill], user, MagicMock(spec=Session))
 
-    assert hydrated_skills == [skill]
     assert files["canonical-name/scripts/run.py"] == b"print('hello')\n"
     assert b"license: Apache-2.0" in files["canonical-name/SKILL.md"]
     assert b"x-custom: retained" in files["canonical-name/SKILL.md"]
@@ -93,11 +101,8 @@ def test_assemble_marks_invalid_legacy_name_and_does_not_hydrate(
     monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
     monkeypatch.setattr(push, "persist_skill_validity", persist)
 
-    hydrated_skills, files = push._assemble_fileset(
-        [skill], user, MagicMock(spec=Session)
-    )
+    files = push._assemble_fileset([skill], user, MagicMock(spec=Session))
 
-    assert hydrated_skills == []
     assert files == {}
     assert skill.is_valid is None
     persist.assert_called_once_with(
@@ -123,11 +128,8 @@ def test_assemble_leaves_transient_read_failure_unclassified(
     monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
     monkeypatch.setattr(push, "persist_skill_validity", persist)
 
-    hydrated_skills, files = push._assemble_fileset(
-        [skill], user, MagicMock(spec=Session)
-    )
+    files = push._assemble_fileset([skill], user, MagicMock(spec=Session))
 
-    assert hydrated_skills == []
     assert files == {}
     persist.assert_called_once_with([])
 
@@ -143,11 +145,8 @@ def test_assemble_skips_known_invalid_skill_without_reading_bundle(
     monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
     monkeypatch.setattr(push, "persist_skill_validity", persist)
 
-    hydrated_skills, files = push._assemble_fileset(
-        [skill], user, MagicMock(spec=Session)
-    )
+    files = push._assemble_fileset([skill], user, MagicMock(spec=Session))
 
-    assert hydrated_skills == []
     assert files == {}
     file_store.read_file.assert_not_called()
     persist.assert_called_once_with([])
@@ -169,11 +168,8 @@ def test_assemble_normalizes_wrapped_known_valid_skill(
     monkeypatch.setattr(push, "persist_skill_validity", persist)
     monkeypatch.setattr(push, "validate_stored_custom_skill", validate)
 
-    hydrated_skills, files = push._assemble_fileset(
-        [skill], user, MagicMock(spec=Session)
-    )
+    files = push._assemble_fileset([skill], user, MagicMock(spec=Session))
 
-    assert hydrated_skills == [skill]
     assert files["canonical-name/SKILL.md"].startswith(b"---\n")
     assert files["canonical-name/scripts/run.py"] == b"print('hello')\n"
     assert "canonical-name/canonical-name/SKILL.md" not in files
@@ -196,23 +192,18 @@ def test_assemble_hydrates_when_validity_persistence_fails(
         MagicMock(side_effect=RuntimeError("database unavailable")),
     )
 
-    hydrated_skills, files = push._assemble_fileset(
-        [skill], user, MagicMock(spec=Session)
-    )
+    files = push._assemble_fileset([skill], user, MagicMock(spec=Session))
 
-    assert hydrated_skills == [skill]
     assert files["canonical-name/SKILL.md"].startswith(b"---\n")
 
 
-def test_user_payload_advertises_only_hydrated_skills(
+def test_user_payload_returns_hydrated_files_and_connectable_apps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     valid_skill = _skill(is_valid=True)
     invalid_skill = _skill(slug="invalid-skill", is_valid=False)
     user = cast(User, SimpleNamespace())
     db_session = MagicMock(spec=Session)
-    build_section = MagicMock(return_value="skills section")
-
     monkeypatch.setattr(
         push,
         "list_skills",
@@ -221,17 +212,12 @@ def test_user_payload_advertises_only_hydrated_skills(
     monkeypatch.setattr(
         push,
         "_assemble_fileset",
-        lambda *_args: ([valid_skill], {"canonical-name/SKILL.md": b"content"}),
+        lambda *_args: {"canonical-name/SKILL.md": b"content"},
     )
-    monkeypatch.setattr(push, "build_skills_section_from_data", build_section)
     monkeypatch.setattr(push, "get_connectable_apps_for_user", lambda *_args: [])
     monkeypatch.setattr(push, "build_connectable_apps_list", lambda _apps: "apps")
 
-    skills_section, apps_section, files = push.build_user_skills_payload(
-        user, db_session
-    )
+    apps_section, files = push.build_user_skills_payload(user, db_session)
 
-    assert skills_section == "skills section"
     assert apps_section == "apps"
     assert files == {"canonical-name/SKILL.md": b"content"}
-    build_section.assert_called_once_with([valid_skill])

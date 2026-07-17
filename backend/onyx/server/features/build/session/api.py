@@ -36,6 +36,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
+from onyx.server.features.build.db.build_session import skills_are_stale
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
@@ -54,6 +55,7 @@ from onyx.server.features.build.session.models import SessionCreateRequest
 from onyx.server.features.build.session.models import SessionListResponse
 from onyx.server.features.build.session.models import SessionNameGenerateResponse
 from onyx.server.features.build.session.models import SessionResponse
+from onyx.server.features.build.session.models import SessionSkillsStateResponse
 from onyx.server.features.build.session.models import SessionUpdateRequest
 from onyx.server.features.build.session.models import SetSessionSharingRequest
 from onyx.server.features.build.session.models import SetSessionSharingResponse
@@ -187,6 +189,7 @@ def get_session_details(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    check_workspace: bool = True,
 ) -> DetailedSessionResponse:
     """
     Get details of a specific build session.
@@ -206,7 +209,7 @@ def get_session_details(
 
     # Check if session workspace exists in the sandbox
     session_loaded = False
-    if sandbox and sandbox.status == SandboxStatus.RUNNING:
+    if check_workspace and sandbox and sandbox.status == SandboxStatus.RUNNING:
         sandbox_manager = get_sandbox_manager()
         session_loaded = sandbox_manager.session_workspace_exists(
             sandbox.id, session_id
@@ -216,6 +219,17 @@ def get_session_details(
     return DetailedSessionResponse.from_session_response(
         base_response, session_loaded_in_sandbox=session_loaded
     )
+
+
+@router.post("/{session_id}/skills/reload")
+def reload_session_skills(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SessionSkillsStateResponse:
+    skills_stale = SessionManager(db_session).reload_session_skills(session_id, user)
+    db_session.commit()
+    return SessionSkillsStateResponse(skills_stale=skills_stale)
 
 
 @router.get("/{session_id}/sandbox-status")
@@ -407,7 +421,10 @@ def restore_session(
                 sandbox.id, session_id
             ):
                 session.status = BuildSessionStatus.ACTIVE
-                update_sandbox_heartbeat(db_session, sandbox.id)
+                if skills_are_stale(session, sandbox):
+                    SessionManager(db_session).reload_session_skills(session_id, user)
+                else:
+                    update_sandbox_heartbeat(db_session, sandbox.id)
                 base_response = SessionResponse.from_model(session, sandbox)
                 return DetailedSessionResponse.from_session_response(
                     base_response, session_loaded_in_sandbox=True
@@ -454,12 +471,9 @@ def restore_session(
 
                 snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
-                skills_section, connectable_apps_section, skills_files = (
-                    build_user_skills_payload(user, db_session)
+                connectable_apps_section, skills_files = build_user_skills_payload(
+                    user, db_session
                 )
-                # Push the exact fileset AGENTS.md is rendered from, before
-                # rendering it — a skill can never be advertised while
-                # missing from disk.
                 hydrate_managed_content(
                     sandbox_manager,
                     sandbox.id,
@@ -475,10 +489,10 @@ def restore_session(
                             snapshot_storage_path=snapshot.storage_path,
                             nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
-                            skills_section=skills_section,
                             connectable_apps_section=connectable_apps_section,
                         )
                         session.status = BuildSessionStatus.ACTIVE
+                        session.skills_hash = sandbox.skills_hash
                         db_session.commit()
                     except Exception as e:
                         logger.error(
@@ -493,10 +507,10 @@ def restore_session(
                         session_id=session_id,
                         llm_config=llm_config,
                         nextjs_port=session.nextjs_port,
-                        skills_section=skills_section,
                         connectable_apps_section=connectable_apps_section,
                     )
                     session.status = BuildSessionStatus.ACTIVE
+                    session.skills_hash = sandbox.skills_hash
                     db_session.commit()
 
         else:

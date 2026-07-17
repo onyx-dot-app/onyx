@@ -5788,6 +5788,7 @@ class BuildSession(Base):
     opencode_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     agent_model: Mapped[str | None] = mapped_column(String, nullable=True)
+    skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Relationships
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
@@ -5841,6 +5842,7 @@ class Sandbox(Base):
     last_heartbeat: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True

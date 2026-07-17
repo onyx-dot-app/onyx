@@ -124,6 +124,7 @@ def _replace_skill_bundle_from_editor(
 
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
+    db_session.commit()
     delete_bundle_blob(file_store, old_file_id)
     return _editable_skill_response(skill, user, db_session)
 
@@ -156,6 +157,7 @@ def set_skill_enabled_for_current_user(
     )
     db_session.commit()
     push_skills_for_users({user.id}, db_session)
+    db_session.commit()
     return skill_response_for_user(skill, user, db_session)
 
 
@@ -218,6 +220,7 @@ def create_custom_skill(
         db_session.commit()
 
     push_skill_to_affected_sandboxes(skill, db_session)
+    db_session.commit()
     return skill_response_for_user(
         skill,
         user,
@@ -287,6 +290,7 @@ def create_custom_skill_from_editor(
         db_session.commit()
 
     push_skill_to_affected_sandboxes(skill, db_session)
+    db_session.commit()
     return _editable_skill_response(skill, user, db_session)
 
 
@@ -375,6 +379,7 @@ def replace_current_user_skill_bundle(
 
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
+    db_session.commit()
     delete_bundle_blob(file_store, old_file_id)
     return skill_response_for_user(
         skill,
@@ -527,6 +532,7 @@ def patch_current_user_skill(
     if patch_req.has_details_update or visibility_changed:
         after_affected = affected_user_ids_for_skill(skill, db_session)
         push_skills_for_users(before_affected | after_affected, db_session)
+        db_session.commit()
 
     if file_store is not None and old_bundle_file_id is not None:
         delete_bundle_blob(file_store, old_bundle_file_id)
@@ -604,6 +610,7 @@ def share_current_user_skill(
     db_session.expire(skill)
     after_affected = affected_user_ids_for_skill(skill, db_session)
     push_skills_for_users(before_affected | after_affected, db_session)
+    db_session.commit()
     return skill_response_for_user(
         skill,
         user,
@@ -682,6 +689,7 @@ def transfer_current_user_skill_ownership(
     db_session.expire(skill)
     after_affected = affected_user_ids_for_skill(skill, db_session)
     push_skills_for_users(before_affected | after_affected, db_session)
+    db_session.commit()
     return skill_response_for_user(
         skill,
         user,
@@ -711,5 +719,6 @@ def delete_current_user_skill(
     db_session.commit()
 
     push_skills_for_users(affected, db_session)
+    db_session.commit()
     if old_file_id is not None:
         delete_bundle_blob(get_default_file_store(), old_file_id)

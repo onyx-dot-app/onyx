@@ -431,6 +431,7 @@ def upsert_user_credentials(
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes now.
     push_skills_for_users({user.id}, db_session)
+    db_session.commit()
 
 
 @router.get("/apps")
