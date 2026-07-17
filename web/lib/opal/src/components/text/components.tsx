@@ -2,7 +2,7 @@ import type { HTMLAttributes } from "react";
 // Canonical TextFont/TextColor unions, shared with mobile via the neutral
 // @onyx-ai/shared/contracts (not the RN-only /native).
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
-import type { RichStr, TextTagVariants, WithoutStyles } from "@opal/types";
+import type { RichStr, WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";
 
@@ -20,7 +20,7 @@ interface TextProps extends WithoutStyles<
   color?: TextColor;
 
   /** HTML tag to render. Default: `"span"`. */
-  as?: TextTagVariants;
+  as?: "p" | "span" | "li" | "h1" | "h2" | "h3";
 
   /** Prevent text wrapping. */
   nowrap?: boolean;

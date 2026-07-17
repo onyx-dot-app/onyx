@@ -41,21 +41,11 @@ export const AsLink: Story = {
   },
 };
 
-export const AsListItem: Story = {
-  render: () => (
-    <ul style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <TextButton as="li" onClick={() => alert("removed")}>
-        Remove filter
-      </TextButton>
-    </ul>
-  ),
-};
-
 export const InlineInProse: Story = {
   render: () => (
-    <p style={{ maxWidth: "36rem", lineHeight: 1.7 }}>
+    <div style={{ maxWidth: "36rem", lineHeight: 1.7 }}>
       You can undo this action within the next 30 seconds.{" "}
       <TextButton onClick={() => alert("undone")}>Undo</TextButton>.
-    </p>
+    </div>
   ),
 };
