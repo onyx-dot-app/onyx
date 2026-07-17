@@ -106,7 +106,12 @@ export const SettingsPanel = ({
   const toggleTheme = async () => {
     const nextTheme = isDark ? ThemePreference.LIGHT : ThemePreference.DARK;
     setTheme(nextTheme);
-    await updateUserThemePreference(nextTheme);
+    try {
+      await updateUserThemePreference(nextTheme);
+    } catch {
+      // errors are already logged and state is rolled back via refreshUser
+      // inside updateUserThemePreference
+    }
   };
 
   const handleBackgroundChange = async (bg: ChatBackgroundOption) => {
