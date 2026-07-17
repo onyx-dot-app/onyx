@@ -165,8 +165,6 @@ export default function ConfigureProviderModal({
             ...existingApp.organization_credentials,
             ...credentialValues,
           },
-          // Saving credentials implies enable; disable is separate.
-          enabled: true,
           action_policies: policies,
         });
       } else {
@@ -177,7 +175,6 @@ export default function ConfigureProviderModal({
           upstream_url_patterns: descriptor.upstream_url_patterns,
           auth_template: descriptor.auth_template,
           organization_credentials: credentialValues,
-          enabled: true,
           action_policies: policies,
         });
       }
@@ -210,8 +207,8 @@ export default function ConfigureProviderModal({
             {managed ? (
               <Text font="secondary-body" color="text-03">
                 This app is provided by Onyx — credentials are managed for you.
-                Enable it from the apps list, then choose what the agent may do
-                below.
+                Choose what the agent may do below. Users connect this app on
+                the Apps page to make its skill available.
               </Text>
             ) : (
               <>

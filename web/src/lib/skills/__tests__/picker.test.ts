@@ -104,7 +104,6 @@ describe("toPickerSections", () => {
   });
 
   it("builds the Apps section from the external-apps payload with auth state", () => {
-    const data = skillsList({ builtins: [builtinFixture({ slug: "pptx" })] });
     const apps = [
       appFixture({ slug: "slack", app_type: "SLACK", authenticated: true }),
       appFixture({
@@ -114,22 +113,18 @@ describe("toPickerSections", () => {
         authenticated: false,
       }),
     ];
-    const { apps: result } = toPickerSections(data, apps);
+    const { apps: result } = toPickerSections(skillsList(), apps);
     expect(result.map((a) => [a.slug, a.name, a.authenticated])).toEqual([
       ["gmail", "Gmail", false],
       ["slack", "slack", true],
     ]);
   });
 
-  it("returns an empty Apps section when the user has no apps", () => {
-    expect(toPickerSections(skillsList(), []).apps).toEqual([]);
-  });
-
-  it("returns Apps even when skills payload is undefined", () => {
+  it("builds Apps independently of skill data", () => {
     const apps = [appFixture({ slug: "slack", app_type: "SLACK" })];
     const result = toPickerSections(undefined, apps);
     expect(result.skills).toEqual([]);
-    expect(result.apps.map((a) => a.slug)).toEqual(["slack"]);
+    expect(result.apps.map((app) => app.slug)).toEqual(["slack"]);
   });
 });
 

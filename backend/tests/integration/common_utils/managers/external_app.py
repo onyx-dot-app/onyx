@@ -49,7 +49,6 @@ class ExternalAppManager:
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool = True,
         app_type: ExternalAppType = ExternalAppType.CUSTOM,
         action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
@@ -62,7 +61,6 @@ class ExternalAppManager:
             upstream_url_patterns,
             auth_template,
             organization_credentials,
-            enabled,
             action_policies,
         )
 
@@ -75,7 +73,6 @@ class ExternalAppManager:
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool = True,
         app_type: ExternalAppType = ExternalAppType.CUSTOM,
         action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
@@ -88,7 +85,6 @@ class ExternalAppManager:
             upstream_url_patterns,
             auth_template,
             organization_credentials,
-            enabled,
             action_policies,
         )
 
@@ -102,7 +98,6 @@ class ExternalAppManager:
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool,
         action_policies: dict[str, EndpointPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         # Update (``app_id`` set) is type-agnostic — the JSON PATCH edits fields
@@ -115,7 +110,6 @@ class ExternalAppManager:
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template=auth_template,
                 organization_credentials=organization_credentials,
-                enabled=enabled,
                 action_policies=action_policies,
             )
             response = client.patch(
@@ -132,7 +126,6 @@ class ExternalAppManager:
                 upstream_url_patterns,
                 auth_template,
                 organization_credentials,
-                enabled,
             )
         else:
             create_body = CreateBuiltInExternalAppRequest(
@@ -142,7 +135,6 @@ class ExternalAppManager:
                 upstream_url_patterns=upstream_url_patterns,
                 auth_template=auth_template,
                 organization_credentials=organization_credentials,
-                enabled=enabled,
                 action_policies=action_policies,
             )
             response = client.post(
@@ -162,7 +154,6 @@ class ExternalAppManager:
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        enabled: bool,
     ) -> Any:
         """POST the multipart custom-app create endpoint (bundle required)."""
         data: dict[str, str] = {
@@ -171,7 +162,6 @@ class ExternalAppManager:
             "upstream_url_patterns": json.dumps(upstream_url_patterns),
             "auth_template": json.dumps(auth_template),
             "organization_credentials": json.dumps(organization_credentials),
-            "enabled": str(enabled).lower(),
         }
         # Each bundle needs a unique canonical name while slug uniqueness is
         # still enforced by the current persistence model.
@@ -195,27 +185,6 @@ class ExternalAppManager:
             headers=headers,
             cookies=user_performing_action.cookies,
         )
-
-    @staticmethod
-    def set_enablement(
-        user_performing_action: DATestUser,
-        app_id: int,
-        enabled: bool,
-        action_policies: dict[str, EndpointPolicy] | None = None,
-    ) -> ExternalAppAdminResponse:
-        """PATCH the update endpoint with just enablement + policies, keyed by id."""
-        body = UpdateExternalAppRequest(
-            enabled=enabled,
-            action_policies=action_policies,
-        )
-        response = client.patch(
-            f"{_BUILD_PREFIX}/admin/apps/{app_id}",
-            json=body.model_dump(mode="json"),
-            headers=user_performing_action.headers,
-            cookies=user_performing_action.cookies,
-        )
-        response.raise_for_status()
-        return ExternalAppAdminResponse.model_validate(response.json())
 
     @staticmethod
     def list_admin(

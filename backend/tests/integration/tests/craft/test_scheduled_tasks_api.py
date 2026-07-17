@@ -204,7 +204,7 @@ def test_patch_task_recomputes_next_run_at_on_schedule_change(
             "editor_payload": {
                 "unit": "days",
                 "every": 1,
-                "time_of_day": "03:00",
+                "time_of_day": "03:17",
             },
         },
     )

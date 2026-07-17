@@ -18,6 +18,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill
@@ -240,15 +241,19 @@ class TestNonUniqueBuiltInId:
         assert {s.slug for s in matches} == {"pptx", "pptx-team-a"}
 
 
-class TestSchemaInvariant:
-    def test_built_in_row_has_null_bundle_fields(self, db_session: Session) -> None:
-        """``ck_skill_definition_source`` enforces XOR — built-in rows
-        keep ``bundle_file_id`` NULL, custom rows keep it set."""
-        row = make_built_in_skill_row(db_session, built_in_skill_id="company-search")
-        db_session.commit()
-        assert row.bundle_file_id is None
-        assert row.bundle_sha256 is None
+class TestDefinitionSourceInvariant:
+    def test_built_in_row_rejects_bundle_storage(self, db_session: Session) -> None:
+        row = make_built_in_skill_row(
+            db_session, built_in_skill_id=f"invalid-source-{uuid4().hex[:8]}"
+        )
+        row.bundle_file_id = "unexpected-bundle"
 
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+        db_session.rollback()
+
+
+class TestBuiltInSourceDirectory:
     def test_source_dir_resolves_under_skills_template_path(self) -> None:
         for definition in BUILT_IN_SKILLS.values():
             assert isinstance(definition.source_dir, Path)
