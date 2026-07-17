@@ -571,7 +571,11 @@ class OnyxConfluence:
                     if attempt == MAX_RETRIES - 1:
                         raise
 
-                    delay = min(5 * 2**attempt, 60)
+                    # cap to the remaining call budget so the deadline check
+                    # at the top of the loop can fire on time
+                    delay = min(
+                        5 * 2**attempt, 60, max(0.0, timeout_at - time.monotonic())
+                    )
                     # log the exception type only: the message can embed the
                     # request URL, which may carry auth material
                     logger.warning(
