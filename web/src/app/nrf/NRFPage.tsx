@@ -109,14 +109,26 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Sync single-model selection to llmManager so the submission path
   // uses the correct provider/version (mirrors AppPage behaviour).
+  // Guard against echoing derived state back — only call updateCurrentLlm
+  // when the selection actually differs from currentLlm, otherwise the
+  // initial [] -> [currentLlmModel] sync would pin
+  // `userHasManuallyOverriddenLLM=true` on whatever default resolved first
+  // (e.g. before the agent's own default finishes loading).
   useEffect(() => {
     if (multiModel.selectedModels.length === 1) {
       const model = multiModel.selectedModels[0]!;
-      llmManager.updateCurrentLlm({
-        name: model.name,
-        provider: model.provider,
-        modelName: model.modelName,
-      });
+      const current = llmManager.currentLlm;
+      if (
+        model.provider !== current.provider ||
+        model.modelName !== current.modelName ||
+        model.name !== current.name
+      ) {
+        llmManager.updateCurrentLlm({
+          name: model.name,
+          provider: model.provider,
+          modelName: model.modelName,
+        });
+      }
     }
   }, [multiModel.selectedModels]);
 
