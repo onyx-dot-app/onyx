@@ -15,6 +15,8 @@ from enum import Enum
 from typing import Protocol
 
 from mitmproxy import http
+from pydantic import BaseModel
+from pydantic import ConfigDict
 
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.identity import ResolvedSandbox
@@ -24,7 +26,15 @@ logger = setup_logger()
 
 
 class CredentialUnavailableError(Exception):
-    """A resolver claimed a request but couldn't produce its credential."""
+    """A resolver claimed a request but couldn't produce its credential.
+
+    `sandbox_detail`, when set, is agent-facing 403-body prose — never secrets
+    or internal ids; the exception message itself is internal (logs only).
+    """
+
+    def __init__(self, message: str, *, sandbox_detail: str | None = None) -> None:
+        super().__init__(message)
+        self.sandbox_detail = sandbox_detail
 
 
 @dataclass(frozen=True)
@@ -47,8 +57,10 @@ class CredentialResolver(Protocol):
         """Cheap predicate: does this resolver own this request?
 
         Implementations should key off `request.host` (and `ctx.matched_actions` /
-        `ctx.sandbox.tenant_id` for per-context routing); they MUST NOT open
-        a DB session — that's `resolve()`'s job.
+        `ctx.sandbox.tenant_id` for per-context routing). Avoid opening a DB
+        session here — that's `resolve()`'s job; a resolver that must consult the
+        DB to decide ownership should serve `claims()` from a short-TTL cache
+        refreshed at most once per interval (see `MCPServerResolver`).
         """
         ...
 
@@ -64,17 +76,27 @@ class InjectionOutcome(Enum):
     BLOCKED = "blocked"
 
 
+class InjectionResult(BaseModel):
+    """Outcome of one dispatch. `block_detail` is agent-facing prose for the
+    403 body, present only on BLOCKED when the resolver supplied one."""
+
+    model_config = ConfigDict(frozen=True)
+
+    outcome: InjectionOutcome
+    block_detail: str | None = None
+
+
 class CredentialInjectionDispatcher:
     """First-claim-wins dispatch across a fixed list of resolvers."""
 
     def __init__(self, resolvers: list[CredentialResolver]) -> None:
         self._resolvers = list(resolvers)
 
-    def apply(self, flow: http.HTTPFlow, ctx: InjectionContext) -> InjectionOutcome:
+    def apply(self, flow: http.HTTPFlow, ctx: InjectionContext) -> InjectionResult:
         host = flow.request.host
         resolver = self._pick(flow.request, ctx)
         if resolver is None:
-            return InjectionOutcome.PASS_THROUGH
+            return InjectionResult(outcome=InjectionOutcome.PASS_THROUGH)
 
         resolver_name = type(resolver).__name__
         try:
@@ -86,14 +108,16 @@ class CredentialInjectionDispatcher:
                 host,
                 str(e),
             )
-            return InjectionOutcome.BLOCKED
+            return InjectionResult(
+                outcome=InjectionOutcome.BLOCKED, block_detail=e.sandbox_detail
+            )
         except Exception:
             logger.exception(
                 "credential_resolver_error resolver=%s host=%s",
                 resolver_name,
                 host,
             )
-            return InjectionOutcome.BLOCKED
+            return InjectionResult(outcome=InjectionOutcome.BLOCKED)
 
         if not headers:
             logger.debug(
@@ -104,7 +128,7 @@ class CredentialInjectionDispatcher:
                 0,
                 "-",
             )
-            return InjectionOutcome.CLAIMED
+            return InjectionResult(outcome=InjectionOutcome.CLAIMED)
 
         for name, value in headers.items():
             flow.request.headers[name] = value
@@ -116,7 +140,7 @@ class CredentialInjectionDispatcher:
             len(headers),
             ",".join(sorted(headers)),
         )
-        return InjectionOutcome.INJECTED
+        return InjectionResult(outcome=InjectionOutcome.INJECTED)
 
     def _pick(
         self, request: http.Request, ctx: InjectionContext
