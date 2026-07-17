@@ -36,9 +36,10 @@ function measure(
  * content-anchored surfaces like the bottom-left banner queue.
  *
  * When the container is absent (pages without `AppLayouts.Root`) or the
- * sidebar overlays the content on medium screens, every value is `null` and
- * `hasContainerCenter` is `false`, so callers fall back to viewport-relative
- * positioning.
+ * viewport is below the large-screen breakpoint — where the sidebar-inset
+ * content area isn't wide enough to center a modal within — every value is
+ * `null` and `hasContainerCenter` is `false`, so callers fall back to
+ * viewport-relative positioning.
  *
  * Uses a lazy `useState` initializer so the first render already has the
  * correct values (no flash), and a `ResizeObserver` to stay reactive when
