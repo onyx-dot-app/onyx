@@ -375,7 +375,7 @@ def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
 
     scrubbed = message
     for secret in secrets:
-        if not secret or len(secret) < 4:
+        if not secret or len(secret) < 3:
             continue
         scrubbed = scrubbed.replace(secret, _SCRUB_PLACEHOLDER)
 
@@ -403,16 +403,27 @@ def collect_llm_credential_values(llm: LLM | None) -> list[str]:
     return collect_credential_values(llm.config.api_key, llm.config.custom_config)
 
 
-def litellm_exception_to_safe_error_msg(
+def litellm_exception_to_safe_error(
     e: Exception,
     llm: LLM | None = None,
+    *,
+    fallback_to_error_msg: bool = False,
+    custom_error_msg_mappings: (
+        dict[str, str] | None
+    ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
     secrets: Iterable[str | None] = (),
-) -> str:
-    """Map a LiteLLM exception to a user-facing message and redact secrets."""
-    safe_msg, _, _ = litellm_exception_to_error_msg(e, llm, fallback_to_error_msg=False)
-    return scrub_sensitive_values(
-        safe_msg, [*collect_llm_credential_values(llm), *secrets]
+) -> tuple[str, str, bool]:
+    """Classify a LiteLLM exception and redact secrets from its message."""
+    message, error_code, is_retryable = litellm_exception_to_error_msg(
+        e,
+        llm,
+        fallback_to_error_msg=fallback_to_error_msg,
+        custom_error_msg_mappings=custom_error_msg_mappings,
     )
+    safe_message = scrub_sensitive_values(
+        message, [*collect_llm_credential_values(llm), *secrets]
+    )
+    return safe_message, error_code, is_retryable
 
 
 def test_llm(llm: LLM) -> str | None:
@@ -435,7 +446,7 @@ def test_llm(llm: LLM) -> str | None:
             return None
         except Exception as e:
             logger.warning("Failed to call LLM with the following error: %s", e)
-            error_msg = litellm_exception_to_safe_error_msg(e, llm)
+            error_msg, _, _ = litellm_exception_to_safe_error(e, llm)
 
     return error_msg
 

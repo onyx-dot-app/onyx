@@ -21,7 +21,7 @@ from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.factory import get_image_generation_provider, validate_credentials
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.utils import collect_credential_values, litellm_exception_to_safe_error_msg
+from onyx.llm.utils import collect_credential_values, litellm_exception_to_safe_error
 from onyx.server.manage.image_generation.models import (
     ImageGenerationConfigCreate,
     ImageGenerationConfigUpdate,
@@ -297,10 +297,9 @@ def test_image_generation(
         raise
     except Exception as e:
         logger.warning("Image generation test failed: %s", type(e).__name__)
-        safe_error_msg = litellm_exception_to_safe_error_msg(
-            e,
-            secrets=collect_credential_values(api_key, custom_config),
-        )
+        safe_error_msg = litellm_exception_to_safe_error(
+            e, secrets=collect_credential_values(api_key, custom_config)
+        )[0]
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, safe_error_msg)
 
 

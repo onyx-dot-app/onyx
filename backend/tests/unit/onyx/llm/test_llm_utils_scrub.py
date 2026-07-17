@@ -10,6 +10,7 @@ from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.utils import (
     collect_llm_credential_values,
     is_sensitive_custom_config_key,
+    litellm_exception_to_safe_error,
     scrub_sensitive_values,
 )
 from onyx.llm.utils import (
@@ -111,6 +112,10 @@ def test_scrub_ignores_empty_and_short_secrets() -> None:
     assert scrubbed == msg
 
 
+def test_scrub_replaces_three_character_secrets() -> None:
+    assert scrub_sensitive_values("key=abc", ["abc"]) == "key=[REDACTED]"
+
+
 def test_scrub_replaces_multiple_occurrences_of_same_secret() -> None:
     msg = f"sent {_SECRET_KEY} then retried with {_SECRET_KEY}"
 
@@ -171,6 +176,24 @@ def test_collect_llm_credential_values_skips_missing_api_key() -> None:
     llm = _StubLLM(config)
 
     assert collect_llm_credential_values(llm) == []
+
+
+def test_safe_error_preserves_classification_and_redacts_fallback() -> None:
+    custom_secret = "custom-config-secret"
+    llm = _StubLLM(_make_config(custom_config={"auth_token": custom_secret}))
+    error = RuntimeError(f"provider rejected {_SECRET_KEY} and {custom_secret}")
+
+    message, error_code, is_retryable = litellm_exception_to_safe_error(
+        error,
+        llm,
+        fallback_to_error_msg=True,
+    )
+
+    assert message.count("[REDACTED]") == 2
+    assert _SECRET_KEY not in message
+    assert custom_secret not in message
+    assert error_code == "UNKNOWN_ERROR"
+    assert is_retryable is True
 
 
 # ---------------------------------------------------------------------------
