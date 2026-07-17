@@ -55,6 +55,12 @@ class TestIsTrueOpenAIModel:
         """Test that Ollama provider returns False."""
         assert is_true_openai_model(LlmProviderNames.OLLAMA_CHAT, "llama3.1") is False
 
+    def test_non_openai_provider_edenai(self) -> None:
+        """Test that Eden AI provider returns False (routed via openai-compatible)."""
+        assert (
+            is_true_openai_model(LlmProviderNames.EDENAI, "openai/gpt-4o-mini") is False
+        )
+
     def test_openai_compatible_not_in_registry(self) -> None:
         """Test that OpenAI-compatible model not in registry returns False."""
         # Custom model served via vLLM or LiteLLM proxy

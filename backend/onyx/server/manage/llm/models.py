@@ -459,6 +459,50 @@ class OpenRouterFinalModelResponse(BaseModel):
     supports_image_input: bool
 
 
+# Eden AI dynamic models fetch
+class EdenAiModelsRequest(BaseModel):
+    api_base: str
+    api_key: str
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class EdenAiModelDetails(BaseModel):
+    """Response model for the Eden AI /v3/models endpoint."""
+
+    # Ignore any extra fields returned by the API
+    model_config = {"extra": "ignore"}
+
+    id: str
+    # Eden AI returns the bare model name (without the vendor prefix)
+    model_name: str | None = None
+    # context_length may be missing or 0 for some models
+    context_length: int | None = None
+    # Contains 'input_modalities' / 'output_modalities' lists and supports_* flags
+    capabilities: dict[str, Any] = {}
+
+    @property
+    def supports_image_input(self) -> bool:
+        modalities = self.capabilities.get("input_modalities", [])
+        return isinstance(modalities, list) and "image" in modalities
+
+    @property
+    def is_text_output(self) -> bool:
+        # Keep chat models only; skip audio / image / embedding models.
+        # If Eden AI omits the field, keep the model (fail open).
+        modalities = self.capabilities.get("output_modalities")
+        if not isinstance(modalities, list) or not modalities:
+            return True
+        return "text" in modalities
+
+
+class EdenAiFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g., "anthropic/claude-sonnet-4-5")
+    display_name: str  # Human-readable name
+    max_input_tokens: int | None  # From Eden AI context_length (may be missing)
+    supports_image_input: bool
+
+
 # LM Studio dynamic models fetch
 class LMStudioModelsRequest(BaseModel):
     api_base: str

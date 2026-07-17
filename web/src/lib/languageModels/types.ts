@@ -38,6 +38,7 @@ export enum LLMProviderName {
   LM_STUDIO = "lm_studio",
   AZURE = "azure",
   OPENROUTER = "openrouter",
+  EDENAI = "edenai",
   VERTEX_AI = "vertex_ai",
   BEDROCK = "bedrock",
   LITELLM = "litellm",
@@ -107,6 +108,13 @@ export interface OpenRouterModelResponse {
   supports_image_input: boolean;
 }
 
+export interface EdenAiModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+}
+
 export interface BedrockModelResponse {
   name: string;
   display_name: string;
@@ -164,6 +172,12 @@ export interface OllamaFetchParams {
 }
 
 export interface OpenRouterFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+}
+
+export interface EdenAiFetchParams {
   api_base?: string;
   api_key?: string;
   provider_id?: number;
@@ -250,6 +264,7 @@ export type FetchModelsParams =
   | BedrockFetchParams
   | OllamaFetchParams
   | OpenRouterFetchParams
+  | EdenAiFetchParams
   | LiteLLMProxyFetchParams
   | BifrostFetchParams
   | OpenAICompatibleFetchParams

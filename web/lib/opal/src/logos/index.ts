@@ -23,6 +23,7 @@ export { default as SvgDiscourse } from "@opal/logos/discourse";
 export { default as SvgDocument360 } from "@opal/logos/document-360";
 export { default as SvgDropbox } from "@opal/logos/dropbox";
 export { default as SvgDrupal } from "@opal/logos/drupal";
+export { default as SvgEdenai } from "@opal/logos/edenai";
 export { default as SvgEgnyte } from "@opal/logos/egnyte";
 export { default as SvgElevenLabs } from "@opal/logos/eleven-labs";
 export { default as SvgExa } from "@opal/logos/exa";
