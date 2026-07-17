@@ -561,6 +561,24 @@ class OnyxConfluence:
                     while time.monotonic() < delay_until:
                         # in the future, check a signal here to exit
                         time.sleep(1)
+                except (
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.ChunkedEncodingError,
+                ) as e:
+                    # Confluence (Cloud especially) occasionally resets the TCP
+                    # connection mid-response on long crawls. Transient, so retry
+                    # instead of failing the whole index attempt.
+                    if attempt == MAX_RETRIES - 1:
+                        raise e
+
+                    delay = min(5 * 2**attempt, 60)
+                    logger.warning(
+                        "Transient network error in confluence call. "
+                        "Retrying in %s seconds... (%s)",
+                        delay,
+                        e,
+                    )
+                    time.sleep(delay)
                 except AttributeError as e:
                     # Some error within the Confluence library, unclear why it fails.
                     # Users reported it to be intermittent, so just retry

@@ -1334,10 +1334,12 @@ def test_supports_rest_space_permissions_false_when_probe_fails(
         server_info_mock
     )
 
-    assert confluence_server_client.supports_rest_space_permissions() is False
+    with mock.patch("time.sleep"):
+        assert confluence_server_client.supports_rest_space_permissions() is False
     assert confluence_server_client.get_server_version() is None
+    calls_after_first_probe = server_info_mock.call_count
     confluence_server_client.supports_rest_space_permissions()
-    assert server_info_mock.call_count == 1
+    assert server_info_mock.call_count == calls_after_first_probe
 
 
 def test_get_all_space_permissions_server_rest_404_raises_unavailable(
@@ -1493,3 +1495,57 @@ def test_get_user_email_from_userkey_caches_negative_result(
     assert first is None
     assert second is None
     assert user_details_mock.call_count == 1
+
+
+def test_wrapped_call_retries_transient_network_errors(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """Mid-crawl TCP resets surface as ChunkedEncodingError (reset while
+    reading the body) or ConnectionError (reset on send). Both are
+    transient and must be retried rather than failing the whole crawl.
+    """
+    success_response = _create_mock_response(
+        200, {"results": []}, url="rest/api/content/search"
+    )
+    confluence_server_client._confluence.get.side_effect = [  # ty: ignore[unresolved-attribute]
+        requests.exceptions.ChunkedEncodingError(
+            "Connection broken: ConnectionResetError(104, 'Connection reset by peer')"
+        ),
+        requests.exceptions.ConnectionError(
+            "('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))"
+        ),
+        success_response,
+    ]
+
+    with mock.patch("time.sleep"):
+        result = confluence_server_client.get(
+            "rest/api/content/search", advanced_mode=True
+        )
+
+    assert result is success_response
+    assert (
+        confluence_server_client._confluence.get.call_count  # ty: ignore[unresolved-attribute]
+        == 3
+    )
+
+
+def test_wrapped_call_raises_after_persistent_network_errors(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """A permanently unreachable Confluence should still fail after the
+    retry budget (5 attempts) is exhausted, not loop forever.
+    """
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        requests.exceptions.ChunkedEncodingError(
+            "Connection broken: ConnectionResetError(104, 'Connection reset by peer')"
+        )
+    )
+
+    with mock.patch("time.sleep"):
+        with pytest.raises(requests.exceptions.ChunkedEncodingError):
+            confluence_server_client.get("rest/api/content/search", advanced_mode=True)
+
+    assert (
+        confluence_server_client._confluence.get.call_count  # ty: ignore[unresolved-attribute]
+        == 5
+    )
