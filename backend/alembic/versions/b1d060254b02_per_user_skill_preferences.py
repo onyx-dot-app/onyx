@@ -1,7 +1,7 @@
 """Per-user skill preferences.
 
 Revision ID: b1d060254b02
-Revises: d396075958bd
+Revises: 8f3b2c91d4e7
 Create Date: 2026-07-16 13:47:31.228302
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = "b1d060254b02"
-down_revision = "d396075958bd"
+down_revision = "8f3b2c91d4e7"
 branch_labels = None
 depends_on = None
 
