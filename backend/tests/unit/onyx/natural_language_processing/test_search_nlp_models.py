@@ -12,6 +12,7 @@ from litellm.exceptions import RateLimitError
 from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
+from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from shared_configs.enums import EmbeddingProvider
@@ -33,6 +34,28 @@ async def mock_http_client() -> AsyncGenerator[AsyncMock, None]:
 @pytest.fixture
 def sample_embeddings() -> list[list[float]]:
     return [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # Cloudflare AI Gateway model id — leading @ would yield _cf_baai_bge_m3
+        # and Vespa rejects schema names starting with _.
+        ("@cf/baai/bge-m3", "cf_baai_bge_m3"),
+        # OpenAI-style names — same result as the old implementation.
+        ("text-embedding-ada-002", "text_embedding_ada_002"),
+        # Hugging Face-style namespaced names.
+        ("nomic-ai/nomic-embed-text-v1", "nomic_ai_nomic_embed_text_v1"),
+        # Litellm provider:model form.
+        ("openai:text-embedding-3-small", "openai_text_embedding_3_small"),
+        # Already-clean names pass through unchanged.
+        ("snowflake_arctic_embed_l_v2", "snowflake_arctic_embed_l_v2"),
+    ],
+)
+def test_clean_model_name_substitutes_non_alphanumeric(
+    raw: str, expected: str
+) -> None:
+    assert clean_model_name(raw) == expected
 
 
 @pytest.mark.asyncio
