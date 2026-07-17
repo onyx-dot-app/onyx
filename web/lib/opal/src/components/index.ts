@@ -147,6 +147,16 @@ export {
   type PopoverMenuProps,
 } from "@opal/components/popover/components";
 
+/* Modal */
+export {
+  Modal,
+  BasicModalFooter,
+  type ModalContentProps,
+  type ModalHeaderProps,
+  type ModalBodyProps,
+  type BasicModalFooterProps,
+} from "@opal/components/modal/components";
+
 /* InputTypeIn */
 export {
   default as InputTypeIn,

@@ -1,0 +1,124 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   Modal
+
+   Three layers share the chrome:
+   - .opal-modal-overlay: the scrim behind the card.
+   - .opal-modal-positioner: the fixed, centered (or top-pinned) frame that
+     carries width, the viewport clamp, and the open/close animations. When a
+     [data-main-container] center is in effect, the owner supplies left/top
+     inline and omits [data-viewport-centered].
+   - .opal-modal-card: the bordered card that carries background and height.
+
+   Without a bottom slot, one element wears positioner + card. With one, the
+   positioner wraps a .opal-modal-stack column of card + slot.
+   --------------------------------------------------------------------------- */
+
+.opal-modal-overlay {
+  @apply fixed inset-0 bg-mask-03 backdrop-blur-03 pointer-events-none;
+  z-index: var(--z-modal-overlay);
+}
+.opal-modal-overlay[data-state="open"] {
+  @apply animate-in fade-in-0;
+}
+.opal-modal-overlay[data-state="closed"] {
+  @apply animate-out fade-out-0;
+}
+
+.opal-modal-positioner {
+  @apply fixed -translate-x-1/2 duration-200;
+  @apply max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)];
+  z-index: var(--z-modal);
+}
+.opal-modal-positioner[data-state="open"] {
+  @apply animate-in fade-in-0 zoom-in-95;
+}
+.opal-modal-positioner[data-state="closed"] {
+  @apply animate-out fade-out-0 zoom-out-95;
+}
+.opal-modal-positioner[data-position="center"] {
+  @apply -translate-y-1/2;
+}
+.opal-modal-positioner[data-position="center"][data-state="open"] {
+  @apply slide-in-from-top-1/2;
+}
+.opal-modal-positioner[data-position="center"][data-state="closed"] {
+  @apply slide-out-to-top-1/2;
+}
+.opal-modal-positioner[data-position="center"][data-viewport-centered] {
+  @apply left-1/2 top-1/2;
+}
+.opal-modal-positioner[data-position="top"] {
+  @apply top-[72px];
+}
+.opal-modal-positioner[data-position="top"][data-viewport-centered] {
+  @apply left-1/2;
+}
+
+.opal-modal-positioner[data-width="sm"] {
+  @apply w-120;
+}
+.opal-modal-positioner[data-width="md"] {
+  @apply w-160;
+}
+.opal-modal-positioner[data-width="lg"] {
+  @apply w-200;
+}
+.opal-modal-positioner[data-width="xl"] {
+  @apply w-240;
+}
+.opal-modal-positioner[data-width="full"] {
+  @apply w-[80dvw];
+}
+
+.opal-modal-card {
+  @apply overflow-hidden bg-background-tint-00 border rounded-16 shadow-2xl flex flex-col;
+}
+.opal-modal-card[data-background="gray"] {
+  @apply bg-background-tint-01;
+}
+.opal-modal-card[data-height="fit"] {
+  @apply h-fit;
+}
+.opal-modal-card[data-height="sm"] {
+  @apply max-h-120 overflow-y-auto;
+}
+.opal-modal-card[data-height="lg"] {
+  @apply max-h-[calc(100dvh-4rem)] overflow-y-auto;
+}
+.opal-modal-card[data-height="full"] {
+  @apply h-[80dvh] overflow-y-auto;
+}
+
+.opal-modal-stack {
+  @apply flex flex-col gap-4 items-center;
+}
+.opal-modal-stack > .opal-modal-card {
+  @apply w-full min-h-0;
+}
+.opal-modal-bottom-slot {
+  @apply w-full shrink-0;
+}
+
+/* Header: the close button overlaps the content's top-right per the Figma
+   mocks, so the description keeps the full width. */
+.opal-modal-header-content {
+  @apply relative w-full;
+}
+.opal-modal-header-close {
+  @apply absolute top-0 right-0;
+}
+.opal-modal-close-focus {
+  @apply outline-hidden;
+}
+.opal-modal-a11y-description {
+  @apply hidden;
+}
+
+.opal-modal-body {
+  @apply flex-auto min-h-0 overflow-y-auto w-full;
+}
+.opal-modal-body[data-two-tone] {
+  @apply bg-background-tint-01;
+}
