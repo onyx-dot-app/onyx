@@ -801,6 +801,91 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management (JSM) connector",
+    subtext: `Configure which JSM service desk project to index. Service desk issues (incidents, service requests, problems, changes) will be indexed with request type, SLA status, and customer information.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira/JSM instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: "How Should We Index Your JSM Project?",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything",
+                description:
+                  "This connector will index all JSM service desk issues the provided credentials have access to.",
+              },
+            ],
+          },
+          {
+            value: "project",
+            label: "Project",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the JSM project key:",
+                label: "Project Key",
+                name: "project_key",
+                description:
+                  "The key of a specific JSM project to index (e.g., 'IT' or 'ITSM').",
+              },
+            ],
+          },
+          {
+            value: "jql",
+            label: "JQL Query",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the JQL query:",
+                label: "JQL Query",
+                name: "jql_query",
+                description:
+                  "A custom JQL query to filter JSM issues." +
+                  "\n\nIMPORTANT: Do not include time-based filters as they conflict with the connector logic. Do not include ORDER BY clauses." +
+                  "\n\nWhen using a custom JQL query, the connector will NOT automatically filter to JSM issue types — include your own issuetype filter if needed.",
+              },
+            ],
+          },
+        ],
+        defaultTab: "everything",
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to blacklist from comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        description:
+          "Add user emails whose comments should NOT be indexed (useful for bots).",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
