@@ -117,7 +117,10 @@ def box_connector(test_secrets: dict[TestSecret, str]) -> BoxConnector:
     return connector
 
 
-def test_load_documents(box_connector: BoxConnector) -> None:
+def test_load_documents(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    box_connector: BoxConnector,
+) -> None:
     result = load_all_from_connector(box_connector, 0, time())
 
     documents_by_name = {d.semantic_identifier: d for d in result.documents}
@@ -165,7 +168,10 @@ def test_load_documents(box_connector: BoxConnector) -> None:
         assert section.link.startswith("https://app.box.com/file/")
 
 
-def test_web_links(test_secrets: dict[TestSecret, str]) -> None:
+def test_web_links(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
+    test_secrets: dict[TestSecret, str],
+) -> None:
     # web links are indexed only when include_web_links is enabled, as a thin
     # "bookmark" document: name + description as text, section linking to the
     # target URL (the linked page's content is NOT fetched).
@@ -190,6 +196,7 @@ def test_web_links(test_secrets: dict[TestSecret, str]) -> None:
 
 
 def test_poll_window_filters_documents_but_not_hierarchy(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     box_connector: BoxConnector,
 ) -> None:
     # A 1970 window can never contain any real Box file.
@@ -200,6 +207,7 @@ def test_poll_window_filters_documents_but_not_hierarchy(
 
 
 def test_perm_sync_external_access(
+    mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     box_connector: BoxConnector,
     test_secrets: dict[TestSecret, str],
 ) -> None:
