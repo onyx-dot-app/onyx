@@ -9,6 +9,7 @@ restart.
 
 from typing import Any
 
+from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 
 # 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
@@ -117,6 +118,37 @@ def _build_permissions(
     return permissions
 
 
+def _mcp_tool_id(server_key: str, tool_name: str) -> str:
+    """opencode namespaces an MCP tool as ``<serverKey>_<toolName>``. Isolated
+    here since it's the one opencode-version-coupled string in MCP emission."""
+    return f"{server_key}_{tool_name}"
+
+
+def _build_mcp_block(
+    mcp_servers: list[CraftMCPServerConfig],
+) -> dict[str, dict[str, Any]]:
+    """opencode `mcp` entries for craft-enabled servers: remote transport, real
+    URL, **no auth headers** (the sandbox proxy injects them per request, so the
+    static config never changes when a user connects a server)."""
+    return {
+        server.key: {"type": "remote", "url": server.url, "enabled": True}
+        for server in mcp_servers
+    }
+
+
+def _apply_mcp_permissions(
+    permissions: dict[str, Any], mcp_servers: list[CraftMCPServerConfig]
+) -> None:
+    """MCP tools are proxy-gated, so opencode must not also prompt: enabled tools
+    are ``allow``. Admin-disabled tools are ``deny`` so chat-side curation carries
+    over (they never reach the proxy)."""
+    for server in mcp_servers:
+        for tool_name in server.enabled_tools:
+            permissions[_mcp_tool_id(server.key, tool_name)] = "allow"
+        for tool_name in server.disabled_tools:
+            permissions[_mcp_tool_id(server.key, tool_name)] = "deny"
+
+
 def _build_provider_block(
     provider_config: LLMProviderConfig,
 ) -> dict[str, Any]:
@@ -138,12 +170,18 @@ def build_multi_provider_opencode_config(
     disabled_tools: list[str] | None = None,
     dev_mode: bool = False,
     plugins: list[str] | None = None,
+    mcp_servers: list[CraftMCPServerConfig] | None = None,
 ) -> dict[str, Any]:
     """opencode.json with every provider pre-registered so per-prompt
     ``body["model"]`` overrides can target any of them.
 
     ``plugins`` is an optional list of opencode plugin specs (npm names or
     absolute file paths) loaded once per session Instance.
+
+    ``mcp_servers`` are craft-enabled MCP servers to expose to the agent as
+    remote MCP endpoints. Pre-registered statically (URL only) regardless of
+    per-user connection state — the proxy injects credentials, so connecting a
+    server needs no config change (mirrors the LLM-provider pre-load).
 
     Raises:
         ValueError: If ``providers`` is empty or ``default_provider`` is
@@ -169,13 +207,18 @@ def build_multi_provider_opencode_config(
             f" {sorted(provider_names)}"
         )
 
+    permissions = _build_permissions(disabled_tools, dev_mode)
+    if mcp_servers:
+        _apply_mcp_permissions(permissions, mcp_servers)
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
         "model": f"{default_provider}/{default_model}",
         "provider": {p.provider: _build_provider_block(p) for p in providers},
         "enabled_providers": sorted(provider_names),
-        "permission": _build_permissions(disabled_tools, dev_mode),
+        "permission": permissions,
     }
     if plugins:
         config["plugin"] = list(plugins)
+    if mcp_servers:
+        config["mcp"] = _build_mcp_block(mcp_servers)
     return config

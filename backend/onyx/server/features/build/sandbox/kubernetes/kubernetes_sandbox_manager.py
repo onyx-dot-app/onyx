@@ -108,6 +108,7 @@ from onyx.server.features.build.sandbox.labels import (
     LABEL_TENANT_ID,
 )
 from onyx.server.features.build.sandbox.models import (
+    CraftMCPServerConfig,
     FatalWriteError,
     FileSet,
     FilesystemEntry,
@@ -1007,6 +1008,7 @@ class KubernetesSandboxManager(SandboxManager):
         onyx_pat: str | None = None,
         *,
         all_llm_configs: list[LLMProviderConfig] | None = None,
+        mcp_servers: list[CraftMCPServerConfig] | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -1120,6 +1122,7 @@ class KubernetesSandboxManager(SandboxManager):
                             _OPENCODE_CONNECT_APP_PLUGIN_PATH,
                             _OPENCODE_SESSION_TAG_PLUGIN_PATH,
                         ],
+                        mcp_servers=mcp_servers,
                     )
                 )
                 self._provision_opencode_secret(str(sandbox_id), opencode_config_json)

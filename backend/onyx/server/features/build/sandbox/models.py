@@ -23,6 +23,21 @@ class LLMProviderConfig(BaseModel):
     api_base: str | None
 
 
+class CraftMCPServerConfig(BaseModel):
+    """A craft-enabled MCP server, resolved for opencode `mcp` emission.
+
+    Static (URL only) — credentials are never in opencode.json; the sandbox
+    proxy injects them per request. ``key`` is the opencode server id (the tool
+    namespace the agent sees). ``disabled_tools`` are chat-side tool-curation
+    disables (from ``Tool.enabled``) carried over to Craft.
+    """
+
+    key: str
+    url: str
+    enabled_tools: tuple[str, ...] = ()
+    disabled_tools: tuple[str, ...] = ()
+
+
 class SandboxInfo(BaseModel):
     """Information about a sandbox instance.
 
