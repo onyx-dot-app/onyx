@@ -6,8 +6,10 @@ self-hosted deployments, dropped on multi-tenant cloud (see
 LLM_CUSTOM_CONFIG_ENV_INJECTION_ENABLED).
 """
 
-from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel
+from pydantic import ConfigDict
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.well_known_providers.constants import AWS_ACCESS_KEY_ID_KWARG
@@ -68,14 +70,15 @@ _PROVIDER_CUSTOM_CONFIG_KWARGS: dict[str, dict[str, str]] = {
 }
 
 
-@dataclass(frozen=True)
-class CustomConfigMapping:
+class CustomConfigMapping(BaseModel):
     """Result of mapping a custom_config to LiteLLM kwargs.
 
     `consumed_keys` is a superset of the keys that produced kwargs: a
     recognized key can be superseded by an explicit provider-level setting
     (e.g. a stored api_key), exactly as an env var would have been.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     model_kwargs: dict[str, Any]
     consumed_keys: frozenset[str]
