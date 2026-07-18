@@ -7,6 +7,7 @@ import {
   Packet,
   PacketType,
 } from "@/chat/streamingModels";
+import { openUrl } from "@/chat/openSource";
 import { StreamingMarkdown } from "@/components/chat/StreamingMarkdown";
 import { useTypewriter } from "@/hooks/useTypewriter";
 
@@ -34,13 +35,20 @@ function accumulateContent(packets: Packet[]): string {
   return content;
 }
 
-function MessageText({ packets, isComplete }: MessageRendererProps) {
+function MessageText({ packets, processed }: MessageRendererProps) {
+  const isComplete = processed.isComplete;
   // Stable across packet flushes so the typewriter target grows only when content does.
   const content = useMemo(() => accumulateContent(packets), [packets]);
   // Captured once at mount: live messages animate; historical ones mount complete and snap.
   const [animate] = useState(() => !isComplete);
   const { displayed } = useTypewriter(content, animate, isComplete);
-  return <StreamingMarkdown content={displayed} isStreaming={!isComplete} />;
+  return (
+    <StreamingMarkdown
+      content={displayed}
+      isStreaming={!isComplete}
+      onLinkPress={openUrl}
+    />
+  );
 }
 
 export const MessageTextRenderer: MessageRenderer = {

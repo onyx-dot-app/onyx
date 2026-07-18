@@ -39,6 +39,7 @@ from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.packets import CompactionPacket
 from onyx.server.features.build.packets import ContextUsagePacket
 from onyx.server.features.build.packets import SubagentStartedPacket
+from onyx.server.features.build.sandbox.event_schema import ActivityTimeoutError
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import Error
@@ -1241,6 +1242,16 @@ class OpencodeServeClient:
         )
         return False
 
+    def dispose_instance(self, *, directory: str) -> None:
+        """Dispose the directory-scoped runtime so OpenCode reloads managed files."""
+        r = self._request(
+            "POST",
+            "/instance/dispose",
+            params={"directory": directory},
+            idempotent=True,
+        )
+        _raise_for_status(r, "instance dispose")
+
     def list_messages(
         self, opencode_session_id: str, *, directory: str
     ) -> list[dict[str, Any]]:
@@ -1550,17 +1561,15 @@ class OpencodeServeClient:
             remaining = min(inactivity_remaining, absolute_remaining)
             if remaining <= 0:
                 self.abort(opencode_session_id, directory=directory)
-                message = (
-                    "Turn exceeded maximum duration"
-                    if absolute_remaining <= 0
-                    else "Timeout waiting for activity"
-                )
-                yield Error.model_validate(
-                    {
-                        "code": TURN_ERROR_CODE_TIMEOUT,
-                        "message": message,
-                    }
-                )
+                if absolute_remaining <= 0:
+                    yield Error.model_validate(
+                        {
+                            "code": TURN_ERROR_CODE_TIMEOUT,
+                            "message": "Turn exceeded maximum duration",
+                        }
+                    )
+                else:
+                    yield ActivityTimeoutError(message="Timeout waiting for activity")
                 return
 
             try:

@@ -4,10 +4,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@opal/layouts";
-import { AuthType } from "@/lib/auth/types";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { useFilters, useLlmManager } from "@/lib/hooks";
 import Dropzone from "react-dropzone";
 import { getPanelOrigin } from "@/lib/extension/utils";
@@ -110,15 +109,25 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Sync single-model selection to llmManager so the submission path
   // uses the correct provider/version (mirrors AppPage behaviour).
+  // Skip when unchanged — otherwise the initial [] -> [currentLlmModel]
+  // sync would flag a manual override before the agent's default loads.
   useEffect(() => {
     if (multiModel.selectedModels.length === 1) {
       const model = multiModel.selectedModels[0]!;
-      llmManager.updateCurrentLlm({
-        name: model.name,
-        provider: model.provider,
-        modelName: model.modelName,
-      });
+      const current = llmManager.currentLlm;
+      if (
+        model.provider !== current.provider ||
+        model.modelName !== current.modelName ||
+        model.name !== current.name
+      ) {
+        llmManager.updateCurrentLlm({
+          name: model.name,
+          provider: model.provider,
+          modelName: model.modelName,
+        });
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.selectedModels]);
 
   // Deep research toggle
@@ -634,7 +643,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <Modal.Content width="sm" height="sm">
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
-              {authTypeMetadata?.authType === AuthType.BASIC ? (
+              {authTypeMetadata?.multiTenant === false ? (
                 <LoginPage
                   authUrl={null}
                   authTypeMetadata={authTypeMetadata ?? null}

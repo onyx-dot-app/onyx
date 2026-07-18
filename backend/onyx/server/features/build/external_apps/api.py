@@ -98,7 +98,6 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
         organization_credentials=(
             {} if managed else app.organization_credentials.get_value(apply_mask=True)
         ),
-        enabled=app.skill.enabled,
         actions=action_policy_views(app.app_type, stored),
         is_onyx_managed=managed,
     )
@@ -164,7 +163,7 @@ def create_built_in_external_app(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in apps are provided by Onyx; use PATCH /admin/apps/{id} to "
-            "enable/disable them or set action policies.",
+            "set action policies.",
         )
 
     action_policies = resolve_action_overrides(
@@ -178,7 +177,6 @@ def create_built_in_external_app(
         description=request.description,
         bundle_file_id="",
         bundle_sha256="",
-        enabled=request.enabled,
         is_public=True,
         app_type=request.app_type,
         upstream_url_patterns=request.upstream_url_patterns,
@@ -202,7 +200,7 @@ def update_external_app_admin(
 ) -> ExternalAppAdminResponse:
     """Partial update of any app (404 if absent). ``None`` fields are left
     untouched. For Onyx-managed built-ins (cloud) the gateway-config fields
-    are Onyx-owned and ignored — only ``enabled`` + ``action_policies`` apply.
+    are Onyx-owned and ignored — only ``action_policies`` apply.
     A custom app's bundle bytes are swapped via ``PUT /admin/apps/{id}/bundle``.
     """
     app = _get_app_or_404(db_session, external_app_id)
@@ -229,7 +227,6 @@ def update_external_app_admin(
         app_type=app.app_type,
         name=none_as_unset(request.name),
         description=none_as_unset(request.description),
-        enabled=none_as_unset(request.enabled),
         # Gateway config is Onyx-owned for managed built-ins; leave it untouched.
         upstream_url_patterns=(
             UNSET if managed else none_as_unset(request.upstream_url_patterns)
@@ -253,7 +250,6 @@ def create_custom_external_app(
     upstream_url_patterns: str = Form(...),
     auth_template: str = Form(...),
     organization_credentials: str = Form(...),
-    enabled: bool = Form(True),
     bundle: UploadFile | None = File(None),
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -313,9 +309,8 @@ def create_custom_external_app(
             upstream_url_patterns=parsed_patterns,
             auth_template=parsed_auth_template,
             organization_credentials=parsed_org_credentials,
-            enabled=enabled,
             is_public=True,
-            slug=ingested.slug,
+            slug=ingested.canonical_name,
         )
         # Push before commit so a failure rolls back the create + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
@@ -347,7 +342,7 @@ def replace_custom_app_bundle(
         read_bundle_file(bundle.file),
         bundle.filename,
         file_store,
-        slug=app.skill.slug,
+        expected_name=app.skill.slug,
     ) as ingested:
         app, old_bundle_file_id = update_external_app(
             db_session=db_session,
@@ -436,6 +431,7 @@ def upsert_user_credentials(
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes now.
     push_skills_for_users({user.id}, db_session)
+    db_session.commit()
 
 
 @router.get("/apps")
@@ -443,7 +439,7 @@ def list_external_apps(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ExternalAppUserResponse]:
-    """List enabled external apps with the calling user's credential state: the
+    """List external apps with the calling user's credential state: the
     keys the user must supply, the values already stored, and an
     ``authenticated`` flag. Org credentials and the raw auth template aren't
     exposed.
@@ -452,11 +448,7 @@ def list_external_apps(
     user_creds_by_app = get_user_credentials_by_app_id(
         db_session=db_session, user_id=user.id
     )
-    return [
-        _to_user_response(app, user_creds_by_app.get(app.id))
-        for app in apps
-        if app.skill.enabled
-    ]
+    return [_to_user_response(app, user_creds_by_app.get(app.id)) for app in apps]
 
 
 @router.post("/apps/connect/{request_id}/decision")

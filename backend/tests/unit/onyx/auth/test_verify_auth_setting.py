@@ -5,17 +5,42 @@ import pytest
 import onyx.auth.users as users
 from onyx.auth.users import verify_auth_setting
 from onyx.auth.users import verify_user_auth_secret
-from onyx.configs.constants import AuthType
 
 
-def test_verify_auth_setting_raises_for_cloud(
+@pytest.mark.parametrize("stale_value", ["", "basic", "cloud"])
+def test_verify_auth_setting_silent_for_inert_values(
+    monkeypatch: pytest.MonkeyPatch,
+    stale_value: str,
+) -> None:
+    """Inert values (unset, basic, cloud) log only the mode notice, no warning."""
+    if stale_value:
+        monkeypatch.setenv("AUTH_TYPE", stale_value)
+    else:
+        monkeypatch.delenv("AUTH_TYPE", raising=False)
+
+    mock_logger = MagicMock()
+    monkeypatch.setattr(users, "logger", mock_logger)
+    monkeypatch.setattr(users, "MULTI_TENANT", False)
+
+    verify_auth_setting()
+
+    mock_logger.warning.assert_not_called()
+    mock_logger.notice.assert_called_once_with("Using Auth Type: %s", "basic")
+
+
+def test_verify_auth_setting_reports_cloud_when_multi_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Cloud auth type is not valid for self-hosted deployments."""
-    monkeypatch.setenv("AUTH_TYPE", "cloud")
+    monkeypatch.delenv("AUTH_TYPE", raising=False)
 
-    with pytest.raises(ValueError, match="'cloud' is not a valid auth type"):
-        verify_auth_setting()
+    mock_logger = MagicMock()
+    monkeypatch.setattr(users, "logger", mock_logger)
+    monkeypatch.setattr(users, "MULTI_TENANT", True)
+
+    verify_auth_setting()
+
+    mock_logger.warning.assert_not_called()
+    mock_logger.notice.assert_called_once_with("Using Auth Type: %s", "cloud")
 
 
 def test_verify_auth_setting_warns_for_disabled(
@@ -26,7 +51,7 @@ def test_verify_auth_setting_warns_for_disabled(
 
     mock_logger = MagicMock()
     monkeypatch.setattr(users, "logger", mock_logger)
-    monkeypatch.setattr(users, "AUTH_TYPE", AuthType.BASIC)
+    monkeypatch.setattr(users, "MULTI_TENANT", False)
 
     verify_auth_setting()
 
@@ -34,25 +59,23 @@ def test_verify_auth_setting_warns_for_disabled(
     assert "no longer supported" in mock_logger.warning.call_args[0][0]
 
 
-@pytest.mark.parametrize(
-    "auth_type",
-    [AuthType.BASIC, AuthType.GOOGLE_OAUTH, AuthType.OIDC, AuthType.SAML],
-)
-def test_verify_auth_setting_valid_auth_types(
+@pytest.mark.parametrize("legacy_value", ["google_oauth", "oidc", "saml"])
+def test_verify_auth_setting_warns_for_legacy_sso_modes(
     monkeypatch: pytest.MonkeyPatch,
-    auth_type: AuthType,
+    legacy_value: str,
 ) -> None:
-    """Valid auth types work without errors or warnings."""
-    monkeypatch.setenv("AUTH_TYPE", auth_type.value)
+    """Legacy single-provider modes warn that the config migrated to a
+    provider row and the deployment runs as basic."""
+    monkeypatch.setenv("AUTH_TYPE", legacy_value)
 
     mock_logger = MagicMock()
     monkeypatch.setattr(users, "logger", mock_logger)
-    monkeypatch.setattr(users, "AUTH_TYPE", auth_type)
+    monkeypatch.setattr(users, "MULTI_TENANT", False)
 
     verify_auth_setting()
 
-    mock_logger.warning.assert_not_called()
-    mock_logger.notice.assert_called_once_with("Using Auth Type: %s", auth_type.value)
+    mock_logger.warning.assert_called_once()
+    assert "SSO provider row" in mock_logger.warning.call_args[0][0]
 
 
 def test_verify_user_auth_secret_rejects_empty_secret_in_production(

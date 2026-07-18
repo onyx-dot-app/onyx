@@ -45,12 +45,10 @@ from onyx.background.indexing.checkpointing_utils import (
 )
 from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
 from onyx.background.indexing.index_attempt_utils import get_old_index_attempt_ids
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import PERSISTENT_INDEXING
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import DocumentSource
@@ -1027,7 +1025,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     # to prevent continued indexing retry attempts burning through embedding credits.
                     # NOTE: only for Cloud, since most self-hosted users use self-hosted embedding
                     # models. Also, they are more prone to repeated failures -> eventual success.
-                    if AUTH_TYPE == AuthType.CLOUD:
+                    if MULTI_TENANT:
                         update_connector_credential_pair_from_id(
                             db_session=db_session,
                             cc_pair_id=cc_pair.id,

@@ -45,7 +45,7 @@ def build_minimal_bundle(
     now the canonical source for those fields on the backend, so tests that
     care about them should pass them here instead of as separate API args.
     """
-    fm_name = name or f"Test Skill {slug}"
+    fm_name = name or slug
     fm_desc = description or f"Description for {slug}"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -281,6 +281,20 @@ class SkillManager:
         )
         response.raise_for_status()
         return _response_model(response, SkillsList)
+
+    @staticmethod
+    def set_enabled(
+        skill: SkillResponse,
+        user_performing_action: DATestUser,
+        enabled: bool,
+    ) -> SkillResponse:
+        response = client.put(
+            f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+            json={"enabled": enabled},
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillResponse)
 
     @staticmethod
     def get_for_user(

@@ -151,7 +151,6 @@ def test_confluence_connector_restriction_handling(
     non_restricted_user_groups = {
         "confluence-admins-danswerai",
         "org-admins",
-        "atlassian-addons-admin",
         "confluence-users-danswerai",
     }
 

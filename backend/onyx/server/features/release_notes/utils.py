@@ -19,6 +19,7 @@ from onyx.server.features.release_notes.constants import REDIS_CACHE_TTL
 from onyx.server.features.release_notes.constants import REDIS_KEY_ETAG
 from onyx.server.features.release_notes.constants import REDIS_KEY_FETCHED_AT
 from onyx.server.features.release_notes.models import ReleaseNoteEntry
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -131,11 +132,7 @@ def get_last_fetch_time() -> datetime | None:
         if not raw:
             return None
 
-        last_fetch = datetime.fromisoformat(raw.decode("utf-8"))
-        if last_fetch.tzinfo is None:
-            last_fetch = last_fetch.replace(tzinfo=timezone.utc)
-        else:
-            last_fetch = last_fetch.astimezone(timezone.utc)
+        last_fetch = datetime_to_utc(datetime.fromisoformat(raw.decode("utf-8")))
 
         return last_fetch
     except Exception as e:

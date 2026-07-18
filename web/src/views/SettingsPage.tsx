@@ -37,7 +37,7 @@ import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useLlmManager } from "@/lib/hooks";
-import { useAuthType } from "@/lib/auth/hooks";
+import { useIsMultiTenant } from "@/lib/auth/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -48,8 +48,8 @@ import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import { ConfirmationModalLayout } from "@opal/layouts";
+import { BasicModalFooter, Modal } from "@opal/components";
 import { Code, CopyButton } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
@@ -1304,7 +1304,7 @@ function ChatPreferencesSettings() {
 
 function AccountsAccessSettings() {
   const { user, authTypeMetadata } = useUser();
-  const authType = useAuthType();
+  const isMultiTenant = useIsMultiTenant();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // TODO(auth-refresh): only passwordMinLength is enforced here; the remaining
@@ -1337,7 +1337,7 @@ function AccountsAccessSettings() {
   const canCreateTokens = useCloudSubscription();
 
   const showPasswordSection = Boolean(user?.password_configured);
-  const showTokensSection = authType !== null;
+  const showTokensSection = isMultiTenant !== null;
 
   // Fetch PATs with SWR
   const {

@@ -57,6 +57,7 @@ from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
 from onyx.server.features.build.scheduled_tasks.schedule import EditorPayload
 from onyx.server.features.build.scheduled_tasks.schedule import human_readable
 from onyx.server.features.build.scheduled_tasks.schedule import next_n_fires
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -365,9 +366,7 @@ def _parse_cursor(cursor: str | None) -> datetime | None:
             OnyxErrorCode.INVALID_INPUT,
             f"Invalid cursor (expected ISO-8601 datetime): {cursor!r}",
         ) from e
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
+    return datetime_to_utc(parsed)
 
 
 # ---------------------------------------------------------------------------

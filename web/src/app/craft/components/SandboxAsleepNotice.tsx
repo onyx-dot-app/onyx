@@ -9,7 +9,7 @@ import {
   useBuildSessionStore,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useSandboxSleepWatcher } from "@/app/craft/hooks/useSandboxSleepWatcher";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 
 // Waking is always user-initiated — never automatic — so we don't keep pods
 // alive forever and defeat idle reaping.

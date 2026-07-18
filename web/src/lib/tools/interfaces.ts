@@ -37,8 +37,15 @@ export interface MCPServer {
   admin_credentials?: Record<string, string>;
   user_credentials?: Record<string, string>;
   status: MCPServerStatus;
+  is_public: boolean;
+  groups: number[];
+  users: string[];
   last_refreshed_at?: string;
   tool_count: number;
+}
+
+export interface AgentEditorMCPServer extends MCPServer {
+  can_attach: boolean;
 }
 
 export interface MCPServersResponse {
@@ -50,12 +57,19 @@ export interface MCPServerCreateRequest {
   name: string;
   description?: string;
   server_url: string;
+  is_public: boolean;
+  groups: number[];
+  users: string[];
 }
 
 export interface MCPServerUpdateRequest {
   name?: string;
   description?: string;
   server_url?: string;
+  // Omit to leave the server's existing access unchanged.
+  is_public?: boolean;
+  groups?: number[];
+  users?: string[];
 }
 
 export interface MCPTool {

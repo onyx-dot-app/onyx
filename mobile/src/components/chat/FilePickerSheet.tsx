@@ -63,14 +63,17 @@ export function FilePickerSheet({
       }}
       statusBarTranslucent
     >
+      {/* Semantic color tokens can't express translucency (bare CSS vars, no alpha channel), so the
+          dimming scrim uses a raw rgba — the one place a non-token color is warranted. */}
       <Pressable
-        className="bg-background-inverted-05/40 flex-1 justify-end"
+        className="flex-1 justify-end"
+        style={{ backgroundColor: "rgba(0, 0, 0, 0.4)" }}
         onPress={onClose}
       >
         {/* Stop taps inside the sheet from dismissing it. */}
         <Pressable
           onPress={() => {}}
-          className="rounded-t-24 border-t border-border-01 bg-background-tint-00 px-16 pt-16"
+          className="rounded-t-20 border-t border-border-01 bg-background-tint-00 px-16 pt-16"
           style={{ paddingBottom: insets.bottom + 16 }}
         >
           <View className="mb-8 flex-row items-center justify-between">

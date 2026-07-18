@@ -92,7 +92,6 @@ def test_preview_returns_instructions_without_share_details(
     skill = SkillManager.create_custom(
         basic_user,
         slug=f"preview-custom-{uuid4().hex[:6]}",
-        name="Preview Skill",
         description="Preview description",
     )
     skill_id = _skill_id(skill)
@@ -111,7 +110,7 @@ def test_preview_returns_instructions_without_share_details(
 
     assert preview.source == "custom"
     assert preview.id == skill_id
-    assert preview.name == "Preview Skill"
+    assert preview.name == skill.name
     assert preview.description == "Preview description"
     assert preview.instructions_markdown == "Skill instructions."
     assert not hasattr(preview, "user_shares")
@@ -137,7 +136,6 @@ def test_patch_details_rewrites_bundle_without_changing_slug(
     skill = SkillManager.create_custom(
         basic_user,
         slug=slug,
-        name="Original Name",
         description="Original description",
     )
     skill_id = _skill_id(skill)
@@ -146,25 +144,24 @@ def test_patch_details_rewrites_bundle_without_changing_slug(
         skill,
         basic_user,
         SkillPatchRequest(
-            name="Updated Name",
             description="Updated description",
             instructions_markdown="# Updated instructions\n\nUse the revised workflow.",
         ),
     )
 
     assert updated.slug == slug
-    assert updated.name == "Updated Name"
+    assert updated.name == slug
     assert updated.description == "Updated description"
 
     editable = SkillManager.get_editable(skill_id, basic_user)
-    assert editable.name == "Updated Name"
+    assert editable.name == slug
     assert editable.description == "Updated description"
     assert editable.instructions_markdown == (
         "# Updated instructions\n\nUse the revised workflow."
     )
 
     preview = SkillManager.preview(skill_id, basic_user)
-    assert preview.name == "Updated Name"
+    assert preview.name == slug
     assert preview.description == "Updated description"
     assert preview.instructions_markdown == (
         "# Updated instructions\n\nUse the revised workflow."
@@ -203,31 +200,31 @@ def test_direct_viewer_share_grants_view_not_edit(
     _assert_edit_hidden(skill_id, viewer)
 
 
-def test_direct_editor_share_grants_edit(
+def test_direct_share_restores_existing_enabled_preference(
     basic_user: DATestUser,
     admin_user: DATestUser,  # noqa: ARG001
 ) -> None:
-    editor = UserManager.create(name=f"skill_direct_editor_{uuid4().hex[:8]}")
+    recipient = UserManager.create(name=f"skill_recipient_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
         basic_user,
-        slug=f"direct-editor-{uuid4().hex[:6]}",
+        slug=f"preference-restore-{uuid4().hex[:6]}",
     )
-    skill_id = _skill_id(skill)
-
-    SkillManager.share(
-        skill,
-        basic_user,
-        user_shares=[
-            SkillUserShareRequest(
-                user_id=UUID(editor.id),
-                permission=SkillSharePermission.EDITOR,
-            )
-        ],
+    share = SkillUserShareRequest(
+        user_id=UUID(recipient.id),
+        permission=SkillSharePermission.VIEWER,
     )
 
-    editable = SkillManager.get_editable(skill_id, editor)
-    assert editable.user_permission == SkillAccessLevel.EDITOR
-    assert editable.instructions_markdown == "Skill instructions."
+    SkillManager.share(skill, basic_user, user_shares=[share])
+    initially_shared = SkillManager.get_for_user(skill.id, recipient)
+    assert initially_shared.enabled is False
+    assert SkillManager.set_enabled(skill, recipient, True).enabled is True
+
+    SkillManager.share(skill, basic_user, user_shares=[])
+    _assert_skill_hidden(skill.id, recipient)
+
+    SkillManager.share(skill, basic_user, user_shares=[share])
+    reshared = SkillManager.get_for_user(skill.id, recipient)
+    assert reshared.enabled is True
 
 
 def test_org_wide_editor_permission_grants_edit(
@@ -335,6 +332,7 @@ def test_owner_transfer_demotes_previous_owner_and_promotes_new_owner(
     new_owner_response = SkillManager.get_for_user(str(skill_id), new_owner)
     assert new_owner_response.author_user_id == UUID(new_owner.id)
     assert new_owner_response.user_permission == SkillAccessLevel.OWNER
+    assert new_owner_response.enabled is True
 
 
 @pytest.mark.parametrize(

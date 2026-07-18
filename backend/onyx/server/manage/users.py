@@ -30,13 +30,15 @@ from onyx.auth.invited_users import write_invited_users
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
+from onyx.auth.session_tokens import build_session_rejection_error
+from onyx.auth.session_tokens import classify_session_token_value
+from onyx.auth.session_tokens import SessionRejection
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import enforce_seat_limit_locked
 from onyx.auth.users import optional_user
 from onyx.auth.users import scope_exempt
 from onyx.configs.app_configs import AUTH_BACKEND
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import EMAIL_CONFIGURED
@@ -615,7 +617,7 @@ def bulk_invite_users(
     else:
         try:
             for email in emails_needing_seats:
-                send_user_email_invite(email, current_user, AUTH_TYPE)
+                send_user_email_invite(email, current_user)
             email_invite_status = EmailInviteStatus.SENT
         except Exception as e:
             logger.error("Error sending email invite to invited users: %s", e)
@@ -889,43 +891,44 @@ async def get_user_role(
     return UserRoleResponse(role=user.role)
 
 
-def get_current_auth_token_creation_redis(
+def get_current_auth_token_expiry_redis(
     user: User, request: Request
 ) -> datetime | None:
-    """Calculate the token creation time from Redis TTL information.
-
-    This function retrieves the authentication token from cookies,
-    checks its TTL in Redis, and calculates when the token was created.
-    Despite the function name, it returns the token creation time, not the expiration time.
     """
-    # Anonymous users don't have auth tokens
+    Reads the logical expiry embedded in the Redis token value; the physical TTL
+    outlives it by the grace window, so TTL back-calculation would overstate the
+    remaining session time. Pre-upgrade values are the exception: written
+    without the grace window, their TTL is the exact logical expiry, so it is
+    used directly.
+    """
+    # Anonymous users don't have auth tokens.
     if user.is_anonymous:
         return None
     try:
-        # Get the token from the request
         token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
         if not token:
             logger.debug("No auth token cookie found")
             return None
 
-        # Get the Redis client
         redis = get_raw_redis_client()
         redis_key = REDIS_AUTH_KEY_PREFIX + token
-
-        # Get the TTL of the token
-        ttl = cast(int, redis.ttl(redis_key))
-        if ttl <= 0:
-            logger.error("Token has expired or doesn't exist in Redis")
+        raw_value = redis.get(redis_key)
+        result = classify_session_token_value(cast(str | bytes | None, raw_value))
+        if isinstance(result, SessionRejection):
+            logger.error(
+                "Token of authenticated request is not live in Redis: %s",
+                result.reason.value,
+            )
             return None
 
-        # Calculate the creation time based on TTL and session expiry
-        # Current time minus (total session length minus remaining TTL)
-        current_time = datetime.now(timezone.utc)
-        token_creation_time = current_time - timedelta(
-            seconds=(SESSION_EXPIRE_TIME_SECONDS - ttl)
-        )
+        if result.issued_at is None:
+            # Pre-upgrade value: its physical TTL is its logical expiry.
+            ttl = cast(int, redis.ttl(redis_key))
+            if ttl <= 0:
+                return None
+            return datetime.now(timezone.utc) + timedelta(seconds=ttl)
 
-        return token_creation_time
+        return result.expires_at
 
     except Exception as e:
         logger.error("Error retrieving token expiration from Redis: %s", e)
@@ -972,14 +975,19 @@ def get_current_token_creation_jwt(user: User, request: Request) -> datetime | N
         return None
 
 
-def _get_token_created_at(
+def _get_token_expires_at(
     user: User, request: Request, db_session: Session
 ) -> datetime | None:
     if AUTH_BACKEND == AuthBackend.REDIS:
-        return get_current_auth_token_creation_redis(user, request)
+        return get_current_auth_token_expiry_redis(user, request)
+
     if AUTH_BACKEND == AuthBackend.JWT:
-        return get_current_token_creation_jwt(user, request)
-    return get_current_token_creation_postgres(user, db_session)
+        token_created_at = get_current_token_creation_jwt(user, request)
+    else:
+        token_created_at = get_current_token_creation_postgres(user, db_session)
+    if token_created_at is None:
+        return None
+    return token_created_at + timedelta(seconds=SESSION_EXPIRE_TIME_SECONDS)
 
 
 @router.get("/me/permissions", tags=PUBLIC_API_TAGS)
@@ -1004,6 +1012,9 @@ def verify_user_logged_in(
         if anonymous_user_enabled(tenant_id=tenant_id):
             store = get_kv_store()
             return fetch_anonymous_user_info(store)
+        session_rejection_error = build_session_rejection_error()
+        if session_rejection_error is not None:
+            raise session_rejection_error
         raise BasicAuthenticationError(detail="Unauthorized")
 
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
@@ -1011,13 +1022,7 @@ def verify_user_logged_in(
             detail="Access denied. User's OIDC token has expired.",
         )
 
-    token_created_at = _get_token_created_at(user, request, db_session)
-
-    token_expires_at: datetime | None = None
-    if token_created_at is not None:
-        token_expires_at = token_created_at + timedelta(
-            seconds=SESSION_EXPIRE_TIME_SECONDS
-        )
+    token_expires_at = _get_token_expires_at(user, request, db_session)
     track_oidc = get_security_settings().track_external_idp_expiry
     # When OIDC tracking is enabled, cap expiry at the IdP token's lifetime.
     # Guard against stale oidc_expiry from a previous OIDC session (same comment

@@ -1,8 +1,8 @@
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
 
 interface AuthTypeAPIResponse {
-  auth_type: string;
+  multi_tenant: boolean;
   requires_verification: boolean;
   anonymous_user_enabled: boolean | null;
   password_min_length: number;
@@ -13,6 +13,12 @@ interface AuthTypeAPIResponse {
   password_require_special_char: boolean;
   has_users: boolean;
   oauth_enabled: boolean;
+  sso_providers?: {
+    name: string;
+    display_name: string;
+    provider_type: SSOProviderType;
+    authorize_url: string;
+  }[];
 }
 
 export async function fetchAuthTypeMetadata(
@@ -24,12 +30,9 @@ export async function fetchAuthTypeMetadata(
     throw new Error("Failed to fetch auth type metadata");
   }
   const data: AuthTypeAPIResponse = await res.json();
-  const authType = NEXT_PUBLIC_CLOUD_ENABLED
-    ? AuthType.CLOUD
-    : (data.auth_type as AuthType);
+  const multiTenant = NEXT_PUBLIC_CLOUD_ENABLED ? true : data.multi_tenant;
   return {
-    authType,
-    autoRedirect: authType === AuthType.OIDC || authType === AuthType.SAML,
+    multiTenant,
     requiresVerification: data.requires_verification,
     anonymousUserEnabled: data.anonymous_user_enabled,
     passwordMinLength: data.password_min_length,
@@ -40,6 +43,12 @@ export async function fetchAuthTypeMetadata(
     passwordRequireSpecialChar: data.password_require_special_char,
     hasUsers: data.has_users,
     oauthEnabled: data.oauth_enabled,
+    ssoProviders: (data.sso_providers ?? []).map((provider) => ({
+      name: provider.name,
+      displayName: provider.display_name,
+      providerType: provider.provider_type,
+      authorizeUrl: provider.authorize_url,
+    })),
   };
 }
 

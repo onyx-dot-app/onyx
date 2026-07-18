@@ -26,8 +26,8 @@
    These auto-switch for dark mode via colors.css — no dark: modifier needed.
    Note: text-05 = highest contrast, text-01 = lowest. */
 .prose-onyx {
-  --tw-prose-body: var(--text-05);
-  --tw-prose-headings: var(--text-05);
+  --tw-prose-body: var(--text-04);
+  --tw-prose-headings: var(--text-04);
   --tw-prose-lead: var(--text-04);
   --tw-prose-links: var(--action-link-05);
   --tw-prose-bold: var(--text-05);

@@ -20,7 +20,6 @@ or external app is a single ``_REGISTRY`` entry plus its on-disk
 ``builtin/<skill_id>/`` directory.
 """
 
-import re
 from collections.abc import Callable
 from collections.abc import Iterable
 from pathlib import Path
@@ -37,14 +36,12 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType
 from onyx.image_gen.generation import is_image_generation_configured
 from onyx.server.features.build.configs import ENABLE_BROWSER
+from onyx.skills.metadata import parse_skill_document
+from onyx.skills.models import SKILL_NAME_PATTERN
 
 # On-disk root for built-in skill content (one ``<skill_id>/`` dir each). Pushed
 # to sandboxes at session setup; not baked into the sandbox image.
 BUILTIN_SKILLS_PATH: Final[Path] = Path(__file__).parent / "builtin"
-
-# Slug grammar shared with custom bundle slugs (bundle.py imports this).
-SKILL_SLUG_PATTERN: Final[str] = r"^[a-z][a-z0-9-]{0,63}$"
-SLUG_REGEX: Final[re.Pattern[str]] = re.compile(SKILL_SLUG_PATTERN)
 
 
 def _always_available(_: Session) -> bool:
@@ -53,8 +50,8 @@ def _always_available(_: Session) -> bool:
 
 class BuiltInSkillDefinition(BaseModel):
     """Runtime behavior for one built-in skill (the resolved view a provider
-    produces). ``built_in_skill_id`` is the stable identifier, seeded slug, and
-    on-disk directory name under ``BUILTIN_SKILLS_PATH`` — which fully
+    produces). ``built_in_skill_id`` is the stable identifier and on-disk
+    directory name under ``BUILTIN_SKILLS_PATH`` — which fully
     determines ``source_dir`` and ``has_template``, so both are computed.
 
     ``extra="forbid"`` makes a stray ``source_dir=`` (e.g. an old test trying to
@@ -64,7 +61,7 @@ class BuiltInSkillDefinition(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    built_in_skill_id: str = Field(pattern=SKILL_SLUG_PATTERN)
+    built_in_skill_id: str = Field(pattern=SKILL_NAME_PATTERN, max_length=64)
     is_available: Callable[[Session], bool] = _always_available
     unavailable_reason: str | None = None
 
@@ -81,13 +78,12 @@ class BuiltInSkillDefinition(BaseModel):
 
 
 class BuiltInProvider(BaseModel):
-    """Base registry entry. ``skill_id`` doubles as the slug and on-disk dir
-    name, validated here so a bad entry fails at import."""
+    """Base registry entry with a validated canonical name and directory."""
 
     model_config = ConfigDict(frozen=True)
 
     kind: str
-    skill_id: str = Field(pattern=SKILL_SLUG_PATTERN)
+    skill_id: str = Field(pattern=SKILL_NAME_PATTERN, max_length=64)
     is_available: Callable[[Session], bool] = _always_available
     unavailable_reason: str | None = None
 
@@ -142,7 +138,18 @@ class BuiltInSkillRegistry:
         for provider in provider_list:
             if provider.skill_id in definitions:
                 raise ValueError(f"Duplicate built-in skill_id: {provider.skill_id!r}")
-            definitions[provider.skill_id] = provider.to_definition()
+            definition = provider.to_definition()
+            source_name = "SKILL.md.template" if definition.has_template else "SKILL.md"
+            source_path = definition.source_dir / source_name
+            if not source_path.is_file():
+                raise ValueError(
+                    f"Built-in skill {provider.skill_id!r} is missing {source_name}"
+                )
+            parse_skill_document(
+                source_path.read_bytes(),
+                directory_name=provider.skill_id,
+            )
+            definitions[provider.skill_id] = definition
 
             if isinstance(provider, ExternalAppBuiltInProvider):
                 existing = external_app_skill_ids.get(provider.app_type)
@@ -215,6 +222,6 @@ EXTERNAL_APP_SKILL_ID_TO_APP_TYPE: Final[dict[str, ExternalAppType]] = {
     skill_id: app_type for app_type, skill_id in EXTERNAL_APP_BUILT_IN_SKILL_IDS.items()
 }
 
-# Named handles so callers avoid bare slug literals.
+# Named handles so callers avoid bare identity literals.
 COMPANY_SEARCH: Final[BuiltInSkillDefinition] = BUILT_IN_SKILLS["company-search"]
 SLACK: Final[BuiltInSkillDefinition] = BUILT_IN_SKILLS["slack"]

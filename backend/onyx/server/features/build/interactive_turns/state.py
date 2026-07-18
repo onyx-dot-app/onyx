@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from onyx.cache.interface import CacheBackend
 from onyx.cache.interface import CacheLock
+from onyx.utils.datetime import datetime_to_utc
 
 
 class InteractiveTurnStatus(StrEnum):
@@ -275,10 +276,7 @@ def _runner_is_stale(
 ) -> bool:
     if turn.last_heartbeat_at is None:
         return True
-    heartbeat = turn.last_heartbeat_at
-    if heartbeat.tzinfo is None:
-        heartbeat = heartbeat.replace(tzinfo=timezone.utc)
-    age = datetime.now(tz=timezone.utc) - heartbeat
+    age = datetime.now(tz=timezone.utc) - datetime_to_utc(turn.last_heartbeat_at)
     return age.total_seconds() >= stale_after_seconds
 
 

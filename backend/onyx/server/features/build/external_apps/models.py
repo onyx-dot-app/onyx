@@ -17,9 +17,7 @@ class CreateBuiltInExternalAppRequest(BaseModel):
 
     A new row is inserted (and a backing ``Skill`` row is created in the same
     transaction). ``upstream_url_patterns`` is a list of regex patterns matched
-    by the egress proxy against outbound request URLs. ``enabled`` (stored on
-    the linked skill) is the kill switch the proxy checks before injecting
-    credentials.
+    by the egress proxy against outbound request URLs.
 
     Skill identity (slug, bundle bytes, sharing scope) is derived server-side
     from ``app_type``; admins don't supply it.
@@ -27,7 +25,6 @@ class CreateBuiltInExternalAppRequest(BaseModel):
 
     name: str
     description: str
-    enabled: bool
     app_type: ExternalAppType
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
@@ -40,17 +37,16 @@ class CreateBuiltInExternalAppRequest(BaseModel):
 class UpdateExternalAppRequest(BaseModel):
     """Partial update of an existing app, keyed solely by the path ``id``
     (``PATCH /admin/apps/{id}``). Every field is optional; ``None`` means "leave
-    untouched", so a narrow request (e.g. just ``enabled``) won't blank the rest.
+    untouched", so a narrow request won't blank the rest.
 
     This is the single update path for built-in apps. For Onyx-managed built-ins
     (cloud) the gateway-config fields (``upstream_url_patterns``,
     ``auth_template``, ``organization_credentials``) are Onyx-owned and ignored —
-    only ``enabled`` + ``action_policies`` take effect. Custom-app field edits
+    only ``action_policies`` take effect. Custom-app field edits
     (and bundle replacement) go through ``POST /admin/apps/custom`` instead, since
     that path is multipart.
     """
 
-    enabled: bool | None = None
     name: str | None = None
     description: str | None = None
     upstream_url_patterns: list[str] | None = None
@@ -70,11 +66,10 @@ class ExternalAppAdminResponse(BaseModel):
     upstream_url_patterns: list[str]
     auth_template: dict[str, Any]
     organization_credentials: dict[str, Any]
-    enabled: bool
     # The merged per-action policy view (built-in apps; empty for custom).
     actions: list[ActionPolicyView]
     # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;
-    # admin may only enable/disable + set policies. UI hides the rest.
+    # admin may only set policies. UI hides the rest.
     is_onyx_managed: bool = False
 
 
@@ -96,7 +91,7 @@ class ExternalAppUserResponse(BaseModel):
     `credential_keys`.
 
     Admin-only fields (``organization_credentials``, ``auth_template``,
-    ``upstream_url_patterns``, ``enabled``) are intentionally omitted.
+    ``upstream_url_patterns``) are intentionally omitted.
     ``app_type`` is included — it's the non-sensitive provider
     discriminator the UI needs to render the app.
     """

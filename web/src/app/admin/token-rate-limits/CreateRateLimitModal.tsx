@@ -3,7 +3,7 @@
 import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { useEffect, useState } from "react";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Form, Formik } from "formik";
 import { SelectorFormField, TextFormField } from "@/components/Field";
 import { UserGroup } from "@/lib/types";

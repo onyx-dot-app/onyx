@@ -6,6 +6,7 @@ from typing import List
 from typing import NotRequired
 from typing import Optional
 from typing import TypedDict
+from uuid import UUID
 
 from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel
@@ -50,6 +51,14 @@ def apply_auto_substitutions(value: str, *, user_email: str) -> str:
     for key, replacement in subst.items():
         value = value.replace(f"{{{key}}}", replacement)
     return value
+
+
+# Headers that must never be sourced from stored MCP credentials or request
+# templates. Host is particularly critical — it can be used for Host Header
+# Injection attacks to route requests to unintended internal servers.
+DENYLISTED_MCP_HEADERS = {
+    "host",
+}
 
 
 # This should be updated along with MCPConnectionData
@@ -188,6 +197,24 @@ class MCPToolCreateRequest(BaseModel):
     existing_server_id: Optional[int] = Field(
         None, description="ID of existing server to update (for editing)"
     )
+    # Access fields are optional on this auth-configuration path: `None` leaves
+    # the server's existing access untouched (the create/edit form owns access).
+    is_public: Optional[bool] = Field(
+        default=None,
+        description=(
+            "If True, any user may add this server's tools to their agents. "
+            "If False, access is limited to `users` / `groups`. None leaves "
+            "existing access unchanged."
+        ),
+    )
+    groups: Optional[list[int]] = Field(
+        default=None,
+        description="User group IDs allowed to use this server when not public",
+    )
+    users: Optional[list[UUID]] = Field(
+        default=None,
+        description="User IDs allowed to use this server when not public",
+    )
 
     @model_validator(mode="after")
     def validate_auth_configuration(self) -> "MCPToolCreateRequest":
@@ -273,6 +300,21 @@ class MCPServerSimpleCreateRequest(BaseModel):
         None, description="Description of the MCP server"
     )
     server_url: str = Field(..., description="URL of the MCP server")
+    is_public: bool = Field(
+        default=True,
+        description=(
+            "If True, any user may add this server's tools to their agents. "
+            "If False, access is limited to `users` / `groups`."
+        ),
+    )
+    groups: list[int] = Field(
+        default_factory=list,
+        description="User group IDs allowed to use this server when not public",
+    )
+    users: list[UUID] = Field(
+        default_factory=list,
+        description="User IDs allowed to use this server when not public",
+    )
 
 
 class MCPServerSimpleUpdateRequest(BaseModel):
@@ -281,6 +323,23 @@ class MCPServerSimpleUpdateRequest(BaseModel):
         None, description="Description of the MCP server"
     )
     server_url: Optional[str] = Field(None, description="URL of the MCP server")
+    # None leaves the server's existing access unchanged.
+    is_public: Optional[bool] = Field(
+        default=None,
+        description=(
+            "If True, any user may add this server's tools to their agents. "
+            "If False, access is limited to `users` / `groups`. None leaves "
+            "existing access unchanged."
+        ),
+    )
+    groups: Optional[list[int]] = Field(
+        default=None,
+        description="User group IDs allowed to use this server when not public",
+    )
+    users: Optional[list[UUID]] = Field(
+        default=None,
+        description="User IDs allowed to use this server when not public",
+    )
 
 
 class MCPToolResponse(BaseModel):
@@ -441,6 +500,9 @@ class MCPServer(BaseModel):
     is_authenticated: bool
     user_authenticated: Optional[bool] = None
     status: MCPServerStatus
+    is_public: bool = True
+    groups: list[int] = Field(default_factory=list)
+    users: list[UUID] = Field(default_factory=list)
     last_refreshed_at: Optional[datetime.datetime] = None
     tool_count: int = Field(
         default=0, description="Number of tools associated with this server"

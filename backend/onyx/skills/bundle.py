@@ -5,23 +5,22 @@ from __future__ import annotations
 import hashlib
 import io
 import os
-import re
 import stat
 import sys
 import zipfile
 from contextlib import ExitStack
 from copy import copy
-from typing import BinaryIO
+from dataclasses import dataclass
 from typing import Final
 from typing import IO
-
-import yaml
-from slugify import slugify
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
-from onyx.skills.built_in import SLUG_REGEX
+from onyx.skills.metadata import parse_skill_document
+from onyx.skills.metadata import parse_skill_md_frontmatter
+from onyx.skills.metadata import serialize_skill_md
+from onyx.skills.metadata import split_skill_md
 from onyx.skills.models import CustomSkillBundleContents
 from onyx.skills.models import SkillBundleFile
 
@@ -35,11 +34,6 @@ DEFAULT_TOTAL_MAX_BYTES: Final[int] = int(
 SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"
 
-_FRONTMATTER_REGEX: Final[re.Pattern[str]] = re.compile(
-    r"\A---[ \t]*\r?\n(?P<frontmatter>.*?)(?:\r?\n)---[ \t]*(?:\r?\n|\Z)",
-    re.DOTALL,
-)
-
 _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
 
 _IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
@@ -47,45 +41,13 @@ _IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
 )
 
 
-def check_slug(slug: str) -> None:
-    if not SLUG_REGEX.match(slug):
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"invalid slug '{slug}'")
+@dataclass(frozen=True)
+class NormalizedSkillBundle:
+    content: bytes
+    source_directory: str | None
 
 
-def slug_from_filename(filename: str | None) -> str:
-    """Derive a skill slug from the uploaded bundle's filename.
-
-    The bundle ships as ``<slug>.zip`` — strip the extension and validate. We
-    don't take basename here: any directory component is suspicious enough
-    that we'd rather fail than silently massage the input.
-    """
-    if not filename:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "bundle upload is missing a filename",
-        )
-    candidate = filename
-    if candidate.lower().endswith(".zip"):
-        candidate = candidate[:-4]
-    check_slug(candidate)
-    return candidate
-
-
-def slug_from_skill_name(name: str) -> str:
-    """Derive a stable custom-skill identifier from its display name."""
-    candidate = slugify(name, max_length=64)
-    if not candidate:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Skill name must contain at least one letter or number.",
-        )
-    if not candidate[0].isalpha():
-        candidate = f"skill-{candidate}"[:64].rstrip("-")
-    check_slug(candidate)
-    return candidate
-
-
-def read_bundle_file(bundle_file: BinaryIO) -> bytes:
+def read_bundle_file(bundle_file: IO[bytes]) -> bytes:
     """Read a bundle stream without buffering an arbitrarily large body."""
     data = bundle_file.read(DEFAULT_TOTAL_MAX_BYTES + 1)
     if len(data) > DEFAULT_TOTAL_MAX_BYTES:
@@ -96,56 +58,12 @@ def read_bundle_file(bundle_file: BinaryIO) -> bytes:
     return data
 
 
-def parse_skill_md_metadata(raw: bytes) -> tuple[str, str]:
-    """Extract and validate ``(name, description)`` from SKILL.md bytes."""
-    try:
-        content = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md must be UTF-8 encoded",
-        ) from exc
-
-    match = _FRONTMATTER_REGEX.match(content)
-    if match is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md must start with YAML frontmatter delimited by two --- lines",
-        )
-
-    try:
-        parsed = yaml.safe_load(match.group("frontmatter")) or {}
-    except yaml.YAMLError as exc:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"SKILL.md frontmatter is not valid YAML: {exc}",
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md frontmatter must be a mapping",
-        )
-
-    name = parsed.get("name")
-    description = parsed.get("description")
-    if not isinstance(name, str) or not name.strip():
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md frontmatter must include a non-empty 'name'",
-        )
-    if not isinstance(description, str) or not description.strip():
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md frontmatter must include a non-empty 'description'",
-        )
-    return name.strip(), description.strip()
-
-
 def strip_skill_md_frontmatter(content: str) -> str:
-    match = _FRONTMATTER_REGEX.match(content)
-    if match is None:
+    try:
+        _, instructions_markdown = split_skill_md(content.encode("utf-8"))
+    except OnyxError:
         return content.strip()
-    return content[match.end() :].strip()
+    return instructions_markdown.strip()
 
 
 def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
@@ -214,12 +132,12 @@ def build_skill_md(
             "Skill instructions cannot be empty.",
         )
 
-    frontmatter = yaml.safe_dump(
+    skill_md = serialize_skill_md(
         {"name": name, "description": description},
-        sort_keys=False,
-        allow_unicode=True,
-    ).strip()
-    return f"---\n{frontmatter}\n---\n\n{instructions_markdown}\n"
+        instructions_markdown,
+    )
+    parse_skill_document(skill_md.encode("utf-8"))
+    return skill_md
 
 
 def build_single_file_bundle(filename: str, content: bytes) -> bytes:
@@ -235,27 +153,27 @@ def build_single_file_bundle(filename: str, content: bytes) -> bytes:
 def rewrite_custom_bundle_skill_md(
     zip_bytes: bytes,
     *,
-    slug: str,
-    name: str,
+    canonical_name: str,
     description: str,
     instructions_markdown: str,
 ) -> bytes:
     """Return a new custom bundle with root SKILL.md replaced.
 
-    Existing supporting files are copied through unchanged. The resulting
-    archive is validated with the normal custom-bundle validator before it is
-    returned to callers for storage.
+    Existing supporting files and optional frontmatter metadata are copied
+    through unchanged. The resulting archive is structurally normalized before
+    it is returned to callers for storage.
     """
-    check_slug(slug)
-    if slug in BUILT_IN_SKILLS:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
-
-    new_skill_md = build_skill_md(
-        name=name,
+    if canonical_name in BUILT_IN_SKILLS:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"skill name '{canonical_name}' is reserved",
+        )
+    base_skill_md = build_skill_md(
+        name=canonical_name,
         description=description,
         instructions_markdown=instructions_markdown,
     ).encode("utf-8")
-    if len(new_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
+    if len(base_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
         raise OnyxError(
             OnyxErrorCode.PAYLOAD_TOO_LARGE,
             f"file '{SKILL_MD_NAME}' exceeds "
@@ -290,6 +208,26 @@ def rewrite_custom_bundle_skill_md(
             if normalized == SKILL_MD_NAME:
                 if saw_skill_md:
                     continue
+                try:
+                    original_skill_md = source_zip.read(info)
+                except Exception as exc:
+                    raise OnyxError(
+                        OnyxErrorCode.INTERNAL_ERROR,
+                        "Failed to read stored skill bundle entry.",
+                    ) from exc
+                frontmatter, _ = parse_skill_md_frontmatter(original_skill_md)
+                frontmatter["name"] = canonical_name
+                frontmatter["description"] = description
+                new_skill_md = serialize_skill_md(
+                    frontmatter,
+                    instructions_markdown,
+                ).encode("utf-8")
+                if len(new_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        f"file '{SKILL_MD_NAME}' exceeds "
+                        f"{DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB",
+                    )
                 fresh_info = zipfile.ZipInfo(filename=SKILL_MD_NAME)
                 fresh_info.compress_type = zipfile.ZIP_DEFLATED
                 target_zip.writestr(fresh_info, new_skill_md)
@@ -314,7 +252,7 @@ def rewrite_custom_bundle_skill_md(
         )
 
     rewritten = output.getvalue()
-    return validate_and_normalize_custom_bundle(rewritten, slug=slug)
+    return normalize_custom_bundle(rewritten).content
 
 
 def _validated_bundle_path(info: zipfile.ZipInfo) -> str:
@@ -450,23 +388,18 @@ def _copy_validated_bundle_file(
     return size
 
 
-def validate_and_normalize_custom_bundle(
+def normalize_custom_bundle(
     zip_bytes: bytes,
-    slug: str,
     *,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
     total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
-) -> bytes:
+) -> NormalizedSkillBundle:
     """Validate a custom bundle and remove one optional wrapper directory.
 
     Stored custom bundles always use a canonical root-level ``SKILL.md`` layout.
     A common ``zip -r skill.zip skill`` archive is accepted at ingestion and
     flattened here before metadata parsing, hashing, and storage.
     """
-    check_slug(slug)
-    if slug in BUILT_IN_SKILLS:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
-
     try:
         source_zip = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile:
@@ -580,7 +513,10 @@ def validate_and_normalize_custom_bundle(
             "SKILL.md missing at bundle root or directly inside one "
             "top-level directory",
         )
-    return output.getvalue() if needs_rewrite else zip_bytes
+    return NormalizedSkillBundle(
+        content=output.getvalue() if needs_rewrite else zip_bytes,
+        source_directory=wrapper_prefix,
+    )
 
 
 def update_custom_bundle_files(
@@ -589,7 +525,6 @@ def update_custom_bundle_files(
     *,
     filename: str | None = None,
     remove_path: str | None = None,
-    slug: str,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
     total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
 ) -> bytes:
@@ -646,12 +581,11 @@ def update_custom_bundle_files(
                 path.split("/")[-1].lower() == SKILL_MD_NAME.lower()
                 for path in upload_file_paths
             ):
-                return validate_and_normalize_custom_bundle(
+                return normalize_custom_bundle(
                     upload_archive_bytes,
-                    slug=slug,
                     per_file_max_bytes=per_file_max_bytes,
                     total_max_bytes=total_max_bytes,
-                )
+                ).content
             if not upload_file_paths:
                 raise OnyxError(OnyxErrorCode.INVALID_INPUT, "upload contains no files")
             if len(upload_file_paths) != len(set(upload_file_paths)):
@@ -717,12 +651,11 @@ def update_custom_bundle_files(
                         total_max_bytes=total_max_bytes,
                     )
 
-    return validate_and_normalize_custom_bundle(
+    return normalize_custom_bundle(
         output.getvalue(),
-        slug=slug,
         per_file_max_bytes=per_file_max_bytes,
         total_max_bytes=total_max_bytes,
-    )
+    ).content
 
 
 def compute_bundle_sha256(zip_bytes: bytes) -> str:

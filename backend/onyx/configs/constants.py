@@ -323,16 +323,6 @@ class DocumentIndexType(str, Enum):
     SPLIT = "split"  # Typesense + Qdrant
 
 
-class AuthType(str, Enum):
-    BASIC = "basic"
-    GOOGLE_OAUTH = "google_oauth"
-    OIDC = "oidc"
-    SAML = "saml"
-
-    # google auth and basic
-    CLOUD = "cloud"
-
-
 class QueryHistoryType(str, Enum):
     DISABLED = "disabled"
     ANONYMIZED = "anonymized"

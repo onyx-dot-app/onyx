@@ -130,7 +130,6 @@ def make_skill(
     slug: str | None = None,
     is_public: bool = False,
     public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
-    enabled: bool = True,
     author_user_id: UUID | None = None,
 ) -> Skill:
     """Create a single custom ``Skill`` row.
@@ -147,7 +146,6 @@ def make_skill(
         bundle_file_id=f"bundle-{uuid4().hex[:8]}",
         bundle_sha256="0" * 64,
         public_permission=public_permission if is_public else None,
-        enabled=enabled,
         author_user_id=author_user_id,
     )
     db_session.add(skill)
@@ -163,7 +161,6 @@ def make_built_in_skill_row(
     name: str | None = None,
     description: str = "test built-in",
     is_public: bool = True,
-    enabled: bool = True,
 ) -> Skill:
     """Insert a built-in-style ``Skill`` row pointing at a
     ``built_in_skill_id``. Slug defaults to ``built_in_skill_id`` (the
@@ -179,7 +176,6 @@ def make_built_in_skill_row(
         bundle_file_id=None,
         bundle_sha256=None,
         public_permission=SkillSharePermission.VIEWER if is_public else None,
-        enabled=enabled,
     )
     db_session.add(skill)
     db_session.flush()
@@ -194,7 +190,6 @@ def reset_built_in_skill_row(
     name: str | None = None,
     description: str = "test built-in",
     is_public: bool = True,
-    enabled: bool = True,
 ) -> Skill:
     """Idempotently (re)create a built-in row for ``built_in_skill_id``.
 
@@ -212,7 +207,6 @@ def reset_built_in_skill_row(
         name=name,
         description=description,
         is_public=is_public,
-        enabled=enabled,
     )
 
 

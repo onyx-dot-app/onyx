@@ -69,24 +69,6 @@ def test_user_credential_overrides_org(
     }
 
 
-def test_disabled_app_injects_nothing(
-    db_session: Session,
-    test_user: object,  # noqa: ARG001
-) -> None:
-    """The linked skill's enabled flag is the proxy's kill switch."""
-    user = make_user(db_session)
-    app = make_external_app(
-        db_session,
-        skill=make_skill(db_session, enabled=False),
-        auth_template=_BEARER,
-    )
-    make_user_credential(
-        db_session, app=app, user=user, user_credentials={"access_token": "x"}
-    )
-
-    assert resolve_injection_headers(db_session, app.id, user.id) == {}
-
-
 def test_missing_user_credential_omits_header(
     db_session: Session,
     test_user: object,  # noqa: ARG001

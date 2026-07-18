@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Any
 
 from mcp.client.auth import OAuthClientProvider
@@ -6,8 +7,16 @@ from mcp.client.auth import OAuthClientProvider
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
+from onyx.db.mcp import ResolvedMCPCredentials
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
+from onyx.server.features.mcp.client import call_mcp_tool
+from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
+from onyx.server.features.mcp.oauth import make_oauth_provider
+from onyx.server.features.mcp.oauth import refresh_mcp_oauth_token_if_expired
+from onyx.server.features.mcp.oauth import UNUSED_RETURN_PATH
+from onyx.server.metrics.mcp_client import record_mcp_client_tool_outcome
+from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -15,18 +24,22 @@ from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.interface import Tool
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Headers that cannot be overridden by user requests to prevent security issues
-# Host header is particularly critical - it can be used for Host Header Injection attacks
-# to route requests to unintended internal servers
-DENYLISTED_MCP_HEADERS = {
-    "host",  # Prevents Host Header Injection attacks
-}
+_AUTH_ERROR_INDICATORS = (
+    "401",
+    "unauthorized",
+    "authentication",
+    "forbidden",
+    "access denied",
+    "invalid token",
+    "invalid api key",
+    "invalid credentials",
+    "please reconnect to the server",
+)
 
 # TODO: for now we're fitting MCP tool responses into the CustomToolCallSummary class
 # In the future we may want custom handling for MCP tool responses
@@ -129,6 +142,9 @@ class MCPTool(Tool[None]):
         **llm_kwargs: Any,
     ) -> ToolResponse:
         """Execute the MCP tool by calling the MCP server"""
+        _start = time.monotonic()
+        _server = self.mcp_server.name
+        outcome = MCPToolCallStatus.ERROR
         try:
             # Build headers with proper precedence:
             # 1. Start with additional headers from API request (filled in first, excluding denylisted)
@@ -159,14 +175,14 @@ class MCPTool(Tool[None]):
                         denylisted_provided,
                     )
 
-            # Priority 2: Base headers from connection config (DB) - overrides request
-            if self.connection_config and self.connection_config.config:
-                config_dict = self.connection_config.config.get_value(apply_mask=False)
-                headers.update(config_dict.get("headers", {}))
-
-            # Priority 3: For pass-through OAuth, use the user's login OAuth token
-            if self._user_oauth_token:
-                headers["Authorization"] = f"Bearer {self._user_oauth_token}"
+            # Priority 2 + 3: stored connection-config headers, then the
+            # PT_OAuth login token — both override request headers.
+            headers.update(
+                ResolvedMCPCredentials(
+                    connection_config=self.connection_config,
+                    user_oauth_token=self._user_oauth_token,
+                ).build_headers()
+            )
 
             # Check if this is an authentication issue before making the call
             is_passthrough_oauth = (
@@ -209,6 +225,7 @@ class MCPTool(Tool[None]):
                     )
                 )
 
+                outcome = MCPToolCallStatus.AUTH_ERROR
                 return ToolResponse(
                     rich_response=CustomToolCallSummary(
                         tool_name=self._name,
@@ -227,14 +244,22 @@ class MCPTool(Tool[None]):
                 and self._user_id
             ):
                 if self.mcp_server.transport == MCPTransport.SSE:
-                    logger.warning(
-                        "MCP tool '%s': OAuth token refresh is not supported for SSE transport — auth provider will be ignored. Re-authentication may be required after token expiry.",
-                        self._name,
-                    )
+                    # httpx.Auth refresh can't run over an open SSE stream;
+                    # refresh proactively here instead. Non-fatal on failure.
+                    try:
+                        refreshed_header = refresh_mcp_oauth_token_if_expired(
+                            self.mcp_server,
+                            self.connection_config.id,
+                            self._user_id,
+                        )
+                        if refreshed_header:
+                            headers["Authorization"] = refreshed_header
+                    except Exception:
+                        logger.exception(
+                            "MCP tool '%s': proactive SSE OAuth token refresh failed; using existing token",
+                            self._name,
+                        )
                 else:
-                    from onyx.server.features.mcp.api import make_oauth_provider
-                    from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
-
                     # user_id is the requesting user's UUID; safe here because
                     # UNUSED_RETURN_PATH ensures redirect_handler raises immediately
                     # and user_id is never consulted for Redis state lookups.
@@ -273,7 +298,7 @@ class MCPTool(Tool[None]):
                 )
             )
 
-            return ToolResponse(
+            response = ToolResponse(
                 rich_response=CustomToolCallSummary(
                     tool_name=self._name,
                     response_type="json",
@@ -281,30 +306,19 @@ class MCPTool(Tool[None]):
                 ),
                 llm_facing_response=llm_facing_response,
             )
+            outcome = MCPToolCallStatus.SUCCESS
+            return response
 
         except Exception as e:
             error_str = str(e).lower()
             logger.error("Failed to execute MCP tool '%s': %s", self._name, e)
 
-            # Check for authentication-related errors
-            auth_error_indicators = [
-                "401",
-                "unauthorized",
-                "authentication",
-                "auth",
-                "forbidden",
-                "access denied",
-                "invalid token",
-                "invalid api key",
-                "invalid credentials",
-                "please reconnect to the server",
-            ]
-
             is_auth_error = any(
-                indicator in error_str for indicator in auth_error_indicators
+                indicator in error_str for indicator in _AUTH_ERROR_INDICATORS
             )
 
             if is_auth_error:
+                outcome = MCPToolCallStatus.AUTH_ERROR
                 auth_error_msg = (
                     f"Authentication failed for the {self._name} tool from {self.mcp_server.name}. "
                     f"Please use the MCP dropdown in the chat bar to update your credentials "
@@ -335,4 +349,11 @@ class MCPTool(Tool[None]):
                     tool_result=error_result,
                 ),
                 llm_facing_response=llm_facing_response,
+            )
+        finally:
+            record_mcp_client_tool_outcome(
+                server_name=_server,
+                tool_name=self._name,
+                start_time=_start,
+                status=outcome,
             )

@@ -132,6 +132,21 @@ def test_ensure_session_creates_when_no_id_supplied() -> None:
     assert transport.requests[0].url.path == "/session"
 
 
+def test_dispose_instance_uses_directory_scoped_endpoint() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.method == "POST"
+        assert req.url.path == "/instance/dispose"
+        assert req.url.params["directory"] == _CWD
+        return httpx.Response(200, json=True)
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    client.dispose_instance(directory=_CWD)
+
+    assert len(transport.requests) == 1
+
+
 def test_ensure_session_raises_on_5xx_lookup() -> None:
     """Non-404 errors during GET (500, network) must NOT silently fall
     through to POST — that would mask outages and create accidental

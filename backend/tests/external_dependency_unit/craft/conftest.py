@@ -300,7 +300,6 @@ def seeded_skill(
             bundle_file_id=bundle_file_id,
             bundle_sha256=bundle_sha256,
             public_permission=SkillSharePermission.VIEWER if public else None,
-            enabled=True,
             author_user_id=author_user_id,
         )
         db_session.add(skill)

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState, useRef, useEffect, useCallback } from "react";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputTypeIn } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
@@ -10,7 +10,7 @@ import { Button, Divider } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import { toast } from "@opal/layouts";
-import { useModalClose } from "@/refresh-components/contexts/ModalContext";
+import { useModalClose } from "@opal/components";
 import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import {
   useMemoryManager,

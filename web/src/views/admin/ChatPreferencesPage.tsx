@@ -55,7 +55,7 @@ import {
   MessageCard,
   Tooltip,
 } from "@opal/components";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { Switch } from "@opal/components";
 import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";

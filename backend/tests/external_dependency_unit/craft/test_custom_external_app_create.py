@@ -36,13 +36,19 @@ def _noop(*_args: object, **_kwargs: object) -> None:
     return None
 
 
-def _bundle_zip(*, with_skill_md: bool = True, marker: str = "v1") -> bytes:
+def _bundle_zip(
+    *,
+    skill_name: str,
+    with_skill_md: bool = True,
+    marker: str = "v1",
+) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         if with_skill_md:
             zf.writestr(
                 "SKILL.md",
-                "---\nname: Bundle Name\ndescription: Bundle description\n---\n\nDo things.\n",
+                f"---\nname: {skill_name}\ndescription: Bundle description\n"
+                "---\n\nDo things.\n",
             )
         zf.writestr("helper.py", f"print('{marker}')\n")
     return buf.getvalue()
@@ -51,8 +57,15 @@ def _bundle_zip(*, with_skill_md: bool = True, marker: str = "v1") -> bytes:
 def _upload(
     filename: str, *, with_skill_md: bool = True, marker: str = "v1"
 ) -> UploadFile:
+    skill_name = filename.removesuffix(".zip")
     return UploadFile(
-        file=io.BytesIO(_bundle_zip(with_skill_md=with_skill_md, marker=marker)),
+        file=io.BytesIO(
+            _bundle_zip(
+                skill_name=skill_name,
+                with_skill_md=with_skill_md,
+                marker=marker,
+            )
+        ),
         filename=filename,
     )
 
@@ -72,7 +85,6 @@ def _create(
         upstream_url_patterns=json.dumps(_UPSTREAM),
         auth_template=auth_template,
         organization_credentials=organization_credentials,
-        enabled=True,
         bundle=_upload(f"{slug}.zip"),
         _=test_user,
         db_session=db_session,
@@ -172,7 +184,6 @@ def test_create_rejects_wildcard_host_glob(
             upstream_url_patterns=json.dumps(["https://*.example.com/*"]),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({"api_key": "sk-test"}),
-            enabled=True,
             bundle=_upload(f"{slug}.zip"),
             _=test_user,
             db_session=db_session,
@@ -336,7 +347,6 @@ def test_create_rejects_bundle_without_skill_md(
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
-            enabled=True,
             bundle=_upload(f"{slug}.zip", with_skill_md=False),
             _=test_user,
             db_session=db_session,
@@ -361,7 +371,6 @@ def test_create_requires_bundle(
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
-            enabled=True,
             bundle=None,
             _=test_user,
             db_session=db_session,
@@ -387,7 +396,6 @@ def test_create_rejects_bundle_over_skill_upload_size_limit(
             upstream_url_patterns=json.dumps(_UPSTREAM),
             auth_template=json.dumps(_AUTH_TEMPLATE),
             organization_credentials=json.dumps({}),
-            enabled=True,
             bundle=_upload(f"{slug}.zip"),
             _=test_user,
             db_session=db_session,
@@ -466,7 +474,6 @@ def test_json_admin_apps_rejects_custom(
             request=CreateBuiltInExternalAppRequest(
                 name="Nope",
                 description="",
-                enabled=True,
                 app_type=ExternalAppType.CUSTOM,
                 upstream_url_patterns=_UPSTREAM,
                 auth_template=_AUTH_TEMPLATE,

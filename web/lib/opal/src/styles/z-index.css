@@ -10,6 +10,11 @@
      over pinned columns without being obscured. */
   --z-settings-header: 11;
 
+  /* Modal scrim and card. Below popovers/tooltips so pickers opened from
+     inside a modal stack above it. */
+  --z-modal-overlay: 900;
+  --z-modal: 1000;
+
   /* Interactive overlays. Toasts sit below popovers so an open menu is
      never obscured by a passive notification. */
   --z-toast: 1100;
@@ -19,6 +24,12 @@
 
 .z-settings-header {
   z-index: var(--z-settings-header);
+}
+.z-modal-overlay {
+  z-index: var(--z-modal-overlay);
+}
+.z-modal {
+  z-index: var(--z-modal);
 }
 .z-toast {
   z-index: var(--z-toast);

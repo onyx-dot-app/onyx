@@ -1,10 +1,9 @@
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISCORD_BOT_TOKEN
-from onyx.configs.constants import AuthType
 from onyx.db.discord_bot import get_discord_bot_config
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
@@ -26,7 +25,7 @@ def get_bot_token() -> str | None:
         return DISCORD_BOT_TOKEN
 
     # Cloud should always have env var; if not, return None
-    if AUTH_TYPE == AuthType.CLOUD:
+    if MULTI_TENANT:
         logger.warning("Cloud deployment missing DISCORD_BOT_TOKEN env var")
         return None
 

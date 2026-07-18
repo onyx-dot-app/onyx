@@ -52,6 +52,7 @@ import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
+import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
 import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
@@ -778,6 +779,14 @@ export default function BuildChatPanel({
                   )}
                   {/* Model is locked once the session starts — show the picker
                   only before the first message. */}
+                  {sessionId && session?.skillsStale && (
+                    <div className="pb-2">
+                      <SkillsStaleNotice
+                        sessionId={sessionId}
+                        turnActive={isRunning}
+                      />
+                    </div>
+                  )}
                   {session?.isLoaded && session.messages.length === 0 && (
                     <div className="flex justify-end pb-2">
                       <ModelPickerButton

@@ -1,0 +1,123 @@
+name: Connector Filter Eval
+concurrency:
+  group: Connector-Filter-Eval-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+# Regression gate for the source-scope filter extraction prompt. Runs the
+# scored eval in backend/tests/evals/connector_filter_eval/
+# test_filter_extraction_regression.py, which makes real LLM calls — so it is
+# triggered ONLY when the prompt (or the flow/suite around it) changes.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/onyx/prompts/filter_extration.py"
+      - "backend/onyx/secondary_llm_flows/source_filter.py"
+      - "backend/tests/evals/connector_filter_eval/**"
+      - ".github/workflows/pr-connector-filter-eval.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+  # MinIO
+  S3_ENDPOINT_URL: "http://localhost:9004"
+  S3_AWS_ACCESS_KEY_ID: "minioadmin"
+  S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
+
+jobs:
+  connector-filter-eval:
+    # Informative, not a merge gate: a single failing eval case fails the run,
+    # but some cases document behaviors the prompt does not handle yet, so a
+    # red eval must never block the PR.
+    continue-on-error: true
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-arm64
+      - ${{ format('run-id={0}-connector-filter-eval', github.run_id) }}
+      - extras=s3-cache
+    timeout-minutes: 20
+
+    env:
+      PYTHONPATH: ./backend
+      MODEL_SERVER_HOST: "disabled"
+      DISABLE_TELEMETRY: "true"
+      RUN_CONNECTOR_FILTER_EVAL: "1"
+
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Python and Install Dependencies
+        uses: ./.github/actions/setup-python-and-install-dependencies
+        with:
+          requirements: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+            backend/requirements/ee.txt
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Create .env file for Docker Compose
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          COMPOSE_PROFILES=s3-filestore
+          DISABLE_TELEMETRY=true
+          EOF
+
+      - name: Set up Standard Dependencies
+        run: |
+          cd deployment/docker_compose
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.dev.yml \
+            up -d \
+            minio \
+            relational_db \
+            cache \
+            opensearch
+
+      - name: Run migrations
+        run: |
+          cd backend
+          alembic upgrade head
+
+      - name: Run filter-extraction regression eval
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          py.test \
+            -o junit_family=xunit2 \
+            -sv \
+            backend/tests/evals/connector_filter_eval/test_filter_extraction_regression.py
+
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          mkdir -p docker-logs
+          cd deployment/docker_compose
+
+          containers=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q)
+
+          for container in $containers; do
+            container_name=$(docker inspect --format='{{.Name}}' $container | sed 's/^\///')
+            echo "Collecting logs from $container_name..."
+            docker logs $container > ../../docker-logs/${container_name}.log 2>&1
+          done
+
+      - name: Upload Docker logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: docker-logs-connector-filter-eval
+          path: docker-logs/
+          retention-days: 7
