@@ -465,6 +465,8 @@ class WebConnector(LoadConnector, SlimConnector):
         # The URL used for the stored document (id, link, semantic id). Fetching
         # still uses initial_url; only what gets persisted is rewritten. Slim
         # docs must use the same rewritten id or pruning would delete the docs.
+        # Recomputed after redirect resolution below so redirected pages persist
+        # under their canonical (final) URL.
         storage_url = _rewrite_url(initial_url, session_ctx.url_rewrites)
 
         # Handle cookies for the URL
@@ -546,6 +548,7 @@ class WebConnector(LoadConnector, SlimConnector):
             if final_url != initial_url:
                 protected_url_check(final_url)
                 initial_url = final_url
+                storage_url = _rewrite_url(initial_url, session_ctx.url_rewrites)
                 if initial_url in session_ctx.visited_links:
                     logger.info(
                         "%s: %s redirected to %s - already indexed",

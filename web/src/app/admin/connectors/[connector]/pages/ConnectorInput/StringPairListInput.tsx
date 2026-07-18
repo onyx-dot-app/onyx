@@ -1,6 +1,11 @@
 import React from "react";
-import { ArrayHelpers, ErrorMessage, Field, FieldArray } from "formik";
-import { useFormikContext } from "formik";
+import {
+  ArrayHelpers,
+  ErrorMessage,
+  Field,
+  FieldArray,
+  useFormikContext,
+} from "formik";
 import { FiX } from "react-icons/fi";
 import { Button } from "@opal/components";
 import { SvgPlusCircle } from "@opal/icons";
@@ -46,6 +51,19 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
   const { values } = useFormikContext<Record<string, any>>();
   const pairs: Record<string, string>[] = values[name] || [];
 
+  // Stable per-row keys so removing a middle row doesn't shift native input
+  // state (focus/autofill) onto the row that takes its index. Index keys would;
+  // content-derived keys would remount the row on every keystroke. New rows are
+  // seeded here; the remove handler splices so each id stays with its row.
+  const rowIdsRef = React.useRef<number[]>([]);
+  const nextRowIdRef = React.useRef(0);
+  while (rowIdsRef.current.length < pairs.length) {
+    rowIdsRef.current.push(nextRowIdRef.current++);
+  }
+  if (rowIdsRef.current.length > pairs.length) {
+    rowIdsRef.current.length = pairs.length;
+  }
+
   return (
     <div className="mb-4">
       <Label>{label}</Label>
@@ -63,7 +81,7 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
               </div>
             )}
             {pairs.map((_, index) => (
-              <div key={index} className="mt-2">
+              <div key={rowIdsRef.current[index]} className="mt-2">
                 <div className="flex items-center">
                   <Field
                     name={`${name}.${index}.${leftKey}`}
@@ -79,7 +97,10 @@ const StringPairListInput: React.FC<StringPairListInputProps> = ({
                   />
                   <FiX
                     className="w-10 h-10 shrink-0 cursor-pointer hover:bg-background-neutral-02 rounded-sm p-2"
-                    onClick={() => arrayHelpers.remove(index)}
+                    onClick={() => {
+                      rowIdsRef.current.splice(index, 1);
+                      arrayHelpers.remove(index);
+                    }}
                   />
                 </div>
                 <ErrorMessage

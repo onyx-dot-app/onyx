@@ -112,6 +112,7 @@ export interface TabOption extends Option {
     fields: (
       | BooleanOption
       | ListOption
+      | StringPairListOption
       | TextOption
       | NumberOption
       | SelectOption
