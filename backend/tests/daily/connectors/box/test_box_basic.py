@@ -206,6 +206,7 @@ def test_poll_window_filters_documents_but_not_hierarchy(
     assert {n.display_name for n in result.hierarchy_nodes} == EXPECTED_FOLDER_NAMES
 
 
+@pytest.mark.usefixtures("enable_ee")
 def test_perm_sync_external_access(
     mock_get_unstructured_api_key: MagicMock,  # noqa: ARG001
     box_connector: BoxConnector,
