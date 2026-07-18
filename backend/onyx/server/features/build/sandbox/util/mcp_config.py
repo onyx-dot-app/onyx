@@ -1,19 +1,13 @@
-"""Resolve craft-enabled MCP servers into static opencode `mcp` config.
-
-Credentials are deliberately absent — the sandbox proxy injects them per
-request, so the emitted config is identical whether or not a user has connected
-a server. Chat-side per-tool curation (`Tool.enabled`) carries over as opencode
-enable/disable entries.
-"""
+"""Resolve craft-enabled MCP servers into opencode `mcp` config input."""
 
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 
 from sqlalchemy.orm import Session
 
-from onyx.db.mcp import get_all_mcp_tools_for_server
-from onyx.db.mcp import get_craft_enabled_mcp_servers
+from onyx.db.mcp import get_craft_enabled_mcp_servers, get_mcp_tools_for_servers
 from onyx.db.models import MCPServer
 from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
 
@@ -21,24 +15,25 @@ _NON_IDENTIFIER = re.compile(r"[^a-z0-9]+")
 
 
 def _server_key(server: MCPServer) -> str:
-    """A stable, identifier-safe opencode server id. The row id suffix keeps it
-    unique across servers that slugify to the same name."""
+    """Identifier-safe opencode server id; the id suffix keeps it unique across
+    servers that slugify to the same name."""
     slug = _NON_IDENTIFIER.sub("-", server.name.lower()).strip("-") or "mcp"
     return f"{slug}-{server.id}"
 
 
 def resolve_craft_mcp_servers(db_session: Session) -> list[CraftMCPServerConfig]:
-    """Every craft-enabled MCP server as opencode config input, with its tools
-    split into enabled/disabled by the admin's chat-side curation."""
-    configs: list[CraftMCPServerConfig] = []
-    for server in get_craft_enabled_mcp_servers(db_session):
-        tools = get_all_mcp_tools_for_server(server.id, db_session)
-        configs.append(
-            CraftMCPServerConfig(
-                key=_server_key(server),
-                url=server.server_url,
-                enabled_tools=tuple(t.name for t in tools if t.enabled),
-                disabled_tools=tuple(t.name for t in tools if not t.enabled),
-            )
+    """Craft-enabled MCP servers as opencode config input. Two queries: the
+    servers, then a bulk fetch of their tools."""
+    servers = get_craft_enabled_mcp_servers(db_session)
+    disabled_by_server: dict[int, list[str]] = defaultdict(list)
+    for tool in get_mcp_tools_for_servers([s.id for s in servers], db_session):
+        if tool.mcp_server_id is not None and not tool.enabled:
+            disabled_by_server[tool.mcp_server_id].append(tool.name)
+    return [
+        CraftMCPServerConfig(
+            key=_server_key(server),
+            url=server.server_url,
+            disabled_tools=tuple(disabled_by_server.get(server.id, ())),
         )
-    return configs
+        for server in servers
+    ]

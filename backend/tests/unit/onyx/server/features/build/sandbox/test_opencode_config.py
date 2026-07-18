@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import (
+    CraftMCPServerConfig,
+    LLMProviderConfig,
+)
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
 )
@@ -246,15 +248,9 @@ def test_plugins_are_emitted_when_provided() -> None:
 def _mcp(
     key: str,
     url: str = "https://mcp.example.com/mcp",
-    enabled_tools: tuple[str, ...] = (),
     disabled_tools: tuple[str, ...] = (),
 ) -> CraftMCPServerConfig:
-    return CraftMCPServerConfig(
-        key=key,
-        url=url,
-        enabled_tools=enabled_tools,
-        disabled_tools=disabled_tools,
-    )
+    return CraftMCPServerConfig(key=key, url=url, disabled_tools=disabled_tools)
 
 
 def test_no_mcp_servers_omits_mcp_key() -> None:
@@ -273,8 +269,7 @@ def test_mcp_servers_emit_remote_entries_without_headers() -> None:
         default_model="claude-opus-4-7",
         mcp_servers=[_mcp("linear-7", url="https://mcp.linear.app/mcp")],
     )
-    # Remote transport, real URL, and crucially NO auth headers — the proxy
-    # injects credentials so the static config never changes on connect.
+    # No auth headers — the proxy injects credentials.
     assert config["mcp"] == {
         "linear-7": {
             "type": "remote",
@@ -284,22 +279,25 @@ def test_mcp_servers_emit_remote_entries_without_headers() -> None:
     }
 
 
-def test_mcp_tool_curation_maps_to_allow_and_deny_permissions() -> None:
+def test_mcp_tool_curation_maps_to_wildcard_allow_and_deny_permissions() -> None:
     config = build_multi_provider_opencode_config(
         providers=[_cfg("anthropic", "claude-opus-4-7")],
         default_provider="anthropic",
         default_model="claude-opus-4-7",
-        mcp_servers=[
-            _mcp(
-                "linear-7",
-                enabled_tools=("list_issues", "create_issue"),
-                disabled_tools=("delete_issue",),
-            )
-        ],
+        mcp_servers=[_mcp("linear-7", disabled_tools=("delete_issue",))],
     )
     permission = config["permission"]
-    # Enabled MCP tools are auto-allowed (the proxy is the sole gate); the
-    # admin-disabled tool is denied so chat-side curation carries over.
-    assert permission["linear-7_list_issues"] == "allow"
-    assert permission["linear-7_create_issue"] == "allow"
+    assert permission["linear-7_*"] == "allow"
     assert permission["linear-7_delete_issue"] == "deny"
+
+
+def test_uncurated_mcp_server_still_gets_wildcard_allow() -> None:
+    # Zero Tool rows: the wildcard must still allow so runtime-discovered tools
+    # don't fall through to opencode's default "ask".
+    config = build_multi_provider_opencode_config(
+        providers=[_cfg("anthropic", "claude-opus-4-7")],
+        default_provider="anthropic",
+        default_model="claude-opus-4-7",
+        mcp_servers=[_mcp("linear-7")],
+    )
+    assert config["permission"]["linear-7_*"] == "allow"

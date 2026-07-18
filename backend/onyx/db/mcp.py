@@ -279,6 +279,15 @@ def get_all_mcp_tools_for_server(server_id: int, db_session: Session) -> list[To
     )
 
 
+def get_mcp_tools_for_servers(server_ids: list[int], db_session: Session) -> list[Tool]:
+    """All MCP tools across ``server_ids`` in a single query"""
+    if not server_ids:
+        return []
+    return list(
+        db_session.scalars(select(Tool).where(Tool.mcp_server_id.in_(server_ids))).all()
+    )
+
+
 def add_user_to_mcp_server(server_id: int, user_id: UUID, db_session: Session) -> None:
     """Grant a user access to an MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)

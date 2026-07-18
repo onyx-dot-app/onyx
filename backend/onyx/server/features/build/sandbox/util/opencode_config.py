@@ -9,8 +9,10 @@ restart.
 
 from typing import Any
 
-from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.models import (
+    CraftMCPServerConfig,
+    LLMProviderConfig,
+)
 
 # 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
 _ADAPTIVE_THINKING_MODELS = frozenset(
@@ -119,17 +121,14 @@ def _build_permissions(
 
 
 def _mcp_tool_id(server_key: str, tool_name: str) -> str:
-    """opencode namespaces an MCP tool as ``<serverKey>_<toolName>``. Isolated
-    here since it's the one opencode-version-coupled string in MCP emission."""
+    """opencode's tool id for an MCP tool: ``<serverKey>_<toolName>``."""
     return f"{server_key}_{tool_name}"
 
 
 def _build_mcp_block(
     mcp_servers: list[CraftMCPServerConfig],
 ) -> dict[str, dict[str, Any]]:
-    """opencode `mcp` entries for craft-enabled servers: remote transport, real
-    URL, **no auth headers** (the sandbox proxy injects them per request, so the
-    static config never changes when a user connects a server)."""
+    """opencode remote `mcp` entries. No auth headers — the proxy injects them."""
     return {
         server.key: {"type": "remote", "url": server.url, "enabled": True}
         for server in mcp_servers
@@ -139,12 +138,11 @@ def _build_mcp_block(
 def _apply_mcp_permissions(
     permissions: dict[str, Any], mcp_servers: list[CraftMCPServerConfig]
 ) -> None:
-    """MCP tools are proxy-gated, so opencode must not also prompt: enabled tools
-    are ``allow``. Admin-disabled tools are ``deny`` so chat-side curation carries
-    over (they never reach the proxy)."""
+    """Allow all of a server's MCP tools (the proxy is the sole gate; the
+    wildcard also covers tools discovered at runtime), hard-denying the
+    admin-disabled ones."""
     for server in mcp_servers:
-        for tool_name in server.enabled_tools:
-            permissions[_mcp_tool_id(server.key, tool_name)] = "allow"
+        permissions[f"{server.key}_*"] = "allow"
         for tool_name in server.disabled_tools:
             permissions[_mcp_tool_id(server.key, tool_name)] = "deny"
 
@@ -178,10 +176,8 @@ def build_multi_provider_opencode_config(
     ``plugins`` is an optional list of opencode plugin specs (npm names or
     absolute file paths) loaded once per session Instance.
 
-    ``mcp_servers`` are craft-enabled MCP servers to expose to the agent as
-    remote MCP endpoints. Pre-registered statically (URL only) regardless of
-    per-user connection state — the proxy injects credentials, so connecting a
-    server needs no config change (mirrors the LLM-provider pre-load).
+    ``mcp_servers`` are craft-enabled servers exposed as remote MCP endpoints
+    (URL only; the proxy injects credentials).
 
     Raises:
         ValueError: If ``providers`` is empty or ``default_provider`` is

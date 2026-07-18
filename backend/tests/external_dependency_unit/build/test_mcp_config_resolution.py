@@ -13,13 +13,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import MCPAuthenticationPerformer
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPTransport
-from onyx.db.mcp import create_mcp_server__no_commit
-from onyx.db.mcp import update_mcp_server__no_commit
-from onyx.db.models import MCPServer
-from onyx.db.models import Tool
+from onyx.db.enums import (
+    MCPAuthenticationPerformer,
+    MCPAuthenticationType,
+    MCPTransport,
+)
+from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
+from onyx.db.models import MCPServer, Tool
 from onyx.server.features.build.sandbox.util.mcp_config import resolve_craft_mcp_servers
 
 
@@ -74,5 +74,5 @@ def test_only_craft_enabled_servers_resolved_with_tool_curation(
     assert off.server_url not in by_url
     config = by_url[craft.server_url]
     assert config.key == f"linear-mcp-{craft.id}"
-    assert set(config.enabled_tools) == {"list_issues", "create_issue"}
+    # Only disabled tools are tracked; enabled ones ride the wildcard allow.
     assert config.disabled_tools == ("delete_issue",)
