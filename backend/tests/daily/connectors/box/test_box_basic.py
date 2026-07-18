@@ -95,7 +95,7 @@ def _credentials(test_secrets: dict[TestSecret, str]) -> dict[str, str]:
 def _find_test_folder_id(test_secrets: dict[TestSecret, str]) -> str:
     probe = BoxConnector()
     probe.load_credentials(_credentials(test_secrets))
-    items = probe.client.folders.get_folder_items(
+    items = probe.content_client.folders.get_folder_items(
         BOX_ROOT_FOLDER_ID, fields=["type", "id", "name"], usemarker=True, limit=1000
     )
     for item in items.entries or []:
@@ -150,7 +150,7 @@ def test_load_documents(box_connector: BoxConnector) -> None:
         == f"{TEST_FOLDER_NAME}/{UPLOADER_FOLDER_NAME}"
     )
 
-    owner_login = box_connector.client.users.get_user_me().login
+    owner_login = box_connector.content_client.users.get_user_me().login
     for document in result.documents:
         assert document.id.startswith("box-file-")
         assert document.doc_updated_at is not None
