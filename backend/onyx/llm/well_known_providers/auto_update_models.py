@@ -39,7 +39,8 @@ class LLMRecommendations(BaseModel):
     def get_visible_models(self, provider_name: str) -> list[SimpleKnownModel]:
         """Default model first, then additional models, deduped by name. The
         default is often repeated in additional_visible_models (where it carries
-        a display name), so keep the entry that has one."""
+        a display name and context window), so merge the per-name entries rather
+        than dropping either one's metadata."""
         provider_config = self.providers.get(provider_name)
         if provider_config is None:
             return []
@@ -49,8 +50,14 @@ class LLMRecommendations(BaseModel):
             *provider_config.additional_visible_models,
         ]:
             existing = by_name.get(model.name)
-            if existing is None or (model.display_name and not existing.display_name):
+            if existing is None:
                 by_name[model.name] = model
+                continue
+            by_name[model.name] = SimpleKnownModel(
+                name=model.name,
+                display_name=existing.display_name or model.display_name,
+                max_input_tokens=existing.max_input_tokens or model.max_input_tokens,
+            )
         return list(by_name.values())
 
     def get_default_model(self, provider_name: str) -> SimpleKnownModel | None:

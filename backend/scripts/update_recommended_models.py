@@ -4,9 +4,11 @@ Applies the curation rules in update_recommended_models_rules.json (trusted
 vendors + model-family regexes) to the official OpenRouter catalog
 (https://openrouter.ai/api/v1/models) and rewrites
 backend/onyx/llm/well_known_providers/recommended-models.json with the newest
-matching models per provider section. The rules file is the human-editable
-knob: which families are recommendable, how many models to keep, id/display
-name overrides, pinned defaults.
+matching models per provider section, each carrying the catalog's context
+window (max_input_tokens) so brand-new models don't fall back to the 32K default
+while LiteLLM's cost map catches up. The rules file is the human-editable knob:
+which families are recommendable, how many models to keep, id/display name
+overrides, pinned defaults.
 
 The generated file is live production config — deployments poll it from GitHub
 raw main (AUTO_LLM_CONFIG_URL) — so this script never pushes anything itself.
@@ -55,6 +57,9 @@ ID_TRANSFORMS = ("strip_prefix", "strip_prefix_dots_to_dashes", "keep_full_id")
 class RecommendedModel:
     name: str
     display_name: str | None = None
+    # Full context window (input + output). Consumed at runtime only as a
+    # fallback for models LiteLLM's cost map doesn't know yet.
+    max_input_tokens: int | None = None
 
 
 @dataclass
@@ -88,6 +93,7 @@ class CatalogModel:
     pricing: dict[str, Any]
     architecture: dict[str, Any]
     expiration_date: str | None
+    context_length: int | None = None
 
     @classmethod
     def from_json(cls, entry: dict[str, Any]) -> "CatalogModel":
@@ -98,7 +104,21 @@ class CatalogModel:
             pricing=entry.get("pricing") or {},
             architecture=entry.get("architecture") or {},
             expiration_date=entry.get("expiration_date"),
+            context_length=cls._parse_context_length(entry),
         )
+
+    @staticmethod
+    def _parse_context_length(entry: dict[str, Any]) -> int | None:
+        """The model's native context window. Prefer the top-level value and
+        fall back to top_provider; both are ints in the OpenRouter catalog."""
+        candidates: list[Any] = [entry.get("context_length")]
+        top_provider = entry.get("top_provider")
+        if isinstance(top_provider, dict):
+            candidates.append(top_provider.get("context_length"))
+        for value in candidates:
+            if isinstance(value, int) and value > 0:
+                return value
+        return None
 
     @property
     def output_modalities(self) -> list[str]:
@@ -217,7 +237,9 @@ def load_previous(path: Path) -> RecommendedModelsFile:
                 default_model=section["default_model"],
                 additional_visible_models=[
                     RecommendedModel(
-                        name=model["name"], display_name=model.get("display_name")
+                        name=model["name"],
+                        display_name=model.get("display_name"),
+                        max_input_tokens=model.get("max_input_tokens"),
                     )
                     for model in section.get("additional_visible_models", [])
                 ],
@@ -329,8 +351,14 @@ def _visible_models(section: ProviderSection | None) -> list[RecommendedModel]:
         *section.additional_visible_models,
     ]:
         existing = by_name.get(model.name)
-        if existing is None or (model.display_name and not existing.display_name):
+        if existing is None:
             by_name[model.name] = model
+            continue
+        by_name[model.name] = RecommendedModel(
+            name=model.name,
+            display_name=existing.display_name or model.display_name,
+            max_input_tokens=existing.max_input_tokens or model.max_input_tokens,
+        )
     return list(by_name.values())
 
 
@@ -381,6 +409,7 @@ def build_section(
             RecommendedModel(
                 name=native_name,
                 display_name=derive_display_name(pick, native_name, section),
+                max_input_tokens=pick.context_length,
             )
         )
 
@@ -388,15 +417,25 @@ def build_section(
         (i for i, model in enumerate(models) if model.name == default_name), None
     )
     if default_index is None:
+        # Pinned default not matched by any rule: preserve its previous metadata.
+        previous_default = {
+            model.name: model for model in _visible_models(previous)
+        }.get(default_name)
         display_name: str | None = None
         if section.emit_display_name:
-            previous_display = {
-                model.name: model.display_name for model in _visible_models(previous)
-            }
-            display_name = section.display_name_overrides.get(
-                default_name
-            ) or previous_display.get(default_name)
-        models.insert(0, RecommendedModel(name=default_name, display_name=display_name))
+            display_name = section.display_name_overrides.get(default_name) or (
+                previous_default.display_name if previous_default else None
+            )
+        models.insert(
+            0,
+            RecommendedModel(
+                name=default_name,
+                display_name=display_name,
+                max_input_tokens=(
+                    previous_default.max_input_tokens if previous_default else None
+                ),
+            ),
+        )
     else:
         models.insert(0, models.pop(default_index))
 
@@ -414,7 +453,8 @@ def _sections_equal(a: ProviderSection, b: ProviderSection) -> bool:
         return (
             section.default_model,
             tuple(
-                (model.name, model.display_name) for model in _visible_models(section)
+                (model.name, model.display_name, model.max_input_tokens)
+                for model in _visible_models(section)
             ),
         )
 
@@ -472,11 +512,13 @@ def build_recommendations(
 def serialize(recommendations: RecommendedModelsFile) -> str:
     providers: dict[str, Any] = {}
     for section_name, section in recommendations.providers.items():
-        models: list[dict[str, str]] = []
+        models: list[dict[str, Any]] = []
         for model in section.additional_visible_models:
-            entry = {"name": model.name}
+            entry: dict[str, Any] = {"name": model.name}
             if model.display_name:
                 entry["display_name"] = model.display_name
+            if model.max_input_tokens is not None:
+                entry["max_input_tokens"] = model.max_input_tokens
             models.append(entry)
         providers[section_name] = {
             "default_model": section.default_model,

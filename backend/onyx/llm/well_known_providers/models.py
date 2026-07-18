@@ -22,6 +22,12 @@ class CustomConfigKeyType(str, Enum):
 class SimpleKnownModel(BaseModel):
     name: str
     display_name: str | None = None
+    # Full context window (input + output), in the same sense as LiteLLM's
+    # `max_input_tokens`. Used only as a fallback for models the LiteLLM cost map
+    # doesn't know yet — LiteLLM stays the source of truth when it has the model.
+    # Prevents brand-new recommended models from silently falling back to
+    # GEN_AI_MODEL_FALLBACK_MAX_TOKENS while LiteLLM catches up.
+    max_input_tokens: int | None = None
 
 
 class WellKnownLLMProviderDescriptor(BaseModel):

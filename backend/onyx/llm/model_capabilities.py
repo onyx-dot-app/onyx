@@ -141,8 +141,17 @@ def llm_max_input_tokens(
     model_map: dict,
     model_name: str,
     model_provider: str,
+    fallback_max_input_tokens: int | None = None,
 ) -> int:
-    """Best effort attempt to get the max input tokens for the LLM."""
+    """Best effort attempt to get the max input tokens for the LLM.
+
+    LiteLLM is the source of truth when it knows the model. Only when it doesn't
+    do we use `fallback_max_input_tokens` (e.g. a value curated in
+    recommended-models.json for a model LiteLLM hasn't caught up to yet), and
+    only then GEN_AI_MODEL_FALLBACK_MAX_TOKENS.
+    """
+    fallback = fallback_max_input_tokens or GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+
     if GEN_AI_MAX_TOKENS:
         # This is an override, so always return this
         logger.info("Using override GEN_AI_MAX_TOKENS: %s", GEN_AI_MAX_TOKENS)
@@ -157,9 +166,9 @@ def llm_max_input_tokens(
         logger.warning(
             "Model '%s' not found in LiteLLM. Falling back to %s tokens.",
             model_name,
-            GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+            fallback,
         )
-        return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+        return fallback
 
     max_input_tokens = model_obj.get("max_input_tokens")
     if max_input_tokens is not None:
@@ -172,9 +181,9 @@ def llm_max_input_tokens(
     logger.warning(
         "No max tokens found for '%s'. Falling back to %s tokens.",
         model_name,
-        GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+        fallback,
     )
-    return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
+    return fallback
 
 
 def get_llm_max_output_tokens(
@@ -218,6 +227,7 @@ def get_max_input_tokens(
     model_name: str,
     model_provider: str,
     output_tokens: int = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+    fallback_max_input_tokens: int | None = None,
 ) -> int:
     # NOTE: we previously used `litellm.get_max_tokens()`, but despite the name, this actually
     # returns the max OUTPUT tokens. Under the hood, this uses the `litellm.model_cost` dict,
@@ -232,6 +242,7 @@ def get_max_input_tokens(
             model_name=model_name,
             model_provider=model_provider,
             model_map=litellm_model_map,
+            fallback_max_input_tokens=fallback_max_input_tokens,
         )
         - output_tokens
     )

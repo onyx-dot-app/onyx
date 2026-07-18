@@ -257,6 +257,12 @@ def model_configurations_for_provider(
     display_name_by_name = {
         m.name: m.display_name for m in recommended_visible_models if m.display_name
     }
+    # Curated context windows, used only when LiteLLM doesn't know the model yet.
+    max_input_tokens_by_name = {
+        m.name: m.max_input_tokens
+        for m in recommended_visible_models
+        if m.max_input_tokens
+    }
     default_model = llm_recommendations.get_default_model(provider_name)
     default_model_name = default_model.name if default_model else None
 
@@ -281,7 +287,11 @@ def model_configurations_for_provider(
             name=model_name,
             is_visible=model_name in recommended_visible_models_names,
             is_recommended_default=model_name == default_model_name,
-            max_input_tokens=get_max_input_tokens(model_name, provider_name),
+            max_input_tokens=get_max_input_tokens(
+                model_name,
+                provider_name,
+                fallback_max_input_tokens=max_input_tokens_by_name.get(model_name),
+            ),
             supports_image_input=model_supports_image_input(model_name, provider_name),
             display_name=display_name_by_name.get(model_name),
         )
