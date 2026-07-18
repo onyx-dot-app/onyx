@@ -4,6 +4,7 @@ Indexes JSM service desk requests, enriching documents with request type,
 SLA status, and customer information from the Service Desk REST API.
 """
 
+import time
 from collections.abc import Generator
 from typing import Any
 from typing import cast
@@ -139,14 +140,29 @@ class JsmConnector(JiraConnector):
                 if customer_email:
                     meta["jsm_customer_email"] = str(customer_email)
 
-            # SLA breach indicator — check if any SLA has been breached
+            # SLA breach indicator — check both completed and ongoing cycles.
+            # An ongoingCycle that has already passed its breach time is a live
+            # breach even though the cycle has not formally completed yet.
+            now_ms = int(time.time() * 1000)
             sla_list = data.get("sla") or {}
             values = sla_list.get("values") or []
-            breached = [
-                v.get("name", "SLA")
-                for v in values
-                if (v.get("completedCycles") or [{}])[-1].get("breached")
-            ]
+            breached = []
+            for v in values:
+                name = v.get("name", "SLA")
+                # Check most recent completed cycle
+                completed = v.get("completedCycles") or []
+                if completed and completed[-1].get("breached"):
+                    breached.append(name)
+                    continue
+                # Also flag if any ongoing cycle has already passed its breach time
+                for cycle in v.get("ongoingCycles") or []:
+                    if cycle.get("breached"):
+                        breached.append(name)
+                        break
+                    breach_ts = (cycle.get("breachTime") or {}).get("epochMillis")
+                    if breach_ts and breach_ts < now_ms:
+                        breached.append(name)
+                        break
             if breached:
                 meta["jsm_sla_breached"] = ", ".join(breached)
 
