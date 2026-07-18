@@ -1,7 +1,9 @@
 import concurrent.futures
 import re
+import threading
 
 import requests
+from cachetools import TTLCache
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Response
@@ -10,9 +12,7 @@ from fastapi.concurrency import run_in_threadpool
 from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import user_needs_to_be_verified
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import OAUTH_ENABLED
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import DEV_VERSION_PATTERN
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.configs.constants import STABLE_VERSION_PATTERN
@@ -21,7 +21,7 @@ from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.enums import SSOProviderType
 from onyx.db.sso_provider import fetch_sso_providers
 from onyx.server.manage.models import AllVersions
-from onyx.server.manage.models import AuthTypeResponse
+from onyx.server.manage.models import AuthConfigResponse
 from onyx.server.manage.models import ContainerVersions
 from onyx.server.manage.models import SSOProviderOption
 from onyx.server.manage.models import VersionResponse
@@ -40,26 +40,53 @@ _SSO_AUTHORIZE_ROUTER = {
 }
 
 
+# TTL matches the endpoint's HTTP max-age (60s). The two windows stack.
+# Admin mutations invalidate this pod directly. Other pods ride the TTL.
+_SSO_OPTIONS_TTL_SECONDS = 60
+_SSO_OPTIONS_CACHE: TTLCache[str, list[SSOProviderOption]] = TTLCache(
+    maxsize=1, ttl=_SSO_OPTIONS_TTL_SECONDS
+)
+_SSO_OPTIONS_KEY = "options"
+_SSO_OPTIONS_LOCK = threading.Lock()
+
+# Login-page traffic must not COUNT users on every request. Users are never
+# un-created in practice, so once a user exists the flag is latched for the
+# life of the process.
+_HAS_USERS_LATCHED = False
+
+
+def invalidate_sso_provider_options_cache() -> None:
+    """Call after any sso_provider mutation so admin edits show immediately."""
+    with _SSO_OPTIONS_LOCK:
+        _SSO_OPTIONS_CACHE.pop(_SSO_OPTIONS_KEY, None)
+
+
 def _fetch_sso_provider_options() -> list[SSOProviderOption]:
-    # Single-tenant BASIC only. /auth/type runs before any tenant context, so a
-    # multi-tenant lookup has no tenant to key on, and only a BASIC deployment
-    # renders the provider buttons (legacy oidc/saml auto-redirect to the one IdP
-    # and never consume this list), so the query is pure overhead elsewhere.
-    if MULTI_TENANT or AUTH_TYPE != AuthType.BASIC:
+    # Single-tenant only. /auth/type runs before any tenant context, so a
+    # multi-tenant lookup has no tenant to key on.
+    if MULTI_TENANT:
         return []
-    with get_session_with_shared_schema() as db_session:
-        return [
-            SSOProviderOption(
-                name=provider.name,
-                display_name=provider.display_name,
-                provider_type=provider.provider_type,
-                authorize_url=(
-                    f"/api/auth/{_SSO_AUTHORIZE_ROUTER[provider.provider_type]}"
-                    f"/{provider.name}/authorize"
-                ),
-            )
-            for provider in fetch_sso_providers(db_session, enabled_only=True)
-        ]
+    # The lock spans the DB read so a mutation's invalidate cannot land between
+    # read and cache write, which would pin a pre-mutation snapshot for a TTL.
+    with _SSO_OPTIONS_LOCK:
+        cached = _SSO_OPTIONS_CACHE.get(_SSO_OPTIONS_KEY)
+        if cached is not None:
+            return cached
+        with get_session_with_shared_schema() as db_session:
+            options = [
+                SSOProviderOption(
+                    name=provider.name,
+                    display_name=provider.display_name,
+                    provider_type=provider.provider_type,
+                    authorize_url=(
+                        f"/api/auth/{_SSO_AUTHORIZE_ROUTER[provider.provider_type]}"
+                        f"/{provider.name}/authorize"
+                    ),
+                )
+                for provider in fetch_sso_providers(db_session, enabled_only=True)
+            ]
+        _SSO_OPTIONS_CACHE[_SSO_OPTIONS_KEY] = options
+        return options
 
 
 @router.get("/health", tags=PUBLIC_API_TAGS)
@@ -68,31 +95,39 @@ async def healthcheck() -> StatusResponse:
 
 
 @router.get("/auth/type", tags=PUBLIC_API_TAGS)
-async def get_auth_type(response: Response) -> AuthTypeResponse:
+async def get_auth_type(response: Response) -> AuthConfigResponse:
     # NOTE: This endpoint is critical for the multi-tenant flow and is hit before there is a tenant context
     # The reason is this is used during the login flow, but we don't know which tenant the user is supposed to be
     # associated with until they auth.
+    global _HAS_USERS_LATCHED
     has_users = True
-    if AUTH_TYPE != AuthType.CLOUD:
-        user_count = await get_user_count()
-        has_users = user_count > 0
+    if not MULTI_TENANT and not _HAS_USERS_LATCHED:
+        has_users = await get_user_count() > 0
+        _HAS_USERS_LATCHED = has_users
 
     # Cache only after bootstrap; the first user flow depends on a live
     # has_users flag so avoid serving a stale redirect. no-store in that
     # case prevents an intermediate CDN with a default TTL from pinning
     # has_users=false past the first signup. sso_providers rides this cache
-    # too, so a disabled provider's button can linger up to 60s. Clicking it
+    # too, so a disabled provider's button can linger for the server TTL plus
+    # this max-age (~2 min worst case on pods the mutation did not touch). Clicking it
     # still fails closed (authorize resolves enabled_only), so this is a UX
     # blip, not an access path. Reduce the window if that is too slow.
     response.headers["Cache-Control"] = (
         "public, max-age=60" if has_users else "no-store"
     )
 
-    return AuthTypeResponse(
-        auth_type=AUTH_TYPE,
+    security = get_security_settings()
+    return AuthConfigResponse(
+        multi_tenant=MULTI_TENANT,
         requires_verification=user_needs_to_be_verified(),
         anonymous_user_enabled=anonymous_user_enabled(),
-        password_min_length=get_security_settings().password_min_length,
+        password_min_length=security.password_min_length,
+        password_max_length=security.password_max_length,
+        password_require_uppercase=security.password_require_uppercase,
+        password_require_lowercase=security.password_require_lowercase,
+        password_require_digit=security.password_require_digit,
+        password_require_special_char=security.password_require_special_char,
         has_users=has_users,
         oauth_enabled=OAUTH_ENABLED,
         sso_providers=await run_in_threadpool(_fetch_sso_provider_options),

@@ -2,7 +2,7 @@
 
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { InputDivider } from "@opal/layouts";
+import { InputDivider, toast } from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -25,7 +25,6 @@ import {
   ModelAccessField,
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
-import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 const DEFAULT_API_BASE = "http://localhost:4000";

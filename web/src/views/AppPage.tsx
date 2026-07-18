@@ -3,7 +3,6 @@
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
@@ -23,7 +22,7 @@ import { useUser } from "@/providers/UserProvider";
 import { useCurrentUser } from "@/lib/users/hooks";
 import NoAgentModal from "@/sections/modals/NoAgentModal";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
@@ -64,7 +63,12 @@ import { OnboardingStep } from "@/interfaces/onboarding";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
 import { Button, Spacer } from "@opal/components";
-import { IllustrationContent, RootLayout } from "@opal/layouts";
+import {
+  IllustrationContent,
+  RootLayout,
+  toast,
+  useToastFromQuery,
+} from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
 import useAppFocus from "@/hooks/useAppFocus";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -715,31 +719,29 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       <AppPopup />
 
       {retrievalEnabled && documentSidebarVisible && isMobile && (
-        <div className="md:hidden">
-          <Modal
-            open
-            onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
-          >
-            <Modal.Content>
-              <Modal.Header
-                icon={SvgFileText}
-                title="Sources"
-                onClose={() => updateCurrentDocumentSidebarVisible(false)}
+        <Modal
+          open
+          onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
+        >
+          <Modal.Content>
+            <Modal.Header
+              icon={SvgFileText}
+              title="Sources"
+              onClose={() => updateCurrentDocumentSidebarVisible(false)}
+            />
+            <Modal.Body>
+              {/* IMPORTANT: this is a memoized component, and it's very important
+              for performance reasons that this stays true. MAKE SURE that all function
+              props are wrapped in useCallback. */}
+              <DocumentsSidebar
+                setPresentingDocument={setPresentingDocument}
+                modal
+                closeSidebar={handleMobileDocumentSidebarClose}
+                selectedDocuments={selectedDocuments}
               />
-              <Modal.Body>
-                {/* IMPORTANT: this is a memoized component, and it's very important
-                for performance reasons that this stays true. MAKE SURE that all function
-                props are wrapped in useCallback. */}
-                <DocumentsSidebar
-                  setPresentingDocument={setPresentingDocument}
-                  modal
-                  closeSidebar={handleMobileDocumentSidebarClose}
-                  selectedDocuments={selectedDocuments}
-                />
-              </Modal.Body>
-            </Modal.Content>
-          </Modal>
-        </div>
+            </Modal.Body>
+          </Modal.Content>
+        </Modal>
       )}
 
       {presentingDocument && (
@@ -787,7 +789,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center px-2 sm:px-4">
+                {/* No horizontal padding: the scroll container reaches the edge so
+                    its scrollbar sits flush; non-chat siblings add their own px. */}
+                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
                   {/* ChatUI */}
                   <Fade
                     show={
@@ -805,7 +809,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       autoScroll={autoScrollEnabled}
                       isStreaming={isStreaming}
                       onScrollButtonVisibilityChange={setShowScrollButton}
-                      flushContent={fullWidthActive}
+                      fullWidth={fullWidthActive}
                     >
                       <ChatUI
                         liveAgent={liveAgent!}
@@ -829,7 +833,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* Session fetch error (404 / 403) */}
                   <Fade
                     show={appFocus.isChat() && sessionFetchError !== null}
-                    className="h-full w-full flex flex-col items-center justify-center"
+                    className="h-full w-full flex flex-col items-center justify-center px-2 sm:px-4"
                   >
                     {sessionFetchError && (
                       <Section
@@ -867,7 +871,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                   {/* ProjectUI */}
                   {appFocus.isProject() && (
-                    <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none">
+                    <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none px-2 sm:px-4">
                       <ProjectContextPanel
                         projectTokenCount={projectContextTokenCount}
                         availableContextTokens={availableContextTokens}
@@ -882,7 +886,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       (appFocus.isNewSession() || appFocus.isAgent()) &&
                       (state.phase === "idle" || state.phase === "classifying")
                     }
-                    className="w-full flex-1 flex flex-col items-center justify-end"
+                    className="w-full flex-1 flex flex-col items-center justify-end px-2 sm:px-4"
                   >
                     <Section
                       flexDirection="row"

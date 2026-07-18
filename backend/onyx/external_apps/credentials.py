@@ -41,14 +41,13 @@ def resolve_injection_headers(
     """Auth headers the egress proxy should inject for a *verified* request to
     ``external_app_id`` on behalf of ``user_id``.
 
-    Returns ``{}`` when the app is gone or disabled (the linked skill's
-    ``enabled`` flag is the proxy's kill switch), or when no header's
-    placeholders can be filled. Merges the app's organization credentials with
+    Returns ``{}`` when the app is gone or when no header's placeholders can be
+    filled. Merges the app's organization credentials with
     the user's stored credentials (the user's win on key conflicts), then
     renders the ``auth_template`` via :func:`build_auth_headers`.
     """
     app = get_external_app_by_id(db_session, external_app_id)
-    if app is None or not app.skill.enabled:
+    if app is None:
         return {}
 
     credentials: dict[str, Any] = dict(
@@ -68,14 +67,11 @@ def app_is_available(db_session: Session, app: ExternalApp, user_id: UUID) -> bo
     and we have everything needed to serve the request.
 
     Distinguishes "no credential required" from "required credential unavailable":
-    an enabled app with an empty ``auth_template`` (an allowlist-only app that
+    an app with an empty ``auth_template`` (an allowlist-only app that
     injects nothing) is available; an app whose template can't be filled is not.
-    A disabled skill (the proxy's kill switch) is never available. Injection
-    re-resolves later with an OAuth refresh, so this verdict-time render is the
+    Injection re-resolves later with an OAuth refresh, so this verdict-time render is the
     cheap presence check, not the final one.
     """
-    if not app.skill.enabled:
-        return False
     if not app.auth_template:
         return True
     return bool(resolve_injection_headers(db_session, app.id, user_id))

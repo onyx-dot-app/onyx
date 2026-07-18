@@ -43,8 +43,8 @@ def _make_page_mock() -> MagicMock:
     response = MagicMock()
     response.status = 200
     # The server DOES send Last-Modified — the connector must still ignore it.
-    response.header_value.side_effect = (
-        lambda h: LAST_MODIFIED if h == "Last-Modified" else None
+    response.header_value.side_effect = lambda h: (
+        LAST_MODIFIED if h == "Last-Modified" else None
     )
     page.goto.return_value = response
     page.content.return_value = "<html><body><p>static</p></body></html>"

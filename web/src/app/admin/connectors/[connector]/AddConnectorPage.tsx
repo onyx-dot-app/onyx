@@ -4,7 +4,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
-import { toast } from "@/hooks/useToast";
 import { useFormContext } from "@/components/context/FormContext";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -34,7 +33,7 @@ import {
   ConnectorBase,
 } from "@/lib/connectors/connectors";
 import { useSettings } from "@/lib/settings/hooks";
-import Modal from "@/refresh-components/Modal";
+import { Modal } from "@opal/components";
 import {
   useGmailCredentials,
   useGoogleDriveCredentials,
@@ -55,7 +54,7 @@ import {
 } from "@/lib/connectors/oauth";
 import { Spinner } from "@/components/Spinner";
 import { Button } from "@opal/components";
-import { Section } from "@opal/layouts";
+import { Section, toast } from "@opal/layouts";
 import { deleteConnector } from "@/lib/connector";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
 import Text from "@/refresh-components/texts/Text";

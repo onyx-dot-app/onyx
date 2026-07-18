@@ -31,7 +31,6 @@ def _skill(
         description="Description",
         author_user_id=author.id,
         public_permission=public_permission if is_public else None,
-        enabled=True,
     )
 
 

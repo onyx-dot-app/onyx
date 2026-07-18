@@ -6,7 +6,7 @@ import time
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
 from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
-from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.auto_update_service import (

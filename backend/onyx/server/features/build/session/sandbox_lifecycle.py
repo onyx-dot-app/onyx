@@ -29,6 +29,7 @@ from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
+from onyx.server.features.build.db.sandbox import set_sandbox_skills_hashes__no_commit
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import FileSet
@@ -37,6 +38,8 @@ from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.errors import SandboxProvisioningError
+from onyx.skills.push import build_skills_fileset_for_user
+from onyx.skills.push import compute_skills_hash
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -139,7 +142,7 @@ def hydrate_managed_content(
     user: User,
     db_session: DBSession,
     skills_files: FileSet | None = None,
-) -> None:
+) -> bool:
     """Push managed skills + user library into a sandbox.
 
     Must complete before the sandbox is reported RUNNING: turns dispatch as
@@ -147,14 +150,25 @@ def hydrate_managed_content(
     per instance, so a turn started mid-push permanently misses managed
     skills. Each push is best-effort — failures are logged, never raised.
     """
+    skills_hydrated = False
     try:
-        hydrate_sandbox_skills(
+        if skills_files is None:
+            skills_files = build_skills_fileset_for_user(user, db_session)
+        skills_hash = compute_skills_hash(skills_files)
+        result = hydrate_sandbox_skills(
             sandbox_id,
             user,
             db_session,
             sandbox_manager=sandbox_manager,
             files=skills_files,
         )
+        if result.succeeded == result.targets:
+            with db_session.begin_nested():
+                set_sandbox_skills_hashes__no_commit(
+                    db_session,
+                    {sandbox_id: skills_hash},
+                )
+            skills_hydrated = True
     except Exception:
         logger.warning("Failed to push skills to sandbox %s", sandbox_id, exc_info=True)
     try:
@@ -168,6 +182,7 @@ def hydrate_managed_content(
         logger.warning(
             "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
         )
+    return skills_hydrated
 
 
 class ProvisioningPolicy(str, Enum):

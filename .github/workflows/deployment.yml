@@ -310,12 +310,18 @@ jobs:
         include:
           - platform: "macos-latest" # Build a universal image for macOS.
             args: "--target universal-apple-darwin"
+            rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
           - platform: "ubuntu-24.04"
             args: "--bundles deb,rpm"
           - platform: "ubuntu-24.04-arm" # Only available in public repos.
             args: "--bundles deb,rpm"
           - platform: "windows-latest"
             args: ""
+          # Cross-compiled Windows ARM64 build. Only the NSIS bundle supports
+          # ARM64 (WiX/MSI does not), hence --bundles nsis.
+          - platform: "windows-latest"
+            args: "--target aarch64-pc-windows-msvc --bundles nsis"
+            rust-targets: "aarch64-pc-windows-msvc"
 
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 90
@@ -371,8 +377,9 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # zizmor: ignore[impostor-commit]
         with:
-          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          # Extra targets for jobs that cross-compile (macOS universal, Windows ARM64).
+          # Jobs building only for the host architecture leave this empty.
+          targets: ${{ matrix.rust-targets || '' }}
 
       - name: install frontend dependencies
         run: bun install --frozen-lockfile
@@ -490,7 +497,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -572,7 +579,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -654,7 +661,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
@@ -722,9 +729,9 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
+      REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -815,9 +822,9 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
+      REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -908,9 +915,9 @@ jobs:
     timeout-minutes: 90
     environment: release
     env:
-      REGISTRY_IMAGE: onyxdotapp/onyx-web-server-cloud
+      REGISTRY_IMAGE: onyxdotapp/onyx-web-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
@@ -972,9 +979,9 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -1044,9 +1051,9 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -1116,9 +1123,9 @@ jobs:
     timeout-minutes: 90
     environment: release
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-backend
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
@@ -1187,9 +1194,9 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-model-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -1273,9 +1280,9 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-model-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -1358,9 +1365,9 @@ jobs:
     timeout-minutes: 90
     environment: release
     env:
-      REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
+      REGISTRY_IMAGE: onyxdotapp/onyx-model-server
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
@@ -1503,7 +1510,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -1576,7 +1583,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
@@ -1649,7 +1656,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
@@ -1825,11 +1832,11 @@ jobs:
           - component: web
             registry-image: onyxdotapp/onyx-web-server
           - component: web-cloud
-            registry-image: onyxdotapp/onyx-web-server-cloud
+            registry-image: onyxdotapp/onyx-web-server
           - component: backend
-            registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
+            registry-image: onyxdotapp/onyx-backend
           - component: model-server
-            registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
+            registry-image: onyxdotapp/onyx-model-server
           - component: sandbox
             registry-image: onyxdotapp/sandbox
     steps:
@@ -1856,7 +1863,7 @@ jobs:
           BUILD_MODEL_SERVER: ${{ needs.build-model-server-amd64.result }}
           BUILD_SANDBOX: ${{ needs.build-sandbox-amd64.result }}
 
-      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
         if: steps.should-run.outputs.run == 'true'
 
       - name: Checkout

@@ -137,6 +137,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
 )
+from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -1059,22 +1060,22 @@ class DockerSandboxManager(SandboxManager):
     def _render_agents_md(
         self,
         *,
-        llm_config: LLMProviderConfig,
+        agent_provider: str | None,
+        agent_model: str | None,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> str:
         """Shell-escaped AGENTS.md for ``printf '%s' '...'``."""
         agent_instructions = generate_agent_instructions(
             template_path=self._agent_instructions_template_path,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
-            provider=llm_config.provider,
-            model_name=llm_config.model_name,
+            provider=agent_provider,
+            model_name=agent_model,
             nextjs_port=nextjs_port,
             disabled_tools=OPENCODE_DISABLED_TOOLS,
             user_name=user_name,
+            organization_instructions=load_settings().craft_instructions,
         )
         return agent_instructions.replace("'", "'\\''")
 
@@ -1084,16 +1085,15 @@ class DockerSandboxManager(SandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._render_agents_md(
-            llm_config=llm_config,
+            agent_provider=llm_config.provider,
+            agent_model=llm_config.model_name,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
             user_name=user_name,
         )
@@ -1435,7 +1435,6 @@ echo "Session cleanup complete"
         snapshot_storage_path: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        skills_section: str,
         connectable_apps_section: str,
     ) -> None:
         container = self._require_container(sandbox_id)
@@ -1497,12 +1496,12 @@ fi
         except ExecError as e:
             raise RuntimeError(f"Failed to reinstall deps after restore: {e}") from e
 
-        self._regenerate_session_config(
-            container=container,
-            session_path=session_path,
-            llm_config=llm_config,
+        self.regenerate_session_config(
+            sandbox_id=sandbox_id,
+            session_id=session_id,
+            agent_provider=llm_config.provider,
+            agent_model=llm_config.model_name,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
         )
 
@@ -1518,33 +1517,40 @@ fi
             except ExecError as e:
                 raise RuntimeError(f"Failed to start Next.js after restore: {e}") from e
 
-    def _regenerate_session_config(
+    def regenerate_session_config(
         self,
         *,
-        container: Container,
-        session_path: str,
-        llm_config: LLMProviderConfig,
+        sandbox_id: UUID,
+        session_id: UUID,
+        agent_provider: str | None,
+        agent_model: str | None,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
+        user_name: str | None = None,
     ) -> None:
-        """
-        Rewrite AGENTS.md and the skills symlink post-restore. opencode.json is
-        not written — config lives at container scope via
-        OPENCODE_CONFIG_CONTENT.
-        """
+        """Rewrite generated session configuration and managed symlinks."""
+        container = self._require_container(sandbox_id)
+        session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._render_agents_md(
-            llm_config=llm_config,
+            agent_provider=agent_provider,
+            agent_model=agent_model,
             nextjs_port=nextjs_port,
-            skills_section=skills_section,
             connectable_apps_section=connectable_apps_section,
+            user_name=user_name,
         )
+        attachments_content_b64 = base64.b64encode(
+            ATTACHMENTS_SECTION_CONTENT.encode()
+        ).decode()
         script = f"""
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
+if [ -n "$(find {session_path}/attachments -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+    printf '\n\n' >> {session_path}/AGENTS.md
+    echo '{attachments_content_b64}' | base64 -d >> {session_path}/AGENTS.md
+fi
 """
         try:
             _run_in_container_as_sandbox_user(
@@ -1763,12 +1769,12 @@ echo "$base"
         script = f"""
 if [ -f "{agents_md_path}" ]; then
     if ! grep -q "## Attachments (PRIORITY)" "{agents_md_path}" 2>/dev/null; then
-        if grep -q "## Skills" "{agents_md_path}" 2>/dev/null; then
+        if grep -q "## Connectable apps" "{agents_md_path}" 2>/dev/null; then
             awk -v content="$(echo "{attachments_b64}" | base64 -d)" '
-                /^## Skills/ {{ print content; print ""; }}
+                /^## Connectable apps/ {{ print content; print ""; }}
                 {{ print }}
             ' "{agents_md_path}" > "{agents_md_path}.tmp" && mv "{agents_md_path}.tmp" "{agents_md_path}"
-            echo "ADDED_BEFORE_SKILLS"
+            echo "ADDED_BEFORE_CONNECTABLE_APPS"
         else
             echo "" >> "{agents_md_path}"
             echo "" >> "{agents_md_path}"

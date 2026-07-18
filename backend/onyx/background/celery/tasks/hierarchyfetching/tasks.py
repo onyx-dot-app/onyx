@@ -21,6 +21,7 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
 from onyx.configs.constants import DocumentSource
@@ -143,6 +144,10 @@ def _try_creating_hierarchy_fetching_task(
             queue=OnyxCeleryQueues.CONNECTOR_HIERARCHY_FETCHING,
             task_id=custom_task_id,
             priority=OnyxCeleryPriority.LOW,
+            # Unexpired fan-out tasks accumulate forever if consumption stalls
+            # (a deployment with no worker on this queue collected 67k+ of
+            # these); the hourly check re-enqueues anything still due.
+            expires=BEAT_EXPIRES_DEFAULT,
         )
 
         if not result:

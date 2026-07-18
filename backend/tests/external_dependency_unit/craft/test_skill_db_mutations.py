@@ -7,14 +7,17 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill__User
 from onyx.db.models import Skill__UserGroup
+from onyx.db.models import UserSkillPreference
 from onyx.db.skill import replace_skill_shares
+from onyx.db.skill import skill_user_states
 from onyx.db.skill import transfer_skill_ownership
-from onyx.db.skill import update_skill_fields
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.skill.response_helpers import skill_response_for_user
 from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
 from tests.external_dependency_unit.craft.db_helpers import make_group
 from tests.external_dependency_unit.craft.db_helpers import make_skill
@@ -41,51 +44,58 @@ def _group_share_permissions(
     return {row.user_group_id: row.permission for row in rows}
 
 
-def test_update_skill_fields_supports_permission_and_enabled_updates(
+def test_skill_user_states_resolve_defaults_and_visibility(
     db_session: Session,
 ) -> None:
-    skill = make_skill(db_session, is_public=False, enabled=True)
-
-    update_skill_fields(
-        skill=skill,
-        public_permission=SkillSharePermission.EDITOR,
-        enabled=False,
-        db_session=db_session,
+    user = make_user(db_session)
+    visible_custom = make_skill(db_session, is_public=True)
+    hidden_custom = make_skill(db_session, is_public=False)
+    invalid_custom = make_skill(
+        db_session,
+        is_public=True,
+        slug=f"invalid-{uuid4().hex[:8]}",
+    )
+    invalid_custom.is_valid = False
+    built_in = make_built_in_skill_row(
+        db_session,
+        built_in_skill_id=f"built-in-{uuid4().hex[:8]}",
     )
 
-    assert skill.public_permission == SkillSharePermission.EDITOR
-    assert skill.enabled is False
+    states = skill_user_states(
+        user,
+        [visible_custom.id, hidden_custom.id, invalid_custom.id, built_in.id],
+        db_session,
+    )
 
-    update_skill_fields(
-        skill=skill,
+    assert states[visible_custom.id].enabled is False
+    assert states[visible_custom.id].can_toggle is True
+    assert states[hidden_custom.id].can_toggle is False
+    assert states[invalid_custom.id].can_toggle is False
+    assert states[built_in.id].enabled is True
+    assert states[built_in.id].can_toggle is False
+
+
+def test_orphaned_private_skill_has_boolean_admin_state(
+    db_session: Session,
+) -> None:
+    admin = make_user(db_session, role=UserRole.ADMIN)
+    orphaned_skill = make_skill(
+        db_session,
         is_public=False,
-        db_session=db_session,
+        author_user_id=None,
     )
 
-    assert skill.public_permission is None
-    assert skill.enabled is False
+    state = skill_user_states(admin, [orphaned_skill.id], db_session)[orphaned_skill.id]
 
-
-def test_update_skill_fields_preserves_omitted_fields(db_session: Session) -> None:
-    skill = make_skill(db_session, is_public=True, enabled=True)
-
-    updated = update_skill_fields(
-        skill=skill,
-        enabled=False,
-        db_session=db_session,
+    assert state.can_toggle is False
+    response = skill_response_for_user(
+        orphaned_skill,
+        admin,
+        db_session,
+        state=state,
+        user_group_ids=set(),
     )
-
-    assert updated.enabled is False
-    assert updated.public_permission == SkillSharePermission.VIEWER
-
-    updated = update_skill_fields(
-        skill=skill,
-        is_public=False,
-        db_session=db_session,
-    )
-
-    assert updated.enabled is False
-    assert updated.public_permission is None
+    assert response.can_toggle is False
 
 
 def test_replace_skill_shares_replaces_requested_share_types(
@@ -223,6 +233,40 @@ def test_transfer_skill_ownership_adds_previous_owner_editor_share(
     assert skill.author_user_id == new_owner.id
     direct_shares = _direct_share_permissions(db_session, skill.id)
     assert direct_shares == {previous_owner.id: SkillSharePermission.EDITOR}
+    preference = db_session.get(
+        UserSkillPreference,
+        {"user_id": new_owner.id, "skill_id": skill.id},
+    )
+    assert preference is not None
+    assert preference.enabled is True
+
+
+def test_transfer_skill_ownership_preserves_new_owner_explicit_disable(
+    db_session: Session,
+) -> None:
+    previous_owner = make_user(db_session)
+    new_owner = make_user(db_session)
+    skill = make_skill(
+        db_session,
+        is_public=True,
+        author_user_id=previous_owner.id,
+    )
+    preference = UserSkillPreference(
+        user_id=new_owner.id,
+        skill_id=skill.id,
+        enabled=False,
+    )
+    db_session.add(preference)
+    db_session.flush()
+
+    transfer_skill_ownership(
+        skill=skill,
+        new_owner_user_id=new_owner.id,
+        db_session=db_session,
+    )
+
+    assert skill.author_user_id == new_owner.id
+    assert preference.enabled is False
 
 
 def test_transfer_skill_ownership_self_transfer_preserves_direct_share(

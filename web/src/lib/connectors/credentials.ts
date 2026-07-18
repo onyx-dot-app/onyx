@@ -57,6 +57,12 @@ export interface GitlabCredentialJson {
   gitlab_access_token: string;
 }
 
+export interface LumAppsCredentialJson {
+  lumapps_application_id: string;
+  lumapps_api_key: string;
+  lumapps_service_user: string;
+}
+
 export interface BitbucketCredentialJson {
   bitbucket_email: string;
   bitbucket_api_token: string;
@@ -253,6 +259,10 @@ export interface BraintrustCredentialJson {
   braintrust_api_key: string;
 }
 
+export interface CanvasCredentialJson {
+  canvas_access_token: string;
+}
+
 export interface MediaWikiCredentialJson {}
 export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
 
@@ -292,6 +302,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
     gitlab_url: "",
     gitlab_access_token: "",
   } as GitlabCredentialJson,
+  lumapps: {
+    lumapps_application_id: "",
+    lumapps_api_key: "",
+    lumapps_service_user: "",
+  } as LumAppsCredentialJson,
   bitbucket: {
     bitbucket_email: "",
     bitbucket_api_token: "",
@@ -454,6 +469,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
   braintrust: {
     braintrust_api_key: "",
   } as BraintrustCredentialJson,
+  canvas: {
+    canvas_access_token: "",
+  } as CanvasCredentialJson,
   egnyte: {
     domain: "",
     access_token: "",
@@ -502,6 +520,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
 export const credentialDisplayNames: Record<string, string> = {
   // Github
   github_access_token: "GitHub Access Token",
+
+  // LumApps
+  lumapps_application_id: "LumApps Application ID",
+  lumapps_api_key: "LumApps API Key",
+  lumapps_service_user: "Service User Email (to index on behalf of)",
 
   // Gitlab
   gitlab_url: "GitLab URL",
@@ -653,6 +676,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Braintrust
   braintrust_api_key: "Braintrust API Key",
+
+  // Canvas
+  canvas_access_token: "Canvas Access Token",
 
   // GitBook
   gitbook_space_id: "GitBook Space ID",

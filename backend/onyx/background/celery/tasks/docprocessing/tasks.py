@@ -45,12 +45,10 @@ from onyx.background.indexing.checkpointing_utils import (
 )
 from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
 from onyx.background.indexing.index_attempt_utils import get_old_index_attempt_ids
-from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import PERSISTENT_INDEXING
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
-from onyx.configs.constants import AuthType
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import DocumentSource
@@ -139,6 +137,10 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import USAGE_LIMITS_ENABLED
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
+
+# Bound for waiting on the shared cross-batch DB lock (see usage below).
+CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S = 300
+
 
 logger = setup_logger()
 
@@ -1023,7 +1025,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     # to prevent continued indexing retry attempts burning through embedding credits.
                     # NOTE: only for Cloud, since most self-hosted users use self-hosted embedding
                     # models. Also, they are more prone to repeated failures -> eventual success.
-                    if AUTH_TYPE == AuthType.CLOUD:
+                    if MULTI_TENANT:
                         update_connector_credential_pair_from_id(
                             db_session=db_session,
                             cc_pair_id=cc_pair.id,
@@ -1864,7 +1866,21 @@ def _docprocessing_task(
         # Time the lock-acquire wait (the contention signal); record it after
         # release (below) so the metric write doesn't extend this shared lock.
         lock_acquire_start = time.monotonic()
-        cross_batch_db_lock.acquire()
+        # Bounded acquire: the lock guards a short DB update (normal hold well
+        # under a second), but a holder killed mid-section (worker restart /
+        # OOM) leaves the key for its full CELERY_INDEXING_LOCK_TIMEOUT (3h15m).
+        # An unbounded acquire() then wedges every docprocessing thread across
+        # all workers until the fossil expires — observed in production. Fail
+        # the task instead; it redelivers and retries against a fresh lock.
+        if not cross_batch_db_lock.acquire(
+            blocking_timeout=CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S
+        ):
+            raise RuntimeError(
+                f"Could not acquire cross-batch DB lock for index attempt "
+                f"{index_attempt_id} within "
+                f"{CROSS_BATCH_DB_LOCK_ACQUIRE_TIMEOUT_S}s — likely a fossil "
+                f"lock from a killed worker; task will be retried."
+            )
         lock_acquire_ms = max(0, int((time.monotonic() - lock_acquire_start) * 1000))
         try:
             with get_session_with_current_tenant() as db_session:

@@ -29,11 +29,15 @@ export function normalizeServerUrl(input: string): string {
 }
 
 // Reject non-Onyx responses (captive portal, HTML error page) so we don't commit a dead URL.
+// Servers older than the multi_tenant field serve auth_type instead.
 function isAuthTypeMetadata(value: unknown): value is AuthTypeMetadata {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
   return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as Record<string, unknown>).auth_type === "string"
+    typeof record.multi_tenant === "boolean" ||
+    typeof record.auth_type === "string"
   );
 }
 

@@ -22,6 +22,9 @@ from onyx.server.features.notifications.models import PaginatedNotifications
 from onyx.server.features.notifications.utils import (
     ensure_permissions_migration_notification,
 )
+from onyx.server.features.notifications.utils import (
+    ensure_system_announcement_notification,
+)
 from onyx.server.features.release_notes.utils import (
     ensure_release_notes_fresh_and_notify,
 )
@@ -59,6 +62,15 @@ def _check_for_notifications_to_create(
         logger.exception("Failed to check for release notes in notifications endpoint")
 
 
+def _ensure_system_announcement_notification(user: User, db_session: Session) -> None:
+    """Materialize the current admin-authored site-wide announcement on read so
+    it appears without waiting for a background pass. No-op when none is set."""
+    try:
+        ensure_system_announcement_notification(user, db_session)
+    except Exception:
+        logger.exception("Failed to ensure system announcement notification on read")
+
+
 def _ensure_license_expiry_notification(user: User, db_session: Session) -> None:
     """Self-hosted EE only: create the admin's current-stage license-expiry
     notification on read so the banner appears without waiting for the daily
@@ -87,8 +99,9 @@ def get_notifications_api(
     single notif_type.
 
     Note: the first unfiltered page runs the generic create-checks. A
-    type-filtered request skips them, except a LICENSE_EXPIRY_WARNING filter
-    still ensures the requesting admin's current expiry notification exists.
+    type-filtered request skips them, except a SYSTEM_ANNOUNCEMENT or
+    LICENSE_EXPIRY_WARNING filter still ensures that type's current
+    notification exists for the requesting user.
 
     Examples of checks that create new notifications:
     - Checking for new release notes the user hasn't seen
@@ -98,6 +111,8 @@ def get_notifications_api(
     if page_num == 0:
         if notif_type is None:
             _check_for_notifications_to_create(user, db_session)
+        if notif_type in (None, NotificationType.SYSTEM_ANNOUNCEMENT):
+            _ensure_system_announcement_notification(user, db_session)
         if notif_type in (None, NotificationType.LICENSE_EXPIRY_WARNING):
             _ensure_license_expiry_notification(user, db_session)
 
@@ -136,6 +151,7 @@ def get_notifications_summary_api(
     # Preserve app-load notification bootstrap behavior: notifications that are
     # lazily created on read should exist before we compute badge counts.
     _check_for_notifications_to_create(user=user, db_session=db_session)
+    _ensure_system_announcement_notification(user=user, db_session=db_session)
     total_items, undismissed_count = count_notifications(
         user=user,
         db_session=db_session,

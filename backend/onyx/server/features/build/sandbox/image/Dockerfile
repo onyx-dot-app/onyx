@@ -50,13 +50,6 @@ ARG ENABLE_SKILLS=true
 ARG ENABLE_BROWSER=true
 ARG OPENCODE_VERSION=1.15.7
 ARG AGENT_BROWSER_VERSION=0.31.1
-# trixie-security's chromium 150.0.7871.46-1~deb13u1 SIGTRAPs at launch
-# (https://bugs.debian.org/chromium — also broke grafana-image-renderer and
-# linuxserver/docker-chromium), which kills the Craft `browser` command and the
-# craft-k8s browser CI lane. Pin the last known-good build (from
-# trixie-proposed-updates) until a fixed security build lands, then drop the
-# pin and the proposed-updates apt source below.
-ARG CHROMIUM_VERSION=149.0.7827.196-1~deb13u1
 
 # firewall-init.sh needs: iptables (egress lockdown), ca-certificates (trust
 # store), gosu (legacy, not currently invoked). setpriv ships with util-linux in
@@ -103,13 +96,9 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
 # Chromium's NSS db). Its own layer: big and rarely-changing, so an
 # AGENT_BROWSER_VERSION bump below re-pulls only the small CLI layer, not this.
 RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
-    echo "deb http://deb.debian.org/debian trixie-proposed-updates main" \
-    > /etc/apt/sources.list.d/trixie-proposed-updates.list && \
     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    chromium="${CHROMIUM_VERSION}" \
-    chromium-common="${CHROMIUM_VERSION}" \
+    chromium \
     libnss3-tools \
-    && rm /etc/apt/sources.list.d/trixie-proposed-updates.list \
     && rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -157,8 +146,15 @@ RUN python3 -m venv /workspace/.venv && \
 ENV PATH="/workspace/.venv/bin:${PATH}"
 ENV PYTHONPATH="/workspace"
 
+# pptxgenjs: from-scratch deck generation. lucide-static/@tabler/icons: plain
+# .svg icon files + sharp as rasterizer, for the pptx skill's scripts/icon.js.
+# sharp pulls its per-arch prebuilt libvips binary via optionalDependencies
+# (@img/sharp-linux-x64 / @img/sharp-linux-arm64, no install scripts); the
+# smoke test fails the build if the native binary didn't resolve for the
+# target arch, and verifies one known SVG exists from each icon package.
 RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
-    npm install -g pptxgenjs && \
+    npm install -g pptxgenjs@4.0.1 lucide-static@1.24.0 @tabler/icons@3.44.0 sharp@0.35.3 && \
+    NODE_PATH=/usr/local/lib/node_modules node -e "require('pptxgenjs'); require('sharp'); const fs = require('fs'); fs.accessSync('/usr/local/lib/node_modules/lucide-static/icons/circle-check.svg'); fs.accessSync('/usr/local/lib/node_modules/@tabler/icons/icons/outline/shield-check.svg')" && \
     npm cache clean --force && \
     rm -rf /root/.npm; \
     fi

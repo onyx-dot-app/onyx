@@ -28,17 +28,21 @@ from typing import Any
 import httpx
 import pytest
 
+from onyx.server.features.build.sandbox.event_schema import ActivityTimeoutError
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import Error
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
 from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TRANSPORT
+from onyx.server.features.build.sandbox.opencode import serve_client
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
 from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
+from onyx.server.features.build.sandbox.sse import SSEKeepalive
 
 _SESSION = "ses_test_123"
+_CHILD_SESSION = "ses_child_456"
 _DIRECTORY = "/workspace/sessions/test-session"
 
 
@@ -111,6 +115,7 @@ def _run_send_message(
     model_provider: str | None = None,
     model_id: str | None = None,
     timeout: float = 5.0,
+    absolute_timeout: float | None = None,
 ) -> tuple[list[Any], threading.Thread]:
     """Start ``send_message`` on a background thread, returning the
     collected events list (populated as the generator yields)."""
@@ -124,6 +129,7 @@ def _run_send_message(
             model_provider=model_provider,
             model_id=model_id,
             timeout=timeout,
+            absolute_timeout=absolute_timeout,
         ):
             events.append(evt)
 
@@ -600,8 +606,8 @@ def test_send_message_ends_on_unscoped_session_idle(bus: PodEventBus) -> None:
     assert not any(isinstance(e, Error) for e in events)
 
 
-def test_send_message_wall_clock_timeout_aborts(bus: PodEventBus) -> None:
-    """When the configured per-call timeout elapses with no terminator,
+def test_send_message_inactivity_timeout_aborts(bus: PodEventBus) -> None:
+    """When the configured inactivity timeout elapses with no terminator,
     the client posts ``/abort`` and yields a final Error."""
     aborts: list[str] = []
 
@@ -616,10 +622,114 @@ def test_send_message_wall_clock_timeout_aborts(bus: PodEventBus) -> None:
     events = list(
         client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=0.3)
     )
-    assert any(
-        isinstance(e, Error) and e.code == TURN_ERROR_CODE_TIMEOUT for e in events
-    )
+    # Inactivity timeout is the recoverable subtype so the executor can re-prompt.
+    assert any(isinstance(e, ActivityTimeoutError) for e in events)
     assert any("/abort" in p for p in aborts)
+
+
+def test_send_message_descendant_activity_renews_inactivity_timeout(
+    bus: PodEventBus,
+) -> None:
+    """Descendant packets keep an otherwise long-running parent turn alive."""
+    aborts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/abort"):
+            aborts.append(request.url.path)
+        return httpx.Response(204)
+
+    client = _make_client(bus, httpx.MockTransport(handler))
+    events, thread = _run_send_message(client, timeout=0.5)
+    try:
+        bus._dispatch(
+            {
+                "type": "session.created",
+                "properties": {"info": {"id": _CHILD_SESSION, "parentID": _SESSION}},
+            }
+        )
+        for index in range(4):
+            time.sleep(0.2)
+            bus._dispatch(
+                {
+                    "type": "message.updated",
+                    "properties": {
+                        "sessionID": _CHILD_SESSION,
+                        "info": {
+                            "id": f"msg-{index}",
+                            "sessionID": _CHILD_SESSION,
+                            "role": "assistant",
+                            "time": {"completed": None},
+                        },
+                    },
+                }
+            )
+        assert thread.is_alive()
+        _dispatch_session_idle(bus)
+        assert _wait_for(lambda: not thread.is_alive(), timeout=1.0)
+    finally:
+        thread.join(timeout=3.0)
+
+    assert any(isinstance(event, PromptResponse) for event in events)
+    assert not any(isinstance(event, Error) for event in events)
+    assert not aborts
+
+
+def test_send_message_keepalives_do_not_renew_inactivity_timeout(
+    bus: PodEventBus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Transport keepalives cannot keep a stalled opencode turn alive."""
+    monkeypatch.setattr(serve_client, "SSE_KEEPALIVE_INTERVAL", 0.05)
+    client = _make_client(bus, httpx.MockTransport(_ok_response))
+
+    events = list(
+        client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=0.2)
+    )
+
+    assert any(isinstance(event, SSEKeepalive) for event in events)
+    assert any(
+        isinstance(event, Error) and event.code == TURN_ERROR_CODE_TIMEOUT
+        for event in events
+    )
+
+
+def test_send_message_absolute_timeout_is_not_renewed(bus: PodEventBus) -> None:
+    """Continuous activity cannot extend an explicit hard turn budget."""
+    client = _make_client(bus, httpx.MockTransport(_ok_response))
+    events, thread = _run_send_message(
+        client,
+        timeout=0.5,
+        absolute_timeout=0.8,
+    )
+    try:
+        for index in range(6):
+            if not thread.is_alive():
+                break
+            time.sleep(0.2)
+            bus._dispatch(
+                {
+                    "type": "message.updated",
+                    "properties": {
+                        "sessionID": _SESSION,
+                        "info": {
+                            "id": f"msg-{index}",
+                            "sessionID": _SESSION,
+                            "role": "assistant",
+                            "time": {"completed": None},
+                        },
+                    },
+                }
+            )
+        assert _wait_for(lambda: not thread.is_alive(), timeout=1.0)
+    finally:
+        thread.join(timeout=3.0)
+
+    errors = [event for event in events if isinstance(event, Error)]
+    assert len(errors) == 1
+    assert errors[0].code == TURN_ERROR_CODE_TIMEOUT
+    assert errors[0].message == "Turn exceeded maximum duration"
+    # The hard budget timeout is NOT the recoverable subtype — it must not be
+    # re-prompted by the executor.
+    assert not isinstance(errors[0], ActivityTimeoutError)
 
 
 def test_send_message_aborts_on_generator_exit(bus: PodEventBus) -> None:

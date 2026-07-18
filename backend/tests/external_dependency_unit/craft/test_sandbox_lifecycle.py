@@ -480,7 +480,6 @@ class _PushRecordingStub(StubSandboxManager):
         session_id: UUID,
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
-        skills_section: str,
         connectable_apps_section: str,
         user_name: str | None = None,
     ) -> None:
@@ -490,7 +489,6 @@ class _PushRecordingStub(StubSandboxManager):
             session_id,
             llm_config,
             nextjs_port,
-            skills_section,
             connectable_apps_section,
             user_name,
         )
@@ -502,7 +500,6 @@ class _PushRecordingStub(StubSandboxManager):
         snapshot_storage_path: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
-        skills_section: str,
         connectable_apps_section: str,
     ) -> None:
         self.ops.append("render_workspace")
@@ -512,7 +509,6 @@ class _PushRecordingStub(StubSandboxManager):
             snapshot_storage_path,
             nextjs_port,
             llm_config,
-            skills_section,
             connectable_apps_section,
         )
 
@@ -631,8 +627,8 @@ class TestManagedContentPushOrdering:
         assert stub.setup_session_workspace_count == (0 if has_snapshot else 1)
         # First pair lands while the committed status is still PROVISIONING
         # (no turn can dispatch against an unhydrated pod); the second pair is
-        # the fileset AGENTS.md is rendered from, pushed before the render so
-        # AGENTS.md can never land ahead of disk.
+        # a fresh managed-content push for the restored workspace, completed
+        # before the workspace is rendered.
         assert stub.ops == [
             f"push:{SKILLS_MOUNT_PATH}",
             f"push:{USER_LIBRARY_MOUNT_PATH}",

@@ -273,6 +273,10 @@ class TestUploadFile:
         assert section_marker in after_first, (
             "first upload must inject the attachments section into AGENTS.md"
         )
+        assert "## Skills" not in after_first
+        assert after_first.index(section_marker) < after_first.index(
+            "## Connectable apps"
+        )
 
         BuildSessionManager.upload_file(
             handle.api_user,

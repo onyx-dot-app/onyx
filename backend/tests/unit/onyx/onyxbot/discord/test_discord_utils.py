@@ -30,7 +30,7 @@ class TestGetBotToken:
 
         with (
             patch("onyx.onyxbot.discord.utils.DISCORD_BOT_TOKEN", None),
-            patch("onyx.onyxbot.discord.utils.AUTH_TYPE", "basic"),  # Not CLOUD
+            patch("onyx.onyxbot.discord.utils.MULTI_TENANT", False),  # Not cloud
             patch("onyx.onyxbot.discord.utils.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.utils.get_discord_bot_config",
@@ -46,7 +46,7 @@ class TestGetBotToken:
         """When no env var and no DB config, returns None."""
         with (
             patch("onyx.onyxbot.discord.utils.DISCORD_BOT_TOKEN", None),
-            patch("onyx.onyxbot.discord.utils.AUTH_TYPE", "basic"),  # Not CLOUD
+            patch("onyx.onyxbot.discord.utils.MULTI_TENANT", False),  # Not cloud
             patch("onyx.onyxbot.discord.utils.get_session_with_tenant") as mock_session,
             patch(
                 "onyx.onyxbot.discord.utils.get_discord_bot_config",

@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timezone
 from email.utils import parsedate_to_datetime
 
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -47,8 +48,7 @@ def parse_retry_after_seconds(value: str | None) -> float | None:
 
     # parsedate_to_datetime returns a naive datetime when the date carries no
     # timezone; RFC dates are GMT, so treat that as UTC.
-    if retry_at.tzinfo is None:
-        retry_at = retry_at.replace(tzinfo=timezone.utc)
+    retry_at = datetime_to_utc(retry_at)
 
     delta_seconds = (retry_at - datetime.now(timezone.utc)).total_seconds()
     return max(delta_seconds, 0.0)

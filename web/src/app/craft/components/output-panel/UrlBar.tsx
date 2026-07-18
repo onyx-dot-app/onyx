@@ -40,6 +40,8 @@ export interface UrlBarProps {
   isDownloading?: boolean;
   /** Optional refresh callback — shows a refresh icon at the right edge of the URL pill */
   onRefresh?: () => void;
+  /** Whether the current view is refreshing. */
+  isRefreshing?: boolean;
   /** Session ID — when present with previewUrl, shows share button for webapp */
   sessionId?: string;
   /** Sharing scope for the webapp (used when sessionId + previewUrl) */
@@ -68,6 +70,7 @@ export default function UrlBar({
   onDownload,
   isDownloading = false,
   onRefresh,
+  isRefreshing = false,
   sessionId,
   sharingScope = "private",
   onScopeChange,
@@ -150,10 +153,19 @@ export default function UrlBar({
             {onRefresh && (
               <button
                 onClick={onRefresh}
-                className="p-1.5 rounded-full transition-colors hover:bg-background-tint-03 text-text-03"
+                disabled={isRefreshing}
+                className={cn(
+                  "p-1.5 rounded-full transition-colors text-text-03",
+                  isRefreshing ? "cursor-wait" : "hover:bg-background-tint-03"
+                )}
                 aria-label="Refresh"
+                aria-busy={isRefreshing}
               >
-                <SvgRevert size={14} className="-scale-x-100" />
+                {isRefreshing ? (
+                  <SpinningLoader size={14} />
+                ) : (
+                  <SvgRevert size={14} className="-scale-x-100" />
+                )}
               </button>
             )}
           </div>

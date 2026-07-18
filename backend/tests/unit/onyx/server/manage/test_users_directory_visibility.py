@@ -143,7 +143,7 @@ def test_me_service_account_skips_tenant_mapping_lookup() -> None:
             "onyx.server.manage.users.get_security_settings",
             return_value=_settings(user_directory_admin_only=False),
         ),
-        patch("onyx.server.manage.users._get_token_created_at", return_value=None),
+        patch("onyx.server.manage.users._get_token_expires_at", return_value=None),
         patch("onyx.server.manage.users.UserInfo") as mock_user_info,
     ):
         verify_user_logged_in(request=MagicMock(), user=user, db_session=MagicMock())

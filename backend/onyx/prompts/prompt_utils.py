@@ -1,8 +1,10 @@
+import re
 from datetime import datetime
 from typing import cast
 
 from langchain_core.messages import BaseMessage
 
+from onyx.auth.oauth_claims_capture import IDP_PLACEHOLDER_KEYS
 from onyx.configs.constants import DocumentSource
 from onyx.prompts.chat_prompts import ADDITIONAL_INFO
 from onyx.prompts.chat_prompts import CITATION_GUIDANCE_REPLACEMENT_PAT
@@ -64,6 +66,7 @@ def replace_citation_guidance_tag(
     *,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
+    append_citation_if_missing: bool = True,
 ) -> tuple[str, bool]:
     """
     Replace {{CITATION_GUIDANCE}} placeholder with citation guidance if needed.
@@ -79,8 +82,10 @@ def replace_citation_guidance_tag(
     if not placeholder_was_present:
         # Placeholder not present - caller should append if citations are needed
         should_append = (
-            should_cite_documents or include_all_guidance
-        ) and REQUIRE_CITATION_GUIDANCE not in prompt_str
+            append_citation_if_missing
+            and (should_cite_documents or include_all_guidance)
+            and REQUIRE_CITATION_GUIDANCE not in prompt_str
+        )
         return prompt_str, should_append
 
     citation_guidance = (
@@ -107,35 +112,86 @@ def replace_reminder_tag(prompt_str: str) -> str:
     return prompt_str
 
 
-def handle_onyx_date_awareness(
+def apply_prompt_placeholders(
     prompt_str: str,
-    # We always replace the pattern {{CURRENT_DATETIME}} if it shows up
-    # but if it doesn't show up and the prompt is datetime aware, add it to the prompt at the end.
+    *,
     datetime_aware: bool = False,
-) -> str:
-    """
-    If there is a {{CURRENT_DATETIME}} tag, replace it with the current date and time no matter what.
-    If the prompt is datetime aware, and there are no datetime tags, add it to the prompt.
-    Do nothing otherwise.
-    This can later be expanded to support other tags.
-    """
+    append_datetime_if_aware: bool = False,
+    should_cite_documents: bool = False,
+    include_all_guidance: bool = False,
+    append_citation_if_missing: bool = False,
+) -> tuple[str, bool]:
+    """Apply standard Onyx prompt placeholders to any prompt string.
 
-    prompt_with_datetime = replace_current_datetime_tag(
+    Supported placeholders:
+    - {{CURRENT_DATETIME}}
+    - {{CITATION_GUIDANCE}}
+    - {{REMINDER_TAG_DESCRIPTION}}
+
+    Returns:
+        tuple[str, bool]: (processed prompt, whether citation guidance should be appended)
+    """
+    prompt_str = replace_reminder_tag(prompt_str)
+
+    original_prompt = prompt_str
+    prompt_str = replace_current_datetime_tag(
         prompt_str,
         full_sentence=False,
         include_day_of_week=True,
     )
-    if prompt_with_datetime != prompt_str:
-        return prompt_with_datetime
-
-    if datetime_aware:
-        return prompt_str + ADDITIONAL_INFO.format(
+    # If no datetime tag was present (string unchanged), optionally append the date.
+    if prompt_str == original_prompt and append_datetime_if_aware and datetime_aware:
+        prompt_str = prompt_str + ADDITIONAL_INFO.format(
             datetime_info=_BASIC_TIME_STR.format(
                 datetime_info=get_current_llm_day_time()
             )
         )
 
-    return prompt_str
+    return replace_citation_guidance_tag(
+        prompt_str,
+        should_cite_documents=should_cite_documents,
+        include_all_guidance=include_all_guidance,
+        append_citation_if_missing=append_citation_if_missing,
+    )
+
+
+# Basic identity placeholder keys, sourced from the user record rather than the
+# IdP directory profile. Combined with the IdP-derived keys to form the full
+# catalog of author-usable `{{user.<key>}}` placeholders.
+_IDENTITY_PLACEHOLDER_KEYS: frozenset[str] = frozenset({"email", "name", "role"})
+
+# Full allow-list of recognized `{{user.<key>}}` placeholder keys. A key in this
+# set always resolves (to its value, or "" when unavailable) so a non-Entra user
+# never leaks a raw placeholder to the LLM; an unknown key (e.g. a typo) is left
+# literal so the agent author notices it.
+USER_PLACEHOLDER_KEYS: frozenset[str] = (
+    IDP_PLACEHOLDER_KEYS | _IDENTITY_PLACEHOLDER_KEYS
+)
+
+# Matches `{{user.<key>}}` with optional inner whitespace, e.g. `{{ user.city }}`.
+# Deliberately a literal-tag regex (not str.format) so user prompts full of
+# `{...}` (JSON, code, LaTeX) are never touched and can never raise.
+_USER_PLACEHOLDER_RE = re.compile(r"\{\{\s*user\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
+
+
+def substitute_user_placeholders(
+    prompt_str: str, placeholder_values: dict[str, str]
+) -> str:
+    """Replace `{{user.<key>}}` placeholders in ``prompt_str`` with the current
+    user's attribute values (Entra directory profile + basic identity).
+
+    - Recognized key (in ``USER_PLACEHOLDER_KEYS``) -> its value, or "" when the
+      user has no captured value for it (avoids leaking the raw token).
+    - Unrecognized key -> left untouched so the author can spot the mistake.
+    """
+
+    def _replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key in USER_PLACEHOLDER_KEYS:
+            return placeholder_values.get(key, "")
+        return match.group(0)
+
+    return _USER_PLACEHOLDER_RE.sub(_replace, prompt_str)
 
 
 def get_company_context() -> str | None:

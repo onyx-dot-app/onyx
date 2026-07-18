@@ -1,7 +1,6 @@
 import os
 from collections.abc import Generator
 from datetime import datetime
-from datetime import timezone
 from typing import Any
 from typing import cast
 from typing import Dict
@@ -25,6 +24,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.batching import batch_generator
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -478,8 +478,8 @@ class CodaConnector(LoadConnector, PollConnector):
 
     def _convert_page_to_document(self, page: CodaPage, content: str = "") -> Document:
         """Convert a page into a Document."""
-        page_updated = datetime.fromisoformat(page.updated_at).astimezone(timezone.utc)
-        page_created = datetime.fromisoformat(page.created_at).astimezone(timezone.utc)
+        page_updated = datetime_to_utc(datetime.fromisoformat(page.updated_at))
+        page_created = datetime_to_utc(datetime.fromisoformat(page.created_at))
 
         text_parts = [page.name, page.browser_link]
         if content:
@@ -506,12 +506,8 @@ class CodaConnector(LoadConnector, PollConnector):
         self, table: CodaTable, rows: List[CodaRow]
     ) -> Document:
         """Convert a table and its rows into a single Document with multiple sections (one per row)."""
-        table_updated = datetime.fromisoformat(table.updated_at).astimezone(
-            timezone.utc
-        )
-        table_created = datetime.fromisoformat(table.created_at).astimezone(
-            timezone.utc
-        )
+        table_updated = datetime_to_utc(datetime.fromisoformat(table.updated_at))
+        table_created = datetime_to_utc(datetime.fromisoformat(table.created_at))
 
         sections: List[TextSection] = []
         for row in rows:
@@ -623,11 +619,9 @@ class CodaConnector(LoadConnector, PollConnector):
                 try:
                     pages = self._list_pages_in_doc(doc.id)
                     for page in pages:
-                        page_timestamp = (
+                        page_timestamp = datetime_to_utc(
                             datetime.fromisoformat(page.updated_at)
-                            .astimezone(timezone.utc)
-                            .timestamp()
-                        )
+                        ).timestamp()
                         if start < page_timestamp <= end:
                             content = ""
                             if self.index_page_content:
@@ -646,11 +640,9 @@ class CodaConnector(LoadConnector, PollConnector):
                 try:
                     tables = self._list_tables(doc.id)
                     for table in tables:
-                        table_timestamp = (
+                        table_timestamp = datetime_to_utc(
                             datetime.fromisoformat(table.updated_at)
-                            .astimezone(timezone.utc)
-                            .timestamp()
-                        )
+                        ).timestamp()
 
                         try:
                             rows = self._list_rows_and_values(doc.id, table.id)
@@ -658,11 +650,9 @@ class CodaConnector(LoadConnector, PollConnector):
                             table_or_rows_updated = start < table_timestamp <= end
                             if not table_or_rows_updated:
                                 for row in rows:
-                                    row_timestamp = (
+                                    row_timestamp = datetime_to_utc(
                                         datetime.fromisoformat(row.updated_at)
-                                        .astimezone(timezone.utc)
-                                        .timestamp()
-                                    )
+                                    ).timestamp()
                                     if start < row_timestamp <= end:
                                         table_or_rows_updated = True
                                         break

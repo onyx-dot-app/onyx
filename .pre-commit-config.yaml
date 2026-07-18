@@ -60,7 +60,8 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
         name: Check lazy imports
-        args: ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
+        args:
+          ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -88,13 +89,13 @@ repos:
         # of uv's project handling, so config still applies. Keep the pinned
         # version in sync with `ruff` in the dev dependency group in
         # pyproject.toml.
-        args: ["--no-project", "--with=ruff==0.12.0", "ruff", "check", "--fix"]
+        args: ["--no-project", "--with=ruff==0.15.21", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
         alias: ruff-format
         name: ruff format
-        args: ["--no-project", "--with=ruff==0.12.0", "ruff", "format"]
+        args: ["--no-project", "--with=ruff==0.15.21", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
       - id: uv-run
@@ -106,8 +107,7 @@ repos:
         # uses `uv sync --only-group zizmor`). `--offline` keeps it fast and
         # token-free locally; CI runs the online audits. Keep the pinned version
         # in sync with the `zizmor` dependency group in pyproject.toml.
-        args:
-          ["--no-project", "--with=zizmor==1.25.2", "zizmor", "--offline"]
+        args: ["--no-project", "--with=zizmor==1.25.2", "zizmor", "--offline"]
         pass_filenames: true
         files: ^\.github/(workflows/.+\.ya?ml|actions/.+/action\.ya?ml)$
 
@@ -257,13 +257,15 @@ repos:
         pass_filenames: false
         types_or: [javascript, ts, tsx]
 
-      # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
-      # This is a preview package - if it breaks:
-      #   1. Try updating: cd web && bun update @typescript/native-preview
-      #   2. Or fallback to tsc: replace 'tsgo' with 'tsc' below
+      # Type checks with the native TypeScript compiler (~10x faster than classic
+      # tsc). web and web/lib/shared use the stable typescript@7 release (web
+      # aliases it as `typescript-7` since Next.js still needs typescript@5); the
+      # widget hooks below still use tsgo from @typescript/native-preview in the
+      # root workspace.
       - id: typescript-check
         name: TypeScript type check
-        entry: bash -c 'cd web && bunx tsgo --noEmit --project tsconfig.types.json'
+        entry: bash -c 'cd web && bun run types:check'
+
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$
@@ -284,7 +286,7 @@ repos:
 
       - id: shared-typescript-check
         name: shared TypeScript type check
-        entry: bash -c 'cd web/lib/shared && bunx tsgo --noEmit'
+        entry: bash -c 'cd web/lib/shared && bun run typecheck'
         language: system
         pass_filenames: false
         files: ^web/lib/shared/(.*\.(ts|tsx)|package\.json|tsconfig.*\.json)$

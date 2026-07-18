@@ -27,7 +27,6 @@ from httpx import ASGITransport
 from httpx import AsyncClient
 from sqlalchemy.orm import Session
 
-import onyx.db.engine.async_sql_engine as async_sql_engine
 from onyx.auth.users import cookie_transport
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
@@ -79,20 +78,6 @@ def require_mock_oidc() -> None:
     # never makes a network call.
     if not _mock_reachable():
         pytest.skip("requires navikt/mock-oauth2-server (MOCK_OIDC_URL)")
-
-
-@pytest.fixture(autouse=True)
-def null_pool_async_engine(
-    monkeypatch: pytest.MonkeyPatch,
-) -> Generator[None, None, None]:
-    # A pooled asyncpg connection is bound to the loop that created it, so the
-    # process async engine cannot be reused across the per-test event loops that
-    # pytest-asyncio creates. NullPool gives each request a fresh connection in
-    # the current loop, and rebuilding drops any engine bound to a dead loop.
-    monkeypatch.setattr(async_sql_engine, "POSTGRES_USE_NULL_POOL", True)
-    async_sql_engine._ASYNC_ENGINE = None
-    yield
-    async_sql_engine._ASYNC_ENGINE = None
 
 
 def _config_url(issuer: str) -> str:

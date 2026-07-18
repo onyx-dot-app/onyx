@@ -9,7 +9,6 @@ import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
-import { AuthType } from "@/lib/auth/types";
 import InviteOnlyCard from "./InviteOnlyCard";
 
 // ---------------------------------------------------------------------------
@@ -110,10 +109,7 @@ export default function UsersSummary({
   onFilterRequests,
 }: UsersSummaryProps) {
   const { authTypeMetadata } = useAuthTypeMetadata();
-  const showInviteOnly =
-    !showScim &&
-    (authTypeMetadata.authType === AuthType.BASIC ||
-      authTypeMetadata.authType === AuthType.GOOGLE_OAUTH);
+  const showInviteOnly = !showScim && authTypeMetadata?.multiTenant === false;
   const showRequests = requests !== null && requests > 0;
 
   const statsCard = (

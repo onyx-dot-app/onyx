@@ -1,10 +1,9 @@
 import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
-import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import { redirect } from "next/navigation";
-import EmailPasswordForm from "../login/EmailPasswordForm";
-import SignInButton from "@/app/auth/login/SignInButton";
+import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 
@@ -45,16 +44,16 @@ const Page = async (props: {
     }
     return redirect("/auth/waiting-on-verification");
   }
-  const cloud = authTypeMetadata?.authType === AuthType.CLOUD;
+  const cloud = authTypeMetadata?.multiTenant === true;
 
-  // only enable this page if basic login is enabled
-  if (authTypeMetadata?.authType !== AuthType.BASIC && !cloud) {
+  // No auth metadata (backend unreachable), nothing to render here.
+  if (authTypeMetadata?.multiTenant !== false && !cloud) {
     return redirect("/app");
   }
 
   let authUrl: string | null = null;
   if (cloud && authTypeMetadata) {
-    authUrl = await getAuthUrlSS(authTypeMetadata.authType, null);
+    authUrl = await getAuthUrlSS(authTypeMetadata.multiTenant, null);
   }
   const emailDomain = defaultEmail?.split("@")[1];
 
@@ -71,7 +70,7 @@ const Page = async (props: {
 
           {cloud && authUrl && (
             <div className="w-full justify-center">
-              <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
+              <SignInButton authorizeUrl={authUrl} />
               <div className="flex items-center w-full my-4">
                 <div className="grow border-t border-background-300"></div>
                 <span className="px-4 text-text-500">or</span>
@@ -81,8 +80,7 @@ const Page = async (props: {
           )}
 
           <EmailPasswordForm
-            isSignup
-            isJoin
+            label="join"
             shouldVerify={authTypeMetadata?.requiresVerification}
             nextUrl={nextUrl}
             defaultEmail={defaultEmail}

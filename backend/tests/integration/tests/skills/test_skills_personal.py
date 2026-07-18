@@ -8,6 +8,8 @@ promotion to org-wide, and admin disable as a reversible mute.
 
 from __future__ import annotations
 
+import io
+import zipfile
 from uuid import uuid4
 
 import httpx
@@ -62,6 +64,99 @@ def test_create_personal_skill_visibility(
     assert admin_match[0].is_personal is True
 
 
+def test_create_personal_skill_from_editor(basic_user: DATestUser) -> None:
+    suffix = uuid4().hex[:6]
+    name = f"editor-skill-{suffix}"
+
+    skill = SkillManager.create_from_editor(
+        basic_user,
+        name=name,
+        description="Created without an uploaded bundle",
+        instructions_markdown="# Workflow\n\nFollow these steps.",
+        upload_bytes=b"supporting context",
+        upload_filename="context.txt",
+    )
+
+    editable = SkillManager.get_editable(skill.id, basic_user)
+    assert skill.slug == f"editor-skill-{suffix}"
+    assert skill.is_personal is True
+    assert editable.instructions_markdown == "# Workflow\n\nFollow these steps."
+    assert [file.path for file in editable.files] == ["context.txt"]
+
+
+def test_upload_supporting_files_merges_and_bundle_upload_replaces(
+    basic_user: DATestUser,
+) -> None:
+    original_name = f"original-{uuid4().hex[:6]}"
+    skill = SkillManager.create_from_editor(
+        basic_user,
+        name=original_name,
+        description="Original description",
+        instructions_markdown="Original instructions.",
+    )
+
+    supporting = io.BytesIO()
+    with zipfile.ZipFile(supporting, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("scripts/run.py", "print('hello')\n")
+        zf.writestr("references/context.md", "Context")
+    merged = SkillManager.upload_files(
+        skill,
+        supporting.getvalue(),
+        "supporting.zip",
+        basic_user,
+    )
+    assert [file.path for file in merged.files] == [
+        "references/context.md",
+        "scripts/run.py",
+    ]
+    assert merged.name == original_name
+
+    after_removal = SkillManager.remove_file(skill, "scripts/run.py", basic_user)
+    assert [file.path for file in after_removal.files] == ["references/context.md"]
+    assert after_removal.instructions_markdown == "Original instructions."
+
+    replacement = io.BytesIO()
+    with zipfile.ZipFile(replacement, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            f"{original_name}/SKILL.md",
+            f"---\nname: {original_name}\ndescription: Replaced bundle\n---\n\n"
+            "Replacement instructions.",
+        )
+        zf.writestr(f"{original_name}/new.txt", "new")
+    replaced = SkillManager.upload_files(
+        skill,
+        replacement.getvalue(),
+        "replacement.zip",
+        basic_user,
+    )
+    assert replaced.name == original_name
+    assert replaced.description == "Replaced bundle"
+    assert replaced.instructions_markdown == "Replacement instructions."
+    assert [file.path for file in replaced.files] == ["new.txt"]
+
+
+def test_create_personal_skill_accepts_wrapped_directory(
+    basic_user: DATestUser,
+) -> None:
+    slug = f"personal-wrapped-{uuid4().hex[:6]}"
+    bundle = io.BytesIO()
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            f"{slug}/SKILL.md",
+            f"---\nname: {slug}\ndescription: Wrapped directory\n---\n\n"
+            "Use the supporting script.",
+        )
+
+    skill = SkillManager.create_personal(
+        basic_user,
+        slug=slug,
+        bundle_bytes=bundle.getvalue(),
+    )
+
+    assert skill.name == slug
+    assert skill.description == "Wrapped directory"
+
+
 def test_owner_can_fetch_own_personal_skill(basic_user: DATestUser) -> None:
     slug = f"personal-fetch-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
@@ -75,11 +170,9 @@ def test_owner_can_replace_bundle_and_delete(basic_user: DATestUser) -> None:
     slug = f"personal-mutate-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
 
-    new_bundle = build_minimal_bundle(
-        slug, name="Renamed Personal", description="Updated personal desc"
-    )
+    new_bundle = build_minimal_bundle(slug, description="Updated personal desc")
     updated = SkillManager.replace_personal_bundle(skill, new_bundle, basic_user)
-    assert updated.name == "Renamed Personal"
+    assert updated.name == slug
     assert updated.description == "Updated personal desc"
     assert updated.is_personal is True
 
@@ -183,15 +276,11 @@ def test_owner_can_share_org_wide_and_retain_edit_permissions(
     assert len(visible) == 1
     assert visible[0].is_personal is False
 
-    new_bundle = build_minimal_bundle(
-        slug, name="Retained Owner Edit", description="Owner can still edit"
-    )
+    new_bundle = build_minimal_bundle(slug, description="Owner can still edit")
     updated = SkillManager.replace_personal_bundle(skill, new_bundle, basic_user)
-    assert updated.name == "Retained Owner Edit"
+    assert updated.name == slug
 
-    disabled = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(enabled=False)
-    )
+    disabled = SkillManager.set_enabled(skill, basic_user, False)
     assert disabled.enabled is False
 
 
@@ -202,9 +291,7 @@ def test_owner_can_toggle_personal_skill(
     slug = f"personal-toggle-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
 
-    toggled = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(enabled=False)
-    )
+    toggled = SkillManager.set_enabled(skill, basic_user, False)
     assert toggled.enabled is False
     assert toggled.is_personal is True
 
@@ -220,40 +307,18 @@ def test_owner_can_toggle_personal_skill(
     # still invisible to everyone else
     assert slug not in _user_custom_slugs(other_basic_user)
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
-        SkillManager.patch_personal(
-            skill, other_basic_user, SkillPatchRequest(enabled=True)
-        )
+        SkillManager.set_enabled(skill, other_basic_user, True)
     assert exc_info.value.response.status_code == 404
 
-    reenabled = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(enabled=True)
-    )
+    reenabled = SkillManager.set_enabled(skill, basic_user, True)
     assert reenabled.enabled is True
 
 
-def test_owner_can_toggle_after_sharing_org_wide(
-    basic_user: DATestUser,
-) -> None:
-    slug = f"personal-toggle-promo-{uuid4().hex[:6]}"
-    skill = SkillManager.create_personal(basic_user, slug=slug)
-    SkillManager.patch_personal(
-        skill,
-        basic_user,
-        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
-    )
-
-    disabled = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(enabled=False)
-    )
-    assert disabled.enabled is False
-
-
-def test_admin_disable_then_owner_reenable(
+def test_user_enablement_is_independent(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
-    """Admin disable is a reversible mute, not a sticky lock: the skill stays
-    listed (greyed) for the owner and the owner can re-enable it."""
+    """One user's preference does not change another user's preference."""
     slug = f"personal-admin-toggle-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
     SkillManager.patch_personal(
@@ -262,17 +327,13 @@ def test_admin_disable_then_owner_reenable(
         SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
     )
 
-    SkillManager.patch_custom(skill, admin_user, SkillPatchRequest(enabled=False))
+    SkillManager.set_enabled(skill, admin_user, False)
     own = [
         skill
         for skill in SkillManager.list_for_user(basic_user).customs
         if skill.slug == slug
     ]
-    assert len(own) == 1 and own[0].enabled is False
+    assert len(own) == 1 and own[0].enabled is True
 
-    # enabled is a shared flag with no who-disabled tracking, so the owner can
-    # turn it back on.
-    reenabled = SkillManager.patch_personal(
-        skill, basic_user, SkillPatchRequest(enabled=True)
-    )
-    assert reenabled.enabled is True
+    admin_view = SkillManager.get_for_user(skill.id, admin_user)
+    assert admin_view.enabled is False

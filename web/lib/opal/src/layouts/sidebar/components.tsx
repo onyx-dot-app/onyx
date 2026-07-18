@@ -43,16 +43,16 @@ interface SidebarRootProps {
 }
 
 function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
-  const { isMobile, isMediumScreen } = useScreenSize();
+  const { isMobile, isSmallScreen } = useScreenSize();
   const { folded, setFolded } = useSidebarState();
 
   const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
 
   useEffect(() => {
-    if (!isMobile && !isMediumScreen && !foldable) {
+    if (!isMobile && !isSmallScreen && !foldable) {
       setFolded(false);
     }
-  }, [isMobile, isMediumScreen, foldable, setFolded]);
+  }, [isMobile, isSmallScreen, foldable, setFolded]);
 
   const foldedAttr = String(folded);
   const inner = <div className="opal-sidebar-root__inner">{children}</div>;
@@ -77,20 +77,20 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
     );
   }
 
-  if (isMediumScreen) {
+  if (isSmallScreen) {
     return (
       <SidebarFoldableContext.Provider value={true}>
         <div className="opal-sidebar-root__spacer" />
         <div
           className="opal-sidebar-root__overlay"
-          data-variant="medium"
+          data-variant="small"
           data-folded={foldedAttr}
         >
           {inner}
         </div>
         <div
           className="opal-sidebar-root__backdrop"
-          data-variant="medium"
+          data-variant="small"
           data-folded={foldedAttr}
           onClick={closeSidebar}
         />
@@ -120,7 +120,7 @@ interface SidebarHeaderProps {
    * sidebar is non-foldable) and returns an `IconFunctionComponent` that is
    * rendered at `size={28}` in the topbar.
    */
-  renderAppLogo: (folded: boolean | undefined) => IconFunctionComponent;
+  renderAppLogo: (folded: boolean) => IconFunctionComponent;
   /**
    * When `true` (default), the logo is shown in the folded state with a
    * hover-to-reveal fold button. When `false`, only the fold button is shown
@@ -156,7 +156,7 @@ function SidebarHeader({
     [folded, toggleFolded]
   );
 
-  const Logo = renderAppLogo(foldable ? folded : undefined);
+  const Logo = renderAppLogo(foldable ? folded : false);
   const logoEl = <Logo size={SIDEBAR_LOGO_HEIGHT_PX} />;
 
   return (

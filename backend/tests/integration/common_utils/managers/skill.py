@@ -9,6 +9,7 @@ import httpx
 from pydantic import BaseModel
 
 from onyx.db.enums import SkillSharePermission
+from onyx.server.features.skill.models import SkillCreateRequest
 from onyx.server.features.skill.models import SkillEditableDetailResponse
 from onyx.server.features.skill.models import SkillGroupShareRequest
 from onyx.server.features.skill.models import SkillPatchRequest
@@ -44,7 +45,7 @@ def build_minimal_bundle(
     now the canonical source for those fields on the backend, so tests that
     care about them should pass them here instead of as separate API args.
     """
-    fm_name = name or f"Test Skill {slug}"
+    fm_name = name or slug
     fm_desc = description or f"Description for {slug}"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -56,6 +57,41 @@ def build_minimal_bundle(
 
 
 class SkillManager:
+    @staticmethod
+    def create_from_editor(
+        user_performing_action: DATestUser,
+        *,
+        name: str,
+        description: str,
+        instructions_markdown: str,
+        upload_bytes: bytes | None = None,
+        upload_filename: str = "supporting-file.txt",
+    ) -> SkillResponse:
+        create_request = SkillCreateRequest(
+            name=name,
+            description=description,
+            instructions_markdown=instructions_markdown,
+        )
+        headers = dict(user_performing_action.headers)
+        headers.pop("Content-Type", None)
+        form_fields = create_request.model_dump(mode="json")
+        files: dict[str, tuple[str | None, object, str | None]] = {
+            field: (None, value, None) for field, value in form_fields.items()
+        }
+        if upload_bytes is not None:
+            files["upload"] = (
+                upload_filename,
+                io.BytesIO(upload_bytes),
+                "application/octet-stream",
+            )
+        response = client.post(
+            f"{API_SERVER_URL}/skills/custom/editor",
+            files=files,
+            headers=headers,
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillResponse)
+
     @staticmethod
     def create_custom(
         user_performing_action: DATestUser,
@@ -153,6 +189,44 @@ class SkillManager:
         return _response_model(response, SkillResponse)
 
     @staticmethod
+    def upload_files(
+        skill: SkillResponse,
+        upload_bytes: bytes,
+        filename: str,
+        user_performing_action: DATestUser,
+    ) -> SkillEditableDetailResponse:
+        headers = dict(user_performing_action.headers)
+        headers.pop("Content-Type", None)
+
+        response = client.post(
+            f"{API_SERVER_URL}/skills/custom/{skill.id}/files",
+            files={
+                "upload": (
+                    filename,
+                    io.BytesIO(upload_bytes),
+                    "application/octet-stream",
+                )
+            },
+            headers=headers,
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillEditableDetailResponse)
+
+    @staticmethod
+    def remove_file(
+        skill: SkillResponse,
+        path: str,
+        user_performing_action: DATestUser,
+    ) -> SkillEditableDetailResponse:
+        response = client.delete(
+            f"{API_SERVER_URL}/skills/custom/{skill.id}/files",
+            params={"path": path},
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillEditableDetailResponse)
+
+    @staticmethod
     def replace_group_shares(
         skill: SkillResponse,
         group_ids: list[int],
@@ -207,6 +281,20 @@ class SkillManager:
         )
         response.raise_for_status()
         return _response_model(response, SkillsList)
+
+    @staticmethod
+    def set_enabled(
+        skill: SkillResponse,
+        user_performing_action: DATestUser,
+        enabled: bool,
+    ) -> SkillResponse:
+        response = client.put(
+            f"{API_SERVER_URL}/skills/{skill.id}/enabled",
+            json={"enabled": enabled},
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillResponse)
 
     @staticmethod
     def get_for_user(

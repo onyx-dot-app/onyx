@@ -76,13 +76,22 @@ def get_build_session(
     db_session: Session,
 ) -> BuildSession | None:
     """Get a build session by ID, ensuring it belongs to the user."""
-    return (
-        db_session.query(BuildSession)
-        .filter(
-            BuildSession.id == session_id,
-            BuildSession.user_id == user_id,
-        )
-        .one_or_none()
+    stmt = select(BuildSession).where(
+        BuildSession.id == session_id,
+        BuildSession.user_id == user_id,
+    )
+    return db_session.scalar(stmt)
+
+
+def skills_are_stale(session: BuildSession, sandbox: Sandbox | None) -> bool:
+    """Whether a live runtime predates the sandbox's managed content."""
+    return bool(
+        session.status == BuildSessionStatus.ACTIVE
+        and session.origin == SessionOrigin.INTERACTIVE
+        and session.opencode_session_id is not None
+        and sandbox is not None
+        and sandbox.skills_hash is not None
+        and session.skills_hash != sandbox.skills_hash
     )
 
 
@@ -125,8 +134,8 @@ def get_user_build_sessions(
     """Get a user's interactive build sessions that have at least one message.
 
     Sessions created by non-interactive callers (e.g. the scheduled-tasks
-    executor) are intentionally excluded from this listing so they don't
-    leak into the Craft sidebar. The covering composite index
+    executor or the Slack bot) are intentionally excluded from this listing
+    so they don't leak into the Craft sidebar. The covering composite index
     ``ix_build_session_user_origin_created`` is built for this exact query
     shape: ``(user_id, origin, created_at DESC)``.
     """
@@ -153,6 +162,8 @@ def get_empty_session_for_user(
     """Get an empty (pre-provisioned) session for the user if one exists.
 
     Returns a session with no messages, or None if all sessions have messages.
+    Only considers INTERACTIVE sessions — non-interactive origins (e.g. Slack)
+    skip port allocation and must not be handed to the Craft UI.
     """
     has_messages = exists().where(BuildMessage.session_id == BuildSession.id)
 
@@ -160,6 +171,7 @@ def get_empty_session_for_user(
         db_session.query(BuildSession)
         .filter(
             BuildSession.user_id == user_id,
+            BuildSession.origin == SessionOrigin.INTERACTIVE,
             ~has_messages,
         )
         .first()
@@ -547,7 +559,11 @@ def mark_user_sessions_idle__no_commit(db_session: Session, user_id: UUID) -> in
             BuildSession.user_id == user_id,
             BuildSession.status == BuildSessionStatus.ACTIVE,
         )
-        .update({BuildSession.status: BuildSessionStatus.IDLE})
+        .update(
+            {
+                BuildSession.status: BuildSessionStatus.IDLE,
+            }
+        )
     )
     db_session.flush()
     logger.info("Marked %s sessions as IDLE for user %s", result, user_id)
@@ -584,10 +600,13 @@ def fetch_all_supported_build_llm_providers(
 ) -> list[LLMProviderView]:
     """Every provider of a Craft-supported type (anthropic, openai, openrouter)
     that the ``user`` can access. Respects is_public / group restrictions so a
-    user never gets a sandbox keyed with a provider they can't use."""
+    user never gets a sandbox keyed with a provider they can't use. Providers
+    are ordered by ID so provisioning and proxy credential selection agree on
+    the first provider of each type."""
     provider_models = db_session.scalars(
         select(LLMProviderModel)
         .where(LLMProviderModel.provider.in_(BUILD_MODE_ALLOWED_PROVIDER_TYPES))
+        .order_by(LLMProviderModel.id.asc())
         .options(
             selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),

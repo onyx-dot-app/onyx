@@ -43,7 +43,7 @@ import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { ChatFileType } from "@/app/app/interfaces";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import { useProjects } from "@/lib/projects/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 

@@ -29,7 +29,7 @@
 }
 
 /* ---------------------------------------------------------------------------
-   SidebarRoot — mobile / medium overlays
+   SidebarRoot — mobile / small overlays
    --------------------------------------------------------------------------- */
 
 /* Shared visual column styles for overlaid sidebar */
@@ -53,12 +53,12 @@
   @apply translate-x-0;
 }
 
-/* Medium: fixed overlay (spacer holds width in the layout flow) */
-.opal-sidebar-root__overlay[data-variant="medium"] {
+/* Small: fixed overlay (spacer holds width in the layout flow) */
+.opal-sidebar-root__overlay[data-variant="small"] {
   @apply fixed inset-y-0 left-0 z-50;
 }
 
-/* Spacer that reserves the folded width in the flex row on medium screens */
+/* Spacer that reserves the folded width in the flex row on small screens */
 .opal-sidebar-root__spacer {
   @apply shrink-0;
   width: var(--sidebar-width-folded);

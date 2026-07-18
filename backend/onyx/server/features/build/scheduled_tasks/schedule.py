@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from datetime import timezone
 from typing import Literal
 
 from cron_descriptor import ExpressionDescriptor
@@ -34,6 +33,7 @@ from pydantic import model_validator
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.datetime import datetime_to_utc
 
 EditorMode = Literal["interval", "daily_weekly", "advanced"]
 IntervalUnit = Literal["minutes", "hours", "days"]
@@ -210,10 +210,7 @@ def compute_next_run_at(cron: str, after: datetime) -> datetime:
     """
     _validate_cron(cron)
 
-    if after.tzinfo is None:
-        after = after.replace(tzinfo=timezone.utc)
-    else:
-        after = after.astimezone(timezone.utc)
+    after = datetime_to_utc(after)
 
     try:
         itr = croniter(cron, after)
@@ -224,9 +221,7 @@ def compute_next_run_at(cron: str, after: datetime) -> datetime:
             f"Cron expression has no future fire: {cron!r}",
         ) from e
 
-    if next_fire.tzinfo is None:
-        return next_fire.replace(tzinfo=timezone.utc)
-    return next_fire.astimezone(timezone.utc)
+    return datetime_to_utc(next_fire)
 
 
 def next_n_fires(
@@ -243,10 +238,7 @@ def next_n_fires(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "n must be positive")
     _validate_cron(cron)
 
-    if after.tzinfo is None:
-        after = after.replace(tzinfo=timezone.utc)
-    else:
-        after = after.astimezone(timezone.utc)
+    after = datetime_to_utc(after)
 
     itr = croniter(cron, after)
     fires: list[datetime] = []
@@ -258,9 +250,7 @@ def next_n_fires(
                 OnyxErrorCode.INVALID_INPUT,
                 f"Cron expression has no future fire: {cron!r}",
             ) from e
-        if nxt.tzinfo is None:
-            nxt = nxt.replace(tzinfo=timezone.utc)
-        fires.append(nxt.astimezone(timezone.utc))
+        fires.append(datetime_to_utc(nxt))
     return fires
 
 

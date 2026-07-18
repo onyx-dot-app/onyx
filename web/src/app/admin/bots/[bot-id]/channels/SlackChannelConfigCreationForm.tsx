@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { toast } from "@/hooks/useToast";
+import { toast } from "@opal/layouts";
 import {
   DocumentSetSummary,
   SlackChannelConfig,

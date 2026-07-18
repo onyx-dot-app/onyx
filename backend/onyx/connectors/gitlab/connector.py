@@ -25,6 +25,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 T = TypeVar("T")
@@ -73,11 +74,7 @@ def _gitlab_datetime_to_utc(value: Any) -> datetime | None:
     if value is None:
         return None
     if isinstance(value, datetime):
-        return (
-            value.replace(tzinfo=timezone.utc)
-            if value.tzinfo is None
-            else value.astimezone(timezone.utc)
-        )
+        return datetime_to_utc(value)
     return time_str_to_utc(value)
 
 

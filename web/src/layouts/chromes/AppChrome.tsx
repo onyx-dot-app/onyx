@@ -31,7 +31,7 @@ import {
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
-import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
+import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
   Button,

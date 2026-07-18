@@ -1,10 +1,9 @@
 "use client";
 
-import { AuthType, AuthTypeMetadata } from "@/lib/auth/types";
+import { AuthTypeMetadata } from "@/lib/auth/types";
 import LoginText from "@/app/auth/login/LoginText";
-import SignInButton from "@/app/auth/login/SignInButton";
 import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
-import EmailPasswordForm from "./EmailPasswordForm";
+import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import Text from "@/refresh-components/texts/Text";
@@ -43,29 +42,12 @@ export default function LoginPage({
           title="Your email has been verified! Please sign in to continue."
         />
       )}
-      {authUrl &&
-        authTypeMetadata &&
-        authTypeMetadata.authType !== AuthType.CLOUD &&
-        // basic auth is handled below w/ the EmailPasswordForm
-        authTypeMetadata.authType !== AuthType.BASIC && (
-          <div className="flex flex-col w-full gap-4">
-            <LoginText />
-            <SignInButton
-              authorizeUrl={authUrl}
-              authType={authTypeMetadata?.authType}
-            />
-          </div>
-        )}
-
-      {authTypeMetadata?.authType === AuthType.CLOUD && (
+      {authTypeMetadata?.multiTenant === true && (
         <div className="w-full justify-center flex flex-col gap-6">
           <LoginText />
           {authUrl && authTypeMetadata && (
             <>
-              <SignInButton
-                authorizeUrl={authUrl}
-                authType={authTypeMetadata?.authType}
-              />
+              <SignInButton authorizeUrl={authUrl} />
               <div className="flex flex-row items-center w-full gap-2">
                 <div className="flex-1 border-t border-text-01" />
                 <Text as="p" text03 mainUiMuted>
@@ -75,14 +57,18 @@ export default function LoginPage({
               </div>
             </>
           )}
-          <EmailPasswordForm shouldVerify={true} nextUrl={effectiveNextUrl} />
+          <EmailPasswordForm
+            label="submit"
+            shouldVerify={true}
+            nextUrl={effectiveNextUrl}
+          />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
             <Button href="/auth/forgot-password">Reset Password</Button>
           )}
         </div>
       )}
 
-      {authTypeMetadata?.authType === AuthType.BASIC && (
+      {authTypeMetadata?.multiTenant === false && (
         <div className="flex flex-col w-full gap-6">
           <LoginText />
           {ssoProviders.length > 0 && (
@@ -105,7 +91,7 @@ export default function LoginPage({
               </div>
             </>
           )}
-          <EmailPasswordForm nextUrl={effectiveNextUrl} />
+          <EmailPasswordForm label="submit" nextUrl={effectiveNextUrl} />
         </div>
       )}
 

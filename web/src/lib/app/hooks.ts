@@ -21,7 +21,8 @@ export function useAppDocumentTitle(): void {
   const { currentChatSession } = useChatSessions();
   useLayoutEffect(() => {
     const appendChatNameToDocumentTitle =
-      (appFocus.isChat() || appFocus.isSharedChat()) && currentChatSession;
+      (appFocus.isChat() || appFocus.isSharedChat()) &&
+      currentChatSession?.name;
     document.title = appendChatNameToDocumentTitle
       ? `${currentChatSession.name} — ${appName}`
       : appName;

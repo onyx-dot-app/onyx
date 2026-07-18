@@ -54,7 +54,7 @@ html.onyx-desktop .h-screen,
 html.onyx-desktop .max-h-screen,
 html.onyx-desktop .opal-sidebar-root__column,
 html.onyx-desktop .opal-sidebar-root__overlay[data-variant="mobile"],
-html.onyx-desktop .opal-sidebar-root__overlay[data-variant="medium"] {
+html.onyx-desktop .opal-sidebar-root__overlay[data-variant="small"] {
   height: calc(100dvh - var(--onyx-titlebar-height)) !important;
   max-height: calc(100dvh - var(--onyx-titlebar-height)) !important;
 }
@@ -69,7 +69,7 @@ html.onyx-desktop .min-h-screen {
   the title bar.
 */
 html.onyx-desktop .opal-sidebar-root__overlay[data-variant="mobile"],
-html.onyx-desktop .opal-sidebar-root__overlay[data-variant="medium"],
+html.onyx-desktop .opal-sidebar-root__overlay[data-variant="small"],
 html.onyx-desktop .opal-sidebar-root__backdrop {
   top: var(--onyx-titlebar-height) !important;
   bottom: 0 !important;
