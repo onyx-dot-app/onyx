@@ -120,6 +120,20 @@ def _create_mcp_server(user: DATestUser) -> int:
     return int(resp.json()["id"])
 
 
+def _persona_upsert_body(*, is_public: bool, groups: list[int]) -> dict[str, Any]:
+    return {
+        "name": f"agent-{uuid4()}",
+        "description": "escalation test",
+        "document_set_ids": [],
+        "tool_ids": [],
+        "system_prompt": "",
+        "task_prompt": "",
+        "datetime_aware": False,
+        "is_public": is_public,
+        "groups": groups,
+    }
+
+
 _TOKEN_LIMIT_BODY: dict[str, Any] = {
     "enabled": True,
     "token_budget": 1000,
@@ -210,6 +224,25 @@ def test_manager_cannot_share_agent_to_unmanaged_group(env: _ScopedEnv) -> None:
         "PATCH",
         path,
         {"group_ids": [env.managed_group.id, env.other_group.id]},
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert_response(resp, "PATCH", path, "manager", "denied")
+
+
+def test_manager_cannot_publish_agent(env: _ScopedEnv) -> None:
+    # Publishing (is_public) via the update path is outside a manager's scope even
+    # when groups are unchanged — the group-share gate alone would miss it.
+    agent = PersonaManager.create(
+        user_performing_action=env.manager,
+        is_public=False,
+        groups=[env.managed_group.id],
+    )
+    path = f"/persona/{agent.id}"
+    resp = call_endpoint(
+        "PATCH",
+        path,
+        _persona_upsert_body(is_public=True, groups=[env.managed_group.id]),
         env.manager.headers,
         env.manager.cookies,
     )

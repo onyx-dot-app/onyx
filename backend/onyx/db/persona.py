@@ -16,11 +16,14 @@ from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_permission
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
@@ -334,6 +337,44 @@ def update_persona_access(
         mark_persona_user_files_for_sync(persona_id, db_session)
 
 
+def _assert_persona_update_within_managed_scope(
+    persona_id: int | None,
+    request: PersonaUpsertRequest,
+    user: User,
+    db_session: Session,
+) -> None:
+    """GATE 2 for a scoped group manager on the create/update path. Global holders
+    (admins, global MANAGE_AGENTS) and non-managers are untouched — only a manager
+    relying on SCOPED authority is constrained: they may neither publish an agent
+    (is_public) nor create/edit one whose groups fall outside those they manage.
+    Current groups + privacy are re-read from the DB, not trusted from the request.
+    This complements the group-share gate in ``update_persona_access``, which does
+    not fire when an update leaves groups unchanged (e.g. a bare is_public flip)."""
+    if has_permission(user, Permission.MANAGE_AGENTS) is not PermissionAuthority.SCOPED:
+        return
+    current_group_ids: list[int] = []
+    current_is_public = False
+    if persona_id is not None:
+        persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
+        if persona is not None:
+            current_group_ids = [group.id for group in persona.groups]
+            current_is_public = persona.is_public
+    requested_group_ids = (
+        list(request.groups) if request.groups is not None else current_group_ids
+    )
+    requested_is_public = (
+        request.is_public if request.is_public is not None else current_is_public
+    )
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_AGENTS,
+        current_group_ids=current_group_ids,
+        requested_group_ids=requested_group_ids,
+        is_non_public=not current_is_public and not requested_is_public,
+    )
+
+
 def create_update_persona(
     persona_id: int | None,
     create_persona_request: PersonaUpsertRequest,
@@ -344,6 +385,10 @@ def create_update_persona(
     # Permission to actually use these is checked later
 
     try:
+        _assert_persona_update_within_managed_scope(
+            persona_id, create_persona_request, user, db_session
+        )
+
         # Featured persona validation
         if create_persona_request.is_featured:
             if not has_global_permission(user, Permission.MANAGE_AGENTS):
