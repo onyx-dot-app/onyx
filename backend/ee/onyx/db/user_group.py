@@ -198,6 +198,7 @@ def fetch_user_groups(
     only_up_to_date: bool = True,
     eager_load_for_snapshot: bool = False,
     include_default: bool = True,
+    restrict_to_group_ids: set[int] | None = None,
 ) -> Sequence[UserGroup]:
     """
     Fetches user groups from the database.
@@ -213,6 +214,9 @@ def fetch_user_groups(
         eager_load_for_snapshot: If True, adds eager loading for all relationships
             needed by UserGroup.from_model snapshot creation.
         include_default: If False, excludes system default groups (is_default=True).
+        restrict_to_group_ids: If provided, limits the result to these group ids — the
+            scoped-manager variant passes the groups they manage. An empty set returns
+            nothing (fail-closed); ``None`` returns all groups (admin/global).
 
     Returns:
         Sequence[UserGroup]: A sequence of `UserGroup` objects matching the query criteria.
@@ -222,6 +226,8 @@ def fetch_user_groups(
         stmt = stmt.where(UserGroup.is_up_to_date == True)  # noqa: E712
     if not include_default:
         stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
+    if restrict_to_group_ids is not None:
+        stmt = stmt.where(UserGroup.id.in_(restrict_to_group_ids))
     if eager_load_for_snapshot:
         stmt = _add_user_group_snapshot_eager_loads(stmt)
     return db_session.scalars(stmt).unique().all()

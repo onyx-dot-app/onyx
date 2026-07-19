@@ -26,11 +26,13 @@ from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupRename
 from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
 from onyx.auth.permissions import PERMISSION_REGISTRY
 from onyx.auth.permissions import PermissionRegistryEntry
 from onyx.auth.permissions import require_permission
 from onyx.auth.scoped_permissions import assert_manages_group
+from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
@@ -50,14 +52,25 @@ router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 @router.get("/admin/user-group")
 def list_user_groups(
     include_default: bool = False,
-    _: User = Depends(require_permission(Permission.READ_USER_GROUPS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
+    # GATE 2 (read): admins/global holders see every group; a scoped manager sees
+    # only the groups they manage. The group list has no built-in membership filter,
+    # so restrict it here or a manager would see the whole org.
+    restrict_to_group_ids = (
+        None
+        if has_global_permission(user, Permission.MANAGE_USER_GROUPS)
+        else get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
+    )
     user_groups = fetch_user_groups(
         db_session,
         only_up_to_date=False,
         eager_load_for_snapshot=True,
         include_default=include_default,
+        restrict_to_group_ids=restrict_to_group_ids,
     )
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
