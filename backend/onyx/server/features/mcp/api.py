@@ -1386,9 +1386,15 @@ def _ensure_mcp_server_editable(
     if server.owner == user.email:
         return
     if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED:
-        group_ids, has_public_agent = get_mcp_server_agent_scope(server.id, db_session)
+        group_ids, has_public_agent, has_ungrouped_private_agent = (
+            get_mcp_server_agent_scope(server.id, db_session)
+        )
         if agent_mediated_scope_allows(
-            user, db_session, group_ids=group_ids, has_public_agent=has_public_agent
+            user,
+            db_session,
+            group_ids=group_ids,
+            has_public_agent=has_public_agent,
+            has_ungrouped_private_agent=has_ungrouped_private_agent,
         ):
             return
     raise OnyxError(

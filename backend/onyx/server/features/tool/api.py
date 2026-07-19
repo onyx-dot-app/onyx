@@ -65,9 +65,15 @@ def _assert_action_within_managed_scope(
     """A scoped group manager may edit an action only when every agent using it is
     private and in a group they manage. An action reachable via a public agent (so
     org-wide), or used by no agent (no group context), is owner/admin-only."""
-    group_ids, has_public_agent = get_action_agent_scope(tool_id, db_session)
+    group_ids, has_public_agent, has_ungrouped_private_agent = get_action_agent_scope(
+        tool_id, db_session
+    )
     if not agent_mediated_scope_allows(
-        user, db_session, group_ids=group_ids, has_public_agent=has_public_agent
+        user,
+        db_session,
+        group_ids=group_ids,
+        has_public_agent=has_public_agent,
+        has_ungrouped_private_agent=has_ungrouped_private_agent,
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

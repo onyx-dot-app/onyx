@@ -263,6 +263,32 @@ def test_manager_cannot_edit_action_used_by_public_agent(env: _ScopedEnv) -> Non
     assert_response(resp, "PUT", path, "manager", "denied")
 
 
+def test_manager_cannot_edit_action_used_by_ungrouped_private_agent(
+    env: _ScopedEnv,
+) -> None:
+    # A private agent in NO group is a personal agent outside the manager's scope;
+    # its presence must block editing even alongside a managed-group agent (the
+    # ungrouped agent adds no group to the union, so it must be tracked explicitly).
+    tool_id = _create_custom_tool(env.admin)
+    PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.managed_group.id],
+        tool_ids=[tool_id],
+    )
+    PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[],
+        tool_ids=[tool_id],
+    )
+    path = f"/admin/tool/custom/{tool_id}"
+    resp = call_endpoint(
+        "PUT", path, _tool_body(), env.manager.headers, env.manager.cookies
+    )
+    assert_response(resp, "PUT", path, "manager", "denied")
+
+
 def test_manager_cannot_delete_action(env: _ScopedEnv) -> None:
     # Owns it — still denied: delete is admin-only (no allow_scope on the route).
     tool_id = _create_custom_tool(env.manager)
