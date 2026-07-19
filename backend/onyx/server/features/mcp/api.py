@@ -2491,6 +2491,11 @@ def upsert_mcp_server(
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise
+    except OnyxError:
+        # Preserve authorization/validation errors (e.g. the scope gate's
+        # INSUFFICIENT_PERMISSIONS) so they surface as their real status rather
+        # than a masked 500.
+        raise
     except Exception as e:
         logger.exception("Failed to create/update MCP tool")
         raise HTTPException(

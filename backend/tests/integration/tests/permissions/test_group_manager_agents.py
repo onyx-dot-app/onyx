@@ -31,6 +31,8 @@ import pytest
 from sqlalchemy import update
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPAuthenticationType
 from onyx.db.models import Persona
 from onyx.db.models import User__UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
@@ -395,6 +397,24 @@ def test_manager_cannot_delete_mcp_server(env: _ScopedEnv) -> None:
     path = f"/admin/mcp/server/{server_id}"
     resp = call_endpoint("DELETE", path, None, env.manager.headers, env.manager.cookies)
     assert_response(resp, "DELETE", path, "manager", "denied")
+
+
+def test_manager_update_via_servers_create_denied_not_masked(
+    env: _ScopedEnv,
+) -> None:
+    # Updating an out-of-scope server through /servers/create must surface the
+    # gate's 403, not a 500 masked by the handler's blanket except.
+    server_id = _create_mcp_server(env.admin)
+    path = "/admin/mcp/servers/create"
+    body = {
+        "name": f"mcp-{uuid4()}",
+        "server_url": "https://example.com/mcp",
+        "auth_type": MCPAuthenticationType.NONE.value,
+        "auth_performer": MCPAuthenticationPerformer.ADMIN.value,
+        "existing_server_id": server_id,
+    }
+    resp = call_endpoint("POST", path, body, env.manager.headers, env.manager.cookies)
+    assert_response(resp, "POST", path, "manager", "denied")
 
 
 # --- token limits -----------------------------------------------------------
