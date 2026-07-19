@@ -49,6 +49,8 @@ export interface ModelSelectorProps {
    * (modelConfigurationId === null), which callers should treat as "clear."
    */
   includeGlobalDefault?: boolean;
+  /** When true and `value` is unset, show "Select Model" instead of the global default name. */
+  requireExplicitSelection?: boolean;
   /** Which side of the trigger the popover prefers to open on. */
   side?: "top" | "bottom" | "left" | "right";
 }
@@ -61,6 +63,7 @@ export default function ModelSelector({
   temperatureManager,
   disabled = false,
   includeGlobalDefault = false,
+  requireExplicitSelection = false,
   side = "top",
 }: ModelSelectorProps) {
   const { llmProviders, defaultText } = useCurrentAgentLLMProviders();
@@ -99,7 +102,9 @@ export default function ModelSelector({
     };
   }, [defaultText, llmProviders]);
 
-  const effectiveOption = currentOption ?? defaultModelOption;
+  const effectiveOption =
+    currentOption ??
+    (requireExplicitSelection ? null : defaultModelOption);
   const currentDisplayName = effectiveOption?.displayName ?? "Select Model";
 
   const isSelected = useCallback(
