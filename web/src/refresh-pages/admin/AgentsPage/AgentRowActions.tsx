@@ -59,10 +59,14 @@ export default function AgentRowActions({
   onMutate,
 }: AgentRowActionsProps) {
   const router = useRouter();
-  const { isAdmin, permissions } = useUser();
- const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const { user } = useUser();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
+  // Featuring promotes an agent org-wide — a GLOBAL manage:agents action (the
+  // backend gates it without allow_scope). Check raw effective_permissions so a
+  // scoped group manager, who holds manage:agents only within their own groups,
+  // does not see this control.
   const canUpdateFeaturedStatus = hasPermission(
-    permissions,
+    user?.effective_permissions ?? [],
     Permission.MANAGE_AGENTS
   );
   const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);

@@ -2,9 +2,8 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Permission, User } from "@/lib/types";
 
 // Tokens a group manager may exercise, scoped to the groups they manage — mirrors
-// the backend SCOPED_MANAGER_PERMISSIONS bundle. Surfaced to the client for NAV
-// VISIBILITY ONLY; real enforcement is backend GATE 2. (MANAGE_SKILLS is in the
-// backend bundle but has no frontend nav route yet, so it is omitted here.)
+// the backend SCOPED_MANAGER_PERMISSIONS bundle. (MANAGE_SKILLS is in the backend
+// bundle but has no frontend nav route yet, so it is omitted here.)
 export const SCOPED_MANAGER_PERMISSIONS: string[] = [
   Permission.MANAGE_CONNECTORS,
   Permission.MANAGE_DOCUMENT_SETS,
@@ -14,9 +13,23 @@ export const SCOPED_MANAGER_PERMISSIONS: string[] = [
   Permission.MANAGE_ACTIONS,
 ];
 
-// Effective permissions for nav/visibility. A group manager is treated as holding
-// the scoped manage tokens so the sidebar reveals their scoped admin pages. NOT a
-// security boundary — the backend enforces scope on every request.
+/**
+ * The user's CAPABILITY set: raw effective permissions plus a group manager's
+ * scoped tokens. This is `useUser().permissions`.
+ *
+ * How to gate UI (never rely on any of this for security — the backend enforces):
+ *  - COARSE "can this user do X at all?" (nav links, page access, top-level
+ *    "New X" buttons, scoped create/edit) → `hasPermission(permissions, X)`.
+ *    A manager holds X, so this correctly returns true.
+ *  - GLOBAL / org-wide action (feature an agent, publish org-wide, delete) →
+ *    check the RAW `user.effective_permissions` (a manager's scoped tokens are
+ *    NOT in there), or `isAdmin` when it is FULL_ADMIN-gated. Managers must not
+ *    see these.
+ *  - Action on a SPECIFIC item in a read-scoped list (e.g. edit an agent on the
+ *    chat page) → use that item's backend editable flag, never a token check —
+ *    a token can't say "…but only for this resource". (See the is_editable
+ *    follow-up; until it lands these stay owner/admin-gated.)
+ */
 export function visibilityPermissions(
   user: User | null | undefined
 ): string[] {
