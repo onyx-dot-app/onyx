@@ -14,9 +14,11 @@ import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
+import { useUser } from "@/providers/UserProvider";
 
 function GroupsPage() {
   const router = useRouter();
+  const { isAdmin } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
 
   const {
@@ -58,8 +60,13 @@ function GroupsPage() {
           onSearchQueryChange={setSearchQuery}
           placeholder="Search groups..."
           emptyStateText="Create groups to organize users and manage access."
-          onAction={() => router.push("/admin/groups/create" as Route)}
-          actionLabel="New Group"
+          // Group creation is admin-only; managers only edit groups they manage.
+          onAction={
+            isAdmin
+              ? () => router.push("/admin/groups/create" as Route)
+              : undefined
+          }
+          actionLabel={isAdmin ? "New Group" : undefined}
         />
 
         {isLoading && <SvgSimpleLoader />}

@@ -130,6 +130,8 @@ export interface User {
   personalization?: UserPersonalization;
   effective_permissions?: string[];
   is_admin?: boolean;
+  // True if the user manages any group (drives manager nav visibility).
+  is_group_manager?: boolean;
 }
 
 export interface TenantInfo {
@@ -532,6 +534,8 @@ export interface UserGroup {
   id: number;
   name: string;
   users: User[];
+  // ids of members who manage this group (drives the Make/Revoke Manager toggle)
+  manager_ids: string[];
   curator_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
   document_sets: DocumentSetSummary[];

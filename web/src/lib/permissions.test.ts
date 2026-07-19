@@ -2,9 +2,11 @@ import {
   hasAnyAdminPermission,
   hasPermission,
   getFirstPermittedAdminRoute,
+  visibilityPermissions,
+  SCOPED_MANAGER_PERMISSIONS,
 } from "./permissions";
 import { ADMIN_ROUTES } from "./admin-routes";
-import { Permission } from "./types";
+import { Permission, User } from "./types";
 
 describe("hasPermission", () => {
   it("returns false for an empty permission set", () => {
@@ -81,6 +83,55 @@ describe("hasAnyAdminPermission", () => {
     expect(hasAnyAdminPermission([Permission.MANAGE_AGENTS])).toBe(true);
     expect(hasAnyAdminPermission([Permission.MANAGE_LLMS])).toBe(true);
     expect(hasAnyAdminPermission([Permission.MANAGE_USER_GROUPS])).toBe(true);
+  });
+});
+
+describe("visibilityPermissions", () => {
+  const asUser = (u: Partial<User>): User => u as User;
+
+  it("returns the raw permissions for a non-manager", () => {
+    const perms = visibilityPermissions(
+      asUser({ effective_permissions: [Permission.BASIC_ACCESS] })
+    );
+    expect(perms).toEqual([Permission.BASIC_ACCESS]);
+  });
+
+  it("augments a manager with the scoped manage tokens", () => {
+    const perms = visibilityPermissions(
+      asUser({
+        effective_permissions: [Permission.BASIC_ACCESS],
+        is_group_manager: true,
+      })
+    );
+    for (const token of SCOPED_MANAGER_PERMISSIONS) {
+      expect(perms).toContain(token);
+    }
+    expect(perms).toContain(Permission.BASIC_ACCESS);
+    // a manager should reach the admin area via those tokens
+    expect(hasAnyAdminPermission(perms)).toBe(true);
+  });
+
+  it("does not grant full admin to a manager", () => {
+    const perms = visibilityPermissions(
+      asUser({ effective_permissions: [], is_group_manager: true })
+    );
+    expect(perms).not.toContain(Permission.FULL_ADMIN_PANEL_ACCESS);
+  });
+
+  it("returns an empty list for a null user", () => {
+    expect(visibilityPermissions(null)).toEqual([]);
+  });
+
+  it("does not duplicate a token the manager already holds", () => {
+    const perms = visibilityPermissions(
+      asUser({
+        effective_permissions: [Permission.MANAGE_CONNECTORS],
+        is_group_manager: true,
+      })
+    );
+    expect(
+      perms.filter((p) => p === Permission.MANAGE_CONNECTORS)
+    ).toHaveLength(1);
   });
 });
 
