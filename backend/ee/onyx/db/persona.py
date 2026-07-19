@@ -2,9 +2,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.auth.scoped_permissions import assert_within_scope
+from onyx.db.enums import Permission
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserGroup
+from onyx.db.models import User
 from onyx.db.persona import apply_persona_user_share_diff
 from onyx.db.persona import mark_persona_user_files_for_sync
 from onyx.db.persona import resolve_desired_user_shares
@@ -65,10 +68,39 @@ def _apply_persona_group_share_diff(
             )
 
 
+def _assert_group_share_within_scope(
+    acting_user: User,
+    persona_id: int,
+    desired_group_shares: dict[int, PersonaSharePermission],
+    db_session: Session,
+) -> None:
+    """GATE 2: sharing an agent to a group is a MANAGE_AGENTS action. Admins
+    and global MANAGE_AGENTS holders bypass; a scoped manager may only add/remove
+    groups they manage on a PRIVATE agent; an ADD_AGENTS-only user (no MANAGE_AGENTS
+    authority) is rejected. Current groups + privacy are re-read in-txn, not trusted
+    from the caller — so a reassignment can't escape scope."""
+    persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
+    current_group_ids = [
+        row.user_group_id
+        for row in db_session.query(Persona__UserGroup)
+        .filter(Persona__UserGroup.persona_id == persona_id)
+        .all()
+    ]
+    assert_within_scope(
+        acting_user,
+        db_session,
+        permission=Permission.MANAGE_AGENTS,
+        current_group_ids=current_group_ids,
+        requested_group_ids=list(desired_group_shares.keys()),
+        is_non_public=persona is not None and not persona.is_public,
+    )
+
+
 def update_persona_access(
     persona_id: int,
     creator_user_id: UUID | None,
     db_session: Session,
+    acting_user: User,
     is_public: bool | None = None,
     user_ids: list[UUID] | None = None,
     group_ids: list[int] | None = None,
@@ -106,6 +138,9 @@ def update_persona_access(
     )
     if desired_group_shares is not None:
         needs_sync = True
+        _assert_group_share_within_scope(
+            acting_user, persona_id, desired_group_shares, db_session
+        )
         _apply_persona_group_share_diff(persona_id, desired_group_shares, db_session)
 
     # When sharing changes, user file ACLs need to be updated in the vector DB

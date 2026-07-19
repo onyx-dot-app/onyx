@@ -40,6 +40,8 @@ from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
 from onyx.db.persona_sharing import get_persona_access_level
 from onyx.db.persona_sharing import get_user_group_ids_for_user
+from onyx.db.scoped_permissions import scoped_group_ids_subquery
+from onyx.db.scoped_permissions import within_managed_scope_clause
 from onyx.db.users import user_is_admin
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
@@ -129,6 +131,15 @@ def _add_user_filters(
         # Org-wide edit
         where_clause |= (Persona.is_public == True) & (  # noqa: E712
             Persona.public_permission == PersonaSharePermission.EDITOR
+        )
+        # Scoped group manager: PRIVATE agents whose every group they manage
+        # (empty managed subquery for a non-manager → contributes no rows).
+        where_clause |= within_managed_scope_clause(
+            resource_id_col=Persona.id,
+            junction_resource_col=Persona__UserGroup.persona_id,
+            junction_group_col=Persona__UserGroup.user_group_id,
+            non_public_clause=Persona.is_public.is_(False),
+            managed_subq=scoped_group_ids_subquery(user),
         )
     else:
         listed = Persona.is_listed == True  # noqa: E712
@@ -274,6 +285,7 @@ def update_persona_access(
     persona_id: int,
     creator_user_id: UUID | None,
     db_session: Session,
+    acting_user: User,  # noqa: ARG001  (lockstep with EE; MIT has no group sharing)
     is_public: bool | None = None,
     user_ids: list[UUID] | None = None,
     group_ids: list[int] | None = None,
@@ -385,6 +397,7 @@ def create_update_persona(
             persona_id=persona.id,
             creator_user_id=user.id,
             db_session=db_session,
+            acting_user=user,
             user_ids=create_persona_request.users,
             group_ids=create_persona_request.groups,
         )
@@ -473,6 +486,7 @@ def update_persona_shared(
         persona_id=persona_id,
         creator_user_id=user.id,
         db_session=db_session,
+        acting_user=user,
         is_public=is_public,
         user_ids=user_ids,
         group_ids=group_ids,

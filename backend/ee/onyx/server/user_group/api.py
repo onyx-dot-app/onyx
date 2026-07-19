@@ -257,7 +257,9 @@ def delete_user_group(
 def update_group_agents(
     user_group_id: int,
     request: UpdateGroupAgentsRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     for agent_id in request.added_agent_ids:
@@ -270,6 +272,7 @@ def update_group_agents(
                 persona_id=agent_id,
                 creator_user_id=user.id,
                 db_session=db_session,
+                acting_user=user,
                 group_ids=current_group_ids + [user_group_id],
             )
 
@@ -282,6 +285,7 @@ def update_group_agents(
             persona_id=agent_id,
             creator_user_id=user.id,
             db_session=db_session,
+            acting_user=user,
             group_ids=[gid for gid in current_group_ids if gid != user_group_id],
         )
 
