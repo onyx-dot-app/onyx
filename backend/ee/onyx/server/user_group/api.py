@@ -32,7 +32,7 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.persona import get_persona_by_id
+from onyx.db.persona import fetch_persona_by_id_for_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
@@ -263,8 +263,8 @@ def update_group_agents(
     db_session: Session = Depends(get_session),
 ) -> None:
     for agent_id in request.added_agent_ids:
-        persona = get_persona_by_id(
-            persona_id=agent_id, user=user, db_session=db_session
+        persona = fetch_persona_by_id_for_user(
+            db_session=db_session, persona_id=agent_id, user=user
         )
         current_group_ids = [g.id for g in persona.groups]
         if user_group_id not in current_group_ids:
@@ -277,8 +277,8 @@ def update_group_agents(
             )
 
     for agent_id in request.removed_agent_ids:
-        persona = get_persona_by_id(
-            persona_id=agent_id, user=user, db_session=db_session
+        persona = fetch_persona_by_id_for_user(
+            db_session=db_session, persona_id=agent_id, user=user
         )
         current_group_ids = [g.id for g in persona.groups]
         update_persona_access(

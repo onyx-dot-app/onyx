@@ -306,6 +306,26 @@ def test_add_agents_user_creates_personal_agent_with_empty_groups(
     assert_response(resp, "POST", path, "member", "allowed")
 
 
+def test_manager_rosters_agent_shared_to_managed_group(env: _ScopedEnv) -> None:
+    # A private agent shared to the manager's group but owned by the admin can be
+    # rostered out of that group by the manager: the scope-aware lookup admits them
+    # so the MANAGE_AGENTS gate (not an owner-only lookup) authorizes the change.
+    agent = PersonaManager.create(
+        user_performing_action=env.admin,
+        is_public=False,
+        groups=[env.managed_group.id],
+    )
+    path = f"/manage/admin/user-group/{env.managed_group.id}/agents"
+    resp = call_endpoint(
+        "PATCH",
+        path,
+        {"added_agent_ids": [], "removed_agent_ids": [agent.id]},
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert resp.status_code == 200, resp.text
+
+
 # --- custom actions (agent-mediated scope) ----------------------------------
 
 
