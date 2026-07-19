@@ -82,19 +82,25 @@ def _assert_group_share_within_scope(
     caller, so a reassignment can't escape scope. Privacy anchors on BOTH the
     original state (snapshotted by the caller before is_public is applied) and the
     requested one — a public→private conversion in the same call must not slip past."""
-    persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
     current_group_ids = [
         row.user_group_id
         for row in db_session.query(Persona__UserGroup)
         .filter(Persona__UserGroup.persona_id == persona_id)
         .all()
     ]
+    requested_group_ids = list(desired_group_shares.keys())
+    # No group on either side: a personal (no-group) create/save or a no-op clear,
+    # not a group-share mutation — nothing to authorize, so an ADD_AGENTS-only user
+    # can still create personal agents (e.g. when the client sends groups=[]).
+    if not current_group_ids and not requested_group_ids:
+        return
+    persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
     assert_within_scope(
         acting_user,
         db_session,
         permission=Permission.MANAGE_AGENTS,
         current_group_ids=current_group_ids,
-        requested_group_ids=list(desired_group_shares.keys()),
+        requested_group_ids=requested_group_ids,
         is_non_public=not original_is_public
         and persona is not None
         and not persona.is_public,

@@ -18,8 +18,8 @@ manager-creation helper exists yet). Allowed actions go through Manager classes
 (which assert real success); denied actions go through the shared ``_access_matrix``
 helpers, which verify the 403 is a genuine permission-gate denial.
 
-Not yet covered (need extra setup / a live run to verify): the ADD_AGENTS-only
-"can create a personal agent but cannot group-share" case, and PAT scope narrowing.
+Not yet covered (need a live run to verify): the ADD_AGENTS-only user's inability
+to group-share, and PAT scope narrowing.
 """
 
 import os
@@ -33,6 +33,7 @@ from sqlalchemy import update
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import Permission
 from onyx.db.models import Persona
 from onyx.db.models import User__UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
@@ -278,6 +279,31 @@ def test_manager_cannot_capture_public_agent_via_share(env: _ScopedEnv) -> None:
         env.manager.cookies,
     )
     assert_response(resp, "PATCH", path, "manager", "denied")
+
+
+def test_add_agents_user_creates_personal_agent_with_empty_groups(
+    env: _ScopedEnv,
+) -> None:
+    # An ADD_AGENTS-only user (no MANAGE_AGENTS authority) must still create a
+    # personal agent when the client sends groups=[] (no group share).
+    member = UserManager.create(name="add_agents_only")
+    grant_group = UserGroupManager.create(
+        name="add-agents", user_ids=[member.id], user_performing_action=env.admin
+    )
+    UserGroupManager.set_permissions(
+        user_group=grant_group,
+        permissions=[Permission.ADD_AGENTS.value],
+        user_performing_action=env.admin,
+    ).raise_for_status()
+    path = "/persona"
+    resp = call_endpoint(
+        "POST",
+        path,
+        _persona_upsert_body(is_public=False, groups=[]),
+        member.headers,
+        member.cookies,
+    )
+    assert_response(resp, "POST", path, "member", "allowed")
 
 
 # --- custom actions (agent-mediated scope) ----------------------------------
