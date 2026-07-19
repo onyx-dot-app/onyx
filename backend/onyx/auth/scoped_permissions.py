@@ -10,6 +10,7 @@ from collections.abc import Collection
 
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS
 from onyx.db.enums import Permission
@@ -85,6 +86,21 @@ def assert_within_scope(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
         "Group managers can only act on private resources "
         "within the groups they manage.",
+    )
+
+
+def assert_manages_group(user: User, db_session: Session, *, group_id: int) -> None:
+    """GATE 2 for an action scoped to a single user group (membership edits, manager
+    assignment): a GLOBAL ``MANAGE_USER_GROUPS`` holder bypasses; a scoped manager
+    passes only when ``group_id`` is one they manage. NONE, or out-of-scope, rejects.
+    Fail-closed: empty managed scope rejects."""
+    if has_global_permission(user, Permission.MANAGE_USER_GROUPS):
+        return
+    if group_id in get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS):
+        return
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        "Group managers can only act within the groups they manage.",
     )
 
 

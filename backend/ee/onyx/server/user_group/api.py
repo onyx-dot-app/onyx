@@ -26,12 +26,11 @@ from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupRename
 from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.auth.permissions import get_effective_permissions
-from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
 from onyx.auth.permissions import PERMISSION_REGISTRY
 from onyx.auth.permissions import PermissionRegistryEntry
 from onyx.auth.permissions import require_permission
-from onyx.auth.scoped_permissions import get_scoped_groups
+from onyx.auth.scoped_permissions import assert_manages_group
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
@@ -169,9 +168,13 @@ def create_user_group(
 @router.patch("/admin/user-group/rename")
 def rename_user_group_endpoint(
     rename_request: UserGroupRename,
-    _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
+    # GATE 2: rename's DB fn takes no user and re-reads nothing, so gate here.
+    assert_manages_group(user, db_session, group_id=rename_request.id)
     group = fetch_user_group(db_session, rename_request.id)
     if group and group.is_default:
         raise OnyxError(OnyxErrorCode.CONFLICT, "Cannot rename a default system group.")
@@ -200,7 +203,9 @@ def rename_user_group_endpoint(
 def patch_user_group(
     user_group_id: int,
     user_group_update: UserGroupUpdate,
-    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -221,7 +226,9 @@ def patch_user_group(
 def add_users(
     user_group_id: int,
     add_users_request: AddUsersToUserGroupRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -309,13 +316,7 @@ def set_group_manager(
     # GATE 2: an admin / global MANAGE_USER_GROUPS holder may assign in any group;
     # a scoped manager may only (de)assign managers within a group they manage — so
     # a manager can delegate within their own group but not beyond it.
-    if not has_global_permission(user, Permission.MANAGE_USER_GROUPS):
-        managed = get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
-        if user_group_id not in managed:
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "Group managers can only assign managers within the groups they manage.",
-            )
+    assert_manages_group(user, db_session, group_id=user_group_id)
     try:
         if request.is_manager:
             make_group_manager(db_session, request.user_id, user_group_id)

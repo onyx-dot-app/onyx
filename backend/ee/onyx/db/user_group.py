@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Sequence
 from operator import and_
 from uuid import UUID
@@ -12,12 +13,17 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.auth.permissions import has_permission
+from onyx.auth.scoped_permissions import assert_manages_group
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import GrantSource
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Credential__UserGroup
@@ -38,6 +44,8 @@ from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import fetch_user_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -501,9 +509,54 @@ def add_users_to_user_group(
     )
 
 
+def _assert_group_update_within_scope(
+    db_session: Session,
+    user: User,
+    user_group_id: int,
+    added_cc_pair_ids: set[int],
+) -> None:
+    """GATE 2 for a scoped manager editing a group: the group must be one they
+    manage, and every newly-attached cc_pair must be a private one within their
+    managed scope — otherwise the junction rewrite could attach a public or
+    out-of-scope connector to the group, granting its members access. Admins /
+    global holders bypass both checks."""
+    assert_manages_group(user, db_session, group_id=user_group_id)
+
+    # The cc_pair re-attach vector only applies to scoped managers; a global
+    # MANAGE_USER_GROUPS holder keeps today's unrestricted attach behavior.
+    if (
+        has_permission(user, Permission.MANAGE_USER_GROUPS)
+        is not PermissionAuthority.SCOPED
+    ):
+        return
+
+    current_groups_by_cc_pair: dict[int, list[int]] = defaultdict(list)
+    for row in get_cc_pair_groups_for_ids(db_session, list(added_cc_pair_ids)):
+        if row.is_current and row.cc_pair_id is not None:
+            current_groups_by_cc_pair[row.cc_pair_id].append(row.user_group_id)
+
+    for cc_pair_id in added_cc_pair_ids:
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session, cc_pair_id=cc_pair_id
+        )
+        if cc_pair is None:
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Group managers can only attach connectors within the groups they manage.",
+            )
+        assert_within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=current_groups_by_cc_pair[cc_pair_id],
+            requested_group_ids=[user_group_id],
+            is_non_public=cc_pair.access_type != AccessType.PUBLIC,
+        )
+
+
 def update_user_group(
     db_session: Session,
-    user: User,  # noqa: ARG001
+    user: User,
     user_group_id: int,
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:
@@ -517,6 +570,15 @@ def update_user_group(
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
 
     _check_user_group_is_modifiable(db_user_group)
+
+    current_cc_pair_ids = set(cc_pair.id for cc_pair in db_user_group.cc_pairs)
+    requested_cc_pair_ids = set(user_group_update.cc_pair_ids)
+    _assert_group_update_within_scope(
+        db_session,
+        user,
+        user_group_id,
+        added_cc_pair_ids=requested_cc_pair_ids - current_cc_pair_ids,
+    )
 
     current_user_ids = set([user.id for user in db_user_group.users])
     updated_user_ids = set(user_group_update.user_ids)
@@ -548,9 +610,7 @@ def update_user_group(
             user_ids=added_user_ids,
         )
 
-    cc_pairs_updated = set([cc_pair.id for cc_pair in db_user_group.cc_pairs]) != set(
-        user_group_update.cc_pair_ids
-    )
+    cc_pairs_updated = current_cc_pair_ids != requested_cc_pair_ids
     if cc_pairs_updated:
         _mark_user_group__cc_pair_relationships_outdated__no_commit(
             db_session=db_session, user_group_id=user_group_id
