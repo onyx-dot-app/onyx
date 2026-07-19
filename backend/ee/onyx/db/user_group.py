@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Sequence
 from operator import and_
 from uuid import UUID
@@ -12,12 +13,17 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupUpdate
+from onyx.auth.permissions import has_permission
+from onyx.auth.scoped_permissions import assert_manages_group
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import GrantSource
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Credential__UserGroup
@@ -38,6 +44,8 @@ from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import fetch_user_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -190,6 +198,7 @@ def fetch_user_groups(
     only_up_to_date: bool = True,
     eager_load_for_snapshot: bool = False,
     include_default: bool = True,
+    restrict_to_group_ids: set[int] | None = None,
 ) -> Sequence[UserGroup]:
     """
     Fetches user groups from the database.
@@ -205,6 +214,9 @@ def fetch_user_groups(
         eager_load_for_snapshot: If True, adds eager loading for all relationships
             needed by UserGroup.from_model snapshot creation.
         include_default: If False, excludes system default groups (is_default=True).
+        restrict_to_group_ids: If provided, limits the result to these group ids — the
+            scoped-manager variant passes the groups they manage. An empty set returns
+            nothing (fail-closed); ``None`` returns all groups (admin/global).
 
     Returns:
         Sequence[UserGroup]: A sequence of `UserGroup` objects matching the query criteria.
@@ -214,6 +226,8 @@ def fetch_user_groups(
         stmt = stmt.where(UserGroup.is_up_to_date == True)  # noqa: E712
     if not include_default:
         stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
+    if restrict_to_group_ids is not None:
+        stmt = stmt.where(UserGroup.id.in_(restrict_to_group_ids))
     if eager_load_for_snapshot:
         stmt = _add_user_group_snapshot_eager_loads(stmt)
     return db_session.scalars(stmt).unique().all()
@@ -459,6 +473,22 @@ def _mark_user_group__cc_pair_relationships_outdated__no_commit(
         user_group__cc_pair_relationship.is_current = False
 
 
+def _current_cc_pair_ids(db_user_group: UserGroup) -> list[int]:
+    """The cc_pairs currently attached to the group — is_current junction rows only.
+
+    A removed cc_pair keeps a stale ``is_current=False`` row until the Vespa sync
+    deletes it, and the plain ``cc_pairs`` relationship has no is_current filter, so
+    it would still surface the removed pair. Reading it as "current" lets a removed
+    (possibly public / out-of-scope) pair be re-attached without re-clearing the
+    scope gate, so always derive the current set from the live relationships.
+    """
+    return [
+        relationship.cc_pair_id
+        for relationship in db_user_group.cc_pair_relationships
+        if relationship.is_current
+    ]
+
+
 def add_users_to_user_group(
     db_session: Session,
     user: User,
@@ -490,7 +520,7 @@ def add_users_to_user_group(
 
     user_group_update = UserGroupUpdate(
         user_ids=current_user_ids + new_user_ids,
-        cc_pair_ids=[cc_pair.id for cc_pair in db_user_group.cc_pairs],
+        cc_pair_ids=_current_cc_pair_ids(db_user_group),
     )
 
     return update_user_group(
@@ -501,9 +531,61 @@ def add_users_to_user_group(
     )
 
 
+def _assert_group_update_within_scope(
+    db_session: Session,
+    user: User,
+    user_group_id: int,
+    added_cc_pair_ids: set[int],
+) -> None:
+    """GATE 2 for a scoped manager editing a group: the group must be one they
+    manage, and every newly-attached cc_pair must be a private one within their
+    managed scope — otherwise the junction rewrite could attach a public or
+    out-of-scope connector to the group, granting its members access. Admins /
+    global holders bypass both checks."""
+    assert_manages_group(user, db_session, group_id=user_group_id)
+
+    # The cc_pair re-attach vector only applies to scoped managers; a global
+    # MANAGE_USER_GROUPS holder keeps today's unrestricted attach behavior.
+    if (
+        has_permission(user, Permission.MANAGE_USER_GROUPS)
+        is not PermissionAuthority.SCOPED
+    ):
+        return
+
+    current_groups_by_cc_pair: dict[int, list[int]] = defaultdict(list)
+    for row in get_cc_pair_groups_for_ids(db_session, list(added_cc_pair_ids)):
+        if row.is_current and row.cc_pair_id is not None:
+            current_groups_by_cc_pair[row.cc_pair_id].append(row.user_group_id)
+
+    cc_pairs_by_id = {
+        cc_pair.id: cc_pair
+        for cc_pair in db_session.scalars(
+            select(ConnectorCredentialPair).where(
+                ConnectorCredentialPair.id.in_(added_cc_pair_ids)
+            )
+        )
+    }
+
+    for cc_pair_id in added_cc_pair_ids:
+        cc_pair = cc_pairs_by_id.get(cc_pair_id)
+        if cc_pair is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Connector credential pair '{cc_pair_id}' not found.",
+            )
+        assert_within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=current_groups_by_cc_pair[cc_pair_id],
+            requested_group_ids=[user_group_id],
+            is_non_public=cc_pair.access_type != AccessType.PUBLIC,
+        )
+
+
 def update_user_group(
     db_session: Session,
-    user: User,  # noqa: ARG001
+    user: User,
     user_group_id: int,
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:
@@ -517,6 +599,15 @@ def update_user_group(
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
 
     _check_user_group_is_modifiable(db_user_group)
+
+    current_cc_pair_ids = set(_current_cc_pair_ids(db_user_group))
+    requested_cc_pair_ids = set(user_group_update.cc_pair_ids)
+    _assert_group_update_within_scope(
+        db_session,
+        user,
+        user_group_id,
+        added_cc_pair_ids=requested_cc_pair_ids - current_cc_pair_ids,
+    )
 
     current_user_ids = set([user.id for user in db_user_group.users])
     updated_user_ids = set(user_group_update.user_ids)
@@ -548,9 +639,7 @@ def update_user_group(
             user_ids=added_user_ids,
         )
 
-    cc_pairs_updated = set([cc_pair.id for cc_pair in db_user_group.cc_pairs]) != set(
-        user_group_update.cc_pair_ids
-    )
+    cc_pairs_updated = current_cc_pair_ids != requested_cc_pair_ids
     if cc_pairs_updated:
         _mark_user_group__cc_pair_relationships_outdated__no_commit(
             db_session=db_session, user_group_id=user_group_id
@@ -573,6 +662,39 @@ def update_user_group(
 
     db_session.commit()
     return db_user_group
+
+
+def _set_group_manager__no_commit(
+    db_session: Session, *, user_id: UUID, group_id: int, is_manager: bool
+) -> None:
+    edge = db_session.scalar(
+        select(User__UserGroup).where(
+            User__UserGroup.user_id == user_id,
+            User__UserGroup.user_group_id == group_id,
+        )
+    )
+    if edge is None:
+        raise ValueError(f"User '{user_id}' is not a member of group '{group_id}'")
+    edge.is_manager = is_manager
+    # Refresh the affected user's cached is_group_manager flag; a pure manager flip
+    # (no membership change) otherwise leaves the route-gate flag stale.
+    recompute_user_permissions__no_commit([user_id], db_session)
+
+
+def make_group_manager(db_session: Session, user_id: UUID, group_id: int) -> None:
+    """Flip is_manager=true on the (user, group) edge. The row must already exist —
+    a manager is always a member — else ValueError. Idempotent. Does NOT commit."""
+    _set_group_manager__no_commit(
+        db_session, user_id=user_id, group_id=group_id, is_manager=True
+    )
+
+
+def revoke_group_manager(db_session: Session, user_id: UUID, group_id: int) -> None:
+    """Flip is_manager=false on the (user, group) edge. The row must exist else
+    ValueError. Idempotent. Does NOT commit."""
+    _set_group_manager__no_commit(
+        db_session, user_id=user_id, group_id=group_id, is_manager=False
+    )
 
 
 def rename_user_group(
