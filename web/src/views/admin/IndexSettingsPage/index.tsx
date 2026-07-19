@@ -865,8 +865,8 @@ export default function IndexSettingsPage() {
                 values.model_name === (currentEmbeddingModel?.model_name ?? "");
               const stagedModel =
                 values.custom_model ??
-                findRegistryModel(values.model_name) ??
-                (embeddingModelUnchanged ? currentEmbeddingModelSpec : null);
+                (embeddingModelUnchanged ? currentEmbeddingModelSpec : null) ??
+                findRegistryModel(values.model_name);
               if (!stagedModel) {
                 toast.error("Could not find the selected model");
                 return;
