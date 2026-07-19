@@ -105,7 +105,7 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.ADD_AGENTS,
         Permission.MANAGE_USER_GROUPS,
         Permission.MANAGE_ACTIONS,  # scoped via its agents at GATE 2
-        Permission.MANAGE_SKILLS,  # not yet enforced (no registry)
+        Permission.MANAGE_SKILLS,  # scoped via Skill__UserGroup at GATE 2
     }
 )
 
@@ -201,6 +201,13 @@ PERMISSION_REGISTRY: list[PermissionRegistryEntry] = [
         display_name="Manage Agents",
         description="View and update all public and shared agents in the organization.",
         permissions=[Permission.MANAGE_AGENTS],
+        group=2,
+    ),
+    PermissionRegistryEntry(
+        id="manage_skills",
+        display_name="Manage Skills",
+        description="Add and update skills that agents can use.",
+        permissions=[Permission.MANAGE_SKILLS],
         group=2,
     ),
     # Group 3 — Monitoring & Tokens

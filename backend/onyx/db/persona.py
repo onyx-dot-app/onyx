@@ -16,11 +16,14 @@ from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_permission
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
@@ -40,6 +43,8 @@ from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
 from onyx.db.persona_sharing import get_persona_access_level
 from onyx.db.persona_sharing import get_user_group_ids_for_user
+from onyx.db.scoped_permissions import scoped_group_ids_subquery
+from onyx.db.scoped_permissions import within_managed_scope_clause
 from onyx.db.users import user_is_admin
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
@@ -129,6 +134,15 @@ def _add_user_filters(
         # Org-wide edit
         where_clause |= (Persona.is_public == True) & (  # noqa: E712
             Persona.public_permission == PersonaSharePermission.EDITOR
+        )
+        # Scoped group manager: PRIVATE agents whose every group they manage
+        # (empty managed subquery for a non-manager → contributes no rows).
+        where_clause |= within_managed_scope_clause(
+            resource_id_col=Persona.id,
+            junction_resource_col=Persona__UserGroup.persona_id,
+            junction_group_col=Persona__UserGroup.user_group_id,
+            non_public_clause=Persona.is_public.is_(False),
+            managed_subq=scoped_group_ids_subquery(user),
         )
     else:
         listed = Persona.is_listed == True  # noqa: E712
@@ -274,6 +288,7 @@ def update_persona_access(
     persona_id: int,
     creator_user_id: UUID | None,
     db_session: Session,
+    acting_user: User,  # noqa: ARG001  (lockstep with EE; MIT has no group sharing)
     is_public: bool | None = None,
     user_ids: list[UUID] | None = None,
     group_ids: list[int] | None = None,
@@ -322,6 +337,49 @@ def update_persona_access(
         mark_persona_user_files_for_sync(persona_id, db_session)
 
 
+def _assert_persona_update_within_managed_scope(
+    persona_id: int | None,
+    request: PersonaUpsertRequest,
+    user: User,
+    db_session: Session,
+) -> None:
+    """GATE 2 for a scoped group manager on the create/update path. Global holders
+    (admins, global MANAGE_AGENTS) and non-managers are untouched. For a GROUP-scoped
+    agent, a manager relying on SCOPED authority may neither publish it (is_public)
+    nor use groups outside those they manage; a personal (no-group) agent follows the
+    normal owner path, like any ADD_AGENTS user. Current groups + privacy are re-read
+    from the DB, not trusted from the request. This complements the group-share gate
+    in ``update_persona_access``, which does not fire when an update leaves groups
+    unchanged (e.g. a bare is_public flip)."""
+    if has_permission(user, Permission.MANAGE_AGENTS) is not PermissionAuthority.SCOPED:
+        return
+    current_group_ids: list[int] = []
+    current_is_public = False
+    if persona_id is not None:
+        persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
+        if persona is not None:
+            current_group_ids = [group.id for group in persona.groups]
+            current_is_public = persona.is_public
+    requested_group_ids = (
+        list(request.groups) if request.groups is not None else current_group_ids
+    )
+    requested_is_public = (
+        request.is_public if request.is_public is not None else current_is_public
+    )
+    # No group on either side: a personal (no-group) agent, not a group-scoped
+    # resource — nothing for the managed-group gate to authorize.
+    if not current_group_ids and not requested_group_ids:
+        return
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_AGENTS,
+        current_group_ids=current_group_ids,
+        requested_group_ids=requested_group_ids,
+        is_non_public=not current_is_public and not requested_is_public,
+    )
+
+
 def create_update_persona(
     persona_id: int | None,
     create_persona_request: PersonaUpsertRequest,
@@ -332,6 +390,10 @@ def create_update_persona(
     # Permission to actually use these is checked later
 
     try:
+        _assert_persona_update_within_managed_scope(
+            persona_id, create_persona_request, user, db_session
+        )
+
         # Featured persona validation
         if create_persona_request.is_featured:
             if not has_global_permission(user, Permission.MANAGE_AGENTS):
@@ -385,6 +447,7 @@ def create_update_persona(
             persona_id=persona.id,
             creator_user_id=user.id,
             db_session=db_session,
+            acting_user=user,
             user_ids=create_persona_request.users,
             group_ids=create_persona_request.groups,
         )
@@ -473,6 +536,7 @@ def update_persona_shared(
         persona_id=persona_id,
         creator_user_id=user.id,
         db_session=db_session,
+        acting_user=user,
         is_public=is_public,
         user_ids=user_ids,
         group_ids=group_ids,

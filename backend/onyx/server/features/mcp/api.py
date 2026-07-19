@@ -34,7 +34,9 @@ from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
 from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
+from onyx.auth.scoped_permissions import agent_mediated_scope_allows
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -44,6 +46,7 @@ from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.mcp import create_connection_config
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
@@ -65,6 +68,7 @@ from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
+from onyx.db.tools import get_mcp_server_agent_scope
 from onyx.db.tools import get_tools_by_mcp_server_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -1369,6 +1373,36 @@ def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User) -> None:
         )
 
 
+def _ensure_mcp_server_editable(
+    server: DbMCPServer, user: User, db_session: Session
+) -> None:
+    """Write gate for the standalone MCP server endpoints. Admin and owner bypass;
+    otherwise a scoped group manager may edit a server only when every agent using
+    any of its tools is private and in a group they manage. A server reachable via a
+    public agent (org-wide), or used by no agent (no group context), is owner/admin-
+    only."""
+    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
+        return
+    if server.owner == user.email:
+        return
+    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED:
+        group_ids, has_public_agent, has_ungrouped_private_agent = (
+            get_mcp_server_agent_scope(server.id, db_session)
+        )
+        if agent_mediated_scope_allows(
+            user,
+            db_session,
+            group_ids=group_ids,
+            has_public_agent=has_public_agent,
+            has_ungrouped_private_agent=has_ungrouped_private_agent,
+        ):
+            return
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        "Only the server owner or a manager of its groups can modify this MCP server.",
+    )
+
+
 def _db_mcp_server_to_api_mcp_server(
     db_server: DbMCPServer,
     db: Session,
@@ -1927,7 +1961,7 @@ def _upsert_mcp_server(
                 status_code=404,
                 detail=f"MCP server with ID {request.existing_server_id} not found",
             )
-        _ensure_mcp_server_owner_or_admin(mcp_server, user)
+        _ensure_mcp_server_editable(mcp_server, user, db_session)
         client_info: OAuthClientInformationFull | None = None
         existing_admin_config_dict: MCPConnectionData = MCPConnectionData(headers={})
         if mcp_server.admin_connection_config:
@@ -2399,7 +2433,9 @@ def get_mcp_server_db_tools(
 def upsert_mcp_server(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPServerCreateResponse:
     """Create or update an MCP server (no tools yet)"""
 
@@ -2455,6 +2491,11 @@ def upsert_mcp_server(
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise
+    except OnyxError:
+        # Preserve authorization/validation errors (e.g. the scope gate's
+        # INSUFFICIENT_PERMISSIONS) so they surface as their real status rather
+        # than a masked 500.
+        raise
     except Exception as e:
         logger.exception("Failed to create/update MCP tool")
         raise HTTPException(
@@ -2466,7 +2507,9 @@ def upsert_mcp_server(
 def update_mcp_server_with_tools(
     request: MCPToolUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPServerUpdateResponse:
     """Update an MCP server and associated tools"""
 
@@ -2475,7 +2518,7 @@ def update_mcp_server_with_tools(
     except ValueError:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+    _ensure_mcp_server_editable(mcp_server, user, db_session)
 
     if mcp_server.admin_connection_config_id is None and mcp_server.auth_type not in (
         MCPAuthenticationType.NONE,
@@ -2518,7 +2561,9 @@ def update_mcp_server_with_tools(
 def create_mcp_server_simple(
     request: MCPServerSimpleCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
@@ -2565,7 +2610,9 @@ def update_mcp_server_simple(
     server_id: int,
     request: MCPServerSimpleUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> MCPServer:
     """Update MCP server basic information (name, description, URL)"""
     try:
@@ -2573,7 +2620,7 @@ def update_mcp_server_simple(
     except ValueError:
         raise HTTPException(status_code=404, detail="MCP server not found")
 
-    _ensure_mcp_server_owner_or_admin(mcp_server, user)
+    _ensure_mcp_server_editable(mcp_server, user, db_session)
 
     _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
 

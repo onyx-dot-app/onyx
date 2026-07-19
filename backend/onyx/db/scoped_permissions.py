@@ -5,6 +5,8 @@ scope clause. The authorization policy that consumes these (bundle guard + the
 GATE 2 write gate) lives in ``onyx/auth/scoped_permissions.py``.
 """
 
+from typing import TypeVar
+
 from sqlalchemy import and_
 from sqlalchemy import ColumnElement
 from sqlalchemy import Select
@@ -14,6 +16,10 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+
+# Resource PK type — int for connectors/doc-sets, UUID for skills. The clause is
+# key-type agnostic; the TypeVar just ties the resource + junction cols together.
+_ResourceId = TypeVar("_ResourceId")
 
 
 def scoped_group_ids_subquery(user: User) -> Select:
@@ -32,8 +38,8 @@ def fetch_managed_group_ids(user: User, db_session: Session) -> set[int]:
 
 def within_managed_scope_clause(
     *,
-    resource_id_col: InstrumentedAttribute[int],
-    junction_resource_col: InstrumentedAttribute[int],
+    resource_id_col: InstrumentedAttribute[_ResourceId],
+    junction_resource_col: InstrumentedAttribute[_ResourceId],
     junction_group_col: InstrumentedAttribute[int],
     non_public_clause: ColumnElement[bool],
     managed_subq: Select,

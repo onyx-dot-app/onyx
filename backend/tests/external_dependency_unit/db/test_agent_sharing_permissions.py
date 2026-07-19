@@ -7,7 +7,6 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import PersonaAccessLevel
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.enums import PersonaSharingStatus
@@ -77,7 +76,7 @@ def test_unrelated_user_has_no_access_to_private_persona(db_session: Session) ->
 
 def test_admin_always_has_edit_access(db_session: Session) -> None:
     owner = create_test_user(db_session, "owner")
-    admin = create_test_user(db_session, "admin", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "admin", is_admin=True)
     persona = create_test_persona(db_session, owner)
     assert _can_fetch(db_session, persona.id, admin, editable=True)
 
@@ -126,6 +125,7 @@ def test_legacy_user_ids_path_defaults_to_viewer(db_session: Session) -> None:
         persona_id=persona.id,
         creator_user_id=owner.id,
         db_session=db_session,
+        acting_user=owner,
         user_ids=[shared.id],
     )
     db_session.commit()
@@ -154,6 +154,7 @@ def test_legacy_user_ids_path_preserves_existing_editor_level(
         persona_id=persona.id,
         creator_user_id=owner.id,
         db_session=db_session,
+        acting_user=owner,
         user_ids=[editor.id],
     )
     db_session.commit()
@@ -193,7 +194,7 @@ def test_access_level_for_user_shares(
 
 def test_access_level_admin_and_stranger(db_session: Session) -> None:
     owner = create_test_user(db_session, "owner")
-    admin = create_test_user(db_session, "admin", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "admin", is_admin=True)
     stranger = create_test_user(db_session, "stranger")
     persona = create_test_persona(db_session, owner)
     db_session.refresh(persona)

@@ -7,14 +7,18 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
+from onyx.auth.scoped_permissions import agent_mediated_scope_allows
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.enums import PermissionAuthority
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
+from onyx.db.tools import get_action_agent_scope
 from onyx.db.tools import get_tool_by_id
 from onyx.db.tools import get_tools
 from onyx.db.tools import get_tools_by_ids
@@ -55,6 +59,28 @@ def _validate_auth_settings(tool_data: CustomToolCreate | CustomToolUpdate) -> N
                 )
 
 
+def _assert_action_within_managed_scope(
+    tool_id: int, db_session: Session, user: User
+) -> None:
+    """A scoped group manager may edit an action only when every agent using it is
+    private and in a group they manage. An action reachable via a public agent (so
+    org-wide), or used by no agent (no group context), is owner/admin-only."""
+    group_ids, has_public_agent, has_ungrouped_private_agent = get_action_agent_scope(
+        tool_id, db_session
+    )
+    if not agent_mediated_scope_allows(
+        user,
+        db_session,
+        group_ids=group_ids,
+        has_public_agent=has_public_agent,
+        has_ungrouped_private_agent=has_ungrouped_private_agent,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can only modify actions scoped to groups you manage.",
+        )
+
+
 def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> Tool:
     """Fetch a custom tool and ensure the caller has permission to edit it."""
     try:
@@ -68,24 +94,31 @@ def _get_editable_custom_tool(tool_id: int, db_session: Session, user: User) -> 
             detail="Built-in tools cannot be modified through this endpoint.",
         )
 
-    # Admins can always make changes; non-admins must own the tool.
+    # Admins bypass; owners may always edit the action they created.
     if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
         return tool
+    if tool.user_id is not None and tool.user_id == user.id:
+        return tool
 
-    if tool.user_id is None or tool.user_id != user.id:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "You can only modify actions that you created.",
-        )
+    # A scoped group manager may edit an action scoped (via its agents) to groups
+    # they manage; everyone else is limited to actions they created.
+    if has_permission(user, Permission.MANAGE_ACTIONS) is PermissionAuthority.SCOPED:
+        _assert_action_within_managed_scope(tool_id, db_session, user)
+        return tool
 
-    return tool
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        "You can only modify actions that you created.",
+    )
 
 
 @admin_router.post("/custom", tags=PUBLIC_API_TAGS)
 def create_custom_tool(
     tool_data: CustomToolCreate,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
@@ -109,7 +142,9 @@ def update_custom_tool(
     tool_id: int,
     tool_data: CustomToolUpdate,
     db_session: Session = Depends(get_session),
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
 ) -> ToolSnapshot:
     existing_tool = _get_editable_custom_tool(tool_id, db_session, user)
     if tool_data.definition:
@@ -208,7 +243,7 @@ class ValidateToolResponse(BaseModel):
 @admin_router.post("/custom/validate", tags=PUBLIC_API_TAGS)
 def validate_tool(
     tool_data: ValidateToolRequest,
-    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)),
 ) -> ValidateToolResponse:
     _validate_tool_definition(tool_data.definition)
     method_specs = openapi_to_method_specs(tool_data.definition)

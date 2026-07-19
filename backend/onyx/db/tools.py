@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy import or_
+from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,9 @@ from onyx.db.constants import UnsetType
 from onyx.db.enums import MCPServerStatus
 from onyx.db.models import MCPServer
 from onyx.db.models import OAuthConfig
+from onyx.db.models import Persona
+from onyx.db.models import Persona__Tool
+from onyx.db.models import Persona__UserGroup
 from onyx.db.models import Tool
 from onyx.db.models import ToolCall
 from onyx.server.features.tool.models import Header
@@ -92,6 +96,72 @@ def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
     if not tool:
         raise ValueError("Tool by specified id does not exist")
     return tool
+
+
+def _agent_group_scope(
+    agent_select: Select[tuple[int, bool, int | None]], db_session: Session
+) -> tuple[set[int], bool, bool]:
+    """Shared core of the agent-mediated action/MCP scope. Given a select of
+    ``(persona_id, is_public, owner_group_id)`` for the (non-deleted) agents
+    referencing a resource, return ``(private_agent_group_ids, has_public_agent,
+    has_ungrouped_private_agent)``. A private agent's groups are those it is shared
+    to (``Persona__UserGroup``) plus the group that owns it (``owner_group_id``); an
+    agent with neither is a personal agent outside any managed group and must be
+    tracked explicitly. A public agent is org-wide; a resource used by no agent has
+    no group context (empty set)."""
+    agent_rows = db_session.execute(agent_select).all()
+    has_public_agent = any(is_public for _, is_public, _ in agent_rows)
+    private_owner_groups = {
+        pid: owner_group_id
+        for pid, is_public, owner_group_id in agent_rows
+        if not is_public
+    }
+    if not private_owner_groups:
+        return set(), has_public_agent, False
+    share_rows = db_session.execute(
+        select(Persona__UserGroup.persona_id, Persona__UserGroup.user_group_id).where(
+            Persona__UserGroup.persona_id.in_(private_owner_groups.keys())
+        )
+    ).all()
+    group_ids: set[int] = set()
+    grouped_agent_ids: set[int] = set()
+    for persona_id, user_group_id in share_rows:
+        group_ids.add(user_group_id)
+        grouped_agent_ids.add(persona_id)
+    for persona_id, owner_group_id in private_owner_groups.items():
+        if owner_group_id is not None:
+            group_ids.add(owner_group_id)
+            grouped_agent_ids.add(persona_id)
+    has_ungrouped_private_agent = bool(
+        set(private_owner_groups.keys()) - grouped_agent_ids
+    )
+    return group_ids, has_public_agent, has_ungrouped_private_agent
+
+
+def get_action_agent_scope(
+    tool_id: int, db_session: Session
+) -> tuple[set[int], bool, bool]:
+    """The groups a custom action is exposed to, via the agents that reference it."""
+    return _agent_group_scope(
+        select(Persona.id, Persona.is_public, Persona.owner_group_id)
+        .join(Persona__Tool, Persona__Tool.persona_id == Persona.id)
+        .where(Persona__Tool.tool_id == tool_id, Persona.deleted.is_(False)),
+        db_session,
+    )
+
+
+def get_mcp_server_agent_scope(
+    mcp_server_id: int, db_session: Session
+) -> tuple[set[int], bool, bool]:
+    """The groups an MCP server is exposed to, via the agents that use any of its
+    tools."""
+    return _agent_group_scope(
+        select(Persona.id, Persona.is_public, Persona.owner_group_id)
+        .join(Persona__Tool, Persona__Tool.persona_id == Persona.id)
+        .join(Tool, Tool.id == Persona__Tool.tool_id)
+        .where(Tool.mcp_server_id == mcp_server_id, Persona.deleted.is_(False)),
+        db_session,
+    )
 
 
 def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:

@@ -28,7 +28,7 @@ class TestSkillVisibility:
         admin = make_user(db_session, role=UserRole.ADMIN)
         disabled_skill = make_skill(db_session, enabled=False, is_public=True)
 
-        admin_list = list_skills_for_admin(db_session)
+        admin_list = list_skills_for_admin(db_session, admin)
         admin_ids = {s.id for s in admin_list}
 
         assert disabled_skill.id in admin_ids

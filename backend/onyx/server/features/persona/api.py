@@ -307,7 +307,7 @@ def upload_file(
 @basic_router.post("", tags=PUBLIC_API_TAGS)
 def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
+    user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     tenant_id = get_current_tenant_id()
@@ -337,7 +337,7 @@ def create_persona(
 def update_persona(
     persona_id: int,
     persona_upsert_request: PersonaUpsertRequest,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
+    user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
@@ -444,7 +444,7 @@ class PersonaShareRequest(BaseModel):
 def share_persona(
     persona_id: int,
     persona_share_request: PersonaShareRequest,
-    user: User = Depends(require_permission(Permission.ADD_AGENTS)),
+    user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_shares = (

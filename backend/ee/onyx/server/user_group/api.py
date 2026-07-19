@@ -32,7 +32,7 @@ from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.db.persona import get_persona_by_id
+from onyx.db.persona import fetch_persona_by_id_for_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
@@ -257,12 +257,14 @@ def delete_user_group(
 def update_group_agents(
     user_group_id: int,
     request: UpdateGroupAgentsRequest,
-    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     for agent_id in request.added_agent_ids:
-        persona = get_persona_by_id(
-            persona_id=agent_id, user=user, db_session=db_session
+        persona = fetch_persona_by_id_for_user(
+            db_session=db_session, persona_id=agent_id, user=user
         )
         current_group_ids = [g.id for g in persona.groups]
         if user_group_id not in current_group_ids:
@@ -270,18 +272,20 @@ def update_group_agents(
                 persona_id=agent_id,
                 creator_user_id=user.id,
                 db_session=db_session,
+                acting_user=user,
                 group_ids=current_group_ids + [user_group_id],
             )
 
     for agent_id in request.removed_agent_ids:
-        persona = get_persona_by_id(
-            persona_id=agent_id, user=user, db_session=db_session
+        persona = fetch_persona_by_id_for_user(
+            db_session=db_session, persona_id=agent_id, user=user
         )
         current_group_ids = [g.id for g in persona.groups]
         update_persona_access(
             persona_id=agent_id,
             creator_user_id=user.id,
             db_session=db_session,
+            acting_user=user,
             group_ids=[gid for gid in current_group_ids if gid != user_group_id],
         )
 
