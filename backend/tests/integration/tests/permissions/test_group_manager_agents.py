@@ -281,6 +281,20 @@ def test_manager_cannot_capture_public_agent_via_share(env: _ScopedEnv) -> None:
     assert_response(resp, "PATCH", path, "manager", "denied")
 
 
+def test_manager_creates_personal_agent(env: _ScopedEnv) -> None:
+    # A scoped manager may create a private no-group personal agent like any
+    # ADD_AGENTS user; the managed-group gate applies only once a group is involved.
+    path = "/persona"
+    resp = call_endpoint(
+        "POST",
+        path,
+        _persona_upsert_body(is_public=False, groups=[]),
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert_response(resp, "POST", path, "manager", "allowed")
+
+
 def test_add_agents_user_creates_personal_agent_with_empty_groups(
     env: _ScopedEnv,
 ) -> None:
