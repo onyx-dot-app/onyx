@@ -45,6 +45,15 @@ class BulkInviteResponse(BaseModel):
     email_invite_status: EmailInviteStatus
 
 
+class UserPermissionsResponse(BaseModel):
+    # The user's global effective permissions (implication-expanded).
+    permissions: list[str]
+    # Whether the user manages any group, plus the ids of those groups — lets the
+    # frontend reveal manager nav. Not a security boundary (backend GATE 2 enforces).
+    is_manager: bool
+    managed_group_ids: list[int]
+
+
 class VersionResponse(BaseModel):
     backend_version: str
 
