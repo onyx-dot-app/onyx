@@ -719,6 +719,25 @@ export class OnyxApiClient {
   }
 
   /**
+   * Assigns or revokes a group member as a manager of that group.
+   */
+  async setGroupManager(
+    groupId: number,
+    userId: string,
+    isManager: boolean
+  ): Promise<void> {
+    const response = await this.put(
+      `/manage/admin/user-group/${groupId}/manager`,
+      { user_id: userId, is_manager: isManager }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to set manager for user group ${groupId}`
+    );
+    this.log(`Set manager ${userId}=${isManager} for user group ${groupId}`);
+  }
+
+  /**
    * Polls until a user group has finished syncing (is_up_to_date === true).
    * Newly created groups start syncing immediately; many mutation endpoints
    * reject requests while the group is still syncing.

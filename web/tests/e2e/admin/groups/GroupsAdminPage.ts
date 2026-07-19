@@ -188,6 +188,33 @@ export class GroupsAdminPage {
   }
 
   // ---------------------------------------------------------------------------
+  // Manager assignment (per-member shield toggle)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The manager toggle button in a member's row. The accessible name flips
+   * between "Make manager" and "Revoke manager" with the member's state.
+   */
+  managerToggle(emailOrName: string, label: "Make manager" | "Revoke manager") {
+    return this.page
+      .getByRole("row")
+      .filter({ hasText: emailOrName })
+      .getByRole("button", { name: label });
+  }
+
+  /** Click "Make manager" for a member and wait for the confirmation toast. */
+  async makeManager(emailOrName: string) {
+    await this.managerToggle(emailOrName, "Make manager").click();
+    await this.expectToast("Manager assigned");
+  }
+
+  /** Click "Revoke manager" for a member and wait for the confirmation toast. */
+  async revokeManager(emailOrName: string) {
+    await this.managerToggle(emailOrName, "Revoke manager").click();
+    await this.expectToast("Manager revoked");
+  }
+
+  // ---------------------------------------------------------------------------
   // Delete flow
   // ---------------------------------------------------------------------------
 
