@@ -17,6 +17,7 @@ class UserGroup(BaseModel):
     id: int
     name: str
     users: list[UserInfo]
+    manager_ids: list[str]
     cc_pairs: list[ConnectorCredentialPairDescriptor]
     document_sets: list[DocumentSet]
     personas: list[PersonaSnapshot]
@@ -34,6 +35,11 @@ class UserGroup(BaseModel):
         return cls(
             id=user_group_model.id,
             name=user_group_model.name,
+            manager_ids=[
+                str(relationship.user_id)
+                for relationship in user_group_model.user_group_relationships
+                if relationship.is_manager and relationship.user_id is not None
+            ],
             users=[
                 UserInfo(
                     id=str(user.id),

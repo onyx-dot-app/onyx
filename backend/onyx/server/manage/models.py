@@ -146,6 +146,9 @@ class UserInfo(BaseModel):
     password_configured: bool | None = None
     tenant_info: TenantInfo | None = None
     effective_permissions: list[str] = Field(default_factory=list)
+    # True if the user manages any group — lets the client reveal manager nav.
+    # Not a security boundary (backend GATE 2 enforces scope).
+    is_group_manager: bool = False
 
     @classmethod
     def from_model(
@@ -203,6 +206,7 @@ class UserInfo(BaseModel):
             is_anonymous_user=is_anonymous_user,
             tenant_info=tenant_info,
             effective_permissions=effective_permissions or [],
+            is_group_manager=user.is_group_manager,
             personalization=UserPersonalization(
                 name=user.personal_name or "",
                 role=user.personal_role or "",
