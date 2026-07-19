@@ -14,6 +14,9 @@ from onyx.db.constants import UnsetType
 from onyx.db.enums import MCPServerStatus
 from onyx.db.models import MCPServer
 from onyx.db.models import OAuthConfig
+from onyx.db.models import Persona
+from onyx.db.models import Persona__Tool
+from onyx.db.models import Persona__UserGroup
 from onyx.db.models import Tool
 from onyx.db.models import ToolCall
 from onyx.server.features.tool.models import Header
@@ -92,6 +95,30 @@ def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
     if not tool:
         raise ValueError("Tool by specified id does not exist")
     return tool
+
+
+def get_action_agent_scope(tool_id: int, db_session: Session) -> tuple[set[int], bool]:
+    """The groups a custom action is exposed to, derived from the (non-deleted)
+    agents that reference it, plus whether any such agent is public. An action
+    reachable via a public agent is effectively org-wide; one used by no agent has
+    no group context. Returns ``(private_agent_group_ids, has_public_agent)``."""
+    agent_rows = db_session.execute(
+        select(Persona.id, Persona.is_public)
+        .join(Persona__Tool, Persona__Tool.persona_id == Persona.id)
+        .where(Persona__Tool.tool_id == tool_id, Persona.deleted.is_(False))
+    ).all()
+    has_public_agent = any(is_public for _, is_public in agent_rows)
+    private_agent_ids = [pid for pid, is_public in agent_rows if not is_public]
+    if not private_agent_ids:
+        return set(), has_public_agent
+    group_ids = set(
+        db_session.scalars(
+            select(Persona__UserGroup.user_group_id).where(
+                Persona__UserGroup.persona_id.in_(private_agent_ids)
+            )
+        ).all()
+    )
+    return group_ids, has_public_agent
 
 
 def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:
