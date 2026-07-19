@@ -473,6 +473,22 @@ def _mark_user_group__cc_pair_relationships_outdated__no_commit(
         user_group__cc_pair_relationship.is_current = False
 
 
+def _current_cc_pair_ids(db_user_group: UserGroup) -> list[int]:
+    """The cc_pairs currently attached to the group — is_current junction rows only.
+
+    A removed cc_pair keeps a stale ``is_current=False`` row until the Vespa sync
+    deletes it, and the plain ``cc_pairs`` relationship has no is_current filter, so
+    it would still surface the removed pair. Reading it as "current" lets a removed
+    (possibly public / out-of-scope) pair be re-attached without re-clearing the
+    scope gate, so always derive the current set from the live relationships.
+    """
+    return [
+        relationship.cc_pair_id
+        for relationship in db_user_group.cc_pair_relationships
+        if relationship.is_current
+    ]
+
+
 def add_users_to_user_group(
     db_session: Session,
     user: User,
@@ -504,7 +520,7 @@ def add_users_to_user_group(
 
     user_group_update = UserGroupUpdate(
         user_ids=current_user_ids + new_user_ids,
-        cc_pair_ids=[cc_pair.id for cc_pair in db_user_group.cc_pairs],
+        cc_pair_ids=_current_cc_pair_ids(db_user_group),
     )
 
     return update_user_group(
@@ -577,7 +593,7 @@ def update_user_group(
 
     _check_user_group_is_modifiable(db_user_group)
 
-    current_cc_pair_ids = set(cc_pair.id for cc_pair in db_user_group.cc_pairs)
+    current_cc_pair_ids = set(_current_cc_pair_ids(db_user_group))
     requested_cc_pair_ids = set(user_group_update.cc_pair_ids)
     _assert_group_update_within_scope(
         db_session,

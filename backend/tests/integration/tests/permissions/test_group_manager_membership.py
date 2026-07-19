@@ -24,6 +24,7 @@ from sqlalchemy import update
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.models import User__UserGroup
+from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -105,6 +106,18 @@ def _me_permissions(user: DATestUser) -> dict[str, Any]:
 
 def _patch_group_body(user_ids: list[str], cc_pair_ids: list[int]) -> dict[str, Any]:
     return {"user_ids": user_ids, "cc_pair_ids": cc_pair_ids}
+
+
+def _insert_stale_cc_pair_junction(group_id: int, cc_pair_id: int) -> None:
+    """Simulate a removed-but-not-yet-swept cc_pair: an is_current=False junction row
+    (removals mark the row stale rather than delete it, until the Vespa sync runs)."""
+    with get_session_with_current_tenant() as db_session:
+        db_session.add(
+            UserGroup__ConnectorCredentialPair(
+                user_group_id=group_id, cc_pair_id=cc_pair_id, is_current=False
+            )
+        )
+        db_session.commit()
 
 
 # --- manager assignment endpoint (GATE 2 = admin or manager-of-that-group) ---
@@ -285,6 +298,25 @@ def test_manager_cannot_attach_unmanaged_cc_pair(env: _ScopedEnv) -> None:
         "PATCH",
         path,
         _patch_group_body([env.manager.id, env.member.id], [unmanaged_cc_pair.id]),
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert_response(resp, "PATCH", path, "manager", "denied")
+
+
+def test_manager_cannot_reattach_removed_public_cc_pair(env: _ScopedEnv) -> None:
+    # A removed cc_pair leaves a stale is_current=False junction row until the sync
+    # sweeps it; that stale row must not make a public connector look "already
+    # attached" and slip past the re-attach gate.
+    public_cc_pair = CCPairManager.create_from_scratch(
+        user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
+    )
+    _insert_stale_cc_pair_junction(env.managed_group.id, public_cc_pair.id)
+    path = f"/manage/admin/user-group/{env.managed_group.id}"
+    resp = call_endpoint(
+        "PATCH",
+        path,
+        _patch_group_body([env.manager.id, env.member.id], [public_cc_pair.id]),
         env.manager.headers,
         env.manager.cookies,
     )
