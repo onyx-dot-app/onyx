@@ -11,6 +11,8 @@ from onyx.db.models import User
 from onyx.db.persona import apply_persona_user_share_diff
 from onyx.db.persona import mark_persona_user_files_for_sync
 from onyx.db.persona import resolve_desired_user_shares
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 
 def _resolve_desired_group_shares(
@@ -95,15 +97,17 @@ def _assert_group_share_within_scope(
     if not current_group_ids and not requested_group_ids:
         return
     persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
+    if persona is None:
+        raise OnyxError(
+            OnyxErrorCode.PERSONA_NOT_FOUND, f"Persona {persona_id} does not exist"
+        )
     assert_within_scope(
         acting_user,
         db_session,
         permission=Permission.MANAGE_AGENTS,
         current_group_ids=current_group_ids,
         requested_group_ids=requested_group_ids,
-        is_non_public=not original_is_public
-        and persona is not None
-        and not persona.is_public,
+        is_non_public=not original_is_public and not persona.is_public,
     )
 
 
