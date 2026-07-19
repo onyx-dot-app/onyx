@@ -8,6 +8,7 @@ from ee.onyx.db.token_limit import fetch_all_user_group_token_rate_limits_by_gro
 from ee.onyx.db.token_limit import fetch_user_group_token_rate_limits_for_group
 from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
 from onyx.auth.permissions import require_permission
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -63,9 +64,21 @@ def get_group_token_limit_settings(
 def create_group_token_limit_settings(
     group_id: int,
     token_limit_settings: TokenRateLimitArgs,
-    _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> TokenRateLimitDisplay:
+    # GATE 2: a scoped manager may only set a token limit on a group they manage
+    # (admins bypass). Token limits have no privacy dimension, so is_non_public=True.
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_USER_GROUPS,
+        current_group_ids=[group_id],
+        requested_group_ids=[group_id],
+        is_non_public=True,
+    )
     rate_limit_display = TokenRateLimitDisplay.from_db(
         insert_user_group_token_rate_limit(
             db_session=db_session,
