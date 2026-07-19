@@ -33,6 +33,7 @@ backend = [
     "azure-cognitiveservices-speech==1.50.0",
     "beautifulsoup4==4.12.3",
     "boto3==1.39.11",
+    "boxsdk==10.12.0",
     "celery==5.5.1",
     "chardet==5.2.0",
     "chonkie==1.0.10",

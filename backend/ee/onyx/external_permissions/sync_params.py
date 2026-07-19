@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from ee.onyx.configs.app_configs import BOX_PERMISSION_DOC_SYNC_FREQUENCY
+from ee.onyx.configs.app_configs import BOX_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import CANVAS_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY
@@ -18,6 +20,8 @@ from ee.onyx.configs.app_configs import SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import SLACK_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import TEAMS_PERMISSION_DOC_SYNC_FREQUENCY
+from ee.onyx.external_permissions.box.doc_sync import box_doc_sync
+from ee.onyx.external_permissions.box.group_sync import box_group_sync
 from ee.onyx.external_permissions.canvas.doc_sync import canvas_doc_sync
 from ee.onyx.external_permissions.canvas.group_sync import canvas_group_sync
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
@@ -131,6 +135,18 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=CANVAS_PERMISSION_GROUP_SYNC_FREQUENCY,
             group_sync_func=canvas_group_sync,
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.BOX: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=BOX_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=box_doc_sync,
+            initial_index_should_sync=True,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=BOX_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=box_group_sync,
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
