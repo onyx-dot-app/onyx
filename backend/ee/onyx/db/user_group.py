@@ -557,14 +557,21 @@ def _assert_group_update_within_scope(
         if row.is_current and row.cc_pair_id is not None:
             current_groups_by_cc_pair[row.cc_pair_id].append(row.user_group_id)
 
-    for cc_pair_id in added_cc_pair_ids:
-        cc_pair = get_connector_credential_pair_from_id(
-            db_session=db_session, cc_pair_id=cc_pair_id
+    cc_pairs_by_id = {
+        cc_pair.id: cc_pair
+        for cc_pair in db_session.scalars(
+            select(ConnectorCredentialPair).where(
+                ConnectorCredentialPair.id.in_(added_cc_pair_ids)
+            )
         )
+    }
+
+    for cc_pair_id in added_cc_pair_ids:
+        cc_pair = cc_pairs_by_id.get(cc_pair_id)
         if cc_pair is None:
             raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "Group managers can only attach connectors within the groups they manage.",
+                OnyxErrorCode.INVALID_INPUT,
+                f"Connector credential pair '{cc_pair_id}' not found.",
             )
         assert_within_scope(
             user,
