@@ -575,23 +575,25 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 disabledTooltip={tokenLimitsDisabledTooltip}
               />
 
-              {/* Delete This Group */}
-              <Card>
-                <InputHorizontal
-                  title="Delete This Group"
-                  description="Members will lose access to any resources shared with this group."
-                  center
-                >
-                  <Button
-                    variant="danger"
-                    prominence="secondary"
-                    icon={SvgTrash}
-                    onClick={() => setShowDeleteModal(true)}
+              {/* Delete This Group — admin-only (deletion is not a manager scope) */}
+              {isAdmin && (
+                <Card>
+                  <InputHorizontal
+                    title="Delete This Group"
+                    description="Members will lose access to any resources shared with this group."
+                    center
                   >
-                    Delete Group
-                  </Button>
-                </InputHorizontal>
-              </Card>
+                    <Button
+                      variant="danger"
+                      prominence="secondary"
+                      icon={SvgTrash}
+                      onClick={() => setShowDeleteModal(true)}
+                    >
+                      Delete Group
+                    </Button>
+                  </InputHorizontal>
+                </Card>
+              )}
             </>
           )}
         </SettingsLayouts.Body>

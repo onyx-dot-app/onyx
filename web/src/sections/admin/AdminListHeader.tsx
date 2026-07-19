@@ -16,10 +16,11 @@ interface AdminListHeaderProps {
   placeholder?: string;
   /** Text shown in the empty-state card when no items exist. */
   emptyStateText: string;
-  /** Called when the action button is clicked. */
-  onAction: () => void;
-  /** Label for the action button. */
-  actionLabel: string;
+  /** Called when the action button is clicked. Omit to hide the action button
+   * (e.g. when the current user may not create items). */
+  onAction?: () => void;
+  /** Label for the action button. Omit alongside onAction to hide it. */
+  actionLabel?: string;
 }
 
 /**
@@ -32,7 +33,8 @@ interface AdminListHeaderProps {
  * 2. **No items** (`hasItems = false`): renders a bordered card with
  *    descriptive text on the left and the same action button on the right.
  *
- * The action button always renders with a `SvgPlusCircle` right icon.
+ * The action button (a `SvgPlusCircle` right icon) renders only when both
+ * `onAction` and `actionLabel` are provided — omit them to hide it.
  *
  * Used on admin pages that have a flat list of items with no advanced
  * filtering — e.g. Service Accounts, Groups, OpenAPI Actions, MCP Servers.
@@ -59,11 +61,12 @@ export default function AdminListHeader({
   onAction,
   actionLabel,
 }: AdminListHeaderProps) {
-  const actionButton = (
-    <Button rightIcon={SvgPlusCircle} onClick={onAction}>
-      {actionLabel}
-    </Button>
-  );
+  const actionButton =
+    onAction && actionLabel ? (
+      <Button rightIcon={SvgPlusCircle} onClick={onAction}>
+        {actionLabel}
+      </Button>
+    ) : null;
 
   if (!hasItems) {
     return (
