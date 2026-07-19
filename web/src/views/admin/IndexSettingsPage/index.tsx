@@ -855,6 +855,12 @@ export default function IndexSettingsPage() {
                 );
                 return;
               }
+              // Custom self-hosted models live outside the static registry,
+              // so the form carries their spec (`modelDim`, `normalize`, etc.)
+              // in `custom_model` for submission. The provider, however, is
+              // ALWAYS resolved through `resolveProviderName` — see its NOTE
+              // for why this is the single source of truth for provider
+              // discrimination.
               const embeddingModelUnchanged =
                 values.model_name === (currentEmbeddingModel?.model_name ?? "");
               const stagedModel =
@@ -865,6 +871,10 @@ export default function IndexSettingsPage() {
                 toast.error("Could not find the selected model");
                 return;
               }
+              // A staged custom model from a no-registry cloud provider
+              // (LiteLLM / Azure) carries its owning provider explicitly;
+              // otherwise fall back to resolving the provider from the model
+              // name against the static registry.
               const providerName =
                 values.custom_model_provider ??
                 (embeddingModelUnchanged && currentProviderName
