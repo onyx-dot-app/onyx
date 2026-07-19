@@ -249,6 +249,34 @@ def test_manager_cannot_publish_agent(env: _ScopedEnv) -> None:
     assert_response(resp, "PATCH", path, "manager", "denied")
 
 
+def test_manager_cannot_capture_public_agent_via_share(env: _ScopedEnv) -> None:
+    # Manager owns a private agent in their group; an admin publishes it org-wide.
+    agent = PersonaManager.create(
+        user_performing_action=env.manager,
+        is_public=False,
+        groups=[env.managed_group.id],
+    )
+    publish = call_endpoint(
+        "PATCH",
+        f"/persona/{agent.id}",
+        _persona_upsert_body(is_public=True, groups=[env.managed_group.id]),
+        env.admin.headers,
+        env.admin.cookies,
+    )
+    assert publish.status_code == 200, publish.text
+    # The manager must not pull the now-public agent back to private AND keep the
+    # group share in one call — the gate anchors on the original (public) state.
+    path = f"/persona/{agent.id}/share"
+    resp = call_endpoint(
+        "PATCH",
+        path,
+        {"is_public": False, "group_ids": [env.managed_group.id]},
+        env.manager.headers,
+        env.manager.cookies,
+    )
+    assert_response(resp, "PATCH", path, "manager", "denied")
+
+
 # --- custom actions (agent-mediated scope) ----------------------------------
 
 

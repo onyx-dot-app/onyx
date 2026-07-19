@@ -73,12 +73,15 @@ def _assert_group_share_within_scope(
     persona_id: int,
     desired_group_shares: dict[int, PersonaSharePermission],
     db_session: Session,
+    original_is_public: bool,
 ) -> None:
     """GATE 2: sharing an agent to a group is a MANAGE_AGENTS action. Admins
     and global MANAGE_AGENTS holders bypass; a scoped manager may only add/remove
     groups they manage on a PRIVATE agent; an ADD_AGENTS-only user (no MANAGE_AGENTS
-    authority) is rejected. Current groups + privacy are re-read in-txn, not trusted
-    from the caller — so a reassignment can't escape scope."""
+    authority) is rejected. Current groups are re-read in-txn, not trusted from the
+    caller, so a reassignment can't escape scope. Privacy anchors on BOTH the
+    original state (snapshotted by the caller before is_public is applied) and the
+    requested one — a public→private conversion in the same call must not slip past."""
     persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
     current_group_ids = [
         row.user_group_id
@@ -92,7 +95,9 @@ def _assert_group_share_within_scope(
         permission=Permission.MANAGE_AGENTS,
         current_group_ids=current_group_ids,
         requested_group_ids=list(desired_group_shares.keys()),
-        is_non_public=persona is not None and not persona.is_public,
+        is_non_public=not original_is_public
+        and persona is not None
+        and not persona.is_public,
     )
 
 
@@ -113,9 +118,14 @@ def update_persona_access(
 
     NOTE: Callers are responsible for committing."""
     needs_sync = False
+    # Snapshot privacy before is_public is applied below, so the group-share gate
+    # anchors on the ORIGINAL state — a public->private convert + group-share in one
+    # call must not read the already-mutated (private) value and slip through.
+    persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
+    original_is_public = persona.is_public if persona is not None else False
+
     if is_public is not None or public_permission is not None:
         needs_sync = True
-        persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
         if persona:
             if is_public is not None:
                 persona.is_public = is_public
@@ -139,7 +149,11 @@ def update_persona_access(
     if desired_group_shares is not None:
         needs_sync = True
         _assert_group_share_within_scope(
-            acting_user, persona_id, desired_group_shares, db_session
+            acting_user,
+            persona_id,
+            desired_group_shares,
+            db_session,
+            original_is_public,
         )
         _apply_persona_group_share_diff(persona_id, desired_group_shares, db_session)
 
