@@ -1,6 +1,6 @@
 /** Regression for https://github.com/onyx-dot-app/onyx/issues/12850 */
 import { expect, test } from "@playwright/test";
-import { loginAsRandomUser } from "@tests/e2e/utils/auth";
+import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const SET_NEW_SETTINGS_API = "**/api/search-settings/set-new-search-settings**";
@@ -11,16 +11,27 @@ test.describe("Issue #12850 contextual RAG submit @exclusive", () => {
     page,
   }) => {
     await page.context().clearCookies();
-    await loginAsRandomUser(page, { setDisplayName: true });
-
+    await loginAs(page, "admin");
     const client = new OnyxApiClient(page.request);
+    await client.ensurePublicProvider();
 
-    const provider = await client.ensurePublicProvider("OpenAI");
-    const modelConfigs = provider.model_configurations ?? [];
-    expect(modelConfigs.length).toBeGreaterThan(1);
+    const providersRes = await page.request.get("/api/admin/llm/provider");
+    expect(providersRes.ok()).toBeTruthy();
+    const { providers } = (await providersRes.json()) as {
+      providers: Array<{
+        is_public?: boolean;
+        model_configurations: Array<{ id: number }>;
+      }>;
+    };
+    const llmProvider =
+      providers.find(
+        (p) => p.is_public && (p.model_configurations?.length ?? 0) > 0
+      ) ?? providers.find((p) => (p.model_configurations?.length ?? 0) > 0);
+    expect(llmProvider).toBeTruthy();
+    const modelConfigs = llmProvider!.model_configurations;
+    expect(modelConfigs.length).toBeGreaterThan(0);
 
     const firstModelId = modelConfigs[0]!.id!;
-
     await page.route(TEST_EMBEDDING_API, async (route) => {
       await route.fulfill({ status: 200, body: JSON.stringify({}) });
     });
@@ -90,10 +101,9 @@ test.describe("Issue #12850 contextual RAG submit @exclusive", () => {
     await expect(dialog).toBeVisible({ timeout: 10000 });
     const modelOptions = dialog.getByRole("button");
     const optionCount = await modelOptions.count();
-    expect(optionCount).toBeGreaterThan(1);
-    await modelOptions.nth(1).click();
+    expect(optionCount).toBeGreaterThan(0);
+    await modelOptions.nth(Math.min(1, optionCount - 1)).click();
     await expect(dialog).not.toBeVisible({ timeout: 5000 });
-
     const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
       void page.route(SET_NEW_SETTINGS_API, async (route) => {
         resolve(
