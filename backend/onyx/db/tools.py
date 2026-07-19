@@ -99,28 +99,42 @@ def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
 
 
 def _agent_group_scope(
-    agent_select: Select[tuple[int, bool]], db_session: Session
+    agent_select: Select[tuple[int, bool, int | None]], db_session: Session
 ) -> tuple[set[int], bool, bool]:
     """Shared core of the agent-mediated action/MCP scope. Given a select of
-    ``(persona_id, is_public)`` for the (non-deleted) agents referencing a resource,
-    return ``(private_agent_group_ids, has_public_agent, has_ungrouped_private_agent)``.
-    Each flag must reject a scoped manager: a public agent is org-wide; a private
-    agent in no group is a personal agent outside any managed group (it contributes
-    nothing to the group union, so it must be tracked explicitly, not inferred from
-    the groups); a resource used by no agent has no group context (empty set)."""
+    ``(persona_id, is_public, owner_group_id)`` for the (non-deleted) agents
+    referencing a resource, return ``(private_agent_group_ids, has_public_agent,
+    has_ungrouped_private_agent)``. A private agent's groups are those it is shared
+    to (``Persona__UserGroup``) plus the group that owns it (``owner_group_id``); an
+    agent with neither is a personal agent outside any managed group and must be
+    tracked explicitly. A public agent is org-wide; a resource used by no agent has
+    no group context (empty set)."""
     agent_rows = db_session.execute(agent_select).all()
-    has_public_agent = any(is_public for _, is_public in agent_rows)
-    private_agent_ids = {pid for pid, is_public in agent_rows if not is_public}
-    if not private_agent_ids:
+    has_public_agent = any(is_public for _, is_public, _ in agent_rows)
+    private_owner_groups = {
+        pid: owner_group_id
+        for pid, is_public, owner_group_id in agent_rows
+        if not is_public
+    }
+    if not private_owner_groups:
         return set(), has_public_agent, False
-    grant_rows = db_session.execute(
+    share_rows = db_session.execute(
         select(Persona__UserGroup.persona_id, Persona__UserGroup.user_group_id).where(
-            Persona__UserGroup.persona_id.in_(private_agent_ids)
+            Persona__UserGroup.persona_id.in_(private_owner_groups.keys())
         )
     ).all()
-    group_ids = {group_id for _, group_id in grant_rows}
-    grouped_agent_ids = {persona_id for persona_id, _ in grant_rows}
-    has_ungrouped_private_agent = bool(private_agent_ids - grouped_agent_ids)
+    group_ids: set[int] = set()
+    grouped_agent_ids: set[int] = set()
+    for persona_id, user_group_id in share_rows:
+        group_ids.add(user_group_id)
+        grouped_agent_ids.add(persona_id)
+    for persona_id, owner_group_id in private_owner_groups.items():
+        if owner_group_id is not None:
+            group_ids.add(owner_group_id)
+            grouped_agent_ids.add(persona_id)
+    has_ungrouped_private_agent = bool(
+        set(private_owner_groups.keys()) - grouped_agent_ids
+    )
     return group_ids, has_public_agent, has_ungrouped_private_agent
 
 
@@ -129,7 +143,7 @@ def get_action_agent_scope(
 ) -> tuple[set[int], bool, bool]:
     """The groups a custom action is exposed to, via the agents that reference it."""
     return _agent_group_scope(
-        select(Persona.id, Persona.is_public)
+        select(Persona.id, Persona.is_public, Persona.owner_group_id)
         .join(Persona__Tool, Persona__Tool.persona_id == Persona.id)
         .where(Persona__Tool.tool_id == tool_id, Persona.deleted.is_(False)),
         db_session,
@@ -142,7 +156,7 @@ def get_mcp_server_agent_scope(
     """The groups an MCP server is exposed to, via the agents that use any of its
     tools."""
     return _agent_group_scope(
-        select(Persona.id, Persona.is_public)
+        select(Persona.id, Persona.is_public, Persona.owner_group_id)
         .join(Persona__Tool, Persona__Tool.persona_id == Persona.id)
         .join(Tool, Tool.id == Persona__Tool.tool_id)
         .where(Tool.mcp_server_id == mcp_server_id, Persona.deleted.is_(False)),

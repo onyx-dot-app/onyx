@@ -31,6 +31,7 @@ import pytest
 from sqlalchemy import update
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import Persona
 from onyx.db.models import User__UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from tests.integration.common_utils.managers.persona import PersonaManager
@@ -302,6 +303,29 @@ def test_manager_edits_action_used_by_managed_private_agent(env: _ScopedEnv) -> 
         groups=[env.managed_group.id],
         tool_ids=[tool_id],
     )
+    path = f"/admin/tool/custom/{tool_id}"
+    resp = call_endpoint(
+        "PUT", path, _tool_body(), env.manager.headers, env.manager.cookies
+    )
+    assert_response(resp, "PUT", path, "manager", "allowed")
+
+
+def test_manager_edits_action_used_by_group_owned_agent(env: _ScopedEnv) -> None:
+    # An action used only by a PRIVATE agent OWNED by the manager's group (via
+    # owner_group_id, with no share rows) is in scope through that group ownership.
+    tool_id = _create_custom_tool(env.admin)
+    agent = PersonaManager.create(
+        user_performing_action=env.admin, is_public=False, tool_ids=[tool_id]
+    )
+    # No API creates a group-owned agent in these tests, so re-own it directly
+    # (owner_group_id and user_id are mutually exclusive).
+    with get_session_with_current_tenant() as db_session:
+        db_session.execute(
+            update(Persona)
+            .where(Persona.id == agent.id)
+            .values(user_id=None, owner_group_id=env.managed_group.id)
+        )
+        db_session.commit()
     path = f"/admin/tool/custom/{tool_id}"
     resp = call_endpoint(
         "PUT", path, _tool_body(), env.manager.headers, env.manager.cookies
