@@ -12,6 +12,7 @@ import {
   SvgMinusCircle,
   SvgPlusCircle,
   SvgSimpleLoader,
+  SvgShield,
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -38,6 +39,7 @@ import {
   updateDocSetGroupSharing,
   saveTokenLimits,
   saveGroupPermissions,
+  setGroupManager,
 } from "./svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import SharedGroupResources from "@/refresh-pages/admin/GroupsPage/SharedGroupResources";
@@ -192,25 +194,90 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     setSelectedUserIds((prev) => prev.filter((id) => id !== userId));
   }, []);
 
+  // Members who currently manage this group, and the members persisted on the
+  // backend (a manager must be an existing member — a not-yet-saved member can't
+  // be assigned until the group is saved). Both derive from the fetched group.
+  const managerIds = useMemo(
+    () => new Set(group?.manager_ids ?? []),
+    [group]
+  );
+  const persistedMemberIds = useMemo(
+    () => new Set(group?.users.map((u) => u.id) ?? []),
+    [group]
+  );
+  const [pendingManagerId, setPendingManagerId] = useState<string | null>(null);
+
+  // The manager toggle hits the dedicated endpoint immediately (unlike member
+  // add/remove, which is deferred to Save), then revalidates the group.
+  const handleToggleManager = useCallback(
+    async (userId: string, makeManager: boolean) => {
+      setPendingManagerId(userId);
+      try {
+        await setGroupManager(groupId, userId, makeManager);
+        await mutate(SWR_KEYS.adminUserGroups);
+        toast.success(makeManager ? "Manager assigned" : "Manager revoked");
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to update manager"
+        );
+      } finally {
+        setPendingManagerId(null);
+      }
+    },
+    [groupId, mutate]
+  );
+
   const memberColumns = useMemo(
     () => [
       ...baseColumns,
       tc.actions({
         showSorting: false,
         showColumnVisibility: false,
-        cell: (row: MemberRow) => (
-          <IconButton
-            icon={SvgMinusCircle}
-            tertiary
-            onClick={(e) => {
-              e.stopPropagation();
-              handleRemoveMember(row.id ?? row.email);
-            }}
-          />
-        ),
+        cell: (row: MemberRow) => {
+          const userId = row.id ?? row.email;
+          const isManager = managerIds.has(userId);
+          const isPersisted = persistedMemberIds.has(userId);
+          const isPending = pendingManagerId === userId;
+          return (
+            <div className="flex items-center gap-1">
+              <IconButton
+                icon={isPending ? SvgSimpleLoader : SvgShield}
+                tertiary
+                transient={isManager}
+                disabled={!isPersisted || isPending}
+                aria-label={isManager ? "Revoke manager" : "Make manager"}
+                tooltip={
+                  !isPersisted
+                    ? "Save the group before assigning a manager"
+                    : isManager
+                      ? "Revoke manager"
+                      : "Make manager"
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleManager(userId, !isManager);
+                }}
+              />
+              <IconButton
+                icon={SvgMinusCircle}
+                tertiary
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveMember(userId);
+                }}
+              />
+            </div>
+          );
+        },
       }),
     ],
-    [handleRemoveMember]
+    [
+      handleRemoveMember,
+      handleToggleManager,
+      managerIds,
+      persistedMemberIds,
+      pendingManagerId,
+    ]
   );
 
   // IDs of members not visible in the add-mode table (e.g. inactive users).
