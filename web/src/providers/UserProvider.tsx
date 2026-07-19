@@ -15,7 +15,10 @@ import {
   ThemePreference,
   Permission,
 } from "@/lib/types";
-import { hasAnyAdminPermission } from "@/lib/permissions";
+import {
+  hasAnyAdminPermission,
+  visibilityPermissions,
+} from "@/lib/permissions";
 import { usePostHog } from "posthog-js/react";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
@@ -568,10 +571,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         isAdmin: (
           upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
         ).includes(Permission.FULL_ADMIN_PANEL_ACCESS),
+        // Managers are treated as holding the scoped manage tokens for nav
+        // visibility only; backend GATE 2 does the real enforcement.
         hasAdminAccess: hasAnyAdminPermission(
-          upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS
+          visibilityPermissions(upToDateUser)
         ),
-        permissions: upToDateUser?.effective_permissions ?? EMPTY_PERMISSIONS,
+        permissions: visibilityPermissions(upToDateUser),
         isCloudSuperuser: upToDateUser?.is_cloud_superuser ?? false,
       }}
     >

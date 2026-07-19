@@ -5,7 +5,10 @@ import {
   getCurrentUserSS,
 } from "@/lib/userSS";
 import { AuthType } from "@/lib/constants";
-import { hasAnyAdminPermission } from "@/lib/permissions";
+import {
+  hasAnyAdminPermission,
+  visibilityPermissions,
+} from "@/lib/permissions";
 
 /**
  * Result of an authentication check.
@@ -100,8 +103,9 @@ export async function requireAdminAuth(): Promise<AuthCheckResult> {
 
   const { user, authTypeMetadata } = authResult;
 
-  // Check if user has any admin permission
-  if (user && !hasAnyAdminPermission(user.effective_permissions ?? [])) {
+  // Check if user has any admin permission — a group manager is admitted via the
+  // scoped manage tokens (visibilityPermissions), then scoped by backend GATE 2.
+  if (user && !hasAnyAdminPermission(visibilityPermissions(user))) {
     return {
       user,
       authTypeMetadata,
