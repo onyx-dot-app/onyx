@@ -53,16 +53,17 @@ router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 def list_user_groups(
     include_default: bool = False,
     user: User = Depends(
-        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+        require_permission(Permission.READ_USER_GROUPS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
-    # GATE 2 (read): admins/global holders see every group; a scoped manager sees
-    # only the groups they manage. The group list has no built-in membership filter,
-    # so restrict it here or a manager would see the whole org.
+    # GATE 2 (read): a global READ_USER_GROUPS holder (admin, or any MANAGE_* that
+    # implies it) sees every group; a scoped manager sees only the groups they
+    # manage. The group list has no built-in membership filter, so restrict it here
+    # or a manager would see the whole org.
     restrict_to_group_ids = (
         None
-        if has_global_permission(user, Permission.MANAGE_USER_GROUPS)
+        if has_global_permission(user, Permission.READ_USER_GROUPS)
         else get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
     )
     user_groups = fetch_user_groups(
