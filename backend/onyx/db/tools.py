@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy import or_
+from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -97,16 +98,15 @@ def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
     return tool
 
 
-def get_action_agent_scope(tool_id: int, db_session: Session) -> tuple[set[int], bool]:
-    """The groups a custom action is exposed to, derived from the (non-deleted)
-    agents that reference it, plus whether any such agent is public. An action
-    reachable via a public agent is effectively org-wide; one used by no agent has
-    no group context. Returns ``(private_agent_group_ids, has_public_agent)``."""
-    agent_rows = db_session.execute(
-        select(Persona.id, Persona.is_public)
-        .join(Persona__Tool, Persona__Tool.persona_id == Persona.id)
-        .where(Persona__Tool.tool_id == tool_id, Persona.deleted.is_(False))
-    ).all()
+def _agent_group_scope(
+    agent_select: Select[tuple[int, bool]], db_session: Session
+) -> tuple[set[int], bool]:
+    """Shared core of the agent-mediated action/MCP scope. Given a select of
+    ``(persona_id, is_public)`` for the (non-deleted) agents referencing a resource,
+    return ``(private_agent_group_ids, has_public_agent)``. A resource reachable via
+    a public agent is effectively org-wide; one used by no agent yields no group
+    context (empty set)."""
+    agent_rows = db_session.execute(agent_select).all()
     has_public_agent = any(is_public for _, is_public in agent_rows)
     private_agent_ids = [pid for pid, is_public in agent_rows if not is_public]
     if not private_agent_ids:
@@ -119,6 +119,30 @@ def get_action_agent_scope(tool_id: int, db_session: Session) -> tuple[set[int],
         ).all()
     )
     return group_ids, has_public_agent
+
+
+def get_action_agent_scope(tool_id: int, db_session: Session) -> tuple[set[int], bool]:
+    """The groups a custom action is exposed to, via the agents that reference it."""
+    return _agent_group_scope(
+        select(Persona.id, Persona.is_public)
+        .join(Persona__Tool, Persona__Tool.persona_id == Persona.id)
+        .where(Persona__Tool.tool_id == tool_id, Persona.deleted.is_(False)),
+        db_session,
+    )
+
+
+def get_mcp_server_agent_scope(
+    mcp_server_id: int, db_session: Session
+) -> tuple[set[int], bool]:
+    """The groups an MCP server is exposed to, via the agents that use any of its
+    tools."""
+    return _agent_group_scope(
+        select(Persona.id, Persona.is_public)
+        .join(Persona__Tool, Persona__Tool.persona_id == Persona.id)
+        .join(Tool, Tool.id == Persona__Tool.tool_id)
+        .where(Tool.mcp_server_id == mcp_server_id, Persona.deleted.is_(False)),
+        db_session,
+    )
 
 
 def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:

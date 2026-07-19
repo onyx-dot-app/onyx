@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import has_permission
 from onyx.auth.permissions import require_permission
-from onyx.auth.scoped_permissions import get_scoped_groups
+from onyx.auth.scoped_permissions import agent_mediated_scope_allows
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -66,8 +66,9 @@ def _assert_action_within_managed_scope(
     private and in a group they manage. An action reachable via a public agent (so
     org-wide), or used by no agent (no group context), is owner/admin-only."""
     group_ids, has_public_agent = get_action_agent_scope(tool_id, db_session)
-    managed = get_scoped_groups(user, db_session, Permission.MANAGE_ACTIONS)
-    if has_public_agent or not group_ids or not group_ids.issubset(managed):
+    if not agent_mediated_scope_allows(
+        user, db_session, group_ids=group_ids, has_public_agent=has_public_agent
+    ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "You can only modify actions scoped to groups you manage.",
