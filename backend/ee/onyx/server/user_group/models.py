@@ -122,6 +122,11 @@ class UpdateGroupAgentsRequest(BaseModel):
     removed_agent_ids: list[int]
 
 
+class SetGroupManagerRequest(BaseModel):
+    user_id: UUID
+    is_manager: bool
+
+
 class SetPermissionRequest(BaseModel):
     permission: Permission
     enabled: bool

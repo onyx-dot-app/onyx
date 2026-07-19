@@ -10,23 +10,28 @@ from ee.onyx.db.user_group import fetch_user_group
 from ee.onyx.db.user_group import fetch_user_groups
 from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.db.user_group import insert_user_group
+from ee.onyx.db.user_group import make_group_manager
 from ee.onyx.db.user_group import prepare_user_group_for_deletion
 from ee.onyx.db.user_group import rename_user_group
+from ee.onyx.db.user_group import revoke_group_manager
 from ee.onyx.db.user_group import set_group_permissions_bulk__no_commit
 from ee.onyx.db.user_group import update_user_group
 from ee.onyx.server.user_group.models import AddUsersToUserGroupRequest
 from ee.onyx.server.user_group.models import BulkSetPermissionsRequest
 from ee.onyx.server.user_group.models import MinimalUserGroupSnapshot
+from ee.onyx.server.user_group.models import SetGroupManagerRequest
 from ee.onyx.server.user_group.models import UpdateGroupAgentsRequest
 from ee.onyx.server.user_group.models import UserGroup
 from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupRename
 from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
 from onyx.auth.permissions import PERMISSION_REGISTRY
 from onyx.auth.permissions import PermissionRegistryEntry
 from onyx.auth.permissions import require_permission
+from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
@@ -289,4 +294,34 @@ def update_group_agents(
             group_ids=[gid for gid in current_group_ids if gid != user_group_id],
         )
 
+    db_session.commit()
+
+
+@router.put("/admin/user-group/{user_group_id}/manager")
+def set_group_manager(
+    user_group_id: int,
+    request: SetGroupManagerRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_USER_GROUPS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> None:
+    # GATE 2: an admin / global MANAGE_USER_GROUPS holder may assign in any group;
+    # a scoped manager may only (de)assign managers within a group they manage — so
+    # a manager can delegate within their own group but not beyond it.
+    if not has_global_permission(user, Permission.MANAGE_USER_GROUPS):
+        managed = get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
+        if user_group_id not in managed:
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Group managers can only assign managers within the groups they manage.",
+            )
+    try:
+        if request.is_manager:
+            make_group_manager(db_session, request.user_id, user_group_id)
+        else:
+            revoke_group_manager(db_session, request.user_id, user_group_id)
+    except ValueError as e:
+        # Target isn't a member of the group (a manager is always a member).
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
     db_session.commit()
