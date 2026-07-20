@@ -13,10 +13,18 @@ here is best-effort over `CacheBackend`. Two lists:
 import asyncio
 import time
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.db.enums import ApprovalDecision, GatedAppKind
+from onyx.external_apps.matching.engine import actions_requiring_approval
+from onyx.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from onyx.db.models import ActionApproval
+
+logger = setup_logger()
 
 # Only need to outlive the gap between RPUSH and the consumer's BLPOP.
 ANNOUNCE_TTL_S = 60
@@ -67,6 +75,50 @@ def cache_session_grant_actions(
             str(source_approval_id),
             ex=SESSION_GRANT_TTL_S,
         )
+
+
+def hydrate_session_grants(
+    *,
+    session_id: UUID,
+    kind: GatedAppKind,
+    target_id: int,
+    rows: Iterable["ActionApproval"],
+    cache: CacheBackend | None,
+) -> set[str]:
+    """Union of ASK action types across persisted grant ``rows``, hydrating each
+    row's per-action grant keys as a side effect.
+
+    Hydration is best-effort: skipped when ``cache`` is ``None`` and
+    warned-and-continued on transient cache errors, so callers always get the
+    union back.
+    """
+    granted: set[str] = set()
+    per_row: list[tuple[UUID, list[str]]] = []
+    for row in rows:
+        action_types = actions_requiring_approval(row.actions)
+        granted.update(action_types)
+        per_row.append((row.approval_id, action_types))
+    if cache is not None:
+        try:
+            for source_approval_id, action_types in per_row:
+                cache_session_grant_actions(
+                    session_id=session_id,
+                    kind=kind,
+                    target_id=target_id,
+                    action_types=action_types,
+                    source_approval_id=source_approval_id,
+                    cache=cache,
+                )
+        except CACHE_TRANSIENT_ERRORS as e:
+            logger.warning(
+                "approval.session_grant_cache_hydrate_failed session_id=%s "
+                "target=%s:%s error=%s",
+                session_id,
+                kind.value,
+                target_id,
+                str(e),
+            )
+    return granted
 
 
 def cached_session_grants_cover(

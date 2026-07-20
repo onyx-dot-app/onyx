@@ -730,7 +730,7 @@ class GateAddon:
             return None
         run_id, granted_targets = grants
         target = matched_actions.target
-        if (target.kind, target.id) not in granted_targets:
+        if target.key not in granted_targets:
             return None
         return _ApprovalGrant(
             decided_via=ApprovalDecidedVia.PRE_APPROVAL,
@@ -780,38 +780,15 @@ class GateAddon:
             kind=target.kind,
             target_id=target.id,
         )
-        granted_action_types: set[str] = set()
-        for grant_source_row in grant_source_rows:
-            granted_action_types.update(
-                actions_requiring_approval(grant_source_row.actions)
-            )
+        granted_action_types = approval_cache.hydrate_session_grants(
+            session_id=ctx.session_id,
+            kind=target.kind,
+            target_id=target.id,
+            rows=grant_source_rows,
+            cache=cache,
+        )
         if not set(action_types).issubset(granted_action_types):
             return None
-
-        if cache is not None:
-            try:
-                for grant_source_row in grant_source_rows:
-                    approval_cache.cache_session_grant_actions(
-                        session_id=ctx.session_id,
-                        kind=target.kind,
-                        target_id=target.id,
-                        action_types=actions_requiring_approval(
-                            grant_source_row.actions
-                        ),
-                        source_approval_id=grant_source_row.approval_id,
-                        cache=cache,
-                    )
-            except CACHE_TRANSIENT_ERRORS as e:
-                logger.warning(
-                    "approval_grant_cache_error tenant=%s session=%s "
-                    "target=%s:%s operation=%s error=%r",
-                    ctx.tenant_id,
-                    short_log_id(ctx.session_id),
-                    target.kind.value,
-                    target.id,
-                    "hydrate",
-                    str(e),
-                )
         return _ApprovalGrant(decided_via=ApprovalDecidedVia.SESSION_GRANT)
 
     async def _apply_approval_grant(
@@ -864,8 +841,7 @@ class GateAddon:
                     ],
                     app_name=matched_actions.app_name,
                     payload=matched_actions.payload,
-                    kind=matched_actions.target.kind,
-                    target_id=matched_actions.target.id,
+                    target=matched_actions.target.key,
                     decision=ApprovalDecision.APPROVED,
                     decided_via=grant.decided_via,
                 )
@@ -921,8 +897,7 @@ class GateAddon:
                 actions=actions_payload,
                 app_name=matched_actions.app_name,
                 payload=matched_actions.payload,
-                kind=matched_actions.target.kind,
-                target_id=matched_actions.target.id,
+                target=matched_actions.target.key,
             )
             approval_id = row.approval_id
             db.commit()

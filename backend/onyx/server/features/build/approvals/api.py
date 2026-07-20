@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, GatedAppKind, Permission
 from onyx.db.models import ActionApproval, User
@@ -82,9 +82,7 @@ class ApprovalListResponse(BaseModel):
 def _row_target(row: ActionApproval) -> tuple[GatedAppKind, int] | None:
     """The gated target ``(kind, id)`` a row is attributed to, or ``None`` when
     its ``gated_app`` was cleared (parent app/server deleted — SET NULL)."""
-    if row.gated_app is None:
-        return None
-    return row.gated_app.kind, row.gated_app.target_id
+    return row.gated_app.target_key if row.gated_app is not None else None
 
 
 def _send_wake_best_effort(approval_id: UUID, decision: ApprovalDecision) -> None:
@@ -274,23 +272,9 @@ def submit_session_grant(
         kind=target_kind,
         target_id=target_id,
     )
-    granted_action_types: set[str] = set()
-    for grant_source_row in grant_source_rows:
-        granted_action_types.update(
-            actions_requiring_approval(grant_source_row.actions)
-        )
-
+    cache: CacheBackend | None = None
     try:
         cache = get_cache_backend(tenant_id=get_current_tenant_id())
-        for grant_source_row in grant_source_rows:
-            approval_cache.cache_session_grant_actions(
-                session_id=session_id,
-                kind=target_kind,
-                target_id=target_id,
-                action_types=actions_requiring_approval(grant_source_row.actions),
-                source_approval_id=grant_source_row.approval_id,
-                cache=cache,
-            )
     except CACHE_TRANSIENT_ERRORS as e:
         logger.warning(
             "approval.session_grant_cache_failed approval_id=%s session_id=%s error=%s",
@@ -298,6 +282,13 @@ def submit_session_grant(
             session_id,
             str(e),
         )
+    granted_action_types = approval_cache.hydrate_session_grants(
+        session_id=session_id,
+        kind=target_kind,
+        target_id=target_id,
+        rows=grant_source_rows,
+        cache=cache,
+    )
 
     pending_rows = action_approval.list_session_pending_action_approvals(
         db_session, session_id, created_after=cutoff, load_target=True

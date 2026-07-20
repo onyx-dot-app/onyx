@@ -107,8 +107,7 @@ def set_pre_approved_apps(
     mcp_grants = [
         grant
         for grant in task.pre_approved_apps
-        if grant.gated_app is not None
-        and grant.gated_app.kind is GatedAppKind.MCP_SERVER
+        if grant.gated_app.kind is GatedAppKind.MCP_SERVER
     ]
     task.pre_approved_apps = [
         existing.get(gated_app_id)
@@ -541,7 +540,7 @@ def get_live_scheduled_run_grants(
         )
         .where(ScheduledTaskPreApprovedApp.scheduled_task_id == task_id)
     ).all()
-    granted: set[GrantedTarget] = {(ga.kind, ga.target_id) for ga in gated_apps}
+    granted: set[GrantedTarget] = {ga.target_key for ga in gated_apps}
     return run_id, granted
 
 

@@ -16,25 +16,20 @@ Create Date: 2026-07-17 14:10:36.718336
 import sqlalchemy as sa
 from alembic import op
 
-from onyx.db.enums import GatedAppKind
-
-
 # revision identifiers, used by Alembic.
 revision = "bc9e56f2fb96"
 down_revision = "1e0a3e4226f7"
 branch_labels = None
 depends_on = None
 
-_EXTERNAL_APP = GatedAppKind.EXTERNAL_APP.value
-_MCP_SERVER = GatedAppKind.MCP_SERVER.value
-
 
 def upgrade() -> None:
     # --- polymorphic identity table -------------------------------------
+    # The target's kind is derived from which FK is populated; no stored
+    # discriminator to keep consistent.
     op.create_table(
         "gated_app",
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("kind", sa.Enum(GatedAppKind, native_enum=False), nullable=False),
         sa.Column("external_app_id", sa.Integer(), nullable=True),
         sa.Column("mcp_server_id", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(
@@ -47,23 +42,14 @@ def upgrade() -> None:
         sa.UniqueConstraint("external_app_id", name="uq_gated_app_external_app"),
         sa.UniqueConstraint("mcp_server_id", name="uq_gated_app_mcp_server"),
         sa.CheckConstraint(
-            "(kind = 'EXTERNAL_APP' AND external_app_id IS NOT NULL "
-            "AND mcp_server_id IS NULL) OR "
-            "(kind = 'MCP_SERVER' AND mcp_server_id IS NOT NULL "
-            "AND external_app_id IS NULL)",
+            "num_nonnulls(external_app_id, mcp_server_id) = 1",
             name="ck_gated_app_single_target",
         ),
     )
     # One identity row per existing target so current policy / approval /
     # pre-approval rows can be repointed. New targets get theirs lazily.
-    op.execute(
-        f"INSERT INTO gated_app (kind, external_app_id) "
-        f"SELECT '{_EXTERNAL_APP}', id FROM external_app"
-    )
-    op.execute(
-        f"INSERT INTO gated_app (kind, mcp_server_id) "
-        f"SELECT '{_MCP_SERVER}', id FROM mcp_server"
-    )
+    op.execute("INSERT INTO gated_app (external_app_id) SELECT id FROM external_app")
+    op.execute("INSERT INTO gated_app (mcp_server_id) SELECT id FROM mcp_server")
 
     # --- external_app_policy -> gated_action_policy ---------------------
     op.rename_table("external_app_policy", "gated_action_policy")

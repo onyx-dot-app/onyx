@@ -661,8 +661,7 @@ async def test_pre_approved_scheduled_run_skips_park(
     assert len(inserted) == 1
     assert inserted[0]["decision"] == ApprovalDecision.APPROVED
     assert inserted[0]["decided_via"] == ApprovalDecidedVia.PRE_APPROVAL
-    assert inserted[0]["kind"] == GatedAppKind.EXTERNAL_APP
-    assert inserted[0]["target_id"] == _GRANTED_APP_ID
+    assert inserted[0]["target"] == (GatedAppKind.EXTERNAL_APP, _GRANTED_APP_ID)
     # Dedup contract: additional_data is exactly the stable (run, app) pair.
     assert len(notified) == 1
     assert notified[0]["additional_data"] == {
@@ -1536,8 +1535,7 @@ def test_persist_approval_row_commits_announces_notifies(
         "actions": [a.model_dump(mode="json") for a in _MATCH.actions],
         "app_name": _MATCH.app_name,
         "payload": _MATCH.payload,
-        "kind": _MATCH.target.kind,
-        "target_id": _MATCH.target.id,
+        "target": _MATCH.target.key,
     }
 
     # insert -> commit -> rpush: announce must not precede the commit,

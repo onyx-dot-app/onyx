@@ -362,8 +362,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send, always_read],
         app_name="Slack",
         payload={"text": "current"},
-        kind=GatedAppKind.EXTERNAL_APP,
-        target_id=app.id,
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
     )
     matching = insert_action_approval(
         db_session,
@@ -371,8 +370,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send],
         app_name="Slack",
         payload={"text": "matching"},
-        kind=GatedAppKind.EXTERNAL_APP,
-        target_id=app.id,
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
     )
     broader = insert_action_approval(
         db_session,
@@ -380,8 +378,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send, ask_upload],
         app_name="Slack",
         payload={"text": "broader"},
-        kind=GatedAppKind.EXTERNAL_APP,
-        target_id=app.id,
+        target=(GatedAppKind.EXTERNAL_APP, app.id),
     )
     other = insert_action_approval(
         db_session,
@@ -389,8 +386,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send],
         app_name="Other",
         payload={"text": "other"},
-        kind=GatedAppKind.EXTERNAL_APP,
-        target_id=other_app.id,
+        target=(GatedAppKind.EXTERNAL_APP, other_app.id),
     )
     db_session.commit()
 

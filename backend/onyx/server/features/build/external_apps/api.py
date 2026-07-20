@@ -78,15 +78,12 @@ def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
 
 
 def _to_admin_response(
-    db_session: Session,
     app: ExternalApp,
     *,
-    stored: dict[str, EndpointPolicy] | None = None,
+    stored: dict[str, EndpointPolicy],
 ) -> ExternalAppAdminResponse:
-    # ``stored`` lets a list caller pass policies fetched in one batched query
-    # instead of paying a per-app lookup here.
-    if stored is None:
-        stored = get_policies(db_session, app.id)
+    # ``stored`` is the app's per-action policy overrides; list callers fetch
+    # them for all apps in one batched query instead of per app.
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
     return ExternalAppAdminResponse(
         id=app.id,
@@ -191,7 +188,7 @@ def create_built_in_external_app(
     # Push before commit so a push failure rolls back the create.
     push_skill_to_affected_sandboxes(app.skill, db_session)
     db_session.commit()
-    return _to_admin_response(db_session, app)
+    return _to_admin_response(app, stored=get_policies(db_session, app.id))
 
 
 @admin_router.patch("/apps/{external_app_id}")
@@ -244,7 +241,7 @@ def update_external_app_admin(
     # Push before commit so a push failure rolls back the change.
     push_skill_to_affected_sandboxes(app.skill, db_session)
     db_session.commit()
-    return _to_admin_response(db_session, app)
+    return _to_admin_response(app, stored=get_policies(db_session, app.id))
 
 
 @admin_router.post("/apps/custom")
@@ -320,7 +317,7 @@ def create_custom_external_app(
         push_skill_to_affected_sandboxes(app.skill, db_session)
         db_session.commit()
 
-    return _to_admin_response(db_session, app)
+    return _to_admin_response(app, stored=get_policies(db_session, app.id))
 
 
 @admin_router.put("/apps/{external_app_id}/bundle")
@@ -363,7 +360,7 @@ def replace_custom_app_bundle(
     if old_bundle_file_id:
         delete_bundle_blob(file_store, old_bundle_file_id)
 
-    return _to_admin_response(db_session, app)
+    return _to_admin_response(app, stored=get_policies(db_session, app.id))
 
 
 @admin_router.get("/apps")
@@ -375,8 +372,7 @@ def list_external_apps_admin(
     apps = get_external_apps(db_session=db_session)
     policies_by_app = get_policies_for_apps(db_session, [app.id for app in apps])
     return [
-        _to_admin_response(db_session, app, stored=policies_by_app.get(app.id, {}))
-        for app in apps
+        _to_admin_response(app, stored=policies_by_app.get(app.id, {})) for app in apps
     ]
 
 

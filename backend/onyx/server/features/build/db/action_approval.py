@@ -31,17 +31,16 @@ def insert_action_approval(
     actions: list[dict[str, Any]],
     app_name: str,
     payload: dict[str, Any],
-    kind: GatedAppKind | None = None,
-    target_id: int | None = None,
+    target: tuple[GatedAppKind, int] | None = None,
     decision: ApprovalDecision | None = None,
     decided_via: ApprovalDecidedVia | None = None,
 ) -> ActionApproval:
     """Commit an approval row. ``actions`` is the JSONB list of
     ``MatchedAction``-shaped dicts; must be non-empty. Re-sorted
     strictest-policy-first so every reader can rely on ``actions[0]``.
-    ``(kind, target_id)``, when both given, attribute the row to a gated target
-    via its ``gated_app`` identity row; a target-less row (e.g. a bash gate)
-    leaves ``gated_app_id`` NULL.
+    ``target`` attributes the row to a gated ``(kind, target_id)`` via its
+    ``gated_app`` identity row; a target-less row (e.g. a bash gate) leaves
+    ``gated_app_id`` NULL.
 
     Defaults to a pending row (``decision IS NULL``). Passing ``decision``
     inserts it pre-decided — safe to bypass ``try_record_decision``'s
@@ -55,9 +54,7 @@ def insert_action_approval(
         reverse=True,
     )
     gated_app_id = (
-        get_or_create_gated_app_id(db_session, kind, target_id)
-        if kind is not None and target_id is not None
-        else None
+        get_or_create_gated_app_id(db_session, *target) if target is not None else None
     )
     row = ActionApproval(
         session_id=session_id,

@@ -49,6 +49,12 @@ class GatedTarget(BaseModel):
     id: int
     app_name: str
 
+    @property
+    def key(self) -> tuple[GatedAppKind, int]:
+        """The ``(kind, id)`` pair — same shape as ``GatedApp.target_key``, so
+        live matches compare directly against persisted grants."""
+        return self.kind, self.id
+
 
 class AllMatchedActions(BaseModel):
     """Every catalog action the request matched within the resolved app.

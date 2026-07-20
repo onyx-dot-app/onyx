@@ -6096,8 +6096,7 @@ class ScheduledTask(Base):
         return [
             grant.gated_app.external_app_id
             for grant in self.pre_approved_apps
-            if grant.gated_app is not None
-            and grant.gated_app.external_app_id is not None
+            if grant.gated_app.external_app_id is not None
         ]
 
     __table_args__ = (
@@ -6592,18 +6591,14 @@ class GatedApp(Base):
     consumer table. Rows are created lazily via
     ``onyx.db.gated_app.get_or_create_gated_app_id``.
 
-    Exactly one of ``external_app_id`` / ``mcp_server_id`` is set; ``kind`` names
-    which. Deleting the underlying target CASCADEs this row away, which in turn
-    CASCADEs its policies and pre-approvals.
+    Exactly one of ``external_app_id`` / ``mcp_server_id`` is set; ``kind`` is
+    derived from which. Deleting the underlying target CASCADEs this row away,
+    which in turn CASCADEs its policies and pre-approvals.
     """
 
     __tablename__ = "gated_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    kind: Mapped[GatedAppKind] = mapped_column(
-        Enum(GatedAppKind, native_enum=False),
-        nullable=False,
-    )
     external_app_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("external_app.id", ondelete="CASCADE"),
@@ -6618,28 +6613,37 @@ class GatedApp(Base):
     )
 
     __table_args__ = (
-        # Exactly one target column is populated AND it matches ``kind`` — a
-        # mismatched pair (kind=EXTERNAL_APP with only mcp_server_id set) would
-        # make ``target_id`` assert and resolve policies against the wrong row.
         CheckConstraint(
-            "(kind = 'EXTERNAL_APP' AND external_app_id IS NOT NULL "
-            "AND mcp_server_id IS NULL) OR "
-            "(kind = 'MCP_SERVER' AND mcp_server_id IS NOT NULL "
-            "AND external_app_id IS NULL)",
+            "num_nonnulls(external_app_id, mcp_server_id) = 1",
             name="ck_gated_app_single_target",
         ),
     )
+
+    @property
+    def kind(self) -> GatedAppKind:
+        """Which catalog the target lives in, derived from the populated FK so a
+        kind/column mismatch is unrepresentable."""
+        return (
+            GatedAppKind.EXTERNAL_APP
+            if self.external_app_id is not None
+            else GatedAppKind.MCP_SERVER
+        )
 
     @property
     def target_id(self) -> int:
         """Id of the underlying target row named by ``kind``."""
         tid = (
             self.external_app_id
-            if self.kind is GatedAppKind.EXTERNAL_APP
+            if self.external_app_id is not None
             else self.mcp_server_id
         )
         assert tid is not None  # guaranteed by ck_gated_app_single_target
         return tid
+
+    @property
+    def target_key(self) -> tuple[GatedAppKind, int]:
+        """The ``(kind, target_id)`` pair consumers key grants and lookups off."""
+        return self.kind, self.target_id
 
 
 class GatedActionPolicy(Base):

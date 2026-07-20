@@ -186,8 +186,7 @@ def test_insert_pre_decided_row(
         actions=default_action_entries(),
         app_name="Slack",
         payload={"text": "hi"},
-        kind=GatedAppKind.EXTERNAL_APP,
-        target_id=app_id,
+        target=(GatedAppKind.EXTERNAL_APP, app_id),
         decision=ApprovalDecision.APPROVED,
         decided_via=ApprovalDecidedVia.PRE_APPROVAL,
     )
@@ -215,8 +214,7 @@ def test_insert_default_row_stays_pending(
         actions=default_action_entries(),
         app_name="Slack",
         payload={},
-        kind=GatedAppKind.EXTERNAL_APP,
-        target_id=app_id,
+        target=(GatedAppKind.EXTERNAL_APP, app_id),
     )
     db_session.commit()
     db_session.refresh(row)
@@ -359,8 +357,7 @@ def test_deleting_app_nulls_action_approval_fk(
         actions=default_action_entries(),
         app_name="Slack",
         payload={},
-        kind=GatedAppKind.EXTERNAL_APP,
-        target_id=app_id,
+        target=(GatedAppKind.EXTERNAL_APP, app_id),
         decision=ApprovalDecision.APPROVED,
         decided_via=ApprovalDecidedVia.PRE_APPROVAL,
     )

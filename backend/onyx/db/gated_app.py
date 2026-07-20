@@ -45,17 +45,11 @@ def get_or_create_gated_app_id(
     existing = get_gated_app_id(db_session, kind, target_id)
     if existing is not None:
         return existing
-    values: dict[str, object] = {"kind": kind}
-    if kind is GatedAppKind.EXTERNAL_APP:
-        values["external_app_id"] = target_id
-        conflict_column = "external_app_id"
-    else:
-        values["mcp_server_id"] = target_id
-        conflict_column = "mcp_server_id"
+    target_column = _target_column(kind).key
     db_session.execute(
         pg_insert(GatedApp)
-        .values(**values)
-        .on_conflict_do_nothing(index_elements=[conflict_column])
+        .values({target_column: target_id})
+        .on_conflict_do_nothing(index_elements=[target_column])
     )
     db_session.flush()
     created = get_gated_app_id(db_session, kind, target_id)
