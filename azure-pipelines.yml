@@ -37,7 +37,6 @@ stages:
 
           - script: |
               docker build \
-                --build-arg BASE_IMAGE_REGISTRY=$(ECRRegistry)/docker-hub \
                 -f backend/Dockerfile \
                 -t data-onyx/onyx-backend:latest \
                 -t data-onyx/onyx-backend:$(short_hash) \
@@ -68,7 +67,6 @@ stages:
 
           - script: |
               docker build \
-                --build-arg BASE_IMAGE_REGISTRY=$(ECRRegistry)/docker-hub \
                 -f backend/Dockerfile.model_server \
                 -t data-onyx/onyx-model-server:latest \
                 -t data-onyx/onyx-model-server:$(short_hash) \
@@ -99,7 +97,6 @@ stages:
 
           - script: |
               docker build \
-                --build-arg BASE_IMAGE_REGISTRY=$(ECRRegistry)/docker-hub \
                 -f web/Dockerfile \
                 -t data-onyx/onyx-web-server:latest \
                 -t data-onyx/onyx-web-server:$(short_hash) \
