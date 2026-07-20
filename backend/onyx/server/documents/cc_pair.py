@@ -640,18 +640,23 @@ def prune_cc_pair(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="Connection not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Connection not found for current user's permissions",
+        )
+    if cc_pair.reindex_required_since is not None:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Pruning is blocked until the required reindex completes",
         )
 
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.prune.fenced:
-        raise HTTPException(
-            status_code=HTTPStatus.CONFLICT,
-            detail="Pruning task already in progress.",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Pruning task already in progress",
         )
 
     logger.info(
@@ -665,10 +670,13 @@ def prune_cc_pair(
         client_app, cc_pair, db_session, r, tenant_id
     )
     if not payload_id:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail="Pruning task creation failed.",
-        )
+        db_session.refresh(cc_pair)
+        if cc_pair.reindex_required_since is not None:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "Pruning is blocked until the required reindex completes",
+            )
+        raise RuntimeError("Pruning task creation failed")
 
     logger.info("Pruning queued: cc_pair=%s id=%s", cc_pair.id, payload_id)
 

@@ -1,5 +1,7 @@
 """Database-based indexing coordination to replace Redis fencing."""
 
+from datetime import datetime
+
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -38,6 +40,7 @@ class IndexingCoordination:
         search_settings_id: int,
         celery_task_id: str,
         from_beginning: bool = False,
+        reindex_requirement_started_at: datetime | None = None,
     ) -> int | None:
         """
         Try to create a new index attempt for the given CC pair and search settings.
@@ -80,6 +83,7 @@ class IndexingCoordination:
                 from_beginning=from_beginning,
                 db_session=db_session,
                 celery_task_id=celery_task_id,
+                reindex_requirement_started_at=reindex_requirement_started_at,
             )
 
             logger.info(

@@ -275,6 +275,8 @@ def should_index(
         return False
 
     if search_settings_instance.status.is_current():
+        if cc_pair.reindex_required_since is not None:
+            return True
         if cc_pair.indexing_trigger is not None:
             # if a manual indexing trigger is on the cc pair, honor it for live search settings
             return True

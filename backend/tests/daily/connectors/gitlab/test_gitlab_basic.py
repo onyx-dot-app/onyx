@@ -1,11 +1,14 @@
-import itertools
 import os
+import time
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.gitlab.connector import GitlabConnector
-from onyx.connectors.models import HierarchyNode
+from onyx.connectors.gitlab.connector import GitlabConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import Document
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.GITLAB_ACCESS_TOKEN)
@@ -20,9 +23,8 @@ def gitlab_connector(
         project_name="onyx",
         include_mrs=True,
         include_issues=True,
-        include_code_files=True,  # Include code files in the test
+        include_code_files=True,
     )
-    # Ensure GITLAB_ACCESS_TOKEN and optionally GITLAB_URL are set in the environment
     gitlab_url = os.environ.get("GITLAB_URL", "https://gitlab.com")
     gitlab_token = test_secrets[TestSecret.GITLAB_ACCESS_TOKEN]
 
@@ -36,28 +38,39 @@ def gitlab_connector(
 
 
 def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
-    doc_batches = gitlab_connector.load_from_state()
-    docs = list(itertools.chain(*doc_batches))
-    # Assert right number of docs - Adjust if necessary based on test repo state
+    checkpoint = gitlab_connector.build_dummy_checkpoint()
+    results: list[Document | ConnectorFailure] = []
+    while checkpoint.has_more:
+        wrapper = CheckpointOutputWrapper[GitlabConnectorCheckpoint]()
+        output = gitlab_connector.load_from_checkpoint(
+            start=0,
+            end=time.time(),
+            checkpoint=checkpoint,
+        )
+        for document, _, failure, _ in wrapper(output):
+            if document:
+                results.append(document)
+            elif failure:
+                results.append(failure)
+        assert wrapper.next_checkpoint is not None
+        checkpoint = wrapper.next_checkpoint
+
+    failures = [result for result in results if isinstance(result, ConnectorFailure)]
+    assert not failures
+    docs = [result for result in results if isinstance(result, Document)]
     assert len(docs) == 82
 
-    # Find one of each type to validate
     validated_mr = False
     validated_issue = False
     validated_code_file = False
     gitlab_base_url = os.environ.get("GITLAB_URL", "https://gitlab.com").split("//")[-1]
     project_path = f"{gitlab_connector.project_owner}/{gitlab_connector.project_name}"
 
-    # --- Specific Document Details to Validate ---
     target_mr_id = f"https://{gitlab_base_url}/{project_path}/-/merge_requests/1"
     target_issue_id = f"https://{gitlab_base_url}/{project_path}/-/work_items/2"
     target_code_file_semantic_id = "README.md"
-    # ---
 
     for doc in docs:
-        if isinstance(doc, HierarchyNode):
-            continue
-        # Verify basic document properties (common to all types)
         assert doc.source == DocumentSource.GITLAB
         assert doc.secondary_owners is None
         assert doc.from_ingestion_api is False
@@ -67,22 +80,18 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
         assert "type" in doc.metadata
         doc_type = doc.metadata["type"]
 
-        # Verify sections (common structure)
         assert len(doc.sections) >= 1
         section = doc.sections[0]
         assert isinstance(section.link, str)
         assert gitlab_base_url in section.link
         assert isinstance(section.text, str)
 
-        # --- Type-specific and Content Validation ---
         if doc.id == target_mr_id and doc_type == "MergeRequest":
             assert doc.metadata["state"] == "opened"
             assert doc.semantic_identifier == "Add awesome feature"
             assert section.text == "This MR implements the awesome feature"
             assert doc.primary_owners is not None
             assert len(doc.primary_owners) == 1
-            # GitLab masks `name` as "****" for blocked/bot users; the
-            # connector falls back to `username` in that case.
             assert doc.primary_owners[0].display_name
             assert doc.primary_owners[0].display_name != "****"
             assert doc.id == section.link
@@ -104,31 +113,22 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
             doc.semantic_identifier == target_code_file_semantic_id
             and doc_type == "CodeFile"
         ):
-            # ID is a git hash (e.g., 'd177...'), Link is the blob URL
             assert doc.id != section.link
             assert section.link.endswith("/README.md")
-            assert "# onyx" in section.text  # Check for a known part of the content
-            # Code files might not have primary owners assigned this way
-            # assert len(doc.primary_owners) == 0
+            assert "# onyx" in section.text
             validated_code_file = True
 
-        # Generic validation for *any* document of the type if specific one not found yet
         elif doc_type == "MergeRequest" and not validated_mr:
             assert "state" in doc.metadata
-            assert gitlab_base_url in doc.id  # MR ID should be a URL
-            assert doc.id == section.link  # Link and ID are the same URL
+            assert gitlab_base_url in doc.id
+            assert doc.id == section.link
         elif doc_type == "ISSUE" and not validated_issue:
             assert "state" in doc.metadata
-            assert gitlab_base_url in doc.id  # Issue ID should be a URL
-            assert doc.id == section.link  # Link and ID are the same URL
+            assert gitlab_base_url in doc.id
+            assert doc.id == section.link
         elif doc_type == "CodeFile" and not validated_code_file:
-            assert doc.id != section.link  # ID is GID/hash, link is blob URL
+            assert doc.id != section.link
 
-        # Early exit optimization (optional)
-        # if validated_mr and validated_issue and validated_code_file:
-        #     break
-
-    # Assert that we found and validated the specific documents
     assert validated_mr, (
         f"Failed to find and validate the specific MergeRequest ({target_mr_id})."
     )

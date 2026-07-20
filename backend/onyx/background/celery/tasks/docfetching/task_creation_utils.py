@@ -66,6 +66,9 @@ def try_creating_docfetching_task(
             search_settings_id=search_settings.id,
             celery_task_id=custom_task_id,
             from_beginning=reindex,
+            reindex_requirement_started_at=(
+                cc_pair.reindex_required_since if reindex else None
+            ),
         )
 
         if index_attempt_id is None:

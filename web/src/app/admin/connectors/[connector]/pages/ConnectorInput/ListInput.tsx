@@ -10,18 +10,19 @@ interface ListInputProps {
 
 const ListInput: React.FC<ListInputProps> = ({ name, label, description }) => {
   const { values } = useFormikContext<any>();
+  const resolvedLabel = typeof label === "function" ? label(null) : label;
   return (
-    <TextArrayField
-      name={name}
-      label={typeof label === "function" ? label(null) : label}
-      values={values}
-      subtext={
-        typeof description === "function" ? description(null) : description
-      }
-      placeholder={`Enter ${
-        typeof label === "function" ? label(null) : label.toLowerCase()
-      }`}
-    />
+    <div>
+      <TextArrayField
+        name={name}
+        label={resolvedLabel}
+        values={values}
+        subtext={
+          typeof description === "function" ? description(null) : description
+        }
+        placeholder={`Enter ${resolvedLabel.toLowerCase()}`}
+      />
+    </div>
   );
 };
 

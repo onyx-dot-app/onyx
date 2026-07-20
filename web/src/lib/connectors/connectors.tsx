@@ -341,6 +341,7 @@ export const connectorConfigs: Record<
       },
     ],
   },
+  // TODO: Support post-creation filter edits with reindex/prune orchestration.
   gitlab: {
     description: "Configure GitLab connector",
     values: [
@@ -375,6 +376,48 @@ export const connectorConfigs: Record<
         name: "include_issues",
         description: "Index issues from repositories",
         default: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include code files?",
+        label: "Include Code Files",
+        name: "include_code_files",
+        description:
+          "Download the repository archive and index matching files.",
+        default: false,
+      },
+      {
+        type: "list",
+        name: "code_file_patterns",
+        label: "Code File Patterns",
+        description:
+          "Glob patterns for files to index when 'Include Code Files' is enabled. Patterns without a '/' match filenames anywhere; patterns with a '/' match repository-relative paths. Leave empty to use built-in defaults.",
+        default: [],
+      },
+      {
+        type: "list",
+        name: "include_path_patterns",
+        label: "Include Path Patterns",
+        description:
+          "Glob patterns for paths to include (e.g. src/**, docs/*). Leave empty to include all paths.",
+        default: [],
+      },
+      {
+        type: "list",
+        name: "exclude_path_patterns",
+        label: "Exclude Path Patterns",
+        description:
+          "Glob patterns for paths to exclude (e.g. *_test.py, vendor/**).",
+        default: [],
+      },
+      {
+        type: "text",
+        name: "branch",
+        label: "Branch",
+        optional: true,
+        description:
+          "Branch to index. Leave empty to use the project's default branch.",
+        default: "",
       },
     ],
   },
@@ -2081,6 +2124,11 @@ export interface GitlabConfig {
   project_name: string;
   include_mrs: boolean;
   include_issues: boolean;
+  include_code_files?: boolean;
+  code_file_patterns?: string[];
+  include_path_patterns?: string[];
+  exclude_path_patterns?: string[];
+  branch?: string;
 }
 
 export interface LumAppsConfig {
