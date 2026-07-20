@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
+from onyx.db.cc_pair_deletion import delete_cc_pair_dependencies__no_commit
 from onyx.db.enums import IndexingMode
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
@@ -167,6 +168,12 @@ def delete_connector(
     if connector is None:
         return StatusResponse(
             success=True, message="Connector was already deleted", data=connector_id
+        )
+
+    for cc_pair in connector.credentials:
+        delete_cc_pair_dependencies__no_commit(
+            db_session=db_session,
+            cc_pair_id=cc_pair.id,
         )
 
     db_session.delete(connector)

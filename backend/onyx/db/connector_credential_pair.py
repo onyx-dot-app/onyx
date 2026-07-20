@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID
 from onyx.configs.constants import DocumentSource
+from onyx.db.cc_pair_deletion import delete_cc_pair_dependencies__no_commit
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.credentials import fetch_credential_by_id_for_user
@@ -744,10 +745,7 @@ def remove_credential_from_connector(
     )
 
     if association is not None:
-        fetch_ee_implementation_or_noop(
-            "onyx.db.external_perm",
-            "delete_user__ext_group_for_cc_pair__no_commit",
-        )(
+        delete_cc_pair_dependencies__no_commit(
             db_session=db_session,
             cc_pair_id=association.id,
         )
