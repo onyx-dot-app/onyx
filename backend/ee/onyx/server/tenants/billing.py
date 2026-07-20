@@ -1,5 +1,5 @@
 from enum import Enum as PyEnum
-from typing import cast, Literal
+from typing import Literal, cast
 
 import requests
 import stripe

@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from celery import Celery, shared_task, Task
+from celery import Celery, Task, shared_task
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
@@ -46,9 +46,9 @@ from onyx.db.hierarchy import (
 )
 from onyx.db.models import ConnectorCredentialPair
 from onyx.redis.redis_hierarchy import (
+    HierarchyNodeCacheEntry,
     cache_hierarchy_nodes_batch,
     ensure_source_node_exists,
-    HierarchyNodeCacheEntry,
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient

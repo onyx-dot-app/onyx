@@ -29,9 +29,9 @@ from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy.addons import gate as gate_mod
 from onyx.sandbox_proxy.addons.gate import (
+    PARSER_MAX_BODY_BYTES,
     GateAddon,
     ParkedApprovals,
-    PARSER_MAX_BODY_BYTES,
 )
 from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
@@ -42,13 +42,13 @@ from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
-from tests.unit.sandbox_proxy.conftest import make_flow as _flow
 from tests.unit.sandbox_proxy.conftest import (
-    make_matched_actions,
     RecordingCredentialResolver,
+    make_matched_actions,
 )
-from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
 from tests.unit.sandbox_proxy.conftest import StubResolver as _StubResolver
+from tests.unit.sandbox_proxy.conftest import make_flow as _flow
+from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
 
 # ---------------------------------------------------------------------------
 # Stubs

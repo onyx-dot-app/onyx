@@ -22,10 +22,10 @@ from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.dr_mock_tools import (
-    get_research_agent_additional_tool_definitions,
     RESEARCH_AGENT_TASK_KEY,
     THINK_TOOL_RESPONSE_MESSAGE,
     THINK_TOOL_RESPONSE_TOKEN_COUNT,
+    get_research_agent_additional_tool_definitions,
 )
 from onyx.deep_research.models import (
     CombinedResearchAgentCallResult,
@@ -720,7 +720,7 @@ if __name__ == "__main__":
     from uuid import uuid4
 
     from onyx.chat.chat_state import ChatStateContainer
-    from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+    from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
     from onyx.db.models import User
     from onyx.db.persona import get_default_behavior_persona
     from onyx.llm.factory import get_default_llm, get_llm_token_counter

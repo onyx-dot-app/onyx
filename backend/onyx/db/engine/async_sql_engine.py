@@ -20,10 +20,10 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.iam_auth import create_ssl_context_if_iam, get_iam_auth_token
 from onyx.db.engine.sql_engine import (
     ASYNC_DB_API,
+    USE_IAM_AUTH,
+    SqlEngine,
     build_connection_string,
     is_valid_schema_name,
-    SqlEngine,
-    USE_IAM_AUTH,
 )
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import get_current_tenant_id

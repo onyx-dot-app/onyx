@@ -30,12 +30,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from scripts.tenant_cleanup.cleanup_utils import (
+    TenantNotFoundInControlPlaneError,
     confirm_step,
     execute_control_plane_query,
     find_worker_pod,
     get_tenant_status,
     read_tenant_ids_from_csv,
-    TenantNotFoundInControlPlaneError,
 )
 
 

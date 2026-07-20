@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from cachetools import cachedmethod, TTLCache
+from cachetools import TTLCache, cachedmethod
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
@@ -23,14 +23,14 @@ from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_live_scheduled_run_grants, ScheduledRunGrants
+from onyx.db.scheduled_task import ScheduledRunGrants, get_live_scheduled_run_grants
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.credential_injection import (
     CredentialInjectionDispatcher,
     InjectionContext,
 )
-from onyx.sandbox_proxy.errors import http_403, SandboxProxyError
+from onyx.sandbox_proxy.errors import SandboxProxyError, http_403
 from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy

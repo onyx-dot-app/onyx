@@ -16,10 +16,10 @@ from requests import HTTPError, Response
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import (
-    build_oauth_authorization_url,
-    exchange_oauth_code_for_token,
     OAuthFlowParams,
     OAuthTokenManager,
+    build_oauth_authorization_url,
+    exchange_oauth_code_for_token,
 )
 from onyx.db.models import OAuthConfig
 from onyx.db.oauth_config import create_oauth_config, upsert_user_oauth_token

@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any, IO
+from typing import IO, Any
 
 from sqlalchemy.orm import Session
 

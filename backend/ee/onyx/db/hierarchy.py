@@ -4,7 +4,7 @@ This module provides permission-aware hierarchy node access for Enterprise Editi
 It filters hierarchy nodes based on user email and external group membership.
 """
 
-from sqlalchemy import any_, cast, or_, select, String
+from sqlalchemy import String, any_, cast, or_, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement

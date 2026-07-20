@@ -7,7 +7,7 @@ eliminating the need for an external S3/MinIO service.
 import tempfile
 import uuid
 from io import BytesIO
-from typing import Any, cast, IO
+from typing import IO, Any, cast
 
 import puremagic
 from psycopg2.extensions import connection as Psycopg2Connection

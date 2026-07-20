@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 import contextvars
 from types import TracebackType
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from . import util
 from .scope import Scope

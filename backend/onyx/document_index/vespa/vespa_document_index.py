@@ -56,11 +56,11 @@ from onyx.document_index.vespa.chunk_retrieval import (
 from onyx.document_index.vespa.deletion import delete_vespa_chunks
 from onyx.document_index.vespa.indexing_utils import (
     BaseHTTPXClientContext,
+    GlobalHTTPXClientContext,
+    TemporaryHTTPXClientContext,
     batch_index_vespa_chunks,
     check_for_final_chunk_existence,
     clean_chunk_id_copy,
-    GlobalHTTPXClientContext,
-    TemporaryHTTPXClientContext,
 )
 from onyx.document_index.vespa.internal_types import (
     EnrichedDocumentIndexingInfo,

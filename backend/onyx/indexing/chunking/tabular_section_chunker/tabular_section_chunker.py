@@ -21,7 +21,7 @@ from onyx.natural_language_processing.utils import (
     count_tokens,
     split_text_by_tokens,
 )
-from onyx.utils.csv_utils import parse_csv_string, ParsedRow, read_csv_header
+from onyx.utils.csv_utils import ParsedRow, parse_csv_string, read_csv_header
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

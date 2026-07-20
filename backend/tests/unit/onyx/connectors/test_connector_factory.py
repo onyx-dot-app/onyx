@@ -13,9 +13,9 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import (
+    ConnectorMissingException,
     _connector_cache,
     _load_connector_class,
-    ConnectorMissingException,
     identify_connector_class,
     instantiate_connector,
 )

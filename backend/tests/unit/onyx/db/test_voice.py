@@ -7,6 +7,8 @@ import pytest
 
 from onyx.db.models import VoiceProvider
 from onyx.db.voice import (
+    MAX_VOICE_PLAYBACK_SPEED,
+    MIN_VOICE_PLAYBACK_SPEED,
     deactivate_stt_provider,
     deactivate_tts_provider,
     delete_voice_provider,
@@ -15,8 +17,6 @@ from onyx.db.voice import (
     fetch_voice_provider_by_id,
     fetch_voice_provider_by_type,
     fetch_voice_providers,
-    MAX_VOICE_PLAYBACK_SPEED,
-    MIN_VOICE_PLAYBACK_SPEED,
     set_default_stt_provider,
     set_default_tts_provider,
     update_user_voice_settings,

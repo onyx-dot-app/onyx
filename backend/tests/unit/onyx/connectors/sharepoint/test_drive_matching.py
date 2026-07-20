@@ -9,8 +9,8 @@ import pytest
 
 from onyx.connectors.models import Document, DocumentSource, TextSection
 from onyx.connectors.sharepoint.connector import (
-    DriveItemData,
     SHARED_DOCUMENTS_MAP,
+    DriveItemData,
     SharepointConnector,
     SharepointConnectorCheckpoint,
     SiteDescriptor,

@@ -18,11 +18,11 @@ from onyx.sandbox_proxy.credential_injection import (
     InjectionOutcome,
 )
 from onyx.sandbox_proxy.errors import SandboxProxyError
-from tests.unit.sandbox_proxy.conftest import make_flow as _flow
 from tests.unit.sandbox_proxy.conftest import (
-    make_matched_actions,
     RecordingCredentialResolver,
+    make_matched_actions,
 )
+from tests.unit.sandbox_proxy.conftest import make_flow as _flow
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox as _sandbox
 
 

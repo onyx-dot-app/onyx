@@ -32,12 +32,12 @@ from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.db.enums import AccessType, SandboxStatus
 from onyx.db.models import Sandbox, Skill, User, UserGroup
 from onyx.db.skill import (
+    SkillPatch,
     affected_user_ids_for_skill,
     delete_skill,
     patch_skill,
     replace_skill_bundle,
     replace_skill_grants,
-    SkillPatch,
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.sandbox.models import FatalWriteError

@@ -28,8 +28,8 @@ from kubernetes import client
 import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
     PUSH_DAEMON_PORT,
+    KubernetesSandboxManager,
 )
 
 

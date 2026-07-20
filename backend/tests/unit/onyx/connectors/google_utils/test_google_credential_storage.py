@@ -3,9 +3,9 @@ from typing import Any
 import pytest
 
 from onyx.configs.constants import (
-    DocumentSource,
     KV_GOOGLE_DRIVE_CRED_KEY,
     KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY,
+    DocumentSource,
 )
 from onyx.connectors.google_utils.google_kv import (
     get_auth_url,

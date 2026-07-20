@@ -15,11 +15,11 @@ import threading
 import time
 import zipfile
 from collections.abc import Callable, Generator, Iterable, Sequence
-from concurrent.futures import as_completed, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -29,10 +29,10 @@ if TYPE_CHECKING:
     from kubernetes import client as k8s_client_module
 from redis import Redis
 from sqlalchemy import select, text
-from sqlalchemy.orm import class_mapper, Session
+from sqlalchemy.orm import Session, class_mapper
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import AccountType, BuildSessionStatus, SandboxStatus
 from onyx.db.llm import (
     fetch_default_llm_model,

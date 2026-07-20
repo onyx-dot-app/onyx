@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 
 from onyx.connectors.sharepoint.connector import (
-    _build_item_relative_path,
-    _is_path_excluded,
-    _is_site_excluded,
     DriveItemData,
     SharepointConnector,
     SiteDescriptor,
+    _build_item_relative_path,
+    _is_path_excluded,
+    _is_site_excluded,
 )
 
 

@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.db.models import SamlAccount

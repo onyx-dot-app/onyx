@@ -1,6 +1,6 @@
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import selectinload, Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel

@@ -8,7 +8,7 @@ import string
 import uuid
 from collections.abc import AsyncGenerator, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Any, cast, Dict, List, Literal, Optional, Protocol, Tuple, TypeVar
+from typing import Any, Dict, List, Literal, Optional, Protocol, Tuple, TypeVar, cast
 from urllib.parse import urlparse
 
 import jwt
@@ -20,19 +20,19 @@ from fastapi import (
     Query,
     Request,
     Response,
-    status,
     WebSocket,
+    status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import (
     BaseUserManager,
-    exceptions,
     FastAPIUsers,
+    UUIDIDMixin,
+    exceptions,
     models,
     schemas,
-    UUIDIDMixin,
 )
 from fastapi_users.authentication import (
     AuthenticationBackend,
@@ -46,7 +46,7 @@ from fastapi_users.authentication.strategy.db import (
     DatabaseStrategy,
 )
 from fastapi_users.exceptions import UserAlreadyExists
-from fastapi_users.jwt import decode_jwt, generate_jwt, SecretType
+from fastapi_users.jwt import SecretType, decode_jwt, generate_jwt
 from fastapi_users.manager import UserManagerDependency
 from fastapi_users.openapi import OpenAPIResponseType
 from fastapi_users.router.common import ErrorCode, ErrorModel
@@ -89,22 +89,22 @@ from onyx.configs.constants import (
     ANONYMOUS_USER_COOKIE_NAME,
     ANONYMOUS_USER_EMAIL,
     ANONYMOUS_USER_UUID,
-    AuthType,
     DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
     DANSWER_API_KEY_PREFIX,
     FASTAPI_USERS_AUTH_COOKIE_NAME,
-    MilestoneRecordType,
-    OnyxRedisLocks,
     PASSWORD_SPECIAL_CHARS,
     UNNAMED_KEY_PLACEHOLDER,
+    AuthType,
+    MilestoneRecordType,
+    OnyxRedisLocks,
 )
 from onyx.db.api_key import fetch_user_for_api_key
 from onyx.db.auth import (
+    SQLAlchemyUserAdminDB,
     get_access_token_db,
     get_default_admin_user_emails,
     get_user_count,
     get_user_db,
-    SQLAlchemyUserAdminDB,
 )
 from onyx.db.engine.async_sql_engine import (
     get_async_session,
@@ -124,9 +124,9 @@ from onyx.db.users import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import (
+    OnyxError,
     log_onyx_error,
     onyx_error_to_json_response,
-    OnyxError,
 )
 from onyx.redis.redis_pool import get_async_redis_connection, retrieve_ws_token_data
 from onyx.server.security.store import get_security_settings
@@ -134,20 +134,20 @@ from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import (
+    RecordType,
     mt_cloud_alias,
     mt_cloud_get_anon_id,
     mt_cloud_identify,
     mt_cloud_telemetry,
     optional_telemetry,
-    RecordType,
 )
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import (
-    async_return_default_schema,
     MULTI_TENANT,
     POSTGRES_DEFAULT_SCHEMA,
+    async_return_default_schema,
 )
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,

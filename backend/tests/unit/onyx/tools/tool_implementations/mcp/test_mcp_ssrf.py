@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from onyx.auth import oauth_token_manager
-from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token, OAuthFlowParams
+from onyx.auth.oauth_token_manager import OAuthFlowParams, exchange_oauth_code_for_token
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import api

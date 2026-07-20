@@ -9,7 +9,7 @@ from onyx.configs.app_configs import (
     MAX_CHUNKS_PER_DOC_BATCH,
     VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT,
 )
-from onyx.configs.constants import OnyxRedisLocks, PUBLIC_DOC_PAT
+from onyx.configs.constants import PUBLIC_DOC_PAT, OnyxRedisLocks
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
@@ -45,14 +45,14 @@ from onyx.document_index.opensearch.schema import (
     ACCESS_CONTROL_LIST_FIELD_NAME,
     CONTENT_FIELD_NAME,
     DOCUMENT_SETS_FIELD_NAME,
-    DocumentChunk,
-    DocumentChunkWithoutVectors,
-    DocumentSchema,
-    get_opensearch_doc_chunk_id,
     GLOBAL_BOOST_FIELD_NAME,
     HIDDEN_FIELD_NAME,
     PERSONAS_FIELD_NAME,
     USER_PROJECTS_FIELD_NAME,
+    DocumentChunk,
+    DocumentChunkWithoutVectors,
+    DocumentSchema,
+    get_opensearch_doc_chunk_id,
 )
 from onyx.document_index.opensearch.search import (
     DocumentQuery,

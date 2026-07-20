@@ -3,7 +3,7 @@ from collections.abc import Callable
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.discovery import build, Resource
+from googleapiclient.discovery import Resource, build
 
 from onyx.utils.logger import setup_logger
 

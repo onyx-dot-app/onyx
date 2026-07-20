@@ -21,7 +21,7 @@ from onyx.auth.users import (
     current_limited_user,
 )
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.configs.constants import FileOrigin, MilestoneRecordType, PUBLIC_API_TAGS
+from onyx.configs.constants import PUBLIC_API_TAGS, FileOrigin, MilestoneRecordType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.file_record import get_filerecord_by_file_id_optional

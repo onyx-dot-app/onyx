@@ -19,11 +19,11 @@ from requests import Response
 from requests.exceptions import HTTPError
 
 from onyx.connectors.sharepoint.connector import (
-    _is_per_site_graph_failure,
     GRAPH_INVALID_REQUEST_CODE,
     PER_SITE_GRAPH_FAILURE_STATUSES,
     SharepointConnector,
     SiteDescriptor,
+    _is_per_site_graph_failure,
 )
 
 SITE_URL = "https://tenant.sharepoint.com/sites/ClassicSite"

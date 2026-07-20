@@ -1,7 +1,7 @@
 import pytest
 from chonkie import SentenceChunker
 
-from onyx.configs.constants import DocumentSource, SECTION_SEPARATOR
+from onyx.configs.constants import SECTION_SEPARATOR, DocumentSource
 from onyx.connectors.models import IndexingDocument, Section, SectionType
 from onyx.indexing.chunking import DocumentChunker
 from onyx.indexing.chunking import text_section_chunker as text_chunker_module

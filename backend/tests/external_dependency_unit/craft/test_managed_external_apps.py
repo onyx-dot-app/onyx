@@ -26,10 +26,10 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.registry import (
+    PROVIDERS,
     action_policy_views,
     fetch_onyx_managed_built_in_apps,
     get_endpoint_catalog,
-    PROVIDERS,
 )
 from onyx.server.features.build.api.models import (
     CreateBuiltInExternalAppRequest,

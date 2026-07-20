@@ -25,11 +25,11 @@ from onyx.onyxbot.slack.blocks import (
 from onyx.onyxbot.slack.config import get_slack_channel_config_for_bot_and_channel
 from onyx.onyxbot.slack.constants import (
     DISLIKE_BLOCK_ACTION_ID,
-    FeedbackVisibility,
     KEEP_TO_YOURSELF_ACTION_ID,
     LIKE_BLOCK_ACTION_ID,
     SHOW_EVERYONE_ACTION_ID,
     VIEW_DOC_FEEDBACK_ID,
+    FeedbackVisibility,
 )
 from onyx.onyxbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
@@ -37,6 +37,7 @@ from onyx.onyxbot.slack.handlers.handle_message import (
 from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import (
+    TenantSocketModeClient,
     build_feedback_id,
     decompose_action_id,
     fetch_group_ids_from_names,
@@ -45,7 +46,6 @@ from onyx.onyxbot.slack.utils import (
     get_feedback_visibility,
     read_slack_thread,
     respond_in_thread_or_channel,
-    TenantSocketModeClient,
     update_emote_react,
 )
 from onyx.server.query_and_chat.models import ChatMessageDetail

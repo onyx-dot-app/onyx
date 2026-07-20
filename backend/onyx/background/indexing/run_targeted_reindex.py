@@ -51,8 +51,8 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.redis.redis_hierarchy import (
-    cache_hierarchy_nodes_batch,
     HierarchyNodeCacheEntry,
+    cache_hierarchy_nodes_batch,
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger

@@ -22,10 +22,10 @@ import pytest
 
 from onyx.server.features.build.sandbox.opencode import event_bus as event_bus_mod
 from onyx.server.features.build.sandbox.opencode.event_bus import (
-    _extract_session_id,
-    _parse_sse_block,
     BUS_CLOSED_SENTINEL,
     PodEventBus,
+    _extract_session_id,
+    _parse_sse_block,
 )
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@ from onyx.configs.app_configs import (
     OPENAI_DEFAULT_API_KEY,
     OPENROUTER_DEFAULT_API_KEY,
 )
-from onyx.db.usage import check_usage_limit, UsageLimitExceededError, UsageType
+from onyx.db.usage import UsageLimitExceededError, UsageType, check_usage_limit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.tenant_usage_limits import (

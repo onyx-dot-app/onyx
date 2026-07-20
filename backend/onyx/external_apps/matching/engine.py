@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType, POLICY_SEVERITY
+from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType
 from onyx.db.external_app import get_policies
 from onyx.db.models import ExternalApp
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest

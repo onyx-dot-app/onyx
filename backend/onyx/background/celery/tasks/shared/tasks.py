@@ -3,7 +3,7 @@ from enum import Enum
 from http import HTTPStatus
 
 import httpx
-from celery import shared_task, Task
+from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from tenacity import RetryError
 

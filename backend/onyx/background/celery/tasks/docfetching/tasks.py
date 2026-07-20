@@ -5,7 +5,7 @@ import traceback
 from time import sleep
 
 import sentry_sdk
-from celery import Celery, shared_task, Task
+from celery import Celery, Task, shared_task
 
 from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger

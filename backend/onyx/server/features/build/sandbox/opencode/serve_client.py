@@ -37,9 +37,9 @@ from onyx.server.features.build.sandbox.event_schema import (
     ToolCallStart,
 )
 from onyx.server.features.build.sandbox.opencode.event_bus import (
-    _Subscription,
     BUS_CLOSED_SENTINEL,
     PodEventBus,
+    _Subscription,
 )
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger

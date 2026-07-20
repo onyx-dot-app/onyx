@@ -33,7 +33,7 @@ from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import MessageType, MilestoneRecordType, PUBLIC_API_TAGS
+from onyx.configs.constants import PUBLIC_API_TAGS, MessageType, MilestoneRecordType
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
@@ -55,7 +55,7 @@ from onyx.db.enums import Permission
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
 from onyx.db.models import ChatSessionSharedStatus, Persona, User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.usage import increment_usage, UsageType
+from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError

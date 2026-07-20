@@ -13,10 +13,10 @@ from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_genera
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import (
+    PUBLIC_API_TAGS,
     DocumentSource,
     OnyxCeleryPriority,
     OnyxCeleryTask,
-    PUBLIC_API_TAGS,
 )
 from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user

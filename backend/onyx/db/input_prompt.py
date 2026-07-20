@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import aliased, Session
+from sqlalchemy.orm import Session, aliased
 
 from onyx.db.models import InputPrompt, InputPrompt__User, User
 from onyx.utils.logger import setup_logger

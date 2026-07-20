@@ -5,7 +5,7 @@ from uuid import UUID
 
 import httpx
 import sqlalchemy as sa
-from celery import Celery, shared_task, Task
+from celery import Celery, Task, shared_task
 from redis.lock import Lock as RedisLock
 from retry import retry
 from sqlalchemy import select
@@ -32,14 +32,14 @@ from onyx.configs.constants import (
     CELERY_USER_FILE_PROCESSING_TASK_EXPIRES,
     CELERY_USER_FILE_PROJECT_SYNC_LOCK_TIMEOUT,
     CELERY_USER_FILE_PROJECT_SYNC_TASK_EXPIRES,
+    USER_FILE_DELETE_MAX_QUEUE_DEPTH,
+    USER_FILE_PROCESSING_MAX_QUEUE_DEPTH,
+    USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
     DocumentSource,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
     OnyxRedisLocks,
-    USER_FILE_DELETE_MAX_QUEUE_DEPTH,
-    USER_FILE_PROCESSING_MAX_QUEUE_DEPTH,
-    USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
 )
 from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import Document, HierarchyNode

@@ -11,10 +11,10 @@ from onyx.background.celery.tasks.user_file_processing.tasks import (
 )
 from onyx.configs.constants import (
     CELERY_USER_FILE_PROJECT_SYNC_TASK_EXPIRES,
+    USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
-    USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH,
 )
 
 

@@ -16,7 +16,7 @@ import json
 import time
 from collections.abc import Callable, Generator, Iterator
 from datetime import datetime, timedelta, timezone
-from typing import Any, cast, TypeVar
+from typing import Any, TypeVar, cast
 from urllib.parse import quote
 
 import bs4

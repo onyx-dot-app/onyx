@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable, Generator, Iterator
 from datetime import datetime
 from enum import Enum
-from typing import Any, cast, Protocol
+from typing import Any, Protocol, cast
 from urllib.parse import parse_qs, urlparse, urlunparse
 
 from google.auth.exceptions import RefreshError
@@ -28,14 +28,14 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
 )
 from onyx.connectors.google_drive.doc_conversion import (
+    PermissionSyncContext,
     build_slim_document,
     convert_drive_item_to_document,
     onyx_document_id_from_drive_file,
-    PermissionSyncContext,
 )
 from onyx.connectors.google_drive.file_retrieval import (
-    crawl_folders_for_files,
     DriveFileFieldType,
+    crawl_folders_for_files,
     get_all_files_for_oauth,
     get_all_files_in_my_drive_and_shared,
     get_external_access_for_folder,
@@ -55,15 +55,15 @@ from onyx.connectors.google_drive.models import (
 )
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import (
+    GoogleFields,
     execute_paginated_retrieval,
     get_file_owners,
-    GoogleFields,
 )
 from onyx.connectors.google_utils.resources import (
-    get_admin_service,
-    get_drive_service,
     GoogleDriveService,
     ImpersonationError,
+    get_admin_service,
+    get_drive_service,
     make_user_removal_checker,
 )
 from onyx.connectors.google_utils.shared_constants import (
@@ -97,10 +97,10 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import (
-    parallel_yield,
-    run_functions_tuples_in_parallel,
     ThreadSafeDict,
     ThreadSafeSet,
+    parallel_yield,
+    run_functions_tuples_in_parallel,
 )
 
 logger = setup_logger()

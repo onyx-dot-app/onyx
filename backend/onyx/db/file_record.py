@@ -1,4 +1,4 @@
-from sqlalchemy import and_, cast, select, String
+from sqlalchemy import String, and_, cast, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 

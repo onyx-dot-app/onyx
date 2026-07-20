@@ -1,4 +1,4 @@
-from concurrent.futures import as_completed, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from onyx.configs.constants import QAFeedbackType
 from tests.integration.common_utils.managers.api_key import APIKeyManager

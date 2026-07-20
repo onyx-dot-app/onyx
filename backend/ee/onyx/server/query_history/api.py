@@ -26,13 +26,13 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.chat.chat_utils import create_chat_history_chain
 from onyx.configs.constants import (
+    PUBLIC_API_TAGS,
     FileOrigin,
     FileType,
     MessageType,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
-    PUBLIC_API_TAGS,
     QAFeedbackType,
     QueryHistoryType,
     SessionType,

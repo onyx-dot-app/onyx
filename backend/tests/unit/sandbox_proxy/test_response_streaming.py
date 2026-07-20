@@ -29,7 +29,7 @@ from mitmproxy import http as mitm_http
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
-from onyx.sandbox_proxy.addons.gate import _IdentityResolver, GateAddon
+from onyx.sandbox_proxy.addons.gate import GateAddon, _IdentityResolver
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator

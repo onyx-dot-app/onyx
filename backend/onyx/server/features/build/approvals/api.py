@@ -11,7 +11,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, computed_field, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission

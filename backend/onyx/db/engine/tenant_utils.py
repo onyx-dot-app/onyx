@@ -2,7 +2,7 @@ import re
 
 from sqlalchemy import text
 
-from onyx.db.engine.sql_engine import get_session_with_shared_schema, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_shared_schema
 from shared_configs.configs import (
     MULTI_TENANT,
     POSTGRES_DEFAULT_SCHEMA,

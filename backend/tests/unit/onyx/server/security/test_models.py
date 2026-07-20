@@ -6,15 +6,15 @@ import pytest
 from pydantic import ValidationError
 
 from onyx.server.security.models import (
-    _derive_operator_locked_fields,
-    _operator_locked,
-    _tenant_editable,
     OPERATOR_LOCKED_FIELDS,
     PASSWORD_LENGTH_CAP,
     PASSWORD_MAX_LENGTH_FLOOR,
     SecuritySettings,
     SecuritySettingsOverrides,
     SSRFProtectionLevel,
+    _derive_operator_locked_fields,
+    _operator_locked,
+    _tenant_editable,
 )
 
 _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {

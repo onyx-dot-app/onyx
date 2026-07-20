@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from logging import Logger
-from typing import Any, cast, TypeVar
+from typing import Any, TypeVar, cast
 
 import requests
 from retry import retry
