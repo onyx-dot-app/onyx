@@ -1,4 +1,4 @@
-"""add slack_session_link table
+"""add slack_thread__build_session table
 
 Revision ID: 716d0d180a2a
 Revises: bd38e2a494ff
@@ -19,7 +19,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "slack_session_link",
+        "slack_thread__build_session",
         sa.Column(
             "id",
             postgresql.UUID(as_uuid=True),
@@ -47,13 +47,13 @@ def upgrade() -> None:
             "slack_team_id",
             "channel_id",
             "thread_ts",
-            name="uq_slack_session_link_thread",
+            name="uq_slack_thread__build_session_thread",
         ),
         sa.UniqueConstraint(
-            "build_session_id", name="uq_slack_session_link_build_session_id"
+            "build_session_id", name="uq_slack_thread__build_session_session"
         ),
     )
 
 
 def downgrade() -> None:
-    op.drop_table("slack_session_link")
+    op.drop_table("slack_thread__build_session")

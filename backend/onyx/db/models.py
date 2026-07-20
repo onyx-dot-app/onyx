@@ -5793,10 +5793,10 @@ class BuildSession(Base):
     )
 
 
-class SlackSessionLink(Base):
+class SlackThread__BuildSession(Base):
     """Maps a Slack thread to the BuildSession handling it (one thread per session)."""
 
-    __tablename__ = "slack_session_link"
+    __tablename__ = "slack_thread__build_session"
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -5820,10 +5820,10 @@ class SlackSessionLink(Base):
             "slack_team_id",
             "channel_id",
             "thread_ts",
-            name="uq_slack_session_link_thread",
+            name="uq_slack_thread__build_session_thread",
         ),
         UniqueConstraint(
-            "build_session_id", name="uq_slack_session_link_build_session_id"
+            "build_session_id", name="uq_slack_thread__build_session_session"
         ),
     )
 

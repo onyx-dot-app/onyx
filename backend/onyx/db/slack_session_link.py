@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db.models import SlackSessionLink
+from onyx.db.models import SlackThread__BuildSession
 
 
 def get_session_id_for_slack_thread(
@@ -14,10 +14,10 @@ def get_session_id_for_slack_thread(
     thread_ts: str,
 ) -> UUID | None:
     link = db_session.scalar(
-        select(SlackSessionLink).where(
-            SlackSessionLink.slack_team_id == slack_team_id,
-            SlackSessionLink.channel_id == channel_id,
-            SlackSessionLink.thread_ts == thread_ts,
+        select(SlackThread__BuildSession).where(
+            SlackThread__BuildSession.slack_team_id == slack_team_id,
+            SlackThread__BuildSession.channel_id == channel_id,
+            SlackThread__BuildSession.thread_ts == thread_ts,
         )
     )
     return link.build_session_id if link else None
@@ -29,10 +29,10 @@ def insert_slack_session_link(
     channel_id: str,
     thread_ts: str,
     build_session_id: UUID,
-) -> SlackSessionLink:
+) -> SlackThread__BuildSession:
     """Raises IntegrityError on a race between concurrent inserts for the same
     thread; callers should catch it and re-fetch the winning link."""
-    link = SlackSessionLink(
+    link = SlackThread__BuildSession(
         slack_team_id=slack_team_id,
         channel_id=channel_id,
         thread_ts=thread_ts,
@@ -50,9 +50,9 @@ def insert_slack_session_link(
 def get_link_for_session(
     db_session: Session,
     build_session_id: UUID,
-) -> SlackSessionLink | None:
+) -> SlackThread__BuildSession | None:
     return db_session.scalar(
-        select(SlackSessionLink).where(
-            SlackSessionLink.build_session_id == build_session_id
+        select(SlackThread__BuildSession).where(
+            SlackThread__BuildSession.build_session_id == build_session_id
         )
     )
