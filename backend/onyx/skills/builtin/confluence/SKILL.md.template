@@ -1,0 +1,124 @@
+---
+name: confluence
+description: Search, read, and write Confluence Cloud pages, blog posts, and comments on the connected user's behalf via a light REST wrapper.
+---
+
+# Confluence
+
+Call the Confluence Cloud REST API as the connected user via the bundled helper.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/confluence/confluence_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. The writes are
+`create-page`, `update-page`, `comment`, and `delete-page`. Use `--raw` to skip
+empty-field pruning; `python confluence_api.py <command> -h` shows its flags.
+
+Every command except `sites` is scoped to an Atlassian site by its cloud id,
+which is resolved automatically from the first accessible site. Target a
+specific site with a global `--cloud-id CLOUD_ID` or `--site "<name or url
+substring>"` before the subcommand.
+
+### Accessible sites
+
+```
+python confluence_api.py sites
+```
+
+Lists the Atlassian sites (Confluence instances) the grant can reach, each with
+the `id` (cloud id) used to scope every other call.
+
+### The connected user
+
+```
+python confluence_api.py me
+```
+
+### Spaces
+
+```
+python confluence_api.py spaces [--limit N]
+```
+
+### Search content with CQL
+
+```
+python confluence_api.py search 'type=page and text ~ "roadmap"' [--limit N]
+```
+
+The argument is a CQL query. Example clauses: `space=ENG`, `type=page`,
+`text ~ "onboarding"`, `title ~ "Q3"`.
+
+### Read a page (or any content) by id
+
+```
+python confluence_api.py page CONTENT_ID
+```
+
+Expands `body.storage`, `version`, and `space` so you get the content itself.
+
+### List a content's children
+
+```
+python confluence_api.py children CONTENT_ID [--type page] [--limit N]
+```
+
+`--type` is the child type (`page`, `comment`, `attachment`; default `page`).
+
+### Create a page (write)
+
+```
+python confluence_api.py create-page --space KEY --title "Title" \
+  --body "<p>Body as storage-format HTML</p>" [--parent CONTENT_ID]
+```
+
+`--parent` nests the new page under an existing one. `--body` is Confluence
+storage format (XHTML).
+
+### Update a page (write)
+
+```
+python confluence_api.py update-page CONTENT_ID --title "New title" \
+  --body "<p>New body</p>" --version N
+```
+
+`--version` must be the content's current version number + 1 (read it first
+with `page`).
+
+### Comment on content (write)
+
+```
+python confluence_api.py comment CONTENT_ID "<p>Looking into this</p>"
+```
+
+### Delete content (write)
+
+```
+python confluence_api.py delete-page CONTENT_ID
+```
+
+Moves the content to trash.
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "<key>": [...], "count": N,
+"truncated": bool}` (`truncated` means more results existed past `--limit`).
+Failures return `{"ok": false, "status": <code>, "error": "<message>"}` and exit
+non-zero — surface the error rather than retrying blindly.
+
+## Notes
+
+- Content ids are numeric Confluence ids. Get them from `search`, `spaces`
+  (space keys), `children`, or `page` output.
+- Bodies are Confluence storage format (XHTML), e.g. `<p>...</p>`,
+  `<h1>...</h1>`.
+- The connected user's token is injected by the egress gateway — send no
+  credentials yourself.
+- A 401 / 403 usually means the connected user lacks permission on the space or
+  content, or the app wasn't granted the needed scope — tell the user rather
+  than retrying.
+- This built-in covers Confluence **Cloud** only. Confluence Data Center /
+  Server is self-hosted with different auth and is not supported here.
