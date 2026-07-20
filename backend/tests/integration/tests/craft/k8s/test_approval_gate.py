@@ -6,8 +6,7 @@ import json
 import time
 from collections.abc import Generator
 from typing import NamedTuple
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -16,21 +15,23 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import NotificationType
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
-from onyx.db.models import ActionApproval
-from onyx.db.models import BuildSession
-from onyx.db.models import Notification
+from onyx.db.enums import (
+    ApprovalDecision,
+    BuildSessionStatus,
+    EndpointPolicy,
+    ExternalAppType,
+)
+from onyx.db.models import ActionApproval, BuildSession, Notification
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.sandbox_proxy.approval_cache import pop_announcement
-from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
-from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.configs import (
+    SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+    SANDBOX_BACKEND,
+    SANDBOX_NAMESPACE,
+    SANDBOX_PROXY_NAMESPACE,
+    SANDBOX_PROXY_PORT,
+    SandboxBackend,
+)
 from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -38,11 +39,13 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.k8s.k8s_fixtures import OwnedLivePod
-from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
-from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec_async
-from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_exec_output
-from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_proxy_redeploy
+from tests.integration.tests.craft.k8s.k8s_fixtures import (
+    OwnedLivePod,
+    pod_exec,
+    pod_exec_async,
+    wait_for_pod_exec_output,
+    wait_for_proxy_redeploy,
+)
 
 logger = setup_logger()
 

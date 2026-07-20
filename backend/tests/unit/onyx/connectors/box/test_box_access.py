@@ -1,12 +1,13 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import cast
 
 import pytest
 from box_sdk_gen import BoxClient
-from box_sdk_gen.schemas.collaboration import Collaboration
-from box_sdk_gen.schemas.collaboration import CollaborationRoleField
-from box_sdk_gen.schemas.collaboration import CollaborationStatusField
+from box_sdk_gen.schemas.collaboration import (
+    Collaboration,
+    CollaborationRoleField,
+    CollaborationStatusField,
+)
 from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_full import FolderFull
 from box_sdk_gen.schemas.folder_mini import FolderMini
@@ -14,13 +15,17 @@ from box_sdk_gen.schemas.group_mini import GroupMini
 from box_sdk_gen.schemas.items import Items
 from box_sdk_gen.schemas.user_collaborations import UserCollaborations
 from box_sdk_gen.schemas.user_mini import UserMini
-from box_sdk_gen.schemas.web_link import WebLinkSharedLinkEffectiveAccessField
-from box_sdk_gen.schemas.web_link import WebLinkSharedLinkEffectivePermissionField
-from box_sdk_gen.schemas.web_link import WebLinkSharedLinkField
+from box_sdk_gen.schemas.web_link import (
+    WebLinkSharedLinkEffectiveAccessField,
+    WebLinkSharedLinkEffectivePermissionField,
+    WebLinkSharedLinkField,
+)
 
-from ee.onyx.external_permissions.box.access import apply_collaborations_to_access
-from ee.onyx.external_permissions.box.access import apply_shared_link_to_access
-from ee.onyx.external_permissions.box.access import BoxAccessContext
+from ee.onyx.external_permissions.box.access import (
+    apply_collaborations_to_access,
+    apply_shared_link_to_access,
+    BoxAccessContext,
+)
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.models import Document
 from tests.unit.onyx.connectors.box.fake_box_client import FakeBoxClient

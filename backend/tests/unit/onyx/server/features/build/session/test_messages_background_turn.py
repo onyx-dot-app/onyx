@@ -3,8 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session

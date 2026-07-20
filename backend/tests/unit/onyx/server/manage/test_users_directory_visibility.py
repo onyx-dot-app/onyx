@@ -1,15 +1,12 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
-from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
+from onyx.db.enums import AccountType, Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.manage.users import list_all_users_basic_info
-from onyx.server.manage.users import verify_user_logged_in
+from onyx.server.manage.users import list_all_users_basic_info, verify_user_logged_in
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.store import _build_env_defaults
 

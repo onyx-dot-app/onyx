@@ -4,15 +4,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import SAML_CONF_DIR
-from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
+from onyx.configs.app_configs import SAML_CONF_DIR, VALID_EMAIL_DOMAINS
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.utils.logger import setup_logger

@@ -1,11 +1,8 @@
 """Unit tests for the DB-snapshot connector state metrics collector."""
 
 from contextlib import nullcontext
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from threading import Event
-from threading import Thread
+from datetime import datetime, timedelta, timezone
+from threading import Event, Thread
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,12 +11,12 @@ from prometheus_client import CollectorRegistry
 import onyx.server.metrics.connector_state_metrics as csm
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import ConnectorStateSnapshot
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingMode
-from onyx.server.metrics.connector_state_metrics import _enum_label
-from onyx.server.metrics.connector_state_metrics import _to_unix_ts
-from onyx.server.metrics.connector_state_metrics import ConnectorStateMetricsCollector
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, IndexingMode
+from onyx.server.metrics.connector_state_metrics import (
+    _enum_label,
+    _to_unix_ts,
+    ConnectorStateMetricsCollector,
+)
 
 
 def _snapshot() -> ConnectorStateSnapshot:

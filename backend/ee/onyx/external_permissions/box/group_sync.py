@@ -4,12 +4,14 @@ from box_sdk_gen import BoxClient
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.utils import credential_json
-from onyx.connectors.box.connector import box_all_enterprise_users_group_id
-from onyx.connectors.box.connector import BOX_ENTERPRISE_ID_CREDENTIAL_KEY
-from onyx.connectors.box.connector import box_group_id
-from onyx.connectors.box.connector import BoxConnector
-from onyx.connectors.box.connector import iter_box_enterprise_users
-from onyx.connectors.box.connector import normalize_box_login
+from onyx.connectors.box.connector import (
+    box_all_enterprise_users_group_id,
+    BOX_ENTERPRISE_ID_CREDENTIAL_KEY,
+    box_group_id,
+    BoxConnector,
+    iter_box_enterprise_users,
+    normalize_box_login,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 

@@ -13,13 +13,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from ee.onyx.external_permissions.box.group_sync import box_group_sync
-from onyx.connectors.box.connector import box_all_enterprise_users_group_id
-from onyx.connectors.box.connector import box_group_id
-from onyx.connectors.box.connector import BOX_ROOT_FOLDER_ID
-from onyx.connectors.box.connector import BoxConnector
+from onyx.connectors.box.connector import (
+    box_all_enterprise_users_group_id,
+    box_group_id,
+    BOX_ROOT_FOLDER_ID,
+    BoxConnector,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Document, TextSection
 from onyx.db.models import ConnectorCredentialPair
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret

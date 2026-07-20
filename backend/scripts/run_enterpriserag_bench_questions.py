@@ -6,12 +6,9 @@ import json
 import logging
 import sys
 import time
-from dataclasses import asdict
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
-from typing import TypedDict
-from typing import TypeGuard
+from typing import Any, TypedDict, TypeGuard
 
 import aiohttp
 

@@ -1,23 +1,22 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
-from typing import Generic
-from typing import TYPE_CHECKING
-from typing import TypeVar
+from typing import Any, Generic, TYPE_CHECKING, TypeVar
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.llm.constants import DYNAMIC_LLM_PROVIDERS
-from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_capabilities import litellm_thinks_model_supports_image_input
-from onyx.llm.model_capabilities import model_is_reasoning_model
-from onyx.server.manage.llm.utils import extract_vendor_from_model_name
-from onyx.server.manage.llm.utils import filter_model_configurations
-from onyx.server.manage.llm.utils import is_reasoning_model
+from onyx.llm.model_capabilities import (
+    get_max_input_tokens,
+    litellm_thinks_model_supports_image_input,
+    model_is_reasoning_model,
+)
+from onyx.server.manage.llm.utils import (
+    extract_vendor_from_model_name,
+    filter_model_configurations,
+    is_reasoning_model,
+)
 
 if TYPE_CHECKING:
     from onyx.db.models import LLMProvider as LLMProviderModel
@@ -74,8 +73,6 @@ class LLMProviderDescriptor(BaseModel):
     ) -> "LLMProviderDescriptor":
         from onyx.llm.well_known_providers.llm_provider_options import (
             fetch_default_model_for_provider,
-        )
-        from onyx.llm.well_known_providers.llm_provider_options import (
             get_provider_display_name,
         )
 

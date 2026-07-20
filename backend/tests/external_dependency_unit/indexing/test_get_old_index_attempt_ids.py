@@ -18,17 +18,18 @@ import pytest
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from onyx.background.indexing.index_attempt_utils import get_old_index_attempt_ids
 from onyx.background.indexing.index_attempt_utils import (
+    get_old_index_attempt_ids,
     NUM_RECENT_INDEX_ATTEMPTS_TO_KEEP,
 )
 from onyx.configs.constants import NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import IndexingStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 
 @pytest.fixture

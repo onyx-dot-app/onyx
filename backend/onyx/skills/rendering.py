@@ -4,15 +4,12 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import DocumentSourceDescription
+from onyx.configs.constants import DocumentSource, DocumentSourceDescription
 from onyx.db.connector import _INTERNAL_ONLY_SOURCES
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
-from onyx.db.enums import EndpointPolicy
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.external_app import get_policies
-from onyx.db.models import ExternalApp
-from onyx.db.models import User
+from onyx.db.models import ExternalApp, User
 from onyx.external_apps.providers.registry import action_policy_views
 from onyx.utils.logger import setup_logger
 

@@ -3,13 +3,14 @@
 from onyx.db.models import Skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import FileStore
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.bundle import read_custom_bundle_instructions
-from onyx.skills.bundle import SKILL_MD_NAME
-from onyx.skills.bundle import strip_skill_md_frontmatter
-from onyx.skills.bundle import TEMPLATE_SUFFIX
+from onyx.skills.bundle import (
+    read_custom_bundle_instructions,
+    SKILL_MD_NAME,
+    strip_skill_md_frontmatter,
+    TEMPLATE_SUFFIX,
+)
 
 
 def read_builtin_skill_instructions(definition: BuiltInSkillDefinition) -> str:

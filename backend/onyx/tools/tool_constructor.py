@@ -9,27 +9,25 @@ from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import PersonaSearchInfo
+from onyx.context.search.models import BaseFilters, PersonaSearchInfo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.mcp import get_all_mcp_tools_for_server
-from onyx.db.mcp import get_mcp_server_by_id
-from onyx.db.mcp import MCPCredentialsError
-from onyx.db.mcp import resolve_mcp_credentials
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.mcp import (
+    get_all_mcp_tools_for_server,
+    get_mcp_server_by_id,
+    MCPCredentialsError,
+    resolve_mcp_credentials,
+)
+from onyx.db.models import Persona, User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
-from onyx.tools.models import DynamicSchemaInfo
-from onyx.tools.models import SearchToolUsage
+from onyx.tools.models import DynamicSchemaInfo, SearchToolUsage
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
 )

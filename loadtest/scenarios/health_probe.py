@@ -30,11 +30,8 @@ from __future__ import annotations
 import os
 import time
 
-from locust import constant_pacing
-from locust import HttpUser
-from locust import task
-from onyx_client.env import env_float
-from onyx_client.env import env_int
+from locust import constant_pacing, HttpUser, task
+from onyx_client.env import env_float, env_int
 
 
 class HealthProbeUser(HttpUser):

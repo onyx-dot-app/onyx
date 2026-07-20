@@ -1,52 +1,37 @@
 import json
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
-from urllib.parse import parse_qs
-from urllib.parse import ParseResult
-from urllib.parse import urlparse
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
+from urllib.parse import parse_qs, ParseResult, urlparse
 
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import KV_CRED_KEY
-from onyx.connectors.google_utils.resources import get_drive_service
-from onyx.connectors.google_utils.resources import get_gmail_service
+from onyx.configs.constants import DocumentSource, KV_CRED_KEY
+from onyx.connectors.google_utils.resources import get_drive_service, get_gmail_service
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
-from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
-)
-from onyx.connectors.google_utils.shared_constants import GOOGLE_SCOPES
-from onyx.connectors.google_utils.shared_constants import (
+    GOOGLE_SCOPES,
     GoogleOAuthAuthenticationMethod,
+    MISSING_SCOPES_ERROR_STR,
+    ONYX_SCOPE_INSTRUCTIONS,
 )
-from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
-from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
-from onyx.db.credentials import fetch_credential_by_id_for_user
-from onyx.db.credentials import update_credential_json
-from onyx.db.encrypted_kv_store import delete_encrypted_kv
-from onyx.db.encrypted_kv_store import load_encrypted_kv
-from onyx.db.encrypted_kv_store import upsert_encrypted_kv
+from onyx.db.credentials import fetch_credential_by_id_for_user, update_credential_json
+from onyx.db.encrypted_kv_store import (
+    delete_encrypted_kv,
+    load_encrypted_kv,
+    upsert_encrypted_kv,
+)
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.server.documents.models import CredentialBase
-from onyx.server.documents.models import GoogleServiceAccountKey
+from onyx.server.documents.models import CredentialBase, GoogleServiceAccountKey
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

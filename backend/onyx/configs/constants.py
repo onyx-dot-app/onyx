@@ -2,8 +2,7 @@ import os
 import platform
 import re
 import socket
-from enum import auto
-from enum import Enum
+from enum import auto, Enum
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_DISCORD_URL = "https://discord.gg/4NA5SbzrWb"

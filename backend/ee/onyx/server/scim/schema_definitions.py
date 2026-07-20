@@ -4,13 +4,15 @@ Pre-built at import time — these never change at runtime. Separated from
 api.py to keep the endpoint module focused on request handling.
 """
 
-from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA
-from ee.onyx.server.scim.models import SCIM_GROUP_SCHEMA
-from ee.onyx.server.scim.models import SCIM_USER_SCHEMA
-from ee.onyx.server.scim.models import ScimResourceType
-from ee.onyx.server.scim.models import ScimSchemaAttribute
-from ee.onyx.server.scim.models import ScimSchemaDefinition
-from ee.onyx.server.scim.models import ScimServiceProviderConfig
+from ee.onyx.server.scim.models import (
+    SCIM_ENTERPRISE_USER_SCHEMA,
+    SCIM_GROUP_SCHEMA,
+    SCIM_USER_SCHEMA,
+    ScimResourceType,
+    ScimSchemaAttribute,
+    ScimSchemaDefinition,
+    ScimServiceProviderConfig,
+)
 
 SERVICE_PROVIDER_CONFIG = ScimServiceProviderConfig()
 

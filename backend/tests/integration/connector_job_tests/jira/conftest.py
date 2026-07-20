@@ -1,7 +1,6 @@
 import os
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 
@@ -12,10 +11,12 @@ from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestConnector
-from tests.integration.common_utils.test_models import DATestCredential
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestCCPair,
+    DATestConnector,
+    DATestCredential,
+    DATestUser,
+)
 
 JiraTestEnvSetupTuple = tuple[
     DATestUser,

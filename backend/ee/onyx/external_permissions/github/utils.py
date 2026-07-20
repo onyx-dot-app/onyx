@@ -1,12 +1,8 @@
 from collections.abc import Callable
 from enum import Enum
-from typing import List
-from typing import Optional
-from typing import Tuple
-from typing import TypeVar
+from typing import List, Optional, Tuple, TypeVar
 
-from github import Github
-from github import RateLimitExceededException
+from github import Github, RateLimitExceededException
 from github.GithubException import GithubException
 from github.NamedUser import NamedUser
 from github.Organization import Organization

@@ -8,12 +8,10 @@ from fastapi import Request
 from fastapi_users import exceptions
 from pydantic import BaseModel
 
-from onyx.auth.schemas import UserCreate
-from onyx.auth.schemas import UserRole
+from onyx.auth.schemas import UserCreate, UserRole
 from onyx.auth.users import get_user_manager
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.auth import get_user_count
-from onyx.db.auth import get_user_db
+from onyx.db.auth import get_user_count, get_user_db
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger

@@ -5,16 +5,17 @@ These tests verify that the SSRF protection correctly blocks
 requests to internal/private IP addresses and other potentially dangerous destinations.
 """
 
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.utils.url import _is_ip_private_or_reserved
-from onyx.utils.url import _validate_and_resolve_url
-from onyx.utils.url import ssrf_safe_get
-from onyx.utils.url import SSRFException
-from onyx.utils.url import validate_outbound_http_url
+from onyx.utils.url import (
+    _is_ip_private_or_reserved,
+    _validate_and_resolve_url,
+    ssrf_safe_get,
+    SSRFException,
+    validate_outbound_http_url,
+)
 
 
 class TestIsIpPrivateOrReserved:

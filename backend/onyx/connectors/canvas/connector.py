@@ -1,41 +1,45 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
-from typing import cast
-from typing import NoReturn
+from typing import Any, cast, NoReturn
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.canvas.access import build_course_permission_context
-from onyx.connectors.canvas.access import get_announcement_permissions
-from onyx.connectors.canvas.access import get_assignment_permissions
-from onyx.connectors.canvas.access import get_page_permissions
+from onyx.connectors.canvas.access import (
+    build_course_permission_context,
+    get_announcement_permissions,
+    get_assignment_permissions,
+    get_page_permissions,
+)
 from onyx.connectors.canvas.client import CanvasApiClient
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TextSection,
+)
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface

@@ -1,16 +1,12 @@
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import aliased, Session
 
-from onyx.db.models import InputPrompt
-from onyx.db.models import InputPrompt__User
-from onyx.db.models import User
+from onyx.db.models import InputPrompt, InputPrompt__User, User
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

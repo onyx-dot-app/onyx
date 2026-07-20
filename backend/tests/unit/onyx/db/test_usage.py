@@ -1,20 +1,20 @@
 """Unit tests for tenant usage tracking and limits."""
 
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.db.usage import check_usage_limit
-from onyx.db.usage import get_current_window_start
-from onyx.db.usage import get_or_create_tenant_usage
-from onyx.db.usage import get_tenant_usage_stats
-from onyx.db.usage import increment_usage
-from onyx.db.usage import TenantUsageStats
-from onyx.db.usage import UsageLimitExceededError
-from onyx.db.usage import UsageType
+from onyx.db.usage import (
+    check_usage_limit,
+    get_current_window_start,
+    get_or_create_tenant_usage,
+    get_tenant_usage_stats,
+    increment_usage,
+    TenantUsageStats,
+    UsageLimitExceededError,
+    UsageType,
+)
 
 
 class TestGetCurrentWindowStart:

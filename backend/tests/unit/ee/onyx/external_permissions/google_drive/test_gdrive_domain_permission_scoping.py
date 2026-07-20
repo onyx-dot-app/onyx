@@ -4,23 +4,21 @@ permission paths. The user-side token comes from the synced domain group's real
 Workspace membership, not from the user's email string."""
 
 from types import SimpleNamespace
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 from sqlalchemy.orm import Session
 
 from ee.onyx.external_permissions.google_drive.doc_sync import (
     get_external_access_for_folder,
-)
-from ee.onyx.external_permissions.google_drive.doc_sync import (
     get_external_access_for_raw_gdrive_file,
 )
-from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
-from ee.onyx.external_permissions.google_drive.models import PermissionType
+from ee.onyx.external_permissions.google_drive.models import (
+    GoogleDrivePermission,
+    PermissionType,
+)
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.access.utils import prefix_external_group
+from onyx.access.utils import build_ext_group_name_for_onyx, prefix_external_group
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.db.models import User

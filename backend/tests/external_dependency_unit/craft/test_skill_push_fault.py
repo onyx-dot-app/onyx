@@ -9,19 +9,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.models import BuildSession
-from onyx.db.models import Skill
-from onyx.db.models import User
+from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
+from onyx.db.models import BuildSession, Skill, User
 from onyx.server.features.build.db.build_session import skills_are_stale
 from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.skills.push import compute_skills_hash
-from onyx.skills.push import push_skills_for_users
+from onyx.skills.push import compute_skills_hash, push_skills_for_users
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.db_helpers import make_sandbox
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
 
 def test_one_failing_sandbox_does_not_abort_push_to_others(

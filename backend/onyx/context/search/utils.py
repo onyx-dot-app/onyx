@@ -4,28 +4,29 @@ from typing import TypeVar
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import QUERY_EMBEDDING_CACHE_ENABLED
-from onyx.configs.app_configs import QUERY_EMBEDDING_CACHE_TTL_S
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SavedSearchDocWithContent
-from onyx.context.search.models import SearchDoc
+from onyx.configs.app_configs import (
+    QUERY_EMBEDDING_CACHE_ENABLED,
+    QUERY_EMBEDDING_CACHE_TTL_S,
+)
+from onyx.context.search.models import (
+    InferenceChunk,
+    InferenceSection,
+    SavedSearchDoc,
+    SavedSearchDocWithContent,
+    SearchDoc,
+)
 from onyx.db.document import get_document_id_to_file_id_map
 from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.natural_language_processing.query_embedding_cache import (
     cache_query_embeddings,
-)
-from onyx.natural_language_processing.query_embedding_cache import (
     get_cached_query_embeddings,
+    record_cache_skipped,
 )
-from onyx.natural_language_processing.query_embedding_cache import record_cache_skipped
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import MODEL_SERVER_HOST, MODEL_SERVER_PORT
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding
 
