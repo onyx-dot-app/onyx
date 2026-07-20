@@ -3,6 +3,7 @@ import re
 from enum import Enum
 from typing import Any
 from typing import List
+from typing import Literal
 from typing import NotRequired
 from typing import Optional
 from typing import TypedDict
@@ -553,3 +554,24 @@ class MCPToolListResponse(BaseModel):
     server_name: str
     server_url: str
     tools: list[MCPLibTool]
+
+
+# Why a server needs (re)auth, when it does. `null` means it does not.
+MCPReauthReason = Literal["never_authenticated", "token_expired"]
+
+
+class MCPServerAuthStatus(BaseModel):
+    """Per-server, caller-scoped re-auth signal derived from stored
+    connection config alone — no probe of the MCP server."""
+
+    server_id: int
+    name: str
+    needs_reauth: bool
+    reason: Optional[MCPReauthReason] = None
+    auth_performer: Optional[MCPAuthenticationPerformer] = None
+    auth_type: MCPAuthenticationType
+
+
+class MCPServersAuthStatusResponse(BaseModel):
+    assistant_id: str
+    auth_statuses: List[MCPServerAuthStatus]

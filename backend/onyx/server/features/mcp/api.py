@@ -32,6 +32,7 @@ from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
+from onyx.auth.users import current_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import MCPAuthenticationPerformer
@@ -60,6 +61,7 @@ from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.db.models import Tool
 from onyx.db.models import User
+from onyx.db.persona import get_persona_by_id
 from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool__no_commit
 from onyx.db.tools import get_tools_by_mcp_server_id
@@ -75,8 +77,11 @@ from onyx.server.features.mcp.models import MCPAuthTemplate
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.server.features.mcp.models import MCPOAuthCallbackResponse
 from onyx.server.features.mcp.models import MCPOAuthKeys
+from onyx.server.features.mcp.models import MCPReauthReason
 from onyx.server.features.mcp.models import MCPServer
+from onyx.server.features.mcp.models import MCPServerAuthStatus
 from onyx.server.features.mcp.models import MCPServerCreateResponse
+from onyx.server.features.mcp.models import MCPServersAuthStatusResponse
 from onyx.server.features.mcp.models import MCPServerSimpleCreateRequest
 from onyx.server.features.mcp.models import MCPServerSimpleUpdateRequest
 from onyx.server.features.mcp.models import MCPServersResponse
@@ -1285,6 +1290,124 @@ def get_mcp_servers_for_assistant(
     except Exception as e:
         logger.error("Failed to fetch MCP servers: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch MCP servers")
+
+
+def _compute_user_reauth_reason(
+    db_server: DbMCPServer,
+    user_email: str,
+    db: Session,
+) -> MCPReauthReason | None:
+    """Derive whether the caller must (re)authenticate to ``db_server``,
+    using only stored connection config — never a probe of the MCP server.
+
+    Conservative by design: only `never_authenticated` is a sure thing.
+    `token_expired` is returned only for OAuth tokens we can confidently
+    judge expired with no usable refresh; any ambiguity yields ``None`` so
+    we never nag a user whose credentials may still be valid.
+    """
+    user_config = get_user_connection_config(db_server.id, user_email, db)
+    if user_config is None:
+        return "never_authenticated"
+
+    if db_server.auth_type != MCPAuthenticationType.OAUTH:
+        # A stored API_TOKEN config is assumed valid; we can't tell otherwise
+        # without calling the server.
+        return None
+
+    config_data = extract_connection_data(user_config)
+    tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
+    if not tokens_raw:
+        return "never_authenticated"
+
+    try:
+        tokens = OAuthToken.model_validate(tokens_raw)
+    except Exception:
+        # Malformed token blob — don't guess at expiry.
+        return None
+
+    # A usable refresh token means the runtime can renew silently; not a
+    # re-auth case.
+    if tokens.refresh_token:
+        return None
+    if tokens.expires_in is None:
+        return None
+
+    # No explicit obtained-at is stored, so use the config's `updated_at` as
+    # the issued-at proxy (token writes go through `update_connection_config`,
+    # which bumps it). This is imprecise: a later unrelated write would push
+    # the apparent expiry out, biasing us toward NOT flagging — acceptable,
+    # since the runtime 401 path still catches a truly-expired token.
+    issued_at = user_config.updated_at
+    expires_at = issued_at + datetime.timedelta(seconds=tokens.expires_in)
+    if datetime.datetime.now(datetime.timezone.utc) >= expires_at:
+        return "token_expired"
+    return None
+
+
+@router.get("/servers/auth-status/{assistant_id}")
+def get_mcp_servers_auth_status(
+    assistant_id: str,
+    db: Session = Depends(get_session),
+    user: User = Depends(current_user),
+) -> MCPServersAuthStatusResponse:
+    """Caller-scoped re-auth status for the PER_USER MCP servers on an
+    assistant, computed cheaply from stored config (no network probe). Lets
+    the chat UI light the re-auth badge on page load instead of waiting for a
+    runtime 401."""
+    try:
+        persona_id = int(assistant_id)
+    except ValueError:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid assistant ID")
+
+    # get_mcp_servers_for_persona ignores `user`, so gate read access to THIS
+    # persona here before exposing its MCP-server names / auth state. Use
+    # get_persona_by_id (scoped to persona_id, raises when inaccessible) rather
+    # than get_best_persona_id_for_user, which FALLS BACK to the user's next-best
+    # persona for an inaccessible id and would let the check pass.
+    try:
+        get_persona_by_id(persona_id, user, db, is_for_edit=False)
+    except ValueError:
+        raise OnyxError(OnyxErrorCode.PERSONA_NOT_FOUND)
+
+    try:
+        db_mcp_servers = get_mcp_servers_for_persona(persona_id, db, user)
+    except Exception as e:
+        logger.error("Failed to fetch MCP servers for auth status: %s", e)
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to fetch MCP servers")
+
+    user_email = user.email
+
+    auth_statuses: list[MCPServerAuthStatus] = []
+    for db_server in db_mcp_servers:
+        # Only servers the caller can act on: per-user, auth actually required.
+        auth_type = db_server.auth_type
+        if db_server.auth_performer != MCPAuthenticationPerformer.PER_USER:
+            continue
+        if (
+            auth_type is None
+            or auth_type == MCPAuthenticationType.NONE
+            # PT_OAUTH authenticates via the user's login token (no per-user
+            # config row exists), so it can never be 'needs re-auth' here; a
+            # runtime 401 is still surfaced in-stream by the tool path.
+            or auth_type == MCPAuthenticationType.PT_OAUTH
+        ):
+            continue
+
+        reason = _compute_user_reauth_reason(db_server, user_email, db)
+        auth_statuses.append(
+            MCPServerAuthStatus(
+                server_id=db_server.id,
+                name=db_server.name,
+                needs_reauth=reason is not None,
+                reason=reason,
+                auth_performer=db_server.auth_performer,
+                auth_type=auth_type,
+            )
+        )
+
+    return MCPServersAuthStatusResponse(
+        assistant_id=assistant_id, auth_statuses=auth_statuses
+    )
 
 
 @router.get("/servers", response_model=MCPServersResponse)
