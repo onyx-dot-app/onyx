@@ -122,6 +122,22 @@ class TestBindAddressSelection:
         assert [call.args[0] for call in mock_start.call_args_list] == ["::", "0.0.0.0"]
 
     @patch("onyx.server.metrics.metrics_server._start_wsgi_server")
+    def test_unexpected_error_does_not_stop_the_worker(
+        self, mock_start: MagicMock
+    ) -> None:
+        """Workers call this unguarded from worker_ready; metrics are best-effort."""
+        mock_start.side_effect = RuntimeError("can't start new thread")
+        assert start_metrics_server("monitoring") is None
+
+    def test_empty_getaddrinfo_surfaces_as_os_error(self) -> None:
+        """A non-OSError here would bypass the fallback and reach the worker."""
+        import onyx.server.metrics.metrics_server as mod
+
+        with patch.object(socket, "getaddrinfo", return_value=[]):
+            with pytest.raises(OSError):
+                mod._start_wsgi_server("::", 9099)
+
+    @patch("onyx.server.metrics.metrics_server._start_wsgi_server")
     @patch.dict("os.environ", {"PROMETHEUS_METRICS_BIND_ADDR": "127.0.0.1"})
     def test_explicit_bind_addr_is_pinned(self, mock_start: MagicMock) -> None:
         """An explicit bind address is honored verbatim, with no fallback."""

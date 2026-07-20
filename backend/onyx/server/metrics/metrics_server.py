@@ -99,7 +99,11 @@ def _start_wsgi_server(addr: str, port: int) -> WSGIServer:
     infos = socket.getaddrinfo(
         addr, port, type=socket.SOCK_STREAM, flags=socket.AI_PASSIVE
     )
-    family, _, _, _, sockaddr = next(iter(infos))
+    if not infos:
+        # Every failure in here has to surface as OSError, or the caller skips
+        # its fallback to the next candidate.
+        raise OSError(f"getaddrinfo returned no results for {addr!r}")
+    family, _, _, _, sockaddr = infos[0]
 
     class _Server(_DualStackWSGIServer):
         address_family = family
@@ -183,6 +187,14 @@ def start_metrics_server(worker_type: str) -> int | None:
                         _format_endpoint(remaining[0], port),
                     )
                 continue
+            except Exception:
+                # Workers call this from worker_ready without guarding it, and
+                # metrics are best-effort, so an unexpected failure here must not
+                # stop the worker from starting.
+                logger.exception(
+                    "Unexpected error starting metrics server for %s", worker_type
+                )
+                return None
 
             _server_started = True
             logger.info(
