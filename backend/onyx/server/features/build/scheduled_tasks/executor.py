@@ -41,11 +41,13 @@ import time
 from typing import Any
 from uuid import UUID
 
-from onyx.configs.constants import MessageType, NotificationType
+from onyx.configs.constants import MessageType, NotificationType, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ScheduledTaskErrorClass, ScheduledTaskRunStatus, SessionOrigin
 from onyx.db.notification import create_notification
 from onyx.db.scheduled_task import get_run, mark_run_status
+from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.build.configs import SESSION_CREATE_LOCK_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import (
     create_message,
     get_session_messages,
@@ -59,6 +61,7 @@ from onyx.server.features.build.sandbox.event_schema import (
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -344,39 +347,53 @@ def _drive_agent(
     with get_session_with_current_tenant() as db_session:
         session_manager = SessionManager(db_session)
 
-        # Create the BuildSession. SCHEDULED origin keeps it out of the
-        # Craft sidebar (see `get_user_build_sessions`).
-        build_session = session_manager.create_session__no_commit(
-            user_id=task_user_id,
-            origin=SessionOrigin.SCHEDULED,
-            name=f"Scheduled: {task_name}",
+        redis_client = get_redis_client(tenant_id=get_current_tenant_id())
+        creation_lock = redis_client.lock(
+            f"{OnyxRedisLocks.SESSION_CREATE_LOCK_PREFIX}:{task_user_id}",
+            timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS,
         )
-        session_id = build_session.id
+        if not creation_lock.acquire(
+            blocking=True,
+            blocking_timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS,
+        ):
+            raise RuntimeError("Scheduled session creation timed out waiting for lock")
+        try:
+            # Create the BuildSession. SCHEDULED origin keeps it out of the
+            # Craft sidebar (see `get_user_build_sessions`).
+            build_session = session_manager.create_session__no_commit(
+                user_id=task_user_id,
+                origin=SessionOrigin.SCHEDULED,
+                name=f"Scheduled: {task_name}",
+            )
+            session_id = build_session.id
 
-        # Persist the user prompt as turn 0 so the transcript matches an
-        # interactive run exactly (interactive flow does the same in
-        # `_stream_cli_agent_response`).
-        create_message(
-            session_id=session_id,
-            message_type=MessageType.USER,
-            turn_index=0,
-            message_metadata={
-                "type": "user_message",
-                "content": {"type": "text", "text": task_prompt},
-            },
-            db_session=db_session,
-        )
+            # Persist the user prompt as turn 0 so the transcript matches an
+            # interactive run exactly (interactive flow does the same in
+            # `_stream_cli_agent_response`).
+            create_message(
+                session_id=session_id,
+                message_type=MessageType.USER,
+                turn_index=0,
+                message_metadata={
+                    "type": "user_message",
+                    "content": {"type": "text", "text": task_prompt},
+                },
+                db_session=db_session,
+            )
 
-        # Wire the session id onto the run row so the UI can deep-link
-        # from the run history into the session view as soon as anything
-        # is persisted.
-        mark_run_status(
-            db_session=db_session,
-            run_id=run_id,
-            status=ScheduledTaskRunStatus.RUNNING,
-            session_id=session_id,
-        )
-        db_session.commit()
+            # Wire the session id onto the run row so the UI can deep-link
+            # from the run history into the session view as soon as anything
+            # is persisted.
+            mark_run_status(
+                db_session=db_session,
+                run_id=run_id,
+                status=ScheduledTaskRunStatus.RUNNING,
+                session_id=session_id,
+            )
+            db_session.commit()
+        finally:
+            if creation_lock.owned():
+                creation_lock.release()
 
         state = BuildStreamingState(turn_index=0)
         deadline = time.monotonic() + budget_seconds

@@ -13,6 +13,7 @@ from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     BuildSessionStatus,
@@ -25,6 +26,7 @@ from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.features.build.configs import SESSION_CREATE_LOCK_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import (
     allocate_nextjs_port,
     get_build_session,
@@ -101,10 +103,6 @@ def list_sessions(
     )
 
 
-# Lock timeout for session creation (should be longer than max provision time)
-SESSION_CREATE_LOCK_TIMEOUT_SECONDS = 300
-
-
 @router.post("", response_model=DetailedSessionResponse)
 def create_session(
     request: SessionCreateRequest,
@@ -129,7 +127,7 @@ def create_session(
     # Lock on user_id to prevent concurrent session creation for the same user
     # This prevents race conditions where two requests both see sandbox as SLEEPING
     # and both try to provision, with one deleting the other's work
-    lock_key = f"session_create:{user.id}"
+    lock_key = f"{OnyxRedisLocks.SESSION_CREATE_LOCK_PREFIX}:{user.id}"
     lock = redis_client.lock(lock_key, timeout=SESSION_CREATE_LOCK_TIMEOUT_SECONDS)
 
     # blocking=True means wait if another create is in progress
@@ -150,9 +148,11 @@ def create_session(
             llm_model_name=request.llm_model_name,
             headless=request.headless,
         )
+        sandbox = get_sandbox_by_user_id(db_session, user.id)
+        if sandbox is None:
+            raise RuntimeError("Session creation completed without a sandbox")
         db_session.commit()
 
-        sandbox = get_sandbox_by_user_id(db_session, user.id)
         base_response = SessionResponse.from_model(build_session, sandbox)
         return DetailedSessionResponse.from_session_response(
             base_response, session_loaded_in_sandbox=True

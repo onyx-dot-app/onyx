@@ -154,13 +154,22 @@ def update_sandbox_status__no_commit(
     return sandbox
 
 
-def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
-    """Update sandbox last_heartbeat to now."""
+def update_sandbox_heartbeat__no_commit(
+    db_session: Session, sandbox_id: UUID
+) -> Sandbox:
+    """Update sandbox last_heartbeat without committing the transaction."""
     sandbox = get_sandbox_by_id(db_session, sandbox_id)
     if not sandbox:
         raise ValueError(f"Sandbox {sandbox_id} not found")
 
     sandbox.last_heartbeat = datetime.datetime.now(datetime.timezone.utc)
+    db_session.flush()
+    return sandbox
+
+
+def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:
+    """Update sandbox last_heartbeat to now."""
+    sandbox = update_sandbox_heartbeat__no_commit(db_session, sandbox_id)
     db_session.commit()
     return sandbox
 
