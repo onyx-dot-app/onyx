@@ -7,8 +7,10 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
 from onyx.configs.app_configs import SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
-from onyx.connectors.sharepoint.connector import acquire_token_for_rest
-from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.sharepoint.connector import (
+    acquire_token_for_rest,
+    SharepointConnector,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 

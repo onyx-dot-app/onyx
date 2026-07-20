@@ -3,8 +3,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.external_app import get_external_app_by_id
-from onyx.db.external_app import get_external_app_user_credential
+from onyx.db.external_app import (
+    get_external_app_by_id,
+    get_external_app_user_credential,
+)
 from onyx.db.models import ExternalApp
 
 

@@ -8,9 +8,7 @@ mislabels a secret).
 import ast
 
 import pytest
-from scripts.env_inventory import classify_var
-from scripts.env_inventory import EnvVisitor
-from scripts.env_inventory import is_sensitive
+from scripts.env_inventory import classify_var, EnvVisitor, is_sensitive
 
 
 @pytest.mark.parametrize(

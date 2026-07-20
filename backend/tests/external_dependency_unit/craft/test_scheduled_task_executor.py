@@ -21,8 +21,7 @@ import datetime
 import threading
 from collections.abc import Callable
 from typing import Any
-from unittest.mock import patch
-from unittest.mock import PropertyMock
+from unittest.mock import patch, PropertyMock
 from uuid import UUID
 
 import pytest
@@ -30,23 +29,22 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     cleanup_stuck_scheduled_runs,
-)
-from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     dispatch_due_scheduled_tasks,
 )
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.models import Sandbox
-from onyx.db.models import ScheduledTask
-from onyx.db.models import ScheduledTaskRun
-from onyx.db.models import User
-from onyx.server.features.build.sandbox.event_schema import Error
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
-from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TRANSPORT
+from onyx.db.enums import (
+    SandboxStatus,
+    ScheduledTaskErrorClass,
+    ScheduledTaskRunStatus,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+)
+from onyx.db.models import Sandbox, ScheduledTask, ScheduledTaskRun, User
+from onyx.server.features.build.sandbox.event_schema import (
+    Error,
+    PromptResponse,
+    TURN_ERROR_CODE_TIMEOUT,
+    TURN_ERROR_CODE_TRANSPORT,
+)
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
 from onyx.server.features.build.session.manager import SessionManager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE

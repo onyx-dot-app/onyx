@@ -4,17 +4,16 @@ from typing import Any
 from mcp.client.auth import OAuthClientProvider
 
 from onyx.chat.emitter import Emitter
-from onyx.db.enums import MCPAuthenticationType
-from onyx.db.enums import MCPTransport
-from onyx.db.models import MCPConnectionConfig
-from onyx.db.models import MCPServer
+from onyx.db.enums import MCPAuthenticationType, MCPTransport
+from onyx.db.models import MCPConnectionConfig, MCPServer
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import CustomToolDelta
-from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import (
+    CustomToolDelta,
+    CustomToolStart,
+    Packet,
+)
 from onyx.tools.interface import Tool
-from onyx.tools.models import CustomToolCallSummary
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import CustomToolCallSummary, ToolResponse
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.logger import setup_logger
@@ -232,8 +231,10 @@ class MCPTool(Tool[None]):
                         self._name,
                     )
                 else:
-                    from onyx.server.features.mcp.api import make_oauth_provider
-                    from onyx.server.features.mcp.api import UNUSED_RETURN_PATH
+                    from onyx.server.features.mcp.api import (
+                        make_oauth_provider,
+                        UNUSED_RETURN_PATH,
+                    )
 
                     # user_id is the requesting user's UUID; safe here because
                     # UNUSED_RETURN_PATH ensures redirect_handler raises immediately

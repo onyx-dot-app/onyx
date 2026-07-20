@@ -3,17 +3,19 @@ from sqlalchemy import or_
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import Connector
-from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import KGEntity
-from onyx.db.models import KGEntityExtractionStaging
-from onyx.db.models import KGEntityType
-from onyx.db.models import KGRelationship
-from onyx.db.models import KGRelationshipExtractionStaging
-from onyx.db.models import KGRelationshipType
-from onyx.db.models import KGRelationshipTypeExtractionStaging
-from onyx.db.models import KGStage
+from onyx.db.models import (
+    Connector,
+    Document,
+    DocumentByConnectorCredentialPair,
+    KGEntity,
+    KGEntityExtractionStaging,
+    KGEntityType,
+    KGRelationship,
+    KGRelationshipExtractionStaging,
+    KGRelationshipType,
+    KGRelationshipTypeExtractionStaging,
+    KGStage,
+)
 from onyx.kg.resets.reset_index import reset_full_kg_index__commit
 from onyx.kg.resets.reset_vespa import reset_vespa_kg_index
 

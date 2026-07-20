@@ -1,37 +1,41 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
+from typing import Any, TYPE_CHECKING
 
 from typing_extensions import override
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.bitbucket.utils import build_auth_client
-from onyx.connectors.bitbucket.utils import list_repositories
-from onyx.connectors.bitbucket.utils import map_pr_to_document
-from onyx.connectors.bitbucket.utils import paginate
-from onyx.connectors.bitbucket.utils import PR_LIST_RESPONSE_FIELDS
-from onyx.connectors.bitbucket.utils import SLIM_PR_LIST_RESPONSE_FIELDS
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.bitbucket.utils import (
+    build_auth_client,
+    list_repositories,
+    map_pr_to_document,
+    paginate,
+    PR_LIST_RESPONSE_FIELDS,
+    SLIM_PR_LIST_RESPONSE_FIELDS,
+)
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    DocumentFailure,
+    HierarchyNode,
+    SlimDocument,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 

@@ -1,22 +1,16 @@
 import re
-from collections.abc import Callable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any
-from typing import TypeVar
-from urllib.parse import urljoin
-from urllib.parse import urlparse
+from typing import Any, TypeVar
+from urllib.parse import urljoin, urlparse
 
 import requests
 from dateutil.parser import parse
 
 from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import IGNORE_FOR_QA
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import OnyxMetadata
+from onyx.configs.constants import DocumentSource, IGNORE_FOR_QA
+from onyx.connectors.models import BasicExpertInfo, OnyxMetadata
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import is_valid_email
 

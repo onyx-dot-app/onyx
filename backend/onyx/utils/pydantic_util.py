@@ -1,9 +1,6 @@
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
-from pydantic import BaseModel
-from pydantic import TypeAdapter
-from pydantic import ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError

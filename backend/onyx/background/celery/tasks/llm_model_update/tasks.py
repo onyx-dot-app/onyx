@@ -1,5 +1,4 @@
-from celery import shared_task
-from celery import Task
+from celery import shared_task, Task
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL

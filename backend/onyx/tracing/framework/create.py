@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from onyx.utils.logger import setup_logger
 
 from .setup import get_trace_provider
-from .span_data import AgentSpanData
-from .span_data import FunctionSpanData
-from .span_data import GenerationSpanData
+from .span_data import AgentSpanData, FunctionSpanData, GenerationSpanData
 from .spans import Span
 from .traces import Trace
 

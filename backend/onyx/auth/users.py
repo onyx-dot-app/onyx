@@ -6,70 +6,56 @@ import random
 import secrets
 import string
 import uuid
-from collections.abc import AsyncGenerator
-from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import Dict
-from typing import List
-from typing import Literal
-from typing import Optional
-from typing import Protocol
-from typing import Tuple
-from typing import TypeVar
+from collections.abc import AsyncGenerator, Sequence
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast, Dict, List, Literal, Optional, Protocol, Tuple, TypeVar
 from urllib.parse import urlparse
 
 import jwt
-from email_validator import EmailNotValidError
-from email_validator import EmailUndeliverableError
-from email_validator import validate_email
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
-from fastapi import status
-from fastapi import WebSocket
-from fastapi.responses import JSONResponse
-from fastapi.responses import RedirectResponse
+from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+    WebSocket,
+)
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi_users import BaseUserManager
-from fastapi_users import exceptions
-from fastapi_users import FastAPIUsers
-from fastapi_users import models
-from fastapi_users import schemas
-from fastapi_users import UUIDIDMixin
-from fastapi_users.authentication import AuthenticationBackend
-from fastapi_users.authentication import BearerTransport
-from fastapi_users.authentication import CookieTransport
-from fastapi_users.authentication import JWTStrategy
-from fastapi_users.authentication import (
-    RedisStrategy,  # ty: ignore[possibly-missing-import]
+from fastapi_users import (
+    BaseUserManager,
+    exceptions,
+    FastAPIUsers,
+    models,
+    schemas,
+    UUIDIDMixin,
 )
-from fastapi_users.authentication import Strategy
-from fastapi_users.authentication.strategy.db import AccessTokenDatabase
-from fastapi_users.authentication.strategy.db import DatabaseStrategy
+from fastapi_users.authentication import (
+    AuthenticationBackend,
+    BearerTransport,
+    CookieTransport,
+    JWTStrategy,
+    RedisStrategy,  # ty: ignore[possibly-missing-import]
+    Strategy,
+)
+from fastapi_users.authentication.strategy.db import (
+    AccessTokenDatabase,
+    DatabaseStrategy,
+)
 from fastapi_users.exceptions import UserAlreadyExists
-from fastapi_users.jwt import decode_jwt
-from fastapi_users.jwt import generate_jwt
-from fastapi_users.jwt import SecretType
+from fastapi_users.jwt import decode_jwt, generate_jwt, SecretType
 from fastapi_users.manager import UserManagerDependency
 from fastapi_users.openapi import OpenAPIResponseType
-from fastapi_users.router.common import ErrorCode
-from fastapi_users.router.common import ErrorModel
+from fastapi_users.router.common import ErrorCode, ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
-from httpx_oauth.oauth2 import BaseOAuth2
-from httpx_oauth.oauth2 import GetAccessTokenError
-from httpx_oauth.oauth2 import OAuth2Token
+from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
 from pydantic import BaseModel
-from sqlalchemy import nulls_last
-from sqlalchemy import select
+from sqlalchemy import nulls_last, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -77,89 +63,101 @@ from starlette.routing import BaseRoute
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.disposable_email_validator import is_disposable_email
-from onyx.auth.email_utils import send_forgot_password_email
-from onyx.auth.email_utils import send_user_verification_email
-from onyx.auth.invited_users import get_invited_users
-from onyx.auth.invited_users import remove_user_from_invited_users
+from onyx.auth.email_utils import (
+    send_forgot_password_email,
+    send_user_verification_email,
+)
+from onyx.auth.invited_users import get_invited_users, remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
-from onyx.auth.mobile_sso.sso_completion import apply_mobile_state
-from onyx.auth.mobile_sso.sso_completion import complete_mobile_sso
-from onyx.auth.mobile_sso.sso_completion import is_mobile_sso
+from onyx.auth.mobile_sso.sso_completion import (
+    apply_mobile_state,
+    complete_mobile_sso,
+    is_mobile_sso,
+)
 from onyx.auth.pat import get_hashed_pat_from_request
-from onyx.auth.schemas import AuthBackend
-from onyx.auth.schemas import UserCreate
-from onyx.auth.schemas import UserRole
+from onyx.auth.schemas import AuthBackend, UserCreate, UserRole
 from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
-from onyx.configs.app_configs import AUTH_BACKEND
-from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import DEV_MODE
-from onyx.configs.app_configs import EMAIL_CONFIGURED
-from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
-from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
-from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
-from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
-from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
-from onyx.configs.constants import ANONYMOUS_USER_EMAIL
-from onyx.configs.constants import ANONYMOUS_USER_UUID
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
-from onyx.configs.constants import DANSWER_API_KEY_PREFIX
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import PASSWORD_SPECIAL_CHARS
-from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
+from onyx.configs.app_configs import (
+    AUTH_BACKEND,
+    AUTH_COOKIE_EXPIRE_TIME_SECONDS,
+    AUTH_TYPE,
+    DEV_MODE,
+    EMAIL_CONFIGURED,
+    INTEGRATION_TESTS_MODE,
+    JWT_PUBLIC_KEY_URL,
+    REDIS_AUTH_KEY_PREFIX,
+    REQUIRE_EMAIL_VERIFICATION,
+    SESSION_EXPIRE_TIME_SECONDS,
+    USER_AUTH_SECRET,
+    WEB_DOMAIN,
+)
+from onyx.configs.constants import (
+    ANONYMOUS_USER_COOKIE_NAME,
+    ANONYMOUS_USER_EMAIL,
+    ANONYMOUS_USER_UUID,
+    AuthType,
+    DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
+    DANSWER_API_KEY_PREFIX,
+    FASTAPI_USERS_AUTH_COOKIE_NAME,
+    MilestoneRecordType,
+    OnyxRedisLocks,
+    PASSWORD_SPECIAL_CHARS,
+    UNNAMED_KEY_PLACEHOLDER,
+)
 from onyx.db.api_key import fetch_user_for_api_key
-from onyx.db.auth import get_access_token_db
-from onyx.db.auth import get_default_admin_user_emails
-from onyx.db.auth import get_user_count
-from onyx.db.auth import get_user_db
-from onyx.db.auth import SQLAlchemyUserAdminDB
-from onyx.db.engine.async_sql_engine import get_async_session
-from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import AccountType
-from onyx.db.enums import Permission
-from onyx.db.models import AccessToken
-from onyx.db.models import OAuthAccount
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.auth import (
+    get_access_token_db,
+    get_default_admin_user_emails,
+    get_user_count,
+    get_user_db,
+    SQLAlchemyUserAdminDB,
+)
+from onyx.db.engine.async_sql_engine import (
+    get_async_session,
+    get_async_session_context_manager,
+)
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_tenant,
+)
+from onyx.db.enums import AccountType, Permission
+from onyx.db.models import AccessToken, OAuthAccount, Persona, User
 from onyx.db.pat import resolve_pat
-from onyx.db.users import assign_user_to_default_groups__no_commit
-from onyx.db.users import get_user_by_email
-from onyx.db.users import is_limited_user
+from onyx.db.users import (
+    assign_user_to_default_groups__no_commit,
+    get_user_by_email,
+    is_limited_user,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import log_onyx_error
-from onyx.error_handling.exceptions import onyx_error_to_json_response
-from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_async_redis_connection
-from onyx.redis.redis_pool import retrieve_ws_token_data
+from onyx.error_handling.exceptions import (
+    log_onyx_error,
+    onyx_error_to_json_response,
+    OnyxError,
+)
+from onyx.redis.redis_pool import get_async_redis_connection, retrieve_ws_token_data
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
-from onyx.utils.audit import AuditAction
-from onyx.utils.audit import AuditActor
-from onyx.utils.audit import AuditOutcome
-from onyx.utils.audit import emit_audit_event
+from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import mt_cloud_identify_user
-from onyx.utils.telemetry import mt_cloud_telemetry
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import (
+    mt_cloud_identify_user,
+    mt_cloud_telemetry,
+    optional_telemetry,
+    RecordType,
+)
 from onyx.utils.timing import log_function_time
-from onyx.utils.url import add_url_params
-from onyx.utils.url import sanitize_next_url
+from onyx.utils.url import add_url_params, sanitize_next_url
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from shared_configs.configs import async_return_default_schema
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.configs import (
+    async_return_default_schema,
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 logger = setup_logger()
 
@@ -573,10 +571,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             await enforce_signup_rate_limit(request)
 
         # Verify captcha if enabled (for cloud signup protection)
-        from onyx.auth.captcha import CaptchaAction
-        from onyx.auth.captcha import CaptchaVerificationError
-        from onyx.auth.captcha import is_captcha_enabled
-        from onyx.auth.captcha import verify_captcha_token
+        from onyx.auth.captcha import (
+            CaptchaAction,
+            CaptchaVerificationError,
+            is_captcha_enabled,
+            verify_captcha_token,
+        )
 
         if is_captcha_enabled() and request is not None:
             # Get captcha token from request body or headers
@@ -1346,8 +1346,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         if not verified:
             # Raise some HTTPException (or your custom exception) if old password is invalid:
-            from fastapi import HTTPException
-            from fastapi import status
+            from fastapi import HTTPException, status
 
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

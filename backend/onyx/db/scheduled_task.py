@@ -12,30 +12,27 @@ that claimed the task so concurrent beat ticks don't double-fire.
 
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import desc
-from sqlalchemy import literal
-from sqlalchemy import select
+from sqlalchemy import and_, desc, literal, select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import ScheduledTaskSkipReason
-from onyx.db.enums import ScheduledTaskStatus
-from onyx.db.enums import ScheduledTaskTriggerSource
-from onyx.db.models import ScheduledTask
-from onyx.db.models import ScheduledTaskPreApprovedApp
-from onyx.db.models import ScheduledTaskRun
+from onyx.db.enums import (
+    ScheduledTaskErrorClass,
+    ScheduledTaskRunStatus,
+    ScheduledTaskSkipReason,
+    ScheduledTaskStatus,
+    ScheduledTaskTriggerSource,
+)
+from onyx.db.models import ScheduledTask, ScheduledTaskPreApprovedApp, ScheduledTaskRun
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.scheduled_tasks.schedule import compute_next_run_at
-from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
+from onyx.server.features.build.scheduled_tasks.schedule import (
+    compute_next_run_at,
+    EditorMode,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

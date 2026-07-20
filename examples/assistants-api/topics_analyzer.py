@@ -1,9 +1,7 @@
 import argparse
 import os
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 from openai import OpenAI
 
@@ -27,9 +25,9 @@ If there is no relevant information, just say "No relevant information found."
 """
 
 
-def wait_on_run(client: OpenAI, run, thread):  # type: ignore
+def wait_on_run(client: OpenAI, run, thread):
     while run.status == "queued" or run.status == "in_progress":
-        run = client.beta.threads.runs.retrieve(
+        run = client.beta.threads.runs.retrieve(  # ty: ignore[deprecated]
             thread_id=thread.id,
             run_id=run.id,
         )
@@ -37,7 +35,7 @@ def wait_on_run(client: OpenAI, run, thread):  # type: ignore
     return run
 
 
-def show_response(messages) -> None:  # type: ignore
+def show_response(messages) -> None:
     # Get only the assistant's response text
     for message in messages.data[::-1]:
         if message.role == "assistant":
@@ -64,14 +62,14 @@ def analyze_topics(topics: list[str]) -> None:
 
     # Create an assistant if it doesn't exist
     try:
-        assistants = client.beta.assistants.list(limit=100)
+        assistants = client.beta.assistants.list(limit=100)  # ty: ignore[deprecated]
         # Find the Topic Analyzer assistant if it exists
         assistant = next((a for a in assistants.data if a.name == ASSISTANT_NAME))
-        client.beta.assistants.delete(assistant.id)
+        client.beta.assistants.delete(assistant.id)  # ty: ignore[deprecated]
     except Exception:
         pass
 
-    assistant = client.beta.assistants.create(
+    assistant = client.beta.assistants.create(  # ty: ignore[deprecated]
         name=ASSISTANT_NAME,
         instructions=SYSTEM_PROMPT,
         tools=[{"type": "SearchTool"}],  # type: ignore
@@ -80,18 +78,18 @@ def analyze_topics(topics: list[str]) -> None:
 
     # Process each topic individually
     for topic in topics:
-        thread = client.beta.threads.create()
-        message = client.beta.threads.messages.create(
+        thread = client.beta.threads.create()  # ty: ignore[deprecated]
+        message = client.beta.threads.messages.create(  # ty: ignore[deprecated]
             thread_id=thread.id,
             role="user",
             content=USER_PROMPT.format(topic=topic),
         )
 
-        run = client.beta.threads.runs.create(
+        run = client.beta.threads.runs.create(  # ty: ignore[deprecated]
             thread_id=thread.id,
             assistant_id=assistant.id,
-            tools=[
-                {  # type: ignore
+            tools=[  # type: ignore
+                {
                     "type": "SearchTool",
                     "retrieval_details": {
                         "run_search": "always",
@@ -106,7 +104,7 @@ def analyze_topics(topics: list[str]) -> None:
         )
 
         run = wait_on_run(client, run, thread)
-        messages = client.beta.threads.messages.list(
+        messages = client.beta.threads.messages.list(  # ty: ignore[deprecated]
             thread_id=thread.id, order="asc", after=message.id
         )
         print(f"\nAnalysis for topic: {topic}")

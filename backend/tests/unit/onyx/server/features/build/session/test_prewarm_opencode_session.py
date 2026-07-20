@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 

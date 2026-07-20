@@ -6,8 +6,10 @@ from unittest.mock import MagicMock
 import pytest
 from docker import DockerClient
 
-from onyx.sandbox_proxy.identity_docker import _identity_from_container
-from onyx.sandbox_proxy.identity_docker import DockerEventsLookup
+from onyx.sandbox_proxy.identity_docker import (
+    _identity_from_container,
+    DockerEventsLookup,
+)
 
 _DEFAULT_NETWORK = "onyx_craft_sandbox"
 

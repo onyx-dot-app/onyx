@@ -6,23 +6,27 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from onyx.configs.app_configs import OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED
-from onyx.file_processing.html_utils import ParsedHTML
-from onyx.file_processing.html_utils import web_html_cleanup
+from onyx.file_processing.html_utils import ParsedHTML, web_html_cleanup
 from onyx.server.security.models import outbound_allow_private_network
 from onyx.server.security.store import get_security_settings
-from onyx.tools.tool_implementations.open_url.models import WebContent
-from onyx.tools.tool_implementations.open_url.models import WebContentProvider
+from onyx.tools.tool_implementations.open_url.models import (
+    WebContent,
+    WebContentProvider,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.playwright_fetch import fetch_rendered_html
-from onyx.utils.playwright_fetch import looks_like_cloudflare_challenge
-from onyx.utils.playwright_fetch import RenderedPage
-from onyx.utils.url import ssrf_safe_get
-from onyx.utils.url import SSRFException
-from onyx.utils.web_content import decode_html_bytes
-from onyx.utils.web_content import extract_pdf_text
-from onyx.utils.web_content import is_pdf_resource
-from onyx.utils.web_content import title_from_pdf_metadata
-from onyx.utils.web_content import title_from_url
+from onyx.utils.playwright_fetch import (
+    fetch_rendered_html,
+    looks_like_cloudflare_challenge,
+    RenderedPage,
+)
+from onyx.utils.url import ssrf_safe_get, SSRFException
+from onyx.utils.web_content import (
+    decode_html_bytes,
+    extract_pdf_text,
+    is_pdf_resource,
+    title_from_pdf_metadata,
+    title_from_url,
+)
 
 logger = setup_logger()
 

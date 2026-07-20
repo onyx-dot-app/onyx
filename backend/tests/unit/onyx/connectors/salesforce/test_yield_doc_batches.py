@@ -1,19 +1,22 @@
 """Unit tests for _yield_doc_batches and metadata type conversion in SalesforceConnector."""
 
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
-from onyx.connectors.salesforce.connector import _convert_to_metadata_value
-from onyx.connectors.salesforce.connector import SalesforceConnector
-from onyx.connectors.salesforce.utils import ID_FIELD
-from onyx.connectors.salesforce.utils import MODIFIED_FIELD
-from onyx.connectors.salesforce.utils import NAME_FIELD
-from onyx.connectors.salesforce.utils import SalesforceObject
+from onyx.connectors.salesforce.connector import (
+    _convert_to_metadata_value,
+    SalesforceConnector,
+)
+from onyx.connectors.salesforce.utils import (
+    ID_FIELD,
+    MODIFIED_FIELD,
+    NAME_FIELD,
+    SalesforceObject,
+)
 
 
 class TestConvertToMetadataValue:

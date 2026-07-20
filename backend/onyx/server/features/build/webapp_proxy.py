@@ -1,21 +1,21 @@
 import asyncio
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from urllib.parse import parse_qsl
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import Response
-from fastapi import WebSocket
-from fastapi import WebSocketDisconnect
-from fastapi import WebSocketException
-from fastapi.responses import RedirectResponse
-from fastapi.responses import StreamingResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    WebSocketException,
+)
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi_users.authentication.strategy.base import Strategy
 from fastapi_users.manager import BaseUserManager
 from starlette.websockets import WebSocketState
@@ -24,17 +24,16 @@ from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosed
 
 from onyx.auth.permissions import get_effective_permissions
-from onyx.auth.users import auth_backend
-from onyx.auth.users import get_user_manager
-from onyx.auth.users import optional_user
+from onyx.auth.users import auth_backend, get_user_manager, optional_user
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
-from onyx.db.enums import Permission
-from onyx.db.enums import SharingScope
+from onyx.db.enums import Permission, SharingScope
 from onyx.db.models import User
-from onyx.server.features.build.db.build_session import get_webapp_access_async
-from onyx.server.features.build.db.build_session import get_webapp_target_async
+from onyx.server.features.build.db.build_session import (
+    get_webapp_access_async,
+    get_webapp_target_async,
+)
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.utils.logger import setup_logger
 

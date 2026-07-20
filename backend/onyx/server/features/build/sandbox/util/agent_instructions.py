@@ -3,8 +3,7 @@
 from collections.abc import Iterable
 from pathlib import Path
 
-from onyx.db.models import ExternalApp
-from onyx.db.models import Skill
+from onyx.db.models import ExternalApp, Skill
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 

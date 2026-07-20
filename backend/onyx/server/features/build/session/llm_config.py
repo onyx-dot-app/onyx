@@ -11,8 +11,10 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_default_model_for_provider,
 )
-from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
-from onyx.server.features.build.configs import BUILD_MODE_NOT_CONFIGURED_API_KEY
+from onyx.server.features.build.configs import (
+    BUILD_MODE_ALLOWED_PROVIDER_TYPES,
+    BUILD_MODE_NOT_CONFIGURED_API_KEY,
+)
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger

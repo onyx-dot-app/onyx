@@ -3,13 +3,15 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import ChunkIndexRequest
-from onyx.context.search.models import ChunkSearchRequest
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import PersonaSearchInfo
+from onyx.context.search.models import (
+    BaseFilters,
+    ChunkIndexRequest,
+    ChunkSearchRequest,
+    IndexFilters,
+    InferenceChunk,
+    InferenceSection,
+    PersonaSearchInfo,
+)
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )

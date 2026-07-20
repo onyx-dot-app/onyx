@@ -10,14 +10,15 @@ tests/unit/onyx/utils/test_audit.py.
 import json
 import logging
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.server.api_key.api import create_api_key
-from onyx.server.api_key.api import delete_api_key
-from onyx.server.api_key.api import regenerate_existing_api_key
+from onyx.server.api_key.api import (
+    create_api_key,
+    delete_api_key,
+    regenerate_existing_api_key,
+)
 from onyx.server.manage.llm.api import delete_llm_provider
 
 

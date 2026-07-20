@@ -1,34 +1,38 @@
 import os
 import re
 import time
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
+from datetime import datetime, timezone
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import requests
 from typing_extensions import override
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import LINEAR_CLIENT_ID
-from onyx.configs.app_configs import LINEAR_CLIENT_SECRET
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    LINEAR_CLIENT_ID,
+    LINEAR_CLIENT_SECRET,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_oauth_callback_uri,
+    time_str_to_utc,
 )
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import NormalizationResult
-from onyx.connectors.interfaces import OAuthConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    NormalizationResult,
+    OAuthConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    HierarchyNode,
+    ImageSection,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
 

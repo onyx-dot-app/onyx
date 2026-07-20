@@ -1,36 +1,26 @@
 """Database operations for Build Mode sessions."""
 
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import desc
-from sqlalchemy import exists
-from sqlalchemy import select
+from sqlalchemy import desc, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import selectinload, Session
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import MessageType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.enums import SharingScope
-from onyx.db.llm import can_user_access_llm_provider
-from onyx.db.llm import fetch_user_group_ids
-from onyx.db.models import Artifact
-from onyx.db.models import BuildMessage
-from onyx.db.models import BuildSession
+from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin, SharingScope
+from onyx.db.llm import can_user_access_llm_provider, fetch_user_group_ids
+from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox, User
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Sandbox
-from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
-from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
+from onyx.server.features.build.configs import (
+    BUILD_MODE_ALLOWED_PROVIDER_TYPES,
+    SANDBOX_NEXTJS_PORT_END,
+    SANDBOX_NEXTJS_PORT_START,
+)
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like

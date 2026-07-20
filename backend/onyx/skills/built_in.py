@@ -21,17 +21,11 @@ or external app is a single ``_REGISTRY`` entry plus its on-disk
 """
 
 import re
-from collections.abc import Callable
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Final
-from typing import Literal
+from typing import Final, Literal
 
-from pydantic import BaseModel
-from pydantic import computed_field
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, computed_field, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType

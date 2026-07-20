@@ -8,22 +8,15 @@ import random
 import re
 import time
 from collections import deque
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterable
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator, Iterable
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
-from typing import cast
-from urllib.parse import quote
-from urllib.parse import unquote
-from urllib.parse import urlsplit
+from typing import Any, cast
+from urllib.parse import quote, unquote, urlsplit
 
 import msal
 import requests
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from office365.graph_client import GraphClient
 from office365.onedrive.driveitems.driveItem import DriveItem
@@ -34,57 +27,60 @@ from office365.runtime.client_request import ClientRequestException
 from office365.runtime.paths.resource_path import ResourcePath
 from office365.runtime.queries.client_query import ClientQuery
 from office365.sharepoint.client_context import ClientContext
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 from requests.exceptions import HTTPError
 from typing_extensions import override
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
-from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    REQUEST_TIMEOUT_SECONDS,
+    SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
+)
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
+    is_tabular_file,
 )
-from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import IndexingHeartbeatInterface
-from onyx.connectors.interfaces import Resolver
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    IndexingHeartbeatInterface,
+    Resolver,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
 from onyx.connectors.microsoft_graph_env import resolve_microsoft_environment
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import ExternalAccess
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    ExternalAccess,
+    HierarchyNode,
+    ImageSection,
+    SlimDocument,
+    TabularSection,
+    TextSection,
+)
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
 from onyx.db.enums import HierarchyNodeType
-from onyx.file_processing.extract_file_text import extract_text_and_images
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
-from onyx.file_processing.file_types import OnyxMimeTypes
-from onyx.file_processing.image_utils import make_image_callback
-from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
+from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
+from onyx.file_processing.image_utils import (
+    make_image_callback,
+    store_image_and_create_section,
+)
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.url import SSRFException
-from onyx.utils.url import validate_outbound_http_url
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000

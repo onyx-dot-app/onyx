@@ -1,10 +1,8 @@
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
 
-from pydantic import BaseModel
-from pydantic import field_validator
+from pydantic import BaseModel, field_validator
 
 from onyx.utils.url import normalize_url
 

@@ -24,28 +24,27 @@ See: https://linear.app/onyx-app/issue/ENG-3533/migrate-tenantsbilling-adminbill
 import asyncio
 
 import httpx
-from fastapi import APIRouter
-from fastapi import Depends
-from pydantic import BaseModel
-from pydantic import ValidationError
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, ValidationError
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.license import get_license
-from ee.onyx.db.license import get_used_seats
+from ee.onyx.db.license import get_license, get_used_seats
 from ee.onyx.server.billing.billing_cache import (
     invalidate_billing_cache as invalidate_indexing_trial_cache,
 )
-from ee.onyx.server.billing.models import BillingInformationResponse
-from ee.onyx.server.billing.models import CreateCheckoutSessionRequest
-from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
-from ee.onyx.server.billing.models import CreateCustomerPortalSessionRequest
-from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
-from ee.onyx.server.billing.models import EndTrialResponse
-from ee.onyx.server.billing.models import SeatUpdateRequest
-from ee.onyx.server.billing.models import SeatUpdateResponse
-from ee.onyx.server.billing.models import StripePublishableKeyResponse
-from ee.onyx.server.billing.models import SubscriptionStatusResponse
+from ee.onyx.server.billing.models import (
+    BillingInformationResponse,
+    CreateCheckoutSessionRequest,
+    CreateCheckoutSessionResponse,
+    CreateCustomerPortalSessionRequest,
+    CreateCustomerPortalSessionResponse,
+    EndTrialResponse,
+    SeatUpdateRequest,
+    SeatUpdateResponse,
+    StripePublishableKeyResponse,
+    SubscriptionStatusResponse,
+)
 from ee.onyx.server.billing.service import (
     create_checkout_session as create_checkout_service,
 )
@@ -59,15 +58,16 @@ from ee.onyx.server.billing.service import (
 from ee.onyx.server.billing.service import update_seat_count as update_seat_service
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
-from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
-from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_URL
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.app_configs import (
+    STRIPE_PUBLISHABLE_KEY_OVERRIDE,
+    STRIPE_PUBLISHABLE_KEY_URL,
+    WEB_DOMAIN,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_shared_redis_client
+from onyx.redis.redis_pool import get_redis_client, get_shared_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT

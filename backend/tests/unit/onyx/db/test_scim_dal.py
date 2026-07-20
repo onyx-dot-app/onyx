@@ -5,9 +5,7 @@ from uuid import uuid4
 import pytest
 
 from ee.onyx.db.scim import ScimDAL
-from onyx.db.models import ScimGroupMapping
-from onyx.db.models import ScimToken
-from onyx.db.models import ScimUserMapping
+from onyx.db.models import ScimGroupMapping, ScimToken, ScimUserMapping
 from tests.unit.onyx.db.conftest import model_attrs
 
 

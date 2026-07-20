@@ -1,6 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -14,8 +12,10 @@ from onyx.server.features.build.external_apps.oauth import (
     router as external_apps_oauth_router,
 )
 from onyx.server.features.build.interactive_turns.api import router as turns_router
-from onyx.server.features.build.rate_limit import get_user_rate_limit_status
-from onyx.server.features.build.rate_limit import RateLimitResponse
+from onyx.server.features.build.rate_limit import (
+    get_user_rate_limit_status,
+    RateLimitResponse,
+)
 from onyx.server.features.build.scheduled_tasks.api import (
     router as scheduled_tasks_router,
 )

@@ -1,13 +1,8 @@
 import multiprocessing
 from typing import Any
 
-from celery import Celery
-from celery import signals
-from celery import Task
-from celery.signals import celeryd_init
-from celery.signals import worker_init
-from celery.signals import worker_ready
-from celery.signals import worker_shutdown
+from celery import Celery, signals, Task
+from celery.signals import celeryd_init, worker_init, worker_ready, worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_MONITORING_APP_NAME

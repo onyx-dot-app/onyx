@@ -1,15 +1,10 @@
 import datetime
 from uuid import UUID
 
-from sqlalchemy import func
-from sqlalchemy import select
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import joinedload, selectinload, Session
 
-from onyx.db.models import Persona
-from onyx.db.models import Project__UserFile
-from onyx.db.models import UserFile
+from onyx.db.models import Persona, Project__UserFile, UserFile
 
 
 def fetch_chunk_counts_for_user_files(

@@ -1,13 +1,16 @@
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.prompts.chat_prompts import CITATION_GUIDANCE_REPLACEMENT_PAT
-from onyx.prompts.chat_prompts import DATETIME_REPLACEMENT_PAT
-from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
+from onyx.prompts.chat_prompts import (
+    CITATION_GUIDANCE_REPLACEMENT_PAT,
+    DATETIME_REPLACEMENT_PAT,
+    REQUIRE_CITATION_GUIDANCE,
+)
 from onyx.prompts.constants import REMINDER_TAG_DESCRIPTION
-from onyx.prompts.prompt_utils import apply_prompt_placeholders
-from onyx.prompts.prompt_utils import replace_current_datetime_tag
-from onyx.prompts.prompt_utils import replace_reminder_tag
+from onyx.prompts.prompt_utils import (
+    apply_prompt_placeholders,
+    replace_current_datetime_tag,
+    replace_reminder_tag,
+)
 
 
 def test_replace_reminder_tag_pattern() -> None:

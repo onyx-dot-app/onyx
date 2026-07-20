@@ -3,27 +3,30 @@ import pathlib
 import threading
 import time
 
-from onyx.llm.constants import LlmProviderNames
-from onyx.llm.constants import PROVIDER_DISPLAY_NAMES
-from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES
-from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import model_supports_image_input
+from onyx.llm.constants import (
+    LlmProviderNames,
+    PROVIDER_DISPLAY_NAMES,
+    WELL_KNOWN_PROVIDER_NAMES,
+)
+from onyx.llm.utils import get_max_input_tokens, model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
-from onyx.llm.well_known_providers.constants import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import AZURE_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import BIFROST_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import LITELLM_PROXY_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import LM_STUDIO_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import NEBIUS_TOKENFACTORY_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import OPENAI_COMPATIBLE_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
-from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import (
+    ANTHROPIC_PROVIDER_NAME,
+    AZURE_PROVIDER_NAME,
+    BEDROCK_PROVIDER_NAME,
+    BIFROST_PROVIDER_NAME,
+    LITELLM_PROXY_PROVIDER_NAME,
+    LM_STUDIO_PROVIDER_NAME,
+    NEBIUS_TOKENFACTORY_PROVIDER_NAME,
+    OLLAMA_PROVIDER_NAME,
+    OPENAI_COMPATIBLE_PROVIDER_NAME,
+    OPENAI_PROVIDER_NAME,
+    OPENROUTER_PROVIDER_NAME,
+    VERTEXAI_PROVIDER_NAME,
+)
 from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
 from onyx.server.manage.llm.models import ModelConfigurationView
 from onyx.utils.logger import setup_logger

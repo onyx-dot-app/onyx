@@ -14,8 +14,7 @@ from onyx.db.models import Skill
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.skills.push import push_skills_for_users
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.db_helpers import make_sandbox
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
 
 def test_one_failing_sandbox_does_not_abort_push_to_others(

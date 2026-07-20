@@ -1,8 +1,7 @@
 """Factory for creating federated connector instances."""
 
 import importlib
-from typing import Any
-from typing import Type
+from typing import Any, Type
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.federated_connectors.interfaces import FederatedConnector

@@ -16,9 +16,11 @@ from pathlib import Path
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.bundle import _safe_unzip
-from onyx.skills.bundle import _ZIP_UNIX_CREATE_SYSTEM
-from onyx.skills.bundle import validate_custom_bundle
+from onyx.skills.bundle import (
+    _safe_unzip,
+    _ZIP_UNIX_CREATE_SYSTEM,
+    validate_custom_bundle,
+)
 
 
 def _build_zip(

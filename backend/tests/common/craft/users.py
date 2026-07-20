@@ -6,9 +6,11 @@ import httpx
 
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.managers.user import build_email
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user import (
+    build_email,
+    DEFAULT_PASSWORD,
+    UserManager,
+)
 from tests.integration.common_utils.test_models import DATestUser
 
 

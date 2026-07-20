@@ -11,13 +11,14 @@ from __future__ import annotations
 
 from mitmproxy import http
 
-from onyx.auth.constants import API_KEY_HEADER_NAME
-from onyx.auth.constants import BEARER_PREFIX
+from onyx.auth.constants import API_KEY_HEADER_NAME, BEARER_PREFIX
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import fetch_user_by_id
-from onyx.sandbox_proxy.credential_injection import CredentialResolver
-from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
-from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.credential_injection import (
+    CredentialResolver,
+    CredentialUnavailableError,
+    InjectionContext,
+)
 from onyx.sandbox_proxy.logging_utils import short_log_id
 from onyx.server.features.build.db.build_session import (
     fetch_all_supported_build_llm_providers,

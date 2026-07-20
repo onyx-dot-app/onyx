@@ -3,15 +3,16 @@ from __future__ import annotations
 import base64
 import json
 from datetime import datetime
-from typing import Any
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from onyx.image_gen.exceptions import ImageProviderCredentialsError
-from onyx.image_gen.interfaces import ImageGenerationProvider
-from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
-from onyx.image_gen.interfaces import ReferenceImage
+from onyx.image_gen.interfaces import (
+    ImageGenerationProvider,
+    ImageGenerationProviderCredentials,
+    ReferenceImage,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 
@@ -115,8 +116,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
         from google import genai
         from google.genai import types as genai_types
         from google.oauth2 import service_account
-        from litellm.types.utils import ImageObject
-        from litellm.types.utils import ImageResponse
+        from litellm.types.utils import ImageObject, ImageResponse
 
         service_account_info = json.loads(self._vertex_credentials)
         credentials = service_account.Credentials.from_service_account_info(

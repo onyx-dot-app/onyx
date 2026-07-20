@@ -61,21 +61,15 @@ Status checked against LiteLLM v1.85.1 (2026-05-26):
 
 import time
 import uuid
-from typing import Any
-from typing import cast
-from typing import List
-from typing import Optional
+from typing import Any, cast, List, Optional
 
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
-)
-from litellm.completion_extras.litellm_responses_transformation.transformation import (
     OpenAiResponsesToChatCompletionStreamIterator,
 )
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.llms.ollama.common_utils import OllamaError
-from litellm.types.utils import ChatCompletionUsageBlock
-from litellm.types.utils import ModelResponseStream
+from litellm.types.utils import ChatCompletionUsageBlock, ModelResponseStream
 
 # Original upstream chunk_parser, saved before any patching for fallback use
 _original_responses_chunk_parser = (
@@ -122,8 +116,7 @@ def _patch_ollama_chunk_parser() -> None:
             - return finish_reason when done is true
             - return usage when done is true
             """
-            from litellm.types.utils import Delta
-            from litellm.types.utils import StreamingChoices
+            from litellm.types.utils import Delta, StreamingChoices
 
             # process tool calls - if complete function arg - add id to tool call
             tool_calls = chunk["message"].get("tool_calls")
@@ -260,9 +253,7 @@ def _patch_responses_reasoning_summary_newlines() -> None:
         self: Any, chunk: dict
     ) -> "ModelResponseStream":
         from litellm.types.llms.openai import ResponsesAPIStreamEvents
-        from litellm.types.utils import Delta
-        from litellm.types.utils import ModelResponseStream
-        from litellm.types.utils import StreamingChoices
+        from litellm.types.utils import Delta, ModelResponseStream, StreamingChoices
         from pydantic import BaseModel
 
         parsed_chunk = chunk
@@ -474,8 +465,7 @@ def _patch_responses_api_usage_format() -> None:
     - litellm/llms/volcengine/responses/transformation.py (lines 225, 277)
     - litellm/completion_extras/litellm_responses_transformation/handler.py (line 51)
     """
-    from litellm.types.llms.openai import ResponseAPIUsage
-    from litellm.types.llms.openai import ResponsesAPIResponse
+    from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
 
     original_model_construct = ResponsesAPIResponse.model_construct
 
@@ -543,13 +533,14 @@ def _patch_logging_assembled_streaming_response() -> None:
     """
     from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLoggingObj
     from litellm.responses.utils import ResponseAPILoggingUtils
-    from litellm.types.llms.openai import ResponseAPIUsage
-    from litellm.types.llms.openai import ResponseCompletedEvent
-    from litellm.types.llms.openai import ResponseFailedEvent
-    from litellm.types.llms.openai import ResponseIncompleteEvent
-    from litellm.types.llms.openai import ResponsesAPIResponse
-    from litellm.types.utils import ModelResponse
-    from litellm.types.utils import TextCompletionResponse
+    from litellm.types.llms.openai import (
+        ResponseAPIUsage,
+        ResponseCompletedEvent,
+        ResponseFailedEvent,
+        ResponseIncompleteEvent,
+        ResponsesAPIResponse,
+    )
+    from litellm.types.utils import ModelResponse, TextCompletionResponse
 
     original_method = LiteLLMLoggingObj._get_assembled_streaming_response
 

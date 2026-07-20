@@ -6,12 +6,10 @@ Value at TENANT_TIER_KEY is a JSON blob:
 
 import json
 from datetime import datetime
-from typing import cast
-from typing import NamedTuple
+from typing import cast, NamedTuple
 
 from ee.onyx.server.license.models import CustomerTier
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.utils.logger import setup_logger
 
 # Per-tenant cached CustomerTier; TTL bounds upgrade-visible delay if push is missed.
