@@ -171,32 +171,16 @@ with engine.connect() as conn:
     conn.commit()
 '''
 
-    # Write the script to a temp file on the pod
-    script_path = "/tmp/control_plane_query.py"
-
+    # Piped over stdin rather than staged to a file on the pod. Callers run this
+    # concurrently against a single pod, and a shared temp path let one thread's query
+    # overwrite another's before it executed - tenant A could run tenant B's DELETE.
     try:
-        cmd_write = ["kubectl", "exec", "--context", context, pod_name]
-        cmd_write.extend(
-            [
-                "--",
-                "bash",
-                "-c",
-                f"cat > {script_path} << 'EOFQUERY'\n{query_script}\nEOFQUERY",
-            ]
-        )
-
-        subprocess.run(
-            cmd_write,
-            check=True,
-            capture_output=True,
-        )
-
-        # Execute the script
-        cmd_exec = ["kubectl", "exec", "--context", context, pod_name]
-        cmd_exec.extend(["--", "python", script_path])
+        cmd_exec = ["kubectl", "exec", "-i", "--context", context, pod_name]
+        cmd_exec.extend(["--", "python", "-"])
 
         result = subprocess.run(
             cmd_exec,
+            input=query_script,
             capture_output=True,
             text=True,
             check=True,

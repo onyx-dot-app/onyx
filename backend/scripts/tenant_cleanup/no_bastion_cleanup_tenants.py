@@ -344,7 +344,7 @@ def drop_data_plane_schema(pod_name: str, tenant_id: str, context: str) -> None:
 
 def cleanup_control_plane(
     pod_name: str, tenant_id: str, context: str, force: bool = False
-) -> None:
+) -> bool:
     """Clean up control plane data via pod queries.
 
     Args:
@@ -352,6 +352,9 @@ def cleanup_control_plane(
         tenant_id: Tenant ID to process
         context: kubectl context for control plane cluster
         force: Skip confirmations if True
+
+    Returns:
+        True if every delete succeeded, False if any table still holds rows
     """
     print(f"Cleaning up control plane data for tenant: {tenant_id}")
 
@@ -367,6 +370,7 @@ def cleanup_control_plane(
     ]
 
     try:
+        failed_tables = []
         for table_name, query in delete_queries:
             print(f"  Deleting from {table_name}...")
 
@@ -374,9 +378,19 @@ def cleanup_control_plane(
                 print(f"  Skipping deletion from {table_name}")
                 continue
 
-            execute_control_plane_delete(pod_name, query, context)
+            if not execute_control_plane_delete(pod_name, query, context):
+                failed_tables.append(table_name)
+
+        if failed_tables:
+            print(
+                f"✗ Failed to delete from {', '.join(failed_tables)} for tenant "
+                f"{tenant_id} - control plane rows remain",
+                file=sys.stderr,
+            )
+            return False
 
         print(f"✓ Successfully cleaned up control plane data for tenant: {tenant_id}")
+        return True
 
     except Exception as e:
         print(
@@ -537,15 +551,20 @@ def cleanup_tenant(
         force,
     ):
         try:
-            cleanup_control_plane(
+            if not cleanup_control_plane(
                 control_plane_pod, tenant_id, control_plane_context, force
-            )
+            ):
+                # The schema is already gone at this point, so report the tenant as
+                # failed rather than cleaned - it needs a re-run to drop the leftover
+                # control plane rows.
+                return False
         except Exception as e:
             print(f"✗ Failed at control plane cleanup step: {e}", file=sys.stderr)
             if not force:
                 print("Control plane cleanup failed")
             else:
                 print("[FORCE MODE] Control plane cleanup failed but continuing")
+            return False
     else:
         print("Step 3 skipped by user")
         return False
@@ -745,11 +764,14 @@ def main() -> None:
     successful_tenants = []
     skipped_tenants = []
 
-    # Open CSV file for writing successful cleanups in real-time
+    # Append rather than truncate: cleanup runs in batches, and this file is the only
+    # record of what was deleted. Opening it "w" silently erased prior batches.
     csv_output_path = "cleaned_tenants.csv"
-    with open(csv_output_path, "w", newline="") as csv_file:
+    write_header = not Path(csv_output_path).exists()
+    with open(csv_output_path, "a", newline="") as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(["tenant_id", "cleaned_at"])
+        if write_header:
+            csv_writer.writerow(["tenant_id", "cleaned_at"])
         csv_file.flush()
 
         print(f"Writing successful cleanups to: {csv_output_path}\n")

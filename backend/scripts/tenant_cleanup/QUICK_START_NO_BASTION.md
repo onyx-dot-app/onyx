@@ -54,14 +54,28 @@ kubectl get po | grep celery-worker-user-file-processing | grep Running
 ## Important Notes
 
 1. **Step 2 triggers background deletion** - the actual document deletion happens asynchronously via Celery workers
-2. **You MUST wait** between Step 2 and Step 3 for deletion to complete (can take 6+ hours)
+2. **You MUST wait** between Step 2 and Step 3 for deletion to complete (can take 6+ hours).
+   Tenants with no documents drain within minutes, since there is nothing to delete.
 3. **Monitor deletion progress** with: `kubectl logs -f <celery-worker-pod>`
 4. **All scripts verify tenant status** - they'll refuse to process active (non-GATED_ACCESS) tenants
+5. **Pods are resolved once per run.** If that pod restarts mid-run, every remaining tenant fails.
+   Prefer batches of ~1000 over one enormous run.
+6. **Set the namespace on your kubectl contexts.** Pod discovery runs `kubectl get po` with no
+   `-n`, so it only sees the context's default namespace.
+7. **Verify against the database afterwards, not against the summary.** A tenant counted as
+   successful can still leave rows behind if a later step failed. Check `pg_namespace`,
+   `public.user_tenant_mapping`, and the control plane `tenant` table.
+8. **Search indices are not cleaned up.** In multi-tenant deployments all tenants share indices
+   and are separated by a `tenant_id` field, so dropping a schema leaves that tenant's chunks
+   behind. They can be swept later by selecting on `tenant_id` - keep `cleaned_tenants.csv`.
 
 ## Files Generated
 
+- `tenant_data_YYYYMMDD_HHMMSS.json` - Raw per-tenant data. **Contains real user chat message
+  text** (`last_query_text`); keep it out of the repo and off shared storage.
 - `gated_tenants_no_query_3mo_YYYYMMDD_HHMMSS.csv` - List of tenants to clean
-- `cleaned_tenants.csv` - Successfully cleaned tenants with timestamps
+- `cleaned_tenants.csv` - Successfully cleaned tenants with timestamps. Appended across runs, and
+  the only record of what was deleted - needed for any later search-index sweep.
 
 ## Safety First
 
