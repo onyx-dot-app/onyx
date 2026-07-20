@@ -271,7 +271,11 @@ def litellm_exception_to_error_msg(
         error_code = "BUDGET_EXCEEDED"
         is_retryable = False
     elif isinstance(core_exception, Timeout):
-        error_msg = "Request timed out: The operation took too long to complete. Please try again."
+        error_msg = (
+            "The LLM took too long to respond. "
+            "If you're running a local model, try increasing the "
+            "LLM_SOCKET_READ_TIMEOUT environment variable (current default: 120 seconds)."
+        )
         error_code = "CONNECTION_ERROR"
         is_retryable = True
     elif str(getattr(core_exception, "status_code", "")) == "413" or (
