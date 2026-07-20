@@ -23,8 +23,7 @@ import io
 import os
 import tarfile
 import time
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -32,21 +31,23 @@ from kubernetes import client
 from kubernetes.client.rest import ApiException
 
 from onyx.db.enums import SandboxStatus
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.configs import (
+    SANDBOX_BACKEND,
+    SANDBOX_NAMESPACE,
+    SandboxBackend,
 )
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
+    KubernetesSandboxManager,
     PUSH_DAEMON_PORT,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.utils.logger import setup_logger
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
-from tests.external_dependency_unit.craft.conftest import pod_exec
-from tests.external_dependency_unit.craft.conftest import wait_for_pod_deletion
+from tests.external_dependency_unit.craft.conftest import (
+    pod_exec,
+    wait_for_pod_deletion,
+)
 
 logger = setup_logger()
 

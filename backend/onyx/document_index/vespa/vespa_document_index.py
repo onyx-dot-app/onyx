@@ -7,13 +7,9 @@ import re
 import time
 import urllib.parse
 import zipfile
-from collections.abc import Generator
-from collections.abc import Iterable
-from datetime import datetime
-from datetime import timedelta
-from typing import Any
-from typing import BinaryIO
-from typing import cast
+from collections.abc import Generator, Iterable
+from datetime import datetime, timedelta
+from typing import Any, BinaryIO, cast
 from uuid import UUID
 
 import httpx
@@ -22,59 +18,74 @@ import requests
 from pydantic import BaseModel
 from retry import retry
 
-from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
-from onyx.configs.app_configs import RECENCY_BIAS_MULTIPLIER
-from onyx.configs.app_configs import RERANK_COUNT
-from onyx.configs.chat_configs import DOC_TIME_DECAY
-from onyx.configs.chat_configs import HYBRID_ALPHA
-from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
-from onyx.configs.chat_configs import VESPA_SEARCHER_THREADS
+from onyx.configs.app_configs import (
+    MAX_CHUNKS_PER_DOC_BATCH,
+    RECENCY_BIAS_MULTIPLIER,
+    RERANK_COUNT,
+)
+from onyx.configs.chat_configs import (
+    DOC_TIME_DECAY,
+    HYBRID_ALPHA,
+    TITLE_CONTENT_RATIO,
+    VESPA_SEARCHER_THREADS,
+)
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.context.search.enums import QueryType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.chunk_content_enrichment import cleanup_content_for_chunks
-from onyx.document_index.document_index_utils import get_document_chunk_ids
-from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
-from onyx.document_index.interfaces_new import DocumentIndex
-from onyx.document_index.interfaces_new import DocumentInsertionRecord
-from onyx.document_index.interfaces_new import DocumentSectionRequest
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
-from onyx.document_index.vespa.chunk_retrieval import get_all_chunks_paginated
-from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
-from onyx.document_index.vespa.chunk_retrieval import parallel_visit_api_retrieval
-from onyx.document_index.vespa.chunk_retrieval import query_vespa
+from onyx.document_index.document_index_utils import (
+    get_document_chunk_ids,
+    get_uuid_from_chunk_info,
+)
+from onyx.document_index.interfaces_new import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    DocumentSectionRequest,
+    IndexingMetadata,
+    MetadataUpdateRequest,
+    TenantState,
+)
+from onyx.document_index.vespa.chunk_retrieval import (
+    batch_search_api_retrieval,
+    get_all_chunks_paginated,
+    get_chunks_via_visit_api,
+    parallel_visit_api_retrieval,
+    query_vespa,
+)
 from onyx.document_index.vespa.deletion import delete_vespa_chunks
-from onyx.document_index.vespa.indexing_utils import BaseHTTPXClientContext
-from onyx.document_index.vespa.indexing_utils import batch_index_vespa_chunks
-from onyx.document_index.vespa.indexing_utils import check_for_final_chunk_existence
-from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
-from onyx.document_index.vespa.indexing_utils import GlobalHTTPXClientContext
-from onyx.document_index.vespa.indexing_utils import TemporaryHTTPXClientContext
-from onyx.document_index.vespa.internal_types import EnrichedDocumentIndexingInfo
-from onyx.document_index.vespa.internal_types import MinimalDocumentIndexingInfo
-from onyx.document_index.vespa.internal_types import VespaChunkRequest
-from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
+from onyx.document_index.vespa.indexing_utils import (
+    BaseHTTPXClientContext,
+    batch_index_vespa_chunks,
+    check_for_final_chunk_existence,
+    clean_chunk_id_copy,
+    GlobalHTTPXClientContext,
+    TemporaryHTTPXClientContext,
+)
+from onyx.document_index.vespa.internal_types import (
+    EnrichedDocumentIndexingInfo,
+    MinimalDocumentIndexingInfo,
+    VespaChunkRequest,
+)
 from onyx.document_index.vespa.shared_utils.utils import (
+    get_vespa_http_client,
     replace_invalid_doc_id_characters,
 )
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
-from onyx.document_index.vespa_constants import BATCH_SIZE
-from onyx.document_index.vespa_constants import CHUNK_ID
-from onyx.document_index.vespa_constants import CONTENT_SUMMARY
-from onyx.document_index.vespa_constants import DOCUMENT_ID
-from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa_constants import NUM_THREADS
-from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
-from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
-from onyx.document_index.vespa_constants import VESPA_TIMEOUT
-from onyx.document_index.vespa_constants import YQL_BASE
+from onyx.document_index.vespa_constants import (
+    BATCH_SIZE,
+    CHUNK_ID,
+    CONTENT_SUMMARY,
+    DOCUMENT_ID,
+    DOCUMENT_ID_ENDPOINT,
+    NUM_THREADS,
+    SEARCH_ENDPOINT,
+    VESPA_APPLICATION_ENDPOINT,
+    VESPA_TIMEOUT,
+    YQL_BASE,
+)
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.key_value_store.factory import get_shared_kv_store
 from onyx.kg.utils.formatting_utils import split_relationship_id

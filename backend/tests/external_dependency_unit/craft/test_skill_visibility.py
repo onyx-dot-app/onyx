@@ -6,17 +6,20 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User
-from onyx.db.models import UserRole
-from onyx.db.skill import fetch_skill_for_user
-from onyx.db.skill import fetch_skill_for_user_by_slug
-from onyx.db.skill import list_skills_for_admin
-from onyx.db.skill import list_skills_for_user
-from tests.external_dependency_unit.craft._test_helpers import add_user_to_group
-from tests.external_dependency_unit.craft._test_helpers import grant_skill_to_group
-from tests.external_dependency_unit.craft._test_helpers import make_group
-from tests.external_dependency_unit.craft._test_helpers import make_skill
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from onyx.db.models import User, UserRole
+from onyx.db.skill import (
+    fetch_skill_for_user,
+    fetch_skill_for_user_by_slug,
+    list_skills_for_admin,
+    list_skills_for_user,
+)
+from tests.external_dependency_unit.craft._test_helpers import (
+    add_user_to_group,
+    grant_skill_to_group,
+    make_group,
+    make_skill,
+    make_user,
+)
 
 
 class TestSkillVisibility:

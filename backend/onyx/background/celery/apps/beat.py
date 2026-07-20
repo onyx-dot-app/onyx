@@ -1,8 +1,7 @@
 from datetime import timedelta
 from typing import Any
 
-from celery import Celery
-from celery import signals
+from celery import Celery, signals
 from celery.beat import PersistentScheduler  # ty: ignore[unresolved-import]
 from celery.signals import beat_init
 from celery.utils.log import get_task_logger
@@ -15,8 +14,7 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.variable_functionality import fetch_versioned_implementation
-from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST, MULTI_TENANT
 
 task_logger = get_task_logger(__name__)
 

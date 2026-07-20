@@ -15,9 +15,11 @@ from pathlib import Path
 import pytest
 
 from onyx.file_processing import extract_file_text
-from onyx.file_processing.extract_file_text import count_pdf_embedded_images
-from onyx.file_processing.extract_file_text import pdf_to_text
-from onyx.file_processing.extract_file_text import read_pdf_file
+from onyx.file_processing.extract_file_text import (
+    count_pdf_embedded_images,
+    pdf_to_text,
+    read_pdf_file,
+)
 from onyx.file_processing.password_validation import is_pdf_protected
 
 FIXTURES = Path(__file__).parent / "fixtures"

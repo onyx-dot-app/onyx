@@ -1,12 +1,12 @@
 from chonkie import SentenceChunker
 
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
-from onyx.connectors.models import SectionType
+from onyx.connectors.models import IndexingDocument, Section, SectionType
 from onyx.indexing.chunking.image_section_chunker import ImageChunker
-from onyx.indexing.chunking.section_chunker import AccumulatorState
-from onyx.indexing.chunking.section_chunker import ChunkPayload
-from onyx.indexing.chunking.section_chunker import SectionChunker
+from onyx.indexing.chunking.section_chunker import (
+    AccumulatorState,
+    ChunkPayload,
+    SectionChunker,
+)
 from onyx.indexing.chunking.tabular_section_chunker import TabularChunker
 from onyx.indexing.chunking.text_section_chunker import TextChunker
 from onyx.indexing.models import DocAwareChunk

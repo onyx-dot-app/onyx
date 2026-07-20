@@ -4,16 +4,20 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TabularSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointedConnectorWithPermSync,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    Document,
+    HierarchyNode,
+    ImageSection,
+    TabularSection,
+    TextSection,
+)
 
 _ITERATION_LIMIT = 100_000
 

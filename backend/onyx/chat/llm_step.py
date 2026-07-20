@@ -2,58 +2,59 @@ import json
 import re
 import time
 import uuid
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from html import unescape
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import ChatMessageSimple
-from onyx.chat.models import LlmStepResult
+from onyx.chat.models import ChatMessageSimple, LlmStepResult
 from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
-from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP
-from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
-from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
+from onyx.configs.app_configs import (
+    ENABLE_AZURE_IMAGE_CAP,
+    LOG_ONYX_MODEL_INTERACTIONS,
+    PROMPT_CACHE_CHAT_HISTORY,
+)
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LanguageModelInput
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import LLMUserIdentity
-from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.interfaces import (
+    LanguageModelInput,
+    LLM,
+    LLMConfig,
+    LLMUserIdentity,
+    ToolChoiceOptions,
+)
 from onyx.llm.model_response import Delta
-from onyx.llm.models import AssistantMessage
-from onyx.llm.models import ChatCompletionMessage
-from onyx.llm.models import FunctionCall
-from onyx.llm.models import ImageContentPart
-from onyx.llm.models import ImageUrlDetail
-from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import SystemMessage
-from onyx.llm.models import TextContentPart
-from onyx.llm.models import ToolCall
-from onyx.llm.models import ToolMessage
-from onyx.llm.models import UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    ChatCompletionMessage,
+    FunctionCall,
+    ImageContentPart,
+    ImageUrlDetail,
+    ReasoningEffort,
+    SystemMessage,
+    TextContentPart,
+    ToolCall,
+    ToolMessage,
+    UserMessage,
+)
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.utils import model_needs_formatting_reenabled
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
-from onyx.prompts.chat_prompts import IMAGE_DROP_REMINDER
-from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE
-from onyx.prompts.constants import SYSTEM_REMINDER_TAG_OPEN
+from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN, IMAGE_DROP_REMINDER
+from onyx.prompts.constants import SYSTEM_REMINDER_TAG_CLOSE, SYSTEM_REMINDER_TAG_OPEN
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
-from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ReasoningDelta
-from onyx.server.query_and_chat.streaming_models import ReasoningDone
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
+    AgentResponseStart,
+    CitationInfo,
+    Packet,
+    ReasoningDelta,
+    ReasoningDone,
+    ReasoningStart,
+)
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.tracing.flows import LLMFlow

@@ -29,18 +29,19 @@ import wave
 from collections.abc import AsyncIterator
 from typing import Any
 from urllib.parse import urlparse
-from xml.sax.saxutils import escape
-from xml.sax.saxutils import quoteattr
+from xml.sax.saxutils import escape, quoteattr
 
 import aiohttp
 
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
-from onyx.voice.interface import StreamingSynthesizerProtocol
-from onyx.voice.interface import StreamingTranscriberProtocol
-from onyx.voice.interface import TranscriptResult
-from onyx.voice.interface import VoiceProviderInterface
+from onyx.voice.interface import (
+    StreamingSynthesizerProtocol,
+    StreamingTranscriberProtocol,
+    TranscriptResult,
+    VoiceProviderInterface,
+)
 
 # SSML namespace — W3C standard for Speech Synthesis Markup Language.
 # This is a fixed W3C specification and will not change.

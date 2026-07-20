@@ -12,16 +12,16 @@ from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.db.enums import EmbeddingPrecision
-from onyx.document_index.interfaces_new import IndexingMetadata
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces_new import IndexingMetadata, TenantState
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from onyx.indexing.models import ChunkEmbedding, DocMetadataAwareIndexChunk
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 EMBEDDING_DIM = 128

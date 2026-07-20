@@ -8,8 +8,7 @@ lockdown, not this heuristic.
 import json
 import re
 from collections.abc import Iterable
-from typing import Any
-from typing import Protocol
+from typing import Any, Protocol
 from urllib.parse import parse_qs
 from uuid import UUID
 
@@ -19,9 +18,11 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.external_app import get_external_apps
 from onyx.db.models import ExternalApp
 from onyx.external_apps.credentials import app_is_available
-from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.external_apps.matching.engine import apply_credential_gate
-from onyx.external_apps.matching.engine import recognize_actions
+from onyx.external_apps.matching.engine import (
+    AllMatchedActions,
+    apply_credential_gate,
+    recognize_actions,
+)
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.utils.logger import setup_logger
 

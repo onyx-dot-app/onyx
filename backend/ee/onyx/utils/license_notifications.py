@@ -7,20 +7,15 @@ admins for a given (stage, expires_at[, sent_date]) tuple are skipped — only
 freshly-notified admins receive an email.
 """
 
-from datetime import date
-from datetime import datetime
-from datetime import timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ee.onyx.utils.license_expiry import ExpiryWarningStage
-from ee.onyx.utils.license_expiry import get_grace_days_remaining
-from onyx.auth.email_utils import build_html_email
-from onyx.auth.email_utils import send_email
+from ee.onyx.utils.license_expiry import ExpiryWarningStage, get_grace_days_remaining
+from onyx.auth.email_utils import build_html_email, send_email
 from onyx.configs.app_configs import EMAIL_CONFIGURED
-from onyx.configs.constants import NotificationType
-from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
+from onyx.configs.constants import NotificationType, ONYX_DEFAULT_APPLICATION_NAME
 from onyx.db.notification import batch_create_notifications
 from onyx.db.users import get_active_admin_users
 from onyx.utils.logger import setup_logger

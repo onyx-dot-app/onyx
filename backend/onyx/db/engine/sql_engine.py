@@ -7,38 +7,42 @@ from contextlib import contextmanager
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import event
-from sqlalchemy import pool
-from sqlalchemy.engine import create_engine
-from sqlalchemy.engine import Engine
+from sqlalchemy import event, pool
+from sqlalchemy.engine import create_engine, Engine
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DB_READONLY_PASSWORD
-from onyx.configs.app_configs import DB_READONLY_USER
-from onyx.configs.app_configs import LOG_POSTGRES_CONN_COUNTS
-from onyx.configs.app_configs import LOG_POSTGRES_LATENCY
-from onyx.configs.app_configs import POSTGRES_DB
-from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_PASSWORD
-from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
-from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
-from onyx.configs.app_configs import POSTGRES_PORT
-from onyx.configs.app_configs import POSTGRES_TCP_KEEPALIVES
-from onyx.configs.app_configs import POSTGRES_TCP_KEEPALIVES_COUNT
-from onyx.configs.app_configs import POSTGRES_TCP_KEEPALIVES_IDLE
-from onyx.configs.app_configs import POSTGRES_TCP_KEEPALIVES_INTERVAL
-from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
-from onyx.configs.app_configs import POSTGRES_USER
+from onyx.configs.app_configs import (
+    DB_READONLY_PASSWORD,
+    DB_READONLY_USER,
+    LOG_POSTGRES_CONN_COUNTS,
+    LOG_POSTGRES_LATENCY,
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_POOL_PRE_PING,
+    POSTGRES_POOL_RECYCLE,
+    POSTGRES_PORT,
+    POSTGRES_TCP_KEEPALIVES,
+    POSTGRES_TCP_KEEPALIVES_COUNT,
+    POSTGRES_TCP_KEEPALIVES_IDLE,
+    POSTGRES_TCP_KEEPALIVES_INTERVAL,
+    POSTGRES_USE_NULL_POOL,
+    POSTGRES_USER,
+)
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
 from onyx.db.engine.iam_auth import provide_iam_token
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.configs import (
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 # Moved is_valid_schema_name here to avoid circular import
 

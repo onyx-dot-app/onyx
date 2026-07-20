@@ -4,15 +4,15 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
 from onyx.db.search_settings import get_active_search_settings
-from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.factory import (
+    get_all_document_indices,
+    get_default_document_index,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.models import IndexingSetting
-from onyx.setup import setup_document_indices
-from onyx.setup import setup_postgres
+from onyx.setup import setup_document_indices, setup_postgres
 from shared_configs import configs as shared_configs_module
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID

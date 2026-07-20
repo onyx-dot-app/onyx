@@ -2,8 +2,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from mistune import create_markdown
-from mistune import HTMLRenderer
+from mistune import create_markdown, HTMLRenderer
 
 # Tags that should be replaced with a newline (line-break and block-level elements)
 _HTML_NEWLINE_TAG_PATTERN = re.compile(

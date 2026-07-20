@@ -9,48 +9,53 @@ PATCH value dicts).
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from fastapi import Response
 
-from ee.onyx.server.scim.api import create_user
-from ee.onyx.server.scim.api import delete_user
-from ee.onyx.server.scim.api import get_group
-from ee.onyx.server.scim.api import get_resource_types
-from ee.onyx.server.scim.api import get_schemas
-from ee.onyx.server.scim.api import get_service_provider_config
-from ee.onyx.server.scim.api import get_user
-from ee.onyx.server.scim.api import list_groups
-from ee.onyx.server.scim.api import list_users
-from ee.onyx.server.scim.api import patch_group
-from ee.onyx.server.scim.api import patch_user
-from ee.onyx.server.scim.api import replace_user
-from ee.onyx.server.scim.api import ScimJSONResponse
-from ee.onyx.server.scim.models import SCIM_ENTERPRISE_USER_SCHEMA
-from ee.onyx.server.scim.models import SCIM_USER_SCHEMA
-from ee.onyx.server.scim.models import ScimEnterpriseExtension
-from ee.onyx.server.scim.models import ScimGroupMember
-from ee.onyx.server.scim.models import ScimGroupResource
-from ee.onyx.server.scim.models import ScimManagerRef
-from ee.onyx.server.scim.models import ScimMappingFields
-from ee.onyx.server.scim.models import ScimName
-from ee.onyx.server.scim.models import ScimPatchOperation
-from ee.onyx.server.scim.models import ScimPatchOperationType
-from ee.onyx.server.scim.models import ScimPatchRequest
-from ee.onyx.server.scim.models import ScimPatchResourceValue
-from ee.onyx.server.scim.models import ScimUserResource
+from ee.onyx.server.scim.api import (
+    create_user,
+    delete_user,
+    get_group,
+    get_resource_types,
+    get_schemas,
+    get_service_provider_config,
+    get_user,
+    list_groups,
+    list_users,
+    patch_group,
+    patch_user,
+    replace_user,
+    ScimJSONResponse,
+)
+from ee.onyx.server.scim.models import (
+    SCIM_ENTERPRISE_USER_SCHEMA,
+    SCIM_USER_SCHEMA,
+    ScimEnterpriseExtension,
+    ScimGroupMember,
+    ScimGroupResource,
+    ScimManagerRef,
+    ScimMappingFields,
+    ScimName,
+    ScimPatchOperation,
+    ScimPatchOperationType,
+    ScimPatchRequest,
+    ScimPatchResourceValue,
+    ScimUserResource,
+)
 from ee.onyx.server.scim.providers.base import ScimProvider
 from ee.onyx.server.scim.providers.entra import EntraProvider
-from tests.unit.onyx.server.scim.conftest import make_db_group
-from tests.unit.onyx.server.scim.conftest import make_db_user
-from tests.unit.onyx.server.scim.conftest import make_scim_user
-from tests.unit.onyx.server.scim.conftest import make_user_mapping
-from tests.unit.onyx.server.scim.conftest import parse_scim_group
-from tests.unit.onyx.server.scim.conftest import parse_scim_list
-from tests.unit.onyx.server.scim.conftest import parse_scim_user
+from tests.unit.onyx.server.scim.conftest import (
+    make_db_group,
+    make_db_user,
+    make_scim_user,
+    make_user_mapping,
+    parse_scim_group,
+    parse_scim_list,
+    parse_scim_user,
+)
 
 
 @pytest.fixture

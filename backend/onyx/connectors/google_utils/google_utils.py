@@ -1,10 +1,8 @@
 import re
 import socket
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 

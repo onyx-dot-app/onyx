@@ -7,16 +7,17 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import OAuthAccount
-from onyx.db.models import User
+from onyx.db.models import OAuthAccount, User
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
-from tests.external_dependency_unit.craft._test_helpers import add_user_to_group
-from tests.external_dependency_unit.craft._test_helpers import grant_skill_to_group
-from tests.external_dependency_unit.craft._test_helpers import make_group
-from tests.external_dependency_unit.craft._test_helpers import make_sandbox
-from tests.external_dependency_unit.craft._test_helpers import make_skill
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.external_dependency_unit.craft._test_helpers import (
+    add_user_to_group,
+    grant_skill_to_group,
+    make_group,
+    make_sandbox,
+    make_skill,
+    make_user,
+)
 
 
 class TestAffectedUserIdsForSkill:

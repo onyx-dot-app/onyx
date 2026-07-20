@@ -1,33 +1,31 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
-from typing import AsyncContextManager
+from typing import Any, AsyncContextManager
 
 from fastapi import HTTPException
-from sqlalchemy import event
-from sqlalchemy import pool
-from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import event, pool
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
-from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
-from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
-from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
-from onyx.configs.app_configs import POSTGRES_PORT
-from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
-from onyx.configs.app_configs import POSTGRES_USER
-from onyx.db.engine.iam_auth import create_ssl_context_if_iam
-from onyx.db.engine.iam_auth import get_iam_auth_token
-from onyx.db.engine.sql_engine import ASYNC_DB_API
-from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.engine.sql_engine import is_valid_schema_name
-from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.engine.sql_engine import USE_IAM_AUTH
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from onyx.configs.app_configs import (
+    AWS_REGION_NAME,
+    POSTGRES_API_SERVER_POOL_OVERFLOW,
+    POSTGRES_API_SERVER_POOL_SIZE,
+    POSTGRES_HOST,
+    POSTGRES_POOL_PRE_PING,
+    POSTGRES_POOL_RECYCLE,
+    POSTGRES_PORT,
+    POSTGRES_USE_NULL_POOL,
+    POSTGRES_USER,
+)
+from onyx.db.engine.iam_auth import create_ssl_context_if_iam, get_iam_auth_token
+from onyx.db.engine.sql_engine import (
+    ASYNC_DB_API,
+    build_connection_string,
+    is_valid_schema_name,
+    SqlEngine,
+    USE_IAM_AUTH,
+)
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import get_current_tenant_id
 
 # Global so we don't create more than one engine per process

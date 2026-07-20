@@ -1,15 +1,15 @@
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
-from uuid import UUID
-from uuid import uuid4
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
-from onyx.db.models import DocumentSet
-from onyx.db.models import DocumentSet__User
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import SamlAccount
-from onyx.db.models import User__UserGroup
+from onyx.db.models import (
+    DocumentSet,
+    DocumentSet__User,
+    Persona,
+    Persona__User,
+    SamlAccount,
+    User__UserGroup,
+)
 from onyx.db.users import delete_user_from_db
 
 

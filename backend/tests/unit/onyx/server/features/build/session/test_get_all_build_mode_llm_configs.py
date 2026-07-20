@@ -13,23 +13,19 @@ from collections.abc import Iterator
 from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox
-from onyx.db.models import User
+from onyx.db.models import Sandbox, User
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
-from onyx.server.features.build.sandbox.models import SandboxInfo
+from onyx.server.features.build.sandbox.models import LLMProviderConfig, SandboxInfo
 from onyx.server.features.build.session.llm_config import get_all_build_mode_llm_configs
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfigurationView
+from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 
 # The recommended default model per provider type is sourced from the shared
 # recommended-models config (GitHub-or-bundled) at runtime. Stub it here so

@@ -15,28 +15,28 @@ yielded SSE text.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import User
-from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import get_session_messages
-from onyx.server.features.build.db.build_session import upsert_agent_plan
-from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
-from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
-from onyx.server.features.build.sandbox.event_schema import PromptResponse
-from onyx.server.features.build.sandbox.event_schema import ToolCallProgress
-from onyx.server.features.build.sandbox.event_schema import ToolCallStart
+from onyx.db.models import BuildSession, Sandbox, User
+from onyx.server.features.build.db.build_session import (
+    create_message,
+    get_session_messages,
+    upsert_agent_plan,
+)
+from onyx.server.features.build.sandbox.event_schema import (
+    AgentMessageChunk,
+    AgentThoughtChunk,
+    PromptResponse,
+    ToolCallProgress,
+    ToolCallStart,
+)
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState

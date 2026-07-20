@@ -8,8 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema
 
-from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.engine.sql_engine import get_sqlalchemy_engine
+from onyx.db.engine.sql_engine import build_connection_string, get_sqlalchemy_engine
 from onyx.db.engine.tenant_utils import validate_tenant_id
 
 logger = logging.getLogger(__name__)

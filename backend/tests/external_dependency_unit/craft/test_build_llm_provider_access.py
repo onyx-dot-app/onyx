@@ -11,18 +11,20 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import upsert_llm_provider
-from onyx.db.models import User
-from onyx.db.models import UserRole
+from onyx.db.llm import remove_llm_provider, upsert_llm_provider
+from onyx.db.models import User, UserRole
 from onyx.server.features.build.db.build_session import (
     fetch_all_supported_build_llm_providers,
 )
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from tests.external_dependency_unit.craft._test_helpers import add_user_to_group
-from tests.external_dependency_unit.craft._test_helpers import make_group
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
+from tests.external_dependency_unit.craft._test_helpers import (
+    add_user_to_group,
+    make_group,
+    make_user,
+)
 
 
 def _make_group_restricted_anthropic_provider(

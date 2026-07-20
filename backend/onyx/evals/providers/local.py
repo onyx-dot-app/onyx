@@ -6,11 +6,13 @@ No external dependencies like Braintrust required.
 from collections.abc import Callable
 from typing import Any
 
-from onyx.evals.models import EvalationAck
-from onyx.evals.models import EvalConfigurationOptions
-from onyx.evals.models import EvalProvider
-from onyx.evals.models import EvalToolResult
-from onyx.evals.models import MultiTurnEvalResult
+from onyx.evals.models import (
+    EvalationAck,
+    EvalConfigurationOptions,
+    EvalProvider,
+    EvalToolResult,
+    MultiTurnEvalResult,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

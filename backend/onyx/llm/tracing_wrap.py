@@ -17,21 +17,17 @@ from __future__ import annotations
 
 import functools
 import inspect
-from collections.abc import Callable
-from collections.abc import Iterator
-from typing import Any
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterator
+from typing import Any, TYPE_CHECKING
 
-from onyx.llm.model_response import ChatCompletionDeltaToolCall
+from onyx.llm.model_response import ChatCompletionDeltaToolCall, Usage
 from onyx.llm.model_response import FunctionCall as DeltaFunctionCall
-from onyx.llm.model_response import Usage
 from onyx.tracing.framework.create import get_current_span
 from onyx.tracing.framework.span_data import GenerationSpanData
 
 if TYPE_CHECKING:
     from onyx.llm.interfaces import LLM
-    from onyx.llm.model_response import ModelResponse
-    from onyx.llm.model_response import ModelResponseStream
+    from onyx.llm.model_response import ModelResponse, ModelResponseStream
     from onyx.llm.models import ToolCall
 
 
@@ -137,8 +133,7 @@ def wrap_invoke(
             return invoke_fn(self, *args, **kwargs)
 
         from onyx.tracing.flows import LLMFlow
-        from onyx.tracing.llm_utils import llm_generation_span
-        from onyx.tracing.llm_utils import record_llm_response
+        from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 
         prompt = _extract_prompt(sig, self, args, kwargs)
         with llm_generation_span(
@@ -194,8 +189,7 @@ def wrap_stream(
             return
 
         from onyx.tracing.flows import LLMFlow
-        from onyx.tracing.llm_utils import llm_generation_span
-        from onyx.tracing.llm_utils import record_llm_span_output
+        from onyx.tracing.llm_utils import llm_generation_span, record_llm_span_output
 
         prompt = _extract_prompt(sig, self, args, kwargs)
         with llm_generation_span(

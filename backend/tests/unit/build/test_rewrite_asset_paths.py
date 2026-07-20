@@ -1,22 +1,22 @@
 """Unit tests for webapp proxy path rewriting/injection."""
 
-from collections.abc import AsyncGenerator
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID
 
 import httpx
 import pytest
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import HTTPException, Request
 from starlette.responses import StreamingResponse
 
 from onyx.db.enums import SharingScope
 from onyx.server.features.build.api import api
-from onyx.server.features.build.api.api import _inject_hmr_fixer
-from onyx.server.features.build.api.api import _rewrite_asset_paths
-from onyx.server.features.build.api.api import _rewrite_proxy_response_headers
+from onyx.server.features.build.api.api import (
+    _inject_hmr_fixer,
+    _rewrite_asset_paths,
+    _rewrite_proxy_response_headers,
+)
 
 SESSION_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 BASE = f"/api/build/sessions/{SESSION_ID}/webapp"

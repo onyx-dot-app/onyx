@@ -10,17 +10,18 @@ per-document failure (which then trips the indexing failure threshold).
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
 from onyx.connectors.sharepoint import connector as sp_connector
-from onyx.connectors.sharepoint.connector import _download_via_graph_api
-from onyx.connectors.sharepoint.connector import _download_with_cap
-from onyx.connectors.sharepoint.connector import _redact_url_for_logging
-from onyx.connectors.sharepoint.connector import SizeCapExceeded
+from onyx.connectors.sharepoint.connector import (
+    _download_via_graph_api,
+    _download_with_cap,
+    _redact_url_for_logging,
+    SizeCapExceeded,
+)
 
 CAP = 10 * 1024 * 1024  # 10 MiB cap; well above the byte payloads used in tests
 

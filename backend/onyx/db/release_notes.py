@@ -6,9 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INSTANCE_TYPE
-from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
-from onyx.configs.constants import NotificationType
-from onyx.configs.constants import ONYX_UTM_SOURCE
+from onyx.configs.constants import (
+    DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
+    NotificationType,
+    ONYX_UTM_SOURCE,
+)
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.notification import batch_create_notifications

@@ -3,24 +3,25 @@
 from collections.abc import Generator
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.configs.constants import PUBLIC_API_TAGS
-from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.server.features.build.api.models import MessageInterruptResponse
-from onyx.server.features.build.api.models import MessageListResponse
-from onyx.server.features.build.api.models import MessageRequest
-from onyx.server.features.build.api.models import MessageResponse
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.api.models import (
+    MessageInterruptResponse,
+    MessageListResponse,
+    MessageRequest,
+    MessageResponse,
+)
+from onyx.server.features.build.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
 from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.utils.logger import setup_logger

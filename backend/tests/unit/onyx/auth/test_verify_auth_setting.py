@@ -3,8 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import onyx.auth.users as users
-from onyx.auth.users import verify_auth_setting
-from onyx.auth.users import verify_user_auth_secret
+from onyx.auth.users import verify_auth_setting, verify_user_auth_secret
 from onyx.configs.constants import AuthType
 
 

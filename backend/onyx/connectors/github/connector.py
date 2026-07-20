@@ -1,20 +1,13 @@
 import copy
 import os
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Callable, Generator
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from io import BytesIO
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from github import Github
-from github import RateLimitExceededException
-from github import Repository
-from github.GithubException import GithubException
-from github.GithubException import UnknownObjectException
+from github import Github, RateLimitExceededException, Repository
+from github.GithubException import GithubException, UnknownObjectException
 from github.Issue import Issue
 from github.NamedUser import NamedUser
 from github.PaginatedList import PaginatedList
@@ -25,34 +18,40 @@ from typing_extensions import override
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.connector_runner import CheckpointOutputWrapper
-from onyx.connectors.connector_runner import ConnectorRunner
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.connector_runner import CheckpointOutputWrapper, ConnectorRunner
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
-from onyx.connectors.github.utils import deserialize_repository
-from onyx.connectors.github.utils import get_external_access_permission
-from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import ConnectorCheckpoint
-from onyx.connectors.interfaces import ConnectorFailure
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import IndexingHeartbeatInterface
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.interfaces import SlimConnectorWithPermSync
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import file_io_to_text
-from onyx.file_processing.extract_file_text import is_text_file
+from onyx.connectors.github.utils import (
+    deserialize_repository,
+    get_external_access_permission,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnectorWithPermSync,
+    CheckpointOutput,
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    GenerateSlimDocumentOutput,
+    IndexingHeartbeatInterface,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    EntityFailure,
+    HierarchyNode,
+    SlimDocument,
+    TextSection,
+)
+from onyx.file_processing.extract_file_text import file_io_to_text, is_text_file
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

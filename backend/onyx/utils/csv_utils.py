@@ -1,7 +1,6 @@
 import csv
 import io
-from collections.abc import Generator
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
 
 from pydantic import BaseModel
 

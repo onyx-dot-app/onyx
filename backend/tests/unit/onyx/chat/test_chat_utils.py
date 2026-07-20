@@ -2,16 +2,16 @@
 
 from io import BytesIO
 from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from onyx.chat.chat_utils import _build_tool_call_response_history_message
-from onyx.chat.chat_utils import _get_or_extract_plaintext
-from onyx.chat.chat_utils import convert_chat_history
-from onyx.chat.chat_utils import get_custom_agent_prompt
+from onyx.chat.chat_utils import (
+    _build_tool_call_response_history_message,
+    _get_or_extract_plaintext,
+    convert_chat_history,
+    get_custom_agent_prompt,
+)
 from onyx.chat.models import ChatLoadedFile
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.models import ChatMessage
 from onyx.file_store.models import ChatFileType
 from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE

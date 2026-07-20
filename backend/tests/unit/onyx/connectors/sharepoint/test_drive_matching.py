@@ -1,22 +1,20 @@
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Generator
-from collections.abc import Sequence
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Generator, Sequence
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
 
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import TextSection
-from onyx.connectors.sharepoint.connector import DriveItemData
-from onyx.connectors.sharepoint.connector import SHARED_DOCUMENTS_MAP
-from onyx.connectors.sharepoint.connector import SharepointConnector
-from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
-from onyx.connectors.sharepoint.connector import SiteDescriptor
+from onyx.connectors.models import Document, DocumentSource, TextSection
+from onyx.connectors.sharepoint.connector import (
+    DriveItemData,
+    SHARED_DOCUMENTS_MAP,
+    SharepointConnector,
+    SharepointConnectorCheckpoint,
+    SiteDescriptor,
+)
 
 
 class _FakeQuery:

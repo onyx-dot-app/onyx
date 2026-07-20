@@ -16,29 +16,21 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MessageType
-from onyx.db.enums import ArtifactType
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.enums import SandboxStatus
-from onyx.db.enums import SessionOrigin
-from onyx.db.models import Artifact
-from onyx.db.models import BuildMessage
-from onyx.db.models import BuildSession
-from onyx.db.models import Sandbox
-from onyx.db.models import Snapshot
-from onyx.db.models import User
+from onyx.configs.constants import FileOrigin, MessageType
+from onyx.db.enums import ArtifactType, BuildSessionStatus, SandboxStatus, SessionOrigin
+from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox, Snapshot, User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.sessions_api import restore_session
-from onyx.server.features.build.db.build_session import allocate_nextjs_port
-from onyx.server.features.build.db.build_session import get_user_build_sessions
+from onyx.server.features.build.db.build_session import (
+    allocate_nextjs_port,
+    get_user_build_sessions,
+)
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.manager import SessionManager
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import make_sandbox
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.external_dependency_unit.craft._test_helpers import make_sandbox, make_user
 from tests.external_dependency_unit.craft.conftest import (
     assert_lock_serializes_two_threads,
 )

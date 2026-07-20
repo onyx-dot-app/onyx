@@ -1,6 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
@@ -13,18 +11,22 @@ from onyx.db.enums import Permission
 from onyx.db.hierarchy import get_accessible_hierarchy_nodes_for_source
 from onyx.db.models import User
 from onyx.db.opensearch_migration import get_opensearch_retrieval_state
-from onyx.server.features.hierarchy.constants import DOCUMENT_PAGE_SIZE
-from onyx.server.features.hierarchy.constants import HIERARCHY_NODE_DOCUMENTS_PATH
-from onyx.server.features.hierarchy.constants import HIERARCHY_NODES_LIST_PATH
-from onyx.server.features.hierarchy.constants import HIERARCHY_NODES_PREFIX
-from onyx.server.features.hierarchy.models import DocumentPageCursor
-from onyx.server.features.hierarchy.models import DocumentSortDirection
-from onyx.server.features.hierarchy.models import DocumentSortField
-from onyx.server.features.hierarchy.models import DocumentSummary
-from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsRequest
-from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsResponse
-from onyx.server.features.hierarchy.models import HierarchyNodesResponse
-from onyx.server.features.hierarchy.models import HierarchyNodeSummary
+from onyx.server.features.hierarchy.constants import (
+    DOCUMENT_PAGE_SIZE,
+    HIERARCHY_NODE_DOCUMENTS_PATH,
+    HIERARCHY_NODES_LIST_PATH,
+    HIERARCHY_NODES_PREFIX,
+)
+from onyx.server.features.hierarchy.models import (
+    DocumentPageCursor,
+    DocumentSortDirection,
+    DocumentSortField,
+    DocumentSummary,
+    HierarchyNodeDocumentsRequest,
+    HierarchyNodeDocumentsResponse,
+    HierarchyNodesResponse,
+    HierarchyNodeSummary,
+)
 
 OPENSEARCH_NOT_ENABLED_MESSAGE = "Per-source knowledge selection is coming soon in v3.0! OpenSearch indexing must be enabled to use this feature."
 

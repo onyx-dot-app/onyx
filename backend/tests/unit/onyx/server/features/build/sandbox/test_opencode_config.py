@@ -14,8 +14,6 @@ import pytest
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
-)
-from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_config,
 )
 

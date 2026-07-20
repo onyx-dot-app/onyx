@@ -1,19 +1,17 @@
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import ImageSection
-from onyx.connectors.sharepoint.connector import SharepointAuthMethod
-from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.models import Document, HierarchyNode, ImageSection
+from onyx.connectors.sharepoint.connector import (
+    SharepointAuthMethod,
+    SharepointConnector,
+)
 from onyx.db.enums import HierarchyNodeType
 from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret

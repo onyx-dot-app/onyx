@@ -9,17 +9,13 @@ from __future__ import annotations
 
 import datetime as dt
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ApprovalDecision
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.models import ActionApproval
-from onyx.db.models import BuildSession
-from onyx.sandbox_proxy.addons.gate import _IdentityResolver
-from onyx.sandbox_proxy.addons.gate import GateAddon
+from onyx.db.enums import ApprovalDecision, BuildSessionStatus
+from onyx.db.models import ActionApproval, BuildSession
+from onyx.sandbox_proxy.addons.gate import _IdentityResolver, GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator

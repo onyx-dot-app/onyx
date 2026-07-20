@@ -9,19 +9,14 @@ import time
 import uvicorn
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from fastapi import FastAPI
-from fastapi import Header
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from sandbox_daemon.extract import MAX_BUNDLE_BYTES
-from sandbox_daemon.extract import safe_extract_then_atomic_swap
-from sandbox_daemon.models import SnapshotCreateRequest
-from sandbox_daemon.models import SnapshotCreateResponse
-from sandbox_daemon.models import SnapshotRestoreRequest
-from sandbox_daemon.snapshot import create_snapshot
-from sandbox_daemon.snapshot import restore_snapshot
-from sandbox_daemon.snapshot import SnapshotError
+from fastapi import FastAPI, Header, HTTPException, Query, Request
+from sandbox_daemon.extract import MAX_BUNDLE_BYTES, safe_extract_then_atomic_swap
+from sandbox_daemon.models import (
+    SnapshotCreateRequest,
+    SnapshotCreateResponse,
+    SnapshotRestoreRequest,
+)
+from sandbox_daemon.snapshot import create_snapshot, restore_snapshot, SnapshotError
 
 app = FastAPI(title="sandbox-sidecar", docs_url=None, redoc_url=None)
 

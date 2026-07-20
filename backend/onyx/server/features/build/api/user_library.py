@@ -3,42 +3,41 @@
 import mimetypes
 import re
 import zipfile
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from io import BytesIO
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import File
-from fastapi import Form
-from fastapi import Query
-from fastapi import UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
-from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
+from onyx.configs.app_configs import (
+    MAX_EMBEDDED_IMAGES_PER_FILE,
+    MAX_EMBEDDED_IMAGES_PER_UPLOAD,
+)
 from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import Permission
+from onyx.db.enums import ConnectorCredentialPairStatus, Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.extract_file_text import count_pdf_embedded_images
-from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILE_SIZE_BYTES
-from onyx.server.features.build.configs import USER_LIBRARY_MAX_FILES_PER_UPLOAD
-from onyx.server.features.build.configs import USER_LIBRARY_MAX_TOTAL_SIZE_BYTES
-from onyx.server.features.build.db.user_library import cleanup_old_blobs
-from onyx.server.features.build.db.user_library import create_directory_record
-from onyx.server.features.build.db.user_library import delete_user_file
-from onyx.server.features.build.db.user_library import fetch_user_file_for_user
-from onyx.server.features.build.db.user_library import get_or_create_craft_connector
-from onyx.server.features.build.db.user_library import get_user_storage_bytes
-from onyx.server.features.build.db.user_library import list_user_files
-from onyx.server.features.build.db.user_library import set_sync_disabled
-from onyx.server.features.build.db.user_library import store_user_file
+from onyx.server.features.build.configs import (
+    USER_LIBRARY_MAX_FILE_SIZE_BYTES,
+    USER_LIBRARY_MAX_FILES_PER_UPLOAD,
+    USER_LIBRARY_MAX_TOTAL_SIZE_BYTES,
+)
+from onyx.server.features.build.db.user_library import (
+    cleanup_old_blobs,
+    create_directory_record,
+    delete_user_file,
+    fetch_user_file_for_user,
+    get_or_create_craft_connector,
+    get_user_storage_bytes,
+    list_user_files,
+    set_sync_disabled,
+    store_user_file,
+)
 from onyx.server.features.build.sandbox.user_library import (
     sync_user_library_to_active_sandboxes,
 )

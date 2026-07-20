@@ -4,15 +4,16 @@ from typing import cast
 from langchain_core.messages import BaseMessage
 
 from onyx.configs.constants import DocumentSource
-from onyx.prompts.chat_prompts import ADDITIONAL_INFO
-from onyx.prompts.chat_prompts import CITATION_GUIDANCE_REPLACEMENT_PAT
-from onyx.prompts.chat_prompts import COMPANY_DESCRIPTION_BLOCK
-from onyx.prompts.chat_prompts import COMPANY_NAME_BLOCK
-from onyx.prompts.chat_prompts import DATETIME_REPLACEMENT_PAT
-from onyx.prompts.chat_prompts import REMINDER_TAG_REPLACEMENT_PAT
-from onyx.prompts.chat_prompts import REQUIRE_CITATION_GUIDANCE
-from onyx.prompts.constants import CODE_BLOCK_PAT
-from onyx.prompts.constants import REMINDER_TAG_DESCRIPTION
+from onyx.prompts.chat_prompts import (
+    ADDITIONAL_INFO,
+    CITATION_GUIDANCE_REPLACEMENT_PAT,
+    COMPANY_DESCRIPTION_BLOCK,
+    COMPANY_NAME_BLOCK,
+    DATETIME_REPLACEMENT_PAT,
+    REMINDER_TAG_REPLACEMENT_PAT,
+    REQUIRE_CITATION_GUIDANCE,
+)
+from onyx.prompts.constants import CODE_BLOCK_PAT, REMINDER_TAG_DESCRIPTION
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 

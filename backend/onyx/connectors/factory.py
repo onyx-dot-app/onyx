@@ -1,6 +1,5 @@
 import importlib
-from typing import Any
-from typing import Type
+from typing import Any, Type
 
 from sqlalchemy.orm import Session
 
@@ -9,17 +8,18 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CredentialsConnector
-from onyx.connectors.interfaces import EventConnector
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    CheckpointedConnector,
+    CredentialsConnector,
+    EventConnector,
+    LoadConnector,
+    PollConnector,
+)
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.credentials import backend_update_credential_json
-from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.credentials import backend_update_credential_json, fetch_credential_by_id
 from onyx.db.enums import AccessType
 from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback

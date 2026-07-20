@@ -1,19 +1,18 @@
 """Tests for Slack thread context fetching with rate limit handling."""
 
 from datetime import datetime
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from slack_sdk.errors import SlackApiError
 
 from onyx.context.search.federated.models import SlackMessage
-from onyx.context.search.federated.slack_search import _fetch_thread_context
 from onyx.context.search.federated.slack_search import (
+    _fetch_thread_context,
     fetch_thread_contexts_with_rate_limit_handling,
+    SlackRateLimitError,
+    ThreadContextResult,
 )
-from onyx.context.search.federated.slack_search import SlackRateLimitError
-from onyx.context.search.federated.slack_search import ThreadContextResult
 
 
 def _create_mock_message(

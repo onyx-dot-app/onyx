@@ -5,18 +5,11 @@ import json
 import os
 import re
 import zipfile
-from collections.abc import Callable
-from collections.abc import Iterator
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
 from email.parser import Parser as EmailParser
 from io import BytesIO
 from pathlib import Path
-from typing import Any
-from typing import cast
-from typing import IO
-from typing import NamedTuple
-from typing import Optional
-from typing import TYPE_CHECKING
+from typing import Any, cast, IO, NamedTuple, Optional, TYPE_CHECKING
 from zipfile import BadZipFile
 
 import chardet
@@ -24,17 +17,23 @@ import openpyxl
 from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 from PIL import Image
 
-from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
-from onyx.configs.app_configs import MAX_XLSX_CELLS_PER_SHEET
+from onyx.configs.app_configs import (
+    MAX_EMBEDDED_IMAGES_PER_FILE,
+    MAX_XLSX_CELLS_PER_SHEET,
+)
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
-from onyx.file_processing.file_types import OnyxFileExtensions
-from onyx.file_processing.file_types import OnyxMimeTypes
-from onyx.file_processing.file_types import PRESENTATION_MIME_TYPE
-from onyx.file_processing.file_types import WORD_PROCESSING_MIME_TYPE
+from onyx.file_processing.file_types import (
+    OnyxFileExtensions,
+    OnyxMimeTypes,
+    PRESENTATION_MIME_TYPE,
+    WORD_PROCESSING_MIME_TYPE,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
-from onyx.file_processing.unstructured import get_unstructured_api_key
-from onyx.file_processing.unstructured import unstructured_to_text
+from onyx.file_processing.unstructured import (
+    get_unstructured_api_key,
+    unstructured_to_text,
+)
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
@@ -438,9 +437,11 @@ def read_docx_file(
     The images list returned is empty in this case.
     """
     md = get_markitdown_converter()
-    from markitdown import FileConversionException
-    from markitdown import StreamInfo
-    from markitdown import UnsupportedFormatException
+    from markitdown import (
+        FileConversionException,
+        StreamInfo,
+        UnsupportedFormatException,
+    )
 
     try:
         doc = md.convert(
@@ -496,9 +497,11 @@ def extract_pptx_images(pptx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
 
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
     md = get_markitdown_converter()
-    from markitdown import FileConversionException
-    from markitdown import StreamInfo
-    from markitdown import UnsupportedFormatException
+    from markitdown import (
+        FileConversionException,
+        StreamInfo,
+        UnsupportedFormatException,
+    )
 
     stream_info = StreamInfo(
         mimetype=PRESENTATION_MIME_TYPE, filename=file_name or None, extension=".pptx"

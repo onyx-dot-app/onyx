@@ -1,14 +1,15 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.db.api_key import ApiKeyDescriptor
-from onyx.db.api_key import fetch_api_keys
-from onyx.db.api_key import insert_api_key
-from onyx.db.api_key import regenerate_api_key
-from onyx.db.api_key import remove_api_key
-from onyx.db.api_key import update_api_key
+from onyx.db.api_key import (
+    ApiKeyDescriptor,
+    fetch_api_keys,
+    insert_api_key,
+    regenerate_api_key,
+    remove_api_key,
+    update_api_key,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User

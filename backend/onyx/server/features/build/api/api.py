@@ -4,13 +4,8 @@ from pathlib import Path
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import Response
-from fastapi.responses import RedirectResponse
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -18,8 +13,7 @@ from onyx.auth.users import optional_user
 from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
-from onyx.db.enums import SharingScope
+from onyx.db.enums import Permission, SharingScope
 from onyx.db.models import User
 from onyx.server.features.build.api.debug_api import router as debug_router
 from onyx.server.features.build.api.external_apps_api import (
@@ -34,8 +28,10 @@ from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.api.user_library import router as user_library_router
 from onyx.server.features.build.approvals.api import router as approvals_router
-from onyx.server.features.build.db.build_session import get_webapp_access_async
-from onyx.server.features.build.db.build_session import get_webapp_target_async
+from onyx.server.features.build.db.build_session import (
+    get_webapp_access_async,
+    get_webapp_target_async,
+)
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.scheduled_tasks.api import (
     router as scheduled_tasks_router,

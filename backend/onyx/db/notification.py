@@ -1,9 +1,7 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import cast
-from sqlalchemy import select
+from sqlalchemy import cast, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -11,8 +9,7 @@ from sqlalchemy.sql import func
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
-from onyx.db.models import Notification
-from onyx.db.models import User
+from onyx.db.models import Notification, User
 
 
 def create_notification(

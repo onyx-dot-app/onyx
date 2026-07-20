@@ -10,8 +10,7 @@ from onyx.db.models import User
 from onyx.db.notification import create_notification
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
-from onyx.server.features.build.configs import ENABLE_CRAFT
-from onyx.server.features.build.configs import MAX_UPLOAD_FILE_SIZE_BYTES
+from onyx.server.features.build.configs import ENABLE_CRAFT, MAX_UPLOAD_FILE_SIZE_BYTES
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

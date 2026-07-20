@@ -23,8 +23,7 @@ depends on JSONB metadata filtering and the file_store client is what
 actually deletes blob + FileRecord together.
 """
 
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from io import BytesIO
 from typing import Any
 from unittest.mock import MagicMock
@@ -34,30 +33,25 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.background.indexing.run_docfetching import run_docfetching_entrypoint
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors import factory as connector_factory
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import HierarchyNode
-from onyx.connectors.models import InputType
-from onyx.connectors.models import TextSection
-from onyx.db.enums import EmbeddingPrecision
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
+from onyx.connectors.models import Document, HierarchyNode, InputType, TextSection
+from onyx.db.enums import EmbeddingPrecision, IndexingStatus, IndexModelStatus
 from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.models import Credential
-from onyx.db.models import FileRecord
-from onyx.db.models import IndexAttempt
-from onyx.db.models import SearchSettings
+from onyx.db.models import Credential, FileRecord, IndexAttempt, SearchSettings
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.staging import build_raw_file_callback
-from onyx.file_store.staging import cleanup_staged_files_for_attempt
-from onyx.file_store.staging import reap_prior_attempt_staged_files
+from onyx.file_store.staging import (
+    build_raw_file_callback,
+    cleanup_staged_files_for_attempt,
+    reap_prior_attempt_staged_files,
+)
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
-from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+from tests.external_dependency_unit.indexing_helpers import (
+    cleanup_cc_pair,
+    make_cc_pair,
+)
 
 # ---------------------------------------------------------------------------
 # Mock connector that stages a file, yields a doc, then crashes

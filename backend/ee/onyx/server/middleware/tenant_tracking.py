@@ -1,12 +1,8 @@
 import asyncio
 import logging
-from collections.abc import Awaitable
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from ee.onyx.auth.users import decode_anonymous_user_jwt_token
@@ -15,13 +11,11 @@ from ee.onyx.configs.multi_tenant_gating_config import (
 )
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
 from onyx.auth.utils import extract_tenant_from_auth_header
-from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
-from onyx.configs.constants import TENANT_ID_COOKIE_NAME
+from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME, TENANT_ID_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 

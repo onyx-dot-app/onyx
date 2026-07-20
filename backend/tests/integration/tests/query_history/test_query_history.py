@@ -1,14 +1,11 @@
 import csv
 import io
 import os
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from onyx.configs.constants import QAFeedbackType
-from onyx.configs.constants import SessionType
+from onyx.configs.constants import QAFeedbackType, SessionType
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager

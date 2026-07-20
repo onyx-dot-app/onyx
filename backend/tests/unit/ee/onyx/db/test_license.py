@@ -1,19 +1,16 @@
 """Tests for license database CRUD operations."""
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
-from ee.onyx.db.license import check_seat_availability
-from ee.onyx.db.license import delete_license
-from ee.onyx.db.license import get_license
-from ee.onyx.db.license import get_used_seats
-from ee.onyx.db.license import upsert_license
-from ee.onyx.server.license.models import LicenseMetadata
-from ee.onyx.server.license.models import LicenseSource
-from ee.onyx.server.license.models import PlanType
+from ee.onyx.db.license import (
+    check_seat_availability,
+    delete_license,
+    get_license,
+    get_used_seats,
+    upsert_license,
+)
+from ee.onyx.server.license.models import LicenseMetadata, LicenseSource, PlanType
 from onyx.db.models import License
 from onyx.server.settings.models import ApplicationStatus
 

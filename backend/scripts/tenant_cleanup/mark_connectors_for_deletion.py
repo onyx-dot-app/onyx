@@ -27,16 +27,17 @@ Examples:
 
 import subprocess
 import sys
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed, ThreadPoolExecutor
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from scripts.tenant_cleanup.cleanup_utils import confirm_step
-from scripts.tenant_cleanup.cleanup_utils import find_worker_pod
-from scripts.tenant_cleanup.cleanup_utils import get_tenant_status
-from scripts.tenant_cleanup.cleanup_utils import read_tenant_ids_from_csv
+from scripts.tenant_cleanup.cleanup_utils import (
+    confirm_step,
+    find_worker_pod,
+    get_tenant_status,
+    read_tenant_ids_from_csv,
+)
 
 # Global lock for thread-safe printing
 _print_lock: Lock = Lock()

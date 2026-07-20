@@ -41,17 +41,15 @@ import time
 from typing import Any
 from uuid import UUID
 
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import NotificationType
+from onyx.configs.constants import MessageType, NotificationType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ScheduledTaskErrorClass
-from onyx.db.enums import ScheduledTaskRunStatus
-from onyx.db.enums import SessionOrigin
+from onyx.db.enums import ScheduledTaskErrorClass, ScheduledTaskRunStatus, SessionOrigin
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_run
-from onyx.db.scheduled_task import mark_run_status
-from onyx.server.features.build.db.build_session import create_message
-from onyx.server.features.build.db.build_session import get_session_messages
+from onyx.db.scheduled_task import get_run, mark_run_status
+from onyx.server.features.build.db.build_session import (
+    create_message,
+    get_session_messages,
+)
 from onyx.server.features.build.sandbox.event_schema import RequestPermissionRequest
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState

@@ -10,10 +10,12 @@ from typing import Any
 
 from onyx.configs.constants import DocumentSource
 from onyx.document_index.interfaces_new import TenantState
-from onyx.document_index.opensearch.schema import ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME
-from onyx.document_index.opensearch.schema import DOCUMENT_ID_FIELD_NAME
-from onyx.document_index.opensearch.schema import DOCUMENT_SETS_FIELD_NAME
-from onyx.document_index.opensearch.schema import PERSONAS_FIELD_NAME
+from onyx.document_index.opensearch.schema import (
+    ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME,
+    DOCUMENT_ID_FIELD_NAME,
+    DOCUMENT_SETS_FIELD_NAME,
+    PERSONAS_FIELD_NAME,
+)
 from onyx.document_index.opensearch.search import DocumentQuery
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 

@@ -1,13 +1,8 @@
 from enum import Enum
-from typing import Any
-from typing import Final
-from typing import TypeGuard
-from typing import TypeVar
+from typing import Any, Final, TypeGuard, TypeVar
 
-from psycopg2 import errorcodes
-from psycopg2 import OperationalError
-from psycopg2.errors import ForeignKeyViolation
-from psycopg2.errors import UniqueViolation
+from psycopg2 import errorcodes, OperationalError
+from psycopg2.errors import ForeignKeyViolation, UniqueViolation
 from pydantic import BaseModel
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError

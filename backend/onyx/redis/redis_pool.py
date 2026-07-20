@@ -2,9 +2,7 @@ import asyncio
 import json
 import ssl
 import threading
-from typing import Any
-from typing import cast
-from typing import Optional
+from typing import Any, cast, Optional
 
 import redis
 from fastapi import Request
@@ -17,22 +15,28 @@ from redis.exceptions import TimeoutError as RedisTimeoutError
 from redis.lock import Lock as RedisLock
 from redis.retry import Retry
 
-from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
-from onyx.configs.app_configs import REDIS_DB_NUMBER
-from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
-from onyx.configs.app_configs import REDIS_HOST
-from onyx.configs.app_configs import REDIS_PASSWORD
-from onyx.configs.app_configs import REDIS_POOL_MAX_CONNECTIONS
-from onyx.configs.app_configs import REDIS_PORT
-from onyx.configs.app_configs import REDIS_REPLICA_HOST
-from onyx.configs.app_configs import REDIS_SSL
-from onyx.configs.app_configs import REDIS_SSL_CA_CERTS
-from onyx.configs.app_configs import REDIS_SSL_CERT_REQS
-from onyx.configs.app_configs import USE_REDIS_IAM_AUTH
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
-from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
-from onyx.redis.iam_auth import configure_redis_iam_auth
-from onyx.redis.iam_auth import create_redis_ssl_context_if_iam
+from onyx.configs.app_configs import (
+    REDIS_AUTH_KEY_PREFIX,
+    REDIS_DB_NUMBER,
+    REDIS_HEALTH_CHECK_INTERVAL,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_POOL_MAX_CONNECTIONS,
+    REDIS_PORT,
+    REDIS_REPLICA_HOST,
+    REDIS_SSL,
+    REDIS_SSL_CA_CERTS,
+    REDIS_SSL_CERT_REQS,
+    USE_REDIS_IAM_AUTH,
+)
+from onyx.configs.constants import (
+    FASTAPI_USERS_AUTH_COOKIE_NAME,
+    REDIS_SOCKET_KEEPALIVE_OPTIONS,
+)
+from onyx.redis.iam_auth import (
+    configure_redis_iam_auth,
+    create_redis_ssl_context_if_iam,
+)
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DEFAULT_REDIS_PREFIX

@@ -4,105 +4,116 @@ import time
 import traceback
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from celery import Celery
-from celery import current_app
-from celery import shared_task
-from celery import Task
+from celery import Celery, current_app, shared_task, Task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
-from sqlalchemy import exists
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_get_broker_client
-from onyx.background.celery.celery_redis import celery_get_queued_task_ids
-from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.celery_redis import (
+    celery_get_broker_client,
+    celery_get_queued_task_ids,
+    celery_get_unacked_task_ids,
+)
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docfetching.task_creation_utils import (
     try_creating_docfetching_task,
 )
-from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
-from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
+from onyx.background.celery.tasks.docprocessing.heartbeat import (
+    start_heartbeat,
+    stop_heartbeat,
+)
 from onyx.background.celery.tasks.docprocessing.targeted_reindex_task import (  # noqa: F401  # registers @shared_task with celery
     targeted_reindex_task,
 )
-from onyx.background.celery.tasks.docprocessing.utils import IndexingCallback
-from onyx.background.celery.tasks.docprocessing.utils import is_in_repeated_error_state
-from onyx.background.celery.tasks.docprocessing.utils import should_index
+from onyx.background.celery.tasks.docprocessing.utils import (
+    IndexingCallback,
+    is_in_repeated_error_state,
+    should_index,
+)
 from onyx.background.celery.tasks.models import DocProcessingContext
-from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
 from onyx.background.indexing.checkpointing_utils import (
+    cleanup_checkpoint,
     get_index_attempts_with_old_checkpoints,
 )
-from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
-from onyx.background.indexing.index_attempt_utils import get_old_index_attempt_ids
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import MANAGED_VESPA
-from onyx.configs.app_configs import PERSISTENT_INDEXING
-from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
-from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import NotificationType
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import OnyxRedisSignals
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import IndexAttemptMetadata
+from onyx.background.indexing.index_attempt_utils import (
+    cleanup_index_attempts,
+    get_old_index_attempt_ids,
+)
+from onyx.configs.app_configs import (
+    AUTH_TYPE,
+    MANAGED_VESPA,
+    PERSISTENT_INDEXING,
+    VESPA_CLOUD_CERT_PATH,
+    VESPA_CLOUD_KEY_PATH,
+)
+from onyx.configs.constants import (
+    AuthType,
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_INDEXING_LOCK_TIMEOUT,
+    DocumentSource,
+    MilestoneRecordType,
+    NotificationType,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+    OnyxRedisLocks,
+    OnyxRedisSignals,
+)
+from onyx.connectors.models import ConnectorFailure, Document, IndexAttemptMetadata
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
+    get_connector_credential_pair_from_id,
+    set_cc_pair_repeated_error_state,
+    update_connector_credential_pair_from_id,
 )
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
-from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.time_utils import get_db_current_time
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingMode
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import SwitchoverType
-from onyx.db.index_attempt import create_index_attempt_error
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
-from onyx.db.index_attempt import get_stale_not_started_index_attempts
-from onyx.db.index_attempt import IndexAttemptError
-from onyx.db.index_attempt import mark_attempt_canceled
-from onyx.db.index_attempt import mark_attempt_failed
-from onyx.db.index_attempt import mark_attempt_partially_succeeded
-from onyx.db.index_attempt import mark_attempt_succeeded
-from onyx.db.index_attempt_metrics import IndexAttemptStage
-from onyx.db.index_attempt_metrics import safe_record_single_event
-from onyx.db.index_attempt_metrics import time_stage
-from onyx.db.indexing_coordination import CoordinationStatus
-from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import IndexAttempt
-from onyx.db.models import SearchSettings
-from onyx.db.notification import create_notification
-from onyx.db.notification import get_notifications
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_secondary_search_settings
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    IndexingMode,
+    IndexingStatus,
+    SwitchoverType,
+)
+from onyx.db.index_attempt import (
+    create_index_attempt_error,
+    get_index_attempt,
+    get_index_attempt_errors_for_cc_pair,
+    get_stale_not_started_index_attempts,
+    IndexAttemptError,
+    mark_attempt_canceled,
+    mark_attempt_failed,
+    mark_attempt_partially_succeeded,
+    mark_attempt_succeeded,
+)
+from onyx.db.index_attempt_metrics import (
+    IndexAttemptStage,
+    safe_record_single_event,
+    time_stage,
+)
+from onyx.db.indexing_coordination import CoordinationStatus, IndexingCoordination
+from onyx.db.models import IndexAttempt, SearchSettings
+from onyx.db.notification import create_notification, get_notifications
+from onyx.db.search_settings import (
+    get_current_search_settings,
+    get_secondary_search_settings,
+)
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_all_document_indices
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.document_batch_storage import DocumentBatchStorage
-from onyx.file_store.document_batch_storage import get_document_batch_storage
+from onyx.file_store.document_batch_storage import (
+    DocumentBatchStorage,
+    get_document_batch_storage,
+)
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.document_indexing_adapter import (
@@ -110,34 +121,44 @@ from onyx.indexing.adapters.document_indexing_adapter import (
 )
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
-from onyx.indexing.persistent_indexing import build_generic_connector_failure
-from onyx.indexing.persistent_indexing import record_generic_failure
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
-from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
+from onyx.indexing.persistent_indexing import (
+    build_generic_connector_failure,
+    record_generic_failure,
+)
+from onyx.natural_language_processing.search_nlp_models import (
+    EmbeddingModel,
+    warm_up_bi_encoder,
+)
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
-from onyx.redis.redis_pool import redis_lock_dump
-from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+from onyx.redis.redis_pool import (
+    get_redis_client,
+    get_redis_replica_client,
+    redis_lock_dump,
+    SCAN_ITER_COUNT_DEFAULT,
+)
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.redis_utils import is_fence
 from onyx.redis.tenant_redis_client import TenantRedisClient
-from onyx.server.metrics.connector_health_metrics import on_connector_error_state_change
-from onyx.server.metrics.connector_health_metrics import on_connector_indexing_success
-from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
+from onyx.server.metrics.connector_health_metrics import (
+    on_connector_error_state_change,
+    on_connector_indexing_success,
+    on_index_attempt_status_change,
+)
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
-from onyx.utils.telemetry import mt_cloud_telemetry
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
-from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
-from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import USAGE_LIMITS_ENABLED
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
+from onyx.utils.telemetry import mt_cloud_telemetry, optional_telemetry, RecordType
+from shared_configs.configs import (
+    INDEXING_MODEL_SERVER_HOST,
+    INDEXING_MODEL_SERVER_PORT,
+    MULTI_TENANT,
+    USAGE_LIMITS_ENABLED,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    INDEX_ATTEMPT_INFO_CONTEXTVAR,
+)
 
 logger = setup_logger()
 
@@ -1843,8 +1864,7 @@ def _docprocessing_task(
         # Track chunk indexing usage for cloud usage limits
         if USAGE_LIMITS_ENABLED and index_pipeline_result.total_chunks > 0:
             try:
-                from onyx.db.usage import increment_usage
-                from onyx.db.usage import UsageType
+                from onyx.db.usage import increment_usage, UsageType
 
                 with get_session_with_current_tenant() as usage_db_session:
                     increment_usage(

@@ -53,25 +53,23 @@ The executor uses three sessions:
 
 import json
 import time
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import httpx
-from pydantic import BaseModel
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import HookFailStrategy
-from onyx.db.enums import HookPoint
-from onyx.db.hook import create_hook_execution_log__no_commit
-from onyx.db.hook import get_non_deleted_hook_by_hook_point
-from onyx.db.hook import update_hook__no_commit
+from onyx.db.enums import HookFailStrategy, HookPoint
+from onyx.db.hook import (
+    create_hook_execution_log__no_commit,
+    get_non_deleted_hook_by_hook_point,
+    update_hook__no_commit,
+)
 from onyx.db.models import Hook
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.hooks.executor import HookSkipped
-from onyx.hooks.executor import HookSoftFailed
+from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 

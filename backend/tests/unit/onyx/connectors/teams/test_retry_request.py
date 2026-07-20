@@ -8,14 +8,12 @@ here in isolation.
 """
 
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from requests.exceptions import HTTPError
 
-from onyx.connectors.teams.utils import _retry
-from onyx.connectors.teams.utils import GRAPH_API_RETRYABLE_STATUSES
+from onyx.connectors.teams.utils import _retry, GRAPH_API_RETRYABLE_STATUSES
 
 
 def _response(
