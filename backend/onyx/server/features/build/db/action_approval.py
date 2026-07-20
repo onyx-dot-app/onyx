@@ -11,10 +11,10 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    POLICY_SEVERITY,
     ApprovalDecidedVia,
     ApprovalDecision,
     EndpointPolicy,
-    POLICY_SEVERITY,
 )
 from onyx.db.models import ActionApproval, BuildSession
 from onyx.utils.logger import setup_logger

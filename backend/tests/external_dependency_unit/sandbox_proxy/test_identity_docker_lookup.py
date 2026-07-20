@@ -22,8 +22,8 @@ from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 
 from onyx.sandbox_proxy.identity_docker import (
-    _identity_from_container,
     DockerEventsLookup,
+    _identity_from_container,
 )
 
 _DOCKER_SOCKET = os.environ.get("SANDBOX_DOCKER_SOCKET", "/var/run/docker.sock")

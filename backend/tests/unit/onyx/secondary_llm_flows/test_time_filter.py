@@ -8,10 +8,10 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters, TimeRange
 from onyx.llm.models import UserMessage
 from onyx.secondary_llm_flows.time_filter import (
-    _parse_time_decision,
-    decide_time_filter,
     DocumentTimeField,
     TimeFilter,
+    _parse_time_decision,
+    decide_time_filter,
 )
 from onyx.tools.models import ChatMinimalTextMessage
 

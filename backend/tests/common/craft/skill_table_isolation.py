@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import class_mapper, Session
+from sqlalchemy.orm import Session, class_mapper
 
 from onyx.db.models import (
     ExternalApp,

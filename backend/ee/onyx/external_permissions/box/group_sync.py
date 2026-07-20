@@ -5,10 +5,10 @@ from box_sdk_gen import BoxClient
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.utils import credential_json
 from onyx.connectors.box.connector import (
-    box_all_enterprise_users_group_id,
     BOX_ENTERPRISE_ID_CREDENTIAL_KEY,
-    box_group_id,
     BoxConnector,
+    box_all_enterprise_users_group_id,
+    box_group_id,
     iter_box_enterprise_users,
     normalize_box_login,
 )

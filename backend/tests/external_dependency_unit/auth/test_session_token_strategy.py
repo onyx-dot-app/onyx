@@ -15,12 +15,12 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from onyx.auth.session_tokens import (
-    get_session_rejection,
-    record_session_rejection,
     SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     SessionRejection,
     SessionRejectionReason,
     SessionTokenValue,
+    get_session_rejection,
+    record_session_rejection,
 )
 from onyx.auth.users import TenantAwareRedisStrategy, UserManager
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX, SESSION_EXPIRE_TIME_SECONDS

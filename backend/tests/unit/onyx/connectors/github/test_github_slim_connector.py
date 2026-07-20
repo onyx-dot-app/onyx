@@ -4,7 +4,7 @@ correctly, and that pruning uses the cheap slim path (no lazy loading).
 """
 
 from collections.abc import Generator
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 

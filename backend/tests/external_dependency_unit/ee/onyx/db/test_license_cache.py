@@ -13,9 +13,9 @@ import pytest
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.license import (
-    get_cached_license_metadata,
     LICENSE_CACHE_TTL_SECONDS,
     LICENSE_METADATA_KEY,
+    get_cached_license_metadata,
     update_license_cache,
 )
 from ee.onyx.server.license.models import (

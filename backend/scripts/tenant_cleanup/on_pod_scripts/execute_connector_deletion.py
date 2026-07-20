@@ -37,7 +37,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs,
     update_connector_credential_pair_from_id,
 )
-from onyx.db.engine.sql_engine import get_session_with_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 

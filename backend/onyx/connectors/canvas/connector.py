@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, cast, NoReturn
+from typing import Any, NoReturn, cast
 
 from pydantic import BaseModel, Field
 from typing_extensions import override

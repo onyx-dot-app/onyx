@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import INSTANCE_TYPE
 from onyx.configs.constants import (
     DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
-    NotificationType,
     ONYX_UTM_SOURCE,
+    NotificationType,
 )
 from onyx.db.enums import AccountType
 from onyx.db.models import User

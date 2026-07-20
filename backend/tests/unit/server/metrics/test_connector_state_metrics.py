@@ -13,9 +13,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import ConnectorStateSnapshot
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, IndexingMode
 from onyx.server.metrics.connector_state_metrics import (
+    ConnectorStateMetricsCollector,
     _enum_label,
     _to_unix_ts,
-    ConnectorStateMetricsCollector,
 )
 
 

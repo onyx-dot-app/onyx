@@ -33,9 +33,9 @@ from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.k8s.k8s_fixtures import (
     OwnedLivePod,
-    pod_exec,
     PoolSession,
     SandboxHandle,
+    pod_exec,
     wait_for_pod_deletion,
     wait_until_healthy,
 )

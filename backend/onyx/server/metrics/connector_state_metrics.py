@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from typing import NamedTuple
 
-from prometheus_client.core import GaugeMetricFamily, InfoMetricFamily, Metric, REGISTRY
+from prometheus_client.core import REGISTRY, GaugeMetricFamily, InfoMetricFamily, Metric
 from prometheus_client.registry import Collector
 
 from onyx.db.connector_credential_pair import get_connector_state_snapshots

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator, SecretStr
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
 from onyx.db.enums import HookFailStrategy, HookPoint
 

@@ -5,9 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.memory import (
+    MAX_MEMORIES_PER_USER,
     add_memory,
     get_memories,
-    MAX_MEMORIES_PER_USER,
     update_memory_at_index,
 )
 from onyx.db.models import Memory, User

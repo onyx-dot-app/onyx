@@ -9,7 +9,7 @@ from onyx.configs.app_configs import (
     USE_CHUNK_SUMMARY,
     USE_DOCUMENT_SUMMARY,
 )
-from onyx.configs.constants import DocumentSource, RETURN_SEPARATOR, SECTION_SEPARATOR
+from onyx.configs.constants import RETURN_SEPARATOR, SECTION_SEPARATOR, DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_metadata_keys_to_ignore,
 )

@@ -20,11 +20,11 @@ from onyx.connectors.google_drive.models import (
     RetrievedDriveFile,
 )
 from onyx.connectors.google_utils.google_utils import (
-    execute_paginated_retrieval,
-    execute_paginated_retrieval_with_max_pages,
-    GoogleFields,
     ORDER_BY_KEY,
     PAGE_TOKEN_KEY,
+    GoogleFields,
+    execute_paginated_retrieval,
+    execute_paginated_retrieval_with_max_pages,
 )
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch

@@ -10,9 +10,9 @@ from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.search_nlp_models import (
-    clean_model_name,
     CloudEmbedding,
     EmbeddingModel,
+    clean_model_name,
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 from shared_configs.model_server_models import EmbedRequest, EmbedResponse

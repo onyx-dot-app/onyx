@@ -3,7 +3,7 @@ import time
 from collections.abc import Callable, Generator, Iterator
 from functools import wraps
 from pathlib import Path
-from typing import Any, cast, TypeVar
+from typing import Any, TypeVar, cast
 
 import torch
 

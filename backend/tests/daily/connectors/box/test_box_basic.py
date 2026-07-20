@@ -14,10 +14,10 @@ import pytest
 
 from ee.onyx.external_permissions.box.group_sync import box_group_sync
 from onyx.connectors.box.connector import (
-    box_all_enterprise_users_group_id,
-    box_group_id,
     BOX_ROOT_FOLDER_ID,
     BoxConnector,
+    box_all_enterprise_users_group_id,
+    box_group_id,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import Document, TextSection

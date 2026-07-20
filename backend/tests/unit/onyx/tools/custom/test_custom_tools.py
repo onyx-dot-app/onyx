@@ -8,8 +8,8 @@ import pytest
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import DynamicSchemaInfo, ToolResponse
 from onyx.tools.tool_implementations.custom.custom_tool import (
-    build_custom_tools_from_openapi_schema_and_headers,
     CustomToolCallSummary,
+    build_custom_tools_from_openapi_schema_and_headers,
     validate_openapi_schema,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (

@@ -16,7 +16,7 @@ from collections.abc import Callable, MutableMapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from celery import Celery, shared_task, Task
+from celery import Celery, Task, shared_task
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 

@@ -29,7 +29,7 @@ from onyx.external_apps.providers.base import (
 )
 from onyx.external_apps.providers.registry import get_provider_for_app
 from onyx.external_apps.token_utils import needs_refresh, stamp_expires_at
-from onyx.redis.lock_context import redis_shared_lock, RedisSharedLockAcquisitionError
+from onyx.redis.lock_context import RedisSharedLockAcquisitionError, redis_shared_lock
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -25,8 +25,8 @@ from onyx.db.models import Skill, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
-    fetch_onyx_managed_built_in_apps,
     PROVIDERS,
+    fetch_onyx_managed_built_in_apps,
 )
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,

@@ -22,9 +22,9 @@ from box_sdk_gen.schemas.web_link import (
 )
 
 from ee.onyx.external_permissions.box.access import (
+    BoxAccessContext,
     apply_collaborations_to_access,
     apply_shared_link_to_access,
-    BoxAccessContext,
 )
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.models import Document

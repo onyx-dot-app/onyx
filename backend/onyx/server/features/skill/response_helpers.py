@@ -7,7 +7,7 @@ from onyx.db.persona_sharing import (
     get_curated_user_group_ids_for_user,
     get_user_group_ids_for_user,
 )
-from onyx.db.skill import skill_user_states, SkillUserState
+from onyx.db.skill import SkillUserState, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.models import (

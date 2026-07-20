@@ -24,8 +24,8 @@ from onyx.connectors.confluence.access import (
 )
 from onyx.connectors.confluence.onyx_confluence import (
     Confcloud77618Error,
-    extract_text_from_confluence_html,
     OnyxConfluence,
+    extract_text_from_confluence_html,
 )
 from onyx.connectors.confluence.utils import (
     build_confluence_document_id,

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from onyx.configs.constants import DocumentSource, INDEX_SEPARATOR
+from onyx.configs.constants import INDEX_SEPARATOR, DocumentSource
 from onyx.context.search.models import IndexFilters, Tag, TimeRange
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,

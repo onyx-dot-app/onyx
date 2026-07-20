@@ -15,9 +15,9 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.audit import (
-    actor_from_user,
     AuditAction,
     AuditOutcome,
+    actor_from_user,
     emit_audit_event,
 )
 

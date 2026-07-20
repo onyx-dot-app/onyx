@@ -15,17 +15,12 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow, SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from tests.daily.connectors.google_drive.consts_and_utils import (
-    _pick,
     ACCESS_MAPPING,
     ADMIN_EMAIL,
     ADMIN_MY_DRIVE_ID,
     ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
-    assert_hierarchy_nodes_match_expected,
-    assert_resource_key_shortcut_target_in_retrieved_docs,
     EXTERNAL_SHARED_FOLDER_ID,
     FOLDER_3_ID,
-    get_expected_hierarchy_for_shared_drives,
-    load_connector_outputs,
     PERM_SYNC_DRIVE_ACCESS_MAPPING,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
@@ -42,6 +37,11 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_MY_DRIVE_ID,
     TEST_USER_2_MY_DRIVE,
     TEST_USER_3_MY_DRIVE_ID,
+    _pick,
+    assert_hierarchy_nodes_match_expected,
+    assert_resource_key_shortcut_target_in_retrieved_docs,
+    get_expected_hierarchy_for_shared_drives,
+    load_connector_outputs,
 )
 from tests.utils.secret_names import TestSecret
 

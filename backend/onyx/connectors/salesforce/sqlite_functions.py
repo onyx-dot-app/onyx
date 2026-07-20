@@ -12,9 +12,9 @@ from onyx.connectors.salesforce.utils import (
     ACCOUNT_OBJECT_TYPE,
     ID_FIELD,
     NAME_FIELD,
-    remove_sqlite_db_files,
-    SalesforceObject,
     USER_OBJECT_TYPE,
+    SalesforceObject,
+    remove_sqlite_db_files,
     validate_salesforce_id,
 )
 from onyx.utils.logger import setup_logger

@@ -26,11 +26,11 @@ from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.tools import get_tool_by_name
 from onyx.deep_research.dr_mock_tools import (
-    get_clarification_tool_definitions,
-    get_orchestrator_tools,
     RESEARCH_AGENT_TOOL_NAME,
     THINK_TOOL_RESPONSE_MESSAGE,
     THINK_TOOL_RESPONSE_TOKEN_COUNT,
+    get_clarification_tool_definitions,
+    get_orchestrator_tools,
 )
 from onyx.deep_research.utils import (
     check_special_tool_calls,

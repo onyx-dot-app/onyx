@@ -10,20 +10,20 @@ import pytest
 
 from onyx.server.features.build.interactive_turns import executor
 from onyx.server.features.build.interactive_turns.state import (
-    claim_turn_for_runner,
-    create_interactive_turn,
-    get_active_turn,
-    get_turn,
-    InteractiveTurn,
     TURN_STATUS_CANCELLED,
     TURN_STATUS_FAILED,
     TURN_STATUS_RUNNING,
     TURN_STATUS_SUCCEEDED,
+    InteractiveTurn,
+    claim_turn_for_runner,
+    create_interactive_turn,
+    get_active_turn,
+    get_turn,
 )
 from onyx.server.features.build.sandbox.event_schema import (
+    TURN_ERROR_CODE_TIMEOUT,
     ActivityTimeoutError,
     PromptResponse,
-    TURN_ERROR_CODE_TIMEOUT,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.serve_transport import (

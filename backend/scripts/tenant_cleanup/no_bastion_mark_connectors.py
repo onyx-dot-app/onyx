@@ -14,18 +14,18 @@ Usage:
 
 import subprocess
 import sys
-from concurrent.futures import as_completed, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
+    TenantNotFoundInControlPlaneError,
     confirm_step,
     find_background_pod,
     find_worker_pod,
     get_tenant_status,
     read_tenant_ids_from_csv,
-    TenantNotFoundInControlPlaneError,
 )
 
 # Global lock for thread-safe printing

@@ -21,10 +21,10 @@ from onyx.db.file_content import (
     get_file_content_by_file_id_optional,
 )
 from onyx.file_store.postgres_file_store import (
-    _get_raw_connection,
-    _read_large_object,
     POSTGRES_BUCKET_SENTINEL,
     PostgresBackedFileStore,
+    _get_raw_connection,
+    _read_large_object,
 )
 from onyx.utils.logger import setup_logger
 

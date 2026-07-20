@@ -6,7 +6,7 @@ UniqueViolation errors, which would occur if the upsert logic
 isn't properly implemented.
 """
 
-from concurrent.futures import as_completed, Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Union
 from uuid import uuid4
 

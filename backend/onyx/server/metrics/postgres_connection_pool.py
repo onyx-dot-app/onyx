@@ -18,7 +18,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram
 from prometheus_client.core import GaugeMetricFamily
-from prometheus_client.registry import Collector, REGISTRY
+from prometheus_client.registry import REGISTRY, Collector
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.interfaces import DBAPIConnection

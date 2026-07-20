@@ -5,17 +5,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
+    AD_GROUP_ENUMERATION_THRESHOLD,
+    SHAREPOINT_GROUP_PRINCIPAL_TYPE,
+    GroupsResult,
     _enumerate_ad_groups_paginated,
     _get_azuread_groups,
     _has_only_limited_access,
     _is_public_item,
     _iter_graph_collection,
     _normalize_email,
-    AD_GROUP_ENUMERATION_THRESHOLD,
     get_external_access_from_sharepoint,
     get_sharepoint_external_groups,
-    GroupsResult,
-    SHAREPOINT_GROUP_PRINCIPAL_TYPE,
 )
 
 MODULE = "ee.onyx.external_permissions.sharepoint.permission_utils"

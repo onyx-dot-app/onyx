@@ -30,7 +30,7 @@ from onyx.coding_agent.mock_tools import (
     CODING_AGENT_REPO_KEY,
     CODING_AGENT_TOOL_NAME,
 )
-from onyx.db.engine.sql_engine import get_session_with_current_tenant, SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llm, get_llm_token_counter
 from onyx.server.query_and_chat.placement import Placement

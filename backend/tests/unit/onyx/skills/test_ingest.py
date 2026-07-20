@@ -9,9 +9,9 @@ import pytest
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.ingest import (
+    IngestedBundle,
     ingest_skill_bundle,
     ingested_skill_bundle,
-    IngestedBundle,
 )
 
 

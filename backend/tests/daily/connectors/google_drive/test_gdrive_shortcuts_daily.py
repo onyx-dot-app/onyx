@@ -7,11 +7,11 @@ from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.models import Document, TextSection
 from tests.daily.connectors.google_drive.consts_and_utils import (
     ADMIN_EMAIL,
-    assert_resource_key_shortcut_target_in_retrieved_docs,
-    load_connector_outputs,
     RESOURCE_KEY_SHORTCUT_TARGET_DOC_ID,
     RESOURCE_KEY_SHORTCUT_TARGET_NAME,
     SHORTCUTS_GALORE_FOLDER_ID,
+    assert_resource_key_shortcut_target_in_retrieved_docs,
+    load_connector_outputs,
 )
 from tests.utils.secret_names import TestSecret
 
